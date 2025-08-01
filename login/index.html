@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Giriş Yap - Gemkom</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="icon" type="image/png" href="../images/gemkom.png">
+    <link rel="stylesheet" href="login.css">
+    <link rel="stylesheet" href="../components/dropdown.css">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+</head>
+<body>
+    <div class="login-wrapper">
+        <div class="login-container">
+            <!-- Logo and Header Section -->
+            <div class="login-header">
+                <div class="logo-container">
+                    <img src="../images/gemkom.png" alt="Gemkom Logo" class="logo">
+                    <div class="brand-info">
+                        <h1 class="brand-title">Gemkom</h1>
+                        <p class="brand-subtitle">Ofis Personel Giriş Sistemi</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Login Form Section -->
+            <div class="login-form-container">
+                <div class="form-header">
+                    <h2 class="form-title">
+                        <i class="fas fa-briefcase"></i>
+                        Ofis Çalışanları
+                    </h2>
+                    <p class="form-subtitle">Yönetim, planlama ve ofis işlemleri için giriş yapın</p>
+                </div>
+
+                <!-- Error Message -->
+                <div id="error-message" class="alert alert-danger alert-dismissible fade" role="alert">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span id="error-text"></span>
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+
+                <!-- Login Form -->
+                <form id="login-form" class="login-form">
+                    <div class="form-group">
+                        <label for="username" class="form-label">
+                            <i class="fas fa-user"></i>
+                            Kullanıcı Adı
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="fas fa-user"></i>
+                            </span>
+                            <input type="text" class="form-control" id="username" required>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="password" class="form-label">
+                            <i class="fas fa-lock"></i>
+                            Şifre
+                        </label>
+                        <div class="input-group">
+                            <span class="input-group-text">
+                                <i class="fas fa-key"></i>
+                            </span>
+                            <input type="password" class="form-control" id="password" required>
+                            <button type="button" class="btn btn-outline-secondary" id="toggle-password">
+                                <i class="fas fa-eye"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <button type="submit" id="login-button" class="btn btn-primary btn-login">
+                            <span class="btn-text">Giriş Yap</span>
+                            <span class="btn-loading" style="display: none;">
+                                <i class="fas fa-spinner fa-spin"></i>
+                                Giriş Yapılıyor...
+                            </span>
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Footer -->
+                <div class="login-footer">
+                    <p class="footer-text">
+                        <i class="fas fa-shield-alt"></i>
+                        Güvenli bağlantı ile korunmaktadır
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Office Background Animation -->
+        <div class="background-animation">
+            <div class="floating-shapes">
+                <div class="shape shape-1" title="Yönetim"></div>
+                <div class="shape shape-2" title="Planlama"></div>
+                <div class="shape shape-3" title="Raporlama"></div>
+                <div class="shape shape-4" title="Ofis İşlemleri"></div>
+            </div>
+            <!-- Office grid pattern -->
+            <div class="office-grid"></div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="login.js"></script>
+</body>
+</html>
