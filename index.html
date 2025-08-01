@@ -35,161 +35,126 @@
             <div class="row g-4">
                 <!-- İmalat Module -->
                 <div class="col-md-6 col-lg-4">
-                    <div class="module-card clickable" id="manufacturing-card" onclick="window.location.href='/manufacturing'">
-                        <div class="card-icon">
-                            <i class="fas fa-industry"></i>
-                        </div>
-                        <div class="card-body">
+                    <div class="functionality-card" onclick="window.location.href='/manufacturing'">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-danger">
+                                <i class="fas fa-industry"></i>
+                            </div>
                             <h5 class="card-title">İmalat</h5>
                             <p class="card-text">Üretim süreçlerini yönetin, üretim planlarını takip edin ve kalite standartlarını izleyin.</p>
-                            <div class="card-features">
-                                <span class="feature-tag"><i class="fas fa-chart-line"></i> Üretim Takibi</span>
-                                <span class="feature-tag"><i class="fas fa-clipboard-list"></i> Planlama</span>
-                                <span class="feature-tag"><i class="fas fa-chart-bar"></i> Raporlama</span>
-                            </div>
-                            <div class="card-action">
-                                <span class="action-text">
-                                    <i class="fas fa-arrow-right me-2"></i>Modüle Git
-                                </span>
-                            </div>
+                                                         <ul class="feature-list">
+                                 <li onclick="event.stopPropagation(); window.location.href='/manufacturing/welding'"><i class="fas fa-fire"></i>Kaynaklı İmalat</li>
+                                 <li onclick="event.stopPropagation(); window.location.href='/manufacturing/machining'"><i class="fas fa-cog"></i>Talaşlı İmalat</li>
+                                 <li onclick="event.stopPropagation(); window.location.href='/manufacturing/maintenance'"><i class="fas fa-wrench"></i>Bakım</li>
+                             </ul>
                         </div>
                     </div>
                 </div>
 
                 <!-- Satın Alma Module -->
                 <div class="col-md-6 col-lg-4">
-                    <div class="module-card clickable" id="procurement-card" onclick="window.location.href='/procurement'">
-                        <div class="card-icon">
-                            <i class="fas fa-shopping-cart"></i>
-                        </div>
-                        <div class="card-body">
+                    <div class="functionality-card" onclick="window.location.href='/procurement'">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-success">
+                                <i class="fas fa-shopping-cart"></i>
+                            </div>
                             <h5 class="card-title">Satın Alma</h5>
                             <p class="card-text">Tedarikçi yönetimi, sipariş takibi ve satın alma süreçlerini yönetin.</p>
-                            <div class="card-features">
-                                <span class="feature-tag"><i class="fas fa-truck"></i> Tedarikçi</span>
-                                <span class="feature-tag"><i class="fas fa-file-invoice"></i> Sipariş</span>
-                                <span class="feature-tag"><i class="fas fa-balance-scale"></i> Fiyat Analizi</span>
-                            </div>
-                            <div class="card-action">
-                                <span class="action-text">
-                                    <i class="fas fa-arrow-right me-2"></i>Modüle Git
-                                </span>
-                            </div>
+                            <ul class="feature-list">
+                                <li><i class="fas fa-truck"></i>Tedarikçi</li>
+                                <li><i class="fas fa-file-invoice"></i>Sipariş</li>
+                                <li><i class="fas fa-balance-scale"></i>Fiyat Analizi</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
 
                 <!-- Planlama Module -->
                 <div class="col-md-6 col-lg-4">
-                    <div class="module-card clickable" id="planning-card" onclick="window.location.href='/planning'">
-                        <div class="card-icon">
-                            <i class="fas fa-calendar-alt"></i>
-                        </div>
-                        <div class="card-body">
+                    <div class="functionality-card" onclick="window.location.href='/planning'">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-info">
+                                <i class="fas fa-calendar-alt"></i>
+                            </div>
                             <h5 class="card-title">Planlama</h5>
                             <p class="card-text">Üretim planlaması, kapasite yönetimi ve proje planlarını oluşturun.</p>
-                            <div class="card-features">
-                                <span class="feature-tag"><i class="fas fa-tasks"></i> Proje Yönetimi</span>
-                                <span class="feature-tag"><i class="fas fa-clock"></i> Zamanlama</span>
-                                <span class="feature-tag"><i class="fas fa-users"></i> Kaynak Yönetimi</span>
-                            </div>
-                            <div class="card-action">
-                                <span class="action-text">
-                                    <i class="fas fa-arrow-right me-2"></i>Modüle Git
-                                </span>
-                            </div>
+                            <ul class="feature-list">
+                                <li><i class="fas fa-tasks"></i>Proje Yönetimi</li>
+                                <li><i class="fas fa-clock"></i>Zamanlama</li>
+                                <li><i class="fas fa-users"></i>Kaynak Yönetimi</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
 
                 <!-- Haddehane Module -->
                 <div class="col-md-6 col-lg-4">
-                    <div class="module-card clickable" id="rolling-mill-card" onclick="window.location.href='/rolling-mill'">
-                        <div class="card-icon">
-                            <i class="fas fa-cogs"></i>
-                        </div>
-                        <div class="card-body">
+                    <div class="functionality-card" onclick="window.location.href='/rolling-mill'">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-warning">
+                                <i class="fas fa-cogs"></i>
+                            </div>
                             <h5 class="card-title">Haddehane</h5>
                             <p class="card-text">Haddehane operasyonlarını yönetin, üretim verilerini takip edin ve optimizasyon yapın.</p>
-                            <div class="card-features">
-                                <span class="feature-tag"><i class="fas fa-tachometer-alt"></i> Performans</span>
-                                <span class="feature-tag"><i class="fas fa-thermometer-half"></i> Sıcaklık</span>
-                                <span class="feature-tag"><i class="fas fa-chart-area"></i> Verimlilik</span>
-                            </div>
-                            <div class="card-action">
-                                <span class="action-text">
-                                    <i class="fas fa-arrow-right me-2"></i>Modüle Git
-                                </span>
-                            </div>
+                            <ul class="feature-list">
+                                <li><i class="fas fa-tachometer-alt"></i>Performans</li>
+                                <li><i class="fas fa-thermometer-half"></i>Sıcaklık</li>
+                                <li><i class="fas fa-chart-area"></i>Verimlilik</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
 
                 <!-- Lojistik Module -->
                 <div class="col-md-6 col-lg-4">
-                    <div class="module-card clickable" id="logistics-card" onclick="window.location.href='/logistics'">
-                        <div class="card-icon">
-                            <i class="fas fa-truck"></i>
-                        </div>
-                        <div class="card-body">
+                    <div class="functionality-card" onclick="window.location.href='/logistics'">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-secondary">
+                                <i class="fas fa-truck"></i>
+                            </div>
                             <h5 class="card-title">Lojistik</h5>
                             <p class="card-text">Depo yönetimi, sevkiyat takibi ve lojistik süreçlerini optimize edin.</p>
-                            <div class="card-features">
-                                <span class="feature-tag"><i class="fas fa-warehouse"></i> Depo</span>
-                                <span class="feature-tag"><i class="fas fa-route"></i> Sevkiyat</span>
-                                <span class="feature-tag"><i class="fas fa-boxes"></i> Stok</span>
-                            </div>
-                            <div class="card-action">
-                                <span class="action-text">
-                                    <i class="fas fa-arrow-right me-2"></i>Modüle Git
-                                </span>
-                            </div>
+                            <ul class="feature-list">
+                                <li><i class="fas fa-warehouse"></i>Depo</li>
+                                <li><i class="fas fa-route"></i>Sevkiyat</li>
+                                <li><i class="fas fa-boxes"></i>Stok</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
 
                 <!-- Dizayn Module -->
                 <div class="col-md-6 col-lg-4">
-                    <div class="module-card clickable" id="design-card" onclick="window.location.href='/design'">
-                        <div class="card-icon">
-                            <i class="fas fa-drafting-compass"></i>
-                        </div>
-                        <div class="card-body">
+                    <div class="functionality-card" onclick="window.location.href='/design'">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-danger">
+                                <i class="fas fa-drafting-compass"></i>
+                            </div>
                             <h5 class="card-title">Dizayn</h5>
                             <p class="card-text">Teknik çizimler, tasarım projeleri ve mühendislik süreçlerini yönetin.</p>
-                            <div class="card-features">
-                                <span class="feature-tag"><i class="fas fa-draw-polygon"></i> Teknik Çizim</span>
-                                <span class="feature-tag"><i class="fas fa-project-diagram"></i> Proje</span>
-                                <span class="feature-tag"><i class="fas fa-ruler-combined"></i> Ölçülendirme</span>
-                            </div>
-                            <div class="card-action">
-                                <span class="action-text">
-                                    <i class="fas fa-arrow-right me-2"></i>Modüle Git
-                                </span>
-                            </div>
+                            <ul class="feature-list">
+                                <li><i class="fas fa-draw-polygon"></i>Teknik Çizim</li>
+                                <li><i class="fas fa-project-diagram"></i>Proje</li>
+                                <li><i class="fas fa-ruler-combined"></i>Ölçülendirme</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
 
                 <!-- Kalite Kontrol Module -->
                 <div class="col-md-6 col-lg-4">
-                    <div class="module-card clickable" id="quality-control-card" onclick="window.location.href='/quality-control'">
-                        <div class="card-icon">
-                            <i class="fas fa-clipboard-check"></i>
-                        </div>
-                        <div class="card-body">
+                    <div class="functionality-card" onclick="window.location.href='/quality-control'">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-success">
+                                <i class="fas fa-clipboard-check"></i>
+                            </div>
                             <h5 class="card-title">Kalite Kontrol</h5>
                             <p class="card-text">Kalite standartlarını kontrol edin, test sonuçlarını takip edin ve kalite raporları oluşturun.</p>
-                            <div class="card-features">
-                                <span class="feature-tag"><i class="fas fa-microscope"></i> Test</span>
-                                <span class="feature-tag"><i class="fas fa-chart-line"></i> Analiz</span>
-                                <span class="feature-tag"><i class="fas fa-certificate"></i> Sertifikasyon</span>
-                            </div>
-                            <div class="card-action">
-                                <span class="action-text">
-                                    <i class="fas fa-arrow-right me-2"></i>Modüle Git
-                                </span>
-                            </div>
+                            <ul class="feature-list">
+                                <li><i class="fas fa-microscope"></i>Test</li>
+                                <li><i class="fas fa-chart-line"></i>Analiz</li>
+                                <li><i class="fas fa-certificate"></i>Sertifikasyon</li>
+                            </ul>
                         </div>
                     </div>
                 </div>

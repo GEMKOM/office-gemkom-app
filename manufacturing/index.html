@@ -35,84 +35,55 @@
             <div class="row g-4">
                 <!-- Kaynaklı İmalat -->
                 <div class="col-md-6 col-lg-4">
-                    <div class="module-card clickable" id="welding-manufacturing-card" onclick="window.location.href='/manufacturing/welding'">
-                        <div class="card-icon">
-                            <i class="fas fa-fire"></i>
-                        </div>
-                        <div class="card-body">
+                    <div class="functionality-card" onclick="window.location.href='/manufacturing/welding'">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-danger">
+                                <i class="fas fa-fire"></i>
+                            </div>
                             <h5 class="card-title">Kaynaklı İmalat</h5>
                             <p class="card-text">Kaynak işlemleri, birleştirme süreçleri ve kaynak kalite kontrolü yönetimi.</p>
-                            <div class="card-features">
-                                <span class="feature-tag"><i class="fas fa-fire"></i> Kaynak İşlemleri</span>
-                                <span class="feature-tag"><i class="fas fa-link"></i> Birleştirme</span>
-                                <span class="feature-tag"><i class="fas fa-clipboard-check"></i> Kalite Kontrol</span>
-                            </div>
-                            <div class="card-action">
-                                <span class="action-text">
-                                    <i class="fas fa-arrow-right me-2"></i>Modüle Git
-                                </span>
-                            </div>
-                            <div class="development-badge">
-                                <span class="badge bg-warning text-dark">
-                                    <i class="fas fa-tools me-1"></i>Geliştirme Aşamasında
-                                </span>
-                            </div>
+                            <ul class="feature-list">
+                                <li onclick="event.stopPropagation(); window.location.href='/manufacturing/welding/processes'"><i class="fas fa-fire"></i>Kaynak İşlemleri</li>
+                                <li onclick="event.stopPropagation(); window.location.href='/manufacturing/welding/joining'"><i class="fas fa-link"></i>Birleştirme</li>
+                                <li onclick="event.stopPropagation(); window.location.href='/manufacturing/welding/quality'"><i class="fas fa-clipboard-check"></i>Kalite Kontrol</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
 
                 <!-- Talaşlı İmalat -->
                 <div class="col-md-6 col-lg-4">
-                    <div class="module-card clickable" id="machining-manufacturing-card" onclick="window.location.href='/manufacturing/machining'">
-                        <div class="card-icon">
-                            <i class="fas fa-cog"></i>
-                        </div>
-                        <div class="card-body">
+                    <div class="functionality-card" onclick="window.location.href='/manufacturing/machining'">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-success">
+                                <i class="fas fa-cog"></i>
+                            </div>
                             <h5 class="card-title">Talaşlı İmalat</h5>
                             <p class="card-text">CNC işlemleri, torna, freze ve diğer talaşlı imalat süreçleri yönetimi.</p>
-                            <div class="card-features">
-                                <span class="feature-tag"><i class="fas fa-cog"></i> CNC İşlemleri</span>
-                                <span class="feature-tag"><i class="fas fa-screwdriver"></i> Torna/Freze</span>
-                                <span class="feature-tag"><i class="fas fa-ruler"></i> Ölçülendirme</span>
-                            </div>
-                            <div class="card-action">
-                                <span class="action-text">
-                                    <i class="fas fa-arrow-right me-2"></i>Modüle Git
-                                </span>
-                            </div>
-                            <div class="development-badge">
-                                <span class="badge bg-warning text-dark">
-                                    <i class="fas fa-tools me-1"></i>Geliştirme Aşamasında
-                                </span>
-                            </div>
+                            <ul class="feature-list">
+                                <li onclick="event.stopPropagation(); window.location.href='/manufacturing/machining/dashboard'"><i class="fas fa-chart-line"></i>Dashboard</li>
+                                <li onclick="event.stopPropagation(); window.location.href='/manufacturing/machining/tasks'"><i class="fas fa-tasks"></i>Görevler</li>
+                                <li onclick="event.stopPropagation(); window.location.href='/manufacturing/machining/reports'"><i class="fas fa-chart-pie"></i>Raporlar</li>
+                                <li onclick="event.stopPropagation(); window.location.href='/manufacturing/machining/capacity'"><i class="fas fa-industry"></i>Kapasite Yönetimi</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
 
                 <!-- Bakım -->
                 <div class="col-md-6 col-lg-4">
-                    <div class="module-card clickable" id="maintenance-card" onclick="window.location.href='/manufacturing/maintenance'">
-                        <div class="card-icon">
-                            <i class="fas fa-wrench"></i>
-                        </div>
-                        <div class="card-body">
+                    <div class="functionality-card" onclick="window.location.href='/manufacturing/maintenance'">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-warning">
+                                <i class="fas fa-wrench"></i>
+                            </div>
                             <h5 class="card-title">Bakım</h5>
                             <p class="card-text">Ekipman bakım planları, arıza takibi ve önleyici bakım yönetimi.</p>
-                            <div class="card-features">
-                                <span class="feature-tag"><i class="fas fa-calendar-check"></i> Bakım Planı</span>
-                                <span class="feature-tag"><i class="fas fa-exclamation-triangle"></i> Arıza Takibi</span>
-                                <span class="feature-tag"><i class="fas fa-shield-alt"></i> Önleyici Bakım</span>
-                            </div>
-                            <div class="card-action">
-                                <span class="action-text">
-                                    <i class="fas fa-arrow-right me-2"></i>Modüle Git
-                                </span>
-                            </div>
-                            <div class="development-badge">
-                                <span class="badge bg-warning text-dark">
-                                    <i class="fas fa-tools me-1"></i>Geliştirme Aşamasında
-                                </span>
-                            </div>
+                            <ul class="feature-list">
+                                <li onclick="event.stopPropagation(); window.location.href='/manufacturing/maintenance/plans'"><i class="fas fa-calendar-check"></i>Bakım Planı</li>
+                                <li onclick="event.stopPropagation(); window.location.href='/manufacturing/maintenance/issues'"><i class="fas fa-exclamation-triangle"></i>Arıza Takibi</li>
+                                <li onclick="event.stopPropagation(); window.location.href='/manufacturing/maintenance/preventive'"><i class="fas fa-shield-alt"></i>Önleyici Bakım</li>
+                            </ul>
                         </div>
                     </div>
                 </div>
