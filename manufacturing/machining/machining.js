@@ -9,8 +9,7 @@ function navigateTo(section) {
         case 'dashboard':
             // Navigate to dashboard
             console.log('Navigating to dashboard...');
-            // TODO: Implement dashboard navigation
-            showNotification('Dashboard özelliği yakında eklenecek!', 'info');
+            window.location.href = '/manufacturing/machining/dashboard/';
             break;
         case 'tasks':
             // Navigate to tasks
