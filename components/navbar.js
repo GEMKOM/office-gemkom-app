@@ -2,91 +2,286 @@ import { logout, isAdmin, isLoggedIn, getUser, navigateTo, ROUTES } from '../aut
 import { backendBase } from '../base.js';
 import { authedFetch } from '../authService.js';
 
-// Navbar component
-export function createNavbar() {
-    const navbar = document.createElement('nav');
-    navbar.className = 'navbar navbar-expand-lg navbar-dark bg-dark';
-    navbar.innerHTML = `
-        <div class="container">
-            <a class="navbar-brand" href="/">GEMKOM</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav"
-                aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarNav">
-                <ul class="navbar-nav">
-                    <li class="nav-item">
-                        <a class="nav-link" href="/">Ana Sayfa</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/manufacturing">İmalat</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/procurement">Satın Alma</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/planning">Planlama</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/rolling-mill">Haddehane</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/logistics">Lojistik</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/design">Dizayn</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link" href="/quality-control">Kalite Kontrol</a>
-                    </li>
-                </ul>
-                <ul class="navbar-nav ms-auto">
-                    <li class="nav-item">
-                        <button id="logout-button" class="nav-link">Çıkış</button>
-                    </li>
-                </ul>
-            </div>
-        </div>
-    `;
-
-    // Add active class to current page link
-    const currentPath = window.location.pathname;
-    const navLinks = navbar.querySelectorAll('.nav-link');
-    navLinks.forEach(link => {
-        const href = link.getAttribute('href');
-        if (href) {
-            // Check for exact match first
-            if (href === currentPath) {
-                link.classList.add('active');
-            }
-            // Check for partial match for subpages (e.g., /manufacturing/tasks/ should highlight /manufacturing)
-            else if (href !== '/' && currentPath.startsWith(href)) {
-                link.classList.add('active');
-            }
-            // Special case for home page - only highlight if we're exactly on home
-            else if (href === '/' && currentPath === '/') {
-                link.classList.add('active');
+// Navigation structure configuration
+const NAVIGATION_STRUCTURE = {
+    '/': {
+        label: 'Ana Sayfa',
+        icon: 'fas fa-home',
+        children: {}
+    },
+    '/manufacturing': {
+        label: 'İmalat',
+        icon: 'fas fa-industry',
+        children: {
+            '/manufacturing/machining': {
+                label: 'Talaşlı İmalat',
+                icon: 'fas fa-cog',
+                children: {
+                    '/manufacturing/machining/dashboard': {
+                        label: 'Dashboard',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    },
+                    '/manufacturing/machining/tasks': {
+                        label: 'Görevler',
+                        icon: 'fas fa-tasks',
+                        children: {}
+                    },
+                    '/manufacturing/machining/reports': {
+                        label: 'Raporlar',
+                        icon: 'fas fa-chart-pie',
+                        children: {}
+                    },
+                    '/manufacturing/machining/capacity': {
+                        label: 'Kapasite Yönetimi',
+                        icon: 'fas fa-industry',
+                        children: {}
+                    }
+                }
+            },
+            '/manufacturing/welding': {
+                label: 'Kaynak',
+                icon: 'fas fa-fire',
+                children: {
+                    '/manufacturing/welding/processes': {
+                        label: 'Kaynak İşlemleri',
+                        icon: 'fas fa-fire',
+                        children: {}
+                    },
+                    '/manufacturing/welding/joining': {
+                        label: 'Birleştirme',
+                        icon: 'fas fa-link',
+                        children: {}
+                    },
+                    '/manufacturing/welding/quality': {
+                        label: 'Kalite Kontrol',
+                        icon: 'fas fa-clipboard-check',
+                        children: {}
+                    }
+                }
+            },
+            '/manufacturing/maintenance': {
+                label: 'Bakım',
+                icon: 'fas fa-wrench',
+                children: {
+                    '/manufacturing/maintenance/plans': {
+                        label: 'Bakım Planı',
+                        icon: 'fas fa-calendar-check',
+                        children: {}
+                    },
+                    '/manufacturing/maintenance/issues': {
+                        label: 'Arıza Takibi',
+                        icon: 'fas fa-exclamation-triangle',
+                        children: {}
+                    },
+                    '/manufacturing/maintenance/preventive': {
+                        label: 'Önleyici Bakım',
+                        icon: 'fas fa-shield-alt',
+                        children: {}
+                    }
+                }
             }
         }
-    });
-
-    // Add click handlers for navigation
-    navLinks.forEach(link => {
-        link.addEventListener('click', (e) => {
-            // Allow home page and login page without authentication
-            if (link.getAttribute('href') === '/' || link.getAttribute('href') === '/login') {
-                return;
+    },
+    '/procurement': {
+        label: 'Satın Alma',
+        icon: 'fas fa-shopping-cart',
+        children: {}
+    },
+    '/planning': {
+        label: 'Planlama',
+        icon: 'fas fa-calendar-alt',
+        children: {}
+    },
+    '/rolling-mill': {
+        label: 'Haddehane',
+        icon: 'fas fa-cogs',
+        children: {}
+    },
+    '/logistics': {
+        label: 'Lojistik',
+        icon: 'fas fa-truck',
+        children: {}
+    },
+    '/design': {
+        label: 'Dizayn',
+        icon: 'fas fa-drafting-compass',
+        children: {}
+    },
+    '/quality-control': {
+        label: 'Kalite Kontrol',
+        icon: 'fas fa-clipboard-check',
+        children: {}
+    },
+    '/admin': {
+        label: 'Yönetim',
+        icon: 'fas fa-cogs',
+        children: {
+            '/admin/taskList': {
+                label: 'Görev Listesi',
+                icon: 'fas fa-tasks',
+                children: {}
+            },
+            '/admin/listUsers': {
+                label: 'Kullanıcı Listesi',
+                icon: 'fas fa-users',
+                children: {}
+            },
+            '/admin/machineList': {
+                label: 'Makine Listesi',
+                icon: 'fas fa-industry',
+                children: {}
+            },
+            '/admin/createUser': {
+                label: 'Kullanıcı Oluştur',
+                icon: 'fas fa-user-plus',
+                children: {}
+            },
+            '/admin/createMachine': {
+                label: 'Makine Oluştur',
+                icon: 'fas fa-plus-circle',
+                children: {}
+            },
+            '/admin/bulkTaskCreate': {
+                label: 'Toplu Görev Oluştur',
+                icon: 'fas fa-layer-group',
+                children: {}
+            },
+            '/admin/bulkUserCreate': {
+                label: 'Toplu Kullanıcı Oluştur',
+                icon: 'fas fa-users-cog',
+                children: {}
+            },
+            '/admin/finishedTimers': {
+                label: 'Tamamlanan Zamanlayıcılar',
+                icon: 'fas fa-clock',
+                children: {}
+            },
+            '/admin/mesaiTalebi': {
+                label: 'Mesai Talebi',
+                icon: 'fas fa-clock',
+                children: {}
+            },
+            '/admin/mesaiTaleplerim': {
+                label: 'Mesai Taleplerim',
+                icon: 'fas fa-list',
+                children: {}
+            },
+            '/admin/machiningReport': {
+                label: 'Talaşlı İmalat Raporu',
+                icon: 'fas fa-chart-bar',
+                children: {}
+            },
+            '/admin/machiningDetailedReport': {
+                label: 'Detaylı Talaşlı İmalat Raporu',
+                icon: 'fas fa-chart-line',
+                children: {}
+            },
+            '/admin/jiraSettings': {
+                label: 'Jira Ayarları',
+                icon: 'fas fa-cog',
+                children: {}
+            },
+            '/admin/machinePlanning': {
+                label: 'Makine Planlama',
+                icon: 'fas fa-calendar',
+                children: {}
             }
+        }
+    }
+};
 
-            // Check if user is logged in
-            if (!isLoggedIn()) {
-                e.preventDefault();
-                navigateTo(ROUTES.LOGIN);
-            }
+// Helper function to get breadcrumb path
+function getBreadcrumbPath(currentPath) {
+    const pathSegments = currentPath.split('/').filter(segment => segment);
+    const breadcrumbs = [];
+    
+    let currentSegment = '';
+    for (const segment of pathSegments) {
+        currentSegment += `/${segment}`;
+        breadcrumbs.push({
+            path: currentSegment,
+            segment: segment
         });
-    });
+    }
+    
+    return breadcrumbs;
+}
 
-    return navbar;
+// Helper function to find navigation item by path
+function findNavigationItem(path, structure = NAVIGATION_STRUCTURE) {
+    for (const [key, value] of Object.entries(structure)) {
+        if (key === path) {
+            return value;
+        }
+        if (value.children) {
+            const found = findNavigationItem(path, value.children);
+            if (found) return found;
+        }
+    }
+    return null;
+}
+
+// Helper function to get parent navigation item
+function getParentNavigationItem(path, structure = NAVIGATION_STRUCTURE) {
+    const pathSegments = path.split('/').filter(segment => segment);
+    if (pathSegments.length <= 1) return null;
+    
+    const parentPath = '/' + pathSegments.slice(0, -1).join('/');
+    return findNavigationItem(parentPath, structure);
+}
+
+// Helper function to render navigation items recursively
+function renderNavigationItems(items, currentPath, level = 0) {
+    let html = '';
+    
+    for (const [path, item] of Object.entries(items)) {
+        const isActive = currentPath === path || currentPath.startsWith(path + '/');
+        const hasChildren = Object.keys(item.children).length > 0;
+        const isExpanded = isActive && hasChildren;
+        
+        const activeClass = isActive ? 'active' : '';
+        const expandedClass = isExpanded ? 'show' : '';
+        
+        if (level === 0) {
+            // Top level items
+            if (hasChildren) {
+                html += `
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle ${activeClass}" href="${path}" role="button" 
+                           data-bs-toggle="dropdown" aria-expanded="${isExpanded}">
+                            <i class="${item.icon} me-1"></i>
+                            <span>${item.label}</span>
+                        </a>
+                        <ul class="dropdown-menu ${expandedClass}">
+                            ${renderNavigationItems(item.children, currentPath, level + 1)}
+                        </ul>
+                    </li>
+                `;
+            } else {
+                html += `
+                    <li class="nav-item">
+                        <a class="nav-link ${activeClass}" href="${path}">
+                            <i class="${item.icon} me-1"></i>
+                            <span>${item.label}</span>
+                        </a>
+                    </li>
+                `;
+            }
+        } else {
+            // Sub-level items
+            html += `
+                <li>
+                    <a class="dropdown-item ${activeClass}" href="${path}">
+                        <i class="${item.icon} me-1"></i>
+                        <span>${item.label}</span>
+                    </a>
+                </li>
+            `;
+        }
+    }
+    
+    return html;
 }
 
 // Helper to create user modal
@@ -181,6 +376,9 @@ export function initNavbar() {
       const userDisplayName = user.first_name && user.last_name ? 
         `${user.first_name} ${user.last_name}` : username;
       
+      const currentPath = window.location.pathname;
+      const navigationItems = renderNavigationItems(NAVIGATION_STRUCTURE, currentPath);
+      
       const navHTML = `
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
             <div class="container-fluid">
@@ -196,54 +394,7 @@ export function initNavbar() {
                 
                 <div class="collapse navbar-collapse" id="navbarNav">
                     <ul class="navbar-nav me-auto mb-2 mb-lg-0">
-                        <li class="nav-item">
-                            <a class="nav-link" href="/">
-                                <i class="fas fa-home me-1"></i>
-                                <span>Ana Sayfa</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="/manufacturing">
-                                <i class="fas fa-industry me-1"></i>
-                                <span>İmalat</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="/procurement">
-                                <i class="fas fa-shopping-cart me-1"></i>
-                                <span>Satın Alma</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="/planning">
-                                <i class="fas fa-calendar-alt me-1"></i>
-                                <span>Planlama</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="/rolling-mill">
-                                <i class="fas fa-cogs me-1"></i>
-                                <span>Haddehane</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="/logistics">
-                                <i class="fas fa-truck me-1"></i>
-                                <span>Lojistik</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="/design">
-                                <i class="fas fa-drafting-compass me-1"></i>
-                                <span>Dizayn</span>
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="/quality-control">
-                                <i class="fas fa-clipboard-check me-1"></i>
-                                <span>Kalite Kontrol</span>
-                            </a>
-                        </li>
+                        ${navigationItems}
                     </ul>
                     
                     <ul class="navbar-nav ms-auto align-items-center">
@@ -316,25 +467,21 @@ export function initNavbar() {
           });
       }
       
-      // Highlight active page
-      const links = navbarContainer.querySelectorAll('.nav-link');
-      const currentPath = window.location.pathname;
-      links.forEach(link => {
-          const href = link.getAttribute('href');
-          if (href) {
-              // Check for exact match first
-              if (href === currentPath) {
-                  link.classList.add('active');
+      // Add click handlers for navigation
+      const navLinks = navbarContainer.querySelectorAll('.nav-link, .dropdown-item');
+      navLinks.forEach(link => {
+          link.addEventListener('click', (e) => {
+              // Allow home page and login page without authentication
+              if (link.getAttribute('href') === '/' || link.getAttribute('href') === '/login') {
+                  return;
               }
-              // Check for partial match for subpages (e.g., /manufacturing/tasks/ should highlight /manufacturing)
-              else if (href !== '/' && currentPath.startsWith(href)) {
-                  link.classList.add('active');
+
+              // Check if user is logged in
+              if (!isLoggedIn()) {
+                  e.preventDefault();
+                  navigateTo(ROUTES.LOGIN);
               }
-              // Special case for home page - only highlight if we're exactly on home
-              else if (href === '/' && currentPath === '/') {
-                  link.classList.add('active');
-              }
-          }
+          });
       });
     }
     
