@@ -22,20 +22,52 @@ const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-chart-line',
                         children: {}
                     },
-                    '/manufacturing/machining/tasks': {
-                        label: 'Görevler',
-                        icon: 'fas fa-tasks',
-                        children: {}
-                    },
+                                         '/manufacturing/machining/tasks': {
+                         label: 'Görevler',
+                         icon: 'fas fa-tasks',
+                         children: {}
+                     },
                     '/manufacturing/machining/reports': {
                         label: 'Raporlar',
                         icon: 'fas fa-chart-pie',
-                        children: {}
+                        children: {
+                            '/manufacturing/machining/reports/production': {
+                                label: 'Üretim Raporları',
+                                icon: 'fas fa-industry',
+                                children: {}
+                            },
+                            '/manufacturing/machining/reports/performance': {
+                                label: 'Performans Raporları',
+                                icon: 'fas fa-tachometer-alt',
+                                children: {}
+                            },
+                            '/manufacturing/machining/reports/quality': {
+                                label: 'Kalite Raporları',
+                                icon: 'fas fa-award',
+                                children: {}
+                            }
+                        }
                     },
                     '/manufacturing/machining/capacity': {
                         label: 'Kapasite Yönetimi',
                         icon: 'fas fa-industry',
-                        children: {}
+                        children: {
+                            '/manufacturing/machining/capacity/planning': {
+                                label: 'Kapasite Planlama',
+                                icon: 'fas fa-calendar-alt',
+                                children: {}
+                            },
+                            '/manufacturing/machining/capacity/monitoring': {
+                                label: 'Kapasite İzleme',
+                                icon: 'fas fa-eye',
+                                children: {}
+                            },
+                            '/manufacturing/machining/capacity/optimization': {
+                                label: 'Kapasite Optimizasyonu',
+                                icon: 'fas fa-cogs',
+                                children: {}
+                            }
+                        }
                     }
                 }
             },
@@ -46,17 +78,65 @@ const NAVIGATION_STRUCTURE = {
                     '/manufacturing/welding/processes': {
                         label: 'Kaynak İşlemleri',
                         icon: 'fas fa-fire',
-                        children: {}
+                        children: {
+                            '/manufacturing/welding/processes/arc': {
+                                label: 'Ark Kaynağı',
+                                icon: 'fas fa-bolt',
+                                children: {}
+                            },
+                            '/manufacturing/welding/processes/gas': {
+                                label: 'Gaz Kaynağı',
+                                icon: 'fas fa-flame',
+                                children: {}
+                            },
+                            '/manufacturing/welding/processes/resistance': {
+                                label: 'Direnç Kaynağı',
+                                icon: 'fas fa-zap',
+                                children: {}
+                            }
+                        }
                     },
                     '/manufacturing/welding/joining': {
                         label: 'Birleştirme',
                         icon: 'fas fa-link',
-                        children: {}
+                        children: {
+                            '/manufacturing/welding/joining/butt': {
+                                label: 'Alın Birleştirme',
+                                icon: 'fas fa-grip-lines',
+                                children: {}
+                            },
+                            '/manufacturing/welding/joining/lap': {
+                                label: 'Bindirme Birleştirme',
+                                icon: 'fas fa-layer-group',
+                                children: {}
+                            },
+                            '/manufacturing/welding/joining/corner': {
+                                label: 'Köşe Birleştirme',
+                                icon: 'fas fa-angle-right',
+                                children: {}
+                            }
+                        }
                     },
                     '/manufacturing/welding/quality': {
                         label: 'Kalite Kontrol',
                         icon: 'fas fa-clipboard-check',
-                        children: {}
+                        children: {
+                            '/manufacturing/welding/quality/inspection': {
+                                label: 'Görsel Muayene',
+                                icon: 'fas fa-eye',
+                                children: {}
+                            },
+                            '/manufacturing/welding/quality/testing': {
+                                label: 'Test İşlemleri',
+                                icon: 'fas fa-vial',
+                                children: {}
+                            },
+                            '/manufacturing/welding/quality/certification': {
+                                label: 'Sertifikasyon',
+                                icon: 'fas fa-certificate',
+                                children: {}
+                            }
+                        }
                     }
                 }
             },
@@ -238,7 +318,8 @@ function renderNavigationItems(items, currentPath, level = 0) {
     for (const [path, item] of Object.entries(items)) {
         const isActive = currentPath === path || currentPath.startsWith(path + '/');
         const hasChildren = Object.keys(item.children).length > 0;
-        const isExpanded = isActive && hasChildren;
+        // Keep dropdowns closed by default - only show when explicitly clicked
+        const isExpanded = false; // Changed from: isActive && hasChildren
         
         const activeClass = isActive ? 'active' : '';
         const expandedClass = isExpanded ? 'show' : '';
@@ -248,8 +329,8 @@ function renderNavigationItems(items, currentPath, level = 0) {
             if (hasChildren) {
                 html += `
                     <li class="nav-item dropdown">
-                        <a class="nav-link dropdown-toggle ${activeClass}" href="${path}" role="button" 
-                           data-bs-toggle="dropdown" aria-expanded="${isExpanded}">
+                        <a class="nav-link dropdown-toggle ${activeClass}" href="#" role="button" 
+                           data-bs-toggle="dropdown" aria-expanded="${isExpanded}" data-path="${path}">
                             <i class="${item.icon} me-1"></i>
                             <span>${item.label}</span>
                         </a>
@@ -261,7 +342,32 @@ function renderNavigationItems(items, currentPath, level = 0) {
             } else {
                 html += `
                     <li class="nav-item">
-                        <a class="nav-link ${activeClass}" href="${path}">
+                        <a class="nav-link ${activeClass}" href="#" data-path="${path}">
+                            <i class="${item.icon} me-1"></i>
+                            <span>${item.label}</span>
+                        </a>
+                    </li>
+                `;
+            }
+        } else if (level === 1) {
+            // Second level items
+            if (hasChildren) {
+                html += `
+                    <li class="dropend">
+                        <a class="dropdown-item dropdown-toggle ${activeClass}" href="#" role="button" 
+                           data-bs-toggle="dropdown" aria-expanded="${isExpanded}" data-path="${path}">
+                            <i class="${item.icon} me-1"></i>
+                            <span>${item.label}</span>
+                        </a>
+                        <ul class="dropdown-menu dropdown-submenu">
+                            ${renderNavigationItems(item.children, currentPath, level + 1)}
+                        </ul>
+                    </li>
+                `;
+            } else {
+                html += `
+                    <li>
+                        <a class="dropdown-item ${activeClass}" href="#" data-path="${path}">
                             <i class="${item.icon} me-1"></i>
                             <span>${item.label}</span>
                         </a>
@@ -269,10 +375,10 @@ function renderNavigationItems(items, currentPath, level = 0) {
                 `;
             }
         } else {
-            // Sub-level items
+            // Third level and deeper items
             html += `
                 <li>
-                    <a class="dropdown-item ${activeClass}" href="${path}">
+                    <a class="dropdown-item ${activeClass}" href="#" data-path="${path}">
                         <i class="${item.icon} me-1"></i>
                         <span>${item.label}</span>
                     </a>
@@ -427,11 +533,145 @@ export function initNavbar() {
       
       navbarContainer.innerHTML = navHTML;
       
-      // Initialize Bootstrap dropdowns after navbar is created
-      const dropdownElementList = navbarContainer.querySelectorAll('.dropdown-toggle');
-      dropdownElementList.forEach(dropdownToggleEl => {
-          new bootstrap.Dropdown(dropdownToggleEl);
-      });
+                     // Initialize Bootstrap dropdowns after navbar is created
+        const dropdownElementList = navbarContainer.querySelectorAll('.dropdown-toggle');
+        dropdownElementList.forEach(dropdownToggleEl => {
+            new bootstrap.Dropdown(dropdownToggleEl);
+        });
+        
+        // Add hover functionality for main navbar dropdowns (top level only)
+        const mainDropdownToggles = navbarContainer.querySelectorAll('.nav-item.dropdown .dropdown-toggle');
+        mainDropdownToggles.forEach(dropdownToggle => {
+            const navItem = dropdownToggle.closest('.nav-item');
+            const dropdownMenu = dropdownToggle.nextElementSibling;
+            
+            // Show dropdown on hover - only immediate subcategories
+            navItem.addEventListener('mouseenter', () => {
+                if (dropdownMenu) {
+                    dropdownMenu.classList.add('show');
+                    // Hide all nested submenus when main dropdown opens
+                    const allSubmenus = dropdownMenu.querySelectorAll('.dropdown-submenu');
+                    allSubmenus.forEach(submenu => {
+                        submenu.classList.remove('show');
+                    });
+                }
+            });
+            
+            // Hide dropdown on mouse leave with longer delay for better UX
+            let hideTimeout;
+            navItem.addEventListener('mouseleave', (e) => {
+                // Check if the mouse is moving to the dropdown menu or its children
+                const relatedTarget = e.relatedTarget;
+                if (relatedTarget && (
+                    relatedTarget === dropdownMenu || 
+                    dropdownMenu.contains(relatedTarget) ||
+                    relatedTarget.closest('.dropdown-menu') ||
+                    relatedTarget.closest('.nav-item.dropdown')
+                )) {
+                    return; // Don't hide if moving to dropdown menu or its items
+                }
+                
+                hideTimeout = setTimeout(() => {
+                    if (dropdownMenu) {
+                        dropdownMenu.classList.remove('show');
+                    }
+                }, 500); // Increased delay for better user experience
+            });
+            
+            // Cancel hide timeout when entering dropdown menu
+            if (dropdownMenu) {
+                dropdownMenu.addEventListener('mouseenter', () => {
+                    if (hideTimeout) {
+                        clearTimeout(hideTimeout);
+                    }
+                });
+                
+                dropdownMenu.addEventListener('mouseleave', (e) => {
+                    // Check if moving to another dropdown item
+                    const relatedTarget = e.relatedTarget;
+                    if (relatedTarget && (
+                        relatedTarget.closest('.dropdown-menu') ||
+                        relatedTarget.closest('.nav-item.dropdown')
+                    )) {
+                        return;
+                    }
+                    
+                    if (dropdownMenu) {
+                        dropdownMenu.classList.remove('show');
+                    }
+                });
+            }
+            
+            // Also handle hover on the dropdown toggle itself for better responsiveness
+            dropdownToggle.addEventListener('mouseenter', () => {
+                if (dropdownMenu) {
+                    dropdownMenu.classList.add('show');
+                    // Hide all nested submenus when main dropdown opens
+                    const allSubmenus = dropdownMenu.querySelectorAll('.dropdown-submenu');
+                    allSubmenus.forEach(submenu => {
+                        submenu.classList.remove('show');
+                    });
+                }
+            });
+        });
+        
+        // Initialize nested dropdowns (dropend) with hover functionality
+        const dropendElements = navbarContainer.querySelectorAll('.dropend .dropdown-toggle');
+        dropendElements.forEach(dropendToggle => {
+            // Don't initialize Bootstrap dropdown for nested dropdowns to avoid conflicts
+            // const dropdown = new bootstrap.Dropdown(dropendToggle);
+            
+            // Add hover functionality for nested dropdowns
+            dropendToggle.addEventListener('mouseenter', () => {
+                const dropdownMenu = dropendToggle.nextElementSibling;
+                if (dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
+                    dropdownMenu.classList.add('show');
+                }
+            });
+            
+            // Hide nested dropdown on mouse leave with delay
+            let hideTimeout;
+            const dropendItem = dropendToggle.closest('.dropend');
+            dropendItem.addEventListener('mouseleave', (e) => {
+                // Check if moving to the submenu
+                const relatedTarget = e.relatedTarget;
+                if (relatedTarget && relatedTarget.closest('.dropdown-submenu')) {
+                    return;
+                }
+                
+                hideTimeout = setTimeout(() => {
+                    const dropdownMenu = dropendToggle.nextElementSibling;
+                    if (dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
+                        dropdownMenu.classList.remove('show');
+                    }
+                }, 300); // Increased delay for better UX
+            });
+            
+            // Cancel hide timeout when entering submenu
+            const dropdownMenu = dropendToggle.nextElementSibling;
+            if (dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
+                dropdownMenu.addEventListener('mouseenter', () => {
+                    if (hideTimeout) {
+                        clearTimeout(hideTimeout);
+                    }
+                });
+                
+                dropdownMenu.addEventListener('mouseleave', (e) => {
+                    // Check if moving to another dropdown item
+                    const relatedTarget = e.relatedTarget;
+                    if (relatedTarget && (
+                        relatedTarget.closest('.dropdown-menu') ||
+                        relatedTarget.closest('.dropend')
+                    )) {
+                        return;
+                    }
+                    
+                    if (dropdownMenu) {
+                        dropdownMenu.classList.remove('show');
+                    }
+                });
+            }
+        });
       
       // Add event listeners
       const editProfileBtn = document.getElementById('edit-profile-btn');
@@ -467,22 +707,84 @@ export function initNavbar() {
           });
       }
       
-      // Add click handlers for navigation
-      const navLinks = navbarContainer.querySelectorAll('.nav-link, .dropdown-item');
-      navLinks.forEach(link => {
-          link.addEventListener('click', (e) => {
-              // Allow home page and login page without authentication
-              if (link.getAttribute('href') === '/' || link.getAttribute('href') === '/login') {
-                  return;
-              }
+                     // Add click handlers for navigation
+        const navLinks = navbarContainer.querySelectorAll('.nav-link, .dropdown-item');
+        navLinks.forEach(link => {
+            link.addEventListener('click', (e) => {
+                const path = link.getAttribute('data-path');
+                
+                // Handle dropdown toggles with dual functionality
+                if (link.classList.contains('dropdown-toggle')) {
+                    // If it has a path, navigate to it on click
+                    if (path) {
+                        e.preventDefault();
+                        
+                        // Allow home page and login page without authentication
+                        if (path === '/' || path === '/login') {
+                            navigateTo(path);
+                            return;
+                        }
 
-              // Check if user is logged in
-              if (!isLoggedIn()) {
-                  e.preventDefault();
-                  navigateTo(ROUTES.LOGIN);
-              }
-          });
-      });
+                        // Check if user is logged in
+                        if (!isLoggedIn()) {
+                            navigateTo(ROUTES.LOGIN);
+                            return;
+                        }
+                        
+                        
+                        if (path.startsWith('/manufacturing/welding/')) {
+                            // Show placeholder for welding pages
+                            alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
+                            return;
+                        }
+                        
+                        if (path.startsWith('/manufacturing/maintenance/')) {
+                            // Show placeholder for maintenance pages
+                            alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
+                            return;
+                        }
+                        
+                        navigateTo(path);
+                    }
+                    // If no path, let Bootstrap handle the dropdown toggle
+                    return;
+                }
+                
+                // Skip if no path
+                if (!path) {
+                    return;
+                }
+                
+                e.preventDefault();
+                
+                // Allow home page and login page without authentication
+                if (path === '/' || path === '/login') {
+                    navigateTo(path);
+                    return;
+                }
+
+                // Check if user is logged in
+                if (!isLoggedIn()) {
+                    navigateTo(ROUTES.LOGIN);
+                    return;
+                }
+                
+                
+                if (path.startsWith('/manufacturing/welding/')) {
+                    // Show placeholder for welding pages
+                    alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
+                    return;
+                }
+                
+                if (path.startsWith('/manufacturing/maintenance/')) {
+                    // Show placeholder for maintenance pages
+                    alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
+                    return;
+                }
+                
+                navigateTo(path);
+            });
+        });
     }
     
     renderNavbar();

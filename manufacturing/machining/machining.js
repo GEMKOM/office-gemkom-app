@@ -14,8 +14,7 @@ function navigateTo(section) {
         case 'tasks':
             // Navigate to tasks
             console.log('Navigating to tasks...');
-            // TODO: Implement tasks navigation
-            showNotification('Görevler özelliği yakında eklenecek!', 'info');
+            window.location.href = '/manufacturing/machining/tasks/';
             break;
         case 'reports':
             // Navigate to reports

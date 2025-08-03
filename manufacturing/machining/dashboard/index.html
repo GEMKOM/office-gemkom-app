@@ -39,6 +39,9 @@
                                 <p class="section-subtitle mb-0">Gerçek zamanlı üretim takibi ve analizi</p>
                             </div>
                             <div class="dashboard-controls">
+                                <button id="back-to-main" class="btn btn-outline-secondary me-2">
+                                    <i class="fas fa-arrow-left me-2"></i>Geri Dön
+                                </button>
                                 <button id="refresh-btn" class="btn btn-primary">
                                     <i class="fas fa-sync-alt me-2"></i>Yenile
                                 </button>
@@ -50,6 +53,8 @@
                     </div>
                 </div>
             </div>
+            
+
 
             <!-- Statistics Cards -->
             <div class="row g-4 mb-4">
@@ -74,7 +79,7 @@
                             </div>
                             <div class="stat-content">
                                 <h3 class="stat-number" id="active-machines-count">0</h3>
-                                <p class="stat-label">Aktif Makine</p>
+                                <p class="stat-label">Makine</p>
                             </div>
                         </div>
                     </div>
@@ -155,8 +160,10 @@
                             </h5>
                         </div>
                         <div class="card-body">
-                            <div id="machines-status">
-                                <!-- Machine status will be inserted here -->
+                            <div class="table-responsive">
+                                <div id="machines-status">
+                                    <!-- Machine status table will be inserted here -->
+                                </div>
                             </div>
                         </div>
                     </div>

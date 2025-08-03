@@ -3,6 +3,7 @@ import { initNavbar } from '../../../components/navbar.js';
 import { fetchTimers } from '../../../generic/timers.js';
 import { fetchMachines } from '../../../generic/machines.js';
 import { getSyncedNow } from '../../../generic/timeService.js';
+import { navigateTo } from '../machining.js';
 //import { stopTimerShared } from '../../../machining/machiningService.js';
 
 // Dashboard state
@@ -72,6 +73,14 @@ function setupEventListeners() {
     const addTimerBtn = document.getElementById('add-timer-btn');
     if (addTimerBtn) {
         addTimerBtn.addEventListener('click', showAddTimerModal);
+    }
+    
+    // Back to main button
+    const backToMainBtn = document.getElementById('back-to-main');
+    if (backToMainBtn) {
+        backToMainBtn.addEventListener('click', () => {
+            window.location.href = '/manufacturing/machining/';
+        });
     }
     
     // Setup table event listeners
@@ -331,6 +340,24 @@ function updateMachinesStatus() {
         return;
     }
     
+    // Create table structure
+    const table = document.createElement('table');
+    table.className = 'table table-hover';
+    table.innerHTML = `
+        <thead>
+            <tr>
+                <th>Makine</th>
+                <th>Tip</th>
+                <th class="text-center">Durum</th>
+            </tr>
+        </thead>
+        <tbody id="machines-table-body">
+        </tbody>
+    `;
+    machinesContainer.appendChild(table);
+    
+    const tbody = document.getElementById('machines-table-body');
+    
     // Process each machine from API data
     dashboardState.machines.forEach(machine => {
         // Determine status class based on machine properties
@@ -352,34 +379,22 @@ function updateMachinesStatus() {
             statusText = 'Bakımda';
         }
         
-        // Create machine status card
-        const machineCard = document.createElement('div');
-        machineCard.className = 'machine-status-card';
-        machineCard.innerHTML = `
-            <div class="machine-status-header">
-                <div class="machine-info">
-                    <h6 class="machine-name">${machine.name || 'Bilinmeyen Makine'}</h6>
-                    <small class="machine-type">${machine.machine_type_label || machine.machine_type || 'Bilinmeyen Tip'}</small>
-                </div>
+        // Create table row
+        const newRow = document.createElement('tr');
+        newRow.className = 'machine-row';
+        newRow.innerHTML = `
+            <td>
+                <span class="machine-name">${machine.name || 'Bilinmeyen Makine'}</span>
+            </td>
+            <td>
+                <span class="machine-type">${machine.machine_type_label || machine.machine_type || 'Bilinmeyen Tip'}</span>
+            </td>
+            <td class="text-center">
                 <span class="status-badge ${statusClass}">${statusText}</span>
-            </div>
-            <div class="machine-details">
-                ${machine.has_active_timer ? `
-                <div class="machine-property active-timer">
-                    <i class="fas fa-play-circle me-1"></i>
-                    <span>Aktif Zamanlayıcı Var</span>
-                </div>
-                ` : ''}
-                ${machine.is_under_maintenance ? `
-                <div class="machine-property maintenance">
-                    <i class="fas fa-tools me-1"></i>
-                    <span>Bakım Modunda</span>
-                </div>
-                ` : ''}
-            </div>
+            </td>
         `;
         
-        machinesContainer.appendChild(machineCard);
+        tbody.appendChild(newRow);
     });
 }
 
@@ -581,6 +596,9 @@ window.addEventListener('beforeunload', () => {
     stopAutoRefresh();
     stopTimerUpdates();
 });
+
+// Make navigation function globally available
+window.navigateTo = navigateTo;
 
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', initDashboard); 
