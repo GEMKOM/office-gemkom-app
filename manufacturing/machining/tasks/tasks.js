@@ -1,13 +1,13 @@
 import { initNavbar } from '../../../components/navbar.js';
 import { ModernDropdown } from '../../../components/dropdown.js';
 import { fetchMachines } from '../../../generic/machines.js';
-import { fetchTasks, deleteTask as deleteTaskAPI, updateTask as updateTaskAPI, fetchTaskById, createTask as createTaskAPI, bulkCreateTasks } from '../../../generic/tasks.js';
+import { fetchTasks, deleteTask as deleteTaskAPI, updateTask as updateTaskAPI, fetchTaskById, createTask as createTaskAPI, bulkCreateTasks, markTaskCompleted, unmarkTaskCompleted } from '../../../generic/tasks.js';
 
 // State management
 let currentPage = 1;
 let currentFilter = 'all';
-let currentOrdering = 'job_no';
-let currentSortField = 'job_no';
+let currentOrdering = 'key';
+let currentSortField = 'key';
 let currentSortDirection = 'asc';
 let tasks = [];
 let machines = [];
@@ -16,6 +16,7 @@ let isLoading = false;
 let createdTasks = []; // Store created tasks for displaying keys
 let machineFilterDropdown = null;
 let statusFilterDropdown = null;
+let isInlineEditing = false; // Flag to prevent re-rendering during inline editing
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -29,9 +30,6 @@ async function initializeTasks() {
         await loadMachines();
         initializeSortableHeaders();
         
-        // Check for URL parameters and set filters
-        const filterApplied = handleUrlParameters();
-        
         await loadTasks();
         updateTaskCounts();
     } catch (error) {
@@ -44,6 +42,12 @@ async function loadMachines() {
     try {
         machines = await fetchMachines('machining');
         populateMachineFilters();
+        
+        // Set default status filter to 'active' if no URL parameters were applied
+        const filterApplied = handleUrlParameters();
+        if (!filterApplied && statusFilterDropdown) {
+            statusFilterDropdown.setValue('active');
+        }
     } catch (error) {
         console.error('Error loading machines:', error);
         machines = [];
@@ -98,7 +102,8 @@ function populateMachineFilters() {
             { value: '', text: 'Tümü' },
             { value: 'active', text: 'Aktif' },
             { value: 'completed', text: 'Tamamlanan' },
-            { value: 'pending', text: 'Bekleyen' }
+            { value: 'pending', text: 'Bekliyor' },
+            { value: 'worked_on', text: 'Çalışıldı' }
         ];
         
         statusFilterDropdown = new ModernDropdown(statusFilterContainer, {
@@ -171,6 +176,12 @@ function handleColumnSort(field) {
 async function loadTasks(page = 1) {
     if (isLoading) return;
     
+    // Don't reload if inline editing is active
+    if (isInlineEditing) {
+        console.log('Skipping loadTasks due to active inline editing');
+        return;
+    }
+    
     isLoading = true;
     showLoadingState();
     
@@ -228,6 +239,12 @@ function buildTaskQuery(page = 1) {
         params.append('completion_date__isnull', 'true');
     } else if (statusFilter === 'completed') {
         params.append('completion_date__isnull', 'false');
+    } else if (statusFilter === 'pending') {
+        params.append('completion_date__isnull', 'true');
+        params.append('has_timer', 'false');
+    } else if (statusFilter === 'worked_on') {
+        params.append('completion_date__isnull', 'true');
+        params.append('has_timer', 'true');
     }
     
     // Add pagination
@@ -248,7 +265,7 @@ function renderTasksTable() {
     if (tasks.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="11" class="text-center">
+                <td colspan="12" class="text-center">
                     <div class="empty-state">
                         <i class="fas fa-tasks"></i>
                         <h5>Görev Bulunamadı</h5>
@@ -261,38 +278,41 @@ function renderTasksTable() {
     }
     
     tbody.innerHTML = tasks.map(task => `
-        <tr class="data-update">
+        <tr class="data-update" data-task-key="${task.key}">
             <td>
                 <span class="task-key">${task.key || 'N/A'}</span>
             </td>
-            <td>
+            <td class="editable-cell" data-field="name" data-task-key="${task.key}">
                 <div class="task-name">
                     <strong>${task.name || 'N/A'}</strong>
                     ${task.description ? `<br><small class="text-muted">${task.description}</small>` : ''}
                 </div>
             </td>
-            <td>${task.job_no || 'N/A'}</td>
-            <td>${task.image_no || 'N/A'}</td>
-            <td>${task.position_no || 'N/A'}</td>
-            <td>
+            <td class="editable-cell" data-field="job_no" data-task-key="${task.key}">${task.job_no || 'N/A'}</td>
+            <td class="editable-cell" data-field="image_no" data-task-key="${task.key}">${task.image_no || 'N/A'}</td>
+            <td class="editable-cell" data-field="position_no" data-task-key="${task.key}">${task.position_no || 'N/A'}</td>
+            <td class="editable-cell" data-field="quantity" data-task-key="${task.key}">
                 <span class="quantity-badge">${task.quantity || 0}</span>
             </td>
-            <td>
+            <td class="editable-cell" data-field="machine_name" data-task-key="${task.key}">
                 <span class="machine-name">${task.machine_name || 'N/A'}</span>
             </td>
-            <td>
+            <td class="editable-cell" data-field="estimated_hours" data-task-key="${task.key}">
                 <span class="estimated-hours">${task.estimated_hours ? task.estimated_hours + ' saat' : 'Belirtilmemiş'}</span>
             </td>
             <td>
                 <span class="hours-spent">${task.total_hours_spent || 0} saat</span>
             </td>
-            <td>
+            <td class="editable-cell" data-field="finish_time" data-task-key="${task.key}">
+                ${task.finish_time ? new Date(task.finish_time).toLocaleDateString('tr-TR') : 'Belirtilmemiş'}
+            </td>
+            <td class="editable-cell" data-field="status" data-task-key="${task.key}">
                 ${getStatusBadge(task)}
             </td>
             <td>
                 <div class="action-buttons">
-                    <button class="btn btn-sm btn-outline-primary" onclick="editTask('${task.key}')" title="Düzenle">
-                        <i class="fas fa-edit"></i>
+                    <button class="btn btn-sm btn-outline-success" onclick="showCompletionData('${task.key}')" title="Görev Verileri">
+                        <i class="fas fa-chart-line"></i>
                     </button>
                     <button class="btn btn-sm btn-outline-danger" onclick="deleteTask('${task.key}')" title="Sil">
                         <i class="fas fa-trash"></i>
@@ -301,6 +321,9 @@ function renderTasksTable() {
             </td>
         </tr>
     `).join('');
+    
+    // Add click event listeners for inline editing
+    setupInlineEditing();
 }
 
 function getStatusBadge(task) {
@@ -953,64 +976,436 @@ async function updateTask() {
 }
 
 // Global functions for table actions
-window.editTask = async function(taskKey) {
+window.editTask = function(taskKey) {
+    // For now, this will show a notification that inline editing is available
+    showNotification('Hücreye tıklayarak düzenleme yapabilirsiniz', 'info');
+};
+
+window.showCompletionData = function(taskKey) {
     try {
-        // Show loading notification instead of replacing table
-        const loadingNotification = showNotification('Görev yükleniyor...', 'info');
+        // Find the task in the global tasks array
+        const task = tasks.find(t => t.key === taskKey);
         
-        // Fetch task details
-        const task = await fetchTaskById(taskKey);
-        if (!task) {
-            throw new Error('Görev bulunamadı');
+        if (task) {
+            showCompletionDataModal(task);
+        } else {
+            showNotification('Görev bulunamadı', 'error');
         }
-        
-        // Remove loading notification
-        if (loadingNotification) {
-            loadingNotification.remove();
-        }
-        
-        // Populate edit form
-        document.getElementById('edit-task-key').value = task.key;
-        document.getElementById('edit-task-name').value = task.name || '';
-        document.getElementById('edit-task-job-no').value = task.job_no || '';
-        document.getElementById('edit-task-image-no').value = task.image_no || '';
-        document.getElementById('edit-task-position-no').value = task.position_no || '';
-        document.getElementById('edit-task-quantity').value = task.quantity || 1;
-        document.getElementById('edit-task-estimated-hours').value = task.estimated_hours || '';
-        document.getElementById('edit-task-machine').value = task.machine_fk || '';
-        document.getElementById('edit-task-finish-time').value = task.finish_time || '';
-        document.getElementById('edit-task-description').value = task.description || '';
-        
-        // Show edit modal
-        const modal = new bootstrap.Modal(document.getElementById('editTaskModal'));
-        modal.show();
-        
     } catch (error) {
-        console.error('Error loading task for edit:', error);
-        showNotification('Görev yüklenirken hata oluştu', 'error');
+        console.error('Error showing completion data:', error);
+        showNotification('Görev verileri gösterilirken hata oluştu', 'error');
+    }
+};
+
+function showCompletionDataModal(task) {
+    // Determine if task is completed
+    const isCompleted = task.completion_date;
+    
+    // Calculate progress for unfinished tasks
+    let progressPercentage = 0;
+    let progressColor = 'secondary';
+    let timeRemaining = '';
+    let remaining_text = '';
+    let efficiency = 'N/A';
+    let hourDifference = 'N/A';
+    let dateDifference = 'N/A';
+    
+    if (!isCompleted) {
+        const now = new Date();
+        const finishTime = task.finish_time ? new Date(task.finish_time) : null;
+        const totalDuration = task.estimated_hours ? parseFloat(task.estimated_hours) : 0;
+        const elapsed = task.total_hours_spent || 0;
+        
+        // Calculate progress percentage
+        if (totalDuration > 0) {
+            progressPercentage = Math.min(Math.max((elapsed / totalDuration) * 100, 0), 100);
+        }
+        
+        // Calculate efficiency
+        if (elapsed > 0 && totalDuration > 0) {
+            efficiency = `${((totalDuration / elapsed) * 100).toFixed(1)}%`;
+        }
+        
+        // Calculate hour difference
+        if (totalDuration > 0) {
+            const diff = (elapsed - totalDuration).toFixed(2);
+            if (elapsed > totalDuration) {
+                hourDifference = `${diff} saat fazla`;
+            } else if (elapsed < totalDuration) {
+                hourDifference = `${Math.abs(diff)} saat kaldı`;
+            } else {
+                hourDifference = 'Tam zamanında';
+            }
+        }
+        
+        // Calculate date difference
+        if (finishTime) {
+            // Set both dates to midnight to get only day difference
+            const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+            const finishTimeOnly = new Date(finishTime.getFullYear(), finishTime.getMonth(), finishTime.getDate());
+            
+            const diffTime = finishTimeOnly.getTime() - nowOnly.getTime();
+            const diffDays = diffTime / (1000 * 60 * 60 * 24);
+            
+            if (diffDays > 0) {
+                dateDifference = `${diffDays} gün kaldı`;
+            } else if (diffDays < 0) {
+                dateDifference = `${Math.abs(diffDays)} gün gecikme`;
+            } else {
+                dateDifference = 'Bugün bitmesi gerekiyor';
+            }
+        }
+        
+        // Calculate remaining hours
+        const remaining = totalDuration > 0 ? Math.abs(totalDuration - elapsed).toFixed(2) : 'N/A';
+        
+        // Determine progress color and remaining text
+        if (progressPercentage >= 100) {
+            progressColor = 'danger'; // Overdue
+            remaining_text = totalDuration > 0 ? `${remaining} saat gecikme` : 'Süre belirtilmemiş';
+        } else if (progressPercentage >= 75) {
+            progressColor = 'warning'; // Almost due
+            remaining_text = totalDuration > 0 ? `${remaining} saat kaldı` : 'Süre belirtilmemiş';
+        } else {
+            progressColor = 'info'; // On track
+            remaining_text = totalDuration > 0 ? `${remaining} saat kaldı` : 'Süre belirtilmemiş';
+        }
+        
+        // Calculate time remaining
+        if (finishTime) {
+            const timeDiff = finishTime.getTime() - now.getTime();
+            const daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+            
+            if (daysRemaining > 0) {
+                timeRemaining = `${daysRemaining} gün kaldı`;
+            } else if (daysRemaining < 0) {
+                timeRemaining = `${Math.abs(daysRemaining)} gün gecikme`;
+            } else {
+                timeRemaining = 'Bugün bitmesi gerekiyor';
+            }
+        } else {
+            timeRemaining = 'Bitiş tarihi belirtilmemiş';
+        }
+    }
+    
+    // Create modal HTML
+    const modalHtml = `
+        <div class="modal fade" id="completionDataModal" tabindex="-1" aria-labelledby="completionDataModalLabel" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="completionDataModalLabel">
+                            <i class="fas fa-chart-line ${isCompleted ? 'text-success' : 'text-primary'}"></i> 
+                            ${isCompleted ? 'Tamamlanma Verileri' : 'Görev Durumu'} - ${task.key}
+                        </h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6 class="text-primary">Görev Bilgileri</h6>
+                                <table class="table table-sm">
+                                    <tr>
+                                        <td><strong>TI No:</strong></td>
+                                        <td>${task.key}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Görev Adı:</strong></td>
+                                        <td>${task.name}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>İş No:</strong></td>
+                                        <td>${task.job_no}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Resim No:</strong></td>
+                                        <td>${task.image_no}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Pozisyon No:</strong></td>
+                                        <td>${task.position_no}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Adet:</strong></td>
+                                        <td>${task.quantity}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                            <div class="col-md-6">
+                                <h6 class="${isCompleted ? 'text-success' : 'text-primary'}">${isCompleted ? 'Tamamlanma Bilgileri' : 'Görev Durumu'}</h6>
+                                <table class="table table-sm">
+                                    ${isCompleted ? `
+                                        <tr>
+                                            <td><strong>Tamamlayan:</strong></td>
+                                            <td>${task.completed_by_username || 'N/A'}</td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Tamamlanma Tarihi:</strong></td>
+                                            <td>${task.completion_date ? new Date(task.completion_date).toLocaleDateString('tr-TR') : 'N/A'}</td>
+                                        </tr>
+                                    ` : `
+                                        <tr>
+                                            <td><strong>Durum:</strong></td>
+                                            <td><span class="badge bg-warning">Devam Ediyor</span></td>
+                                        </tr>
+                                        <tr>
+                                            <td><strong>Başlangıç:</strong></td>
+                                            <td>${task.created_at ? new Date(task.created_at).toLocaleDateString('tr-TR') : 'N/A'}</td>
+                                        </tr>
+                                    `}
+                                    <tr>
+                                        <td><strong>Bitmesi Planlanan Tarih:</strong></td>
+                                        <td>${task.finish_time ? new Date(task.finish_time).toLocaleDateString('tr-TR') : 'N/A'}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Makine:</strong></td>
+                                        <td>${task.machine_name || 'N/A'}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Tahmini Saat:</strong></td>
+                                        <td>${task.estimated_hours || 'N/A'}</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Harcanan Saat:</strong></td>
+                                        <td>${task.total_hours_spent || '0'}</td>
+                                    </tr>
+                                </table>
+                            </div>
+                        </div>
+                        
+                        ${isCompleted ? `
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <h6 class="text-primary">Performans Analizi</h6>
+                                    <div class="alert alert-info">
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <strong>Verimlilik:</strong><br>
+                                                ${task.estimated_hours ? 
+                                                    `${((task.estimated_hours / task.total_hours_spent) * 100).toFixed(1)}%` : 
+                                                    'N/A'
+                                                }
+                                            </div>
+                                            <div class="col-md-3">
+                                                <strong>Saat Farkı:</strong><br>
+                                                ${task.estimated_hours ? 
+                                                    `${(task.estimated_hours - task.total_hours_spent).toFixed(2)} saat` : 
+                                                    'N/A'
+                                                }
+                                            </div>
+                                            <div class="col-md-3">
+                                                <strong>Tarih Farkı:</strong><br>
+                                                ${task.completion_date && task.finish_time ? 
+                                                    (() => {
+                                                        const completionDate = new Date(task.completion_date);
+                                                        const finishTime = new Date(task.finish_time);
+                                                        
+                                                        // Set both dates to midnight to get only day difference
+                                                        const completionDateOnly = new Date(completionDate.getFullYear(), completionDate.getMonth(), completionDate.getDate());
+                                                        const finishTimeOnly = new Date(finishTime.getFullYear(), finishTime.getMonth(), finishTime.getDate());
+                                                        
+                                                        const diffTime = completionDateOnly.getTime() - finishTimeOnly.getTime();
+                                                        const diffDays = diffTime / (1000 * 60 * 60 * 24);
+                                                        return diffDays > 0 ? 
+                                                            `<span class="text-danger">+${diffDays} gün gecikme</span>` :
+                                                            diffDays < 0 ? 
+                                                            `<span class="text-success">${Math.abs(diffDays)} gün erken</span>` :
+                                                            '<span class="text-success">Tam zamanında</span>';
+                                                    })() : 
+                                                    'N/A'
+                                                }
+                                            </div>
+                                            <div class="col-md-3">
+                                                <strong>Durum:</strong><br>
+                                                <span class="badge bg-success">Tamamlandı</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        ` : `
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <h6 class="text-primary">Performans Analizi</h6>
+                                    <div class="alert alert-info">
+                                        <div class="row">
+                                            <div class="col-md-3">
+                                                <strong>Verimlilik:</strong><br>
+                                                ${efficiency}
+                                            </div>
+                                            <div class="col-md-3">
+                                                <strong>Saat Farkı:</strong><br>
+                                                ${hourDifference}
+                                            </div>
+                                            <div class="col-md-3">
+                                                <strong>Tarih Farkı:</strong><br>
+                                                ${dateDifference}
+                                            </div>
+                                            <div class="col-md-3">
+                                                <strong>Durum:</strong><br>
+                                                <span class="badge bg-warning">Devam Ediyor</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `}
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                        ${isCompleted ? `
+                            <button type="button" class="btn btn-primary" onclick="exportCompletionData('${task.key}')">
+                                <i class="fas fa-download"></i> Dışa Aktar
+                            </button>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Remove existing modal if any
+    const existingModal = document.getElementById('completionDataModal');
+    if (existingModal) {
+        existingModal.remove();
+    }
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('completionDataModal'));
+    modal.show();
+    
+    // Clean up modal when hidden
+    document.getElementById('completionDataModal').addEventListener('hidden.bs.modal', function() {
+        this.remove();
+    });
+}
+
+window.exportCompletionData = function(taskKey) {
+    try {
+        // Find the task in the global tasks array
+        const task = tasks.find(t => t.key === taskKey);
+        
+        if (task && task.completion_date) {
+            
+            // Prepare data for Excel export
+            const headers = [
+                'TI No',
+                'Görev Adı',
+                'İş No',
+                'Resim No',
+                'Pozisyon No',
+                'Adet',
+                'Tamamlayan',
+                'Tamamlanma Tarihi',
+                'Bitiş Tarihi',
+                'Makine',
+                'Tahmini Saat',
+                'Toplam Harcanan Saat',
+                'Verimlilik (%)',
+                'Saat Farkı',
+                'Tarih Farkı'
+            ];
+            
+            const efficiency = task.estimated_hours ? ((task.total_hours_spent / task.estimated_hours) * 100).toFixed(1) : 'N/A';
+            const hourDifference = task.estimated_hours ? (task.total_hours_spent - task.estimated_hours).toFixed(2) : 'N/A';
+            
+            // Calculate date difference
+            let dateDifference = 'N/A';
+            if (task.completion_date && task.finish_time) {
+                const completionDate = new Date(task.completion_date);
+                const finishTime = new Date(task.finish_time);
+                const diffTime = completionDate.getTime() - finishTime.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays > 0) {
+                    dateDifference = `+${diffDays} gün gecikme`;
+                } else if (diffDays < 0) {
+                    dateDifference = `${Math.abs(diffDays)} gün erken`;
+                } else {
+                    dateDifference = 'Tam zamanında';
+                }
+            }
+            
+            const worksheetData = [
+                headers,
+                [
+                    task.key,
+                    task.name,
+                    task.job_no,
+                    task.image_no,
+                    task.position_no,
+                    task.quantity,
+                    task.completed_by_username,
+                    task.completion_date ? new Date(task.completion_date).toLocaleDateString('tr-TR') : 'N/A',
+                    task.finish_time ? new Date(task.finish_time).toLocaleDateString('tr-TR') : 'N/A',
+                    task.machine_name,
+                    task.estimated_hours || 'N/A',
+                    task.total_hours_spent,
+                    efficiency,
+                    hourDifference,
+                    dateDifference
+                ]
+            ];
+            
+            // Create workbook and worksheet
+            const workbook = XLSX.utils.book_new();
+            const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+            
+            // Set column widths
+            const columnWidths = [
+                { wch: 12 }, // TI No
+                { wch: 30 }, // Görev Adı
+                { wch: 12 }, // İş No
+                { wch: 12 }, // Resim No
+                { wch: 12 }, // Pozisyon No
+                { wch: 8 },  // Adet
+                { wch: 15 }, // Tamamlayan
+                { wch: 15 }, // Tamamlanma Tarihi
+                { wch: 12 }, // Bitiş Tarihi
+                { wch: 20 }, // Makine
+                { wch: 12 }, // Tahmini Saat
+                { wch: 15 }, // Toplam Harcanan Saat
+                { wch: 12 }, // Verimlilik
+                { wch: 12 }, // Saat Farkı
+                { wch: 15 }  // Tarih Farkı
+            ];
+            worksheet['!cols'] = columnWidths;
+            
+            // Add worksheet to workbook
+            XLSX.utils.book_append_sheet(workbook, worksheet, 'Tamamlanma Verileri');
+            
+            // Generate filename
+            const filename = `tamamlanma_verileri_${task.key}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            
+            // Save file
+            XLSX.writeFile(workbook, filename);
+            
+            showNotification('Tamamlanma verileri başarıyla dışa aktarıldı', 'success');
+        } else {
+            showNotification('Bu görev henüz tamamlanmamış. Sadece tamamlanan görevler dışa aktarılabilir.', 'info');
+        }
+    } catch (error) {
+        console.error('Error exporting completion data:', error);
+        showNotification('Dışa aktarma sırasında hata oluştu', 'error');
     }
 };
 
 
 
-window.deleteTask = async function(taskKey) {
-    // Find the task in the current list to get its name
-    const task = tasks.find(t => t.key === taskKey);
-    const taskName = task ? task.name : taskKey;
-    
-    // Set the task name in the modal
-    document.getElementById('delete-task-name').textContent = taskName;
-    
-    // Store the task key for the confirmation
+window.deleteTask = function(taskKey) {
+    // Set the pending delete key
     window.pendingDeleteTaskKey = taskKey;
     
     // Show the delete confirmation modal
-    const modal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
-    modal.show();
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+    deleteModal.show();
 };
 
+// Global function for pagination
 window.changePage = function(page) {
-    if (page >= 1 && page <= Math.ceil(totalTasks / 20)) {
+    if (page >= 1) {
         loadTasks(page);
     }
 };
@@ -1150,4 +1545,587 @@ function showNotification(message, type = 'info') {
     
     // Return the notification element for manual removal
     return notification;
+} 
+
+function setupInlineEditing() {
+    const editableCells = document.querySelectorAll('.editable-cell');
+    
+    editableCells.forEach(cell => {
+        cell.addEventListener('click', function(e) {
+            // Don't trigger if clicking on action buttons
+            if (e.target.closest('.action-buttons')) {
+                return;
+            }
+            
+            // Skip if already editing globally
+            if (isInlineEditing) {
+                return;
+            }
+            
+            const taskKey = this.dataset.taskKey;
+            const field = this.dataset.field;
+            const currentValue = this.textContent.trim();
+            
+            // Skip if already editing this cell
+            if (this.querySelector('input')) {
+                return;
+            }
+            
+            startInlineEdit(this, taskKey, field, currentValue);
+        });
+    });
+}
+
+function startInlineEdit(cell, taskKey, field, currentValue) {
+    // Prevent multiple simultaneous inline edits
+    if (isInlineEditing) {
+        return;
+    }
+    
+    // Set inline editing flag
+    isInlineEditing = true;
+    
+    // Clear the flag after 30 seconds as a safety measure
+    setTimeout(() => {
+        isInlineEditing = false;
+    }, 30000);
+    
+    // Create input element based on field type
+    let input;
+    
+    // Set input type and attributes based on field
+    switch (field) {
+        case 'quantity':
+            input = document.createElement('input');
+            input.type = 'number';
+            input.min = '1';
+            input.className = 'form-control form-control-sm';
+            input.value = currentValue === 'N/A' || currentValue === '0' ? '' : currentValue;
+            break;
+        case 'estimated_hours':
+            input = document.createElement('input');
+            input.type = 'number';
+            input.step = '0.5';
+            input.min = '0';
+            input.className = 'form-control form-control-sm';
+            input.value = currentValue === 'N/A' || currentValue === 'Belirtilmemiş' ? '' : currentValue.replace(' saat', '');
+            break;
+        case 'machine_name':
+            // Create dropdown for machine selection
+            input = document.createElement('select');
+            input.className = 'form-control form-control-sm';
+            
+            // Add default option
+            const defaultOption = document.createElement('option');
+            defaultOption.value = '';
+            defaultOption.textContent = 'Makine seçin...';
+            input.appendChild(defaultOption);
+            
+            // Add machine options
+            machines.forEach(machine => {
+                const option = document.createElement('option');
+                option.value = machine.id;
+                option.textContent = machine.name;
+                
+                // Select current machine if it matches
+                if (machine.name === currentValue || machine.name === currentValue.replace('N/A', '').trim()) {
+                    option.selected = true;
+                }
+                
+                input.appendChild(option);
+            });
+            break;
+        case 'status':
+            // Create dropdown for status selection
+            input = document.createElement('select');
+            input.className = 'form-control form-control-sm';
+            
+            // Add status options
+            const statusOptions = [
+                { value: 'pending', text: 'Bekliyor' },
+                { value: 'completed', text: 'Tamamlandı' }
+            ];
+            
+            statusOptions.forEach(status => {
+                const option = document.createElement('option');
+                option.value = status.value;
+                option.textContent = status.text;
+                
+                // Select current status if it matches
+                const currentStatusText = currentValue.includes('Tamamlandı') ? 'Tamamlandı' : 
+                                        currentValue.includes('Çalışıldı') ? 'Çalışıldı' : 'Bekliyor';
+                if (status.text === currentStatusText) {
+                    option.selected = true;
+                }
+                
+                input.appendChild(option);
+            });
+            break;
+        case 'finish_time':
+            input = document.createElement('input');
+            input.type = 'date';
+            input.className = 'form-control form-control-sm';
+            
+            // Convert current value to YYYY-MM-DD format for date input
+            if (currentValue && currentValue !== 'Belirtilmemiş') {
+                try {
+                    // First try to parse as Turkish date format (DD.MM.YYYY)
+                    let date;
+                    if (currentValue.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
+                        // Turkish date format: DD.MM.YYYY
+                        const parts = currentValue.split('.');
+                        const day = parseInt(parts[0]);
+                        const month = parseInt(parts[1]) - 1; // Month is 0-indexed
+                        const year = parseInt(parts[2]);
+                        date = new Date(year, month, day);
+                    } else {
+                        // Try parsing as regular date
+                        date = new Date(currentValue);
+                    }
+                    
+                    if (!isNaN(date.getTime())) {
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        input.value = `${year}-${month}-${day}`;
+                    } else {
+                        // If date parsing fails, leave input empty
+                        input.value = '';
+                    }
+                } catch (e) {
+                    // If date parsing fails, leave input empty
+                    input.value = '';
+                }
+            } else {
+                // If no current value or "Belirtilmemiş", leave input empty
+                input.value = '';
+            }
+            break;
+        default:
+            input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'form-control form-control-sm';
+            input.value = currentValue === 'N/A' ? '' : currentValue;
+    }
+    
+    // Store original content
+    const originalContent = cell.innerHTML;
+    
+    // Replace cell content with input
+    cell.innerHTML = '';
+    cell.appendChild(input);
+    
+    // Focus on input
+    input.focus();
+    if (input.type !== 'select-one') {
+        input.select();
+    }
+    
+    // For select elements, ensure dropdown opens immediately
+    if (input.tagName === 'SELECT') {
+        // Trigger dropdown to open - use a more reliable method
+        setTimeout(() => {
+            input.focus();
+            
+            // Ensure the select element is properly sized and visible
+            input.style.width = '100%';
+            input.style.minWidth = '120px';
+            
+            // Try to open the dropdown using the native select method
+            try {
+                // Method 1: Use the native showPicker method if available (modern browsers)
+                if (input.showPicker) {
+                    input.showPicker();
+                } else {
+                    // Method 2: Create and dispatch a mousedown event
+                    const mousedownEvent = new MouseEvent('mousedown', {
+                        bubbles: true,
+                        cancelable: true,
+                        view: window,
+                        button: 0
+                    });
+                    input.dispatchEvent(mousedownEvent);
+                    
+                    // Method 3: Also try a click event as backup
+                    setTimeout(() => {
+                        const clickEvent = new MouseEvent('click', {
+                            bubbles: true,
+                            cancelable: true,
+                            view: window
+                        });
+                        input.dispatchEvent(clickEvent);
+                    }, 5);
+                }
+            } catch (e) {
+                console.log('Dropdown opening failed, trying alternative method');
+                // Fallback: just click the element
+                input.click();
+            }
+        }, 10);
+    }
+    
+    // Handle input events
+    input.addEventListener('blur', (e) => {
+        // For select elements, don't handle blur immediately
+        if (input.tagName === 'SELECT') {
+            return;
+        }
+        
+        // Check if input still exists in DOM before proceeding
+        if (!input.parentNode) {
+            return;
+        }
+        
+        // Add a small delay to prevent race conditions
+        setTimeout(() => {
+            // Check again if input still exists
+            if (input.parentNode) {
+                finishInlineEdit(cell, taskKey, field, input.value, originalContent);
+            }
+        }, 100);
+    });
+    
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            finishInlineEdit(cell, taskKey, field, input.value, originalContent);
+        } else if (e.key === 'Escape') {
+            // Check if cell still exists before setting innerHTML
+            if (cell && cell.parentNode) {
+                cell.innerHTML = originalContent;
+            }
+        }
+    });
+    
+    // For select elements, handle change event only
+    if (input.tagName === 'SELECT') {
+        let editCompleted = false; // Flag to prevent multiple finishInlineEdit calls
+        
+        input.addEventListener('change', () => {
+            if (!editCompleted) {
+                editCompleted = true;
+                finishInlineEdit(cell, taskKey, field, input.value, originalContent);
+            }
+        });
+        
+        // Prevent blur when clicking on the select element
+        input.addEventListener('mousedown', (e) => {
+            e.stopPropagation();
+        });
+        
+        // Prevent blur when clicking on options
+        input.addEventListener('click', (e) => {
+            e.stopPropagation();
+        });
+        
+        // Add focus event to ensure dropdown opens
+        input.addEventListener('focus', () => {
+            // Small delay to ensure the element is fully focused
+            setTimeout(() => {
+                if (document.activeElement === input) {
+                    input.click();
+                }
+            }, 5);
+        });
+        
+        // Add document click listener to close dropdown when clicking outside
+        const handleDocumentClick = (e) => {
+            if (!input.contains(e.target) && !editCompleted) {
+                editCompleted = true;
+                finishInlineEdit(cell, taskKey, field, input.value, originalContent);
+                document.removeEventListener('click', handleDocumentClick);
+            }
+        };
+        
+        // Add the listener immediately but with a small delay to allow the dropdown to open first
+        setTimeout(() => {
+            document.addEventListener('click', handleDocumentClick);
+        }, 50);
+    }
+}
+
+async function finishInlineEdit(cell, taskKey, field, newValue, originalContent) {
+    try {
+        // Clear inline editing flag
+        isInlineEditing = false;
+        
+        // Check if this cell is already being processed
+        if (cell.dataset.processing === 'true') {
+            return;
+        }
+        
+        // Mark this cell as being processed
+        cell.dataset.processing = 'true';
+        
+        // Validate input based on field type
+        if (!validateFieldValue(field, newValue)) {
+            // Check if cell still exists before setting innerHTML
+            if (cell && cell.parentNode) {
+                cell.innerHTML = originalContent;
+            }
+            showNotification('Geçersiz değer', 'error');
+            return;
+        }
+        
+        // Find the task in our local array
+        const task = tasks.find(t => t.key === taskKey);
+        if (!task) {
+            // Check if cell still exists before setting innerHTML
+            if (cell && cell.parentNode) {
+                cell.innerHTML = originalContent;
+            }
+            return;
+        }
+        
+        // Don't update if value hasn't changed
+        const currentValue = getCurrentFieldValue(task, field);
+        
+        // Special handling for finish_time field to compare dates properly
+        if (field === 'finish_time') {
+            const currentDate = currentValue ? new Date(currentValue) : null;
+            const newDate = newValue ? new Date(newValue) : null;
+            
+            // Compare dates by converting both to YYYY-MM-DD format
+            const formatDate = (date) => {
+                if (!date || isNaN(date.getTime())) return '';
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            };
+            
+            const currentFormatted = formatDate(currentDate);
+            const newFormatted = formatDate(newDate);
+            
+            if (currentFormatted === newFormatted) {
+                // Check if cell still exists before setting innerHTML
+                if (cell && cell.parentNode) {
+                    cell.innerHTML = originalContent;
+                }
+                return;
+            }
+        } else if (currentValue === newValue) {
+            // Check if cell still exists before setting innerHTML
+            if (cell && cell.parentNode) {
+                cell.innerHTML = originalContent;
+            }
+            return;
+        }
+        
+        // Prepare update data
+        const updateData = {};
+        
+        // Handle machine field specially - send machine_fk instead of machine_name
+        if (field === 'machine_name') {
+            updateData.machine_fk = newValue ? parseInt(newValue) : null;
+        } else if (field === 'status') {
+            // Handle status updates using specific API functions
+            let response;
+            if (newValue === 'completed') {
+                response = await markTaskCompleted(taskKey);
+            } else if (newValue === 'pending') {
+                response = await unmarkTaskCompleted(taskKey);
+            } else {
+                // Check if cell still exists before setting innerHTML
+                if (cell && cell.parentNode) {
+                    cell.innerHTML = originalContent;
+                }
+                return;
+            }
+            
+            if (response.ok) {
+                // Update local task data
+                if (newValue === 'completed') {
+                    task.completion_date = new Date().toISOString();
+                } else {
+                    task.completion_date = null;
+                }
+                
+                // Update cell content
+                updateCellContent(cell, field, newValue);
+                
+                // Update task counts to reflect the change
+                updateTaskCounts();
+                
+                showNotification('Görev durumu başarıyla güncellendi', 'success');
+            } else {
+                // Revert on error
+                if (cell && cell.parentNode) {
+                    cell.innerHTML = originalContent;
+                }
+                showNotification('Görev durumu güncellenirken hata oluştu', 'error');
+            }
+            return;
+        } else {
+            updateData[field] = newValue;
+        }
+        
+        // Call the updateTask API
+        const response = await updateTaskAPI(taskKey, updateData);
+        
+        if (response.ok) {
+            // Update local task data
+            if (field === 'machine_name') {
+                task.machine_fk = newValue ? parseInt(newValue) : null;
+                // Update machine_name for display
+                const selectedMachine = machines.find(m => m.id == newValue);
+                task.machine_name = selectedMachine ? selectedMachine.name : 'N/A';
+            } else {
+                task[field] = newValue;
+            }
+            
+            // Update cell content
+            updateCellContent(cell, field, newValue);
+            
+            showNotification('Görev başarıyla güncellendi', 'success');
+        } else {
+            // Revert on error
+            if (cell && cell.parentNode) {
+                cell.innerHTML = originalContent;
+            }
+            showNotification('Görev güncellenirken hata oluştu', 'error');
+        }
+    } catch (error) {
+        console.error('Error updating task:', error);
+        isInlineEditing = false; // Clear flag on error
+        if (cell && cell.parentNode) {
+            cell.innerHTML = originalContent;
+        }
+        showNotification('Görev güncellenirken hata oluştu', 'error');
+    } finally {
+        // Clear the processing flag
+        if (cell) {
+            cell.dataset.processing = 'false';
+        }
+    }
+}
+
+function validateFieldValue(field, value) {
+    if (value === '') return true; // Allow empty values
+    
+    switch (field) {
+        case 'quantity':
+            const quantity = parseInt(value);
+            return !isNaN(quantity) && quantity >= 1;
+        case 'estimated_hours':
+            const hours = parseFloat(value);
+            return !isNaN(hours) && hours >= 0;
+        case 'machine_name':
+            // Validate that the machine ID exists in our machines list
+            const machineId = parseInt(value);
+            return !isNaN(machineId) && machines.some(m => m.id === machineId);
+        case 'status':
+            // Validate that the status is either 'pending' or 'completed'
+            return value === 'pending' || value === 'completed';
+        case 'finish_time':
+            // Validate date format (YYYY-MM-DD) or empty value
+            if (value === '') return true; // Allow empty values
+            const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+            if (!dateRegex.test(value)) return false;
+            const date = new Date(value);
+            return !isNaN(date.getTime());
+        case 'name':
+            return value.length <= 255; // Reasonable length limit
+        case 'job_no':
+        case 'image_no':
+        case 'position_no':
+            return value.length <= 100; // Reasonable length limit
+        default:
+            return true;
+    }
+}
+
+function getCurrentFieldValue(task, field) {
+    switch (field) {
+        case 'quantity':
+            return task.quantity ? task.quantity.toString() : '0';
+        case 'estimated_hours':
+            return task.estimated_hours ? task.estimated_hours.toString() : '';
+        case 'machine_name':
+            return task.machine_fk ? task.machine_fk.toString() : '';
+        case 'status':
+            return task.completion_date ? 'completed' : 'pending';
+        case 'finish_time':
+            return task.finish_time || '';
+        default:
+            return task[field] || '';
+    }
+}
+
+function updateCellContent(cell, field, newValue) {
+    // Check if cell still exists before updating
+    if (!cell || !cell.parentNode) {
+        return;
+    }
+    
+    // Add a small delay to ensure DOM has settled
+    setTimeout(() => {
+        // Check again if cell still exists
+        if (!cell || !cell.parentNode) {
+            return;
+        }
+        
+        const displayValue = newValue || 'N/A';
+    
+    switch (field) {
+        case 'name':
+            cell.innerHTML = `
+                <div class="task-name">
+                    <strong>${displayValue}</strong>
+                </div>
+            `;
+            break;
+        case 'quantity':
+            cell.innerHTML = `<span class="quantity-badge">${displayValue}</span>`;
+            break;
+        case 'machine_name':
+            // For machine field, newValue is the machine ID, so we need to find the machine name
+            const selectedMachine = machines.find(m => m.id == newValue);
+            const machineName = selectedMachine ? selectedMachine.name : 'N/A';
+            cell.innerHTML = `<span class="machine-name">${machineName}</span>`;
+            break;
+        case 'estimated_hours':
+            const hoursValue = newValue ? `${newValue} saat` : 'Belirtilmemiş';
+            cell.innerHTML = `<span class="estimated-hours">${hoursValue}</span>`;
+            break;
+        case 'finish_time':
+            if (newValue && newValue !== '') {
+                try {
+                    const date = new Date(newValue);
+                    if (!isNaN(date.getTime())) {
+                        cell.innerHTML = date.toLocaleDateString('tr-TR');
+                    } else {
+                        cell.innerHTML = 'Belirtilmemiş';
+                    }
+                } catch (e) {
+                    cell.innerHTML = 'Belirtilmemiş';
+                }
+            } else {
+                cell.innerHTML = 'Belirtilmemiş';
+            }
+            break;
+        case 'status':
+            // Use the same logic as getStatusBadge function
+            const task = tasks.find(t => t.key === cell.getAttribute('data-task-key'));
+            if (task) {
+                if (newValue === 'completed') {
+                    cell.innerHTML = '<span class="status-badge completed">Tamamlandı</span>';
+                } else {
+                    // For pending status, check if task has hours spent
+                    if (task.total_hours_spent > 0) {
+                        cell.innerHTML = '<span class="status-badge worked-on">Çalışıldı</span>';
+                    } else {
+                        cell.innerHTML = '<span class="status-badge pending">Bekliyor</span>';
+                    }
+                }
+            } else {
+                // Fallback if task not found
+                const statusText = newValue === 'completed' ? 'Tamamlandı' : 'Bekliyor';
+                const statusClass = newValue === 'completed' ? 'completed' : 'pending';
+                cell.innerHTML = `<span class="status-badge ${statusClass}">${statusText}</span>`;
+            }
+            break;
+        default:
+            cell.textContent = displayValue;
+    }
+    }, 50); // Small delay to ensure DOM has settled
 } 

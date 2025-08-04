@@ -19,7 +19,6 @@ export function showFinishedTimers() {
         { key: 'start_time', label: 'Başlangıç' },
         { key: 'finish_time', label: 'Bitiş' },
         { key: 'duration', label: 'Süre (saat)' },
-        { key: 'synced_to_jira', label: 'Jira Senkronize' },
         { key: 'comment', label: 'Yorum' },
         { key: 'image_no', label: 'Resim No' },
         { key: 'position_no', label: 'Pozisyon No' },
