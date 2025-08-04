@@ -1,17 +1,21 @@
 import { initNavbar } from '../../../components/navbar.js';
+import { ModernDropdown } from '../../../components/dropdown.js';
 import { fetchMachines } from '../../../generic/machines.js';
 import { fetchTasks, deleteTask as deleteTaskAPI, updateTask as updateTaskAPI, fetchTaskById, createTask as createTaskAPI, bulkCreateTasks } from '../../../generic/tasks.js';
 
 // State management
 let currentPage = 1;
 let currentFilter = 'all';
-    let currentOrdering = 'job_no';
-    let currentSortField = 'job_no';
-    let currentSortDirection = 'asc';
+let currentOrdering = 'job_no';
+let currentSortField = 'job_no';
+let currentSortDirection = 'asc';
 let tasks = [];
 let machines = [];
 let totalTasks = 0;
 let isLoading = false;
+let createdTasks = []; // Store created tasks for displaying keys
+let machineFilterDropdown = null;
+let statusFilterDropdown = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -69,15 +73,39 @@ function handleUrlParameters() {
 }
 
 function populateMachineFilters() {
-    const machineFilter = document.getElementById('machine-filter');
+    const machineFilterContainer = document.getElementById('machine-filter-container');
     const taskMachine = document.getElementById('task-machine');
     const editTaskMachine = document.getElementById('edit-task-machine');
     
-    if (machineFilter) {
-        machineFilter.innerHTML = '<option value="">Tüm Makineler</option>';
-        machines.forEach(machine => {
-            machineFilter.innerHTML += `<option value="${machine.id}">${machine.name}</option>`;
+    // Initialize machine filter dropdown
+    if (machineFilterContainer && machines.length > 0) {
+        const machineItems = [
+            { value: '', text: 'Tüm Makineler' },
+            ...machines.map(machine => ({ value: machine.id.toString(), text: machine.name }))
+        ];
+        
+        machineFilterDropdown = new ModernDropdown(machineFilterContainer, {
+            placeholder: 'Tüm Makineler',
+            searchable: true
         });
+        machineFilterDropdown.setItems(machineItems);
+    }
+    
+    // Initialize status filter dropdown
+    const statusFilterContainer = document.getElementById('status-filter-container');
+    if (statusFilterContainer) {
+        const statusItems = [
+            { value: '', text: 'Tümü' },
+            { value: 'active', text: 'Aktif' },
+            { value: 'completed', text: 'Tamamlanan' },
+            { value: 'pending', text: 'Bekleyen' }
+        ];
+        
+        statusFilterDropdown = new ModernDropdown(statusFilterContainer, {
+            placeholder: 'Tümü',
+            searchable: false
+        });
+        statusFilterDropdown.setItems(statusItems);
     }
     
     if (taskMachine) {
@@ -180,8 +208,8 @@ function buildTaskQuery(page = 1) {
     const keyFilter = document.getElementById('key-filter')?.value.trim();
     const nameFilter = document.getElementById('name-filter')?.value.trim();
     const jobNoFilter = document.getElementById('job-no-filter')?.value.trim();
-    const machineFilter = document.getElementById('machine-filter')?.value;
-    const statusFilter = document.getElementById('status-filter')?.value;
+    const machineFilter = machineFilterDropdown?.getValue() || '';
+    const statusFilter = statusFilterDropdown?.getValue() || '';
     
     if (keyFilter) {
         let key = keyFilter;
@@ -369,6 +397,11 @@ function setupEventListeners() {
         loadTasks(1);
     });
     
+    // Clear filters button
+    document.getElementById('clear-filters')?.addEventListener('click', () => {
+        clearFilters();
+    });
+    
     // Create task button
     document.getElementById('create-task-btn')?.addEventListener('click', () => {
         showCreateTaskModal();
@@ -424,6 +457,11 @@ function setupEventListeners() {
         }
     });
     
+    // Export created tasks button
+    document.getElementById('export-created-tasks-btn')?.addEventListener('click', () => {
+        exportCreatedTasks();
+    });
+    
     // Back to main button
     document.getElementById('back-to-main')?.addEventListener('click', () => {
         window.location.href = '/manufacturing/machining/';
@@ -437,8 +475,125 @@ function setupEventListeners() {
             }
         });
     });
-    
+}
 
+function clearFilters() {
+    // Clear text inputs
+    document.getElementById('key-filter').value = '';
+    document.getElementById('name-filter').value = '';
+    document.getElementById('job-no-filter').value = '';
+    
+    // Clear dropdowns
+    if (machineFilterDropdown) {
+        machineFilterDropdown.setValue('');
+    }
+    if (statusFilterDropdown) {
+        statusFilterDropdown.setValue('');
+    }
+    
+    // Reload tasks
+    loadTasks(1);
+    showNotification('Filtreler temizlendi', 'info');
+}
+
+function exportCreatedTasks() {
+    if (createdTasks.length === 0) {
+        showNotification('Dışa aktarılacak görev bulunamadı', 'warning');
+        return;
+    }
+    
+    try {
+        // Prepare data for Excel
+        const headers = [
+            'TI No',
+            'Görev Adı',
+            'İş No',
+            'Resim No',
+            'Pozisyon No',
+            'Adet',
+            'Makine',
+            'Tahmini Saat',
+            'Açıklama',
+            'Oluşturulma Tarihi'
+        ];
+        
+        // Convert created tasks to worksheet data
+        const worksheetData = [
+            headers,
+            ...createdTasks.map(task => [
+                task.key || '',
+                task.name || '',
+                task.job_no || '',
+                task.image_no || '',
+                task.position_no || '',
+                task.quantity || '',
+                task.machine_name || '',
+                task.estimated_hours || '',
+                task.description || '',
+                task.created_at ? new Date(task.created_at).toLocaleDateString('tr-TR') : ''
+            ])
+        ];
+        
+        // Create workbook and worksheet
+        const workbook = XLSX.utils.book_new();
+        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        
+        // Set column widths for better readability
+        const columnWidths = [
+            { wch: 12 }, // TI No
+            { wch: 30 }, // Görev Adı
+            { wch: 12 }, // İş No
+            { wch: 12 }, // Resim No
+            { wch: 12 }, // Pozisyon No
+            { wch: 8 },  // Adet
+            { wch: 15 }, // Makine
+            { wch: 12 }, // Tahmini Saat
+            { wch: 30 }, // Açıklama
+            { wch: 15 }  // Oluşturulma Tarihi
+        ];
+        worksheet['!cols'] = columnWidths;
+        
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Oluşturulan Görevler');
+        
+        // Generate Excel file
+        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        
+        // Create download link
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `olusturulan_gorevler_${new Date().toISOString().split('T')[0]}.xlsx`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification(`${createdTasks.length} görev başarıyla Excel dosyası olarak dışa aktarıldı`, 'success');
+    } catch (error) {
+        console.error('Error exporting created tasks:', error);
+        showNotification('Dışa aktarma sırasında hata oluştu', 'error');
+    }
+}
+
+function showCreatedTasksModal(tasks) {
+    createdTasks = tasks;
+    const tbody = document.getElementById('created-tasks-table');
+    
+    if (tbody) {
+        tbody.innerHTML = tasks.map(task => `
+            <tr>
+                <td>${task.name || 'N/A'}</td>
+                <td><strong class="text-primary">${task.key || 'N/A'}</strong></td>
+                <td>${task.job_no || 'N/A'}</td>
+                <td>${task.machine_name || 'N/A'}</td>
+            </tr>
+        `).join('');
+    }
+    
+    const modal = new bootstrap.Modal(document.getElementById('createdTasksModal'));
+    modal.show();
 }
 
 function showCreateTaskModal() {
@@ -666,7 +821,25 @@ async function loadBulkCreateContent() {
                 
                 if (!response.ok) throw new Error('Toplu görev oluşturulamadı');
                 
-                showNotification(`${payload.length} görev başarıyla oluşturuldu!`, 'success');
+                const responseData = await response.json();
+                
+                // Check if the response contains created tasks data
+                if (responseData && Array.isArray(responseData)) {
+                    // Map the created tasks with machine names
+                    const createdTasksWithMachineNames = responseData.map(task => {
+                        const machine = machines.find(m => m.id == task.machine_fk);
+                        return {
+                            ...task,
+                            machine_name: machine ? machine.name : 'N/A'
+                        };
+                    });
+                    
+                    // Show the created tasks modal
+                    showCreatedTasksModal(createdTasksWithMachineNames);
+                } else {
+                    showNotification(`${payload.length} görev başarıyla oluşturuldu!`, 'success');
+                }
+                
                 rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
                 updateInitialState();
                 renderBulkTable();
@@ -711,7 +884,23 @@ async function saveTask() {
         const response = await createTaskAPI(taskData);
         
         if (response.ok) {
-            showNotification('Görev başarıyla oluşturuldu', 'success');
+            const responseData = await response.json();
+            
+            // Check if the response contains created task data
+            if (responseData && responseData.key) {
+                // Find the machine name for display
+                const machine = machines.find(m => m.id == taskData.machine_fk);
+                const createdTask = {
+                    ...responseData,
+                    machine_name: machine ? machine.name : 'N/A'
+                };
+                
+                // Show the created task modal
+                showCreatedTasksModal([createdTask]);
+            } else {
+                showNotification('Görev başarıyla oluşturuldu', 'success');
+            }
+            
             bootstrap.Modal.getInstance(document.getElementById('createTaskModal')).hide();
             form.reset();
             loadTasks(currentPage);
@@ -847,7 +1036,90 @@ function hideLoadingState() {
 }
 
 function exportTasks() {
-    showNotification('Dışa aktarma özelliği yakında eklenecek', 'info');
+    if (tasks.length === 0) {
+        showNotification('Dışa aktarılacak görev bulunamadı', 'warning');
+        return;
+    }
+    
+    try {
+        // Prepare data for Excel
+        const headers = [
+            'TI No',
+            'Görev Adı',
+            'İş No',
+            'Resim No',
+            'Pozisyon No',
+            'Adet',
+            'Makine',
+            'Tahmini Saat',
+            'Harcanan Saat',
+            'Durum',
+            'Oluşturulma Tarihi',
+            'Tamamlanma Tarihi'
+        ];
+        
+        // Convert tasks to worksheet data
+        const worksheetData = [
+            headers,
+            ...tasks.map(task => [
+                task.key || '',
+                task.name || '',
+                task.job_no || '',
+                task.image_no || '',
+                task.position_no || '',
+                task.quantity || '',
+                task.machine_name || '',
+                task.estimated_hours || '',
+                task.total_hours_spent || '',
+                task.completion_date ? 'Tamamlanan' : (task.start_date ? 'Aktif' : 'Bekleyen'),
+                task.created_at ? new Date(task.created_at).toLocaleDateString('tr-TR') : '',
+                task.completion_date ? new Date(task.completion_date).toLocaleDateString('tr-TR') : ''
+            ])
+        ];
+        
+        // Create workbook and worksheet
+        const workbook = XLSX.utils.book_new();
+        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        
+        // Set column widths for better readability
+        const columnWidths = [
+            { wch: 12 }, // TI No
+            { wch: 30 }, // Görev Adı
+            { wch: 12 }, // İş No
+            { wch: 12 }, // Resim No
+            { wch: 12 }, // Pozisyon No
+            { wch: 8 },  // Adet
+            { wch: 15 }, // Makine
+            { wch: 12 }, // Tahmini Saat
+            { wch: 12 }, // Harcanan Saat
+            { wch: 10 }, // Durum
+            { wch: 15 }, // Oluşturulma Tarihi
+            { wch: 15 }  // Tamamlanma Tarihi
+        ];
+        worksheet['!cols'] = columnWidths;
+        
+        // Add worksheet to workbook
+        XLSX.utils.book_append_sheet(workbook, worksheet, 'Görevler');
+        
+        // Generate Excel file
+        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        
+        // Create download link
+        const link = document.createElement('a');
+        const url = URL.createObjectURL(blob);
+        link.setAttribute('href', url);
+        link.setAttribute('download', `gorevler_${new Date().toISOString().split('T')[0]}.xlsx`);
+        link.style.visibility = 'hidden';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        showNotification(`${tasks.length} görev başarıyla Excel dosyası olarak dışa aktarıldı`, 'success');
+    } catch (error) {
+        console.error('Error exporting tasks:', error);
+        showNotification('Dışa aktarma sırasında hata oluştu', 'error');
+    }
 }
 
 function showNotification(message, type = 'info') {

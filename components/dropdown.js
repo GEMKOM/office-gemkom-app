@@ -150,6 +150,21 @@ export class ModernDropdown {
         this.menu.style.transform = 'translateY(0)';
         this.menu.style.maxHeight = '400px';
         
+        // Force high z-index to ensure dropdown appears above everything
+        this.menu.style.zIndex = '99999999';
+        this.menu.style.position = 'absolute';
+        this.menu.style.top = '100%';
+        this.menu.style.left = '0';
+        this.menu.style.right = '0';
+        this.menu.style.overflow = 'visible';
+        this.menu.style.pointerEvents = 'auto';
+        
+        // Ensure the dropdown container has proper stacking context
+        this.container.style.zIndex = '10001';
+        this.container.style.position = 'relative';
+        this.dropdown.style.zIndex = '10002';
+        this.dropdown.style.position = 'relative';
+        
         // Focus search input if available
         if (this.options.searchable && this.searchInput) {
             setTimeout(() => this.searchInput.focus(), 100);

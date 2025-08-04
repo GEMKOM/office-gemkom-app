@@ -130,6 +130,389 @@
     font-weight: 500;
 }
 
+/* Filter dropdown styling */
+#machine-filter-container,
+#status-filter-container {
+    min-height: 38px;
+}
+
+/* Fix dropdown visibility issues */
+/* Override card overflow for dropdown containers */
+.dashboard-card .card-body {
+    overflow: visible !important;
+}
+
+/* Ensure dropdown containers don't clip their children */
+#machine-filter-container,
+#status-filter-container {
+    overflow: visible !important;
+    position: relative;
+}
+
+/* Ensure dropdown appears above everything */
+.modern-dropdown .dropdown-menu {
+    z-index: 999999 !important;
+    position: absolute !important;
+    overflow: visible !important;
+}
+
+/* Additional z-index for dropdown containers */
+.modern-dropdown-container {
+    z-index: 1000;
+    position: relative;
+}
+
+/* Ensure the card itself doesn't clip dropdowns */
+.dashboard-card {
+    overflow: visible !important;
+}
+
+/* Specific override for filters card */
+.dashboard-card.compact {
+    overflow: visible !important;
+}
+
+/* Ensure dropdowns are always on top */
+.modern-dropdown {
+    position: relative;
+    z-index: 1000;
+}
+
+.modern-dropdown.open {
+    z-index: 1001;
+}
+
+/* Ensure dropdown menu is positioned correctly relative to its container */
+.modern-dropdown.open .dropdown-menu {
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: translateY(0) !important;
+    z-index: 999999 !important;
+    overflow: visible !important;
+}
+
+/* Override any potential clipping from parent containers */
+.dashboard-card,
+.dashboard-card .card-body,
+.dashboard-card .card-header {
+    overflow: visible !important;
+    position: relative;
+}
+
+/* Ensure the filters section specifically allows dropdowns */
+.dashboard-card.compact .card-body {
+    overflow: visible !important;
+    position: relative;
+}
+
+/* Comprehensive dropdown fix - override all potential clipping */
+.modern-dropdown-container,
+.modern-dropdown,
+.modern-dropdown .dropdown-menu {
+    overflow: visible !important;
+    position: relative !important;
+}
+
+/* Ensure dropdown menu is always visible when open */
+.modern-dropdown.open .dropdown-menu {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+    max-height: 400px !important;
+    overflow: visible !important;
+    z-index: 999999 !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
+}
+
+/* Override Bootstrap dropdown styles that might interfere */
+.dropdown-menu {
+    z-index: 999999 !important;
+}
+
+/* Ensure no parent elements clip the dropdown */
+body,
+html,
+.container-fluid,
+.row,
+.col-12,
+.col-md-2,
+.dashboard-card,
+.dashboard-card .card-body,
+.dashboard-card .card-header {
+    overflow: visible !important;
+}
+
+/* Specific fix for the filters row */
+.row.mb-3 {
+    overflow: visible !important;
+}
+
+/* Ensure the entire filters section allows dropdowns */
+.dashboard-card.compact {
+    overflow: visible !important;
+    position: relative;
+}
+
+.dashboard-card.compact .card-body {
+    overflow: visible !important;
+    position: relative;
+}
+
+/* AGGRESSIVE DROPDOWN FIX - Force dropdown above everything */
+.modern-dropdown.open .dropdown-menu {
+    z-index: 9999999 !important;
+    position: fixed !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+}
+
+/* Calculate proper position for fixed dropdown */
+.modern-dropdown.open .dropdown-menu {
+    position: absolute !important;
+    z-index: 9999999 !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: translateY(0) !important;
+}
+
+/* Force the entire filters section to have higher z-index */
+.dashboard-card.compact {
+    z-index: 10000 !important;
+    position: relative;
+}
+
+/* Ensure dropdown container has proper stacking context */
+.modern-dropdown-container {
+    z-index: 10001 !important;
+    position: relative;
+}
+
+.modern-dropdown {
+    z-index: 10002 !important;
+    position: relative;
+}
+
+.modern-dropdown.open {
+    z-index: 10003 !important;
+}
+
+/* Force dropdown menu to be above everything */
+.modern-dropdown.open .dropdown-menu {
+    z-index: 9999999 !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: translateY(0) !important;
+    overflow: visible !important;
+    pointer-events: auto !important;
+}
+
+/* Ensure tasks table section has lower z-index */
+.dashboard-card:not(.compact) {
+    z-index: 1 !important;
+    position: relative;
+}
+
+/* Force the tasks table row to have lower z-index */
+.row:not(.mb-3) {
+    z-index: 1 !important;
+    position: relative;
+}
+
+/* Ensure the entire page structure allows dropdowns */
+.modules-section {
+    overflow: visible !important;
+    position: relative;
+}
+
+.container-fluid {
+    overflow: visible !important;
+    position: relative;
+}
+
+/* Force the filters section to be above everything else */
+.row.mb-3 {
+    z-index: 10000 !important;
+    position: relative;
+}
+
+.dashboard-card.compact {
+    z-index: 10001 !important;
+    position: relative;
+}
+
+/* Ensure dropdown containers are above the filters card */
+.modern-dropdown-container {
+    z-index: 10002 !important;
+    position: relative;
+}
+
+.modern-dropdown {
+    z-index: 10003 !important;
+    position: relative;
+}
+
+.modern-dropdown.open {
+    z-index: 10004 !important;
+}
+
+.modern-dropdown.open .dropdown-menu {
+    z-index: 99999999 !important;
+}
+
+/* ULTIMATE DROPDOWN FIX - Use viewport positioning */
+.modern-dropdown.open .dropdown-menu {
+    position: fixed !important;
+    z-index: 99999999 !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+    width: auto !important;
+    min-width: 200px !important;
+    max-width: 300px !important;
+}
+
+/* Ensure the dropdown is positioned correctly relative to the trigger */
+.modern-dropdown.open .dropdown-menu {
+    position: absolute !important;
+    z-index: 99999999 !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: translateY(0) !important;
+    width: 100% !important;
+    min-width: auto !important;
+    max-width: none !important;
+}
+
+/* Force all parent containers to allow overflow */
+.modern-dropdown-container,
+.modern-dropdown,
+.modern-dropdown .dropdown-menu,
+.dashboard-card.compact,
+.dashboard-card.compact .card-body,
+.row.mb-3,
+.container-fluid,
+body,
+html {
+    overflow: visible !important;
+    position: relative !important;
+}
+
+/* Ensure the dropdown is always on top of everything */
+.modern-dropdown.open .dropdown-menu {
+    z-index: 99999999 !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: translateY(0) !important;
+    overflow: visible !important;
+    pointer-events: auto !important;
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    max-height: 400px !important;
+}
+
+/* Fix dropdown text color issues */
+.modern-dropdown .dropdown-item {
+    color: #2c3e50 !important;
+    background: #ffffff !important;
+}
+
+.modern-dropdown .dropdown-item:hover {
+    color: #DC143C !important;
+    background: rgba(220, 20, 60, 0.05) !important;
+}
+
+.modern-dropdown .dropdown-item.focused {
+    color: #DC143C !important;
+    background: rgba(220, 20, 60, 0.1) !important;
+}
+
+.modern-dropdown .dropdown-item.no-items {
+    color: #6c757d !important;
+    background: #ffffff !important;
+}
+
+.modern-dropdown .dropdown-item.disabled {
+    color: #6c757d !important;
+    background: #ffffff !important;
+    opacity: 0.6 !important;
+}
+
+.modern-dropdown .item-text {
+    color: inherit !important;
+}
+
+.modern-dropdown .selected-icon {
+    color: #DC143C !important;
+}
+
+/* Ensure dropdown menu has proper background */
+.modern-dropdown .dropdown-menu {
+    background: #ffffff !important;
+    color: #2c3e50 !important;
+}
+
+/* Ensure search input has proper colors */
+.modern-dropdown .dropdown-search {
+    color: #2c3e50 !important;
+    background: #f8f9fa !important;
+}
+
+.modern-dropdown .dropdown-search:focus {
+    color: #2c3e50 !important;
+    background: #ffffff !important;
+}
+
+.modern-dropdown .dropdown-search::placeholder {
+    color: #6c757d !important;
+}
+
+/* Created tasks modal styling */
+#created-tasks-table .text-primary {
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+}
+
+/* Clear filters button styling */
+#clear-filters {
+    border-color: #6c757d;
+    color: #6c757d;
+}
+
+#clear-filters:hover {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: white;
+}
+
+/* Export button enhancement */
+#export-tasks {
+    transition: all 0.3s ease;
+}
+
+#export-tasks:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
 /* Responsive adjustments for bulk create */
 @media (max-width: 768px) {
     .bulk-create-actions {
@@ -147,5 +530,15 @@
     
     .table-sm td, .table-sm th {
         padding: 0.25rem;
+    }
+    
+    /* Filter buttons responsive */
+    .d-grid.gap-1 {
+        gap: 0.25rem !important;
+    }
+    
+    .d-grid.gap-1 .btn {
+        font-size: 0.75rem;
+        padding: 0.375rem 0.5rem;
     }
 } 

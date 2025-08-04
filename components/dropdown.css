@@ -78,7 +78,7 @@
     border-top: none;
     border-radius: 0 0 8px 8px;
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-    z-index: 99999;
+    z-index: 999999;
     opacity: 0;
     visibility: hidden;
     transform: translateY(-10px);
@@ -92,7 +92,7 @@
     visibility: visible;
     transform: translateY(0);
     max-height: 400px;
-    z-index: 99999;
+    z-index: 999999;
 }
 
 .modern-dropdown.open .dropdown-selected {
