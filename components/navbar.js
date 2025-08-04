@@ -192,82 +192,6 @@ const NAVIGATION_STRUCTURE = {
         label: 'Kalite Kontrol',
         icon: 'fas fa-clipboard-check',
         children: {}
-    },
-    '/admin': {
-        label: 'Yönetim',
-        icon: 'fas fa-cogs',
-        children: {
-            '/admin/taskList': {
-                label: 'Görev Listesi',
-                icon: 'fas fa-tasks',
-                children: {}
-            },
-            '/admin/listUsers': {
-                label: 'Kullanıcı Listesi',
-                icon: 'fas fa-users',
-                children: {}
-            },
-            '/admin/machineList': {
-                label: 'Makine Listesi',
-                icon: 'fas fa-industry',
-                children: {}
-            },
-            '/admin/createUser': {
-                label: 'Kullanıcı Oluştur',
-                icon: 'fas fa-user-plus',
-                children: {}
-            },
-            '/admin/createMachine': {
-                label: 'Makine Oluştur',
-                icon: 'fas fa-plus-circle',
-                children: {}
-            },
-            '/admin/bulkTaskCreate': {
-                label: 'Toplu Görev Oluştur',
-                icon: 'fas fa-layer-group',
-                children: {}
-            },
-            '/admin/bulkUserCreate': {
-                label: 'Toplu Kullanıcı Oluştur',
-                icon: 'fas fa-users-cog',
-                children: {}
-            },
-            '/admin/finishedTimers': {
-                label: 'Tamamlanan Zamanlayıcılar',
-                icon: 'fas fa-clock',
-                children: {}
-            },
-            '/admin/mesaiTalebi': {
-                label: 'Mesai Talebi',
-                icon: 'fas fa-clock',
-                children: {}
-            },
-            '/admin/mesaiTaleplerim': {
-                label: 'Mesai Taleplerim',
-                icon: 'fas fa-list',
-                children: {}
-            },
-            '/admin/machiningReport': {
-                label: 'Talaşlı İmalat Raporu',
-                icon: 'fas fa-chart-bar',
-                children: {}
-            },
-            '/admin/machiningDetailedReport': {
-                label: 'Detaylı Talaşlı İmalat Raporu',
-                icon: 'fas fa-chart-line',
-                children: {}
-            },
-            '/admin/jiraSettings': {
-                label: 'Jira Ayarları',
-                icon: 'fas fa-cog',
-                children: {}
-            },
-            '/admin/machinePlanning': {
-                label: 'Makine Planlama',
-                icon: 'fas fa-calendar',
-                children: {}
-            }
-        }
     }
 };
 
@@ -456,6 +380,8 @@ function createUserEditModal(user) {
     };
 }
 
+
+
 // Function to initialize navbar
 export function initNavbar() {
     const navbarContainer = document.getElementById('navbar-container');
@@ -531,9 +457,9 @@ export function initNavbar() {
         </nav>
       `;
       
-      navbarContainer.innerHTML = navHTML;
+             navbarContainer.innerHTML = navHTML;
       
-                     // Initialize Bootstrap dropdowns after navbar is created
+      // Initialize Bootstrap dropdowns after navbar is created
         const dropdownElementList = navbarContainer.querySelectorAll('.dropdown-toggle');
         dropdownElementList.forEach(dropdownToggleEl => {
             new bootstrap.Dropdown(dropdownToggleEl);

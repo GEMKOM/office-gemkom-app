@@ -410,4 +410,15 @@
     background: rgba(255, 193, 7, 0.7);
 }
 
+.quantity-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
  

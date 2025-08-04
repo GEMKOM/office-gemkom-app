@@ -33,6 +33,9 @@
     font-weight: 500;
     border-radius: 6px;
     margin: 0 0.25rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .nav-link:hover {
@@ -91,14 +94,14 @@
 }
 
 /* Add padding around main nav items */
-.nav-item.dropdown .nav-link {
+.nav-item .nav-link {
     padding: 0.75rem 1rem !important;
     margin: 0 0.25rem;
     border-radius: 4px;
     transition: all 0.2s ease;
 }
 
-.nav-item.dropdown .nav-link:hover {
+.nav-item .nav-link:hover {
     background-color: rgba(255, 255, 255, 0.1) !important;
 }
 
@@ -123,7 +126,7 @@
     font-weight: 500;
 }
 
-.nav-item.dropdown .dropdown-toggle {
+.nav-item .nav-link {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -157,6 +160,9 @@
     display: flex;
     align-items: center;
     border-left: 3px solid transparent;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .dropdown-menu .dropdown-item:hover {
@@ -222,6 +228,9 @@
     font-weight: 500;
     display: flex;
     align-items: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .dropdown-submenu .dropdown-item:hover {
@@ -293,6 +302,45 @@
     border-color: #e9ecef;
 }
 
+/* Tablet and medium screen responsive improvements */
+@media (max-width: 1303px) and (min-width: 992px) {
+    .nav-link {
+        padding: 0.4rem 0.6rem !important;
+        font-size: 0.85rem;
+        margin: 0 0.1rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .navbar-brand {
+        font-size: 1rem;
+    }
+    
+    .navbar-brand img {
+        height: 26px !important;
+    }
+    
+    .dropdown-menu {
+        min-width: 160px;
+    }
+    
+    .dropdown-menu .dropdown-item {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.8rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    
+    .dropdown-menu .dropdown-item i {
+        width: 12px;
+        margin-right: 0.3rem;
+    }
+}
+
+
+
 /* Mobile responsive improvements */
 @media (max-width: 991.98px) {
     .navbar-collapse {
@@ -307,6 +355,7 @@
         margin: 0.25rem 0;
         padding: 0.75rem 1rem !important;
         border-radius: 6px;
+        justify-content: flex-start !important;
     }
     
     .nav-link.active::after {
@@ -366,6 +415,7 @@
     .nav-link {
         font-size: 0.9rem;
         padding: 0.5rem 0.75rem !important;
+        justify-content: flex-start !important;
     }
     
     .dropdown-menu {

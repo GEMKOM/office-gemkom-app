@@ -24,6 +24,10 @@ async function initializeTasks() {
     try {
         await loadMachines();
         initializeSortableHeaders();
+        
+        // Check for URL parameters and set filters
+        const filterApplied = handleUrlParameters();
+        
         await loadTasks();
         updateTaskCounts();
     } catch (error) {
@@ -40,6 +44,28 @@ async function loadMachines() {
         console.error('Error loading machines:', error);
         machines = [];
     }
+}
+
+// Handle URL parameters for filtering
+function handleUrlParameters() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const filterParam = urlParams.get('filter');
+    
+    if (filterParam) {
+        // Set the key filter with the provided value
+        const keyFilter = document.getElementById('key-filter');
+        if (keyFilter) {
+            keyFilter.value = filterParam;
+        }
+        
+        // Show a notification that the page is filtered
+        showNotification(`"${filterParam}" için filtrelenmiş sonuçlar gösteriliyor`, 'info');
+        
+        // Automatically apply the filter
+        return true; // Indicate that a filter was applied
+    }
+    
+    return false; // No filter was applied
 }
 
 function populateMachineFilters() {
