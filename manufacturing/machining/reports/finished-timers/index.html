@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Biten Zamanlayıcılar Raporu</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../../style.css">
+    <link rel="stylesheet" href="../../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../../components/dropdown.css">
+    <link rel="icon" type="image/png" href="../../../../images/gemkom.png">
+    <link rel="stylesheet" href="../../../../pre-auth.css">
+    <link rel="stylesheet" href="finishedTimers.css">
+</head>
+<body class="pre-auth">
+    <!-- Navigation -->
+    <div id="navbar-container"></div>
+
+    <!-- Floating Elements -->
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+
+    <!-- Main Content Section -->
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <!-- Header Section -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="dashboard-header compact">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <h3 class="section-title mb-1">
+                                    <i class="fas fa-clock me-2 text-primary"></i>
+                                    Biten Zamanlayıcılar Raporu
+                                </h3>
+                                <p class="section-subtitle mb-0 small">Tamamlanan zamanlayıcıların detaylı raporu</p>
+                            </div>
+                            <div class="dashboard-controls">
+                                <button id="back-to-main" class="btn btn-sm btn-outline-secondary me-2">
+                                    <i class="fas fa-arrow-left me-1"></i>Geri Dön
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Statistics Cards -->
+            <div class="row g-3 mb-3">
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card compact">
+                        <div class="stat-card-body">
+                            <div class="stat-icon bg-primary">
+                                <i class="fas fa-list"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h4 class="stat-number" id="total-timers-count">0</h4>
+                                <p class="stat-label small">Toplam Zamanlayıcı</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card compact">
+                        <div class="stat-card-body">
+                            <div class="stat-icon bg-success">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h4 class="stat-number" id="total-hours">0</h4>
+                                <p class="stat-label small">Toplam Süre (Saat)</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card compact">
+                        <div class="stat-card-body">
+                            <div class="stat-icon bg-info">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h4 class="stat-number" id="active-users-count">0</h4>
+                                <p class="stat-label small">Aktif Kullanıcı</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card compact">
+                        <div class="stat-card-body">
+                            <div class="stat-icon bg-warning">
+                                <i class="fas fa-cogs"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h4 class="stat-number" id="active-machines-count">0</h4>
+                                <p class="stat-label small">Aktif Makine</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters Section -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="dashboard-card compact">
+                        <div class="card-header">
+                            <h6 class="card-title mb-0">
+                                <i class="fas fa-filter me-2 text-primary"></i>
+                                Filtreler
+                            </h6>
+                        </div>
+                        <div class="card-body py-3">
+                            <div class="row g-2">
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Kullanıcı</label>
+                                    <div id="user-filter-container"></div>
+                                </div>
+                                <div class="col-md-1">
+                                    <label class="form-label small mb-1">TI No</label>
+                                    <input type="text" class="form-control form-control-sm" id="issue-key-filter" placeholder="TI-123">
+                                </div>
+                                <div class="col-md-1">
+                                    <label class="form-label small mb-1">İş No</label>
+                                    <input type="text" class="form-control form-control-sm" id="job-no-filter" placeholder="İş no">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Makine</label>
+                                    <div id="machine-filter-container"></div>
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Başlangıç</label>
+                                    <input type="date" class="form-control form-control-sm" id="start-date-filter">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">Bitiş</label>
+                                    <input type="date" class="form-control form-control-sm" id="finish-date-filter">
+                                </div>
+                                <div class="col-md-2">
+                                    <label class="form-label small mb-1">&nbsp;</label>
+                                    <div class="d-grid gap-1">
+                                        <button class="btn btn-sm btn-primary" id="apply-filters">
+                                            <i class="fas fa-search me-1"></i>Filtrele
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary" id="clear-filters">
+                                            <i class="fas fa-times me-1"></i>Temizle
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Timers Table Section -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <h5 class="card-title">
+                                <i class="fas fa-table me-2 text-primary"></i>
+                                Zamanlayıcı Listesi
+                            </h5>
+                            <div class="card-actions">
+                                <button class="btn btn-sm btn-outline-secondary" id="refresh-timers">
+                                    <i class="fas fa-sync-alt me-1"></i>Yenile
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" id="export-timers">
+                                    <i class="fas fa-download me-1"></i>Dışa Aktar
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th>
+                                                Kullanıcı
+                                            </th>
+                                            <th class="sortable" data-field="issue_key">
+                                                TI No <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th>
+                                                İş No
+                                            </th>
+                                            <th>
+                                                Resim No
+                                            </th>
+                                            <th>
+                                                Poz No
+                                            </th>
+                                            <th>
+                                                Adet
+                                            </th>
+                                            <th>
+                                                Makine
+                                            </th>
+                                            <th class="sortable" data-field="start_time">
+                                                Başlangıç <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="finish_time">
+                                                Bitiş <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="duration">
+                                                Süre (Saat) <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="comment">
+                                                Yorum <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="manual_entry">
+                                                Manuel Giriş <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th>İşlemler</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="timers-table-body">
+                                        <!-- Timer data will be loaded here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                            
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <nav aria-label="Timer pagination">
+                        <ul class="pagination justify-content-center" id="pagination">
+                            <!-- Pagination will be generated here -->
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Edit Timer Modal -->
+    <div class="modal fade" id="edit-timer-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Zamanlayıcıyı Düzenle</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="edit-timer-form">
+                        <input type="hidden" id="edit-timer-id">
+                        <div class="mb-2">
+                            <label class="form-label">İş No</label>
+                            <input type="text" class="form-control" id="edit-job_no">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Resim No</label>
+                            <input type="text" class="form-control" id="edit-image_no">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Pozisyon No</label>
+                            <input type="text" class="form-control" id="edit-position_no">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Adet</label>
+                            <input type="number" class="form-control" id="edit-quantity">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Yorum</label>
+                            <input type="text" class="form-control" id="edit-comment">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Manuel Giriş</label>
+                            <input type="checkbox" id="edit-manual_entry">
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Makine</label>
+                            <select class="form-select" id="edit-machine"></select>
+                        </div>
+                        <div class="mb-2">
+                            <label class="form-label">Bitiş Zamanı</label>
+                            <input type="datetime-local" class="form-control" id="edit-finish_time">
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                    <button type="button" class="btn btn-primary" id="save-edit-timer-btn">Kaydet</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Task Info Modal -->
+    <div class="modal fade" id="task-info-modal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Görev Bilgileri</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
+                </div>
+                <div class="modal-body" id="task-info-content">
+                    <!-- Task info will be loaded here -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom Scripts -->
+    <script type="module" src="finishedTimers.js"></script>
+</body>
+</html> 

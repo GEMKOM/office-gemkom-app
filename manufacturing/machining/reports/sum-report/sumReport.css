@@ -1,0 +1,726 @@
+/* Sum Report Styles - Using Shared Machining Styles */
+
+/* Import shared styles */
+@import url('../../shared.css');
+
+/* Report-specific overrides and additions */
+.group-name {
+    font-weight: 600;
+    color: #343a40;
+}
+
+.hours-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: #e3f2fd;
+    color: #1976d2;
+    border: 1px solid #bbdefb;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.count-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: #f3e5f5;
+    color: #7b1fa2;
+    border: 1px solid #e1bee7;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.avg-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: #e8f5e8;
+    color: #388e3c;
+    border: 1px solid #c8e6c9;
+    border-radius: 4px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+/* Table styling to match tasks */
+.table-sm td, .table-sm th {
+    padding: 0.5rem;
+    vertical-align: middle;
+}
+
+.table-hover tbody tr:hover {
+    background-color: rgba(0, 0, 0, 0.075);
+}
+
+.table th {
+    border-top: none;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    color: #495057;
+    background-color: #f8f9fa;
+}
+
+.table td {
+    border-top: 1px solid #dee2e6;
+    vertical-align: middle;
+}
+
+/* Pagination styling */
+.pagination-sm .page-link {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+}
+
+/* Sortable headers */
+.sortable {
+    cursor: pointer;
+    user-select: none;
+}
+
+.sortable:hover {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.sort-icon {
+    margin-left: 0.25rem;
+    opacity: 0.5;
+}
+
+.sortable.sorted .sort-icon {
+    opacity: 1;
+    color: #0d6efd;
+}
+
+/* Filter Container Styling */
+.dashboard-card .card-body {
+    padding: 1rem;
+}
+
+/* Comprehensive dropdown fix - override all potential clipping */
+.modern-dropdown-container,
+.modern-dropdown,
+.modern-dropdown .dropdown-menu {
+    overflow: visible !important;
+    position: relative !important;
+}
+
+/* Ensure dropdown menu is always visible when open */
+.modern-dropdown.open .dropdown-menu {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+    max-height: 400px !important;
+    overflow: visible !important;
+    z-index: 999999 !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
+}
+
+/* Override Bootstrap dropdown styles that might interfere */
+.dropdown-menu {
+    z-index: 999999 !important;
+}
+
+/* Ensure no parent elements clip the dropdown */
+body,
+html,
+.container-fluid,
+.row,
+.col-12,
+.col-md-2,
+.dashboard-card,
+.dashboard-card .card-body,
+.dashboard-card .card-header {
+    overflow: visible !important;
+}
+
+/* Specific fix for the filters row */
+.row.mb-3 {
+    overflow: visible !important;
+}
+
+/* Ensure the entire filters section allows dropdowns */
+.dashboard-card.compact {
+    overflow: visible !important;
+    position: relative;
+}
+
+.dashboard-card.compact .card-body {
+    overflow: visible !important;
+    position: relative;
+}
+
+/* AGGRESSIVE DROPDOWN FIX - Force dropdown above everything */
+.modern-dropdown.open .dropdown-menu {
+    z-index: 9999999 !important;
+    position: fixed !important;
+    top: auto !important;
+    left: auto !important;
+    right: auto !important;
+    bottom: auto !important;
+    transform: none !important;
+}
+
+/* Calculate proper position for fixed dropdown */
+.modern-dropdown.open .dropdown-menu {
+    position: absolute !important;
+    z-index: 9999999 !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: translateY(0) !important;
+}
+
+/* Force the entire filters section to have higher z-index */
+.dashboard-card.compact {
+    z-index: 10000 !important;
+    position: relative;
+}
+
+/* Ensure dropdown container has proper stacking context */
+.modern-dropdown-container {
+    z-index: 10001 !important;
+    position: relative;
+}
+
+.modern-dropdown {
+    z-index: 10002 !important;
+    position: relative;
+}
+
+.modern-dropdown.open {
+    z-index: 10003 !important;
+}
+
+/* Modern Dropdown Styling */
+.modern-dropdown {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+.modern-dropdown .dropdown-selected {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #495057;
+    background-color: #fff;
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.modern-dropdown .dropdown-selected:hover {
+    border-color: #86b7fe;
+}
+
+.modern-dropdown .dropdown-selected:focus-within {
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.modern-dropdown .selected-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.modern-dropdown .dropdown-arrow {
+    margin-left: 0.5rem;
+    transition: transform 0.2s ease;
+}
+
+.modern-dropdown .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    display: none;
+    min-width: 10rem;
+    padding: 0.5rem 0;
+    margin: 0.125rem 0 0;
+    font-size: 0.875rem;
+    color: #212529;
+    text-align: left;
+    list-style: none;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid rgba(0, 0, 0, 0.175);
+    border-radius: 0.375rem;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.175);
+}
+
+.modern-dropdown-container {
+    position: relative;
+    display: inline-block;
+    width: 100%;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .dashboard-card.compact {
+        margin-bottom: 1rem;
+    }
+    
+    .dashboard-card.compact .card-body {
+        padding: 0.75rem;
+    }
+    
+    .modern-dropdown.open .dropdown-menu {
+        position: static;
+        width: 100%;
+        margin-top: 0.25rem;
+        box-shadow: none;
+        border: 1px solid #dee2e6;
+    }
+    
+    .modern-dropdown.open .dropdown-menu {
+        max-height: 200px;
+        overflow-y: auto;
+    }
+}
+
+/* Compact Layout Adjustments */
+.dashboard-card,
+.modern-dropdown-container {
+    margin-bottom: 1rem;
+}
+
+.dashboard-card.compact {
+    margin-bottom: 0.5rem;
+}
+
+.modern-dropdown {
+    width: 100%;
+}
+
+.modern-dropdown.open {
+    z-index: 1001;
+}
+
+.modern-dropdown.open .dropdown-menu {
+    display: block;
+}
+
+/* Responsive adjustments for compact layout */
+.row.mb-3 {
+    margin-bottom: 1rem !important;
+}
+
+.dashboard-card.compact {
+    margin-bottom: 0.5rem;
+}
+
+.dashboard-card.compact .card-body {
+    padding: 0.75rem;
+}
+
+.modern-dropdown.open .dropdown-menu {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.modern-dropdown.open .dropdown-menu {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+}
+
+/* Main layout adjustments */
+.dashboard-card:not(.compact) {
+    margin-bottom: 1.5rem;
+}
+
+.row:not(.mb-3) {
+    margin-bottom: 1rem;
+}
+
+.modules-section {
+    padding: 2rem 0;
+}
+
+.container-fluid {
+    padding-left: 1rem;
+    padding-right: 1rem;
+}
+
+.row.mb-3 {
+    margin-bottom: 1rem !important;
+}
+
+.dashboard-card.compact {
+    margin-bottom: 0.5rem;
+}
+
+.modern-dropdown-container {
+    margin-bottom: 0.5rem;
+}
+
+.modern-dropdown {
+    width: 100%;
+}
+
+.modern-dropdown.open {
+    z-index: 1001;
+}
+
+.modern-dropdown.open .dropdown-menu {
+    display: block;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.modern-dropdown.open .dropdown-menu {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+}
+
+.modern-dropdown.open .dropdown-menu {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    z-index: 1000;
+    min-width: 10rem;
+    padding: 0.5rem 0;
+    margin: 0.125rem 0 0;
+    font-size: 0.875rem;
+    color: #212529;
+    text-align: left;
+    list-style: none;
+    background-color: #fff;
+    background-clip: padding-box;
+    border: 1px solid rgba(0, 0, 0, 0.175);
+    border-radius: 0.375rem;
+    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.175);
+}
+
+.modern-dropdown.open .dropdown-menu {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.modern-dropdown.open .dropdown-menu {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+}
+
+.modern-dropdown-container,
+.modern-dropdown {
+    margin-bottom: 0.5rem;
+}
+
+.modern-dropdown {
+    width: 100%;
+}
+
+.modern-dropdown.open {
+    z-index: 1001;
+}
+
+.modern-dropdown.open .dropdown-menu {
+    display: block;
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.modern-dropdown.open .dropdown-menu {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.1);
+}
+
+.modern-dropdown .dropdown-item {
+    display: block;
+    width: 100%;
+    padding: 0.25rem 1rem;
+    clear: both;
+    font-weight: 400;
+    color: #212529;
+    text-align: inherit;
+    text-decoration: none;
+    white-space: nowrap;
+    background-color: transparent;
+    border: 0;
+}
+
+.modern-dropdown .dropdown-item:hover {
+    color: #1e2125;
+    background-color: #f8f9fa;
+}
+
+.modern-dropdown .dropdown-item.focused {
+    color: #1e2125;
+    background-color: #e9ecef;
+}
+
+.modern-dropdown .dropdown-item.no-items {
+    color: #6c757d;
+    font-style: italic;
+}
+
+.modern-dropdown .dropdown-item.disabled {
+    color: #6c757d;
+    pointer-events: none;
+    background-color: transparent;
+}
+
+.modern-dropdown .item-text {
+    flex: 1;
+}
+
+.modern-dropdown .selected-icon {
+    margin-left: 0.5rem;
+    color: #0d6efd;
+}
+
+.modern-dropdown .dropdown-menu {
+    max-height: 200px;
+    overflow-y: auto;
+}
+
+.modern-dropdown .dropdown-search {
+    padding: 0.5rem;
+    border: none;
+    border-bottom: 1px solid #dee2e6;
+    width: 100%;
+    font-size: 0.875rem;
+}
+
+.modern-dropdown .dropdown-search:focus {
+    outline: none;
+    border-bottom-color: #0d6efd;
+}
+
+.modern-dropdown .dropdown-search::placeholder {
+    color: #6c757d;
+}
+
+/* Report-specific styling */
+#report-table-body .text-primary {
+    color: #0d6efd !important;
+    font-weight: 600;
+}
+
+/* Clear filters button styling */
+#clear-filters {
+    border-color: #6c757d;
+    color: #6c757d;
+}
+
+#clear-filters:hover {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: #fff;
+}
+
+/* Export button styling */
+#export-report {
+    border-color: #0d6efd;
+    color: #0d6efd;
+}
+
+#export-report:hover {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+
+/* Mobile responsive adjustments */
+@media (max-width: 768px) {
+    .table-responsive {
+        font-size: 0.875rem;
+    }
+    
+    .table-sm td, .table-sm th {
+        padding: 0.375rem;
+    }
+    
+    .d-grid.gap-1 {
+        gap: 0.25rem !important;
+    }
+    
+    .d-grid.gap-1 .btn {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+}
+
+/* Statistics cards styling */
+.stat-card.compact {
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.stat-card.compact:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.stat-card-body {
+    display: flex;
+    align-items: center;
+    padding: 1rem;
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+    color: white;
+    font-size: 1.25rem;
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-number {
+    font-size: 1.5rem;
+    font-weight: 700;
+    margin: 0;
+    color: #343a40;
+}
+
+.stat-label {
+    margin: 0;
+    color: #6c757d;
+}
+
+/* Form check styling */
+.form-check {
+    margin-bottom: 0;
+    display: flex;
+    align-items: center;
+    padding: 0.375rem 0.5rem;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    transition: all 0.15s ease-in-out;
+}
+
+.form-check:hover {
+    background-color: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.form-check-input {
+    margin-right: 0.5rem;
+    margin-top: 0;
+    width: 1rem;
+    height: 1rem;
+    cursor: pointer;
+}
+
+.form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.form-check-input:focus {
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.form-check-label {
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #495057;
+    margin: 0;
+    line-height: 1.2;
+}
+
+/* Filter section styling */
+.dashboard-card.compact .card-body {
+    padding: 1.5rem;
+}
+
+/* Form check styling for filters */
+.form-check {
+    margin: 0;
+    padding: 0.5rem 0.75rem;
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 0.375rem;
+    transition: all 0.15s ease-in-out;
+}
+
+.form-check:hover {
+    background-color: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.form-check-input {
+    margin-right: 0.5rem;
+    margin-top: 0;
+    width: 1rem;
+    height: 1rem;
+    cursor: pointer;
+}
+
+.form-check-input:checked {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.form-check-input:focus {
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.form-check-label {
+    cursor: pointer;
+    user-select: none;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #495057;
+    margin: 0;
+    line-height: 1.2;
+}
+
+/* Filter row spacing */
+.row.g-3 {
+    margin-bottom: 0;
+}
+
+.row.mt-3 {
+    margin-top: 1rem !important;
+}
+
+/* Button styling in filters */
+.d-grid.gap-1 .btn {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+}
+
+/* Time input styling */
+input[type="time"] {
+    font-family: monospace;
+}
+
+/* Additional filters row styling */
+.row.g-2.mt-2 {
+    margin-top: 0.5rem !important;
+    padding-top: 0.5rem;
+    border-top: 1px solid #dee2e6;
+} 

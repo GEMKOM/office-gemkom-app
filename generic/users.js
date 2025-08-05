@@ -14,6 +14,13 @@ export async function fetchUsers(team = null) {
     return extractResultsFromResponse(data);
 }
 
+export async function authFetchUsers() {
+    const resp = await authedFetch(`${backendBase}/users/`);
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return extractResultsFromResponse(data);
+}
+
 export async function fetchTeams() {
     const resp = await authedFetch(`${backendBase}/users/teams/`);
     if (!resp.ok) return [];

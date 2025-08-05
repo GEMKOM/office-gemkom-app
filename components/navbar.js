@@ -9,6 +9,75 @@ const NAVIGATION_STRUCTURE = {
         icon: 'fas fa-home',
         children: {}
     },
+    '/management': {
+        label: 'Yönetim',
+        icon: 'fas fa-cogs',
+        children: {
+            '/management/users': {
+                label: 'Çalışanlar',
+                icon: 'fas fa-users',
+                children: {
+                    '/management/users/list': {
+                        label: 'Çalışan Listesi',
+                        icon: 'fas fa-list',
+                        children: {}
+                    },
+                    '/management/users/profiles': {
+                        label: 'Çalışan Profilleri',
+                        icon: 'fas fa-user-circle',
+                        children: {}
+                    },
+                    '/management/users/departments': {
+                        label: 'Departman Yönetimi',
+                        icon: 'fas fa-building',
+                        children: {}
+                    }
+                }
+            },
+            '/management/machines': {
+                label: 'Makineler',
+                icon: 'fas fa-cogs',
+                children: {
+                    '/management/machines/list': {
+                        label: 'Makine Listesi',
+                        icon: 'fas fa-list',
+                        children: {}
+                    },
+                    '/management/machines/status': {
+                        label: 'Makine Durumları',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    },
+                    '/management/machines/planning': {
+                        label: 'Makine Planlaması',
+                        icon: 'fas fa-calendar-alt',
+                        children: {}
+                    }
+                }
+            },
+            '/management/overtime': {
+                label: 'Mesailer',
+                icon: 'fas fa-clock',
+                children: {
+                    '/management/overtime/requests': {
+                        label: 'Mesai Talepleri',
+                        icon: 'fas fa-file-alt',
+                        children: {}
+                    },
+                    '/management/overtime/approvals': {
+                        label: 'Onay Süreçleri',
+                        icon: 'fas fa-check-circle',
+                        children: {}
+                    },
+                    '/management/overtime/reports': {
+                        label: 'Mesai Raporları',
+                        icon: 'fas fa-chart-bar',
+                        children: {}
+                    }
+                }
+            }
+        }
+    },
     '/manufacturing': {
         label: 'İmalat',
         icon: 'fas fa-industry',
@@ -31,6 +100,7 @@ const NAVIGATION_STRUCTURE = {
                         label: 'Raporlar',
                         icon: 'fas fa-chart-pie',
                         children: {
+
                             '/manufacturing/machining/reports/production': {
                                 label: 'Üretim Raporları',
                                 icon: 'fas fa-industry',
@@ -467,24 +537,48 @@ export function initNavbar() {
         
         // Add hover functionality for main navbar dropdowns (top level only)
         const mainDropdownToggles = navbarContainer.querySelectorAll('.nav-item.dropdown .dropdown-toggle');
-        mainDropdownToggles.forEach(dropdownToggle => {
-            const navItem = dropdownToggle.closest('.nav-item');
-            const dropdownMenu = dropdownToggle.nextElementSibling;
-            
-            // Show dropdown on hover - only immediate subcategories
-            navItem.addEventListener('mouseenter', () => {
-                if (dropdownMenu) {
-                    dropdownMenu.classList.add('show');
-                    // Hide all nested submenus when main dropdown opens
+        
+        // Function to close all dropdowns except the specified one
+        function closeOtherDropdowns(exceptElement) {
+            mainDropdownToggles.forEach(toggle => {
+                const navItem = toggle.closest('.nav-item');
+                const dropdownMenu = toggle.nextElementSibling;
+                
+                if (navItem !== exceptElement && dropdownMenu) {
+                    dropdownMenu.classList.remove('show');
+                    // Also close all nested submenus
                     const allSubmenus = dropdownMenu.querySelectorAll('.dropdown-submenu');
                     allSubmenus.forEach(submenu => {
                         submenu.classList.remove('show');
                     });
                 }
             });
-            
-            // Hide dropdown on mouse leave with longer delay for better UX
+        }
+        
+        mainDropdownToggles.forEach(dropdownToggle => {
+            const navItem = dropdownToggle.closest('.nav-item');
+            const dropdownMenu = dropdownToggle.nextElementSibling;
             let hideTimeout;
+            
+            // Show dropdown on hover
+            navItem.addEventListener('mouseenter', () => {
+                if (dropdownMenu) {
+                    // Close other dropdowns first
+                    closeOtherDropdowns(navItem);
+                    
+                    // Small delay to ensure smooth transition
+                    setTimeout(() => {
+                        dropdownMenu.classList.add('show');
+                        // Hide all nested submenus when main dropdown opens
+                        const allSubmenus = dropdownMenu.querySelectorAll('.dropdown-submenu');
+                        allSubmenus.forEach(submenu => {
+                            submenu.classList.remove('show');
+                        });
+                    }, 50);
+                }
+            });
+            
+            // Hide dropdown on mouse leave
             navItem.addEventListener('mouseleave', (e) => {
                 // Check if the mouse is moving to the dropdown menu or its children
                 const relatedTarget = e.relatedTarget;
@@ -501,7 +595,7 @@ export function initNavbar() {
                     if (dropdownMenu) {
                         dropdownMenu.classList.remove('show');
                     }
-                }, 500); // Increased delay for better user experience
+                }, 300); // Reduced delay for better responsiveness
             });
             
             // Cancel hide timeout when entering dropdown menu
@@ -528,36 +622,60 @@ export function initNavbar() {
                 });
             }
             
-            // Also handle hover on the dropdown toggle itself for better responsiveness
+            // Handle hover on the dropdown toggle itself
             dropdownToggle.addEventListener('mouseenter', () => {
                 if (dropdownMenu) {
-                    dropdownMenu.classList.add('show');
-                    // Hide all nested submenus when main dropdown opens
-                    const allSubmenus = dropdownMenu.querySelectorAll('.dropdown-submenu');
-                    allSubmenus.forEach(submenu => {
-                        submenu.classList.remove('show');
-                    });
+                    // Close other dropdowns first
+                    closeOtherDropdowns(navItem);
+                    
+                    setTimeout(() => {
+                        dropdownMenu.classList.add('show');
+                        // Hide all nested submenus when main dropdown opens
+                        const allSubmenus = dropdownMenu.querySelectorAll('.dropdown-submenu');
+                        allSubmenus.forEach(submenu => {
+                            submenu.classList.remove('show');
+                        });
+                    }, 50);
                 }
             });
         });
         
         // Initialize nested dropdowns (dropend) with hover functionality
         const dropendElements = navbarContainer.querySelectorAll('.dropend .dropdown-toggle');
+        
+        // Function to close all nested submenus except the specified one
+        function closeOtherSubmenus(exceptElement) {
+            dropendElements.forEach(toggle => {
+                const dropendItem = toggle.closest('.dropend');
+                const dropdownMenu = toggle.nextElementSibling;
+                
+                if (dropendItem !== exceptElement && dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
+                    dropdownMenu.classList.remove('show');
+                }
+            });
+        }
+        
         dropendElements.forEach(dropendToggle => {
             // Don't initialize Bootstrap dropdown for nested dropdowns to avoid conflicts
             // const dropdown = new bootstrap.Dropdown(dropendToggle);
             
+            const dropendItem = dropendToggle.closest('.dropend');
+            const dropdownMenu = dropendToggle.nextElementSibling;
+            let hideTimeout;
+            
             // Add hover functionality for nested dropdowns
             dropendToggle.addEventListener('mouseenter', () => {
-                const dropdownMenu = dropendToggle.nextElementSibling;
                 if (dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
-                    dropdownMenu.classList.add('show');
+                    // Close other submenus first
+                    closeOtherSubmenus(dropendItem);
+                    
+                    setTimeout(() => {
+                        dropdownMenu.classList.add('show');
+                    }, 50);
                 }
             });
             
-            // Hide nested dropdown on mouse leave with delay
-            let hideTimeout;
-            const dropendItem = dropendToggle.closest('.dropend');
+            // Hide nested dropdown on mouse leave
             dropendItem.addEventListener('mouseleave', (e) => {
                 // Check if moving to the submenu
                 const relatedTarget = e.relatedTarget;
@@ -566,15 +684,13 @@ export function initNavbar() {
                 }
                 
                 hideTimeout = setTimeout(() => {
-                    const dropdownMenu = dropendToggle.nextElementSibling;
                     if (dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
                         dropdownMenu.classList.remove('show');
                     }
-                }, 300); // Increased delay for better UX
+                }, 200); // Reduced delay for better responsiveness
             });
             
             // Cancel hide timeout when entering submenu
-            const dropdownMenu = dropendToggle.nextElementSibling;
             if (dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
                 dropdownMenu.addEventListener('mouseenter', () => {
                     if (hideTimeout) {
@@ -597,9 +713,34 @@ export function initNavbar() {
                     }
                 });
             }
+                });
+        
+        // Add click outside handler to close all dropdowns
+        document.addEventListener('click', (e) => {
+            const isDropdownClick = e.target.closest('.nav-item.dropdown') || 
+                                  e.target.closest('.dropdown-menu') ||
+                                  e.target.closest('.dropend');
+            
+            if (!isDropdownClick) {
+                // Close all dropdowns when clicking outside
+                mainDropdownToggles.forEach(toggle => {
+                    const dropdownMenu = toggle.nextElementSibling;
+                    if (dropdownMenu) {
+                        dropdownMenu.classList.remove('show');
+                    }
+                });
+                
+                // Close all nested submenus
+                dropendElements.forEach(toggle => {
+                    const dropdownMenu = toggle.nextElementSibling;
+                    if (dropdownMenu && dropdownMenu.classList.contains('dropdown-submenu')) {
+                        dropdownMenu.classList.remove('show');
+                    }
+                });
+            }
         });
-      
-      // Add event listeners
+        
+        // Add event listeners
       const editProfileBtn = document.getElementById('edit-profile-btn');
       if (editProfileBtn) {
           editProfileBtn.addEventListener('click', (e) => {
@@ -664,11 +805,19 @@ export function initNavbar() {
                             return;
                         }
                         
-                        if (path.startsWith('/manufacturing/maintenance/')) {
+                                                if (path.startsWith('/manufacturing/maintenance/')) {
                             // Show placeholder for maintenance pages
                             alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                             return;
                         }
+                        
+                        if (path.startsWith('/management/') && !path.startsWith('/management/users/list')) {
+                            // Show placeholder for management pages
+                            alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
+                            return;
+                        }
+                        
+                        
                         
                         navigateTo(path);
                     }
@@ -702,11 +851,19 @@ export function initNavbar() {
                     return;
                 }
                 
-                if (path.startsWith('/manufacturing/maintenance/')) {
+                                if (path.startsWith('/manufacturing/maintenance/')) {
                     // Show placeholder for maintenance pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;
                 }
+                
+                if (path.startsWith('/management/') && !path.startsWith('/management/users/list')) {
+                    // Show placeholder for management pages
+                    alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
+                    return;
+                }
+                
+                
                 
                 navigateTo(path);
             });

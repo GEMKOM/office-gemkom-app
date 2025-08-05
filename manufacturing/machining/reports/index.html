@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Raporlar</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../style.css">
+    <link rel="stylesheet" href="../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../components/dropdown.css">
+    <link rel="icon" type="image/png" href="../../../images/gemkom.png">
+    <link rel="stylesheet" href="../../../pre-auth.css">
+</head>
+<body class="pre-auth">
+    <!-- Navigation -->
+    <div id="navbar-container"></div>
+
+    <!-- Floating Elements -->
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+
+    <!-- Header Section -->
+    <section class="modules-section py-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-12 text-center mb-5">
+                    <h2 class="section-title">Raporlar</h2>
+                    <p class="section-subtitle">Üretim süreçlerinizi analiz etmek ve performansınızı takip etmek için kapsamlı raporlar</p>
+                </div>
+            </div>
+            
+            <div class="row g-4">
+                                    <!-- Biten Zamanlayıcılar Raporu -->
+                    <div class="col-md-6 col-lg-4">
+                        <div class="functionality-card" onclick="window.location.href='finished-timers/'">
+                            <div class="card-body position-relative">
+                                <div class="card-icon text-primary">
+                                    <i class="fas fa-clock"></i>
+                                </div>
+                                <h5 class="card-title">Biten Zamanlayıcılar</h5>
+                                <p class="card-text">Tamamlanan zamanlayıcıların detaylı analizi. Kullanıcı performansları, süre dağılımları ve verimlilik metriklerini görüntüleyin.</p>
+                                <ul class="feature-list">
+                                    <li><i class="fas fa-users"></i>Kullanıcı Performansları</li>
+                                    <li><i class="fas fa-chart-line"></i>Süre Analizi</li>
+                                    <li><i class="fas fa-download"></i>Dışa Aktarma</li>
+                                    <li><i class="fas fa-filter"></i>Gelişmiş Filtreleme</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Toplam Raporu -->
+                    <div class="col-md-6 col-lg-4">
+                        <div class="functionality-card" onclick="window.location.href='sum-report/'">
+                            <div class="card-body position-relative">
+                                <div class="card-icon text-success">
+                                    <i class="fas fa-chart-pie"></i>
+                                </div>
+                                <h5 class="card-title">Toplam Raporu</h5>
+                                <p class="card-text">Talaşlı imalat süreçlerinin gruplandırılmış analizi. Kullanıcı, makine, iş no ve TI numarasına göre toplam süreleri görüntüleyin.</p>
+                                <ul class="feature-list">
+                                    <li><i class="fas fa-users"></i>Kullanıcı Gruplaması</li>
+                                    <li><i class="fas fa-cogs"></i>Makine Gruplaması</li>
+                                    <li><i class="fas fa-tasks"></i>İş No Gruplaması</li>
+                                    <li><i class="fas fa-chart-bar"></i>Toplam Saat Analizi</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
+                <!-- Üretim Raporları -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="functionality-card development-notice-card">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-success">
+                                <i class="fas fa-industry"></i>
+                            </div>
+                            <h5 class="card-title">Üretim Raporları</h5>
+                            <p class="card-text">Üretim süreçlerinin detaylı analizi, verimlilik metrikleri ve performans göstergeleri.</p>
+                            <ul class="feature-list">
+                                <li><i class="fas fa-chart-bar"></i>Verimlilik Analizi</li>
+                                <li><i class="fas fa-tachometer-alt"></i>Performans Metrikleri</li>
+                                <li><i class="fas fa-calendar-alt"></i>Zaman Bazlı Raporlar</li>
+                                <li><i class="fas fa-cogs"></i>Makine Performansı</li>
+                            </ul>
+                            <div class="development-badge">
+                                <span class="badge bg-warning">Yakında</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Kalite Kontrol Raporları -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="functionality-card development-notice-card">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-info">
+                                <i class="fas fa-award"></i>
+                            </div>
+                            <h5 class="card-title">Kalite Kontrol Raporları</h5>
+                            <p class="card-text">Kalite kontrol süreçlerinin detaylı raporları, hata analizi ve iyileştirme önerileri.</p>
+                            <ul class="feature-list">
+                                <li><i class="fas fa-clipboard-check"></i>Kalite Metrikleri</li>
+                                <li><i class="fas fa-exclamation-triangle"></i>Hata Analizi</li>
+                                <li><i class="fas fa-chart-pie"></i>İstatistiksel Analiz</li>
+                                <li><i class="fas fa-lightbulb"></i>İyileştirme Önerileri</li>
+                            </ul>
+                            <div class="development-badge">
+                                <span class="badge bg-warning">Yakında</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Kapasite Raporları -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="functionality-card development-notice-card">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-warning">
+                                <i class="fas fa-chart-area"></i>
+                            </div>
+                            <h5 class="card-title">Kapasite Raporları</h5>
+                            <p class="card-text">Makine kapasitelerinin analizi, yük dağılımı ve optimizasyon önerileri.</p>
+                            <ul class="feature-list">
+                                <li><i class="fas fa-industry"></i>Kapasite Kullanımı</li>
+                                <li><i class="fas fa-balance-scale"></i>Yük Dağılımı</li>
+                                <li><i class="fas fa-route"></i>Optimizasyon</li>
+                                <li><i class="fas fa-trending-up"></i>Trend Analizi</li>
+                            </ul>
+                            <div class="development-badge">
+                                <span class="badge bg-warning">Yakında</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Maliyet Analizi -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="functionality-card development-notice-card">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-danger">
+                                <i class="fas fa-calculator"></i>
+                            </div>
+                            <h5 class="card-title">Maliyet Analizi</h5>
+                            <p class="card-text">Üretim maliyetlerinin detaylı analizi, bütçe takibi ve maliyet optimizasyonu.</p>
+                            <ul class="feature-list">
+                                <li><i class="fas fa-dollar-sign"></i>Maliyet Takibi</li>
+                                <li><i class="fas fa-chart-line"></i>Bütçe Analizi</li>
+                                <li><i class="fas fa-piggy-bank"></i>Tasarruf Önerileri</li>
+                                <li><i class="fas fa-file-invoice"></i>Maliyet Raporları</li>
+                            </ul>
+                            <div class="development-badge">
+                                <span class="badge bg-warning">Yakında</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Özelleştirilmiş Raporlar -->
+                <div class="col-md-6 col-lg-4">
+                    <div class="functionality-card development-notice-card">
+                        <div class="card-body position-relative">
+                            <div class="card-icon text-secondary">
+                                <i class="fas fa-magic"></i>
+                            </div>
+                            <h5 class="card-title">Özelleştirilmiş Raporlar</h5>
+                            <p class="card-text">İhtiyaçlarınıza özel raporlar oluşturun, dashboard'lar tasarlayın ve verilerinizi görselleştirin.</p>
+                            <ul class="feature-list">
+                                <li><i class="fas fa-palette"></i>Özel Dashboard</li>
+                                <li><i class="fas fa-chart-custom"></i>Görselleştirme</li>
+                                <li><i class="fas fa-cogs"></i>Özelleştirme</li>
+                                <li><i class="fas fa-share-alt"></i>Paylaşım</li>
+                            </ul>
+                            <div class="development-badge">
+                                <span class="badge bg-warning">Yakında</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Development Notice -->
+            <div class="row mt-5">
+                <div class="col-12">
+                    <div class="alert alert-info" role="alert">
+                        <div class="d-flex align-items-center">
+                            <i class="fas fa-info-circle me-3 fa-2x"></i>
+                            <div>
+                                <h6 class="alert-heading mb-1">Geliştirme Sürecinde</h6>
+                                <p class="mb-0">Daha fazla rapor seçeneği yakında eklenecek. Şu anda sadece "Biten Zamanlayıcılar" raporu aktif durumda.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer-section">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>GEMKOM</h5>
+                    <p>Üretim süreçlerinizi optimize edin</p>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p>&copy; 2024 GEMKOM. Tüm hakları saklıdır.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom Scripts -->
+    <script src="../../../components/navbar.js"></script>
+    <script src="../../../components/dropdown.js"></script>
+    <script src="../../../authService.js"></script>
+    <script src="../../../base.js"></script>
+    
+    <!-- Initialize Navbar -->
+    <script type="module">
+        import { initNavbar } from '../../../components/navbar.js';
+        
+        document.addEventListener('DOMContentLoaded', async () => {
+            await initNavbar();
+        });
+    </script>
+</body>
+</html> 

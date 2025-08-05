@@ -19,8 +19,7 @@ function navigateTo(section) {
         case 'reports':
             // Navigate to reports
             console.log('Navigating to reports...');
-            // TODO: Implement reports navigation
-            showNotification('Raporlar özelliği yakında eklenecek!', 'info');
+            window.location.href = '/manufacturing/machining/reports/';
             break;
         case 'capacity':
             // Navigate to capacity view
