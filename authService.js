@@ -54,12 +54,15 @@ export async function login(username, password) {
     const response = await fetch(`${API_URL}/token/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' ,
-            'X-Subdomain': window.location.hostname
+            'X-Subdomain': "ofis.gemcore.com.tr"
         },
         body: JSON.stringify({ username, password }),
     });
 
     if (!response.ok) {
+        if (response.status === 403) {
+            throw new Error('FORBIDDEN');
+        }
         throw new Error('Login failed');
     }
 
@@ -212,7 +215,7 @@ async function refreshAccessToken() {
         const response = await fetch(`${API_URL}/token/refresh/`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' ,
-                'X-Subdomain': window.location.hostname
+                'X-Subdomain': "ofis.gemcore.com.tr"
             },
             body: JSON.stringify({ refresh: refreshToken }),
         });
@@ -240,7 +243,7 @@ export async function authedFetch(url, options = {}) {
         ...options.headers,
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
-        'X-Subdomain': window.location.hostname
+        'X-Subdomain': "ofis.gemcore.com.tr"
     };
 
     let response = await fetch(url, options);

@@ -28,6 +28,64 @@ function hideError() {
     }
 }
 
+// Forbidden access modal
+function showForbiddenModal() {
+    // Add modal-open class to body to prevent scrolling
+    document.body.classList.add('modal-open');
+    
+    // Create modal HTML
+    const modalHTML = `
+        <div id="forbidden-modal" class="forbidden-modal">
+            <div class="forbidden-modal-content">
+                <div class="forbidden-modal-header">
+                    <h2>⚠️ Erişim Reddedildi</h2>
+                </div>
+                <div class="forbidden-modal-body">
+                    <p>Bu sisteme erişim yetkiniz bulunmamaktadır.</p>
+                    <p>Yönlendiriliyorsunuz...</p>
+                </div>
+                <div class="forbidden-modal-footer">
+                    <button id="forbidden-ok-btn" class="forbidden-ok-btn">
+                        TAMAM (<span id="countdown">5</span>)
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Add modal to body
+    document.body.insertAdjacentHTML('beforeend', modalHTML);
+    
+    // Start countdown
+    let countdown = 5;
+    const countdownElement = document.getElementById('countdown');
+    const okButton = document.getElementById('forbidden-ok-btn');
+    
+    const countdownInterval = setInterval(() => {
+        countdown--;
+        if (countdownElement) {
+            countdownElement.textContent = countdown;
+        }
+        
+        if (countdown <= 0) {
+            clearInterval(countdownInterval);
+            redirectToSaha();
+        }
+    }, 1000);
+    
+    // Handle OK button click
+    if (okButton) {
+        okButton.addEventListener('click', () => {
+            clearInterval(countdownInterval);
+            redirectToSaha();
+        });
+    }
+}
+
+function redirectToSaha() {
+    window.location.href = 'https://saha.gemcore.com.tr';
+}
+
 // Enhanced loading state management
 function setLoadingState(isLoading, buttonId = 'login-button') {
     const loginButton = document.getElementById(buttonId);
@@ -101,7 +159,12 @@ async function handleLogin(username, password) {
         }
     } catch (error) {
         console.error('Login error:', error);
-        showError('Kullanıcı adı veya şifre hatalı. Lütfen tekrar deneyin.');
+        
+        if (error.message === 'FORBIDDEN') {
+            showForbiddenModal();
+        } else {
+            showError('Kullanıcı adı veya şifre hatalı. Lütfen tekrar deneyin.');
+        }
         setLoadingState(false);
     }
 }
