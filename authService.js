@@ -53,7 +53,9 @@ function clearTokens() {
 export async function login(username, password) {
     const response = await fetch(`${API_URL}/token/`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' ,
+            'X-Subdomain': window.location.hostname
+        },
         body: JSON.stringify({ username, password }),
     });
 
@@ -209,7 +211,9 @@ async function refreshAccessToken() {
     try {
         const response = await fetch(`${API_URL}/token/refresh/`, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json' ,
+                'X-Subdomain': window.location.hostname
+            },
             body: JSON.stringify({ refresh: refreshToken }),
         });
 
@@ -236,6 +240,7 @@ export async function authedFetch(url, options = {}) {
         ...options.headers,
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
+        'X-Subdomain': window.location.hostname
     };
 
     let response = await fetch(url, options);
