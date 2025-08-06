@@ -16,65 +16,17 @@ const NAVIGATION_STRUCTURE = {
             '/management/users': {
                 label: 'Çalışanlar',
                 icon: 'fas fa-users',
-                children: {
-                    '/management/users/list': {
-                        label: 'Çalışan Listesi',
-                        icon: 'fas fa-list',
-                        children: {}
-                    },
-                    '/management/users/profiles': {
-                        label: 'Çalışan Profilleri',
-                        icon: 'fas fa-user-circle',
-                        children: {}
-                    },
-                    '/management/users/departments': {
-                        label: 'Departman Yönetimi',
-                        icon: 'fas fa-building',
-                        children: {}
-                    }
-                }
+                children: {}
             },
             '/management/machines': {
                 label: 'Makineler',
                 icon: 'fas fa-cogs',
-                children: {
-                    '/management/machines/list': {
-                        label: 'Makine Listesi',
-                        icon: 'fas fa-list',
-                        children: {}
-                    },
-                    '/management/machines/status': {
-                        label: 'Makine Durumları',
-                        icon: 'fas fa-chart-line',
-                        children: {}
-                    },
-                    '/management/machines/planning': {
-                        label: 'Makine Planlaması',
-                        icon: 'fas fa-calendar-alt',
-                        children: {}
-                    }
-                }
+                children: {}
             },
             '/management/overtime': {
                 label: 'Mesailer',
                 icon: 'fas fa-clock',
-                children: {
-                    '/management/overtime/requests': {
-                        label: 'Mesai Talepleri',
-                        icon: 'fas fa-file-alt',
-                        children: {}
-                    },
-                    '/management/overtime/approvals': {
-                        label: 'Onay Süreçleri',
-                        icon: 'fas fa-check-circle',
-                        children: {}
-                    },
-                    '/management/overtime/reports': {
-                        label: 'Mesai Raporları',
-                        icon: 'fas fa-chart-bar',
-                        children: {}
-                    }
-                }
+                children: {}
             }
         }
     },
@@ -811,7 +763,7 @@ export function initNavbar() {
                             return;
                         }
                         
-                        if (path.startsWith('/management/') && !path.startsWith('/management/users/list')) {
+                        if (path.startsWith('/management/') && !path.startsWith('/management/users') && !path.startsWith('/management/machines') && !path.startsWith('/management/overtime')) {
                             // Show placeholder for management pages
                             alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                             return;
@@ -857,7 +809,7 @@ export function initNavbar() {
                     return;
                 }
                 
-                if (path.startsWith('/management/') && !path.startsWith('/management/users/list')) {
+                if (path.startsWith('/management/') && !path.startsWith('/management/users') && !path.startsWith('/management/machines') && !path.startsWith('/management/overtime')) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;

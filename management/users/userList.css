@@ -1,7 +1,7 @@
 /* User List Page Styles - Following Manufacturing/Machining Standards */
 
 /* Import shared styles */
-@import url('../../../manufacturing/machining/shared.css');
+@import url('../../manufacturing/machining/shared.css');
 
 /* User-specific overrides and additions */
 .user-name {

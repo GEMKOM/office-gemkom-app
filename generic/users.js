@@ -34,3 +34,10 @@ export async function fetchOccupations() {
     const data = await resp.json();
     return extractResultsFromResponse(data);
 }
+
+export async function deleteUser(userId) {
+    const resp = await authedFetch(`${backendBase}/users/${userId}/`, {
+        method: 'DELETE',
+    });
+    return resp;
+}

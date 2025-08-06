@@ -1,0 +1,584 @@
+/* Machine List Page Styles - Following Manufacturing/Machining Standards */
+
+/* Import shared styles */
+@import url('../../manufacturing/machining/shared.css');
+
+/* Machine-specific overrides and additions */
+.machine-name {
+    font-weight: 600;
+    color: #343a40;
+}
+
+.machine-name small {
+    color: #6c757d;
+    font-size: 0.85rem;
+}
+
+/* Professional Table Element Styling */
+.machine-type {
+    font-weight: 500;
+    color: #0d6efd;
+    font-size: 0.9rem;
+}
+
+.machine-status {
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.machine-usage-area {
+    font-weight: 500;
+    color: #495057;
+    font-size: 0.9rem;
+}
+
+.machine-department {
+    color: #6c757d;
+    font-weight: 500;
+    font-size: 0.85rem;
+}
+
+.machine-active {
+    color: #495057;
+    font-weight: 500;
+}
+
+/* Status Badges for Machines */
+.status-badge.active {
+    background: rgba(40, 167, 69, 0.2);
+    color: #28a745;
+    border: 1px solid rgba(40, 167, 69, 0.3);
+    font-weight: 500;
+}
+
+.status-badge.inactive {
+    background: rgba(220, 53, 69, 0.2);
+    color: #dc3545;
+    border: 1px solid rgba(220, 53, 69, 0.3);
+    font-weight: 500;
+}
+
+/* Usage Area Header Styling */
+.team-header-row {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef) !important;
+    font-weight: bold;
+    border-bottom: 2px solid rgba(13, 110, 253, 0.1);
+    cursor: pointer;
+}
+
+.team-header-row:hover {
+    background: linear-gradient(135deg, #e9ecef, #dee2e6) !important;
+}
+
+.team-toggle-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    color: #0d6efd;
+    padding: 0.25rem;
+    border-radius: 4px;
+}
+
+.team-toggle-btn:hover {
+    color: #0056b3;
+    transform: scale(1.1);
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.team-toggle-icon {
+    font-size: 1.5rem;
+    font-weight: bold;
+    transition: transform 0.3s ease;
+}
+
+.team-name {
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: #495057;
+}
+
+.team-count {
+    font-size: 1rem;
+    color: #6c757d;
+    margin-left: 0.5rem;
+}
+
+.team-member-row {
+    transition: background-color 0.3s ease;
+}
+
+.team-member-row:hover {
+    background: rgba(13, 110, 253, 0.05);
+}
+
+/* Editable Cell Styling */
+.editable-cell {
+    position: relative;
+    transition: background-color 0.2s;
+    cursor: pointer;
+}
+
+.editable-cell:hover {
+    background-color: rgba(13, 110, 253, 0.05) !important;
+    border-radius: 4px;
+}
+
+.editable-cell:hover::after {
+    content: '✏️';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+.editable-cell input,
+.editable-cell select {
+    border: 2px solid #0d6efd;
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    width: 100%;
+    background-color: #fff;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.editable-cell input:focus,
+.editable-cell select:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.editable-cell.editing {
+    background-color: #fff3cd !important;
+    border: 2px solid #ffc107 !important;
+}
+
+/* Prevent editing on certain cells */
+.editable-cell[data-field="id"],
+.editable-cell[data-field="actions"] {
+    cursor: default;
+}
+
+.editable-cell[data-field="id"]:hover,
+.editable-cell[data-field="actions"]:hover {
+    background-color: transparent;
+}
+
+.editable-cell[data-field="id"]:hover::after,
+.editable-cell[data-field="actions"]:hover::after {
+    display: none;
+}
+
+/* Machine status specific styling */
+.machine-status-active {
+    color: #28a745;
+    font-weight: 600;
+}
+
+.machine-status-inactive {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+/* Action buttons styling */
+.action-buttons {
+    display: flex;
+    gap: 0.25rem;
+    flex-wrap: wrap;
+}
+
+.action-buttons .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.action-buttons .btn:hover {
+    transform: scale(1.05);
+}
+
+.action-buttons .btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.action-buttons .btn-outline-primary {
+    color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.action-buttons .btn-outline-primary:hover {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: white;
+}
+
+.action-buttons .btn-outline-danger {
+    color: #dc3545;
+    border-color: #dc3545;
+}
+
+.action-buttons .btn-outline-danger:hover {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
+}
+
+/* Properties section */
+.properties-toggle {
+    cursor: pointer;
+    color: #0d6efd;
+    text-decoration: none;
+    font-size: 0.9em;
+}
+
+.properties-toggle:hover {
+    text-decoration: underline;
+}
+
+.properties-content {
+    display: none;
+    margin-top: 10px;
+    padding: 10px;
+    background-color: #f8f9fa;
+    border-radius: 4px;
+    border: 1px solid #dee2e6;
+}
+
+.properties-content.show {
+    display: block;
+}
+
+.machine-properties-table {
+    margin-bottom: 0;
+    font-size: 0.9em;
+}
+
+.machine-properties-table td.key-cell {
+    padding-right: 20px;
+    white-space: nowrap;
+    font-weight: bold;
+    width: 1%;
+    color: #495057;
+}
+
+.machine-properties-table td.value-cell {
+    padding-left: 10px;
+    text-align: left;
+    color: #6c757d;
+}
+
+.toggle-icon {
+    margin-right: 5px;
+    transition: transform 0.2s;
+    font-size: 0.8em;
+}
+
+.toggle-icon.rotated {
+    transform: rotate(90deg);
+}
+
+/* Property rows in forms */
+.property-row {
+    margin-bottom: 10px;
+}
+
+.property-row .form-control {
+    font-size: 0.9em;
+}
+
+.remove-property {
+    font-size: 0.8em;
+    padding: 0.25rem 0.5rem;
+}
+
+/* Loading state */
+.loading-container {
+    text-align: center;
+    padding: 2rem;
+}
+
+.loading-container .spinner-border {
+    color: #0d6efd;
+}
+
+.loading-container p {
+    color: #6c757d;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+}
+
+/* Empty state */
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #6c757d;
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+    color: #adb5bd;
+}
+
+.empty-state h5 {
+    margin-bottom: 0.5rem;
+    color: #495057;
+}
+
+.empty-state p {
+    margin: 0;
+    font-size: 0.9rem;
+    color: #6c757d;
+}
+
+/* Animation for data updates */
+@keyframes fadeInUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.data-update {
+    animation: fadeInUp 0.5s ease-out;
+}
+
+/* Compact styling for modals */
+.modal-content.compact .modal-header {
+    padding: 0.75rem 1rem;
+}
+
+.modal-content.compact .modal-body {
+    padding: 1rem;
+}
+
+.modal-content.compact .modal-footer {
+    padding: 0.75rem 1rem;
+}
+
+.form-section.compact {
+    margin-bottom: 1rem;
+}
+
+.section-subtitle.compact {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.75rem;
+}
+
+.form-label.compact {
+    font-size: 0.85rem;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.form-text.compact {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+/* Dashboard header compact */
+.dashboard-header.compact {
+    padding: 1rem;
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    margin-bottom: 1rem;
+}
+
+.dashboard-controls .btn {
+    font-size: 0.85rem;
+    padding: 0.375rem 0.75rem;
+}
+
+/* Stat cards compact */
+.stat-card.compact {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.stat-card.compact:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.stat-card-body {
+    padding: 1rem;
+    display: flex;
+    align-items: center;
+}
+
+.stat-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 1rem;
+    color: white;
+    font-size: 1.2rem;
+}
+
+.stat-content {
+    flex: 1;
+}
+
+.stat-number {
+    font-size: 1.5rem;
+    font-weight: bold;
+    margin: 0;
+    color: #495057;
+}
+
+.stat-label {
+    margin: 0;
+    color: #6c757d;
+}
+
+/* Dashboard card compact */
+.dashboard-card.compact {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.dashboard-card.compact .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 0.75rem 1rem;
+}
+
+.dashboard-card.compact .card-body {
+    padding: 1rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .dashboard-controls {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .dashboard-controls .btn {
+        width: 100%;
+    }
+    
+    .stat-card-body {
+        flex-direction: column;
+        text-align: center;
+    }
+    
+    .stat-icon {
+        margin-right: 0;
+        margin-bottom: 0.5rem;
+    }
+}
+
+/* Loading states */
+.spinner-border {
+    width: 2rem;
+    height: 2rem;
+}
+
+/* Notification styles */
+.alert {
+    border-radius: 8px;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.alert-success {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.alert-danger {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+.alert-info {
+    background-color: #d1ecf1;
+    color: #0c5460;
+}
+
+/* Table improvements */
+.table-responsive {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.table {
+    margin-bottom: 0;
+}
+
+.table thead th {
+    background-color: #343a40;
+    color: white;
+    border-color: #454d55;
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.table tbody tr {
+    transition: background-color 0.2s;
+}
+
+.table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Form improvements */
+.form-control:focus,
+.form-select:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Button improvements */
+.btn {
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+/* Modal improvements */
+.modal-content {
+    border-radius: 12px;
+    border: none;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+}
+
+.modal-header {
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 12px 12px 0 0;
+}
+
+.modal-footer {
+    border-top: 1px solid #dee2e6;
+    border-radius: 0 0 12px 12px;
+} 

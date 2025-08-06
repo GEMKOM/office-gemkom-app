@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Mesai Yönetimi</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../style.css">
+    <link rel="stylesheet" href="../../components/navbar.css">
+    <link rel="stylesheet" href="overtimeList.css">
+    <link rel="icon" type="image/png" href="../../images/gemkom.png">
+    <link rel="stylesheet" href="../../pre-auth.css">
+</head>
+<body class="pre-auth">
+    <!-- Navigation -->
+    <div id="navbar-container"></div>
+
+    <!-- Floating Elements -->
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+
+        <!-- Main Content Section -->
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <!-- Header Section -->
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="dashboard-header compact">
+                        <div class="d-flex align-items-center justify-content-between">
+                            <div>
+                                <h3 class="section-title mb-1">
+                                    <i class="fas fa-clock me-2 text-primary"></i>
+                                    Mesai Listesi
+                                </h3>
+                                <p class="section-subtitle mb-0 small">Mesai taleplerini görüntüleyin ve yönetin</p>
+                            </div>
+                            <div class="dashboard-controls">
+                                <button id="create-overtime-btn" class="btn btn-sm btn-primary me-2">
+                                    <i class="fas fa-plus me-1"></i>Yeni Mesai
+                                </button>
+                                <button id="refresh-overtime-btn" class="btn btn-sm btn-outline-secondary">
+                                    <i class="fas fa-sync-alt me-1"></i>Yenile
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+                        <!-- Statistics Cards -->
+            <div class="row g-3 mb-3">
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card compact">
+                        <div class="stat-card-body">
+                            <div class="stat-icon bg-primary">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h4 class="stat-number" id="total-overtime">-</h4>
+                                <p class="stat-label small">Toplam Mesai</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card compact">
+                        <div class="stat-card-body">
+                            <div class="stat-icon bg-success">
+                                <i class="fas fa-check-circle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h4 class="stat-number" id="approved-overtime">-</h4>
+                                <p class="stat-label small">Onaylanan</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card compact">
+                        <div class="stat-card-body">
+                            <div class="stat-icon bg-warning">
+                                <i class="fas fa-hourglass-half"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h4 class="stat-number" id="pending-overtime">-</h4>
+                                <p class="stat-label small">Bekleyen</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <div class="stat-card compact">
+                        <div class="stat-card-body">
+                            <div class="stat-icon bg-danger">
+                                <i class="fas fa-times-circle"></i>
+                            </div>
+                            <div class="stat-content">
+                                <h4 class="stat-number" id="rejected-overtime">-</h4>
+                                <p class="stat-label small">Reddedilen</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters Card -->
+            <div class="card mb-3">
+                <div class="card-header">
+                    <h5 class="card-title mb-0">
+                        <i class="fas fa-filter me-2"></i>Filtreler
+                    </h5>
+                </div>
+                <div class="card-body py-3">
+                    <div class="row g-2">
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Mesai Adı</label>
+                            <input type="text" class="form-control form-control-sm" id="search-overtime" placeholder="Mesai ara...">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Durum</label>
+                            <select class="form-select form-select-sm" id="filter-status">
+                                <option value="">Tüm Durumlar</option>
+                                <option value="pending">Bekleyen</option>
+                                <option value="approved">Onaylanan</option>
+                                <option value="rejected">Reddedilen</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Departman</label>
+                            <select class="form-select form-select-sm" id="filter-department">
+                                <option value="">Tüm Departmanlar</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Başlangıç Tarihi</label>
+                            <input type="date" class="form-control form-control-sm" id="filter-start-date">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">Bitiş Tarihi</label>
+                            <input type="date" class="form-control form-control-sm" id="filter-end-date">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label small mb-1">&nbsp;</label>
+                            <div class="d-grid gap-1">
+                                                                       <button class="btn btn-sm btn-primary" id="apply-filters">
+                                           <i class="fas fa-search me-1"></i>Filtrele
+                                       </button>
+                                <button class="btn btn-sm btn-outline-secondary" id="clear-filters">
+                                    <i class="fas fa-times me-1"></i>Temizle
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Overtime Table -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <h5 class="card-title mb-0">
+                                <i class="fas fa-clock me-2"></i>
+                                Mesai Listesi
+                            </h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="loading-container" id="loading-container">
+                                <div class="text-center py-4">
+                                    <div class="spinner-border text-primary" role="status">
+                                        <span class="visually-hidden">Yükleniyor...</span>
+                                    </div>
+                                    <p class="mt-2">Mesai listesi yükleniyor...</p>
+                                </div>
+                            </div>
+                            <div class="empty-state" id="empty-state" style="display: none;">
+                                <i class="fas fa-clock text-muted mb-3"></i>
+                                <h5>Henüz mesai talebi bulunmuyor</h5>
+                                <p class="text-muted">Yeni bir mesai talebi oluşturmak için yukarıdaki "Yeni Mesai" butonunu kullanın.</p>
+                            </div>
+                            <div id="overtime-table-container" style="display: none;">
+                                <!-- Overtime data will be populated here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Create Overtime Modal -->
+    <div class="modal fade" id="create-overtime-modal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                                               <h5 class="modal-title">
+                               <i class="fas fa-plus me-2 text-primary"></i>Yeni Mesai Talebi
+                           </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="create-overtime-form">
+                                                <div class="form-section compact mb-3">
+                            <h6 class="section-subtitle compact">
+                                <i class="fas fa-info-circle me-2 text-primary"></i>Temel Bilgiler
+                            </h6>
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label small">Başlangıç Tarihi/Saati</label>
+                                    <input type="datetime-local" class="form-control form-control-sm" id="overtime-start" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small">Bitiş Tarihi/Saati</label>
+                                    <input type="datetime-local" class="form-control form-control-sm" id="overtime-end" required>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="form-section compact mb-3">
+                            <h6 class="section-subtitle compact">
+                                <i class="fas fa-users me-2 text-primary"></i>Takım Üyeleri
+                            </h6>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-hover">
+                                    <thead class="table-light">
+                                        <tr>
+                                            <th width="50">
+                                                <input type="checkbox" id="select-all-users" class="form-check-input">
+                                            </th>
+                                            <th>İsim</th>
+                                            <th>Görev</th>
+                                            <th>İş Emri Numarası</th>
+                                            <th>Açıklama</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="user-selection-table-body">
+                                        <!-- User selection table will be populated here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                                               <button type="button" class="btn btn-primary btn-sm" id="save-overtime-btn">
+                               <i class="fas fa-save me-1"></i>Kaydet
+                           </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="delete-overtime-modal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title text-danger">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Mesai Silme Onayı
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <p>Bu mesai talebini silmek istediğinizden emin misiniz?</p>
+                    <p class="text-muted mb-0"><strong>Mesai:</strong> <span id="delete-overtime-name"></span></p>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-danger btn-sm" id="confirm-delete-overtime-btn">
+                        <i class="fas fa-trash me-1"></i>Sil
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Custom Scripts -->
+    <script type="module" src="overtimeList.js"></script>
+</body>
+</html> 
