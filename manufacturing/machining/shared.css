@@ -4,19 +4,6 @@
 @import url('./dashboard/dashboard.css');
 
 /* Compact Components - Smaller, more efficient layout */
-.dashboard-header.compact {
-    padding: 1rem 1.5rem;
-    margin-bottom: 1rem;
-}
-
-.dashboard-header.compact .section-title {
-    font-size: 1.5rem;
-    margin-bottom: 0.25rem;
-}
-
-.dashboard-header.compact .section-subtitle {
-    font-size: 0.875rem;
-}
 
 .stat-card.compact {
     padding: 0.75rem;
@@ -552,14 +539,6 @@
 
 /* Responsive Design */
 @media (max-width: 768px) {
-    .dashboard-controls {
-        flex-direction: column;
-        gap: 0.5rem;
-    }
-    
-    .dashboard-controls .btn {
-        width: 100%;
-    }
     
     .action-buttons {
         flex-direction: column;
@@ -582,13 +561,6 @@
 }
 
 @media (max-width: 576px) {
-    .dashboard-header {
-        padding: 1.5rem;
-    }
-    
-    .dashboard-header h2 {
-        font-size: 1.5rem;
-    }
     
     .stat-card-body {
         padding: 1rem;

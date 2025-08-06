@@ -14,6 +14,7 @@
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
     <link rel="stylesheet" href="../../../pre-auth.css">
     <link rel="stylesheet" href="tasks.css">
+    <link rel="stylesheet" href="../../../components/header/header.css">
 </head>
 <body class="pre-auth">
     <!-- Navigation -->
@@ -27,33 +28,8 @@
     <!-- Main Content Section -->
     <section class="modules-section py-5">
         <div class="container-fluid">
-            <!-- Header Section -->
-            <div class="row mb-3">
-                <div class="col-12">
-                    <div class="dashboard-header compact">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <div>
-                                <h3 class="section-title mb-1">
-                                    <i class="fas fa-tasks me-2 text-primary"></i>
-                                    Talaşlı İmalat Görevleri
-                                </h3>
-                                <p class="section-subtitle mb-0 small">Görev yönetimi ve takibi</p>
-                            </div>
-                            <div class="dashboard-controls">
-                                <button id="back-to-main" class="btn btn-sm btn-outline-secondary me-2">
-                                    <i class="fas fa-arrow-left me-1"></i>Geri Dön
-                                </button>
-                                <button id="create-task-btn" class="btn btn-sm btn-primary me-2">
-                                    <i class="fas fa-plus me-1"></i>Yeni Görev
-                                </button>
-                                <button id="bulk-create-btn" class="btn btn-sm btn-outline-primary">
-                                    <i class="fas fa-layer-group me-1"></i>Toplu Oluştur
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <!-- Header Component Placeholder -->
+            <div id="header-placeholder"></div>
             
 
 
@@ -618,6 +594,8 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- SheetJS for Excel export -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- Header Component -->
+    <script src="../../../components/header/header.js"></script>
     <script type="module" src="tasks.js"></script>
 </body>
 </html> 

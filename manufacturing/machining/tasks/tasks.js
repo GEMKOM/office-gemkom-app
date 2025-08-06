@@ -21,6 +21,22 @@ let isInlineEditing = false; // Flag to prevent re-rendering during inline editi
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
+    
+    // Initialize header component
+    const header = new HeaderComponent({
+        title: 'Talaşlı İmalat Görevleri',
+        subtitle: 'Görev yönetimi ve takibi',
+        icon: 'tasks',
+        showBackButton: 'block',
+        showCreateButton: 'block',
+        showBulkCreateButton: 'block',
+        createButtonText: '      Yeni Görev',
+        bulkCreateButtonText: 'Toplu Oluştur',
+        onBackClick: () => window.location.href = '/manufacturing/machining/',
+        onCreateClick: () => showCreateTaskModal(),
+        onBulkCreateClick: () => showBulkCreateModal()
+    });
+    
     await initializeTasks();
     setupEventListeners();
 });
@@ -425,15 +441,7 @@ function setupEventListeners() {
         clearFilters();
     });
     
-    // Create task button
-    document.getElementById('create-task-btn')?.addEventListener('click', () => {
-        showCreateTaskModal();
-    });
-    
-    // Bulk create button
-    document.getElementById('bulk-create-btn')?.addEventListener('click', () => {
-        showBulkCreateModal();
-    });
+
     
     // Refresh button
     document.getElementById('refresh-tasks')?.addEventListener('click', () => {
@@ -485,10 +493,7 @@ function setupEventListeners() {
         exportCreatedTasks();
     });
     
-    // Back to main button
-    document.getElementById('back-to-main')?.addEventListener('click', () => {
-        window.location.href = '/manufacturing/machining/';
-    });
+
     
     // Enter key support for filters
     document.querySelectorAll('#key-filter, #name-filter, #job-no-filter').forEach(input => {
