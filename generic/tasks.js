@@ -11,7 +11,10 @@ export async function fetchTaskById(taskKey) {
 export async function fetchTasks(query) {
     const url = `${backendBase}/machining/tasks/${query}`;
     const resp = await authedFetch(url);
-    return resp;
+    if (!resp.ok) {
+        throw new Error(`HTTP error! status: ${resp.status}`);
+    }
+    return await resp.json();
 }
 
 export async function deleteTask(taskKey) {
@@ -28,7 +31,10 @@ export async function createTask(task) {
         method: 'POST',
         body: JSON.stringify(task),
     });
-    return resp;
+    if (!resp.ok) {
+        throw new Error(`HTTP error! status: ${resp.status}`);
+    }
+    return await resp.json();
 }
 
 export async function updateTask(taskKey, task) {
@@ -38,7 +44,10 @@ export async function updateTask(taskKey, task) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(task),
     });
-    return resp;
+    if (!resp.ok) {
+        throw new Error(`HTTP error! status: ${resp.status}`);
+    }
+    return await resp.json();
 }
 
 export async function markTaskCompleted(taskKey) {
@@ -47,7 +56,10 @@ export async function markTaskCompleted(taskKey) {
         method: 'POST',
         body: JSON.stringify({ key: taskKey }),
     });
-    return resp;
+    if (!resp.ok) {
+        throw new Error(`HTTP error! status: ${resp.status}`);
+    }
+    return await resp.json();
 }
 
 export async function unmarkTaskCompleted(taskKey) {
@@ -56,7 +68,10 @@ export async function unmarkTaskCompleted(taskKey) {
         method: 'POST',
         body: JSON.stringify({ key: taskKey }),
     });
-    return resp;
+    if (!resp.ok) {
+        throw new Error(`HTTP error! status: ${resp.status}`);
+    }
+    return await resp.json();
 }
 
 export async function fetchHoldTasks() {

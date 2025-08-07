@@ -1,11 +1,12 @@
 import { initNavbar } from '../../../../components/navbar.js';
-import { ModernDropdown } from '../../../../components/dropdown.js';
 import { fetchMachines } from '../../../../generic/machines.js';
 import { fetchUsers } from '../../../../generic/users.js';
 import { backendBase } from '../../../../base.js';
 import { authedFetch } from '../../../../authService.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
+import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
+
 
 // Sum Report JavaScript
 let reportData = [];

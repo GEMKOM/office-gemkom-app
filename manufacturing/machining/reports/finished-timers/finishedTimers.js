@@ -1,12 +1,13 @@
 import { initNavbar } from '../../../../components/navbar.js';
-import { ModernDropdown } from '../../../../components/dropdown.js';
 import { fetchMachines } from '../../../../generic/machines.js';
 import { fetchUsers } from '../../../../generic/users.js';
 import { fetchTaskById } from '../../../../generic/tasks.js';
 import { backendBase } from '../../../../base.js';
 import { authedFetch } from '../../../../authService.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
+import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
+
 
 // State management
 let currentPage = 1;
@@ -880,9 +881,9 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 
-// Global function for pagination
-window.changePage = function(page) {
+// Export function for pagination
+export function changePage(page) {
     if (page >= 1) {
         loadTimers(page);
     }
-}; 
+} 

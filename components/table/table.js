@@ -2,7 +2,7 @@
  * Reusable Table Component
  * Supports customizable columns, actions, and editable functionality
  */
-export class TableComponent {
+class TableComponent {
     constructor(containerId, options = {}) {
         this.containerId = containerId;
         this.container = document.getElementById(containerId);
@@ -130,7 +130,18 @@ export class TableComponent {
         const headers = this.options.columns.map(column => {
             const sortable = this.options.sortable && column.sortable !== false;
             const sortClass = sortable ? 'sortable' : '';
-            const sortIcon = sortable ? '<i class="fas fa-sort sort-icon"></i>' : '';
+            
+            // Determine sort icon based on current sort state
+            let sortIcon = '';
+            if (sortable) {
+                if (this.currentSortField === column.field) {
+                    sortIcon = this.currentSortDirection === 'asc' ? 
+                        '<i class="fas fa-sort-up sort-icon"></i>' : 
+                        '<i class="fas fa-sort-down sort-icon"></i>';
+                } else {
+                    sortIcon = '<i class="fas fa-sort sort-icon"></i>';
+                }
+            }
             
             return `
                 <th class="${sortClass}" data-field="${column.field}">
@@ -207,13 +218,11 @@ export class TableComponent {
             
             if (!isVisible) return '';
             
-            const onClick = action.onClick ? 
-                `onclick="this.dispatchEvent(new CustomEvent('actionClick', {detail: {action: '${action.key}', row: ${JSON.stringify(row)}, index: ${rowIndex}}}))"` : '';
-            
             return `
-                <button class="btn btn-sm ${action.class || 'btn-outline-secondary'}" 
+                <button class="btn btn-sm ${action.class || 'btn-outline-secondary'} action-btn" 
                         title="${action.title || action.label}" 
-                        ${onClick}>
+                        data-action="${action.key}"
+                        data-row-index="${rowIndex}">
                     <i class="${action.icon}"></i>
                 </button>
             `;
@@ -348,10 +357,20 @@ export class TableComponent {
         }
         
         // Action click events
-        this.container.addEventListener('actionClick', (e) => {
-            const action = this.options.actions.find(a => a.key === e.detail.action);
-            if (action && action.onClick) {
-                action.onClick(e.detail.row, e.detail.index);
+        this.container.addEventListener('click', (e) => {
+            if (e.target.closest('.action-btn')) {
+                e.preventDefault();
+                const button = e.target.closest('.action-btn');
+                const actionKey = button.dataset.action;
+                const rowIndex = parseInt(button.dataset.rowIndex);
+                const row = this.options.data[rowIndex];
+                
+                const action = this.options.actions.find(a => a.key === actionKey);
+                if (action && action.onClick) {
+                    action.onClick(row, rowIndex);
+                } else {
+                    console.log('Action not found or no onClick handler:', actionKey);
+                }
             }
         });
         
@@ -380,6 +399,7 @@ export class TableComponent {
         const currentValue = this.getCellValue(row, { field });
         
         this.isInlineEditing = true;
+        this.currentEditingCell = cell;
         const originalContent = cell.innerHTML;
         
         // Create input element based on field type
@@ -401,10 +421,17 @@ export class TableComponent {
             this.isInlineEditing = false;
         };
         
-        input.addEventListener('blur', handleSave);
+        this.isProcessing = false;
+        
+        input.addEventListener('blur', () => {
+            if (!this.isProcessing) {
+                handleSave();
+            }
+        });
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
+                this.isProcessing = true;
                 handleSave();
             } else if (e.key === 'Escape') {
                 e.preventDefault();
@@ -420,7 +447,20 @@ export class TableComponent {
             const select = document.createElement('select');
             select.className = 'form-control form-control-sm';
             
-            column.options.forEach(option => {
+            // Get the current row data for dynamic options
+            const rowIndex = parseInt(this.currentEditingCell?.dataset.rowIndex || '0');
+            const row = this.options.data[rowIndex];
+            
+            let options = [];
+            if (typeof column.options === 'function') {
+                // If options is a function, call it with the row data
+                options = column.options(row);
+            } else {
+                // If options is an array, use it directly
+                options = column.options;
+            }
+            
+            options.forEach(option => {
                 const optionEl = document.createElement('option');
                 optionEl.value = option.value;
                 optionEl.textContent = option.label;
@@ -472,23 +512,66 @@ export class TableComponent {
         // Call onEdit callback
         if (this.options.onEdit) {
             try {
-                await this.options.onEdit(row, field, newValue, oldValue);
-                cell.innerHTML = this.formatCellValue(newValue, column, row);
+                const result = await this.options.onEdit(row, field, newValue, oldValue);
+                if (result === false) {
+                    // Edit was cancelled or failed
+                    if (cell && cell.parentNode) {
+                        cell.innerHTML = originalContent;
+                    }
+                    this.isInlineEditing = false;
+                    return;
+                }
+                
+                // If result is an object, it contains updated data from API
+                if (result && typeof result === 'object') {
+                    // Update the row data with API response
+                    Object.assign(row, result);
+                    // Get the updated value (might be formatted differently by API)
+                    const updatedValue = this.getCellValue(row, { field });
+                    const formattedValue = this.formatCellValue(updatedValue, column, row);
+                    if (cell && cell.parentNode) {
+                        cell.innerHTML = formattedValue;
+                    }
+                } else {
+                    // Only update cell content if edit was successful
+                    if (cell && cell.parentNode) {
+                        cell.innerHTML = this.formatCellValue(newValue, column, row);
+                    }
+                }
+                
+                // Ensure the cell is updated even if API response is empty
+                if (cell && cell.parentNode && cell.innerHTML === originalContent) {
+                    cell.innerHTML = this.formatCellValue(newValue, column, row);
+                }
             } catch (error) {
                 console.error('Edit failed:', error);
-                cell.innerHTML = originalContent;
+                if (cell && cell.parentNode) {
+                    cell.innerHTML = originalContent;
+                }
                 showNotification('Düzenleme başarısız', 'error');
             }
         } else {
-            cell.innerHTML = this.formatCellValue(newValue, column, row);
+            if (cell && cell.parentNode) {
+                cell.innerHTML = this.formatCellValue(newValue, column, row);
+            }
         }
         
         this.isInlineEditing = false;
+        this.currentEditingCell = null;
+        this.isProcessing = false;
     }
     
     getCellValue(row, column) {
+        // Check if there's a valueGetter for this field in the options
+        if (this.options.valueGetters && this.options.valueGetters[column.field]) {
+            const value = this.options.valueGetters[column.field](row);
+            return value;
+        }
+        
+        // Check if column has its own valueGetter
         if (column.valueGetter) {
-            return column.valueGetter(row);
+            const value = column.valueGetter(row);
+            return value;
         }
         
         const field = column.field;
@@ -500,8 +583,9 @@ export class TableComponent {
     }
     
     formatCellValue(value, column, row) {
-        if (column.formatter) {
-            return column.formatter(value, row);
+        // Check if there's a formatter for this field in the options
+        if (this.options.formatters && this.options.formatters[column.field]) {
+            return this.options.formatters[column.field](value, row);
         }
         
         if (value === null || value === undefined) {
@@ -525,8 +609,17 @@ export class TableComponent {
     
     isColumnEditable(field) {
         if (!this.options.editable) return false;
-        if (this.options.editableColumns.length === 0) return true;
-        return this.options.editableColumns.includes(field);
+        
+        // Check if the specific column is marked as editable
+        const column = this.options.columns.find(col => col.field === field);
+        if (column && column.editable === false) return false;
+        
+        // Check editableColumns array if specified
+        if (this.options.editableColumns && this.options.editableColumns.length > 0) {
+            return this.options.editableColumns.includes(field);
+        }
+        
+        return true;
     }
     
     handleSort(field) {
@@ -557,11 +650,22 @@ export class TableComponent {
             this.options.totalItems = totalItems;
         }
         this.render();
+        this.setupEventListeners();
+    }
+    
+    setSortState(field, direction) {
+        this.currentSortField = field;
+        this.currentSortDirection = direction;
+        this.render();
+        this.setupEventListeners();
     }
     
     setLoading(loading) {
         this.options.loading = loading;
         this.render();
+        if (!loading) {
+            this.setupEventListeners();
+        }
     }
     
     updateColumn(columnField, updates) {
@@ -569,6 +673,7 @@ export class TableComponent {
         if (column) {
             Object.assign(column, updates);
             this.render();
+            this.setupEventListeners();
         }
     }
     
@@ -580,6 +685,10 @@ export class TableComponent {
     removeAction(actionKey) {
         this.options.actions = this.options.actions.filter(action => action.key !== actionKey);
         this.render();
+    }
+    
+    getColumn(field) {
+        return this.options.columns.find(col => col.field === field);
     }
     
     destroy() {
@@ -594,3 +703,5 @@ function showNotification(message, type = 'info') {
     // You can implement your own notification system here
     console.log(`${type.toUpperCase()}: ${message}`);
 }
+
+export { TableComponent };

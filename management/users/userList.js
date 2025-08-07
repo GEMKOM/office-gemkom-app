@@ -4,7 +4,9 @@ import { fetchUsers, fetchOccupations, authFetchUsers, fetchTeams, deleteUser } 
 import { authedFetch } from '../../authService.js';
 import { backendBase } from '../../base.js';
 import { HeaderComponent } from '../../components/header/header.js';
+import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
+
 
 // Header component instance
 let headerComponent;
@@ -943,7 +945,7 @@ function showNotification(message, type = 'info') {
 }
 
 // Delete User Functionality
-window.deleteUser = function(userId, username) {
+export function deleteUserGlobal(userId, username) {
     // Set the pending delete user info
     window.pendingDeleteUserId = userId;
     window.pendingDeleteUsername = username;
@@ -957,7 +959,7 @@ window.deleteUser = function(userId, username) {
     // Show the delete confirmation modal
     const deleteModal = new bootstrap.Modal(document.getElementById('deleteUserConfirmModal'));
     deleteModal.show();
-};
+}
 
 // Handle delete confirmation
 function setupDeleteConfirmation() {

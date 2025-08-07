@@ -1,10 +1,12 @@
+
+
 import { ModernDropdown } from '../dropdown.js';
 
 /**
  * Reusable Filters Component
  * Supports dynamic filter creation with different types and configurations
  */
-export class FiltersComponent {
+class FiltersComponent {
     constructor(containerId, options = {}) {
         this.containerId = containerId;
         this.container = document.getElementById(containerId);
@@ -653,3 +655,5 @@ export class FiltersComponent {
         }
     }
 }
+
+export { FiltersComponent };

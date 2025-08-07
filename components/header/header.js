@@ -3,7 +3,7 @@
  * Provides a consistent header across different pages with configurable buttons
  */
 
-export class HeaderComponent {
+class HeaderComponent {
     constructor(config = {}) {
         this.config = {
             // Default configuration
@@ -228,3 +228,5 @@ export class HeaderComponent {
         }
     }
 }
+
+export { HeaderComponent };

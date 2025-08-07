@@ -10,13 +10,13 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../../style.css">
     <link rel="stylesheet" href="../../../components/navbar.css">
-    <link rel="stylesheet" href="../../../components/dropdown.css">
+
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
-    <link rel="stylesheet" href="../../../pre-auth.css">
-    <link rel="stylesheet" href="tasks.css">
+
     <link rel="stylesheet" href="../../../components/header/header.css">
     <link rel="stylesheet" href="../../../components/statistics-cards/statistics-cards.css">
     <link rel="stylesheet" href="../../../components/filters/filters.css">
+    <link rel="stylesheet" href="../../../components/table/table.css">
 </head>
 <body class="pre-auth">
     <!-- Navigation -->
@@ -36,78 +36,9 @@
             <!-- Tasks Table Section -->
             <div class="row">
                 <div class="col-12">
-                    <div class="dashboard-card">
-                        <div class="card-header">
-                            <h5 class="card-title">
-                                <i class="fas fa-table me-2 text-primary"></i>
-                                Görev Listesi
-                            </h5>
-                            <div class="card-actions">
-                                <button class="btn btn-sm btn-outline-secondary" id="refresh-tasks">
-                                    <i class="fas fa-sync-alt me-1"></i>Yenile
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary" id="export-tasks">
-                                    <i class="fas fa-download me-1"></i>Dışa Aktar
-                                </button>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-hover">
-                                    <thead>
-                                        <tr>
-                                            <th class="sortable" data-field="key">
-                                                TI No <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="name">
-                                                Ad <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="job_no">
-                                                İş No <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="image_no">
-                                                Resim No <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="position_no">
-                                                Poz No <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="quantity">
-                                                Adet <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="machine_name">
-                                                Makine <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="estimated_hours">
-                                                Tahmini Saat <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="total_hours_spent">
-                                                Harcanan Saat <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="finish_time">
-                                                Bitmesi Planlanan Tarih <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th>Durum</th>
-                                            <th>İşlemler</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tasks-table-body">
-                                        <!-- Tasks will be loaded here -->
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
+                    <div id="tasks-table-container">
+                        <!-- TableComponent will be rendered here -->
                     </div>
-                </div>
-            </div>
-
-            <!-- Pagination -->
-            <div class="row mt-4">
-                <div class="col-12">
-                    <nav aria-label="Tasks pagination">
-                        <ul class="pagination justify-content-center" id="tasks-pagination">
-                            <!-- Pagination will be generated here -->
-                        </ul>
-                    </nav>
                 </div>
             </div>
         </div>
@@ -452,6 +383,120 @@
         </div>
     </div>
 
+    <!-- Completion Data Modal -->
+    <div class="modal fade" id="completionDataModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-info text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-chart-line me-2"></i>Görev Verileri
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="text-primary mb-3">
+                                <i class="fas fa-info-circle me-2"></i>Görev Bilgileri
+                            </h6>
+                            <div class="task-info">
+                                <div class="mb-2">
+                                    <strong>TI No:</strong> <span id="completion-task-key">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Görev Adı:</strong> <span id="completion-task-name">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>İş No:</strong> <span id="completion-job-no">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Makine:</strong> <span id="completion-machine">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Adet:</strong> <span id="completion-quantity">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Tahmini Saat:</strong> <span id="completion-estimated-hours">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Harcanan Saat:</strong> <span id="completion-total-hours">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Durum:</strong> <span id="completion-status">-</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="text-success mb-3">
+                                <i class="fas fa-clock me-2"></i>Zaman Takibi
+                            </h6>
+                            <div class="time-tracking">
+                                <div class="mb-2">
+                                    <strong>Başlangıç:</strong> <span id="completion-start-time">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Bitiş:</strong> <span id="completion-end-time">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Toplam Süre:</strong> <span id="completion-duration">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Tamamlanma Tarihi:</strong> <span id="completion-date">-</span>
+                                </div>
+                                <div class="mb-2">
+                                    <strong>Tamamlayan:</strong> <span id="completion-user">-</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="row mt-4">
+                        <div class="col-12">
+                            <h6 class="text-warning mb-3">
+                                <i class="fas fa-chart-bar me-2"></i>İstatistikler
+                            </h6>
+                            <div class="statistics">
+                                <div class="row">
+                                    <div class="col-md-3">
+                                        <div class="stat-card bg-primary text-white p-3 rounded">
+                                            <h4 id="completion-efficiency">-</h4>
+                                            <small>Verimlilik</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-card bg-success text-white p-3 rounded">
+                                            <h4 id="completion-progress">-</h4>
+                                            <small>İlerleme</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-card bg-info text-white p-3 rounded">
+                                            <h4 id="completion-accuracy">-</h4>
+                                            <small>Doğruluk</small>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <div class="stat-card bg-warning text-white p-3 rounded">
+                                            <h4 id="completion-quality">-</h4>
+                                            <small>Kalite</small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Kapat
+                    </button>
+                    <button type="button" class="btn btn-info" id="export-completion-data-btn">
+                        <i class="fas fa-download me-2"></i>Verileri Dışa Aktar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Delete Confirmation Modal -->
     <div class="modal fade" id="deleteConfirmModal" tabindex="-1">
         <div class="modal-dialog">
@@ -489,9 +534,15 @@
     <!-- SheetJS for Excel export -->
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <!-- Header Component -->
-    <script src="../../../components/header/header.js"></script>
+    <script type="module" src="../../../components/header/header.js"></script>
     <!-- Statistics Cards Component -->
-    <script src="../../../components/statistics-cards/statistics-cards.js"></script>
+    <script type="module" src="../../../components/statistics-cards/statistics-cards.js"></script>
+    <!-- Dropdown Component -->
+    <script type="module" src="../../../components/dropdown.js"></script>
+    <!-- Filters Component -->
+    <script type="module" src="../../../components/filters/filters.js"></script>
+    <!-- Table Component -->
+    <script type="module" src="../../../components/table/table.js"></script>
     <script type="module" src="tasks.js"></script>
 </body>
 </html> 
