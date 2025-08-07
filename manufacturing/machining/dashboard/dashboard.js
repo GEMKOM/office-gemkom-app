@@ -5,6 +5,7 @@ import { fetchMachines } from '../../../generic/machines.js';
 import { fetchTaskById } from '../../../generic/tasks.js';
 import { getSyncedNow } from '../../../generic/timeService.js';
 import { navigateTo } from '../machining.js';
+import { HeaderComponent } from '../../../components/header/header.js';
 //import { stopTimerShared } from '../../../machining/machiningService.js';
 
 // Dashboard state
@@ -21,12 +22,33 @@ let dashboardState = {
     timerUpdateInterval: null
 };
 
+// Header component instance
+let headerComponent;
+
+// Statistics Cards component instance
+let dashboardStats = null;
+
 // Initialize dashboard
 async function initDashboard() {
     console.log('Dashboard module initialized');
     
     // Initialize navbar
     initNavbar();
+    
+    // Initialize header component
+    initHeaderComponent();
+    
+    // Initialize Statistics Cards component
+    dashboardStats = new StatisticsCards('dashboard-statistics', {
+        cards: [
+            { title: 'Aktif Zamanlayıcı', value: '0', icon: 'fas fa-clock', color: 'primary', id: 'active-timers-count' },
+            { title: 'Makine', value: '0', icon: 'fas fa-cog', color: 'success', id: 'active-machines-count' },
+            { title: 'Aktif Kullanıcı', value: '0', icon: 'fas fa-users', color: 'info', id: 'active-users-count' },
+            { title: 'Toplam Görev', value: '0', icon: 'fas fa-tasks', color: 'warning', id: 'total-tasks-count' }
+        ],
+        compact: true,
+        animation: true
+    });
     
     // Setup event listeners
     setupEventListeners();
@@ -44,6 +66,29 @@ async function initDashboard() {
     startTimerUpdates();
 }
 
+// Initialize header component
+function initHeaderComponent() {
+    headerComponent = new HeaderComponent({
+        title: 'Talaşlı İmalat Dashboard',
+        subtitle: 'Gerçek zamanlı üretim takibi ve analizi',
+        icon: 'chart-line',
+        showBackButton: 'block',
+        showRefreshButton: 'block',
+        showExportButton: 'block',
+        refreshButtonText: 'Yenile',
+        exportButtonText: 'Dışa Aktar',
+        onBackClick: () => {
+            window.location.href = '/manufacturing/machining/';
+        },
+        onRefreshClick: async () => {
+            await refreshDashboard();
+        },
+        onExportClick: () => {
+            exportDashboardData();
+        }
+    });
+}
+
 // Format duration in HH:MM:SS format
 function formatDuration(milliseconds) {
     const totalSeconds = Math.floor(milliseconds / 1000);
@@ -56,32 +101,10 @@ function formatDuration(milliseconds) {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Refresh button
-    const refreshBtn = document.getElementById('refresh-btn');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', async () => {
-            await refreshDashboard();
-        });
-    }
-    
-    // Export button
-    const exportBtn = document.getElementById('export-btn');
-    if (exportBtn) {
-        exportBtn.addEventListener('click', exportDashboardData);
-    }
-    
     // Add timer button
     const addTimerBtn = document.getElementById('add-timer-btn');
     if (addTimerBtn) {
         addTimerBtn.addEventListener('click', showAddTimerModal);
-    }
-    
-    // Back to main button
-    const backToMainBtn = document.getElementById('back-to-main');
-    if (backToMainBtn) {
-        backToMainBtn.addEventListener('click', () => {
-            window.location.href = '/manufacturing/machining/';
-        });
     }
     
     // Setup table event listeners
@@ -129,23 +152,12 @@ async function loadDashboardData() {
 
 // Refresh dashboard
 async function refreshDashboard() {
-    const refreshBtn = document.getElementById('refresh-btn');
-    if (refreshBtn) {
-        refreshBtn.innerHTML = '<span class="loading-spinner"></span> Yenileniyor...';
-        refreshBtn.disabled = true;
-    }
-    
     try {
         await loadDashboardData();
         showSuccessNotification('Dashboard başarıyla yenilendi.');
     } catch (error) {
         console.error('Error refreshing dashboard:', error);
         showErrorNotification('Dashboard yenilenirken hata oluştu.');
-    } finally {
-        if (refreshBtn) {
-            refreshBtn.innerHTML = '<i class="fas fa-sync-alt me-2"></i>Yenile';
-            refreshBtn.disabled = false;
-        }
     }
 }
 
@@ -206,47 +218,18 @@ function updateDashboardUI() {
 function updateStatisticsCards() {
     const { activeTimers, activeMachines, activeUsers, totalTasks } = dashboardState.statistics;
     
-    // Update active timers count
-    const activeTimersElement = document.getElementById('active-timers-count');
-    if (activeTimersElement) {
-        animateNumber(activeTimersElement, activeTimers);
-    }
-    
-    // Update active machines count
-    const activeMachinesElement = document.getElementById('active-machines-count');
-    if (activeMachinesElement) {
-        animateNumber(activeMachinesElement, activeMachines);
-    }
-    
-    // Update active users count
-    const activeUsersElement = document.getElementById('active-users-count');
-    if (activeUsersElement) {
-        animateNumber(activeUsersElement, activeUsers);
-    }
-    
-    // Update total tasks count
-    const totalTasksElement = document.getElementById('total-tasks-count');
-    if (totalTasksElement) {
-        animateNumber(totalTasksElement, totalTasks);
+    // Update statistics cards using the component
+    if (dashboardStats) {
+        dashboardStats.updateValues({
+            0: activeTimers.toString(),
+            1: activeMachines.toString(),
+            2: activeUsers.toString(),
+            3: totalTasks.toString()
+        });
     }
 }
 
-// Animate number changes
-function animateNumber(element, newValue) {
-    const currentValue = parseInt(element.textContent) || 0;
-    const increment = (newValue - currentValue) / 20;
-    let current = currentValue;
-    
-    const animation = setInterval(() => {
-        current += increment;
-        if ((increment > 0 && current >= newValue) || (increment < 0 && current <= newValue)) {
-            element.textContent = newValue;
-            clearInterval(animation);
-        } else {
-            element.textContent = Math.round(current);
-        }
-    }, 50);
-}
+
 
 // Update active timers table
 function updateActiveTimersTable() {
@@ -490,20 +473,14 @@ function updateTimerDisplays() {
 
 // Show loading state
 function showLoadingState() {
-    const refreshBtn = document.getElementById('refresh-btn');
-    if (refreshBtn) {
-        refreshBtn.innerHTML = '<span class="loading-spinner"></span> Yükleniyor...';
-        refreshBtn.disabled = true;
-    }
+    // Loading state is now handled by the header component
+    console.log('Loading dashboard data...');
 }
 
 // Hide loading state
 function hideLoadingState() {
-    const refreshBtn = document.getElementById('refresh-btn');
-    if (refreshBtn) {
-        refreshBtn.innerHTML = '<i class="fas fa-sync-alt me-2"></i>Yenile';
-        refreshBtn.disabled = false;
-    }
+    // Loading state is now handled by the header component
+    console.log('Dashboard data loaded');
 }
 
 // Show add timer modal

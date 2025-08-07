@@ -4,23 +4,70 @@ import { fetchMachines } from '../../../../generic/machines.js';
 import { fetchUsers } from '../../../../generic/users.js';
 import { backendBase } from '../../../../base.js';
 import { authedFetch } from '../../../../authService.js';
+import { HeaderComponent } from '../../../../components/header/header.js';
+import { FiltersComponent } from '../../../../components/filters/filters.js';
 
 // Sum Report JavaScript
 let reportData = [];
 let currentSortField = 'group';
 let currentSortDirection = 'asc';
-let groupByFilterDropdown = null;
+let reportFilters = null; // Filters component instance
+
+// Header component instance
+let headerComponent;
+
+// Statistics Cards component instance
+let sumReportStats = null;
 
 // Initialize the report
 document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
+    
+    // Initialize header component
+    initHeaderComponent();
+    
+    // Initialize Statistics Cards component
+    sumReportStats = new StatisticsCards('sum-report-statistics', {
+        cards: [
+            { title: 'Toplam Kullanıcı', value: '0', icon: 'fas fa-users', color: 'primary', id: 'total-users-count' },
+            { title: 'Toplam Makine', value: '0', icon: 'fas fa-cogs', color: 'success', id: 'total-machines-count' },
+            { title: 'Toplam Saat', value: '0', icon: 'fas fa-clock', color: 'info', id: 'total-hours' },
+            { title: 'Toplam İş', value: '0', icon: 'fas fa-tasks', color: 'warning', id: 'total-jobs' }
+        ],
+        compact: true,
+        animation: true
+    });
+    
     await initializeSumReport();
 });
 
+// Initialize header component
+function initHeaderComponent() {
+    headerComponent = new HeaderComponent({
+        title: 'Toplam Raporu',
+        subtitle: 'Talaşlı imalat süreçlerinin gruplandırılmış analizi',
+        icon: 'chart-pie',
+        showBackButton: 'block',
+        showRefreshButton: 'block',
+        showExportButton: 'block',
+        refreshButtonText: 'Yenile',
+        exportButtonText: 'Dışa Aktar',
+        onBackClick: () => {
+            window.location.href = '../';
+        },
+        onRefreshClick: () => {
+            loadReport();
+        },
+        onExportClick: () => {
+            exportReport();
+        }
+    });
+}
+
 async function initializeSumReport() {
     try {
-        // Initialize group by dropdown
-        initializeGroupByDropdown();
+        // Initialize filters component
+        initializeFiltersComponent();
         
         // Set default date filters
         setDefaultDateFilters();
@@ -40,27 +87,63 @@ async function initializeSumReport() {
     }
 }
 
-function initializeGroupByDropdown() {
-    const groupByFilterContainer = document.getElementById('group-by-filter-container');
-    
-    if (groupByFilterContainer) {
-        const groupByItems = [
-            { value: 'user', text: 'Kullanıcı' },
-            { value: 'machine', text: 'Makine' },
-            { value: 'job_no', text: 'İş No' },
-            { value: 'issue_key', text: 'TI Numarası' }
-        ];
-        
-        groupByFilterDropdown = new ModernDropdown(groupByFilterContainer, {
-            placeholder: 'Gruplama Seçin',
-            searchable: false
-        });
-        groupByFilterDropdown.setItems(groupByItems);
-        
-        // Set default value
-        groupByFilterDropdown.setValue('user');
-    }
+function initializeFiltersComponent() {
+    // Initialize filters component
+    reportFilters = new FiltersComponent('filters-placeholder', {
+        title: 'Rapor Filtreleri',
+        onApply: (values) => {
+            // Apply filters and reload report
+            loadReport();
+        },
+        onClear: () => {
+            // Clear filters and reload report
+            loadReport();
+            showNotification('Filtreler temizlendi', 'info');
+        },
+        onFilterChange: (filterId, value) => {
+            // Optional: Handle individual filter changes
+            console.log(`Filter ${filterId} changed to:`, value);
+        }
+    });
+
+    // Add group by dropdown filter
+    reportFilters.addDropdownFilter({
+        id: 'group-by-filter',
+        label: 'Gruplama',
+        options: [
+            { value: 'user', label: 'Kullanıcı' },
+            { value: 'machine', label: 'Makine' },
+            { value: 'job_no', label: 'İş No' },
+            { value: 'issue_key', label: 'TI Numarası' }
+        ],
+        placeholder: 'Kullanıcı',
+        value: 'user',
+        colSize: 3
+    });
+
+    // Add datetime filters
+    reportFilters.addDatetimeFilter({
+        id: 'start-datetime-filter',
+        label: 'Başlangıç',
+        colSize: 3
+    });
+
+    reportFilters.addDatetimeFilter({
+        id: 'finish-datetime-filter',
+        label: 'Bitiş',
+        colSize: 3
+    });
+
+    // Add checkbox filter
+    reportFilters.addCheckboxFilter({
+        id: 'manual-only-filter',
+        label: 'Sadece Manuel Girişler',
+        checked: false,
+        colSize: 3
+    });
 }
+
+
 
 function setDefaultDateFilters() {
     const today = new Date();
@@ -68,66 +151,33 @@ function setDefaultDateFilters() {
     // Set default start datetime (today at 07:00)
     const startDate = new Date(today);
     startDate.setHours(7, 0, 0, 0);
-    const startDatetimeFilter = document.getElementById('start-datetime-filter');
-    if (startDatetimeFilter) {
-        const startYear = startDate.getFullYear();
-        const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
-        const startDay = String(startDate.getDate()).padStart(2, '0');
-        const startHour = String(startDate.getHours()).padStart(2, '0');
-        const startMinute = String(startDate.getMinutes()).padStart(2, '0');
-        startDatetimeFilter.value = `${startYear}-${startMonth}-${startDay}T${startHour}:${startMinute}`;
-    }
+    const startYear = startDate.getFullYear();
+    const startMonth = String(startDate.getMonth() + 1).padStart(2, '0');
+    const startDay = String(startDate.getDate()).padStart(2, '0');
+    const startHour = String(startDate.getHours()).padStart(2, '0');
+    const startMinute = String(startDate.getMinutes()).padStart(2, '0');
+    const startDatetime = `${startYear}-${startMonth}-${startDay}T${startHour}:${startMinute}`;
     
     // Set default finish datetime (today at 17:15)
     const finishDate = new Date(today);
     finishDate.setHours(17, 15, 0, 0);
-    const finishDatetimeFilter = document.getElementById('finish-datetime-filter');
-    if (finishDatetimeFilter) {
-        const finishYear = finishDate.getFullYear();
-        const finishMonth = String(finishDate.getMonth() + 1).padStart(2, '0');
-        const finishDay = String(finishDate.getDate()).padStart(2, '0');
-        const finishHour = String(finishDate.getHours()).padStart(2, '0');
-        const finishMinute = String(finishDate.getMinutes()).padStart(2, '0');
-        finishDatetimeFilter.value = `${finishYear}-${finishMonth}-${finishDay}T${finishHour}:${finishMinute}`;
+    const finishYear = finishDate.getFullYear();
+    const finishMonth = String(finishDate.getMonth() + 1).padStart(2, '0');
+    const finishDay = String(finishDate.getDate()).padStart(2, '0');
+    const finishHour = String(finishDate.getHours()).padStart(2, '0');
+    const finishMinute = String(finishDate.getMinutes()).padStart(2, '0');
+    const finishDatetime = `${finishYear}-${finishMonth}-${finishDay}T${finishHour}:${finishMinute}`;
+    
+    if (reportFilters) {
+        reportFilters.setFilterValues({
+            'start-datetime-filter': startDatetime,
+            'finish-datetime-filter': finishDatetime
+        });
     }
 }
 
 function setupEventListeners() {
-    // Filter buttons
-    document.getElementById('apply-filters').addEventListener('click', () => {
-        loadReport();
-    });
-    
-    document.getElementById('clear-filters').addEventListener('click', clearFilters);
-    
-    // Refresh and export buttons
-    document.getElementById('refresh-report').addEventListener('click', () => {
-        loadReport();
-    });
-    
-    document.getElementById('export-report').addEventListener('click', exportReport);
-    
-    // Back button
-    document.getElementById('back-to-main').addEventListener('click', () => {
-        window.location.href = '../';
-    });
-    
-    // Enter key functionality for filters
-    const filterInputs = [
-        'start-datetime-filter',
-        'finish-datetime-filter'
-    ];
-    
-    filterInputs.forEach(inputId => {
-        const input = document.getElementById(inputId);
-        if (input) {
-            input.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    loadReport();
-                }
-            });
-        }
-    });
+    // Event listeners for other functionality can be added here
 }
 
 function initializeSortableHeaders() {
@@ -201,13 +251,16 @@ async function loadReport() {
 function buildReportQuery() {
     const params = new URLSearchParams();
     
+    // Get filter values from the filters component
+    const filterValues = reportFilters ? reportFilters.getFilterValues() : {};
+    
     // Group by
-    const groupBy = groupByFilterDropdown?.getValue() || 'user';
+    const groupBy = filterValues['group-by-filter'] || 'user';
     params.append('group_by', groupBy);
     
     // Datetime filters
-    const startDatetime = document.getElementById('start-datetime-filter').value;
-    const finishDatetime = document.getElementById('finish-datetime-filter').value;
+    const startDatetime = filterValues['start-datetime-filter'];
+    const finishDatetime = filterValues['finish-datetime-filter'];
     
     if (startDatetime) {
         const startTimestamp = new Date(startDatetime).getTime();
@@ -220,7 +273,7 @@ function buildReportQuery() {
     }
     
     // Additional filters
-    const manualOnly = document.getElementById('manual-only-filter').checked;
+    const manualOnly = filterValues['manual-only-filter'];
     
     if (manualOnly) {
         params.append('manual_only', 'true');
@@ -236,7 +289,7 @@ function toTimestamp(datetime) {
 }
 
 async function processReportData(data) {
-    const groupBy = groupByFilterDropdown?.getValue() || 'user';
+    const groupBy = reportFilters ? reportFilters.getFilterValues()['group-by-filter'] || 'user' : 'user';
     let processedData = [];
     
     if (groupBy === 'user') {
@@ -346,63 +399,36 @@ function updateStatistics() {
     const totalTimers = reportData.reduce((sum, row) => sum + (row.timer_count || 0), 0);
     const uniqueGroups = new Set(reportData.map(row => row.group)).size;
     
-    // Update statistics cards
-    animateNumber('total-hours', totalHours.toFixed(2));
-    animateNumber('total-jobs', uniqueGroups);
-    
     // Update group-specific counts based on current grouping
-    const groupBy = groupByFilterDropdown?.getValue() || 'user';
+    const groupBy = reportFilters ? reportFilters.getFilterValues()['group-by-filter'] || 'user' : 'user';
+    let usersCount = 0;
+    let machinesCount = 0;
+    
     if (groupBy === 'user') {
-        animateNumber('total-users-count', uniqueGroups);
-        animateNumber('total-machines-count', 0);
+        usersCount = uniqueGroups;
+        machinesCount = 0;
     } else if (groupBy === 'machine') {
-        animateNumber('total-machines-count', uniqueGroups);
-        animateNumber('total-users-count', 0);
+        machinesCount = uniqueGroups;
+        usersCount = 0;
     } else {
-        animateNumber('total-users-count', 0);
-        animateNumber('total-machines-count', 0);
+        usersCount = 0;
+        machinesCount = 0;
+    }
+    
+    // Update statistics cards using the component
+    if (sumReportStats) {
+        sumReportStats.updateValues({
+            0: usersCount.toString(),
+            1: machinesCount.toString(),
+            2: totalHours.toFixed(2),
+            3: uniqueGroups.toString()
+        });
     }
 }
 
-function animateNumber(elementId, targetValue) {
-    const element = document.getElementById(elementId);
-    if (!element) return;
-    
-    const currentValue = parseFloat(element.textContent) || 0;
-    const target = parseFloat(targetValue) || 0;
-    const duration = 1000;
-    const startTime = Date.now();
-    
-    function updateNumber() {
-        const elapsed = Date.now() - startTime;
-        const progress = Math.min(elapsed / duration, 1);
-        
-        const current = currentValue + (target - currentValue) * progress;
-        element.textContent = current.toFixed(2);
-        
-        if (progress < 1) {
-            requestAnimationFrame(updateNumber);
-        } else {
-            element.textContent = target.toFixed(2);
-        }
-    }
-    
-    updateNumber();
-}
 
-function clearFilters() {
-    document.getElementById('start-datetime-filter').value = '';
-    document.getElementById('finish-datetime-filter').value = '';
-    document.getElementById('manual-only-filter').checked = false;
-    
-    // Reset dropdown to default
-    if (groupByFilterDropdown) {
-        groupByFilterDropdown.setValue('user');
-    }
-    
-    setDefaultDateFilters();
-    loadReport();
-}
+
+
 
 async function exportReport() {
     try {

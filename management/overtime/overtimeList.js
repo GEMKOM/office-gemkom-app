@@ -4,6 +4,8 @@ import { authedFetch } from '../../authService.js';
 import { backendBase, proxyBase } from '../../base.js';
 import { fetchUsers } from '../../generic/users.js';
 import { getAllowedTeams } from '../../generic/teams.js';
+import { HeaderComponent } from '../../components/header/header.js';
+import { FiltersComponent } from '../../components/filters/filters.js';
 
 // Jira base URL
 const JIRA_BASE = 'https://gemkom-1.atlassian.net';
@@ -17,6 +19,13 @@ function toJiraDateTimeLocal(dateStr) {
 let overtimeData = [];
 let departments = [];
 let currentUser = null;
+let headerComponent;
+
+// Statistics Cards component instance
+let overtimeStats = null;
+
+// Filters component instance
+let overtimeFilters = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async function() {
@@ -25,20 +34,135 @@ document.addEventListener('DOMContentLoaded', async function() {
     
     currentUser = JSON.parse(localStorage.getItem('user'));
     
+    // Initialize header component
+    initHeaderComponent();
+    
+    // Initialize filters component
+    initializeFiltersComponent();
+    
     // Load initial data
     await loadOvertimeData();
     
-               // Setup event listeners
-           setupEventListeners();
-           
-           // Show loading initially
-           showLoading();
-           
-           // Load data after a short delay to ensure DOM is ready
-           setTimeout(() => {
-               loadOvertimeData();
-           }, 100);
+    // Setup event listeners
+    setupEventListeners();
+    
+    // Show loading initially
+    showLoading();
+    
+    // Initialize Statistics Cards component
+    overtimeStats = new StatisticsCards('overtime-statistics', {
+        cards: [
+            { title: 'Toplam Mesai', value: '0', icon: 'fas fa-clock', color: 'primary', id: 'total-overtime' },
+            { title: 'Onaylanan', value: '0', icon: 'fas fa-check-circle', color: 'success', id: 'approved-overtime' },
+            { title: 'Bekleyen', value: '0', icon: 'fas fa-hourglass-half', color: 'warning', id: 'pending-overtime' },
+            { title: 'Reddedilen', value: '0', icon: 'fas fa-times-circle', color: 'danger', id: 'rejected-overtime' }
+        ],
+        compact: true,
+        animation: true
+    });
+    
+    // Load data after a short delay to ensure DOM is ready
+    setTimeout(() => {
+        loadOvertimeData();
+    }, 100);
 });
+
+// Initialize header component
+function initHeaderComponent() {
+    headerComponent = new HeaderComponent({
+        title: 'Mesai Listesi',
+        subtitle: 'Mesai taleplerini görüntüleyin ve yönetin',
+        icon: 'clock',
+        showCreateButton: 'block',
+        showRefreshButton: 'block',
+        createButtonText: 'Yeni Mesai',
+        refreshButtonText: 'Yenile',
+        onCreateClick: async () => {
+            const modal = new bootstrap.Modal(document.getElementById('create-overtime-modal'));
+            modal.show();
+            
+            // Load users for the single create modal
+            try {
+                const users = await loadUsersForTeam();
+                populateUserSelectionTable(users, 'user-selection-table-body', 'select-all-users');
+            } catch (error) {
+                console.error('Error loading users for single create:', error);
+                showNotification('Kullanıcı listesi yüklenirken hata oluştu.', 'error');
+            }
+        },
+        onRefreshClick: () => {
+            showLoading();
+            loadOvertimeData();
+        }
+    });
+}
+
+function initializeFiltersComponent() {
+    // Initialize filters component
+    overtimeFilters = new FiltersComponent('filters-placeholder', {
+        title: 'Mesai Filtreleri',
+        onApply: (values) => {
+            // Apply filters and filter overtime
+            filterOvertime();
+        },
+        onClear: () => {
+            // Clear filters and show all overtime
+            clearFilters();
+            showNotification('Filtreler temizlendi', 'info');
+        },
+        onFilterChange: (filterId, value) => {
+            // Optional: Handle individual filter changes
+            console.log(`Filter ${filterId} changed to:`, value);
+        }
+    });
+
+    // Add text filter for overtime name
+    overtimeFilters.addTextFilter({
+        id: 'search-overtime',
+        label: 'Mesai Adı',
+        placeholder: 'Mesai ara...',
+        colSize: 2
+    });
+
+    // Add dropdown filter for status
+    overtimeFilters.addDropdownFilter({
+        id: 'filter-status',
+        label: 'Durum',
+        options: [
+            { value: '', label: 'Tüm Durumlar' },
+            { value: 'pending', label: 'Bekleyen' },
+            { value: 'approved', label: 'Onaylanan' },
+            { value: 'rejected', label: 'Reddedilen' }
+        ],
+        placeholder: 'Tüm Durumlar',
+        colSize: 2
+    });
+
+    // Add dropdown filter for department
+    overtimeFilters.addDropdownFilter({
+        id: 'filter-department',
+        label: 'Departman',
+        options: [
+            { value: '', label: 'Tüm Departmanlar' }
+        ],
+        placeholder: 'Tüm Departmanlar',
+        colSize: 2
+    });
+
+    // Add date filter for start date
+    overtimeFilters.addDateFilter({
+        id: 'filter-start-date',
+        label: 'Başlangıç Tarihi',
+        colSize: 2
+    });
+
+    // Add date filter for end date
+    overtimeFilters.addDateFilter({
+        id: 'filter-end-date',
+        label: 'Bitiş Tarihi',
+        colSize: 2
+    });
+}
 
 // Load overtime data
 async function loadOvertimeData() {
@@ -149,26 +273,27 @@ function extractTextFromADF(adfContent) {
            const pending = overtimeData.filter(o => o.status === 'pending').length;
            const rejected = overtimeData.filter(o => o.status === 'rejected').length;
            
-           document.getElementById('total-overtime').textContent = total || '-';
-           document.getElementById('approved-overtime').textContent = approved || '-';
-           document.getElementById('pending-overtime').textContent = pending || '-';
-           document.getElementById('rejected-overtime').textContent = rejected || '-';
+           // Update statistics cards using the component
+           if (overtimeStats) {
+               overtimeStats.updateValues({
+                   0: total.toString(),
+                   1: approved.toString(),
+                   2: pending.toString(),
+                   3: rejected.toString()
+               });
+           }
        }
 
 // Update filters
 function updateFilters() {
-    const departmentFilter = document.getElementById('filter-department');
     const uniqueDepartments = [...new Set(overtimeData.map(o => o.department).filter(Boolean))].sort();
     
-    // Clear existing options except the first one
-    departmentFilter.innerHTML = '<option value="">Tüm Departmanlar</option>';
-    
-    uniqueDepartments.forEach(department => {
-        const option = document.createElement('option');
-        option.value = department;
-        option.textContent = department;
-        departmentFilter.appendChild(option);
-    });
+    // Update department filter options
+    const departmentOptions = [
+        { value: '', label: 'Tüm Departmanlar' },
+        ...uniqueDepartments.map(department => ({ value: department, label: department }))
+    ];
+    overtimeFilters.updateFilterOptions('filter-department', departmentOptions);
 }
 
 // Render overtime table
@@ -508,55 +633,23 @@ function formatDateTime(dateTimeStr) {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Create overtime button
-    document.getElementById('create-overtime-btn').addEventListener('click', async () => {
-        const modal = new bootstrap.Modal(document.getElementById('create-overtime-modal'));
-        modal.show();
-        
-        // Load users for the single create modal
-        try {
-            const users = await loadUsersForTeam();
-            populateUserSelectionTable(users, 'user-selection-table-body', 'select-all-users');
-        } catch (error) {
-            console.error('Error loading users for single create:', error);
-            showNotification('Kullanıcı listesi yüklenirken hata oluştu.', 'error');
-        }
-    });
-    
-
-           
-           // Refresh overtime button
-           document.getElementById('refresh-overtime-btn').addEventListener('click', () => {
-               showLoading();
-               loadOvertimeData();
-           });
+    // Note: Header button event listeners are now handled by HeaderComponent
     
     // Save overtime button
     document.getElementById('save-overtime-btn').addEventListener('click', saveOvertime);
     
-
-    
-    // Search and filter events
-    document.getElementById('search-overtime').addEventListener('input', filterOvertime);
-    document.getElementById('filter-status').addEventListener('change', filterOvertime);
-    document.getElementById('filter-department').addEventListener('change', filterOvertime);
-    document.getElementById('filter-start-date').addEventListener('input', filterOvertime);
-    document.getElementById('filter-end-date').addEventListener('input', filterOvertime);
-    
-    // Apply filters button
-    document.getElementById('apply-filters').addEventListener('click', filterOvertime);
-    
-    // Clear filters
-    document.getElementById('clear-filters').addEventListener('click', clearFilters);
+    // Event listeners for filters are now handled by the filters component
+    // No additional event listeners needed for filters
 }
 
 // Filter overtime
 function filterOvertime() {
-    const searchTerm = document.getElementById('search-overtime').value.toLowerCase();
-    const selectedStatus = document.getElementById('filter-status').value;
-    const selectedDepartment = document.getElementById('filter-department').value;
-    const startDate = document.getElementById('filter-start-date').value;
-    const endDate = document.getElementById('filter-end-date').value;
+    const filterValues = overtimeFilters.getFilterValues();
+    const searchTerm = filterValues['search-overtime'].toLowerCase();
+    const selectedStatus = filterValues['filter-status'];
+    const selectedDepartment = filterValues['filter-department'];
+    const startDate = filterValues['filter-start-date'];
+    const endDate = filterValues['filter-end-date'];
     
     const rows = document.querySelectorAll('.team-member-row');
     
@@ -601,11 +694,8 @@ function updateEpicHeadersVisibility() {
 
 // Clear filters
 function clearFilters() {
-    document.getElementById('search-overtime').value = '';
-    document.getElementById('filter-status').value = '';
-    document.getElementById('filter-department').value = '';
-    document.getElementById('filter-start-date').value = '';
-    document.getElementById('filter-end-date').value = '';
+    // Clear all filters using the component
+    overtimeFilters.clearFilters();
     
     // Show all rows
     const rows = document.querySelectorAll('.team-member-row');

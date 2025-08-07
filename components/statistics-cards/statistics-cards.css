@@ -1,0 +1,350 @@
+/* Statistics Cards Component Styles */
+
+/* Base card styles */
+.stat-card {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 12px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    transition: all 0.3s ease;
+    overflow: hidden;
+    position: relative;
+}
+
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(135deg, #0d6efd, #0b5ed7);
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.stat-card:hover::before {
+    opacity: 1;
+}
+
+.stat-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+}
+
+/* Card body */
+.stat-card-body {
+    padding: 1.5rem;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* Compact variant */
+.stat-card.compact {
+    padding: 0.75rem;
+}
+
+.stat-card.compact .stat-card-body {
+    padding: 0.75rem;
+}
+
+/* Icon styles */
+.stat-icon {
+    width: 50px;
+    height: 50px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    color: white;
+    flex-shrink: 0;
+    position: relative;
+    overflow: hidden;
+}
+
+.stat-icon::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.2), rgba(255, 255, 255, 0.1));
+    border-radius: 12px;
+}
+
+.stat-icon i {
+    position: relative;
+    z-index: 1;
+}
+
+.stat-card.compact .stat-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 1rem;
+}
+
+/* Content styles */
+.stat-content {
+    flex: 1;
+    min-width: 0;
+}
+
+.stat-number {
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.25rem 0;
+    color: #343a40;
+    line-height: 1.2;
+}
+
+.stat-label {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin: 0;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-card.compact .stat-number {
+    font-size: 1.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.stat-card.compact .stat-label {
+    font-size: 0.75rem;
+    margin-bottom: 0;
+}
+
+/* Color variants */
+.stat-card .stat-icon.bg-primary {
+    background: linear-gradient(135deg, #0d6efd, #0b5ed7);
+}
+
+.stat-card .stat-icon.bg-success {
+    background: linear-gradient(135deg, #198754, #157347);
+}
+
+.stat-card .stat-icon.bg-info {
+    background: linear-gradient(135deg, #0dcaf0, #0aa2c0);
+}
+
+.stat-card .stat-icon.bg-warning {
+    background: linear-gradient(135deg, #ffc107, #e0a800);
+}
+
+.stat-card .stat-icon.bg-danger {
+    background: linear-gradient(135deg, #dc3545, #bb2d3b);
+}
+
+.stat-card .stat-icon.bg-secondary {
+    background: linear-gradient(135deg, #6c757d, #5a6268);
+}
+
+.stat-card .stat-icon.bg-dark {
+    background: linear-gradient(135deg, #212529, #1a1d20);
+}
+
+.stat-card .stat-icon.bg-light {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    color: #495057;
+}
+
+/* Hover effects for different colors */
+.stat-card:hover .stat-icon.bg-primary {
+    background: linear-gradient(135deg, #0b5ed7, #0a58ca);
+}
+
+.stat-card:hover .stat-icon.bg-success {
+    background: linear-gradient(135deg, #157347, #146c43);
+}
+
+.stat-card:hover .stat-icon.bg-info {
+    background: linear-gradient(135deg, #0aa2c0, #099aa7);
+}
+
+.stat-card:hover .stat-icon.bg-warning {
+    background: linear-gradient(135deg, #e0a800, #d39e00);
+}
+
+.stat-card:hover .stat-icon.bg-danger {
+    background: linear-gradient(135deg, #bb2d3b, #b02a37);
+}
+
+.stat-card:hover .stat-icon.bg-secondary {
+    background: linear-gradient(135deg, #5a6268, #545b62);
+}
+
+.stat-card:hover .stat-icon.bg-dark {
+    background: linear-gradient(135deg, #1a1d20, #16181a);
+}
+
+.stat-card:hover .stat-icon.bg-light {
+    background: linear-gradient(135deg, #e9ecef, #dee2e6);
+}
+
+/* Clickable cards */
+.stat-card.clickable {
+    cursor: pointer;
+}
+
+.stat-card.clickable:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+/* Loading state */
+.loading-spinner {
+    padding: 2rem;
+    text-align: center;
+}
+
+/* Empty state */
+.empty-state {
+    padding: 3rem 1rem;
+    text-align: center;
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.empty-state p {
+    margin: 0;
+    font-size: 1rem;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .stat-card-body {
+        padding: 1rem;
+        gap: 0.75rem;
+    }
+    
+    .stat-icon {
+        width: 45px;
+        height: 45px;
+        font-size: 1.125rem;
+    }
+    
+    .stat-number {
+        font-size: 1.75rem;
+    }
+    
+    .stat-label {
+        font-size: 0.8rem;
+    }
+    
+    .stat-card.compact .stat-card-body {
+        padding: 0.5rem;
+    }
+    
+    .stat-card.compact .stat-icon {
+        width: 35px;
+        height: 35px;
+        font-size: 0.875rem;
+    }
+    
+    .stat-card.compact .stat-number {
+        font-size: 1.25rem;
+    }
+    
+    .stat-card.compact .stat-label {
+        font-size: 0.7rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .stat-card-body {
+        padding: 0.75rem;
+        gap: 0.5rem;
+    }
+    
+    .stat-icon {
+        width: 40px;
+        height: 40px;
+        font-size: 1rem;
+    }
+    
+    .stat-number {
+        font-size: 1.5rem;
+    }
+    
+    .stat-label {
+        font-size: 0.75rem;
+    }
+    
+    .stat-card.compact .stat-card-body {
+        padding: 0.5rem;
+    }
+    
+    .stat-card.compact .stat-icon {
+        width: 30px;
+        height: 30px;
+        font-size: 0.75rem;
+    }
+    
+    .stat-card.compact .stat-number {
+        font-size: 1.125rem;
+    }
+    
+    .stat-card.compact .stat-label {
+        font-size: 0.65rem;
+    }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+    .stat-card {
+        border: 2px solid #000;
+    }
+    
+    .stat-card .stat-icon {
+        border: 2px solid #fff;
+    }
+    
+    .stat-number {
+        color: #000;
+    }
+    
+    .stat-label {
+        color: #333;
+    }
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+    .stat-card,
+    .stat-card:hover,
+    .stat-icon {
+        transition: none;
+    }
+    
+    .stat-card:hover {
+        transform: none;
+    }
+}
+
+/* Print styles */
+@media print {
+    .stat-card {
+        break-inside: avoid;
+        box-shadow: none;
+        border: 1px solid #000;
+    }
+    
+    .stat-card:hover {
+        transform: none;
+        box-shadow: none;
+    }
+    
+    .stat-icon {
+        background: #000 !important;
+        color: #fff !important;
+    }
+}

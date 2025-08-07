@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Statistics Cards Component - Example</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Component CSS -->
+    <link rel="stylesheet" href="statistics-cards.css">
+    
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem 0;
+        }
+        
+        .example-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        }
+        
+        .example-title {
+            color: #495057;
+            margin-bottom: 1.5rem;
+            font-weight: 600;
+        }
+        
+        .code-block {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 1rem;
+            margin: 1rem 0;
+            font-family: 'Courier New', monospace;
+            font-size: 0.875rem;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="text-center text-white mb-5">Statistics Cards Component Examples</h1>
+            </div>
+        </div>
+
+        <!-- Basic Example -->
+        <div class="example-section">
+            <h3 class="example-title">Basic Example</h3>
+            <div id="basic-stats"></div>
+            
+            <div class="code-block">
+// Basic usage with 4 cards
+const basicStats = new StatisticsCards('basic-stats', {
+    cards: [
+        {
+            title: 'Total Users',
+            value: '1,234',
+            icon: 'fas fa-users',
+            color: 'primary'
+        },
+        {
+            title: 'Active Sessions',
+            value: '567',
+            icon: 'fas fa-play',
+            color: 'success'
+        },
+        {
+            title: 'Completed Tasks',
+            value: '890',
+            icon: 'fas fa-check',
+            color: 'info'
+        },
+        {
+            title: 'Pending Items',
+            value: '123',
+            icon: 'fas fa-clock',
+            color: 'warning'
+        }
+    ],
+    compact: true
+});
+            </div>
+        </div>
+
+        <!-- Custom Colors Example -->
+        <div class="example-section">
+            <h3 class="example-title">Custom Colors Example</h3>
+            <div id="custom-colors-stats"></div>
+            
+            <div class="code-block">
+// Custom background and text colors
+const customStats = new StatisticsCards('custom-colors-stats', {
+    cards: [
+        {
+            title: 'Revenue',
+            value: '$45,678',
+            icon: 'fas fa-dollar-sign',
+            bgColor: '#ff6b6b',
+            textColor: '#ffffff'
+        },
+        {
+            title: 'Growth',
+            value: '+23.5%',
+            icon: 'fas fa-chart-line',
+            bgColor: '#4ecdc4',
+            textColor: '#ffffff'
+        },
+        {
+            title: 'Efficiency',
+            value: '94.2%',
+            icon: 'fas fa-tachometer-alt',
+            bgColor: '#45b7d1',
+            textColor: '#ffffff'
+        }
+    ],
+    compact: false
+});
+            </div>
+        </div>
+
+        <!-- Interactive Example -->
+        <div class="example-section">
+            <h3 class="example-title">Interactive Example (Clickable Cards)</h3>
+            <div id="interactive-stats"></div>
+            <p class="text-muted mt-2">Click on the cards to see the interaction!</p>
+            
+            <div class="code-block">
+// Interactive cards with click handlers
+const interactiveStats = new StatisticsCards('interactive-stats', {
+    cards: [
+        {
+            title: 'Click to View Details',
+            value: '42',
+            icon: 'fas fa-hand-pointer',
+            color: 'primary',
+            onClick: 'handleCardClick(0)',
+            tooltip: 'Click to view user details'
+        },
+        {
+            title: 'Click to Export',
+            value: '156',
+            icon: 'fas fa-download',
+            color: 'success',
+            onClick: 'handleCardClick(1)',
+            tooltip: 'Click to export data'
+        },
+        {
+            title: 'Click to Refresh',
+            value: '89',
+            icon: 'fas fa-sync-alt',
+            color: 'info',
+            onClick: 'handleCardClick(2)',
+            tooltip: 'Click to refresh data'
+        }
+    ]
+});
+
+function handleCardClick(index) {
+    alert(`Card ${index} clicked! You can implement custom logic here.`);
+}
+            </div>
+        </div>
+
+        <!-- Dynamic Updates Example -->
+        <div class="example-section">
+            <h3 class="example-title">Dynamic Updates Example</h3>
+            <div id="dynamic-stats"></div>
+            <div class="mt-3">
+                <button class="btn btn-primary me-2" onclick="updateRandomValues()">Update Random Values</button>
+                <button class="btn btn-secondary me-2" onclick="addNewCard()">Add New Card</button>
+                <button class="btn btn-danger" onclick="removeLastCard()">Remove Last Card</button>
+            </div>
+            
+            <div class="code-block">
+// Dynamic updates example
+const dynamicStats = new StatisticsCards('dynamic-stats', {
+    cards: [
+        {
+            title: 'Random Value 1',
+            value: '0',
+            icon: 'fas fa-dice-one',
+            color: 'primary'
+        },
+        {
+            title: 'Random Value 2',
+            value: '0',
+            icon: 'fas fa-dice-two',
+            color: 'success'
+        },
+        {
+            title: 'Random Value 3',
+            value: '0',
+            icon: 'fas fa-dice-three',
+            color: 'warning'
+        }
+    ]
+});
+
+function updateRandomValues() {
+    dynamicStats.updateValues({
+        0: Math.floor(Math.random() * 100),
+        1: Math.floor(Math.random() * 100),
+        2: Math.floor(Math.random() * 100)
+    });
+}
+
+function addNewCard() {
+    const cardCount = dynamicStats.options.cards.length;
+    dynamicStats.addCard({
+        title: `New Card ${cardCount + 1}`,
+        value: Math.floor(Math.random() * 100),
+        icon: 'fas fa-plus',
+        color: 'info'
+    });
+}
+
+function removeLastCard() {
+    const cardCount = dynamicStats.options.cards.length;
+    if (cardCount > 0) {
+        dynamicStats.removeCard(cardCount - 1);
+    }
+}
+            </div>
+        </div>
+
+        <!-- Loading and Empty States -->
+        <div class="example-section">
+            <h3 class="example-title">Loading and Empty States</h3>
+            <div id="state-stats"></div>
+            <div class="mt-3">
+                <button class="btn btn-primary me-2" onclick="showLoading()">Show Loading</button>
+                <button class="btn btn-warning me-2" onclick="showEmpty()">Show Empty</button>
+                <button class="btn btn-success" onclick="showData()">Show Data</button>
+            </div>
+            
+            <div class="code-block">
+// Loading and empty states
+const stateStats = new StatisticsCards('state-stats', {
+    cards: [
+        {
+            title: 'Sample Data',
+            value: '100',
+            icon: 'fas fa-chart-bar',
+            color: 'primary'
+        }
+    ]
+});
+
+function showLoading() {
+    stateStats.showLoading();
+}
+
+function showEmpty() {
+    stateStats.showEmpty('No data available at the moment');
+}
+
+function showData() {
+    stateStats.setCards([
+        {
+            title: 'Sample Data',
+            value: '100',
+            icon: 'fas fa-chart-bar',
+            color: 'primary'
+        }
+    ]);
+}
+            </div>
+        </div>
+
+        <!-- Different Layouts -->
+        <div class="example-section">
+            <h3 class="example-title">Different Layouts</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Grid Layout (Default)</h5>
+                    <div id="grid-layout-stats"></div>
+                </div>
+                <div class="col-md-6">
+                    <h5>Flex Layout</h5>
+                    <div id="flex-layout-stats"></div>
+                </div>
+            </div>
+            
+            <div class="code-block">
+// Grid layout (default)
+const gridStats = new StatisticsCards('grid-layout-stats', {
+    layout: 'grid',
+    responsive: true,
+    cards: [
+        {
+            title: 'Grid Card 1',
+            value: '50',
+            icon: 'fas fa-th',
+            color: 'primary'
+        },
+        {
+            title: 'Grid Card 2',
+            value: '75',
+            icon: 'fas fa-th-large',
+            color: 'success'
+        }
+    ]
+});
+
+// Flex layout
+const flexStats = new StatisticsCards('flex-layout-stats', {
+    layout: 'flex',
+    responsive: false,
+    cards: [
+        {
+            title: 'Flex Card 1',
+            value: '25',
+            icon: 'fas fa-arrows-alt-h',
+            color: 'warning'
+        },
+        {
+            title: 'Flex Card 2',
+            value: '60',
+            icon: 'fas fa-arrows-alt-v',
+            color: 'info'
+        }
+    ]
+});
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Component JS -->
+    <script src="statistics-cards.js"></script>
+    
+    <!-- Example Scripts -->
+    <script>
+        // Basic Example
+        const basicStats = new StatisticsCards('basic-stats', {
+            cards: [
+                {
+                    title: 'Total Users',
+                    value: '1,234',
+                    icon: 'fas fa-users',
+                    color: 'primary'
+                },
+                {
+                    title: 'Active Sessions',
+                    value: '567',
+                    icon: 'fas fa-play',
+                    color: 'success'
+                },
+                {
+                    title: 'Completed Tasks',
+                    value: '890',
+                    icon: 'fas fa-check',
+                    color: 'info'
+                },
+                {
+                    title: 'Pending Items',
+                    value: '123',
+                    icon: 'fas fa-clock',
+                    color: 'warning'
+                }
+            ],
+            compact: true
+        });
+
+        // Custom Colors Example
+        const customStats = new StatisticsCards('custom-colors-stats', {
+            cards: [
+                {
+                    title: 'Revenue',
+                    value: '$45,678',
+                    icon: 'fas fa-dollar-sign',
+                    bgColor: '#ff6b6b',
+                    textColor: '#ffffff'
+                },
+                {
+                    title: 'Growth',
+                    value: '+23.5%',
+                    icon: 'fas fa-chart-line',
+                    bgColor: '#4ecdc4',
+                    textColor: '#ffffff'
+                },
+                {
+                    title: 'Efficiency',
+                    value: '94.2%',
+                    icon: 'fas fa-tachometer-alt',
+                    bgColor: '#45b7d1',
+                    textColor: '#ffffff'
+                }
+            ],
+            compact: false
+        });
+
+        // Interactive Example
+        const interactiveStats = new StatisticsCards('interactive-stats', {
+            cards: [
+                {
+                    title: 'Click to View Details',
+                    value: '42',
+                    icon: 'fas fa-hand-pointer',
+                    color: 'primary',
+                    onClick: 'handleCardClick(0)',
+                    tooltip: 'Click to view user details'
+                },
+                {
+                    title: 'Click to Export',
+                    value: '156',
+                    icon: 'fas fa-download',
+                    color: 'success',
+                    onClick: 'handleCardClick(1)',
+                    tooltip: 'Click to export data'
+                },
+                {
+                    title: 'Click to Refresh',
+                    value: '89',
+                    icon: 'fas fa-sync-alt',
+                    color: 'info',
+                    onClick: 'handleCardClick(2)',
+                    tooltip: 'Click to refresh data'
+                }
+            ]
+        });
+
+        function handleCardClick(index) {
+            alert(`Card ${index} clicked! You can implement custom logic here.`);
+        }
+
+        // Dynamic Updates Example
+        const dynamicStats = new StatisticsCards('dynamic-stats', {
+            cards: [
+                {
+                    title: 'Random Value 1',
+                    value: '0',
+                    icon: 'fas fa-dice-one',
+                    color: 'primary'
+                },
+                {
+                    title: 'Random Value 2',
+                    value: '0',
+                    icon: 'fas fa-dice-two',
+                    color: 'success'
+                },
+                {
+                    title: 'Random Value 3',
+                    value: '0',
+                    icon: 'fas fa-dice-three',
+                    color: 'warning'
+                }
+            ]
+        });
+
+        function updateRandomValues() {
+            dynamicStats.updateValues({
+                0: Math.floor(Math.random() * 100),
+                1: Math.floor(Math.random() * 100),
+                2: Math.floor(Math.random() * 100)
+            });
+        }
+
+        function addNewCard() {
+            const cardCount = dynamicStats.options.cards.length;
+            dynamicStats.addCard({
+                title: `New Card ${cardCount + 1}`,
+                value: Math.floor(Math.random() * 100),
+                icon: 'fas fa-plus',
+                color: 'info'
+            });
+        }
+
+        function removeLastCard() {
+            const cardCount = dynamicStats.options.cards.length;
+            if (cardCount > 0) {
+                dynamicStats.removeCard(cardCount - 1);
+            }
+        }
+
+        // Loading and Empty States
+        const stateStats = new StatisticsCards('state-stats', {
+            cards: [
+                {
+                    title: 'Sample Data',
+                    value: '100',
+                    icon: 'fas fa-chart-bar',
+                    color: 'primary'
+                }
+            ]
+        });
+
+        function showLoading() {
+            stateStats.showLoading();
+        }
+
+        function showEmpty() {
+            stateStats.showEmpty('No data available at the moment');
+        }
+
+        function showData() {
+            stateStats.setCards([
+                {
+                    title: 'Sample Data',
+                    value: '100',
+                    icon: 'fas fa-chart-bar',
+                    color: 'primary'
+                }
+            ]);
+        }
+
+        // Different Layouts
+        const gridStats = new StatisticsCards('grid-layout-stats', {
+            layout: 'grid',
+            responsive: true,
+            cards: [
+                {
+                    title: 'Grid Card 1',
+                    value: '50',
+                    icon: 'fas fa-th',
+                    color: 'primary'
+                },
+                {
+                    title: 'Grid Card 2',
+                    value: '75',
+                    icon: 'fas fa-th-large',
+                    color: 'success'
+                }
+            ]
+        });
+
+        const flexStats = new StatisticsCards('flex-layout-stats', {
+            layout: 'flex',
+            responsive: false,
+            cards: [
+                {
+                    title: 'Flex Card 1',
+                    value: '25',
+                    icon: 'fas fa-arrows-alt-h',
+                    color: 'warning'
+                },
+                {
+                    title: 'Flex Card 2',
+                    value: '60',
+                    icon: 'fas fa-arrows-alt-v',
+                    color: 'info'
+                }
+            ]
+        });
+    </script>
+</body>
+</html>

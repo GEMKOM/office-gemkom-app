@@ -1,75 +1,4 @@
-/* Dashboard Styles */
 
-/* Statistics Cards */
-.stat-card {
-    background: rgba(255, 255, 255, 0.95);
-    backdrop-filter: blur(10px);
-    border-radius: 15px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    transition: all 0.3s ease;
-    overflow: hidden;
-    position: relative;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-}
-
-.stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 3px;
-    background: linear-gradient(90deg, #ffc107, #ffca2c);
-    opacity: 0;
-    transition: opacity 0.3s ease;
-}
-
-.stat-card:hover::before {
-    opacity: 1;
-}
-
-.stat-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-}
-
-.stat-card-body {
-    padding: 1.5rem;
-    display: flex;
-    align-items: center;
-    gap: 1rem;
-}
-
-.stat-icon {
-    width: 60px;
-    height: 60px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.5rem;
-    color: white;
-    flex-shrink: 0;
-}
-
-.stat-content {
-    flex-grow: 1;
-}
-
-.stat-number {
-    font-size: 2rem;
-    font-weight: 700;
-    margin: 0;
-    color: #343a40;
-    line-height: 1;
-}
-
-.stat-label {
-    margin: 0;
-    color: #6c757d;
-    font-size: 0.9rem;
-    font-weight: 500;
-}
 
 /* Dashboard Cards */
 .dashboard-card {
@@ -213,23 +142,6 @@
     font-weight: 500;
 }
 
-/* Chart Container */
-.chart-container {
-    height: 300px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(248, 249, 250, 0.5);
-    border-radius: 10px;
-    border: 1px dashed rgba(0, 0, 0, 0.1);
-}
-
-.chart-container::before {
-    content: '📊 Grafik yakında eklenecek';
-    color: #6c757d;
-    font-size: 1.1rem;
-    font-weight: 500;
-}
 
 /* Timer Display */
 .timer-display {
@@ -388,16 +300,3 @@
 .table-responsive::-webkit-scrollbar-thumb:hover {
     background: rgba(255, 193, 7, 0.7);
 }
-
-.quantity-badge {
-    display: inline-block;
-    padding: 0.25rem 0.5rem;
-    background: #f8f9fa;
-    color: #495057;
-    border: 1px solid #dee2e6;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
- 

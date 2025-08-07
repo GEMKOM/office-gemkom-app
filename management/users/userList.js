@@ -3,6 +3,17 @@ import { initNavbar } from '../../components/navbar.js';
 import { fetchUsers, fetchOccupations, authFetchUsers, fetchTeams, deleteUser } from '../../generic/users.js';
 import { authedFetch } from '../../authService.js';
 import { backendBase } from '../../base.js';
+import { HeaderComponent } from '../../components/header/header.js';
+import { FiltersComponent } from '../../components/filters/filters.js';
+
+// Header component instance
+let headerComponent;
+
+// Statistics Cards component instance
+let usersStats = null;
+
+// Filters component instance
+let userFilters = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
@@ -10,11 +21,68 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     initNavbar();
+    
+    // Initialize header component
+    initHeaderComponent();
+    
+    // Initialize Statistics Cards component
+    usersStats = new StatisticsCards('users-statistics', {
+        cards: [
+            { title: 'Toplam Çalışan', value: '0', icon: 'fas fa-users', color: 'primary', id: 'total-users' },
+            { title: 'Admin Kullanıcı', value: '0', icon: 'fas fa-user-shield', color: 'success', id: 'admin-users' },
+            { title: 'Aktif Takım', value: '0', icon: 'fas fa-layer-group', color: 'info', id: 'active-teams' },
+            { title: 'Departman', value: '0', icon: 'fas fa-building', color: 'warning', id: 'total-departments' }
+        ],
+        compact: true,
+        animation: true
+    });
+    
     await initializeUserList();
 });
 
+// Initialize header component
+function initHeaderComponent() {
+    headerComponent = new HeaderComponent({
+        title: 'Çalışan Listesi',
+        subtitle: 'Şirket çalışanlarının yönetimi ve bilgi güncelleme',
+        icon: 'users',
+        showCreateButton: 'block',
+        showBulkCreateButton: 'block',
+        showRefreshButton: 'block',
+        createButtonText: 'Yeni Çalışan',
+        bulkCreateButtonText: 'Toplu Oluştur',
+        refreshButtonText: 'Yenile',
+        onCreateClick: () => {
+            const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
+            modal.show();
+        },
+        onBulkCreateClick: () => {
+            const modal = new bootstrap.Modal(document.getElementById('bulkCreateUserModal'));
+            modal.show();
+        },
+        onRefreshClick: async () => {
+            const button = document.getElementById('refresh-btn');
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Yenileniyor...';
+            button.disabled = true;
+            
+            try {
+                await loadUserData();
+            } catch (error) {
+                console.error('Error refreshing users:', error);
+            } finally {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+    });
+}
+
 async function initializeUserList() {
     try {
+        // Initialize filters component
+        initializeFiltersComponent();
+        
         // Load initial data
         await loadUserData();
         
@@ -31,6 +99,82 @@ async function initializeUserList() {
         console.error('Error initializing user list:', error);
         showError('Kullanıcı listesi yüklenirken hata oluştu.');
     }
+}
+
+function initializeFiltersComponent() {
+    // Initialize filters component
+    userFilters = new FiltersComponent('filters-placeholder', {
+        title: 'Çalışan Filtreleri',
+        onApply: (values) => {
+            // Apply filters and filter users
+            filterUsers();
+        },
+        onClear: () => {
+            // Clear filters and show all users
+            clearFilters();
+            showNotification('Filtreler temizlendi', 'info');
+        },
+        onFilterChange: (filterId, value) => {
+            // Optional: Handle individual filter changes
+            console.log(`Filter ${filterId} changed to:`, value);
+        }
+    });
+
+    // Add text filter for employee name
+    userFilters.addTextFilter({
+        id: 'search-users',
+        label: 'Çalışan Adı',
+        placeholder: 'Çalışan ara...',
+        colSize: 2
+    });
+
+    // Add dropdown filter for team
+    userFilters.addDropdownFilter({
+        id: 'filter-team',
+        label: 'Takım',
+        options: [
+            { value: '', label: 'Tüm Takımlar' }
+        ],
+        placeholder: 'Tüm Takımlar',
+        colSize: 2
+    });
+
+    // Add dropdown filter for role
+    userFilters.addDropdownFilter({
+        id: 'filter-role',
+        label: 'Rol',
+        options: [
+            { value: '', label: 'Tüm Roller' },
+            { value: 'admin', label: 'Admin' },
+            { value: 'user', label: 'Kullanıcı' }
+        ],
+        placeholder: 'Tüm Roller',
+        colSize: 2
+    });
+
+    // Add dropdown filter for work location
+    userFilters.addDropdownFilter({
+        id: 'filter-work-location',
+        label: 'Çalışma Yeri',
+        options: [
+            { value: '', label: 'Tüm Yerler' },
+            { value: 'office', label: 'Ofis' },
+            { value: 'workshop', label: 'Atölye' }
+        ],
+        placeholder: 'Tüm Yerler',
+        colSize: 2
+    });
+
+    // Add dropdown filter for department
+    userFilters.addDropdownFilter({
+        id: 'filter-department',
+        label: 'Departman',
+        options: [
+            { value: '', label: 'Tüm Departmanlar' }
+        ],
+        placeholder: 'Tüm Departmanlar',
+        colSize: 2
+    });
 }
 
 async function loadUserData() {
@@ -59,35 +203,34 @@ function updateStatistics(users) {
     const teams = new Set(users.map(user => user.team_label).filter(Boolean));
     const departments = new Set(users.map(user => user.occupation_label).filter(Boolean));
     
-    document.getElementById('total-users').textContent = totalUsers;
-    document.getElementById('admin-users').textContent = adminUsers;
-    document.getElementById('active-teams').textContent = teams.size;
-    document.getElementById('total-departments').textContent = departments.size;
+    // Update statistics cards using the component
+    if (usersStats) {
+        usersStats.updateValues({
+            0: totalUsers.toString(),
+            1: adminUsers.toString(),
+            2: teams.size.toString(),
+            3: departments.size.toString()
+        });
+    }
 }
 
 function updateFilters(users) {
-    const teamFilter = document.getElementById('filter-team');
-    const departmentFilter = document.getElementById('filter-department');
     const teams = [...new Set(users.map(user => user.team_label).filter(Boolean))].sort();
     const departments = [...new Set(users.map(user => user.occupation_label).filter(Boolean))].sort();
     
-    // Clear existing options except the first one
-    teamFilter.innerHTML = '<option value="">Tüm Takımlar</option>';
-    departmentFilter.innerHTML = '<option value="">Tüm Departmanlar</option>';
+    // Update team filter options
+    const teamOptions = [
+        { value: '', label: 'Tüm Takımlar' },
+        ...teams.map(team => ({ value: team, label: team }))
+    ];
+    userFilters.updateFilterOptions('filter-team', teamOptions);
     
-    teams.forEach(team => {
-        const option = document.createElement('option');
-        option.value = team;
-        option.textContent = team;
-        teamFilter.appendChild(option);
-    });
-    
-    departments.forEach(department => {
-        const option = document.createElement('option');
-        option.value = department;
-        option.textContent = department;
-        departmentFilter.appendChild(option);
-    });
+    // Update department filter options
+    const departmentOptions = [
+        { value: '', label: 'Tüm Departmanlar' },
+        ...departments.map(department => ({ value: department, label: department }))
+    ];
+    userFilters.updateFilterOptions('filter-department', departmentOptions);
 }
 
 function renderUserTable(users, occupations) {
@@ -392,45 +535,17 @@ function updateUserCellContent(cell, field, value) {
 }
 
 function setupEventListeners() {
-    // Refresh button
-    document.getElementById('refresh-users-btn').addEventListener('click', async () => {
-        const button = document.getElementById('refresh-users-btn');
-        const originalText = button.innerHTML;
-        button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Yenileniyor...';
-        button.disabled = true;
-        
-        try {
-            await loadUserData();
-        } catch (error) {
-            console.error('Error refreshing users:', error);
-        } finally {
-            button.innerHTML = originalText;
-            button.disabled = false;
-        }
-    });
-    
-    // Search functionality
-    document.getElementById('search-users').addEventListener('input', filterUsers);
-    
-    // Filter functionality
-    document.getElementById('filter-team').addEventListener('change', filterUsers);
-    document.getElementById('filter-role').addEventListener('change', filterUsers);
-    document.getElementById('filter-work-location').addEventListener('change', filterUsers);
-    document.getElementById('filter-department').addEventListener('change', filterUsers);
-    
-    // Apply filters button
-    document.getElementById('apply-filters').addEventListener('click', filterUsers);
-    
-    // Clear filters
-    document.getElementById('clear-filters').addEventListener('click', clearFilters);
+    // Event listeners are now handled by the filters component
+    // No additional event listeners needed for filters
 }
 
 function filterUsers() {
-    const searchTerm = document.getElementById('search-users').value.toLowerCase();
-    const selectedTeam = document.getElementById('filter-team').value;
-    const selectedRole = document.getElementById('filter-role').value;
-    const selectedWorkLocation = document.getElementById('filter-work-location').value;
-    const selectedDepartment = document.getElementById('filter-department').value;
+    const filterValues = userFilters.getFilterValues();
+    const searchTerm = filterValues['search-users'].toLowerCase();
+    const selectedTeam = filterValues['filter-team'];
+    const selectedRole = filterValues['filter-role'];
+    const selectedWorkLocation = filterValues['filter-work-location'];
+    const selectedDepartment = filterValues['filter-department'];
     
     const rows = document.querySelectorAll('.team-member-row');
     
@@ -482,11 +597,8 @@ function updateTeamHeadersVisibility() {
 }
 
 function clearFilters() {
-    document.getElementById('search-users').value = '';
-    document.getElementById('filter-team').value = '';
-    document.getElementById('filter-role').value = '';
-    document.getElementById('filter-work-location').value = '';
-    document.getElementById('filter-department').value = '';
+    // Clear all filters using the component
+    userFilters.clearFilters();
     
     // Show all rows
     document.querySelectorAll('.team-member-row').forEach(row => {
@@ -556,23 +668,6 @@ function populateTeamDropdowns(teams) {
 }
 
 function setupUserCreationEventListeners() {
-    // Single user creation button
-    const createUserBtn = document.getElementById('create-user-btn');
-    if (createUserBtn) {
-        createUserBtn.addEventListener('click', () => {
-            const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
-            modal.show();
-        });
-    }
-    
-    // Bulk user creation button
-    const bulkCreateUserBtn = document.getElementById('bulk-create-user-btn');
-    if (bulkCreateUserBtn) {
-        bulkCreateUserBtn.addEventListener('click', () => {
-            const modal = new bootstrap.Modal(document.getElementById('bulkCreateUserModal'));
-            modal.show();
-        });
-    }
     
     // Save single user button
     const saveUserBtn = document.getElementById('save-user-btn');

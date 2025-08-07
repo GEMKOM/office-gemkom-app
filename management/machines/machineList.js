@@ -4,6 +4,17 @@ import { fetchMachines, fetchMachineTypes } from '../../generic/machines.js';
 import { fetchTeams } from '../../generic/users.js';
 import { authedFetch } from '../../authService.js';
 import { backendBase } from '../../base.js';
+import { HeaderComponent } from '../../components/header/header.js';
+import { FiltersComponent } from '../../components/filters/filters.js';
+
+// Header component instance
+let headerComponent;
+
+// Statistics Cards component instance
+let machinesStats = null;
+
+// Filters component instance
+let machineFilters = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
@@ -11,11 +22,68 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     initNavbar();
+    
+    // Initialize header component
+    initHeaderComponent();
+    
+    // Initialize Statistics Cards component
+    machinesStats = new StatisticsCards('machines-statistics', {
+        cards: [
+            { title: 'Toplam Makine', value: '0', icon: 'fas fa-cogs', color: 'primary', id: 'total-machines' },
+            { title: 'Aktif Makine', value: '0', icon: 'fas fa-check-circle', color: 'success', id: 'active-machines' },
+            { title: 'Makine Tipi', value: '0', icon: 'fas fa-tags', color: 'info', id: 'machine-types' },
+            { title: 'Kullanım Alanı', value: '0', icon: 'fas fa-building', color: 'warning', id: 'usage-areas' }
+        ],
+        compact: true,
+        animation: true
+    });
+    
     await initializeMachineList();
 });
 
+// Initialize header component
+function initHeaderComponent() {
+    headerComponent = new HeaderComponent({
+        title: 'Makine Listesi',
+        subtitle: 'Şirket makinelerinin yönetimi ve bilgi güncelleme',
+        icon: 'cogs',
+        showCreateButton: 'block',
+        showBulkCreateButton: 'block',
+        showRefreshButton: 'block',
+        createButtonText: 'Yeni Makine',
+        bulkCreateButtonText: 'Toplu Oluştur',
+        refreshButtonText: 'Yenile',
+        onCreateClick: () => {
+            const modal = new bootstrap.Modal(document.getElementById('createMachineModal'));
+            modal.show();
+        },
+        onBulkCreateClick: () => {
+            const modal = new bootstrap.Modal(document.getElementById('bulkCreateMachineModal'));
+            modal.show();
+        },
+        onRefreshClick: async () => {
+            const button = document.getElementById('refresh-btn');
+            const originalText = button.innerHTML;
+            button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Yenileniyor...';
+            button.disabled = true;
+            
+            try {
+                await loadMachineData();
+            } catch (error) {
+                console.error('Error refreshing machines:', error);
+            } finally {
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        }
+    });
+}
+
 async function initializeMachineList() {
     try {
+        // Initialize filters component
+        initializeFiltersComponent();
+        
         // Load initial data
         await loadMachineData();
         
@@ -32,6 +100,77 @@ async function initializeMachineList() {
         console.error('Error initializing machine list:', error);
         showError('Makine listesi yüklenirken hata oluştu.');
     }
+}
+
+function initializeFiltersComponent() {
+    // Initialize filters component
+    machineFilters = new FiltersComponent('filters-placeholder', {
+        title: 'Makine Filtreleri',
+        onApply: (values) => {
+            // Apply filters and filter machines
+            filterMachines();
+        },
+        onClear: () => {
+            // Clear filters and show all machines
+            clearFilters();
+            showNotification('Filtreler temizlendi', 'info');
+        },
+        onFilterChange: (filterId, value) => {
+            // Optional: Handle individual filter changes
+            console.log(`Filter ${filterId} changed to:`, value);
+        }
+    });
+
+    // Add text filter for machine name
+    machineFilters.addTextFilter({
+        id: 'search-machines',
+        label: 'Makine Adı',
+        placeholder: 'Makine ara...',
+        colSize: 2
+    });
+
+    // Add dropdown filter for machine type
+    machineFilters.addDropdownFilter({
+        id: 'filter-type',
+        label: 'Makine Tipi',
+        options: [
+            { value: '', label: 'Tüm Tipler' }
+        ],
+        placeholder: 'Tüm Tipler',
+        colSize: 2
+    });
+
+    // Add dropdown filter for status
+    machineFilters.addDropdownFilter({
+        id: 'filter-status',
+        label: 'Durum',
+        options: [
+            { value: '', label: 'Tüm Durumlar' },
+            { value: 'active', label: 'Aktif' },
+            { value: 'inactive', label: 'Pasif' }
+        ],
+        placeholder: 'Tüm Durumlar',
+        colSize: 2
+    });
+
+    // Add dropdown filter for usage area
+    machineFilters.addDropdownFilter({
+        id: 'filter-usage-area',
+        label: 'Kullanım Alanı',
+        options: [
+            { value: '', label: 'Tüm Alanlar' }
+        ],
+        placeholder: 'Tüm Alanlar',
+        colSize: 2
+    });
+
+    // Add text filter for description
+    machineFilters.addTextFilter({
+        id: 'filter-description',
+        label: 'Açıklama',
+        placeholder: 'Açıklama ara...',
+        colSize: 2
+    });
 }
 
 async function loadMachineData() {
@@ -61,35 +200,34 @@ function updateStatistics(machines) {
     const machineTypes = new Set(machines.map(machine => machine.machine_type_label).filter(Boolean));
     const usageAreas = new Set(machines.map(machine => machine.used_in).filter(Boolean));
     
-    document.getElementById('total-machines').textContent = totalMachines;
-    document.getElementById('active-machines').textContent = activeMachines;
-    document.getElementById('machine-types').textContent = machineTypes.size;
-    document.getElementById('usage-areas').textContent = usageAreas.size;
+    // Update statistics cards using the component
+    if (machinesStats) {
+        machinesStats.updateValues({
+            0: totalMachines.toString(),
+            1: activeMachines.toString(),
+            2: machineTypes.size.toString(),
+            3: usageAreas.size.toString()
+        });
+    }
 }
 
 function updateFilters(machines) {
-    const typeFilter = document.getElementById('filter-type');
-    const usageAreaFilter = document.getElementById('filter-usage-area');
     const types = [...new Set(machines.map(machine => machine.machine_type_label).filter(Boolean))].sort();
     const usageAreas = [...new Set(machines.map(machine => machine.used_in).filter(Boolean))].sort();
     
-    // Clear existing options except the first one
-    typeFilter.innerHTML = '<option value="">Tüm Tipler</option>';
-    usageAreaFilter.innerHTML = '<option value="">Tüm Alanlar</option>';
+    // Update machine type filter options
+    const typeOptions = [
+        { value: '', label: 'Tüm Tipler' },
+        ...types.map(type => ({ value: type, label: type }))
+    ];
+    machineFilters.updateFilterOptions('filter-type', typeOptions);
     
-    types.forEach(type => {
-        const option = document.createElement('option');
-        option.value = type;
-        option.textContent = type;
-        typeFilter.appendChild(option);
-    });
-    
-    usageAreas.forEach(area => {
-        const option = document.createElement('option');
-        option.value = area;
-        option.textContent = area;
-        usageAreaFilter.appendChild(option);
-    });
+    // Update usage area filter options
+    const usageAreaOptions = [
+        { value: '', label: 'Tüm Alanlar' },
+        ...usageAreas.map(area => ({ value: area, label: area }))
+    ];
+    machineFilters.updateFilterOptions('filter-usage-area', usageAreaOptions);
 }
 
 function renderMachineTable(machines, machineTypes) {
@@ -430,45 +568,17 @@ function updateMachineCellContent(cell, field, value) {
 }
 
 function setupEventListeners() {
-    // Refresh button
-    document.getElementById('refresh-machines-btn').addEventListener('click', async () => {
-        const button = document.getElementById('refresh-machines-btn');
-        const originalText = button.innerHTML;
-        button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Yenileniyor...';
-        button.disabled = true;
-        
-        try {
-            await loadMachineData();
-        } catch (error) {
-            console.error('Error refreshing machines:', error);
-        } finally {
-            button.innerHTML = originalText;
-            button.disabled = false;
-        }
-    });
-    
-    // Search functionality
-    document.getElementById('search-machines').addEventListener('input', filterMachines);
-    
-    // Filter functionality
-    document.getElementById('filter-type').addEventListener('change', filterMachines);
-    document.getElementById('filter-status').addEventListener('change', filterMachines);
-    document.getElementById('filter-usage-area').addEventListener('change', filterMachines);
-    document.getElementById('filter-description').addEventListener('input', filterMachines);
-    
-    // Apply filters button
-    document.getElementById('apply-filters').addEventListener('click', filterMachines);
-    
-    // Clear filters
-    document.getElementById('clear-filters').addEventListener('click', clearFilters);
+    // Event listeners are now handled by the filters component
+    // No additional event listeners needed for filters
 }
 
 function filterMachines() {
-    const searchTerm = document.getElementById('search-machines').value.toLowerCase();
-    const selectedType = document.getElementById('filter-type').value;
-    const selectedStatus = document.getElementById('filter-status').value;
-    const selectedUsageArea = document.getElementById('filter-usage-area').value;
-    const descriptionTerm = document.getElementById('filter-description').value.toLowerCase();
+    const filterValues = machineFilters.getFilterValues();
+    const searchTerm = filterValues['search-machines'].toLowerCase();
+    const selectedType = filterValues['filter-type'];
+    const selectedStatus = filterValues['filter-status'];
+    const selectedUsageArea = filterValues['filter-usage-area'];
+    const descriptionTerm = filterValues['filter-description'].toLowerCase();
     
     const rows = document.querySelectorAll('.team-member-row');
     
@@ -520,11 +630,8 @@ function updateAreaHeadersVisibility() {
 }
 
 function clearFilters() {
-    document.getElementById('search-machines').value = '';
-    document.getElementById('filter-type').value = '';
-    document.getElementById('filter-status').value = '';
-    document.getElementById('filter-usage-area').value = '';
-    document.getElementById('filter-description').value = '';
+    // Clear all filters using the component
+    machineFilters.clearFilters();
     
     // Show all rows
     document.querySelectorAll('.team-member-row').forEach(row => {
@@ -624,24 +731,6 @@ function populateDropdowns(machineTypes, teams) {
 }
 
 function setupMachineCreationEventListeners() {
-    // Single machine creation button
-    const createMachineBtn = document.getElementById('create-machine-btn');
-    if (createMachineBtn) {
-        createMachineBtn.addEventListener('click', () => {
-            const modal = new bootstrap.Modal(document.getElementById('createMachineModal'));
-            modal.show();
-        });
-    }
-    
-    // Bulk machine creation button
-    const bulkCreateMachineBtn = document.getElementById('bulk-create-machine-btn');
-    if (bulkCreateMachineBtn) {
-        bulkCreateMachineBtn.addEventListener('click', () => {
-            const modal = new bootstrap.Modal(document.getElementById('bulkCreateMachineModal'));
-            modal.show();
-        });
-    }
-    
     // Save single machine button
     const saveMachineBtn = document.getElementById('save-machine-btn');
     if (saveMachineBtn) {
@@ -731,7 +820,7 @@ async function handleSingleMachineCreate() {
         name: document.getElementById('machine-name').value.trim(),
         machine_type: document.getElementById('machine-type').value,
         used_in: document.getElementById('machine-used-in').value,
-        is_active: document.getElementById('machine-status').value === 'active',
+        is_active: document.getElementById('machine-status').value === 'true',
         description: document.getElementById('machine-description').value.trim(),
         properties: {}
     };
@@ -856,13 +945,11 @@ async function handleBulkMachineCreate() {
     const namesInput = document.getElementById('bulk-machine-names');
     const typeSelect = document.getElementById('bulk-machine-type');
     const usedInSelect = document.getElementById('bulk-machine-used-in');
-    const statusSelect = document.getElementById('bulk-machine-status');
     
     // Get and validate input
     const namesText = namesInput.value.trim();
     const type = typeSelect.value;
     const usedIn = usedInSelect.value;
-    const status = statusSelect.value;
     
     if (!namesText || !type || !usedIn) {
         showNotification('Lütfen makine adları, makine tipi ve kullanım alanı seçin', 'error');
@@ -899,7 +986,7 @@ async function handleBulkMachineCreate() {
             names: names,
             machine_type: type,
             used_in: usedIn,
-            is_active: status === 'active'
+            is_active: true
         };
         
         // Make API call

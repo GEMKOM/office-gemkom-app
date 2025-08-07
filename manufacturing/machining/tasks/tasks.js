@@ -2,6 +2,8 @@ import { initNavbar } from '../../../components/navbar.js';
 import { ModernDropdown } from '../../../components/dropdown.js';
 import { fetchMachines } from '../../../generic/machines.js';
 import { fetchTasks, deleteTask as deleteTaskAPI, updateTask as updateTaskAPI, fetchTaskById, createTask as createTaskAPI, bulkCreateTasks, markTaskCompleted, unmarkTaskCompleted } from '../../../generic/tasks.js';
+import { HeaderComponent } from '../../../components/header/header.js';
+import { FiltersComponent } from '../../../components/filters/filters.js';
 
 // State management
 let currentPage = 1;
@@ -14,9 +16,9 @@ let machines = [];
 let totalTasks = 0;
 let isLoading = false;
 let createdTasks = []; // Store created tasks for displaying keys
-let machineFilterDropdown = null;
-let statusFilterDropdown = null;
 let isInlineEditing = false; // Flag to prevent re-rendering during inline editing
+let tasksStats = null; // Statistics Cards component instance
+let taskFilters = null; // Filters component instance
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -37,12 +39,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         onBulkCreateClick: () => showBulkCreateModal()
     });
     
+    // Initialize Statistics Cards component
+    tasksStats = new StatisticsCards('tasks-statistics', {
+        cards: [
+            { title: 'Tüm Görevler', value: '0', icon: 'fas fa-list', color: 'primary', id: 'all-tasks-count' },
+            { title: 'Aktif Görevler', value: '0', icon: 'fas fa-play', color: 'success', id: 'active-tasks-count' },
+            { title: 'Tamamlanan', value: '0', icon: 'fas fa-check', color: 'info', id: 'completed-tasks-count' },
+            { title: 'Bekleyen', value: '0', icon: 'fas fa-clock', color: 'warning', id: 'pending-tasks-count' }
+        ],
+        compact: true,
+        animation: true
+    });
+    
     await initializeTasks();
     setupEventListeners();
 });
 
 async function initializeTasks() {
     try {
+        initializeFiltersComponent();
         await loadMachines();
         initializeSortableHeaders();
         
@@ -57,12 +72,23 @@ async function initializeTasks() {
 async function loadMachines() {
     try {
         machines = await fetchMachines('machining');
-        populateMachineFilters();
+        
+        // Update machine filter options if filters component is initialized
+        if (taskFilters) {
+            const machineOptions = [
+                { value: '', label: 'Tüm Makineler' },
+                ...machines.map(machine => ({ value: machine.id.toString(), label: machine.name }))
+            ];
+            taskFilters.updateFilterOptions('machine-filter', machineOptions);
+        }
+        
+        // Populate modal machine dropdowns
+        populateModalMachineDropdowns();
         
         // Set default status filter to 'active' if no URL parameters were applied
         const filterApplied = handleUrlParameters();
-        if (!filterApplied && statusFilterDropdown) {
-            statusFilterDropdown.setValue('active');
+        if (!filterApplied && taskFilters) {
+            taskFilters.setFilterValues({ 'status-filter': 'active' });
         }
     } catch (error) {
         console.error('Error loading machines:', error);
@@ -70,17 +96,81 @@ async function loadMachines() {
     }
 }
 
+function initializeFiltersComponent() {
+    // Initialize filters component
+    taskFilters = new FiltersComponent('filters-placeholder', {
+        title: 'Görev Filtreleri',
+        onApply: (values) => {
+            // Apply filters and reload tasks
+            loadTasks(1);
+        },
+        onClear: () => {
+            // Clear filters and reload tasks
+            loadTasks(1);
+            showNotification('Filtreler temizlendi', 'info');
+        },
+        onFilterChange: (filterId, value) => {
+            // Optional: Handle individual filter changes
+            console.log(`Filter ${filterId} changed to:`, value);
+        }
+    });
+
+    // Add text filters
+    taskFilters.addTextFilter({
+        id: 'key-filter',
+        label: 'TI No',
+        placeholder: 'TI-001',
+        colSize: 2
+    });
+
+    taskFilters.addTextFilter({
+        id: 'name-filter',
+        label: 'Görev Adı',
+        placeholder: 'Görev adı',
+        colSize: 2
+    });
+
+    taskFilters.addTextFilter({
+        id: 'job-no-filter',
+        label: 'İş No',
+        placeholder: 'İş numarası',
+        colSize: 2
+    });
+
+    // Add dropdown filters with initial empty options
+    taskFilters.addDropdownFilter({
+        id: 'machine-filter',
+        label: 'Makine',
+        options: [
+            { value: '', label: 'Tüm Makineler' }
+        ],
+        placeholder: 'Tüm Makineler',
+        colSize: 2
+    });
+
+    taskFilters.addDropdownFilter({
+        id: 'status-filter',
+        label: 'Durum',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'active', label: 'Aktif' },
+            { value: 'completed', label: 'Tamamlanan' },
+            { value: 'pending', label: 'Bekliyor' },
+            { value: 'worked_on', label: 'Çalışıldı' }
+        ],
+        placeholder: 'Tümü',
+        colSize: 2
+    });
+}
+
 // Handle URL parameters for filtering
 function handleUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
     const filterParam = urlParams.get('filter');
     
-    if (filterParam) {
+    if (filterParam && taskFilters) {
         // Set the key filter with the provided value
-        const keyFilter = document.getElementById('key-filter');
-        if (keyFilter) {
-            keyFilter.value = filterParam;
-        }
+        taskFilters.setFilterValues({ 'key-filter': filterParam });
         
         // Show a notification that the page is filtered
         showNotification(`"${filterParam}" için filtrelenmiş sonuçlar gösteriliyor`, 'info');
@@ -92,42 +182,9 @@ function handleUrlParameters() {
     return false; // No filter was applied
 }
 
-function populateMachineFilters() {
-    const machineFilterContainer = document.getElementById('machine-filter-container');
+function populateModalMachineDropdowns() {
     const taskMachine = document.getElementById('task-machine');
     const editTaskMachine = document.getElementById('edit-task-machine');
-    
-    // Initialize machine filter dropdown
-    if (machineFilterContainer && machines.length > 0) {
-        const machineItems = [
-            { value: '', text: 'Tüm Makineler' },
-            ...machines.map(machine => ({ value: machine.id.toString(), text: machine.name }))
-        ];
-        
-        machineFilterDropdown = new ModernDropdown(machineFilterContainer, {
-            placeholder: 'Tüm Makineler',
-            searchable: true
-        });
-        machineFilterDropdown.setItems(machineItems);
-    }
-    
-    // Initialize status filter dropdown
-    const statusFilterContainer = document.getElementById('status-filter-container');
-    if (statusFilterContainer) {
-        const statusItems = [
-            { value: '', text: 'Tümü' },
-            { value: 'active', text: 'Aktif' },
-            { value: 'completed', text: 'Tamamlanan' },
-            { value: 'pending', text: 'Bekliyor' },
-            { value: 'worked_on', text: 'Çalışıldı' }
-        ];
-        
-        statusFilterDropdown = new ModernDropdown(statusFilterContainer, {
-            placeholder: 'Tümü',
-            searchable: false
-        });
-        statusFilterDropdown.setItems(statusItems);
-    }
     
     if (taskMachine) {
         taskMachine.innerHTML = '<option value="">Makine seçin...</option>';
@@ -231,12 +288,15 @@ async function loadTasks(page = 1) {
 function buildTaskQuery(page = 1) {
     const params = new URLSearchParams();
     
+    // Get filter values from the filters component
+    const filterValues = taskFilters ? taskFilters.getFilterValues() : {};
+    
     // Add filters
-    const keyFilter = document.getElementById('key-filter')?.value.trim();
-    const nameFilter = document.getElementById('name-filter')?.value.trim();
-    const jobNoFilter = document.getElementById('job-no-filter')?.value.trim();
-    const machineFilter = machineFilterDropdown?.getValue() || '';
-    const statusFilter = statusFilterDropdown?.getValue() || '';
+    const keyFilter = filterValues['key-filter']?.trim();
+    const nameFilter = filterValues['name-filter']?.trim();
+    const jobNoFilter = filterValues['job-no-filter']?.trim();
+    const machineFilter = filterValues['machine-filter'] || '';
+    const statusFilter = filterValues['status-filter'] || '';
     
     if (keyFilter) {
         let key = keyFilter;
@@ -404,45 +464,20 @@ function updateTaskCounts() {
     const completedCount = tasks.filter(t => t.completion_date).length;
     const pendingCount = tasks.filter(t => t.total_hours_spent === 0 && !t.completion_date).length;
     
-    // Animate number updates
-    animateNumber('all-tasks-count', allCount);
-    animateNumber('active-tasks-count', activeCount);
-    animateNumber('completed-tasks-count', completedCount);
-    animateNumber('pending-tasks-count', pendingCount);
+    // Update statistics cards using the component
+    if (tasksStats) {
+        tasksStats.updateValues({
+            0: allCount.toString(),
+            1: activeCount.toString(),
+            2: completedCount.toString(),
+            3: pendingCount.toString()
+        });
+    }
 }
 
-function animateNumber(elementId, targetValue) {
-    const element = document.getElementById(elementId);
-    if (!element) return;
-    
-    const currentValue = parseInt(element.textContent) || 0;
-    const increment = (targetValue - currentValue) / 20;
-    let current = currentValue;
-    
-    const timer = setInterval(() => {
-        current += increment;
-        if ((increment > 0 && current >= targetValue) || (increment < 0 && current <= targetValue)) {
-            element.textContent = targetValue;
-            clearInterval(timer);
-        } else {
-            element.textContent = Math.floor(current);
-        }
-    }, 50);
-}
+
 
 function setupEventListeners() {
-    // Filter button
-    document.getElementById('apply-filters')?.addEventListener('click', () => {
-        loadTasks(1);
-    });
-    
-    // Clear filters button
-    document.getElementById('clear-filters')?.addEventListener('click', () => {
-        clearFilters();
-    });
-    
-
-    
     // Refresh button
     document.getElementById('refresh-tasks')?.addEventListener('click', () => {
         loadTasks(currentPage);
@@ -492,37 +527,9 @@ function setupEventListeners() {
     document.getElementById('export-created-tasks-btn')?.addEventListener('click', () => {
         exportCreatedTasks();
     });
-    
-
-    
-    // Enter key support for filters
-    document.querySelectorAll('#key-filter, #name-filter, #job-no-filter').forEach(input => {
-        input?.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                loadTasks(1);
-            }
-        });
-    });
 }
 
-function clearFilters() {
-    // Clear text inputs
-    document.getElementById('key-filter').value = '';
-    document.getElementById('name-filter').value = '';
-    document.getElementById('job-no-filter').value = '';
-    
-    // Clear dropdowns
-    if (machineFilterDropdown) {
-        machineFilterDropdown.setValue('');
-    }
-    if (statusFilterDropdown) {
-        statusFilterDropdown.setValue('');
-    }
-    
-    // Reload tasks
-    loadTasks(1);
-    showNotification('Filtreler temizlendi', 'info');
-}
+
 
 function exportCreatedTasks() {
     if (createdTasks.length === 0) {

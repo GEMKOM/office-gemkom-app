@@ -1,0 +1,276 @@
+/* Filters Component Styles */
+@import '../dropdown.css';
+
+.filters-component {
+    margin-bottom: 1rem;
+}
+
+.filters-component .dashboard-card.compact {
+    border: 1px solid rgba(0, 0, 0, 0.125);
+    border-radius: 0.5rem;
+    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    background: #fff;
+}
+
+.filters-component .card-header {
+    background: rgba(0, 0, 0, 0.03);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+    padding: 0.75rem 1rem;
+    border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.filters-component .card-title {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #495057;
+    margin: 0;
+}
+
+.filters-component .card-body {
+    padding: 1rem;
+}
+
+.filters-component .form-label {
+    font-size: 0.75rem;
+    font-weight: 500;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+}
+
+.filters-component .form-control-sm {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.filters-component .form-control-sm:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    outline: 0;
+}
+
+/* Force the entire filters section to have higher z-index */
+.dashboard-card.compact {
+    z-index: 10000 !important;
+    position: relative;
+}
+
+.filters-component .btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+
+.filters-component .btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+.filters-component .btn-outline-secondary {
+    color: #6c757d;
+    border-color: #6c757d;
+    background-color: transparent;
+}
+
+.filters-component .btn-outline-secondary:hover {
+    color: #fff;
+    background-color: #6c757d;
+    border-color: #6c757d;
+}
+
+/* Filter field specific styles */
+.filter-field {
+    margin-bottom: 0.5rem;
+}
+
+.filter-field .form-control {
+    width: 100%;
+}
+
+.filter-field .dropdown-container {
+    width: 100%;
+}
+
+/* Action buttons styling */
+.filters-component .ms-auto {
+    margin-left: auto !important;
+}
+
+/* Ensure buttons stay on first row */
+.filters-component .row.g-2 {
+    flex-wrap: wrap;
+}
+
+.filters-component .row.g-2 > .ms-auto {
+    order: 999; /* Push to end of first row */
+    flex-shrink: 0; /* Prevent buttons from shrinking */
+}
+
+/* Ensure minimum filter sizes */
+.filters-component .col-md-1 {
+    min-width: 120px; /* Minimum width for filters */
+}
+
+/* Modern dropdown integration */
+.filters-component .modern-dropdown {
+    width: 100%;
+    height: 31px;
+}
+
+.filters-component .modern-dropdown-container {
+    height: 31px;
+}
+
+.filters-component .modern-dropdown .dropdown-selected {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid #ced4da;
+    border-radius: 0.25rem;
+    background-color: #fff;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    height: 31px; /* Match form-control-sm height */
+    min-height: 31px;
+    display: flex;
+    align-items: center;
+}
+
+.filters-component .modern-dropdown .dropdown-selected:focus-within {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Ensure consistent height for all filter inputs */
+.filters-component .form-control-sm,
+.filters-component .modern-dropdown .dropdown-selected {
+    height: 50px;
+    min-height: 31px;
+    line-height: 1.5;
+    box-sizing: border-box;
+}
+
+/* Checkbox container styling to match other inputs */
+.filters-component .checkbox-container {
+    height: 50px;
+    min-height: 31px;
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border: 2px solid #ced4da;
+    border-radius: 0.25rem;
+    background-color: #f8f9fa;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+    box-sizing: border-box;
+    cursor: pointer;
+}
+
+.filters-component .checkbox-container:hover {
+    border-color: #adb5bd;
+    background-color: #e9ecef;
+}
+
+.filters-component .checkbox-container:focus-within {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+    background-color: #fff;
+}
+
+.filters-component .checkbox-container .form-check-input {
+    margin: 0;
+    margin-right: 0.75rem;
+    width: 1.2em;
+    height: 1.2em;
+    cursor: pointer;
+}
+
+.filters-component .checkbox-container .checkbox-label {
+    margin: 0;
+    cursor: pointer;
+    font-size: 0.875rem;
+    color: #495057;
+    font-weight: 500;
+}
+
+/* Responsive design */
+@media (max-width: 865px) {
+    .filters-component .card-body {
+        padding: 0.75rem;
+    }
+    
+    .filters-component .row.g-2 {
+        margin: -0.25rem;
+    }
+    
+    .filters-component .row.g-2 > [class*="col-"] {
+        padding: 0.25rem;
+    }
+    
+    .filters-component .d-grid.gap-1 {
+        gap: 0.25rem !important;
+    }
+    
+    .filters-component .btn-sm {
+        font-size: 0.8rem;
+        padding: 0.25rem 0.5rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .filters-component .col-md-2,
+    .filters-component .col-md-1 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+    
+    /* Action buttons on mobile */
+    .filters-component .ms-auto {
+        margin-left: 0 !important;
+    }
+    
+    /* Ensure minimum filter sizes on mobile */
+    .filters-component .col-md-1 {
+        min-width: auto;
+    }
+}
+
+/* Animation for filter changes */
+.filters-component .filter-field {
+    transition: opacity 0.2s ease-in-out;
+}
+
+.filters-component .filter-field.fade-in {
+    opacity: 0;
+    animation: fadeIn 0.3s ease-in-out forwards;
+}
+
+@keyframes fadeIn {
+    to {
+        opacity: 1;
+    }
+}
+
+/* Loading state for filters */
+.filters-component.loading .card-body {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.filters-component.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #0d6efd;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}

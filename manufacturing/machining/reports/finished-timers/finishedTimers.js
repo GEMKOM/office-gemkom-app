@@ -5,6 +5,8 @@ import { fetchUsers } from '../../../../generic/users.js';
 import { fetchTaskById } from '../../../../generic/tasks.js';
 import { backendBase } from '../../../../base.js';
 import { authedFetch } from '../../../../authService.js';
+import { HeaderComponent } from '../../../../components/header/header.js';
+import { FiltersComponent } from '../../../../components/filters/filters.js';
 
 // State management
 let currentPage = 1;
@@ -15,19 +17,64 @@ let machines = [];
 let users = [];
 let totalTimers = 0;
 let isLoading = false;
-let machineFilterDropdown = null;
-let userFilterDropdown = null;
 let pageSize = 20;
+let timerFilters = null; // Filters component instance
+
+// Header component instance
+let headerComponent;
+
+// Statistics Cards component instance
+let finishedTimersStats = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
+    
+    // Initialize header component
+    initHeaderComponent();
+    
+    // Initialize Statistics Cards component
+    finishedTimersStats = new StatisticsCards('finished-timers-statistics', {
+        cards: [
+            { title: 'Toplam Zamanlayıcı', value: '0', icon: 'fas fa-list', color: 'primary', id: 'total-timers-count' },
+            { title: 'Toplam Süre (Saat)', value: '0', icon: 'fas fa-clock', color: 'success', id: 'total-hours' },
+            { title: 'Aktif Kullanıcı', value: '0', icon: 'fas fa-users', color: 'info', id: 'active-users-count' },
+            { title: 'Aktif Makine', value: '0', icon: 'fas fa-cogs', color: 'warning', id: 'active-machines-count' }
+        ],
+        compact: true,
+        animation: true
+    });
+    
     await initializeFinishedTimers();
     setupEventListeners();
 });
 
+// Initialize header component
+function initHeaderComponent() {
+    headerComponent = new HeaderComponent({
+        title: 'Biten Zamanlayıcılar Raporu',
+        subtitle: 'Tamamlanan zamanlayıcıların detaylı raporu',
+        icon: 'clock',
+        showBackButton: 'block',
+        showRefreshButton: 'block',
+        showExportButton: 'block',
+        refreshButtonText: 'Yenile',
+        exportButtonText: 'Dışa Aktar',
+        onBackClick: () => {
+            window.history.back();
+        },
+        onRefreshClick: () => {
+            loadTimers(currentPage);
+        },
+        onExportClick: () => {
+            exportTimers();
+        }
+    });
+}
+
 async function initializeFinishedTimers() {
     try {
+        initializeFiltersComponent();
         await loadMachines();
         await loadUsers();
         initializeSortableHeaders();
@@ -44,17 +91,103 @@ async function initializeFinishedTimers() {
 async function loadMachines() {
     try {
         machines = await fetchMachines('machining');
-        populateMachineFilters();
+        
+        // Update machine filter options if filters component is initialized
+        if (timerFilters) {
+            const machineOptions = [
+                { value: '', label: 'Tüm Makineler' },
+                ...machines.map(machine => ({ value: machine.id.toString(), label: machine.name }))
+            ];
+            timerFilters.updateFilterOptions('machine-filter', machineOptions);
+        }
     } catch (error) {
         console.error('Error loading machines:', error);
         machines = [];
     }
 }
 
+function initializeFiltersComponent() {
+    // Initialize filters component
+    timerFilters = new FiltersComponent('filters-placeholder', {
+        title: 'Zamanlayıcı Filtreleri',
+        onApply: (values) => {
+            // Apply filters and reload timers
+            loadTimers(1);
+        },
+        onClear: () => {
+            // Clear filters and reload timers
+            loadTimers(1);
+            showNotification('Filtreler temizlendi', 'info');
+        },
+        onFilterChange: (filterId, value) => {
+            // Optional: Handle individual filter changes
+            console.log(`Filter ${filterId} changed to:`, value);
+        }
+    });
+
+    // Add dropdown filters
+    timerFilters.addDropdownFilter({
+        id: 'user-filter',
+        label: 'Kullanıcı',
+        options: [
+            { value: '', label: 'Tüm Kullanıcılar' }
+        ],
+        placeholder: 'Tüm Kullanıcılar',
+        colSize: 2
+    });
+
+    // Add text filters
+    timerFilters.addTextFilter({
+        id: 'issue-key-filter',
+        label: 'TI No',
+        placeholder: 'TI-123',
+        colSize: 1
+    });
+
+    timerFilters.addTextFilter({
+        id: 'job-no-filter',
+        label: 'İş No',
+        placeholder: 'İş no',
+        colSize: 1
+    });
+
+    // Add machine dropdown filter
+    timerFilters.addDropdownFilter({
+        id: 'machine-filter',
+        label: 'Makine',
+        options: [
+            { value: '', label: 'Tüm Makineler' }
+        ],
+        placeholder: 'Tüm Makineler',
+        colSize: 2
+    });
+
+    // Add date filters
+    timerFilters.addDateFilter({
+        id: 'start-date-filter',
+        label: 'Başlangıç',
+        colSize: 2
+    });
+
+    timerFilters.addDateFilter({
+        id: 'finish-date-filter',
+        label: 'Bitiş',
+        colSize: 2
+    });
+}
+
 async function loadUsers() {
     try {
         users = await fetchUsers('machining');
-        populateUserFilters();
+        
+        // Update user filter options if filters component is initialized
+        if (timerFilters) {
+            const userOptions = [
+                { value: '', label: 'Tüm Kullanıcılar' },
+                ...users.map(user => ({ value: user.username, label: user.username }))
+            ];
+            timerFilters.updateFilterOptions('user-filter', userOptions);
+        }
     } catch (error) {
         console.error('Error loading users:', error);
         users = [];
@@ -65,53 +198,15 @@ function setDefaultDateFilters() {
     const today = new Date();
     const yesterday = new Date(Date.now() - 86400000);
     
-    const startDateFilter = document.getElementById('start-date-filter');
-    if (startDateFilter) {
-        startDateFilter.value = yesterday.toISOString().slice(0, 10);
-    }
-    
-    const finishDateFilter = document.getElementById('finish-date-filter');
-    if (finishDateFilter) {
-        finishDateFilter.value = today.toISOString().slice(0, 10);
+    if (timerFilters) {
+        timerFilters.setFilterValues({
+            'start-date-filter': yesterday.toISOString().slice(0, 10),
+            'finish-date-filter': today.toISOString().slice(0, 10)
+        });
     }
 }
 
-function populateMachineFilters() {
-    const machineFilterContainer = document.getElementById('machine-filter-container');
-    
-    if (machineFilterContainer && machines.length > 0) {
-        const machineItems = [
-            { value: '', text: 'Tüm Makineler' },
-            ...machines.map(machine => ({ value: machine.id.toString(), text: machine.name }))
-        ];
-        
-        machineFilterDropdown = new ModernDropdown(machineFilterContainer, {
-            placeholder: 'Tüm Makineler',
-            searchable: true
-        });
-        machineFilterDropdown.setItems(machineItems);
-    }
-}
 
-function populateUserFilters() {
-    const userFilterContainer = document.getElementById('user-filter-container');
-    
-    if (userFilterContainer && users.length > 0) {
-        const userItems = [
-            { value: '', text: 'Tüm Kullanıcılar' },
-            ...users.map(user => ({
-                value: user.username,
-                text: user.username
-            }))
-        ];
-        
-        userFilterDropdown = new ModernDropdown(userFilterContainer, {
-            placeholder: 'Tüm Kullanıcılar',
-            searchable: true
-        });
-        userFilterDropdown.setItems(userItems);
-    }
-}
 
 function initializeSortableHeaders() {
     document.querySelectorAll('.sortable').forEach(header => {
@@ -193,34 +288,37 @@ function buildTimerQuery(page = 1) {
     // Filters
     params.append('is_active', 'false'); // Only finished timers
     
-    const userFilter = userFilterDropdown?.getValue();
+    // Get filter values from the filters component
+    const filterValues = timerFilters ? timerFilters.getFilterValues() : {};
+    
+    const userFilter = filterValues['user-filter'];
     if (userFilter) {
         params.append('user', userFilter);
     }
     
-    const issueKeyFilter = document.getElementById('issue-key-filter').value;
+    const issueKeyFilter = filterValues['issue-key-filter'];
     if (issueKeyFilter) {
         params.append('issue_key', issueKeyFilter);
     }
     
-    const jobNoFilter = document.getElementById('job-no-filter').value;
+    const jobNoFilter = filterValues['job-no-filter'];
     if (jobNoFilter) {
         params.append('job_no', jobNoFilter);
     }
     
-    const machineFilter = machineFilterDropdown?.getValue();
+    const machineFilter = filterValues['machine-filter'];
     if (machineFilter) {
         params.append('machine_fk', machineFilter);
     }
     
-    const startDateFilter = document.getElementById('start-date-filter').value;
+    const startDateFilter = filterValues['start-date-filter'];
     if (startDateFilter) {
         // Convert to Unix timestamp for start of day (00:00:00)
         const startDate = new Date(`${startDateFilter}T00:00:00`);
         params.append('start_after', startDate.getTime().toString());
     }
     
-    const finishDateFilter = document.getElementById('finish-date-filter').value;
+    const finishDateFilter = filterValues['finish-date-filter'];
     if (finishDateFilter) {
         // Convert to Unix timestamp for end of day (23:59:59)
         const finishDate = new Date(`${finishDateFilter}T23:59:59`);
@@ -404,75 +502,20 @@ function updateStatistics() {
     const uniqueUsers = new Set(timers.map(timer => timer.username).filter(Boolean));
     const uniqueMachines = new Set(timers.map(timer => timer.machine_name).filter(Boolean));
     
-    // Animate numbers
-    animateNumber('total-timers-count', timers.length);
-    animateNumber('total-hours', totalHours.toFixed(2));
-    animateNumber('active-users-count', uniqueUsers.size);
-    animateNumber('active-machines-count', uniqueMachines.size);
+    // Update statistics cards using the component
+    if (finishedTimersStats) {
+        finishedTimersStats.updateValues({
+            0: timers.length.toString(),
+            1: totalHours.toFixed(2),
+            2: uniqueUsers.size.toString(),
+            3: uniqueMachines.size.toString()
+        });
+    }
 }
 
-function animateNumber(elementId, targetValue) {
-    const element = document.getElementById(elementId);
-    if (!element) return;
-    
-    const currentValue = parseFloat(element.textContent) || 0;
-    const target = parseFloat(targetValue) || 0;
-    const increment = (target - currentValue) / 20;
-    let current = currentValue;
-    
-    const timer = setInterval(() => {
-        current += increment;
-        if ((increment > 0 && current >= target) || (increment < 0 && current <= target)) {
-            element.textContent = targetValue;
-            clearInterval(timer);
-        } else {
-            element.textContent = current.toFixed(2);
-        }
-    }, 50);
-}
+
 
 function setupEventListeners() {
-    // Filter buttons
-    document.getElementById('apply-filters').addEventListener('click', () => {
-        currentPage = 1;
-        loadTimers();
-    });
-    
-    document.getElementById('clear-filters').addEventListener('click', clearFilters);
-    
-    // Refresh and export buttons
-    document.getElementById('refresh-timers').addEventListener('click', () => {
-        loadTimers(currentPage);
-    });
-    
-    document.getElementById('export-timers').addEventListener('click', exportTimers);
-    
-    // Back button
-    document.getElementById('back-to-main').addEventListener('click', () => {
-        window.history.back();
-    });
-    
-    // Enter key functionality for filters
-    const filterInputs = [
-        'issue-key-filter', 
-        'job-no-filter',
-        'start-date-filter',
-        'finish-date-filter'
-    ];
-    
-    filterInputs.forEach(inputId => {
-        const input = document.getElementById(inputId);
-        if (input) {
-            input.addEventListener('keypress', (e) => {
-                if (e.key === 'Enter') {
-                    e.preventDefault();
-                    currentPage = 1;
-                    loadTimers();
-                }
-            });
-        }
-    });
-    
     // Pagination
     document.addEventListener('click', (e) => {
         if (e.target.classList.contains('page-link')) {
@@ -506,23 +549,7 @@ function setupEventListeners() {
     document.getElementById('save-edit-timer-btn').addEventListener('click', saveEditTimer);
 }
 
-function clearFilters() {
-    document.getElementById('issue-key-filter').value = '';
-    document.getElementById('job-no-filter').value = '';
-    document.getElementById('start-date-filter').value = '';
-    document.getElementById('finish-date-filter').value = '';
-    
-    if (machineFilterDropdown) {
-        machineFilterDropdown.setValue('');
-    }
-    
-    if (userFilterDropdown) {
-        userFilterDropdown.setValue('');
-    }
-    
-    currentPage = 1;
-    loadTimers();
-}
+
 
 async function deleteTimer(timerId) {
     try {

@@ -15,129 +15,23 @@
     <link rel="stylesheet" href="../../../pre-auth.css">
     <link rel="stylesheet" href="tasks.css">
     <link rel="stylesheet" href="../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="../../../components/filters/filters.css">
 </head>
 <body class="pre-auth">
     <!-- Navigation -->
     <div id="navbar-container"></div>
-
-    <!-- Floating Elements -->
-    <div class="floating-element"></div>
-    <div class="floating-element"></div>
-    <div class="floating-element"></div>
 
     <!-- Main Content Section -->
     <section class="modules-section py-5">
         <div class="container-fluid">
             <!-- Header Component Placeholder -->
             <div id="header-placeholder"></div>
-            
-
-
             <!-- Statistics Cards -->
-            <div class="row g-3 mb-3">
-                <div class="col-lg-3 col-md-6">
-                    <div class="stat-card compact">
-                        <div class="stat-card-body">
-                            <div class="stat-icon bg-primary">
-                                <i class="fas fa-list"></i>
-                            </div>
-                            <div class="stat-content">
-                                <h4 class="stat-number" id="all-tasks-count">0</h4>
-                                <p class="stat-label small">Tüm Görevler</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6">
-                    <div class="stat-card compact">
-                        <div class="stat-card-body">
-                            <div class="stat-icon bg-success">
-                                <i class="fas fa-play"></i>
-                            </div>
-                            <div class="stat-content">
-                                <h4 class="stat-number" id="active-tasks-count">0</h4>
-                                <p class="stat-label small">Aktif Görevler</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6">
-                    <div class="stat-card compact">
-                        <div class="stat-card-body">
-                            <div class="stat-icon bg-info">
-                                <i class="fas fa-check"></i>
-                            </div>
-                            <div class="stat-content">
-                                <h4 class="stat-number" id="completed-tasks-count">0</h4>
-                                <p class="stat-label small">Tamamlanan</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6">
-                    <div class="stat-card compact">
-                        <div class="stat-card-body">
-                            <div class="stat-icon bg-warning">
-                                <i class="fas fa-clock"></i>
-                            </div>
-                            <div class="stat-content">
-                                <h4 class="stat-number" id="pending-tasks-count">0</h4>
-                                <p class="stat-label small">Bekleyen</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <div id="tasks-statistics"></div>
 
             <!-- Filters Section -->
-            <div class="row mb-3">
-                <div class="col-12">
-                    <div class="dashboard-card compact">
-                        <div class="card-header">
-                            <h6 class="card-title mb-0">
-                                <i class="fas fa-filter me-2 text-primary"></i>
-                                Filtreler
-                            </h6>
-                        </div>
-                        <div class="card-body py-3">
-                            <div class="row g-2">
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">TI No</label>
-                                    <input type="text" class="form-control form-control-sm" id="key-filter" placeholder="TI-001">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">Görev Adı</label>
-                                    <input type="text" class="form-control form-control-sm" id="name-filter" placeholder="Görev adı">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">İş No</label>
-                                    <input type="text" class="form-control form-control-sm" id="job-no-filter" placeholder="İş numarası">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">Makine</label>
-                                    <div id="machine-filter-container"></div>
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">Durum</label>
-                                    <div id="status-filter-container"></div>
-                                </div>
-                                
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">&nbsp;</label>
-                                    <div class="d-grid gap-1">
-                                        <button class="btn btn-sm btn-primary" id="apply-filters">
-                                            <i class="fas fa-search me-1"></i>Filtrele
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-secondary" id="clear-filters">
-                                            <i class="fas fa-times me-1"></i>Temizle
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <div id="filters-placeholder"></div>
 
             <!-- Tasks Table Section -->
             <div class="row">
@@ -596,6 +490,8 @@
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
     <!-- Header Component -->
     <script src="../../../components/header/header.js"></script>
+    <!-- Statistics Cards Component -->
+    <script src="../../../components/statistics-cards/statistics-cards.js"></script>
     <script type="module" src="tasks.js"></script>
 </body>
 </html> 

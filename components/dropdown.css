@@ -400,4 +400,203 @@
     .modern-dropdown .dropdown-search:focus {
         background: #2d3748;
     }
-} 
+}
+
+.modern-dropdown-container {
+    z-index: 10001 !important;
+    position: relative;
+}
+
+.modern-dropdown {
+    z-index: 10002 !important;
+    position: relative;
+}
+
+.modern-dropdown.open {
+    z-index: 10003 !important;
+}
+
+/* Style modern dropdown to match form-control-sm */
+.modern-dropdown {
+    height: 46px;
+    min-height: 46px;
+}
+
+.modern-dropdown .dropdown-selected {
+    height: 46px;
+    min-height: 46px;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    border-radius: 0.375rem;
+    border: 1px solid #dee2e6;
+    background-color: #fff;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.modern-dropdown .dropdown-selected:hover {
+    border-color: #0d6efd;
+}
+
+.modern-dropdown .dropdown-selected:focus-within {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Style dropdown text to match form-control-sm */
+.modern-dropdown .selected-text {
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #495057;
+}
+
+.modern-dropdown .dropdown-arrow {
+    font-size: 0.75rem;
+    color: #6c757d;
+}
+
+/* Ensure dropdown appears above everything */
+.modern-dropdown .dropdown-menu {
+    z-index: 999999 !important;
+    position: absolute !important;
+    overflow: visible !important;
+}
+
+/* Additional z-index for dropdown containers */
+.modern-dropdown-container {
+    z-index: 1000;
+    position: relative;
+}
+
+/* Ensure the card itself doesn't clip dropdowns */
+.dashboard-card {
+    overflow: visible !important;
+}
+
+/* Specific override for filters card */
+.dashboard-card.compact {
+    overflow: visible !important;
+}
+
+/* Ensure dropdowns are always on top */
+.modern-dropdown {
+    position: relative;
+    z-index: 1000;
+}
+
+.modern-dropdown.open {
+    z-index: 1001;
+}
+
+/* Ensure dropdown menu is positioned correctly relative to its container */
+.modern-dropdown.open .dropdown-menu {
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: translateY(0) !important;
+    z-index: 999999 !important;
+    overflow: visible !important;
+}
+
+/* Override any potential clipping from parent containers */
+.dashboard-card,
+.dashboard-card .card-body,
+.dashboard-card .card-header {
+    overflow: visible !important;
+    position: relative;
+}
+
+/* Ensure the filters section specifically allows dropdowns */
+.dashboard-card.compact .card-body {
+    overflow: visible !important;
+    position: relative;
+}
+
+/* Comprehensive dropdown fix - override all potential clipping */
+.modern-dropdown-container,
+.modern-dropdown,
+.modern-dropdown .dropdown-menu {
+    overflow: visible !important;
+    position: relative !important;
+}
+
+/* Ensure dropdown menu is always visible when open */
+.modern-dropdown.open .dropdown-menu {
+    display: block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+    transform: translateY(0) !important;
+    max-height: 400px !important;
+    overflow: visible !important;
+    z-index: 999999 !important;
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: auto !important;
+}
+
+/* Override Bootstrap dropdown styles that might interfere */
+.dropdown-menu {
+    z-index: 999999 !important;
+}
+
+/* Fix dropdown text color issues */
+.modern-dropdown .dropdown-item {
+    color: #2c3e50 !important;
+    background: #ffffff !important;
+}
+
+.modern-dropdown .dropdown-item:hover {
+    color: #DC143C !important;
+    background: rgba(220, 20, 60, 0.05) !important;
+}
+
+.modern-dropdown .dropdown-item.focused {
+    color: #DC143C !important;
+    background: rgba(220, 20, 60, 0.1) !important;
+}
+
+.modern-dropdown .dropdown-item.no-items {
+    color: #6c757d !important;
+    background: #ffffff !important;
+}
+
+.modern-dropdown .dropdown-item.disabled {
+    color: #6c757d !important;
+    background: #ffffff !important;
+    opacity: 0.6 !important;
+}
+
+.modern-dropdown .item-text {
+    color: inherit !important;
+}
+
+.modern-dropdown .selected-icon {
+    color: #DC143C !important;
+}
+
+/* Ensure dropdown menu has proper background */
+.modern-dropdown .dropdown-menu {
+    background: #ffffff !important;
+    color: #2c3e50 !important;
+}
+
+/* Ensure search input has proper colors */
+.modern-dropdown .dropdown-search {
+    color: #2c3e50 !important;
+    background: #f8f9fa !important;
+}
+
+.modern-dropdown .dropdown-search:focus {
+    color: #2c3e50 !important;
+    background: #ffffff !important;
+}
+
+.modern-dropdown .dropdown-search::placeholder {
+    color: #6c757d !important;
+}

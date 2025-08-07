@@ -3,13 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GEMKOM - Makine Listesi</title>
+    <title>GEMKOM - Makine Yönetimi</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../style.css">
     <link rel="stylesheet" href="../../components/navbar.css">
+    <link rel="stylesheet" href="../../components/header/header.css">
+    <link rel="stylesheet" href="../../components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="../../components/filters/filters.css">
     <link rel="icon" type="image/png" href="../../images/gemkom.png">
     <link rel="stylesheet" href="../../pre-auth.css">
     <link rel="stylesheet" href="machineList.css">
@@ -26,146 +29,14 @@
     <!-- Main Content Section -->
     <section class="modules-section py-5">
         <div class="container-fluid">
-            <!-- Header Section -->
-            <div class="row mb-3">
-                <div class="col-12">
-                    <div class="dashboard-header compact">
-                        <div class="d-flex align-items-center justify-content-between">
-                            <div>
-                                <h3 class="section-title mb-1">
-                                    <i class="fas fa-cogs me-2 text-primary"></i>
-                                    Makine Listesi
-                                </h3>
-                                <p class="section-subtitle mb-0 small">Şirket makinelerinin yönetimi ve bilgi güncelleme</p>
-                            </div>
-                            <div class="dashboard-controls">
-                                <button id="create-machine-btn" class="btn btn-sm btn-primary me-2">
-                                    <i class="fas fa-plus me-1"></i>Yeni Makine
-                                </button>
-                                <button id="bulk-create-machine-btn" class="btn btn-sm btn-outline-primary me-2">
-                                    <i class="fas fa-layer-group me-1"></i>Toplu Oluştur
-                                </button>
-                                <button id="refresh-machines-btn" class="btn btn-sm btn-outline-secondary">
-                                    <i class="fas fa-sync-alt me-1"></i>Yenile
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <!-- Header Component Placeholder -->
+            <div id="header-placeholder"></div>
 
             <!-- Statistics Cards -->
-            <div class="row g-3 mb-3">
-                <div class="col-lg-3 col-md-6">
-                    <div class="stat-card compact">
-                        <div class="stat-card-body">
-                            <div class="stat-icon bg-primary">
-                                <i class="fas fa-cogs"></i>
-                            </div>
-                            <div class="stat-content">
-                                <h4 class="stat-number" id="total-machines">-</h4>
-                                <p class="stat-label small">Toplam Makine</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6">
-                    <div class="stat-card compact">
-                        <div class="stat-card-body">
-                            <div class="stat-icon bg-primary">
-                                <i class="fas fa-check-circle"></i>
-                            </div>
-                            <div class="stat-content">
-                                <h4 class="stat-number" id="active-machines">-</h4>
-                                <p class="stat-label small">Aktif Makine</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6">
-                    <div class="stat-card compact">
-                        <div class="stat-card-body">
-                            <div class="stat-icon bg-info">
-                                <i class="fas fa-tags"></i>
-                            </div>
-                            <div class="stat-content">
-                                <h4 class="stat-number" id="machine-types">-</h4>
-                                <p class="stat-label small">Makine Tipi</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-lg-3 col-md-6">
-                    <div class="stat-card compact">
-                        <div class="stat-card-body">
-                            <div class="stat-icon bg-warning">
-                                <i class="fas fa-building"></i>
-                            </div>
-                            <div class="stat-content">
-                                <h4 class="stat-number" id="usage-areas">-</h4>
-                                <p class="stat-label small">Kullanım Alanı</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <div id="machines-statistics"></div>
 
             <!-- Filters Section -->
-            <div class="row mb-3">
-                <div class="col-12">
-                    <div class="dashboard-card compact">
-                        <div class="card-header">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-filter me-2"></i>
-                                Filtreler
-                            </h5>
-                        </div>
-                        <div class="card-body py-3">
-                            <div class="row g-2">
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">Makine Adı</label>
-                                    <input type="text" class="form-control form-control-sm" id="search-machines" placeholder="Makine ara...">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">Makine Tipi</label>
-                                    <select class="form-select form-select-sm" id="filter-type">
-                                        <option value="">Tüm Tipler</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">Durum</label>
-                                    <select class="form-select form-select-sm" id="filter-status">
-                                        <option value="">Tüm Durumlar</option>
-                                        <option value="active">Aktif</option>
-                                        <option value="inactive">Pasif</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">Kullanım Alanı</label>
-                                    <select class="form-select form-select-sm" id="filter-usage-area">
-                                        <option value="">Tüm Alanlar</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">Açıklama</label>
-                                    <input type="text" class="form-control form-control-sm" id="filter-description" placeholder="Açıklama ara...">
-                                </div>
-                                <div class="col-md-2">
-                                    <label class="form-label small mb-1">&nbsp;</label>
-                                    <div class="d-grid gap-1">
-                                        <button class="btn btn-sm btn-primary" id="apply-filters">
-                                            <i class="fas fa-search me-1"></i>Filtrele
-                                        </button>
-                                        <button class="btn btn-sm btn-outline-secondary" id="clear-filters">
-                                            <i class="fas fa-times me-1"></i>Temizle
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
+            <div id="filters-placeholder"></div>
 
             <!-- Machines Table -->
             <div class="row">
@@ -191,6 +62,7 @@
                 </div>
             </div>
         </div>
+    </div>
     </section>
 
     <!-- Create Machine Modal -->
@@ -452,6 +324,8 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Statistics Cards Component -->
+    <script src="../../components/statistics-cards/statistics-cards.js"></script>
     <script type="module" src="machineList.js"></script>
 </body>
 </html> 

@@ -3,7 +3,7 @@
  * Provides a consistent header across different pages with configurable buttons
  */
 
-class HeaderComponent {
+export class HeaderComponent {
     constructor(config = {}) {
         this.config = {
             // Default configuration
@@ -100,12 +100,12 @@ class HeaderComponent {
                                  </button>
                                  
                                  <!-- Export Button -->
-                                 <button id="export-btn" class="btn btn-sm btn-outline-success me-2" style="display: {{showExportButton}};">
+                                 <button id="export-btn" class="btn btn-sm btn-outline-secondary me-2" style="display: {{showExportButton}};">
                                      <i class="fas fa-download me-1"></i>{{exportButtonText}}
                                  </button>
                                  
                                  <!-- Refresh Button -->
-                                 <button id="refresh-btn" class="btn btn-sm btn-outline-info" style="display: {{showRefreshButton}};">
+                                 <button id="refresh-btn" class="btn btn-sm btn-primary" style="display: {{showRefreshButton}};">
                                      <i class="fas fa-sync-alt me-1"></i>{{refreshButtonText}}
                                  </button>
                             </div>
@@ -228,10 +228,3 @@ class HeaderComponent {
         }
     }
 }
-
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = HeaderComponent;
-} else {
-    window.HeaderComponent = HeaderComponent;
-} 
