@@ -1,7 +1,7 @@
 // Example implementation for using FiltersComponent in tasks page
 // This shows how to replace the existing static filters with the reusable component
 
-// FiltersComponent is available globally
+import { FiltersComponent } from './filters.js';
 
 /**
  * Example: Tasks Page Filters Implementation

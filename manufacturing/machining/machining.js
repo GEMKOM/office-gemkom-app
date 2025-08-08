@@ -286,3 +286,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initMachiningModule();
 });
 
+// Make functions globally available
+window.navigateTo = navigateTo;
+window.showNotification = showNotification;

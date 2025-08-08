@@ -3,7 +3,7 @@
  * This file demonstrates various ways to use the TableComponent
  */
 
-// TableComponent is available globally
+import { TableComponent } from './table.js';
 
 // Example 1: Basic Table
 function createBasicTable() {

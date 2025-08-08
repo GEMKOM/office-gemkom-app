@@ -1,66 +1,269 @@
-:root {
-    --primary-color: #8b0000;
-    --secondary-color: #a52a2a;
-    --accent-color: #800000;
-    --text-color: #2c3e50;
-    --light-bg: #f8f9fa;
-    --border-radius: 12px;
-    --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-    --card-hover-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-    --transition: all 0.3s ease;
-    --gradient-primary: linear-gradient(135deg, #8b0000, #a52a2a);
-    --gradient-secondary: linear-gradient(135deg, #a52a2a, #800000);
-    --shadow-light: 0 2px 10px rgba(0, 0, 0, 0.1);
-    --shadow-medium: 0 4px 20px rgba(0, 0, 0, 0.15);
-    --shadow-heavy: 0 8px 30px rgba(0, 0, 0, 0.2);
+/* Tasks Page Styles - Using Shared Machining Styles */
+
+/* Import shared styles */
+@import url('../shared.css');
+
+/* Task-specific overrides and additions */
+.task-name {
+    font-weight: 600;
+    color: #343a40;
 }
 
-/* ============================================================================
-   PROFESSIONAL BACKGROUND DESIGN
-   ============================================================================ */
+.task-name small {
+    color: #6c757d;
+    font-size: 0.85rem;
+}
 
-body {
-    font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-    background: linear-gradient(135deg, #ecf0f1 0%, #bdc3c7 50%, #ecf0f1 100%);
-    min-height: 100vh;
+/* Professional Table Element Styling */
+.task-key {
+    font-weight: 700;
+    color: #0d6efd;
+    font-family: 'Courier New', monospace;
+    font-size: 1rem;
+    background: rgba(13, 110, 253, 0.1);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid rgba(13, 110, 253, 0.2);
+}
+
+.quantity-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: #f8f9fa;
+    color: #495057;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+}
+
+.machine-name {
+    font-weight: 500;
+    color: #495057;
+}
+
+.estimated-hours {
+    color: #6c757d;
+    font-weight: 500;
+}
+
+.hours-spent {
+    color: #495057;
+    font-weight: 500;
+}
+
+/* Section-specific styling */
+.form-section:nth-child(1) .section-title {
+    border-bottom-color: rgba(13, 110, 253, 0.2);
+}
+
+.form-section:nth-child(2) .section-title {
+    border-bottom-color: rgba(40, 167, 69, 0.2);
+}
+
+.form-section:nth-child(3) .section-title {
+    border-bottom-color: rgba(23, 162, 184, 0.2);
+}
+
+/* Bulk Create Styles */
+.bulk-create-header {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    padding-bottom: 1rem;
+}
+
+.bulk-create-header h6 {
+    font-weight: 600;
+    margin-bottom: 0.5rem;
+}
+
+.bulk-create-actions {
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding-top: 1rem;
+}
+
+.bulk-input {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.5rem;
+}
+
+.bulk-input:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.table-sm td, .table-sm th {
+    padding: 0.5rem;
+    vertical-align: middle;
+}
+
+
+/* Status Badges for Tasks */
+.status-badge.completed {
+    background: rgba(40, 167, 69, 0.2);
+    color: #28a745;
+    border: 1px solid rgba(40, 167, 69, 0.3);
+    font-weight: 500;
+}
+
+.status-badge.worked-on {
+    background: #e3f2fd;
+    color: #1976d2;
+    border: 1px solid #bbdefb;
+    font-weight: 500;
+}
+
+.status-badge.pending {
+    background: #fff3e0;
+    color: #f57c00;
+    border: 1px solid #ffcc02;
+    font-weight: 500;
+}
+
+.status-badge.hold {
+    background: #ffebee;
+    color: #d32f2f;
+    border: 1px solid #ffcdd2;
+    font-weight: 500;
+}
+
+
+
+/* Created tasks modal styling */
+#created-tasks-table .text-primary {
+    font-weight: 700;
+    font-family: 'Courier New', monospace;
+}
+
+/* Clear filters button styling */
+#clear-filters {
+    border-color: #6c757d;
+    color: #6c757d;
+}
+
+#clear-filters:hover {
+    background-color: #6c757d;
+    border-color: #6c757d;
+    color: white;
+}
+
+/* Export button enhancement */
+#export-tasks {
+    transition: all 0.3s ease;
+}
+
+#export-tasks:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive adjustments for bulk create */
+@media (max-width: 768px) {
+    .bulk-create-actions {
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    
+    .bulk-create-actions .btn {
+        width: 100%;
+    }
+    
+    .table-responsive {
+        font-size: 0.75rem;
+    }
+    
+    .table-sm td, .table-sm th {
+        padding: 0.25rem;
+    }
+    
+    /* Filter buttons responsive */
+    .d-grid.gap-1 {
+        gap: 0.25rem !important;
+    }
+    
+    .d-grid.gap-1 .btn {
+        font-size: 0.75rem;
+        padding: 0.375rem 0.5rem;
+    }
+} 
+
+/* Inline Editing Styles */
+.editable-cell {
+    cursor: pointer;
     position: relative;
-    overflow-x: hidden;
-    color: var(--text-color);
-    line-height: 1.6;
+    transition: background-color 0.2s ease;
 }
 
-body::before {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
+.editable-cell:hover {
+    background-color: rgba(13, 110, 253, 0.05);
+    border-radius: 4px;
+}
+
+.editable-cell:hover::after {
+    content: '✏️';
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 0.75rem;
+    opacity: 0.7;
+}
+
+.editable-cell input {
+    border: 2px solid #0d6efd;
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
     width: 100%;
-    height: 100%;
-    background-image: 
-        radial-gradient(circle at 20% 30%, rgba(139, 0, 0, 0.1) 0%, transparent 50%),
-        radial-gradient(circle at 80% 70%, rgba(165, 42, 42, 0.1) 0%, transparent 50%),
-        radial-gradient(circle at 40% 80%, rgba(128, 0, 0, 0.1) 0%, transparent 50%);
-    pointer-events: none;
-    z-index: -2;
+    background-color: #fff;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
 }
 
-body::after {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
+.editable-cell input:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+.editable-cell select {
+    border: 2px solid #0d6efd;
+    border-radius: 4px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
     width: 100%;
-    height: 100%;
-    background-image: 
-        linear-gradient(rgba(139, 0, 0, 0.03) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(139, 0, 0, 0.03) 1px, transparent 1px);
-    background-size: 60px 60px;
-    animation: gridMove 25s linear infinite;
-    pointer-events: none;
-    z-index: -1;
+    background-color: #fff;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
 }
 
-@keyframes gridMove {
-    0% { transform: translate(0, 0); }
-    100% { transform: translate(60px, 60px); }
+.editable-cell select:focus {
+    outline: none;
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
 }
+
+/* Prevent editing on certain cells */
+.editable-cell[data-field="key"] {
+    cursor: default;
+}
+
+.editable-cell[data-field="key"]:hover {
+    background-color: transparent;
+}
+
+.editable-cell[data-field="key"]:hover::after {
+    display: none;
+}
+
+/* Status and action columns should not be editable */
+.editable-cell[data-field="status"],
+.editable-cell[data-field="actions"] {
+    cursor: default;
+}
+
+.editable-cell[data-field="status"]:hover,
+.editable-cell[data-field="actions"]:hover {
+    background-color: transparent;
+}
+
+.editable-cell[data-field="status"]:hover::after,
+.editable-cell[data-field="actions"]:hover::after {
+    display: none;
+} 

@@ -10,17 +10,17 @@
 }
 
 .dashboard-card .card-header {
-    background: rgba(248, 249, 250, 0.8);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
-    padding: 1.25rem 1.5rem;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 1rem 1.5rem;
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: center;
+    border-bottom: none;
 }
 
 .dashboard-card .card-title {
     margin: 0;
-    color: #343a40;
     font-weight: 600;
     font-size: 1.1rem;
     display: flex;
@@ -57,76 +57,45 @@
 .table {
     margin-bottom: 0;
     font-size: 0.9rem;
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 12px;
-    overflow: hidden;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.table thead {
-    background: linear-gradient(135deg, #f8f9fa, #e9ecef) !important;
-    border-bottom: 2px solid rgba(13, 110, 253, 0.1) !important;
+.table th {
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    font-weight: 600;
+    color: #495057;
+    padding: 0.75rem;
+    vertical-align: middle;
+    position: relative;
 }
 
-.table thead th {
-    color: #495057 !important;
-    font-weight: 600 !important;
-    font-size: 0.875rem !important;
-    text-transform: uppercase !important;
-    letter-spacing: 0.5px !important;
-    padding: 1rem 0.75rem !important;
-    border: none !important;
-    vertical-align: middle !important;
-    background: transparent !important;
+.table th.sortable {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
 }
 
-.table thead th.sortable {
-    cursor: pointer !important;
-    transition: background-color 0.2s ease !important;
+.table th.sortable:hover {
+    background-color: #e9ecef;
 }
 
-.table thead th.sortable:hover {
-    background-color: #e9ecef !important;
+.table th.sortable .sort-icon {
+    margin-left: 0.5rem;
+    opacity: 0.5;
+    transition: opacity 0.2s ease;
 }
 
-.table thead th.sortable .sort-icon {
-    margin-left: 0.5rem !important;
-    opacity: 0.5 !important;
-    transition: opacity 0.2s ease !important;
+.table th.sortable:hover .sort-icon {
+    opacity: 1;
 }
 
-.table thead th.sortable:hover .sort-icon {
-    opacity: 1 !important;
+.table td {
+    padding: 0.75rem;
+    vertical-align: middle;
+    border-bottom: 1px solid #f1f3f4;
 }
 
 .table tbody tr {
-    transition: all 0.2s ease;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.table tbody tr:hover {
-    background: rgba(13, 110, 253, 0.05);
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-.table tbody tr:last-child {
-    border-bottom: none;
-}
-
-.table tbody td {
-    padding: 0.875rem 0.75rem;
-    vertical-align: middle;
-    color: #495057;
-    font-size: 0.875rem;
-    border: none;
-    background: transparent;
-}
-
-.table tbody td:first-child {
-    font-weight: 600;
-    color: #0d6efd;
+    transition: background-color 0.2s ease;
 }
 
 .table tbody tr:hover {
@@ -317,12 +286,6 @@
     background-color: #fff3cd;
     color: #856404;
     border: 1px solid #ffeaa7;
-}
-
-.status-badge.in-progress {
-    background-color: #d1ecf1;
-    color: #0c5460;
-    border: 1px solid #bee5eb;
 }
 
 .status-badge.pending {

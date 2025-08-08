@@ -1,5 +1,5 @@
 // components/dropdown.js
-class ModernDropdown {
+export class ModernDropdown {
     constructor(container, options = {}) {
         this.container = container;
         this.options = {
@@ -342,6 +342,4 @@ class ModernDropdown {
         this.container.innerHTML = '';
         this.container.className = '';
     }
-}
-
-export { ModernDropdown };
+} 

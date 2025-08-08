@@ -6,8 +6,6 @@ import { fetchTaskById } from '../../../generic/tasks.js';
 import { getSyncedNow } from '../../../generic/timeService.js';
 import { navigateTo } from '../machining.js';
 import { HeaderComponent } from '../../../components/header/header.js';
-import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
-
 //import { stopTimerShared } from '../../../machining/machiningService.js';
 
 // Dashboard state
@@ -870,7 +868,8 @@ window.addEventListener('beforeunload', () => {
     stopTimerUpdates();
 });
 
-
+// Make navigation function globally available
+window.navigateTo = navigateTo;
 
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', initDashboard); 
