@@ -33,3 +33,15 @@ export async function fetchTimerById(timerId) {
     const timer = await res.json();
     return timer;
 }
+
+export async function stopTimer({ timerId, finishTime}) {
+    const response = await authedFetch(`${backendBase}/machining/timers/stop/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            timer_id: timerId,
+            finish_time: finishTime,
+        })
+    });
+    return response.ok;
+}

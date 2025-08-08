@@ -341,7 +341,7 @@ function renderTasksTable() {
     if (tasks.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="12" class="text-center">
+                <td colspan="12" class="text-center" style="height: 200px; vertical-align: middle;">
                     <div class="empty-state">
                         <i class="fas fa-tasks"></i>
                         <h5>Görev Bulunamadı</h5>
@@ -1427,14 +1427,27 @@ window.changePage = function(page) {
 function showLoadingState() {
     const tableBody = document.getElementById('tasks-table-body');
     if (tableBody) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="11" class="text-center">
-                    <div class="loading-spinner"></div>
-                    <p class="mt-2">Görevler yükleniyor...</p>
-                </td>
-            </tr>
-        `;
+        // Create loading rows that maintain table structure
+        const loadingRows = [];
+        for (let i = 0; i < 5; i++) { // Show 5 loading rows
+            loadingRows.push(`
+                <tr class="loading-row">
+                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 200px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 60px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                </tr>
+            `);
+        }
+        tableBody.innerHTML = loadingRows.join('');
     }
 }
 

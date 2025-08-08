@@ -96,6 +96,55 @@
     vertical-align: middle;
 }
 
+/* Ensure table maintains column widths during loading */
+.table-responsive table {
+    table-layout: fixed;
+    width: 100%;
+    min-height: 200px; /* Prevent layout shift when empty */
+}
+
+.table-responsive table th,
+.table-responsive table td {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Allow text wrapping for specific columns */
+.table-responsive table td:nth-child(2), /* Task name column */
+.table-responsive table td:nth-child(7) { /* Machine name column */
+    white-space: normal;
+    word-wrap: break-word;
+}
+
+
+/* Loading State Styles */
+.loading-row {
+    opacity: 0.7;
+    transition: opacity 0.3s ease;
+}
+
+.loading-row:hover {
+    opacity: 0.9;
+}
+
+.loading-skeleton {
+    height: 16px;
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    border-radius: 4px;
+    animation: loading-shimmer 1.5s infinite;
+    margin: 4px 0;
+}
+
+@keyframes loading-shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
 
 /* Status Badges for Tasks */
 .status-badge.completed {

@@ -6,6 +6,7 @@ import { fetchTaskById } from '../../../generic/tasks.js';
 import { getSyncedNow } from '../../../generic/timeService.js';
 import { navigateTo } from '../machining.js';
 import { HeaderComponent } from '../../../components/header/header.js';
+import { stopTimer } from '../../../generic/timers.js';
 //import { stopTimerShared } from '../../../machining/machiningService.js';
 
 // Dashboard state
@@ -406,7 +407,7 @@ function setupTableEventListeners() {
 async function handleStopTimer(timerId) {
     try {
         const finishTime = getSyncedNow();
-        const stopped = false;//await stopTimerShared({ timerId, finishTime, syncToJira: false });
+        const stopped = await stopTimer({ timerId, finishTime });
         
         if (stopped) {
             showSuccessNotification('Zamanlayıcı başarıyla durduruldu!');
