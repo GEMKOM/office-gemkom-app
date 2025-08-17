@@ -1,0 +1,602 @@
+/* Custom styles for the offer comparison page */
+
+/* Card styling */
+.card {
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.card-header {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 12px 12px 0 0 !important;
+    padding: 1rem 1.5rem;
+}
+
+.card-header h5 {
+    color: #495057;
+    font-weight: 600;
+    margin: 0;
+}
+
+/* Table styling */
+.table {
+    margin-bottom: 0;
+}
+
+.table th {
+    border-top: none;
+    font-weight: 600;
+    color: #495057;
+    background-color: #f8f9fa;
+}
+
+.table td {
+    vertical-align: middle;
+    border-color: #e9ecef;
+}
+
+/* Supplier cards */
+.supplier-card {
+    border: 2px solid #e9ecef;
+    border-radius: 12px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+    transition: all 0.3s ease;
+    background: #fff;
+}
+
+.supplier-card:hover {
+    border-color: #007bff;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
+    transform: translateY(-2px);
+}
+
+.supplier-card.has-offer {
+    border-color: #28a745;
+    background: linear-gradient(135deg, #f8fff9, #e8f5e8);
+}
+
+.supplier-card.recommended {
+    border-color: #ffc107;
+    background: linear-gradient(135deg, #fffbf0, #fff3cd);
+    box-shadow: 0 4px 12px rgba(255, 193, 7, 0.2);
+}
+
+.supplier-header {
+    display: flex;
+    justify-content: between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.supplier-name {
+    font-weight: 600;
+    color: #495057;
+    font-size: 1.1rem;
+}
+
+.supplier-status {
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.supplier-status.pending {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.supplier-status.completed {
+    background-color: #d4edda;
+    color: #155724;
+}
+
+.supplier-status.recommended {
+    background-color: #fff3cd;
+    color: #856404;
+    font-weight: 600;
+}
+
+.supplier-info {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.supplier-info-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.supplier-info-label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+}
+
+.supplier-info-value {
+    font-weight: 500;
+    color: #495057;
+}
+
+.supplier-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+/* Comparison table styling */
+.comparison-table {
+    font-size: 0.9rem;
+}
+
+.comparison-table th {
+    background: linear-gradient(135deg, #e9f2ff, #f6faff);
+    color: #0d6efd;
+    font-weight: 600;
+    text-align: center;
+    vertical-align: middle;
+    border-bottom: 2px solid #dbe7ff;
+}
+
+.comparison-table td {
+    text-align: center;
+    vertical-align: middle;
+    background-color: #ffffff;
+}
+
+.price-cell {
+    font-weight: 600;
+    color: #2a3b47;
+    border-radius: 10px;
+    background: #ffffff;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    transition: transform 0.08s ease, box-shadow 0.15s ease;
+}
+
+.price-cell.recommended {
+    background-color: #fff3cd;
+    border: 2px solid #ffc107;
+    font-weight: 700;
+    color: #856404;
+}
+
+.price-cell.best-price {
+    /* disable background and text color to avoid green tint, keep subtle border only */
+    border: 1px dashed #bde5c6;
+}
+
+.price-cell .btn.btn-warning,
+.price-cell .btn.btn-outline-warning {
+    padding: 0.15rem 0.4rem;
+    font-size: 0.7rem;
+}
+
+/* Recommended selection highlight */
+.price-cell.recommended-cell {
+    background-color: #f3fff6; /* lightest green */
+    border: 1px solid #bde5c6;
+}
+
+.price-cell:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+}
+
+/* Header action button styling */
+thead .btn.btn-outline-warning {
+    padding: 0.2rem 0.45rem;
+    font-size: 0.75rem;
+    border-width: 1px;
+}
+
+.currency-badge {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+    background-color: #e9ecef;
+    color: #6c757d;
+    margin-left: 0.25rem;
+}
+
+/* Summary section */
+.summary-item {
+    text-align: center;
+    padding: 1rem;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.summary-item label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+}
+
+.summary-item .form-control-plaintext {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #495057;
+    margin: 0;
+}
+
+/* Modal styling */
+.modal-content {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-header {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 12px 12px 0 0;
+}
+
+.modal-title {
+    color: #495057;
+    font-weight: 600;
+}
+
+/* Form styling */
+.form-control, .form-select {
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    padding: 0.75rem;
+    transition: all 0.3s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.form-label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+/* Button styling */
+.btn {
+    border-radius: 8px;
+    padding: 0.5rem 1rem;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+
+.btn-success {
+    background: linear-gradient(135deg, #28a745, #1e7e34);
+    border: none;
+}
+
+.btn-success:hover {
+    background: linear-gradient(135deg, #1e7e34, #155724);
+    transform: translateY(-1px);
+}
+
+.btn-outline-primary {
+    border: 2px solid #007bff;
+    color: #007bff;
+}
+
+.btn-outline-primary:hover {
+    background-color: #007bff;
+    border-color: #007bff;
+    transform: translateY(-1px);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .supplier-info {
+        grid-template-columns: 1fr;
+    }
+    
+    .supplier-actions {
+        flex-direction: column;
+    }
+    
+    .table-responsive {
+        font-size: 0.8rem;
+    }
+    
+    .summary-item .form-control-plaintext {
+        font-size: 1.2rem;
+    }
+}
+
+/* Animation for recommended items */
+@keyframes pulse-recommended {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(255, 193, 7, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0);
+    }
+}
+
+.price-cell.recommended {
+    animation: pulse-recommended 2s infinite;
+}
+
+/* Loading states */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Currency conversion indicators */
+.currency-converted {
+    position: relative;
+}
+
+.currency-converted::after {
+    content: '↻';
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #007bff;
+    color: white;
+    border-radius: 50%;
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Priority indicators */
+.priority-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 500;
+}
+
+.priority-normal {
+    background-color: #e9ecef;
+    color: #6c757d;
+}
+
+.priority-acil {
+    background-color: #fff3cd;
+    color: #856404;
+}
+
+.priority-kritik {
+    background-color: #f8d7da;
+    color: #721c24;
+}
+
+/* Auto-save indicator */
+.auto-save-indicator {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #28a745;
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    z-index: 1050;
+    opacity: 0;
+    transform: translateY(-20px);
+    transition: all 0.3s ease;
+}
+
+.auto-save-indicator.show {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Print styles */
+@media print {
+    .btn, .modal, .floating-element {
+        display: none !important;
+    }
+    
+    .card {
+        border: 1px solid #000;
+        box-shadow: none;
+    }
+    
+    .price-cell.recommended {
+        background-color: #ffff00 !important;
+        border: 2px solid #000 !important;
+    }
+}
+
+/* Bulk Import Styles */
+.bulk-import-modal .modal-dialog {
+    max-width: 90%;
+}
+
+.bulk-import-modal .modal-body {
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+#bulk-import-data {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+#import-preview {
+    margin-top: 1rem;
+    padding: 1rem;
+    background-color: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+#import-preview h6 {
+    color: #495057;
+    font-weight: 600;
+    margin-bottom: 1rem;
+}
+
+#preview-table {
+    font-size: 0.85rem;
+}
+
+#preview-table th {
+    background-color: #e9ecef;
+    font-weight: 600;
+    font-size: 0.8rem;
+}
+
+#preview-table td {
+    padding: 0.5rem;
+    vertical-align: middle;
+}
+
+.table-danger {
+    background-color: #f8d7da !important;
+}
+
+.table-danger td {
+    color: #721c24;
+}
+
+/* Import format example styling */
+.form-control-plaintext code {
+    background-color: #f8f9fa;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    color: #495057;
+    display: block;
+    margin: 0.25rem 0;
+}
+
+/* Button group styling for bulk import */
+.btn-group .btn {
+    border-radius: 6px;
+}
+
+.btn-group .btn:first-child {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.btn-group .btn:last-child {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+}
+
+.btn-group .btn:not(:first-child):not(:last-child) {
+    border-radius: 0;
+}
+
+/* Validation status styling */
+.badge.bg-success {
+    background-color: #28a745 !important;
+}
+
+.badge.bg-danger {
+    background-color: #dc3545 !important;
+}
+
+.badge.bg-warning {
+    background-color: #ffc107 !important;
+    color: #212529;
+}
+
+.badge.bg-secondary {
+    background-color: #6c757d !important;
+}
+
+/* Inline Editing Styles */
+.editable-cell {
+    position: relative;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.editable-cell:hover {
+    background-color: #f8f9fa;
+}
+
+.editable-cell .cell-display {
+    display: inline;
+    min-height: 1.5rem;
+    line-height: 1.5;
+}
+
+.editable-cell .cell-edit {
+    display: none;
+    width: 100%;
+    min-width: 80px;
+}
+
+.editable-cell .cell-edit:focus {
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+    border-color: #80bdff;
+}
+
+/* Edit mode styling */
+.editable-cell.editing {
+    background-color: #fff3cd;
+}
+
+.editable-cell.editing .cell-display {
+    display: none;
+}
+
+.editable-cell.editing .cell-edit {
+    display: block;
+}
+
+/* Button group styling for edit mode */
+.btn-group .save-edit-btn,
+.btn-group .cancel-edit-btn {
+    display: none;
+}
+
+.btn-group .edit-item-btn {
+    display: inline-block;
+}
+
+/* Responsive adjustments for inline editing */
+@media (max-width: 768px) {
+    .editable-cell .cell-edit {
+        min-width: 60px;
+        font-size: 0.875rem;
+    }
+    
+    .btn-group .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+}

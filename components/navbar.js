@@ -188,7 +188,92 @@ const NAVIGATION_STRUCTURE = {
     '/procurement': {
         label: 'Satın Alma',
         icon: 'fas fa-shopping-cart',
-        children: {}
+        children: {
+            '/procurement/providers': {
+                label: 'Tedarikçiler',
+                icon: 'fas fa-handshake',
+                children: {
+                    '/procurement/providers/list': {
+                        label: 'Tedarikçi Listesi',
+                        icon: 'fas fa-list',
+                        children: {}
+                    },
+                    '/procurement/providers/evaluation': {
+                        label: 'Performans Değerlendirme',
+                        icon: 'fas fa-star',
+                        children: {}
+                    },
+                    '/procurement/providers/contracts': {
+                        label: 'Sözleşmeler',
+                        icon: 'fas fa-file-contract',
+                        children: {}
+                    }
+                }
+            },
+            '/procurement/purchase-requests': {
+                label: 'Satın Alma Talepleri',
+                icon: 'fas fa-shopping-cart',
+                children: {
+                    '/procurement/purchase-requests/create': {
+                        label: 'Talep Oluştur',
+                        icon: 'fas fa-plus',
+                        children: {}
+                    },
+                    '/procurement/purchase-requests/pending': {
+                        label: 'Bekleyen Talepler',
+                        icon: 'fas fa-clock',
+                        children: {}
+                    },
+                    '/procurement/purchase-requests/approved': {
+                        label: 'Onaylanan Talepler',
+                        icon: 'fas fa-check-circle',
+                        children: {}
+                    }
+                }
+            },
+            '/procurement/items': {
+                label: 'Malzemeler',
+                icon: 'fas fa-boxes',
+                children: {
+                    '/procurement/items/catalog': {
+                        label: 'Malzeme Kataloğu',
+                        icon: 'fas fa-book',
+                        children: {}
+                    },
+                    '/procurement/items/inventory': {
+                        label: 'Stok Takibi',
+                        icon: 'fas fa-warehouse',
+                        children: {}
+                    },
+                    '/procurement/items/specifications': {
+                        label: 'Teknik Özellikler',
+                        icon: 'fas fa-info-circle',
+                        children: {}
+                    }
+                }
+            },
+            '/procurement/reports': {
+                label: 'Raporlar',
+                icon: 'fas fa-chart-bar',
+                children: {
+                    '/procurement/reports/purchase-analysis': {
+                        label: 'Satın Alma Analizi',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    },
+                    '/procurement/reports/supplier-performance': {
+                        label: 'Tedarikçi Performansı',
+                        icon: 'fas fa-chart-pie',
+                        children: {}
+                    },
+                    '/procurement/reports/cost-analysis': {
+                        label: 'Maliyet Analizi',
+                        icon: 'fas fa-dollar-sign',
+                        children: {}
+                    }
+                }
+            }
+        }
     },
     '/planning': {
         label: 'Planlama',
@@ -763,15 +848,21 @@ export function initNavbar() {
                             return;
                         }
                         
-                        if (path.startsWith('/management/') && !path.startsWith('/management/users') && !path.startsWith('/management/machines') && !path.startsWith('/management/overtime')) {
-                            // Show placeholder for management pages
-                            alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
-                            return;
-                        }
-                        
-                        
-                        
-                        navigateTo(path);
+                                        if (path.startsWith('/management/') && !path.startsWith('/management/users') && !path.startsWith('/management/machines') && !path.startsWith('/management/overtime')) {
+                    // Show placeholder for management pages
+                    alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
+                    return;
+                }
+                
+                if (path.startsWith('/procurement/')) {
+                    // Allow navigation to procurement pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                
+                
+                navigateTo(path);
                     }
                     // If no path, let Bootstrap handle the dropdown toggle
                     return;
@@ -812,6 +903,12 @@ export function initNavbar() {
                 if (path.startsWith('/management/') && !path.startsWith('/management/users') && !path.startsWith('/management/machines') && !path.startsWith('/management/overtime')) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
+                    return;
+                }
+                
+                if (path.startsWith('/procurement/')) {
+                    // Allow navigation to procurement pages
+                    navigateTo(path);
                     return;
                 }
                 

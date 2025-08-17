@@ -1,4 +1,6 @@
 import { getSyncedNow } from './timeService.js';
+import { authedFetch } from '../authService.js';
+import { backendBase } from '../base.js';
 
 export function mapJiraIssueToTask(jiraIssue) {
     const fields = jiraIssue.fields || {};
@@ -44,4 +46,19 @@ export function formatDuration(startTime) {
     const m = Math.floor((elapsed % 3600) / 60).toString().padStart(2, '0');
     const s = (elapsed % 60).toString().padStart(2, '0');
     return `${h}:${m}:${s}`;
-  }
+}
+
+export async function fetchCurrencyRates() {
+    try {
+        const response = await authedFetch(`${backendBase}/currency-rates/`);
+        if (response.ok) {
+            const data = await response.json();
+            return data.rates;
+        } else {
+            console.warn('Failed to fetch currency rates, using fallback values');
+        }
+    } catch (error) {
+        console.error('Error fetching currency rates:', error);
+        return null;
+    }
+}
