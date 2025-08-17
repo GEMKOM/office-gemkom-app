@@ -170,7 +170,7 @@ export class TableComponent {
     renderRow(row, rowIndex) {
         const cells = this.options.columns.map(column => {
             const value = this.getCellValue(row, column);
-            const isEditable = this.isColumnEditable(column.field);
+                            const isEditable = this.isColumnEditable(column);
             const editableClass = isEditable ? 'editable-cell' : '';
             const dataAttributes = isEditable ? 
                 `data-field="${column.field}" data-row-index="${rowIndex}"` : '';
@@ -491,7 +491,12 @@ export class TableComponent {
             return column.valueGetter(row);
         }
         
-        const field = column.field;
+        // Handle both 'field' and 'key' properties for column identification
+        const field = column.field || column.key;
+        if (!field) {
+            return null;
+        }
+        
         if (field.includes('.')) {
             return field.split('.').reduce((obj, key) => obj?.[key], row);
         }
@@ -523,9 +528,14 @@ export class TableComponent {
         return value.toString();
     }
     
-    isColumnEditable(field) {
+    isColumnEditable(column) {
         if (!this.options.editable) return false;
         if (this.options.editableColumns.length === 0) return true;
+        
+        // Handle both 'field' and 'key' properties
+        const field = column.field || column.key;
+        if (!field) return false;
+        
         return this.options.editableColumns.includes(field);
     }
     

@@ -2,7 +2,6 @@ from rest_framework import viewsets, status, permissions
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from django.utils import timezone
-from django.db import transaction
 from .models import (
     PaymentType, Supplier, Item, PurchaseRequest, 
     PurchaseRequestItem, SupplierOffer, ItemOffer
@@ -50,6 +49,16 @@ class PurchaseRequestViewSet(viewsets.ModelViewSet):
     serializer_class = PurchaseRequestSerializer
     permission_classes = [permissions.IsAuthenticated]
     
+    def update(self, request, *args, **kwargs):
+        """Override update to check if request is in draft status"""
+        instance = self.get_object()
+        if instance.status != 'draft':
+            return Response(
+                {'error': 'Only draft requests can be updated'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        return super().update(request, *args, **kwargs)
+    
     def get_queryset(self):
         user = self.request.user
         # Users can see their own requests and all requests if they have permission
@@ -58,7 +67,7 @@ class PurchaseRequestViewSet(viewsets.ModelViewSet):
         return PurchaseRequest.objects.filter(requestor=user)
     
     def get_serializer_class(self):
-        if self.action == 'create':
+        if self.action in ['create', 'update', 'partial_update']:
             return PurchaseRequestCreateSerializer
         return PurchaseRequestSerializer
     
@@ -110,22 +119,6 @@ class PurchaseRequestViewSet(viewsets.ModelViewSet):
         purchase_request.save()
         
         return Response({'status': 'rejected'})
-    
-    @action(detail=True, methods=['post'])
-    def complete(self, request, pk=None):
-        """Mark a purchase request as completed"""
-        purchase_request = self.get_object()
-        
-        if purchase_request.status != 'approved':
-            return Response(
-                {'error': 'Only approved requests can be completed'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        purchase_request.status = 'completed'
-        purchase_request.save()
-        
-        return Response({'status': 'completed'})
     
     @action(detail=False, methods=['get'])
     def my_requests(self, request):

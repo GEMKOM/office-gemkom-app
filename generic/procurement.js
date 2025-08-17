@@ -24,6 +24,28 @@ export async function createPurchaseRequest(requestData) {
     }
 }
 
+export async function updatePurchaseRequest(requestId, requestData) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/purchase-requests/${requestId}/`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Sunucu hatası');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error updating purchase request:', error);
+        throw error;
+    }
+}
+
 export async function submitPurchaseRequest(requestId) {
     try {
         const response = await authedFetch(`${backendBase}/procurement/purchase-requests/${requestId}/submit/`, {
