@@ -19,6 +19,9 @@ let requestData = {
     requestNumber: '',
     requestDate: '',
     requestor: '',
+    title: '',
+    description: '',
+    priority: 'normal',
     items: [],
     suppliers: [],
     offers: {},
@@ -60,6 +63,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Fetch currency rates and then render everything
     currencyRates = await fetchCurrencyRates();
     updateComparisonManagerRates();
+    
+    // Initialize form field listeners
+    initializeFormFieldListeners();
     
     // Now render all components with proper currency rates
     renderAll();
@@ -135,6 +141,9 @@ async function populateRequestData(request) {
     requestData.requestNumber = request.request_number;
     requestData.requestDate = request.created_at;
     requestData.requestor = request.requestor;
+    requestData.title = request.title || '';
+    requestData.description = request.description || '';
+    requestData.priority = request.priority || 'normal';
     
     // Load items
     requestData.items = request.request_items.map(item => ({
@@ -200,23 +209,50 @@ async function populateRequestData(request) {
 }
 
 async function showDraftRequestsModal() {
+    let requests = [];
     try {
-        // Load draft requests
-        const requests = await getPurchaseRequests();
-        const draftRequests = requests.filter(request => request.status === 'draft');
+        // Get current user for filtering
+        let currentUser = null;
+        try {
+            const { getUser } = await import('../../../authService.js');
+            currentUser = await getUser();
+        } catch (error) {
+            console.error('Error fetching current user:', error);
+        }
+        
+        // Build API filters for current user and draft status
+        const apiFilters = {
+            status: 'draft'
+        };
+        
+        // Add user filter (send user ID)
+        if (currentUser && currentUser.id) {
+            apiFilters.requestor = currentUser.id;
+        }
+        
+        // Load draft requests with backend filtering
+        const response = await getPurchaseRequests(apiFilters);
+        // Ensure we have an array of requests
+        if (Array.isArray(response)) {
+            requests = response;
+        } else if (response && Array.isArray(response.results)) {
+            requests = response.results;
+        } else {
+            requests = [];
+        }
         
         const tbody = document.getElementById('draft-requests-tbody');
         const emptyDiv = document.getElementById('draft-requests-empty');
         const table = document.getElementById('draft-requests-table');
         
-        if (draftRequests.length === 0) {
+        if (!requests || requests.length === 0) {
             table.style.display = 'none';
             emptyDiv.style.display = 'block';
         } else {
             table.style.display = 'table';
             emptyDiv.style.display = 'none';
             
-            tbody.innerHTML = draftRequests.map(request => `
+            tbody.innerHTML = requests.map(request => `
                 <tr>
                     <td>
                         <span class="fw-bold text-primary">${request.request_number}</span>
@@ -278,6 +314,7 @@ function updateComparisonManagerRates() {
 }
 
 function renderAll() {
+    renderFormFields();
     itemsManager.renderItemsTable();
     suppliersManager.renderSuppliersContainer();
     
@@ -285,6 +322,45 @@ function renderAll() {
     if (currencyRates) {
         comparisonManager.renderComparisonTable();
         comparisonManager.updateSummary();
+    }
+}
+
+function renderFormFields() {
+    // Set form field values from requestData
+    const titleField = document.getElementById('request-title');
+    const descriptionField = document.getElementById('request-description');
+    const priorityField = document.getElementById('request-priority');
+    
+    if (titleField) titleField.value = requestData.title || '';
+    if (descriptionField) descriptionField.value = requestData.description || '';
+    if (priorityField) priorityField.value = requestData.priority || 'normal';
+}
+
+// Initialize form field event listeners (called only once)
+function initializeFormFieldListeners() {
+    const titleField = document.getElementById('request-title');
+    const descriptionField = document.getElementById('request-description');
+    const priorityField = document.getElementById('request-priority');
+    
+    if (titleField) {
+        titleField.addEventListener('input', (e) => {
+            requestData.title = e.target.value;
+            dataManager.saveDraft();
+        });
+    }
+    
+    if (descriptionField) {
+        descriptionField.addEventListener('input', (e) => {
+            requestData.description = e.target.value;
+            dataManager.saveDraft();
+        });
+    }
+    
+    if (priorityField) {
+        priorityField.addEventListener('change', (e) => {
+            requestData.priority = e.target.value;
+            dataManager.saveDraft();
+        });
     }
 }
 
@@ -308,11 +384,22 @@ async function updateAndSubmitRequest() {
             });
         }
         
+        // Validate required fields
+        if (!requestData.title || !requestData.title.trim()) {
+            showNotification('Lütfen talep başlığını girin', 'error');
+            return;
+        }
+        
+        if (!requestData.description || !requestData.description.trim()) {
+            showNotification('Lütfen talep açıklamasını girin', 'error');
+            return;
+        }
+        
         // Prepare data for backend
         const submitData = {
-            title: 'Malzeme Satın Alma Talebi', // You might want to make this configurable
-            description: 'Proje için gerekli malzemeler', // You might want to make this configurable
-            priority: 'normal', // You might want to make this configurable
+            title: requestData.title.trim(),
+            description: requestData.description.trim(),
+            priority: requestData.priority || 'normal',
             items: requestData.items,
             suppliers: requestData.suppliers,
             offers: requestData.offers,
@@ -364,9 +451,9 @@ async function saveDraftToBackend() {
         
         // Prepare data for backend
         const draftData = {
-            title: 'Malzeme Satın Alma Talebi', // You might want to make this configurable
-            description: 'Proje için gerekli malzemeler', // You might want to make this configurable
-            priority: 'normal', // You might want to make this configurable
+            title: requestData.title || 'Malzeme Satın Alma Talebi',
+            description: requestData.description || 'Proje için gerekli malzemeler',
+            priority: requestData.priority || 'normal',
             items: requestData.items,
             suppliers: requestData.suppliers,
             offers: requestData.offers,
@@ -396,6 +483,17 @@ async function submitRequest() {
     }
     
     try {
+        // Validate required fields
+        if (!requestData.title || !requestData.title.trim()) {
+            showNotification('Lütfen talep başlığını girin', 'error');
+            return;
+        }
+        
+        if (!requestData.description || !requestData.description.trim()) {
+            showNotification('Lütfen talep açıklamasını girin', 'error');
+            return;
+        }
+        
         // Convert itemRecommendations to recommendations format
         const recommendations = {};
         if (requestData.itemRecommendations) {
@@ -409,9 +507,9 @@ async function submitRequest() {
         
         // Prepare data for backend
         const submitData = {
-            title: 'Malzeme Satın Alma Talebi', // You might want to make this configurable
-            description: 'Proje için gerekli malzemeler', // You might want to make this configurable
-            priority: 'normal', // You might want to make this configurable
+            title: requestData.title.trim(),
+            description: requestData.description.trim(),
+            priority: requestData.priority || 'normal',
             items: requestData.items,
             suppliers: requestData.suppliers,
             offers: requestData.offers,
@@ -434,6 +532,9 @@ async function submitRequest() {
             requestNumber: '',
             requestDate: '',
             requestor: '',
+            title: '',
+            description: '',
+            priority: 'normal',
             items: [],
             suppliers: [],
             offers: {},
@@ -491,6 +592,9 @@ window.purchaseRequestApp = {
             requestNumber: '',
             requestDate: '',
             requestor: '',
+            title: '',
+            description: '',
+            priority: 'normal',
             items: [],
             suppliers: [],
             offers: {},

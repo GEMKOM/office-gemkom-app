@@ -600,3 +600,50 @@ thead .btn.btn-outline-warning {
         font-size: 0.75rem;
     }
 }
+
+/* Form Fields Styling */
+.form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+.form-label .text-danger {
+    color: #dc3545 !important;
+}
+
+.form-control:focus,
+.form-select:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.form-control::placeholder,
+.form-select::placeholder {
+    color: #6c757d;
+    opacity: 0.7;
+}
+
+/* Purchase Request Details Card */
+.card-header h5 i {
+    color: #007bff;
+}
+
+/* Priority select styling */
+#request-priority {
+    background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m1 6 7 7 7-7'/%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    background-size: 16px 12px;
+}
+
+/* Textarea styling */
+#request-description {
+    resize: vertical;
+    min-height: 80px;
+}
+
+/* Required field indicator */
+.text-danger {
+    color: #dc3545 !important;
+}

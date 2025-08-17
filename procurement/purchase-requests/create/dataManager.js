@@ -50,6 +50,9 @@ export class DataManager {
     saveDraft() {
         try {
             const draftData = {
+                title: this.requestData.title,
+                description: this.requestData.description,
+                priority: this.requestData.priority,
                 items: this.requestData.items,
                 suppliers: this.requestData.suppliers,
                 offers: this.requestData.offers,
@@ -77,6 +80,9 @@ export class DataManager {
                 const hoursDiff = (now - draftTime) / (1000 * 60 * 60);
                 
                 if (hoursDiff < 24) {
+                    this.requestData.title = draftData.title || '';
+                    this.requestData.description = draftData.description || '';
+                    this.requestData.priority = draftData.priority || 'normal';
                     this.requestData.items = draftData.items || [];
                     this.requestData.suppliers = draftData.suppliers || [];
                     this.requestData.offers = draftData.offers || {};
@@ -109,6 +115,9 @@ export class DataManager {
     exportData() {
         try {
             const exportData = {
+                title: this.requestData.title,
+                description: this.requestData.description,
+                priority: this.requestData.priority,
                 items: this.requestData.items,
                 suppliers: this.requestData.suppliers,
                 offers: this.requestData.offers,
@@ -144,6 +153,9 @@ export class DataManager {
                         throw new Error('Geçersiz veri formatı');
                     }
                     
+                    this.requestData.title = importData.title || '';
+                    this.requestData.description = importData.description || '';
+                    this.requestData.priority = importData.priority || 'normal';
                     this.requestData.items = importData.items || [];
                     this.requestData.suppliers = importData.suppliers || [];
                     this.requestData.offers = importData.offers || {};

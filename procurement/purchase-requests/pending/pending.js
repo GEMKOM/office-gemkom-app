@@ -7,7 +7,8 @@ import {
     getPurchaseRequests, 
     getPurchaseRequest, 
     approvePurchaseRequest, 
-    rejectPurchaseRequest 
+    rejectPurchaseRequest,
+    getStatusChoices
 } from '../../../generic/procurement.js';
 import { fetchCurrencyRates } from '../../../generic/formatters.js';
 
@@ -16,7 +17,7 @@ let currentPage = 1;
 let currentFilter = 'all';
 let currentOrdering = 'request_number';
 let currentSortField = 'request_number';
-let currentSortDirection = 'asc';
+let currentSortDirection = 'desc';
 let requests = [];
 let currentRequest = null;
 let totalRequests = 0;
@@ -79,61 +80,133 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function initializeRequests() {
     try {
-        initializeFiltersComponent();
+        await initializeFiltersComponent();
         initializeSortableHeaders();
         
         await loadRequests();
         updateRequestCounts();
+        
+        // Check if there's a talep parameter in the URL to open modal
+        const urlParams = new URLSearchParams(window.location.search);
+        const talepNo = urlParams.get('talep');
+        if (talepNo) {
+            await openModalFromTalepNo(talepNo);
+        }
     } catch (error) {
         console.error('Error initializing requests:', error);
         showNotification('Talepler yüklenirken hata oluştu', 'error');
     }
 }
 
-function initializeFiltersComponent() {
+async function initializeFiltersComponent() {
+    // Fetch users for requestor filter
+    let users = [];
+    try {
+        const { authFetchUsers } = await import('../../../generic/users.js');
+        users = await authFetchUsers();
+    } catch (error) {
+        console.error('Error fetching users:', error);
+    }
+
+    // Fetch status choices from backend
+    let statusChoices = [];
+    try {
+        statusChoices = await getStatusChoices();
+    } catch (error) {
+        console.error('Error fetching status choices:', error);
+        // Fallback to default options if API fails
+        statusChoices = [
+            { value: 'draft', label: 'Taslak' },
+            { value: 'submitted', label: 'Gönderildi' },
+            { value: 'approved', label: 'Onaylandı' },
+            { value: 'rejected', label: 'Reddedildi' }
+        ];
+    }
+
+    // Get current user for default selection
+    let currentUser = null;
+    try {
+        const { getUser } = await import('../../../authService.js');
+        currentUser = await getUser();
+    } catch (error) {
+        console.error('Error fetching current user:', error);
+    }
+
     // Initialize filters component
     requestFilters = new FiltersComponent('filters-placeholder', {
-        filters: [
-            {
-                id: 'search-filter',
-                type: 'search',
-                placeholder: 'Talep ara...',
-                icon: 'fas fa-search'
-            },
-            {
-                id: 'status-filter',
-                type: 'select',
-                label: 'Durum',
-                options: [
-                    { value: '', label: 'Tüm Durumlar' },
-                    { value: 'draft', label: 'Taslak' },
-                    { value: 'submitted', label: 'Gönderildi' },
-                    { value: 'approved', label: 'Onaylandı' },
-                    { value: 'rejected', label: 'Reddedildi' }
-                ]
-            },
-            {
-                id: 'priority-filter',
-                type: 'select',
-                label: 'Öncelik',
-                options: [
-                    { value: '', label: 'Tüm Öncelikler' },
-                    { value: 'normal', label: 'Normal' },
-                    { value: 'urgent', label: 'Acil' },
-                    { value: 'critical', label: 'Kritik' }
-                ]
-            }
-        ],
-        onFilterChange: (filters) => {
+        title: 'Talep Filtreleri',
+        showApplyButton: true,
+        showClearButton: true,
+        applyButtonText: 'Filtrele',
+        clearButtonText: 'Temizle',
+        onApply: () => {
             currentFilter = 'filtered';
             currentPage = 1;
             loadRequests();
         },
-        onClearFilters: () => {
+        onClear: () => {
             currentFilter = 'all';
             currentPage = 1;
             loadRequests();
         }
+    });
+
+    // Add Talep No filter
+    requestFilters.addTextFilter({
+        id: 'talep-no-filter',
+        label: 'Talep No',
+        placeholder: 'Talep numarası girin...',
+        colSize: 2
+    });
+
+    // Add Requestor filter with current user as default
+    requestFilters.addDropdownFilter({
+        id: 'requestor-filter',
+        label: 'Talep Eden',
+        placeholder: 'Talep eden seçin...',
+        options: [
+            { value: '', label: 'Tüm Kullanıcılar' },
+            ...users.map(user => ({
+                value: user.id,
+                label: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || user.email
+            }))
+        ],
+        value: currentUser ? currentUser.id : '',
+        colSize: 2
+    });
+
+    // Add Status filter with backend options
+    requestFilters.addDropdownFilter({
+        id: 'status-filter',
+        label: 'Durum',
+        placeholder: 'Durum seçin...',
+        options: [
+            { value: '', label: 'Tüm Durumlar' },
+            ...statusChoices
+        ],
+        value: 'submitted', // Default to submitted status
+        colSize: 2
+    });
+
+    // Add Priority filter
+    requestFilters.addDropdownFilter({
+        id: 'priority-filter',
+        label: 'Öncelik',
+        placeholder: 'Öncelik seçin...',
+        options: [
+            { value: '', label: 'Tüm Öncelikler' },
+            { value: 'normal', label: 'Normal' },
+            { value: 'urgent', label: 'Acil' },
+            { value: 'critical', label: 'Kritik' }
+        ],
+        colSize: 2
+    });
+
+    // Add Created At filter
+    requestFilters.addDateFilter({
+        id: 'created-at-filter',
+        label: 'Oluşturulma Tarihi',
+        colSize: 2
     });
 }
 
@@ -146,6 +219,29 @@ function initializeSortableHeaders() {
             handleSort(field);
         });
     });
+    
+    // Update sort indicators for initial state
+    updateSortIndicators();
+}
+
+function updateSortIndicators() {
+    const sortableHeaders = document.querySelectorAll('.sortable');
+    sortableHeaders.forEach(header => {
+        const field = header.dataset.field;
+        const icon = header.querySelector('.sort-icon');
+        
+        if (field === currentSortField) {
+            // Show active sort indicator
+            if (currentSortDirection === 'asc') {
+                icon.className = 'fas fa-sort-up sort-icon text-primary';
+            } else {
+                icon.className = 'fas fa-sort-down sort-icon text-primary';
+            }
+        } else {
+            // Show inactive sort indicator
+            icon.className = 'fas fa-sort sort-icon text-muted';
+        }
+    });
 }
 
 async function loadRequests() {
@@ -154,33 +250,84 @@ async function loadRequests() {
     try {
         isLoading = true;
         showLoading(true);
+        showLoadingState();
         
-        const response = await getPurchaseRequests();
+        // Get current user for default filtering
+        let currentUser = null;
+        try {
+            const { getUser } = await import('../../../authService.js');
+            currentUser = await getUser();
+        } catch (error) {
+            console.error('Error fetching current user:', error);
+        }
+        
+        // Build API filters and ordering
+        const apiFilters = {};
+        
+        // Add user filter (send user ID instead of username)
+        if (currentUser && currentUser.id) {
+            apiFilters.requestor = currentUser.id;
+        }
+        
+        // Get current filter values to apply server-side filtering
+        if (requestFilters) {
+            const filterValues = requestFilters.getFilterValues();
+            
+            // Add requestor filter to API call if changed from default
+            if (filterValues['requestor-filter'] && filterValues['requestor-filter'] !== '') {
+                apiFilters.requestor = filterValues['requestor-filter'];
+            }
+            
+            // Add status filter to API call if set
+            if (filterValues['status-filter']) {
+                apiFilters.status = filterValues['status-filter'];
+            }
+            
+            // Add priority filter to API call if set
+            if (filterValues['priority-filter']) {
+                apiFilters.priority = filterValues['priority-filter'];
+            }
+            
+            // Add created_at filter to API call if set
+            if (filterValues['created-at-filter']) {
+                apiFilters.created_at__gte = filterValues['created-at-filter'];
+            }
+        }
+        
+        // Add ordering parameters
+        if (currentSortField) {
+            const orderingPrefix = currentSortDirection === 'desc' ? '-' : '';
+            apiFilters.ordering = orderingPrefix + currentSortField;
+        }
+        
+        // Add pagination parameters
+        const itemsPerPage = 20;
+        apiFilters.page = currentPage;
+        apiFilters.page_size = itemsPerPage;
+        
+        const response = await getPurchaseRequests(apiFilters);
         
         console.log('API Response:', response);
         
-        // Ensure we have an array of requests
-        if (Array.isArray(response)) {
-            requests = response;
-        } else if (response && Array.isArray(response.results)) {
+        // Handle paginated response
+        if (response && response.results) {
             requests = response.results;
+            totalRequests = response.count || response.results.length;
+        } else if (Array.isArray(response)) {
+            requests = response;
+            totalRequests = response.length;
         } else {
             requests = [];
+            totalRequests = 0;
         }
         
         console.log('Processed requests:', requests);
         
-        // Apply filters
-        const filteredRequests = applyFilters(requests);
+        // Apply remaining local filters (Talep No only)
+        const filteredRequests = applyLocalFilters(requests);
         
-        // Apply sorting
-        const sortedRequests = applySorting(filteredRequests);
-        
-        // Apply pagination
-        const paginatedRequests = applyPagination(sortedRequests);
-        
-        // Update the table
-        renderRequestsTable(paginatedRequests);
+        // Update the table (no need for client-side sorting or pagination)
+        renderRequestsTable(filteredRequests);
         renderPagination();
         updateRequestCounts();
         
@@ -188,6 +335,7 @@ async function loadRequests() {
         console.error('Error loading requests:', error);
         showNotification('Talepler yüklenirken hata oluştu: ' + error.message, 'error');
         requests = [];
+        totalRequests = 0;
         renderRequestsTable([]);
         renderPagination();
         updateRequestCounts();
@@ -197,67 +345,24 @@ async function loadRequests() {
     }
 }
 
-function applyFilters(requests) {
+function applyLocalFilters(requests) {
     if (!requestFilters) return requests;
     
     const filters = requestFilters.getFilterValues();
     let filtered = requests;
     
-    // Search filter
-    if (filters['search-filter']) {
-        const searchTerm = filters['search-filter'].toLowerCase();
+    // Talep No filter (client-side only for real-time search)
+    if (filters['talep-no-filter']) {
+        const searchTerm = filters['talep-no-filter'].toLowerCase();
         filtered = filtered.filter(request => 
-            request.request_number?.toLowerCase().includes(searchTerm) ||
-            request.title?.toLowerCase().includes(searchTerm) ||
-            request.description?.toLowerCase().includes(searchTerm) ||
-            request.requestor?.toLowerCase().includes(searchTerm)
+            request.request_number?.toLowerCase().includes(searchTerm)
         );
-    }
-    
-    // Status filter
-    if (filters['status-filter']) {
-        filtered = filtered.filter(request => request.status === filters['status-filter']);
-    }
-    
-    // Priority filter
-    if (filters['priority-filter']) {
-        filtered = filtered.filter(request => request.priority === filters['priority-filter']);
     }
     
     return filtered;
 }
 
-function applySorting(requests) {
-    if (!currentSortField) return requests;
-    
-    return requests.sort((a, b) => {
-        let aValue = a[currentSortField];
-        let bValue = b[currentSortField];
-        
-        // Handle null/undefined values
-        if (aValue === null || aValue === undefined) aValue = '';
-        if (bValue === null || bValue === undefined) bValue = '';
-        
-        // Convert to strings for comparison
-        aValue = String(aValue).toLowerCase();
-        bValue = String(bValue).toLowerCase();
-        
-        if (currentSortDirection === 'asc') {
-            return aValue.localeCompare(bValue);
-        } else {
-            return bValue.localeCompare(aValue);
-        }
-    });
-}
-
-function applyPagination(requests) {
-    const itemsPerPage = 20;
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    
-    totalRequests = requests.length;
-    return requests.slice(startIndex, endIndex);
-}
+// Client-side sorting and pagination removed - now handled by backend
 
 function renderRequestsTable(requests) {
     const tbody = document.getElementById('requests-table-body');
@@ -289,10 +394,10 @@ function renderRequestsTable(requests) {
             <td>
                 <div class="requestor-name">
                     <i class="fas fa-user-circle me-2 text-muted"></i>
-                    ${request.requestor || 'Bilinmiyor'}
+                    ${request.requestor_username || 'Bilinmiyor'}
                 </div>
             </td>
-            <td class="text-center">${getStatusBadge(request.status)}</td>
+                         <td class="text-center">${getStatusBadge(request.status, request.status_label)}</td>
             <td class="text-center">${getPriorityBadge(request.priority)}</td>
             <td>
                 <div class="total-amount">${request.total_amount_eur ? formatCurrency(request.total_amount_eur, 'EUR') : '-'}</div>
@@ -376,7 +481,7 @@ function renderPagination() {
             const page = parseInt(link.dataset.page);
             if (page >= 1 && page <= totalPages) {
                 currentPage = page;
-                loadRequests();
+                loadRequests(); // This will now fetch the specific page from backend
             }
         });
     });
@@ -404,7 +509,11 @@ function handleSort(field) {
     }
     
     currentOrdering = field;
-    loadRequests();
+    currentPage = 1; // Reset to first page when sorting changes
+    loadRequests(); // This will now fetch sorted data from backend
+    
+    // Update sort indicators
+    updateSortIndicators();
 }
 
 function setupEventListeners() {
@@ -419,6 +528,36 @@ function setupEventListeners() {
     if (refreshBtn) {
         refreshBtn.addEventListener('click', loadRequests);
     }
+    
+    // Modal approve and reject buttons
+    const approveBtn = document.getElementById('approve-request');
+    if (approveBtn) {
+        approveBtn.addEventListener('click', () => {
+            if (currentRequest) {
+                approveRequest(currentRequest.id);
+            }
+        });
+    }
+    
+    const rejectBtn = document.getElementById('reject-request');
+    if (rejectBtn) {
+        rejectBtn.addEventListener('click', () => {
+            if (currentRequest) {
+                rejectRequest(currentRequest.id);
+            }
+        });
+    }
+    
+    // Add event listeners for modal close to clean up URL
+    const modal = document.getElementById('requestDetailsModal');
+    if (modal) {
+        modal.addEventListener('hidden.bs.modal', () => {
+            // Remove the talep parameter from URL when modal is closed
+            const url = new URL(window.location);
+            url.searchParams.delete('talep');
+            window.history.pushState({}, '', url);
+        });
+    }
 }
 
 
@@ -428,6 +567,11 @@ async function viewRequestDetails(requestId) {
         showLoading(true);
         currentRequest = await getPurchaseRequest(requestId);
         showRequestDetailsModal();
+        
+        // Update URL to include the talep no (request number)
+        const url = new URL(window.location);
+        url.searchParams.set('talep', currentRequest.request_number);
+        window.history.pushState({}, '', url);
     } catch (error) {
         console.error('Error loading request details:', error);
         showNotification('Talep detayları yüklenirken hata oluştu: ' + error.message, 'error');
@@ -443,7 +587,12 @@ function showRequestDetailsModal() {
     let totalRecommendedAmountEUR = 0;
     let currencyTotals = {};
     
+    // Calculate total amount for cheapest options
+    let totalCheapestAmountEUR = 0;
+    let cheapestCurrencyTotals = {};
+    
     if (currentRequest.offers && currentRequest.offers.length > 0) {
+        // Calculate recommended totals
         currentRequest.offers.forEach(offer => {
             const currency = offer.supplier.currency;
             if (!currencyTotals[currency]) {
@@ -465,37 +614,142 @@ function showRequestDetailsModal() {
                 }
             });
         });
+        
+        // Calculate cheapest totals by finding the cheapest option for each item
+        if (currentRequest.request_items && currentRequest.request_items.length > 0) {
+            currentRequest.request_items.forEach(requestItem => {
+                let cheapestOption = null;
+                let cheapestPrice = Infinity;
+                
+                // Find the cheapest option for this item across all suppliers
+                currentRequest.offers.forEach(offer => {
+                    const itemOffer = offer.item_offers.find(io => io.purchase_request_item === requestItem.id);
+                    if (itemOffer && itemOffer.unit_price && parseFloat(itemOffer.unit_price) > 0) {
+                        const unitPrice = parseFloat(itemOffer.unit_price);
+                        const quantity = parseFloat(requestItem.quantity || 0);
+                        const totalPrice = unitPrice * quantity;
+                        
+                        if (totalPrice < cheapestPrice) {
+                            cheapestPrice = totalPrice;
+                            cheapestOption = {
+                                price: totalPrice,
+                                currency: offer.supplier.currency,
+                                supplier: offer.supplier.name
+                            };
+                        }
+                    }
+                });
+                
+                // Add the cheapest option to totals
+                if (cheapestOption) {
+                    const currency = cheapestOption.currency;
+                    if (!cheapestCurrencyTotals[currency]) {
+                        cheapestCurrencyTotals[currency] = 0;
+                    }
+                    cheapestCurrencyTotals[currency] += cheapestOption.price;
+                    
+                    if (currencyRates) {
+                        const convertedPrice = convertCurrency(cheapestOption.price, currency, 'EUR');
+                        totalCheapestAmountEUR += convertedPrice;
+                    }
+                }
+            });
+        }
     }
     
-    // Display the total recommended amount
-    const currencyDisplay = Object.entries(currencyTotals)
+    // Display both totals
+    const recommendedCurrencyDisplay = Object.entries(currencyTotals)
         .map(([currency, amount]) => `${formatCurrencyDisplay(amount, currency)}`)
         .join(' + ');
     
-    container.innerHTML = `
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card bg-success text-white">
-                    <div class="card-body text-center">
-                        <h5 class="card-title">
-                            <i class="fas fa-star me-2"></i>
-                            Önerilen Teklifler Toplam Tutarı
-                        </h5>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <h3>${formatCurrencyDisplay(totalRecommendedAmountEUR, 'EUR')}</h3>
-                                <small>Euro Karşılığı</small>
+    const cheapestCurrencyDisplay = Object.entries(cheapestCurrencyTotals)
+        .map(([currency, amount]) => `${formatCurrencyDisplay(amount, currency)}`)
+        .join(' + ');
+    
+    // Check if there are actually lower prices available
+    const hasLowerPrices = totalCheapestAmountEUR > 0 && totalCheapestAmountEUR < totalRecommendedAmountEUR;
+    const savingsAmount = totalRecommendedAmountEUR - totalCheapestAmountEUR;
+    
+    // Build the cards HTML
+    let cardsHTML = '';
+    
+    if (hasLowerPrices) {
+        // Show both cards when there are lower prices
+        cardsHTML = `
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <div class="card h-100 border-secondary border-1 shadow-sm bg-light">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-secondary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px;">
+                                        <i class="fas fa-info-circle text-secondary" style="font-size: 14px;"></i>
+                                    </div>
+                                    <span class="fw-normal text-secondary" style="font-size: 13px;">Daha Düşük Fiyatlar Mevcut</span>
+                                </div>
+                                <div class="text-end">
+                                    <div class="fw-normal text-secondary" style="font-size: 16px; line-height: 1;">${formatCurrencyDisplay(totalCheapestAmountEUR, 'EUR')}</div>
+                                    <div class="text-muted" style="font-size: 10px;">En Düşük Toplam</div>
+                                </div>
                             </div>
-                            <div class="col-md-6">
-                                <h3>${currencyDisplay}</h3>
-                                <small>Orijinal Para Birimleri</small>
+                            <div class="border-top pt-2">
+                                <small class="text-muted" style="font-size: 15px;">
+                                    <i class="fas fa-arrow-down text-success me-1"></i>
+                                    ${formatCurrencyDisplay(savingsAmount, 'EUR')} tasarruf potansiyeli
+                                </small>
                             </div>
                         </div>
                     </div>
                 </div>
+                <div class="col-md-6">
+                    <div class="card h-100 border-primary border-2 shadow">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-secondary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px;">
+                                        <i class="fas fa-star text-primary" style="font-size: 16px; line-height: 1;"></i>
+                                    </div>
+                                    <span class="fw-bold text-primary" style="font-size: 15px;">Önerilen Teklifler</span>
+                                </div>
+                                <div class="text-end">
+                                    <div class="fw-bold text-primary" style="font-size: 20px; line-height: 1;">${formatCurrencyDisplay(totalRecommendedAmountEUR, 'EUR')}</div>
+                                    <div class="text-muted" style="font-size: 11px;">Euro Karşılığı</div>
+                                </div>
+                            </div>
+                            ${recommendedCurrencyDisplay ? `<div class="border-top pt-2"><small class="text-muted" style="font-size: 15px;">${recommendedCurrencyDisplay}</small></div>` : ''}
+                        </div>
+                    </div>
+                </div>
             </div>
-        </div>
-    `;
+        `;
+    } else {
+        // Show only the recommended offers card when there are no lower prices
+        cardsHTML = `
+            <div class="row g-3 mb-3">
+                <div class="col-md-12">
+                    <div class="card h-100 border-primary border-2 shadow">
+                        <div class="card-body p-3">
+                            <div class="d-flex align-items-center justify-content-between mb-2">
+                                <div class="d-flex align-items-center">
+                                    <div class="bg-secondary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px;">
+                                        <i class="fas fa-star text-primary" style="font-size: 16px; line-height: 1;"></i>
+                                    </div>
+                                    <span class="fw-bold text-primary" style="font-size: 15px;">Önerilen Teklifler</span>
+                                </div>
+                                <div class="text-end">
+                                    <div class="fw-bold text-primary" style="font-size: 20px; line-height: 1;">${formatCurrencyDisplay(totalRecommendedAmountEUR, 'EUR')}</div>
+                                    <div class="text-muted" style="font-size: 11px;">Euro Karşılığı</div>
+                                </div>
+                            </div>
+                            ${recommendedCurrencyDisplay ? `<div class="border-top pt-2"><small class="text-muted" style="font-size: 15px;">${recommendedCurrencyDisplay}</small></div>` : ''}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    container.innerHTML = cardsHTML;
 
     // Show comparison table if there are offers
     if (currentRequest.offers && currentRequest.offers.length > 0) {
@@ -507,6 +761,28 @@ function showRequestDetailsModal() {
 
     const modal = new bootstrap.Modal(document.getElementById('requestDetailsModal'));
     modal.show();
+}
+
+async function openModalFromTalepNo(talepNo) {
+    try {
+        // Find the request with the matching talep no
+        const request = requests.find(r => r.request_number === talepNo);
+        if (request) {
+            await viewRequestDetails(request.id);
+        } else {
+            // If not found in current requests, try to fetch it directly
+            try {
+                currentRequest = await getPurchaseRequest(null, talepNo); // Assuming API supports talep no lookup
+                showRequestDetailsModal();
+            } catch (error) {
+                console.error('Request not found:', error);
+                showNotification(`Talep ${talepNo} bulunamadı`, 'error');
+            }
+        }
+    } catch (error) {
+        console.error('Error opening modal from talep no:', error);
+        showNotification('Talep detayları açılırken hata oluştu', 'error');
+    }
 }
 
 function renderComparisonTable() {
@@ -603,6 +879,13 @@ async function approveRequest(requestId) {
         showLoading(true);
         await approvePurchaseRequest(requestId);
         showNotification('Talep başarıyla onaylandı', 'success');
+        
+        // Close the modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('requestDetailsModal'));
+        if (modal) {
+            modal.hide();
+        }
+        
         await loadRequests();
     } catch (error) {
         console.error('Error approving request:', error);
@@ -621,6 +904,13 @@ async function rejectRequest(requestId) {
         showLoading(true);
         await rejectPurchaseRequest(requestId);
         showNotification('Talep başarıyla reddedildi', 'success');
+        
+        // Close the modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('requestDetailsModal'));
+        if (modal) {
+            modal.hide();
+        }
+        
         await loadRequests();
     } catch (error) {
         console.error('Error rejecting request:', error);
@@ -636,17 +926,21 @@ function exportRequests() {
 }
 
 // Utility functions
-function getStatusBadge(status) {
+function getStatusBadge(status, statusLabel) {
+    // Use status_label from response if available, otherwise fallback to status
+    const displayText = statusLabel || status;
+    
+    // Keep the CSS class mapping for styling
     const statusMap = {
-        'draft': { text: 'Taslak', class: 'status-draft' },
-        'submitted': { text: 'Gönderildi', class: 'status-submitted' },
-        'approved': { text: 'Onaylandı', class: 'status-approved' },
-        'rejected': { text: 'Reddedildi', class: 'status-rejected' },
-        'completed': { text: 'Tamamlandı', class: 'status-completed' }
+        'draft': 'status-draft',
+        'submitted': 'status-submitted',
+        'approved': 'status-approved',
+        'rejected': 'status-rejected',
+        'completed': 'status-completed'
     };
 
-    const statusInfo = statusMap[status] || { text: status, class: 'status-draft' };
-    return `<span class="status-badge ${statusInfo.class}">${statusInfo.text}</span>`;
+    const statusClass = statusMap[status] || 'status-draft';
+    return `<span class="status-badge ${statusClass}">${displayText}</span>`;
 }
 
 function getPriorityBadge(priority) {
@@ -707,20 +1001,38 @@ function formatCurrencyDisplay(amount, currency) {
 }
 
 function showLoading(show) {
+    // Simple loading state - just disable/enable buttons
     const buttons = document.querySelectorAll('.btn');
     buttons.forEach(btn => {
-        if (show) {
-            btn.disabled = true;
-            if (btn.innerHTML.includes('Yenile')) {
-                btn.innerHTML = '<span class="loading-spinner"></span> Yükleniyor...';
-            }
-        } else {
-            btn.disabled = false;
-            if (btn.innerHTML.includes('Yükleniyor')) {
-                btn.innerHTML = '<i class="fas fa-sync-alt me-1"></i>Yenile';
-            }
-        }
+        btn.disabled = show;
     });
+}
+
+function showLoadingState() {
+    const tableBody = document.getElementById('requests-table-body');
+    if (tableBody) {
+        // Create loading rows that maintain table structure
+        const loadingRows = [];
+        for (let i = 0; i < 5; i++) { // Show 5 loading rows
+            loadingRows.push(`
+                <tr class="loading-row">
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 200px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                </tr>
+            `);
+        }
+        tableBody.innerHTML = loadingRows.join('');
+    }
+}
+
+function hideLoadingState() {
+    // Loading state is cleared when table is rendered
 }
 
 function showNotification(message, type = 'info') {

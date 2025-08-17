@@ -67,9 +67,20 @@ export async function submitPurchaseRequest(requestId) {
     }
 }
 
-export async function getPurchaseRequests() {
+export async function getPurchaseRequests(filters = {}) {
     try {
-        const response = await authedFetch(`${backendBase}/procurement/purchase-requests/my_requests/`);
+        // Build query parameters
+        const queryParams = new URLSearchParams();
+        
+        // Add filters if provided
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+        
+        const url = `${backendBase}/procurement/purchase-requests/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const response = await authedFetch(url);
         
         if (!response.ok) {
             const errorData = await response.json();
@@ -337,6 +348,23 @@ export async function getPaymentTypes() {
         return await response.json();
     } catch (error) {
         console.error('Error fetching payment types:', error);
+        throw error;
+    }
+}
+
+// Status Choices API Functions
+export async function getStatusChoices() {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/status-choices/`);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Durum seçenekleri yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching status choices:', error);
         throw error;
     }
 }

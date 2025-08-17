@@ -30,7 +30,39 @@
             <!-- Header Component -->
             <div id="header-placeholder"></div>
 
-
+            <!-- Purchase Request Details Section -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header">
+                            <h5 class="mb-0"><i class="fas fa-edit me-2"></i>Talep Detayları</h5>
+                        </div>
+                        <div class="card-body">
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <label for="request-title" class="form-label">Talep Başlığı <span class="text-danger">*</span></label>
+                                    <input type="text" class="form-control" id="request-title" placeholder="Talep başlığını girin" required>
+                                </div>
+                                <div class="col-md-6">
+                                    <label for="request-priority" class="form-label">Öncelik</label>
+                                    <select class="form-select" id="request-priority">
+                                        <option value="low">Düşük</option>
+                                        <option value="normal" selected>Normal</option>
+                                        <option value="high">Yüksek</option>
+                                        <option value="urgent">Acil</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="row mt-3">
+                                <div class="col-12">
+                                    <label for="request-description" class="form-label">Talep Açıklaması <span class="text-danger">*</span></label>
+                                    <textarea class="form-control" id="request-description" rows="3" placeholder="Talep açıklamasını girin" required></textarea>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
             <!-- Items Section -->
             <div class="row mb-4">

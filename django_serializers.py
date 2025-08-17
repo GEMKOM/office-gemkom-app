@@ -26,12 +26,11 @@ class ItemSerializer(serializers.ModelSerializer):
 
 class PurchaseRequestItemSerializer(serializers.ModelSerializer):
     item = ItemSerializer(read_only=True)
-    item_id = serializers.IntegerField(write_only=True)
     
     class Meta:
         model = PurchaseRequestItem
         fields = [
-            'id', 'item', 'item_id', 'quantity', 'priority',
+            'id', 'item', 'quantity', 'priority',
             'specifications', 'order'
         ]
 
@@ -59,13 +58,13 @@ class SupplierOfferSerializer(serializers.ModelSerializer):
 class PurchaseRequestSerializer(serializers.ModelSerializer):
     request_items = PurchaseRequestItemSerializer(many=True, read_only=True)
     offers = SupplierOfferSerializer(many=True, read_only=True)
-    requestor = serializers.ReadOnlyField(source='requestor.username')
+    requestor_username = serializers.ReadOnlyField(source='requestor.username')
     
     class Meta:
         model = PurchaseRequest
         fields = [
             'id', 'request_number', 'title', 'description',
-            'requestor', 'priority', 'status',
+            'requestor', 'requestor_username', 'priority', 'status',
             'total_amount_eur', 'currency_rates_snapshot',
             'created_at', 'updated_at', 'submitted_at',
             'request_items', 'offers'
@@ -161,83 +160,3 @@ class PurchaseRequestCreateSerializer(serializers.ModelSerializer):
                         )
         
         return purchase_request
-    
-    def update(self, instance, validated_data):
-        items_data = validated_data.pop('items', [])
-        suppliers_data = validated_data.pop('suppliers', [])
-        offers_data = validated_data.pop('offers', {})
-        recommendations_data = validated_data.pop('recommendations', {})
-        
-        # Update purchase request basic fields
-        instance.title = validated_data.get('title', instance.title)
-        instance.description = validated_data.get('description', instance.description)
-        instance.priority = validated_data.get('priority', instance.priority)
-        instance.save()
-        
-        # Clear existing items and offers
-        instance.request_items.all().delete()
-        instance.offers.all().delete()
-        
-        # Create or get items and purchase request items
-        request_items = []
-        for i, item_data in enumerate(items_data):
-            item, created = Item.objects.get_or_create(
-                code=item_data['code'],
-                defaults={
-                    'name': item_data['name'],
-                    'unit': item_data['unit']
-                }
-            )
-            
-            request_item = PurchaseRequestItem.objects.create(
-                purchase_request=instance,
-                item=item,
-                quantity=item_data['quantity'],
-                priority=item_data.get('priority', 'normal'),
-                specifications=item_data.get('specifications', ''),
-                order=i
-            )
-            request_items.append(request_item)
-        
-        # Create suppliers and offers
-        for supplier_data in suppliers_data:
-            supplier, created = Supplier.objects.get_or_create(
-                name=supplier_data['name'],
-                defaults={
-                    'contact_person': supplier_data.get('contact_person', ''),
-                    'phone': supplier_data.get('phone', ''),
-                    'email': supplier_data.get('email', ''),
-                    'currency': supplier_data.get('currency', 'TRY')
-                }
-            )
-            
-            # Create supplier offer
-            supplier_offer = SupplierOffer.objects.create(
-                purchase_request=instance,
-                supplier=supplier,
-                unit_price=0,  # Will be calculated
-                total_price=0,  # Will be calculated
-                notes=''
-            )
-            
-            # Create item offers for this supplier
-            if supplier_data['id'] in offers_data:
-                for item_index, offer_data in offers_data[supplier_data['id']].items():
-                    item_index = int(item_index)
-                    if item_index < len(request_items):
-                        request_item = request_items[item_index]
-                        
-                        # Check if this item-supplier combination is recommended
-                        is_recommended = (recommendations_data.get(str(item_index)) == supplier_data['id'])
-                        
-                        ItemOffer.objects.create(
-                            purchase_request_item=request_item,
-                            supplier_offer=supplier_offer,
-                            unit_price=offer_data['unitPrice'],
-                            total_price=offer_data['totalPrice'],
-                            delivery_days=offer_data.get('deliveryDays'),
-                            notes=offer_data.get('notes', ''),
-                            is_recommended=is_recommended
-                        )
-        
-        return instance
