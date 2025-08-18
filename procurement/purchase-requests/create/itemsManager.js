@@ -42,7 +42,6 @@ export class ItemsManager {
         const clearImportBtn = document.getElementById('clear-import-btn');
         const importItemsBtn = document.getElementById('import-items-btn');
         const confirmMappingBtn = document.getElementById('confirm-mapping-btn');
-        const manualMappingBtn = document.getElementById('manual-mapping-btn');
 
         if (bulkImportBtn) {
             bulkImportBtn.addEventListener('click', () => this.showBulkImportModal());
@@ -58,9 +57,6 @@ export class ItemsManager {
         }
         if (confirmMappingBtn) {
             confirmMappingBtn.addEventListener('click', () => this.confirmColumnMapping());
-        }
-        if (manualMappingBtn) {
-            manualMappingBtn.addEventListener('click', () => this.showManualMappingModal());
         }
     }
 
@@ -1105,60 +1101,7 @@ export class ItemsManager {
         modal.show();
     }
 
-    showManualMappingModal() {
-        const fileInput = document.getElementById('excel-file-input');
-        const file = fileInput.files[0];
-        
-        if (!file) {
-            alert('Lütfen önce bir dosya seçin.');
-            return;
-        }
 
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            try {
-                let jsonData;
-                
-                if (file.name.toLowerCase().endsWith('.csv')) {
-                    const csvText = e.target.result;
-                    jsonData = this.parseCSV(csvText);
-                } else {
-                    const data = new Uint8Array(e.target.result);
-                    const workbook = XLSX.read(data, { type: 'array' });
-                    const sheetName = workbook.SheetNames[0];
-                    const worksheet = workbook.Sheets[sheetName];
-                    jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-                }
-
-                if (jsonData.length < 2) {
-                    alert('Dosya boş veya geçersiz format.');
-                    return;
-                }
-
-                const headers = jsonData[0];
-                const dataRows = jsonData.slice(1);
-                const emptyMapping = {
-                    code: -1,
-                    name: -1,
-                    quantity: -1,
-                    unit: -1,
-                    priority: -1,
-                    specs: -1
-                };
-
-                this.showColumnMappingModal(headers, emptyMapping, dataRows);
-            } catch (error) {
-                console.error('Dosya okuma hatası:', error);
-                alert('Dosya okunamadı. Lütfen geçerli bir Excel veya CSV dosyası seçin.');
-            }
-        };
-        
-        if (file.name.toLowerCase().endsWith('.csv')) {
-            reader.readAsText(file, 'UTF-8');
-        } else {
-            reader.readAsArrayBuffer(file);
-        }
-    }
 
     previewBulkImport() {
         const fileInput = document.getElementById('excel-file-input');
@@ -1248,7 +1191,6 @@ export class ItemsManager {
             job_no: -1,
             quantity: -1,
             unit: -1,
-            priority: -1,
             specs: -1
         };
 
@@ -1258,7 +1200,6 @@ export class ItemsManager {
             job_no: ['srm. kodu', 'srm kodu', 'iş no', 'is no', 'job no', 'job number', 'work no', 'work number', 'proje no', 'project no'],
             quantity: ['miktar', 'quantity', 'adet', 'sayı', 'number', 'amount', 'qty', 'count', 'piece'],
             unit: ['birim', 'unit', 'ölçü', 'measure', 'uom', 'measurement'],
-            priority: ['öncelik', 'priority', 'aciliyet', 'urgency', 'level', 'seviye'],
             specs: ['özellik', 'specs', 'specification', 'teknik', 'technical', 'detay', 'detail', 'açıklama', 'description', 'teknik özellikler', 'açıklama-1', 'açıklama-2']
         };
 
@@ -1355,9 +1296,6 @@ export class ItemsManager {
             if (mapping.unit === -1 && (headerLower === 'birim' || headerNormalized === 'birim')) {
                 mapping.unit = index;
             }
-            if (mapping.priority === -1 && (headerLower === 'öncelik' || headerNormalized === 'oncelik')) {
-                mapping.priority = index;
-            }
             if (mapping.specs === -1 && (headerLower.includes('teknik') && headerLower.includes('özellik'))) {
                 mapping.specs = index;
             }
@@ -1376,28 +1314,12 @@ export class ItemsManager {
         const mappingContainer = document.getElementById('column-mapping-container');
         mappingContainer.innerHTML = '';
         
-        // Add sample data preview
-        if (dataRows.length > 0) {
-            const sampleDiv = document.createElement('div');
-            sampleDiv.className = 'alert alert-secondary mb-3';
-            const sampleRow = dataRows[0];
-            sampleDiv.innerHTML = `
-                <strong>Örnek Veri (İlk Satır):</strong><br>
-                ${headers.map((header, index) => 
-                    `<strong>${header || `Sütun ${index + 1}`}:</strong> "${sampleRow[index] || ''}"<br>`
-                ).join('')}
-            `;
-            mappingContainer.appendChild(sampleDiv);
-        }
-        
         const requiredFields = [
             { key: 'code', label: 'Stok Kodu', required: true },
             { key: 'name', label: 'Malzeme Adı', required: true },
             { key: 'job_no', label: 'İş No', required: true },
             { key: 'quantity', label: 'Miktar', required: true },
-            { key: 'unit', label: 'Birim', required: true },
-            { key: 'priority', label: 'Öncelik', required: false },
-            { key: 'specs', label: 'Özellikler', required: false }
+            { key: 'unit', label: 'Birim', required: true }
         ];
 
         requiredFields.forEach(field => {
@@ -1482,7 +1404,7 @@ export class ItemsManager {
                     job_no: this.getCellValue(row, mapping.job_no),
                     quantity: this.parseQuantity(this.getCellValue(row, mapping.quantity)),
                     unit: this.getCellValue(row, mapping.unit),
-                    priority: this.getCellValue(row, mapping.priority) || 'normal',
+                    priority: 'normal',
                     specs: specs
                 };
 
@@ -1519,16 +1441,7 @@ export class ItemsManager {
                     return;
                 }
 
-                // Validate priority values
-                if (item.priority && !['normal', 'acil', 'kritik', 'low', 'high', 'urgent'].includes(item.priority.toLowerCase())) {
-                    warnings.push(`Satır ${index + 2}: Geçersiz öncelik değeri "${item.priority}", "normal" olarak ayarlandı`);
-                    item.priority = 'normal';
-                }
 
-                // Normalize priority
-                if (item.priority) {
-                    item.priority = this.normalizePriority(item.priority);
-                }
 
                 processedItems.push(item);
             } catch (error) {
@@ -1707,7 +1620,6 @@ export class ItemsManager {
         processedItems.forEach((item, index) => {
             const tr = document.createElement('tr');
             const specsCell = this.formatSpecsCell(item.specs);
-            const priorityCell = this.formatPriorityCell(item.priority);
             tr.innerHTML = `
                 <td>${index + 1}</td>
                 <td>${item.code}</td>
@@ -1715,7 +1627,6 @@ export class ItemsManager {
                 <td>${item.job_no}</td>
                 <td>${item.quantity}</td>
                 <td>${item.unit}</td>
-                <td>${priorityCell}</td>
                 <td>${specsCell}</td>
                 <td><span class="badge bg-success">Geçerli</span></td>
             `;

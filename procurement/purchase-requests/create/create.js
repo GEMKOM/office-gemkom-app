@@ -587,6 +587,7 @@ async function submitRequest() {
         );
         
         if (!validation.isValid) {
+            console.log(validation);
             // Show field-specific validation errors for form fields
             const formErrorField = validationManager.showAllFieldValidations(formData);
             

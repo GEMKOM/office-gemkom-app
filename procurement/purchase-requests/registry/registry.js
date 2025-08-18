@@ -45,9 +45,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize header component
     const header = new HeaderComponent({
-        title: 'Bekleyen Satın Alma Talepleri',
-        subtitle: 'Onay bekleyen taleplerin yönetimi ve karşılaştırması',
-        icon: 'clock',
+        title: 'Satın Alma Talepleri Kayıt Defteri',
+        subtitle: 'Tüm satın alma taleplerinin geçmişi ve yönetimi',
+        icon: 'archive',
         showBackButton: 'block',
         showCreateButton: 'none',
         showBulkCreateButton: 'none',
@@ -62,12 +62,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         requestsStats = new StatisticsCards('requests-statistics', {
             cards: [
                 { title: 'Tüm Talepler', value: '0', icon: 'fas fa-list', color: 'primary', id: 'all-requests-count' },
-                { title: 'Taslak', value: '0', icon: 'fas fa-edit', color: 'secondary', id: 'draft-requests-count' },
                 { title: 'Onay Bekliyor', value: '0', icon: 'fas fa-paper-plane', color: 'warning', id: 'submitted-requests-count' },
-                { title: 'Onaylandı', value: '0', icon: 'fas fa-check', color: 'success', id: 'approved-requests-count' }
+                { title: 'Onaylandı', value: '0', icon: 'fas fa-check', color: 'success', id: 'approved-requests-count' },
+                { title: 'Reddedildi', value: '0', icon: 'fas fa-times', color: 'danger', id: 'rejected-requests-count' },
             ],
             compact: true,
-            animation: true
+            animation: true,
+            columns: 5
         });
         console.log('StatisticsCards initialized successfully');
     } catch (error) {
@@ -159,7 +160,7 @@ async function initializeFiltersComponent() {
         colSize: 2
     });
 
-    // Add Requestor filter with current user as default
+    // Add Requestor filter with all users as default
     requestFilters.addDropdownFilter({
         id: 'requestor-filter',
         label: 'Talep Eden',
@@ -171,7 +172,7 @@ async function initializeFiltersComponent() {
                 label: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || user.email
             }))
         ],
-        value: currentUser ? currentUser.id : '',
+        value: '', // Default to all users
         colSize: 2
     });
 
@@ -184,7 +185,7 @@ async function initializeFiltersComponent() {
             { value: '', label: 'Tüm Durumlar' },
             ...statusChoices
         ],
-        value: 'submitted', // Default to submitted status
+        value: '', // Default to all statuses
         colSize: 2
     });
 
@@ -372,7 +373,7 @@ function renderRequestsTable(requests) {
                     <div class="empty-state">
                         <i class="fas fa-inbox"></i>
                         <h5>Henüz talep bulunmuyor</h5>
-                        <p>Bekleyen satın alma talebi bulunmamaktadır.</p>
+                        <p>Satın alma talebi bulunmamaktadır.</p>
                     </div>
                 </td>
             </tr>
@@ -417,6 +418,12 @@ function renderRequestsTable(requests) {
                         <button class="btn btn-outline-danger btn-sm" onclick="rejectRequest(${request.id})" 
                                 title="Reddet">
                             <i class="fas fa-times"></i>
+                        </button>
+                    ` : ''}
+                    ${request.status === 'approved' ? `
+                        <button class="btn btn-outline-info btn-sm" onclick="completeRequest(${request.id})" 
+                                title="Tamamla">
+                            <i class="fas fa-flag-checkered"></i>
                         </button>
                     ` : ''}
                 </div>
@@ -492,7 +499,9 @@ function updateRequestCounts() {
         0: requests.length.toString(),
         1: requests.filter(r => r.status === 'draft').length.toString(),
         2: requests.filter(r => r.status === 'submitted').length.toString(),
-        3: requests.filter(r => r.status === 'approved').length.toString()
+        3: requests.filter(r => r.status === 'approved').length.toString(),
+        4: requests.filter(r => r.status === 'rejected').length.toString(),
+        5: requests.filter(r => r.status === 'completed').length.toString()
     };
     
     requestsStats.updateValues(counts);
@@ -918,6 +927,32 @@ async function rejectRequest(requestId) {
     }
 }
 
+async function completeRequest(requestId) {
+    if (!confirm('Bu talebi tamamlamak istediğinizden emin misiniz?')) {
+        return;
+    }
+
+    try {
+        showLoading(true);
+        // Note: You'll need to implement completePurchaseRequest in the procurement.js file
+        // await completePurchaseRequest(requestId);
+        showNotification('Talep başarıyla tamamlandı', 'success');
+        
+        // Close the modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('requestDetailsModal'));
+        if (modal) {
+            modal.hide();
+        }
+        
+        await loadRequests();
+    } catch (error) {
+        console.error('Error completing request:', error);
+        showNotification('Talep tamamlanırken hata oluştu: ' + error.message, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
 function exportRequests() {
     // Implementation for exporting requests
     showNotification('Dışa aktarma özelliği yakında eklenecek', 'info');
@@ -1055,3 +1090,4 @@ function showNotification(message, type = 'info') {
 window.viewRequestDetails = viewRequestDetails;
 window.approveRequest = approveRequest;
 window.rejectRequest = rejectRequest;
+window.completeRequest = completeRequest;

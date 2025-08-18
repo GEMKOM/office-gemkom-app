@@ -21,6 +21,12 @@ export class ValidationManager {
                 }
             }
         };
+        
+        // Track validation state for each field
+        this.fieldValidationState = {};
+        
+        // Track if validation has been triggered
+        this.validationTriggered = false;
     }
 
     // Validate a single field
@@ -45,10 +51,15 @@ export class ValidationManager {
             errors.push(rules.messages.maxLength);
         }
 
-        return {
+        const result = {
             isValid: errors.length === 0,
             message: errors[0] || ''
         };
+        
+        // Store validation state
+        this.fieldValidationState[fieldId] = result;
+        
+        return result;
     }
 
     // Show field validation state
@@ -119,6 +130,9 @@ export class ValidationManager {
         if (existingFeedback) {
             existingFeedback.remove();
         }
+        
+        // Clear validation state
+        delete this.fieldValidationState[fieldId];
     }
 
     // Validate all fields
@@ -168,6 +182,10 @@ export class ValidationManager {
         
         // Also clear item recommendation marks
         this.clearItemRecommendationMarks();
+        
+        // Reset validation state
+        this.fieldValidationState = {};
+        this.validationTriggered = false;
     }
 
     // Setup real-time validation for a field
@@ -175,9 +193,13 @@ export class ValidationManager {
         const field = document.getElementById(fieldId);
         if (!field) return;
 
-        // Clear validation on input
+        // Validate on input and show feedback immediately
         field.addEventListener('input', () => {
-            this.clearFieldValidation(fieldId);
+            const value = field.value;
+            const validation = this.validateField(fieldId, value);
+            
+            // Always show validation feedback on input
+            this.showFieldValidation(fieldId, validation.isValid, validation.message);
         });
 
         // Validate on blur
@@ -258,6 +280,9 @@ export class ValidationManager {
     // Comprehensive validation for all data
     validateAllData(formData, items, suppliers, itemRecommendations, offers) {
         const errors = [];
+        
+        // Mark that validation has been triggered
+        this.validationTriggered = true;
         
         // Validate form fields
         const formValidation = this.validateAllFields(formData);
@@ -464,7 +489,7 @@ export class ValidationManager {
     
     // Clear all table error messages
     clearTableErrorMessages() {
-        const errorMessages = document.querySelectorAll('.table-error-message, .table-error-indicator, .table-error-tooltip, .table-error-icon');
+        const errorMessages = document.querySelectorAll('.table-error-icon');
         errorMessages.forEach(error => error.remove());
     }
 
@@ -574,6 +599,59 @@ export class ValidationManager {
                     this.addTableErrorMessage(row, errorMessage, errorType);
                 }
             }
+        }
+    }
+    
+    // Check if a specific field has validation errors
+    hasFieldError(fieldId) {
+        return this.fieldValidationState[fieldId] && !this.fieldValidationState[fieldId].isValid;
+    }
+    
+    // Get all current validation errors
+    getAllValidationErrors() {
+        const errors = [];
+        
+        // Add field validation errors
+        Object.values(this.fieldValidationState).forEach(state => {
+            if (!state.isValid && state.message) {
+                errors.push(state.message);
+            }
+        });
+        
+        return errors;
+    }
+    
+    // Check if a specific item error should be cleared
+    shouldClearItemError(itemIndex, items, itemRecommendations, offers, suppliers) {
+        if (!items || !items[itemIndex]) return true;
+        
+        const hasAnyOffer = this.hasAnyOffer(itemIndex, offers, suppliers);
+        const hasValidRecommendation = this.hasValidRecommendation(itemIndex, itemRecommendations, offers, suppliers);
+        
+        return hasAnyOffer && hasValidRecommendation;
+    }
+    
+    // Smart clear validation - only clear errors that are resolved
+    smartClearValidation(items, itemRecommendations, offers, suppliers) {
+        // Clear field validations that are now valid
+        Object.keys(this.fieldValidationState).forEach(fieldId => {
+            const field = document.getElementById(fieldId);
+            if (field) {
+                const value = field.value;
+                const validation = this.validateField(fieldId, value);
+                if (validation.isValid) {
+                    this.clearFieldValidation(fieldId);
+                }
+            }
+        });
+        
+        // Clear item errors that are now resolved
+        if (items && items.length > 0) {
+            items.forEach((item, index) => {
+                if (this.shouldClearItemError(index, items, itemRecommendations, offers, suppliers)) {
+                    this.clearItemError(index);
+                }
+            });
         }
     }
 }

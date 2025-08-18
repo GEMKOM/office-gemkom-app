@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Satın Alma Talepleri Kayıt Defteri</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../style.css">
+    <link rel="stylesheet" href="../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../components/dropdown.css">
+    <link rel="icon" type="image/png" href="../../../images/gemkom.png">
+    <link rel="stylesheet" href="../../../pre-auth.css">
+    <link rel="stylesheet" href="registry.css">
+    <link rel="stylesheet" href="../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="../../../components/filters/filters.css">
+    <link rel="stylesheet" href="../../../components/table/table.css"
+</head>
+<body class="pre-auth">
+    <!-- Navigation -->
+    <div id="navbar-container"></div>
+
+    <!-- Main Content Section -->
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <!-- Header Component Placeholder -->
+            <div id="header-placeholder"></div>
+            
+            <!-- Statistics Cards -->
+            <div id="requests-statistics"></div>
+
+            <!-- Filters Section -->
+            <div id="filters-placeholder"></div>
+
+            <!-- Requests Table Section -->
+            <div class="row">
+                <div class="col-12">
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <h5 class="card-title">
+                                <i class="fas fa-table me-2 text-primary"></i>
+                                Tüm Satın Alma Talepleri
+                            </h5>
+                            <div class="card-actions">
+                                <button class="btn btn-sm btn-outline-secondary" id="refresh-requests">
+                                    <i class="fas fa-sync-alt me-1"></i>Yenile
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" id="export-requests">
+                                    <i class="fas fa-download me-1"></i>Dışa Aktar
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-field="request_number">
+                                                Talep No <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="title">
+                                                Başlık <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="requestor">
+                                                Talep Eden <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="status">
+                                                Durum <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="priority">
+                                                Öncelik <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="total_amount_eur">
+                                                Toplam Tutar <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="created_at">
+                                                Oluşturulma <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th>İşlemler</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="requests-table-body">
+                                        <!-- Requests will be loaded here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <nav aria-label="Requests pagination">
+                        <ul class="pagination justify-content-center" id="requests-pagination">
+                            <!-- Pagination will be generated here -->
+                        </ul>
+                    </nav>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Request Details Modal -->
+    <div class="modal fade" id="requestDetailsModal" tabindex="-1" aria-labelledby="requestDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="requestDetailsModalLabel">
+                        <i class="fas fa-file-invoice me-2"></i>
+                        Talep Detayları
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="request-details-container"></div>
+                    
+                    <!-- Comparison Table Section -->
+                    <div id="comparison-table-section" style="display: none;">
+                        <hr class="my-4">
+                        <h6 class="fw-bold mb-3">
+                            <i class="fas fa-chart-bar me-2"></i>
+                            Teklif Karşılaştırma Tablosu
+                        </h6>
+                        <div class="table-responsive">
+                            <table class="table table-bordered" id="comparison-table">
+                                <thead class="table-primary">
+                                    <tr>
+                                        <th rowspan="2" class="align-middle">Malzeme</th>
+                                        <th rowspan="2" class="align-middle">Miktar</th>
+                                        <th rowspan="2" class="align-middle">Birim</th>
+                                        <th id="supplier-group-header" colspan="1" class="text-center">Tedarikçi Teklifleri</th>
+                                    </tr>
+                                    <tr id="supplier-headers">
+                                        <!-- Supplier headers will be added here -->
+                                    </tr>
+                                </thead>
+                                <tbody id="comparison-tbody">
+                                    <!-- Comparison rows will be added here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-danger" id="reject-request" style="min-width: 120px; height: 38px;">
+                        <i class="fas fa-times me-1"></i>Reddet
+                    </button>
+                    <button type="button" class="btn btn-success" id="approve-request" style="min-width: 120px; height: 38px;">
+                        <i class="fas fa-check me-1"></i>Onayla
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="registry.js"></script>
+    <script src="../../../components/statistics-cards/statistics-cards.js"></script>
+</body>
+</html>
+
