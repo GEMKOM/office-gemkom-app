@@ -647,3 +647,687 @@ thead .btn.btn-outline-warning {
 .text-danger {
     color: #dc3545 !important;
 }
+
+/* Technical Specifications Cell Styling */
+.specs-cell {
+    display: flex;
+    align-items: center;
+    max-width: 100%;
+    word-wrap: break-word;
+    min-height: 1.5rem;
+}
+
+.specs-text {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: calc(100% - 30px);
+}
+
+.specs-expand-btn {
+    flex-shrink: 0;
+    margin-left: 4px;
+    padding: 2px 4px;
+    border: none;
+    background: none;
+    color: #007bff;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.specs-expand-btn:hover {
+    color: #0056b3;
+    text-decoration: none;
+}
+
+.specs-expand-btn:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    border-radius: 3px;
+}
+
+/* Specs Modal Styling */
+.specs-content {
+    background-color: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 1rem;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.specs-text-display {
+    background: none;
+    border: none;
+    font-family: inherit;
+    font-size: 0.9rem;
+    line-height: 1.5;
+    color: #495057;
+    margin: 0;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Tooltip customization for specs */
+.tooltip {
+    font-size: 0.875rem;
+}
+
+.tooltip-inner {
+    max-width: 300px;
+    text-align: left;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
+
+/* Responsive adjustments for specs cell */
+@media (max-width: 768px) {
+    .specs-cell {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .specs-text {
+        max-width: 100%;
+        white-space: normal;
+        line-height: 1.3;
+    }
+    
+    .specs-expand-btn {
+        margin-left: 0;
+        margin-top: 4px;
+    }
+}
+
+/* Modal Styling for Delete/Clear/Merge Operations */
+.item-details {
+    border: 1px solid #dee2e6;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+}
+
+.specs-preview {
+    font-size: 0.875rem;
+    color: #6c757d;
+    background-color: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 0.5rem;
+    max-height: 80px;
+    overflow-y: auto;
+}
+
+.duplicate-group {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border: 1px solid #dee2e6 !important;
+}
+
+.duplicate-group h6 {
+    color: #495057;
+    font-weight: 600;
+}
+
+.merge-preview {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb) !important;
+    border: 1px solid #90caf9 !important;
+}
+
+.duplicates-container {
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+/* Modal header color variations */
+.modal-header.bg-danger {
+    background: linear-gradient(135deg, #dc3545, #c82333) !important;
+}
+
+.modal-header.bg-warning {
+    background: linear-gradient(135deg, #ffc107, #e0a800) !important;
+}
+
+.modal-header.bg-info {
+    background: linear-gradient(135deg, #17a2b8, #138496) !important;
+}
+
+/* Notification styling */
+.alert.position-fixed {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    border: none;
+    border-radius: 8px;
+}
+
+.alert-success {
+    background: linear-gradient(135deg, #d4edda, #c3e6cb);
+    color: #155724;
+    border-left: 4px solid #28a745;
+}
+
+.alert-danger {
+    background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+    color: #721c24;
+    border-left: 4px solid #dc3545;
+}
+
+.alert-warning {
+    background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+    color: #856404;
+    border-left: 4px solid #ffc107;
+}
+
+.alert-info {
+    background: linear-gradient(135deg, #d1ecf1, #bee5eb);
+    color: #0c5460;
+    border-left: 4px solid #17a2b8;
+}
+
+/* Table styling for merge modal */
+.duplicate-group .table {
+    font-size: 0.875rem;
+    margin-bottom: 0;
+}
+
+.duplicate-group .table th {
+    background-color: #e9ecef;
+    font-weight: 600;
+    font-size: 0.8rem;
+    padding: 0.5rem;
+}
+
+.duplicate-group .table td {
+    padding: 0.5rem;
+    vertical-align: middle;
+}
+
+/* List group styling for clear all modal */
+.list-group-item {
+    border-left: none;
+    border-right: none;
+    padding: 0.75rem 1rem;
+}
+
+.list-group-item:first-child {
+    border-top: none;
+}
+
+.list-group-item:last-child {
+    border-bottom: none;
+}
+
+.list-group-item i {
+    width: 20px;
+    text-align: center;
+}
+
+/* Inline Editing Styles for Items Table */
+.editable-cell {
+    position: relative;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    padding: 0.5rem;
+    border-radius: 4px;
+    border: 1px solid #e9ecef;
+    background-color: #fafbfc;
+}
+
+.editable-cell::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    pointer-events: none;
+    transition: all 0.2s ease;
+}
+
+.editable-cell:hover {
+    background-color: #e3f2fd;
+    border-color: #2196f3;
+    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.1);
+}
+
+.editable-cell:hover::before {
+    border-color: #2196f3;
+}
+
+.editable-cell:hover::after {
+    content: "✏️";
+    position: absolute;
+    top: 2px;
+    right: 2px;
+    font-size: 0.7rem;
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+.editable-cell:active {
+    background-color: #bbdefb;
+    transform: scale(0.98);
+}
+
+.editable-cell .form-control-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    border: 1px solid #007bff;
+    border-radius: 4px;
+    width: 100%;
+    min-width: 80px;
+}
+
+.editable-cell .form-control-sm:focus {
+    border-color: #0056b3;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.editable-cell .form-select-sm {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.875rem;
+    border: 1px solid #007bff;
+    border-radius: 4px;
+    width: 100%;
+    min-width: 100px;
+}
+
+.editable-cell .form-select-sm:focus {
+    border-color: #0056b3;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Action buttons styling */
+.action-buttons {
+    white-space: nowrap;
+}
+
+.action-buttons .btn {
+    margin-left: 0.25rem;
+}
+
+/* Textarea styling for specs editing */
+.editable-cell .form-control-sm[rows] {
+    font-family: inherit;
+    line-height: 1.4;
+    padding: 0.375rem 0.5rem;
+    border: 1px solid #007bff;
+    border-radius: 4px;
+    width: 100%;
+    min-width: 200px;
+    max-width: 400px;
+    margin: 0;
+    display: block;
+}
+
+.editable-cell .form-control-sm[rows]:focus {
+    border-color: #0056b3;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+/* Ensure specs cell maintains alignment during editing */
+.editable-cell[data-field="specs"].editing-specs {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    min-height: 60px;
+    background-color: #fff3cd;
+    border-color: #ffc107;
+    box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
+}
+
+/* Visual indicator for cells currently being edited */
+.editable-cell.editing {
+    background-color: #fff3cd;
+    border-color: #ffc107;
+    box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0% {
+        box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
+    }
+    50% {
+        box-shadow: 0 0 0 0.3rem rgba(255, 193, 7, 0.4);
+    }
+    100% {
+        box-shadow: 0 0 0 0.2rem rgba(255, 193, 7, 0.25);
+    }
+}
+
+.editable-cell[data-field="specs"] .form-control-sm[rows] {
+    width: 90%;
+    max-width: 300px;
+    margin: 0;
+    min-height: 60px;
+    max-height: 120px;
+    border: 1px solid #007bff;
+    border-radius: 4px;
+    resize: vertical;
+}
+
+/* Ensure specs cell has consistent padding and alignment */
+.editable-cell[data-field="specs"] {
+    padding: 0.5rem;
+    vertical-align: top;
+}
+
+/* Inline editing instruction styling */
+.alert-sm {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 6px;
+}
+
+.alert-sm .fas {
+    font-size: 0.8rem;
+}
+
+/* Responsive adjustments for inline editing */
+@media (max-width: 768px) {
+    .editable-cell .form-control-sm,
+    .editable-cell .form-select-sm {
+        min-width: 60px;
+        font-size: 0.8rem;
+    }
+    
+    .editable-cell .form-control-sm[rows] {
+        min-width: 150px;
+        max-width: 300px;
+        font-size: 0.8rem;
+    }
+    
+    .action-buttons .btn {
+        padding: 0.25rem 0.5rem;
+        font-size: 0.75rem;
+    }
+    
+    .alert-sm {
+        font-size: 0.8rem;
+        padding: 0.375rem 0.5rem;
+    }
+}
+
+/* Unit price display styling */
+.unit-price-display {
+    background-color: rgba(0, 123, 255, 0.1);
+    border-radius: 6px;
+    padding: 0.25rem 0.5rem;
+    border: 1px solid rgba(0, 123, 255, 0.2);
+    margin: 0.25rem 0;
+}
+
+.unit-price-display small {
+    font-size: 0.75rem;
+    line-height: 1.2;
+}
+
+.unit-price-info {
+    background-color: #f8f9fa;
+    border-radius: 6px;
+    padding: 0.5rem;
+    border: 1px dashed #dee2e6;
+    text-align: center;
+}
+
+/* Professional Inline Validation Styles */
+.form-control.is-invalid,
+.form-select.is-invalid,
+.form-control.is-valid,
+.form-select.is-valid {
+    background-image: none;
+    padding-right: 0.75rem;
+}
+
+/* Item recommendation validation styles */
+.item-no-recommendation {
+    background-color: #fff3cd !important;
+    border-left: 4px solid #ffc107 !important;
+    transition: all 0.3s ease;
+}
+
+.item-no-recommendation:hover {
+    background-color: #ffeaa7 !important;
+    border-left-color: #f39c12 !important;
+}
+
+/* Item no offer validation styles */
+.item-no-offer {
+    background-color: #f8d7da !important;
+    border-left: 4px solid #dc3545 !important;
+    transition: all 0.3s ease;
+}
+
+.item-no-offer:hover {
+    background-color: #f5c6cb !important;
+    border-left-color: #c82333 !important;
+}
+
+.form-control.is-invalid,
+.form-select.is-invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+.form-control.is-valid,
+.form-select.is-valid {
+    border-color: #198754;
+    box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.25);
+}
+
+.invalid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    font-size: 0.875em;
+    color: #dc3545;
+    font-weight: 500;
+}
+
+.valid-feedback {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    font-size: 0.875em;
+    color: #198754;
+    font-weight: 500;
+}
+
+.form-label.has-error {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.form-label.has-success {
+    color: #198754;
+    font-weight: 600;
+}
+
+/* Field group validation styling */
+.field-group.has-error .form-control,
+.field-group.has-error .form-select {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+.field-group.has-success .form-control,
+.field-group.has-success .form-select {
+    border-color: #198754;
+    box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.25);
+}
+
+/* Animation for validation states */
+.form-control,
+.form-select {
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.invalid-feedback,
+.valid-feedback {
+    animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Disabled button styles */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.btn:disabled:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* Focus states for better UX */
+.form-control:focus.is-invalid,
+.form-select:focus.is-invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+.form-control:focus.is-valid,
+.form-select:focus.is-valid {
+    border-color: #198754;
+    box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.25);
+}
+
+/* Simple table error icon styles */
+.table-error-icon {
+    position: absolute;
+    top: 50%;
+    right: 8px;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: help;
+    z-index: 10;
+    animation: fadeInScale 0.3s ease-out;
+    transition: all 0.2s ease;
+}
+
+/* Ensure table cells can accommodate error icons */
+.comparison-table td {
+    position: relative;
+}
+
+.table-error-icon.no-offer {
+    background-color: #dc3545;
+    color: white;
+}
+
+.table-error-icon.no-recommendation {
+    background-color: #ffc107;
+    color: #212529;
+}
+
+.table-error-icon i {
+    font-size: 0.75rem;
+}
+
+.table-error-icon:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+}
+
+/* Tooltip for error details */
+.table-error-icon::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: #333;
+    color: white;
+    padding: 0.5rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    white-space: normal;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 1000;
+    pointer-events: none;
+    margin-bottom: 0.5rem;
+    max-width: 300px;
+    min-width: 200px;
+    word-wrap: break-word;
+    text-align: center;
+    line-height: 1.3;
+}
+
+.table-error-icon::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 4px solid transparent;
+    border-top-color: #333;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.2s ease;
+    z-index: 1000;
+    pointer-events: none;
+    margin-bottom: 0.25rem;
+}
+
+.table-error-icon:hover::after,
+.table-error-icon:hover::before {
+    opacity: 1;
+    visibility: visible;
+}
+
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Ensure table rows can accommodate error icons */
+.comparison-table tr {
+    position: relative;
+}
+
+/* Responsive adjustments for error icons */
+@media (max-width: 768px) {
+    .table-error-icon {
+        width: 18px;
+        height: 18px;
+        top: 50%;
+        right: 6px;
+        transform: translateY(-50%);
+    }
+    
+    .table-error-icon i {
+        font-size: 0.7rem;
+    }
+    
+    .table-error-icon::after {
+        font-size: 0.7rem;
+        padding: 0.4rem 0.6rem;
+        max-width: 250px;
+        min-width: 150px;
+    }
+}

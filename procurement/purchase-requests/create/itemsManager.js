@@ -6,42 +6,47 @@ export class ItemsManager {
         this.setupEventListeners();
     }
 
+    // ===== EVENT LISTENERS =====
     setupEventListeners() {
-        // Add item button
+        this.setupItemButtons();
+        this.setupModalButtons();
+        this.setupBulkImportButtons();
+    }
+
+    setupItemButtons() {
         const addItemBtn = document.getElementById('add-item-btn');
-        if (addItemBtn) {
-            addItemBtn.addEventListener('click', () => {
-                this.showItemModal();
-            });
-        }
-
-        // Bulk import button
-        const bulkImportBtn = document.getElementById('bulk-import-btn');
-        if (bulkImportBtn) {
-            bulkImportBtn.addEventListener('click', () => {
-                this.showBulkImportModal();
-            });
-        }
-
-        // Clear items button
         const clearItemsBtn = document.getElementById('clear-items-btn');
-        if (clearItemsBtn) {
-            clearItemsBtn.addEventListener('click', () => {
-                this.clearAllItems();
-            });
-        }
+        const mergeItemsBtn = document.getElementById('merge-items-btn');
 
-        // Modal event listeners
+        if (addItemBtn) {
+            addItemBtn.addEventListener('click', () => this.showItemModal());
+        }
+        if (clearItemsBtn) {
+            clearItemsBtn.addEventListener('click', () => this.clearAllItems());
+        }
+        if (mergeItemsBtn) {
+            mergeItemsBtn.addEventListener('click', () => this.mergeDuplicateItems());
+        }
+    }
+
+    setupModalButtons() {
         const saveItemBtn = document.getElementById('save-item-btn');
         if (saveItemBtn) {
             saveItemBtn.addEventListener('click', () => this.saveItem());
         }
+    }
 
-        // Bulk import modal event listeners
+    setupBulkImportButtons() {
+        const bulkImportBtn = document.getElementById('bulk-import-btn');
         const previewImportBtn = document.getElementById('preview-import-btn');
         const clearImportBtn = document.getElementById('clear-import-btn');
         const importItemsBtn = document.getElementById('import-items-btn');
+        const confirmMappingBtn = document.getElementById('confirm-mapping-btn');
+        const manualMappingBtn = document.getElementById('manual-mapping-btn');
 
+        if (bulkImportBtn) {
+            bulkImportBtn.addEventListener('click', () => this.showBulkImportModal());
+        }
         if (previewImportBtn) {
             previewImportBtn.addEventListener('click', () => this.previewBulkImport());
         }
@@ -51,8 +56,15 @@ export class ItemsManager {
         if (importItemsBtn) {
             importItemsBtn.addEventListener('click', () => this.importBulkItems());
         }
+        if (confirmMappingBtn) {
+            confirmMappingBtn.addEventListener('click', () => this.confirmColumnMapping());
+        }
+        if (manualMappingBtn) {
+            manualMappingBtn.addEventListener('click', () => this.showManualMappingModal());
+        }
     }
 
+    // ===== ITEM MANAGEMENT =====
     showItemModal(itemIndex = null) {
         const modalElement = document.getElementById('itemModal');
         const modal = new bootstrap.Modal(modalElement);
@@ -78,6 +90,7 @@ export class ItemsManager {
     populateItemForm(item) {
         document.getElementById('item-code').value = item.code;
         document.getElementById('item-name').value = item.name;
+        document.getElementById('item-job-no').value = item.job_no || '';
         document.getElementById('item-quantity').value = item.quantity;
         document.getElementById('item-unit').value = item.unit;
         document.getElementById('item-priority').value = item.priority || 'normal';
@@ -88,14 +101,54 @@ export class ItemsManager {
         const form = document.getElementById('itemForm');
         const editIndex = form.dataset.editIndex;
 
+        // Get form values
+        const code = document.getElementById('item-code').value.trim();
+        const name = document.getElementById('item-name').value.trim();
+        const jobNo = document.getElementById('item-job-no').value.trim();
+        const quantity = parseFloat(document.getElementById('item-quantity').value) || 0;
+        const unit = document.getElementById('item-unit').value;
+        const priority = document.getElementById('item-priority').value;
+        const specs = document.getElementById('item-specs').value;
+
+        // Validate required fields
+        const errors = [];
+        
+        if (!code) {
+            errors.push('Malzeme kodu zorunludur');
+        }
+        
+        if (!name) {
+            errors.push('Malzeme adı zorunludur');
+        }
+        
+        if (!jobNo) {
+            errors.push('İş numarası zorunludur');
+        }
+        
+        if (!quantity || quantity <= 0) {
+            errors.push('Miktar zorunludur ve 0\'dan büyük olmalıdır');
+        }
+        
+        // Check if quantity is integer when unit is 'adet'
+        if (unit === 'adet' && !Number.isInteger(quantity)) {
+            errors.push('\'Adet\' birimi için miktar tam sayı olmalıdır');
+        }
+
+        // Show errors if any
+        if (errors.length > 0) {
+            this.showNotification('Lütfen aşağıdaki hataları düzeltin:\n' + errors.join('\n'), 'error');
+            return;
+        }
+
         const item = {
             id: editIndex !== undefined ? this.requestData.items[editIndex].id : this.generateItemId(),
-            code: document.getElementById('item-code').value,
-            name: document.getElementById('item-name').value,
-            quantity: parseFloat(document.getElementById('item-quantity').value) || 0,
-            unit: document.getElementById('item-unit').value,
-            priority: document.getElementById('item-priority').value,
-            specs: document.getElementById('item-specs').value
+            code: code,
+            name: name,
+            job_no: jobNo,
+            quantity: quantity,
+            unit: unit,
+            priority: priority,
+            specs: specs
         };
 
         if (editIndex !== undefined) {
@@ -114,42 +167,466 @@ export class ItemsManager {
     }
 
     deleteItem(index) {
-        if (confirm('Bu malzemeyi silmek istediğinizden emin misiniz?')) {
-            const item = this.requestData.items[index];
-            
-            // Remove all offers for this item
-            Object.keys(this.requestData.offers).forEach(supplierId => {
-                if (this.requestData.offers[supplierId][index]) {
-                    delete this.requestData.offers[supplierId][index];
-                    // Reindex the offers
-                    const reindexedOffers = {};
-                    Object.keys(this.requestData.offers[supplierId]).forEach(key => {
-                        const numKey = parseInt(key);
-                        if (numKey > index) {
-                            reindexedOffers[numKey - 1] = this.requestData.offers[supplierId][key];
-                        } else if (numKey < index) {
-                            reindexedOffers[numKey] = this.requestData.offers[supplierId][key];
-                        }
-                    });
-                    this.requestData.offers[supplierId] = reindexedOffers;
-                }
-            });
+        const item = this.requestData.items[index];
+        this.showDeleteItemModal(item, index);
+    }
 
-            this.requestData.items.splice(index, 1);
-            this.renderItemsTable();
-            this.autoSave();
-        }
+    showDeleteItemModal(item, index) {
+        const modalId = 'deleteItemModal_' + Date.now();
+        
+        const modalHtml = `
+            <div class="modal fade" id="${modalId}" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header bg-danger text-white">
+                            <h5 class="modal-title">
+                                <i class="fas fa-exclamation-triangle me-2"></i>Malzeme Silme Onayı
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <strong>Dikkat:</strong> Bu işlem geri alınamaz!
+                            </div>
+                            <p>Aşağıdaki malzemeyi silmek istediğinizden emin misiniz?</p>
+                            <div class="item-details p-3 bg-light rounded">
+                                <div class="row">
+                                    <div class="col-md-6">
+                                        <strong>Kod:</strong> ${item.code}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <strong>Ad:</strong> ${item.name}
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-6">
+                                        <strong>İş No:</strong> ${item.job_no || '-'}
+                                    </div>
+                                    <div class="col-md-6">
+                                        <strong>Miktar:</strong> ${item.quantity} ${item.unit}
+                                    </div>
+                                </div>
+                                <div class="row mt-2">
+                                    <div class="col-md-6">
+                                        <strong>Öncelik:</strong> ${item.priority || 'Normal'}
+                                    </div>
+                                </div>
+                                ${item.specs ? `
+                                <div class="row mt-2">
+                                    <div class="col-12">
+                                        <strong>Özellikler:</strong> 
+                                        <div class="specs-preview mt-1">${item.specs.length > 100 ? item.specs.substring(0, 100) + '...' : item.specs}</div>
+                                    </div>
+                                </div>
+                                ` : ''}
+                            </div>
+                            <div class="alert alert-info mt-3">
+                                <i class="fas fa-info-circle me-2"></i>
+                                Bu malzeme ile ilişkili tüm tedarikçi teklifleri de silinecektir.
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                <i class="fas fa-times me-1"></i>İptal
+                            </button>
+                            <button type="button" class="btn btn-danger" onclick="window.itemsManager.confirmDeleteItem(${index}, '${modalId}')">
+                                <i class="fas fa-trash me-1"></i>Evet, Sil
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = new bootstrap.Modal(document.getElementById(modalId));
+        modal.show();
+        
+        document.getElementById(modalId).addEventListener('hidden.bs.modal', function() {
+            this.remove();
+        });
+    }
+
+    confirmDeleteItem(index, modalId) {
+        const item = this.requestData.items[index];
+        
+        // Remove all offers for this item
+        Object.keys(this.requestData.offers).forEach(supplierId => {
+            if (this.requestData.offers[supplierId][index]) {
+                delete this.requestData.offers[supplierId][index];
+                // Reindex the offers
+                const reindexedOffers = {};
+                Object.keys(this.requestData.offers[supplierId]).forEach(key => {
+                    const numKey = parseInt(key);
+                    if (numKey > index) {
+                        reindexedOffers[numKey - 1] = this.requestData.offers[supplierId][key];
+                    } else if (numKey < index) {
+                        reindexedOffers[numKey] = this.requestData.offers[supplierId][key];
+                    }
+                });
+                this.requestData.offers[supplierId] = reindexedOffers;
+            }
+        });
+
+        this.requestData.items.splice(index, 1);
+        this.renderItemsTable();
+        this.autoSave();
+        
+        // Close modal
+        bootstrap.Modal.getInstance(document.getElementById(modalId)).hide();
+        
+        // Show success notification
+        this.showNotification('Malzeme başarıyla silindi', 'success');
     }
 
     clearAllItems() {
         if (!this.requestData.items.length) return;
-        if (confirm('Tüm malzemeleri silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
-            this.requestData.items = [];
-            // Clear all offers since there are no items left
-            this.requestData.offers = {};
-            this.renderItemsTable();
-            this.autoSave();
+        this.showClearAllItemsModal();
+    }
+
+    showClearAllItemsModal() {
+        const modalId = 'clearAllItemsModal_' + Date.now();
+        const itemCount = this.requestData.items.length;
+        
+        const modalHtml = `
+            <div class="modal fade" id="${modalId}" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header bg-warning text-dark">
+                            <h5 class="modal-title">
+                                <i class="fas fa-exclamation-triangle me-2"></i>Tüm Malzemeleri Silme Onayı
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-danger">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <strong>Dikkat:</strong> Bu işlem geri alınamaz!
+                            </div>
+                            <p><strong>${itemCount} adet malzeme</strong> silinecektir. Bu işlem:</p>
+                            <ul class="list-group list-group-flush mb-3">
+                                <li class="list-group-item">
+                                    <i class="fas fa-trash text-danger me-2"></i>
+                                    Tüm malzemeleri kalıcı olarak silecek
+                                </li>
+                                <li class="list-group-item">
+                                    <i class="fas fa-handshake text-danger me-2"></i>
+                                    Tüm tedarikçi tekliflerini silecek
+                                </li>
+                                <li class="list-group-item">
+                                    <i class="fas fa-chart-bar text-danger me-2"></i>
+                                    Karşılaştırma tablosunu temizleyecek
+                                </li>
+                            </ul>
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Öneri:</strong> Eğer emin değilseniz, önce verilerinizi dışa aktarabilirsiniz.
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                <i class="fas fa-times me-1"></i>İptal
+                            </button>
+                            <button type="button" class="btn btn-warning" onclick="window.itemsManager.confirmClearAllItems('${modalId}')">
+                                <i class="fas fa-trash me-1"></i>Evet, Tümünü Sil
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = new bootstrap.Modal(document.getElementById(modalId));
+        modal.show();
+        
+        document.getElementById(modalId).addEventListener('hidden.bs.modal', function() {
+            this.remove();
+        });
+    }
+
+    confirmClearAllItems(modalId) {
+        this.requestData.items = [];
+        // Clear all offers since there are no items left
+        this.requestData.offers = {};
+        this.renderItemsTable();
+        this.autoSave();
+        
+        // Close modal
+        bootstrap.Modal.getInstance(document.getElementById(modalId)).hide();
+        
+        // Show success notification
+        this.showNotification('Tüm malzemeler başarıyla silindi', 'success');
+    }
+
+    mergeDuplicateItems() {
+        if (!this.requestData.items.length) return;
+        
+        // Group items by code
+        const groupedByCode = {};
+        this.requestData.items.forEach((item, index) => {
+            const code = item.code.trim().toLowerCase();
+            if (!groupedByCode[code]) {
+                groupedByCode[code] = [];
+            }
+            groupedByCode[code].push({ ...item, originalIndex: index });
+        });
+
+        // Find groups with multiple items
+        const duplicates = Object.entries(groupedByCode)
+            .filter(([code, items]) => items.length > 1)
+            .map(([code, items]) => ({ code, items }));
+
+        if (duplicates.length === 0) {
+            this.showNotification('Birleştirilecek aynı kodlu malzeme bulunamadı.', 'info');
+            return;
         }
+
+        this.showMergeItemsModal(duplicates);
+    }
+
+    showMergeItemsModal(duplicates) {
+        const modalId = 'mergeItemsModal_' + Date.now();
+        
+        let duplicatesHtml = '';
+        duplicates.forEach(({ code, items }, groupIndex) => {
+            duplicatesHtml += `
+                <div class="duplicate-group mb-3 p-3 border rounded">
+                    <h6 class="text-primary mb-2">
+                        <i class="fas fa-tags me-2"></i>Kod: <strong>${items[0].code}</strong>
+                        <span class="badge bg-primary ms-2">${items.length} adet</span>
+                    </h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Ad</th>
+                                    <th>İş No</th>
+                                    <th>Miktar</th>
+                                    <th>Birim</th>
+                                    <th>Öncelik</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${items.map((item, i) => `
+                                    <tr>
+                                        <td>${i + 1}</td>
+                                        <td>${item.name}</td>
+                                        <td>${item.job_no || '-'}</td>
+                                        <td>${item.quantity}</td>
+                                        <td>${item.unit}</td>
+                                        <td>${this.formatPriorityCell(item.priority)}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="merge-preview mt-2 p-2 bg-light rounded">
+                        <small class="text-muted">
+                            <i class="fas fa-arrow-right me-1"></i>
+                            <strong>Birleştirilecek:</strong> ${items.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0)} ${items[0].unit}
+                        </small>
+                    </div>
+                </div>
+            `;
+        });
+        
+        const modalHtml = `
+            <div class="modal fade" id="${modalId}" tabindex="-1">
+                <div class="modal-dialog modal-lg">
+                    <div class="modal-content">
+                        <div class="modal-header bg-info text-white">
+                            <h5 class="modal-title">
+                                <i class="fas fa-object-group me-2"></i>Malzeme Birleştirme Onayı
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>${duplicates.length} kod</strong> için birden fazla malzeme bulundu. 
+                                Bu malzemeler birleştirilecektir.
+                            </div>
+                            <div class="duplicates-container">
+                                ${duplicatesHtml}
+                            </div>
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <strong>Not:</strong> Birleştirme işlemi sadece aynı ad ve birime sahip malzemeler için yapılır.
+                            </div>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                                <i class="fas fa-times me-1"></i>İptal
+                            </button>
+                            <button type="button" class="btn btn-primary" onclick="window.itemsManager.confirmMergeItems('${modalId}')">
+                                <i class="fas fa-object-group me-1"></i>Birleştir
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = new bootstrap.Modal(document.getElementById(modalId));
+        modal.show();
+        
+        document.getElementById(modalId).addEventListener('hidden.bs.modal', function() {
+            this.remove();
+        });
+    }
+
+    confirmMergeItems(modalId) {
+        // Get the duplicates data from the modal
+        const modal = document.getElementById(modalId);
+        const duplicatesContainer = modal.querySelector('.duplicates-container');
+        const duplicateGroups = duplicatesContainer.querySelectorAll('.duplicate-group');
+        
+        // Process each group
+        const mergedItems = [];
+        const itemsToRemove = [];
+        const mergedGroups = [];
+
+        // Reconstruct duplicates data from the DOM
+        const duplicates = [];
+        duplicateGroups.forEach(group => {
+            const codeElement = group.querySelector('h6 strong');
+            const code = codeElement ? codeElement.textContent : '';
+            const rows = group.querySelectorAll('tbody tr');
+            const items = [];
+            
+            rows.forEach((row, index) => {
+                const cells = row.querySelectorAll('td');
+                if (cells.length >= 5) {
+                    items.push({
+                        code: code,
+                        name: cells[1].textContent.trim(),
+                        job_no: cells[2].textContent.trim(),
+                        quantity: parseFloat(cells[3].textContent) || 0,
+                        unit: cells[4].textContent.trim(),
+                        priority: cells[5].textContent.trim(),
+                        originalIndex: this.findItemIndexByCodeAndNameAndJobNo(code, cells[1].textContent.trim(), cells[2].textContent.trim())
+                    });
+                }
+            });
+            
+            if (items.length > 0) {
+                duplicates.push({ code, items });
+            }
+        });
+
+        duplicates.forEach(({ code, items }) => {
+            // Check if all items have the same name, unit, and job_no
+            const firstItem = items[0];
+            const sameName = items.every(item => 
+                item.name.trim().toLowerCase() === firstItem.name.trim().toLowerCase()
+            );
+            const sameUnit = items.every(item => 
+                item.unit.trim().toLowerCase() === firstItem.unit.trim().toLowerCase()
+            );
+            const sameJobNo = items.every(item => 
+                (item.job_no || '').trim().toLowerCase() === (firstItem.job_no || '').trim().toLowerCase()
+            );
+
+            if (!sameName || !sameUnit || !sameJobNo) {
+                // Items have different names, units, or job numbers - show warning and skip
+                const differentItems = items.filter(item => 
+                    item.name.trim().toLowerCase() !== firstItem.name.trim().toLowerCase() ||
+                    item.unit.trim().toLowerCase() !== firstItem.unit.trim().toLowerCase() ||
+                    (item.job_no || '').trim().toLowerCase() !== (firstItem.job_no || '').trim().toLowerCase()
+                );
+                
+                alert(`Kod "${firstItem.code}" için farklı malzeme adı, birim veya iş no bulundu:\n\n` +
+                      `Beklenen: ${firstItem.name} - ${firstItem.unit} - ${firstItem.job_no || '-'}\n` +
+                      `Farklı olanlar:\n` +
+                      differentItems.map(item => `  ${item.name} - ${item.unit} - ${item.job_no || '-'}`).join('\n') +
+                      '\n\nBu grup birleştirilmeyecek.');
+                return;
+            }
+
+            // Merge items
+            const mergedItem = {
+                id: firstItem.id,
+                code: firstItem.code,
+                name: firstItem.name,
+                job_no: firstItem.job_no,
+                quantity: items.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0),
+                unit: firstItem.unit,
+                priority: firstItem.priority || 'normal',
+                specs: this.mergeSpecs(items.map(item => item.specs))
+            };
+
+            mergedItems.push(mergedItem);
+            itemsToRemove.push(...items.map(item => item.originalIndex));
+            mergedGroups.push({
+                code: firstItem.code,
+                originalCount: items.length,
+                mergedQuantity: mergedItem.quantity
+            });
+        });
+
+        if (mergedItems.length === 0) {
+            return;
+        }
+
+        // Remove original items and add merged items
+        // Sort indices in descending order to avoid index shifting issues
+        const sortedIndices = itemsToRemove.sort((a, b) => b - a);
+        sortedIndices.forEach(index => {
+            this.requestData.items.splice(index, 1);
+        });
+
+        // Add merged items
+        mergedItems.forEach(item => {
+            this.requestData.items.push(item);
+        });
+
+        // Clear offers for removed items (they will be recreated if needed)
+        this.requestData.offers = {};
+
+        this.renderItemsTable();
+        this.autoSave();
+
+        // Close modal
+        bootstrap.Modal.getInstance(document.getElementById(modalId)).hide();
+        
+        // Show success message
+        let successMessage = `${mergedItems.length} grup başarıyla birleştirildi:\n\n`;
+        mergedGroups.forEach(group => {
+            successMessage += `• ${group.code}: ${group.originalCount} satır → ${group.mergedQuantity} ${mergedItems.find(item => item.code === group.code)?.unit}\n`;
+        });
+        this.showNotification(successMessage, 'success');
+    }
+
+    mergeSpecs(specsArray) {
+        // Combine specs from multiple items, removing duplicates
+        const allSpecs = specsArray
+            .filter(specs => specs && specs.trim())
+            .map(specs => specs.trim())
+            .join(' | ')
+            .split(' | ')
+            .filter((spec, index, array) => array.indexOf(spec) === index) // Remove duplicates
+            .join(' | ');
+        
+        return allSpecs;
+    }
+
+    findItemIndexByCodeAndName(code, name) {
+        return this.requestData.items.findIndex(item => 
+            item.code.trim().toLowerCase() === code.trim().toLowerCase() &&
+            item.name.trim().toLowerCase() === name.trim().toLowerCase()
+        );
+    }
+
+    findItemIndexByCodeAndNameAndJobNo(code, name, jobNo) {
+        return this.requestData.items.findIndex(item => 
+            item.code.trim().toLowerCase() === code.trim().toLowerCase() &&
+            item.name.trim().toLowerCase() === name.trim().toLowerCase() &&
+            (item.job_no || '').trim().toLowerCase() === (jobNo || '').trim().toLowerCase()
+        );
     }
 
     renderItemsTable() {
@@ -158,17 +635,18 @@ export class ItemsManager {
 
         this.requestData.items.forEach((item, index) => {
             const row = document.createElement('tr');
+            row.setAttribute('data-item-index', index);
+            const specsCell = this.formatSpecsCell(item.specs);
             row.innerHTML = `
                 <td>${index + 1}</td>
-                <td>${item.code}</td>
-                <td>${item.name}</td>
-                <td>${item.quantity}</td>
-                <td>${item.unit}</td>
-                <td>${item.specs || '-'}</td>
-                <td>
-                    <button class="btn btn-outline-primary btn-sm" onclick="window.itemsManager.editItem(${index})">
-                        <i class="fas fa-edit"></i>
-                    </button>
+                <td class="editable-cell" data-item-index="${index}" data-field="code">${item.code}</td>
+                <td class="editable-cell" data-item-index="${index}" data-field="name">${item.name}</td>
+                <td class="editable-cell" data-item-index="${index}" data-field="job_no">${item.job_no || '-'}</td>
+                <td class="editable-cell" data-item-index="${index}" data-field="quantity">${item.quantity}</td>
+                <td class="editable-cell" data-item-index="${index}" data-field="unit">${item.unit}</td>
+                <td class="editable-cell" data-item-index="${index}" data-field="priority">${this.formatPriorityCell(item.priority)}</td>
+                <td class="editable-cell" data-item-index="${index}" data-field="specs">${specsCell}</td>
+                <td class="action-buttons">
                     <button class="btn btn-outline-danger btn-sm" onclick="window.itemsManager.deleteItem(${index})">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -176,20 +654,510 @@ export class ItemsManager {
             `;
             tbody.appendChild(row);
         });
+
+        // Setup inline editing
+        this.setupInlineEditing();
     }
 
-    editItem(index) {
-        this.showItemModal(index);
+
+
+    formatSpecsCell(specs) {
+        if (!specs || specs.trim() === '') {
+            return '-';
+        }
+
+        const maxLength = 50;
+        const specsText = specs.trim();
+        
+        if (specsText.length <= maxLength) {
+            return specsText;
+        }
+
+        const truncatedText = specsText.substring(0, maxLength) + '...';
+        
+        return `
+            <div class="specs-cell">
+                <span class="specs-text">${truncatedText}</span>
+            </div>
+        `;
     }
+
+    formatPriorityCell(priority) {
+        if (!priority || priority.trim() === '') {
+            return '<span class="badge bg-secondary">Normal</span>';
+        }
+
+        const priorityLower = priority.toLowerCase();
+        let badgeClass = 'bg-secondary';
+        let displayText = 'Normal';
+
+        switch (priorityLower) {
+            case 'acil':
+            case 'urgent':
+            case 'high':
+                badgeClass = 'bg-danger';
+                displayText = 'Acil';
+                break;
+            case 'kritik':
+            case 'critical':
+                badgeClass = 'bg-warning';
+                displayText = 'Kritik';
+                break;
+
+            case 'normal':
+            default:
+                badgeClass = 'bg-secondary';
+                displayText = 'Normal';
+                break;
+        }
+
+        return `<span class="badge ${badgeClass}">${displayText}</span>`;
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+
+
+    showNotification(message, type = 'info') {
+        const notification = document.createElement('div');
+        const alertClass = type === 'error' ? 'danger' : type;
+        const iconClass = type === 'error' ? 'exclamation-triangle' : 
+                         type === 'success' ? 'check-circle' : 
+                         type === 'warning' ? 'exclamation-triangle' : 'info-circle';
+        
+        notification.className = `alert alert-${alertClass} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = 'top: 20px; right: 20px; z-index: 10000; min-width: 300px; max-width: 500px;';
+        notification.innerHTML = `
+            <i class="fas fa-${iconClass} me-2"></i>
+            <div style="white-space: pre-line;">${message}</div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 5 seconds for longer messages
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
+    }
+
+    // ===== INLINE EDITING METHODS =====
+    setupInlineEditing() {
+        const editableCells = document.querySelectorAll('.editable-cell');
+        
+        editableCells.forEach(cell => {
+            cell.addEventListener('click', function(e) {
+                // Don't trigger if clicking on action buttons
+                if (e.target.closest('.action-buttons')) {
+                    return;
+                }
+                
+                const itemIndex = parseInt(this.dataset.itemIndex);
+                const field = this.dataset.field;
+                
+                // For specs and priority fields, get the actual value from the item data
+                let currentValue;
+                if (field === 'specs') {
+                    const item = window.itemsManager.requestData.items[itemIndex];
+                    currentValue = item && item.specs ? item.specs : '';
+                } else if (field === 'priority') {
+                    const item = window.itemsManager.requestData.items[itemIndex];
+                    currentValue = item && item.priority ? item.priority : 'normal';
+                } else {
+                    currentValue = this.textContent.trim();
+                }
+                
+                // Skip if already editing this cell
+                if (this.querySelector('input') || this.querySelector('select') || this.querySelector('textarea')) {
+                    return;
+                }
+                
+                window.itemsManager.startInlineEdit(this, itemIndex, field, currentValue);
+            });
+        });
+    }
+
+    startInlineEdit(cell, itemIndex, field, currentValue) {
+        // Store current editing item index for validation
+        this.currentEditingItemIndex = itemIndex;
+        
+        // Add editing class to indicate the cell is being edited
+        cell.classList.add('editing');
+        
+        // Create input element based on field type
+        let input;
+        
+        switch (field) {
+            case 'quantity':
+                input = document.createElement('input');
+                input.type = 'number';
+                input.min = '0';
+                
+                // Set step based on unit - integer for 'adet', decimal for others
+                const currentItem = this.requestData.items[itemIndex];
+                if (currentItem && currentItem.unit === 'ADET') {
+                    input.step = '1';
+                } else {
+                    input.step = '0.01';
+                }
+                
+                input.className = 'form-control form-control-sm';
+                input.value = currentValue === 'N/A' || currentValue === '0' ? '' : currentValue;
+                break;
+            case 'unit':
+                // Create dropdown for unit selection
+                input = document.createElement('select');
+                input.className = 'form-control form-control-sm';
+                
+                const unitOptions = [
+                    'ADET', 'KG', 'M', 'M2', 'M3', 'LITRE', 'TON', 'PAKET', 'KUTU', 'RULO', 'METRE', 'SANTIMETRE'
+                ];
+                
+                unitOptions.forEach(unit => {
+                    const option = document.createElement('option');
+                    option.value = unit;
+                    option.textContent = unit;
+                    
+                    if (unit === currentValue) {
+                        option.selected = true;
+                    }
+                    
+                    input.appendChild(option);
+                });
+                break;
+            case 'priority':
+                // Create dropdown for priority selection
+                input = document.createElement('select');
+                input.className = 'form-control form-control-sm';
+                
+                const priorityOptions = [
+                    { value: 'normal', text: 'Normal' },
+                    { value: 'acil', text: 'Acil' },
+                    { value: 'kritik', text: 'Kritik' }
+                ];
+                
+                priorityOptions.forEach(priority => {
+                    const option = document.createElement('option');
+                    option.value = priority.value;
+                    option.textContent = priority.text;
+                    
+                    if (priority.value === currentValue) {
+                        option.selected = true;
+                    }
+                    
+                    input.appendChild(option);
+                });
+                break;
+            case 'specs':
+                // Create textarea for specs to handle longer text
+                input = document.createElement('textarea');
+                input.className = 'form-control form-control-sm';
+                input.rows = '3';
+                input.style.resize = 'vertical';
+                input.style.minHeight = '60px';
+                input.style.maxHeight = '120px';
+                input.style.width = '100%';
+                input.style.boxSizing = 'border-box';
+                // Get the actual specs value from the item data
+                const item = this.requestData.items[itemIndex];
+                input.value = item && item.specs ? item.specs : '';
+                // Add editing class for specs cell
+                cell.classList.add('editing-specs');
+                break;
+            default:
+                input = document.createElement('input');
+                input.type = 'text';
+                input.className = 'form-control form-control-sm';
+                input.value = currentValue === 'N/A' ? '' : currentValue;
+        }
+        
+        // Store original content
+        const originalContent = cell.innerHTML;
+        
+        // Replace cell content with input
+        cell.innerHTML = '';
+        cell.appendChild(input);
+        
+        // Focus on input
+        input.focus();
+        if (input.type !== 'select-one') {
+            input.select();
+        }
+        
+        // Handle input events
+        input.addEventListener('blur', (e) => {
+            // For select elements, don't handle blur immediately
+            if (input.tagName === 'SELECT') {
+                return;
+            }
+            
+            // Add a small delay to prevent race conditions
+            setTimeout(() => {
+                if (input.parentNode) {
+                    this.finishInlineEdit(cell, itemIndex, field, input.value, originalContent);
+                }
+            }, 100);
+        });
+        
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                // For textarea, Ctrl+Enter saves, regular Enter creates new line
+                if (input.tagName === 'TEXTAREA') {
+                    if (e.ctrlKey) {
+                        e.preventDefault();
+                        this.finishInlineEdit(cell, itemIndex, field, input.value, originalContent);
+                    }
+                    // Regular Enter in textarea creates new line (default behavior)
+                } else {
+                    // For other inputs, Enter saves
+                    this.finishInlineEdit(cell, itemIndex, field, input.value, originalContent);
+                }
+            } else if (e.key === 'Escape') {
+                // Remove editing classes
+                cell.classList.remove('editing');
+                if (field === 'specs') {
+                    cell.classList.remove('editing-specs');
+                }
+                if (cell && cell.parentNode) {
+                    cell.innerHTML = originalContent;
+                }
+            }
+        });
+        
+        // For select elements, handle change event
+        if (input.tagName === 'SELECT') {
+            let editCompleted = false;
+            
+            input.addEventListener('change', () => {
+                if (!editCompleted) {
+                    editCompleted = true;
+                    this.finishInlineEdit(cell, itemIndex, field, input.value, originalContent);
+                }
+            });
+            
+            // Add document click listener to close dropdown when clicking outside
+            const handleDocumentClick = (e) => {
+                if (!input.contains(e.target) && !editCompleted) {
+                    editCompleted = true;
+                    this.finishInlineEdit(cell, itemIndex, field, input.value, originalContent);
+                    document.removeEventListener('click', handleDocumentClick);
+                }
+            };
+            
+            setTimeout(() => {
+                document.addEventListener('click', handleDocumentClick);
+            }, 50);
+        }
+    }
+
+    finishInlineEdit(cell, itemIndex, field, newValue, originalContent) {
+        try {
+            // Remove editing classes
+            cell.classList.remove('editing');
+            if (field === 'specs') {
+                cell.classList.remove('editing-specs');
+            }
+            
+            // Validate input based on field type
+            if (!this.validateFieldValue(field, newValue)) {
+                if (cell && cell.parentNode) {
+                    cell.innerHTML = originalContent;
+                }
+                this.showNotification('Geçersiz değer', 'error');
+                return;
+            }
+            
+            // Get the item
+            const item = this.requestData.items[itemIndex];
+            if (!item) {
+                if (cell && cell.parentNode) {
+                    cell.innerHTML = originalContent;
+                }
+                return;
+            }
+            
+            // Don't update if value hasn't changed
+            const currentValue = item[field];
+            if (currentValue == newValue) {
+                if (cell && cell.parentNode) {
+                    cell.innerHTML = originalContent;
+                }
+                return;
+            }
+            
+            // Update the item
+            if (field === 'quantity') {
+                item[field] = parseFloat(newValue) || 0;
+            } else {
+                item[field] = newValue;
+            }
+            
+            // Update cell content
+            this.updateCellContent(cell, field, newValue);
+            
+            // Save changes
+            this.autoSave();
+            
+            // If quantity was changed, update comparison table and recalculate offers
+            if (field === 'quantity') {
+                this.updateComparisonTableAndOffers(itemIndex, newValue);
+            }
+            
+            this.showNotification('Malzeme başarıyla güncellendi', 'success');
+            
+        } catch (error) {
+            console.error('Error updating item:', error);
+            if (cell && cell.parentNode) {
+                cell.innerHTML = originalContent;
+            }
+            this.showNotification('Güncelleme sırasında hata oluştu', 'error');
+        }
+    }
+
+    validateFieldValue(field, value) {
+        switch (field) {
+            case 'code':
+                return value && value.trim().length > 0;
+            case 'name':
+                return value && value.trim().length > 0;
+            case 'job_no':
+                return value && value.trim().length > 0;
+            case 'quantity':
+                const numValue = parseFloat(value);
+                if (isNaN(numValue) || numValue <= 0) {
+                    return false;
+                }
+                // Check if quantity is integer when unit is 'adet'
+                const currentItem = this.requestData.items[this.currentEditingItemIndex];
+                if (currentItem && currentItem.unit === 'adet' && !Number.isInteger(numValue)) {
+                    return false;
+                }
+                return true;
+            case 'unit':
+                return value && value.trim().length > 0;
+            case 'priority':
+                // Priority can be empty (defaults to normal), but if provided should be valid
+                if (!value || value.trim() === '') return true;
+                const validPriorities = ['normal', 'acil', 'kritik', 'urgent', 'critical', 'high'];
+                return validPriorities.includes(value.toLowerCase());
+            case 'specs':
+                // Specs can be empty, so just return true
+                return true;
+            default:
+                return true;
+        }
+    }
+
+    updateCellContent(cell, field, value) {
+        if (field === 'quantity') {
+            cell.textContent = parseFloat(value) || 0;
+        } else if (field === 'specs') {
+            // Use the formatSpecsCell method to maintain the same display format
+            cell.innerHTML = this.formatSpecsCell(value);
+        } else if (field === 'priority') {
+            // Use the formatPriorityCell method to maintain the same display format
+            cell.innerHTML = this.formatPriorityCell(value);
+        } else if (field === 'job_no') {
+            cell.textContent = value || '-';
+        } else {
+            cell.textContent = value;
+        }
+    }
+
+    // editItem method removed - replaced with inline editing
 
     generateItemId() {
         return 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 
-    // Bulk Import Methods
+    // ===== COMPARISON TABLE UPDATE METHODS =====
+    updateComparisonTableAndOffers(itemIndex, newQuantity) {
+        // Recalculate offers for this item based on new quantity
+        this.recalculateOffersForItem(itemIndex, newQuantity);
+        
+        // Update comparison table if comparison manager exists
+        if (window.comparisonManager) {
+            window.comparisonManager.renderComparisonTable();
+            window.comparisonManager.updateSummary();
+        }
+    }
+
+    recalculateOffersForItem(itemIndex, newQuantity) {
+        // Update all offers for this item with the new quantity
+        Object.keys(this.requestData.offers).forEach(supplierId => {
+            const offer = this.requestData.offers[supplierId]?.[itemIndex];
+            if (offer && offer.unitPrice) {
+                // Recalculate total price based on new quantity
+                offer.totalPrice = offer.unitPrice * newQuantity;
+            }
+        });
+    }
+
+    // ===== BULK IMPORT METHODS =====
     showBulkImportModal() {
         const modal = new bootstrap.Modal(document.getElementById('bulkImportModal'));
         modal.show();
+    }
+
+    showManualMappingModal() {
+        const fileInput = document.getElementById('excel-file-input');
+        const file = fileInput.files[0];
+        
+        if (!file) {
+            alert('Lütfen önce bir dosya seçin.');
+            return;
+        }
+
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            try {
+                let jsonData;
+                
+                if (file.name.toLowerCase().endsWith('.csv')) {
+                    const csvText = e.target.result;
+                    jsonData = this.parseCSV(csvText);
+                } else {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                }
+
+                if (jsonData.length < 2) {
+                    alert('Dosya boş veya geçersiz format.');
+                    return;
+                }
+
+                const headers = jsonData[0];
+                const dataRows = jsonData.slice(1);
+                const emptyMapping = {
+                    code: -1,
+                    name: -1,
+                    quantity: -1,
+                    unit: -1,
+                    priority: -1,
+                    specs: -1
+                };
+
+                this.showColumnMappingModal(headers, emptyMapping, dataRows);
+            } catch (error) {
+                console.error('Dosya okuma hatası:', error);
+                alert('Dosya okunamadı. Lütfen geçerli bir Excel veya CSV dosyası seçin.');
+            }
+        };
+        
+        if (file.name.toLowerCase().endsWith('.csv')) {
+            reader.readAsText(file, 'UTF-8');
+        } else {
+            reader.readAsArrayBuffer(file);
+        }
     }
 
     previewBulkImport() {
@@ -204,95 +1172,582 @@ export class ItemsManager {
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const data = new Uint8Array(e.target.result);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const sheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[sheetName];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                let jsonData;
+                
+                if (file.name.toLowerCase().endsWith('.csv')) {
+                    // Handle CSV files
+                    const csvText = e.target.result;
+                    jsonData = this.parseCSV(csvText);
+                } else {
+                    // Handle Excel files
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const sheetName = workbook.SheetNames[0];
+                    const worksheet = workbook.Sheets[sheetName];
+                    jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                }
 
                 if (jsonData.length < 2) {
                     alert('Dosya boş veya geçersiz format.');
                     return;
                 }
 
-                this.displayImportPreview(jsonData);
+                this.processExcelData(jsonData);
             } catch (error) {
                 console.error('Dosya okuma hatası:', error);
-                alert('Dosya okunamadı. Lütfen geçerli bir Excel dosyası seçin.');
+                alert('Dosya okunamadı. Lütfen geçerli bir Excel veya CSV dosyası seçin.');
             }
         };
-        reader.readAsArrayBuffer(file);
+        
+        if (file.name.toLowerCase().endsWith('.csv')) {
+            reader.readAsText(file, 'UTF-8');
+        } else {
+            reader.readAsArrayBuffer(file);
+        }
     }
 
-    displayImportPreview(data) {
+    parseCSV(csvText) {
+        const lines = csvText.split('\n');
+        const result = [];
+        
+        lines.forEach(line => {
+            if (line.trim()) {
+                // Handle both comma and semicolon separators
+                const values = line.includes(';') ? line.split(';') : line.split(',');
+                result.push(values.map(value => value.trim().replace(/^["']|["']$/g, '')));
+            }
+        });
+        
+        return result;
+    }
+
+    processExcelData(data) {
+        const headers = data[0];
+        const dataRows = data.slice(1);
+        
+        // Auto-detect column mappings
+        const columnMapping = this.detectColumnMapping(headers, dataRows);
+        
+        // Validate required columns
+        const missingColumns = this.validateRequiredColumns(columnMapping);
+        
+        if (missingColumns.length > 0) {
+            this.showColumnMappingModal(headers, columnMapping, dataRows);
+            return;
+        }
+        
+        // Always show mapping modal for manual verification/adjustment
+        this.showColumnMappingModal(headers, columnMapping, dataRows);
+    }
+
+    // ===== COLUMN DETECTION & MAPPING =====
+    detectColumnMapping(headers, dataRows = []) {
+        const mapping = {
+            code: -1,
+            name: -1,
+            job_no: -1,
+            quantity: -1,
+            unit: -1,
+            priority: -1,
+            specs: -1
+        };
+
+        const columnKeywords = {
+            code: ['kod', 'code', 'stok', 'ürün', 'malzeme', 'item', 'product', 'material', 'part', 'parça', 'sku', 'malzeme kodu'],
+            name: ['ad', 'name', 'açıklama', 'description', 'ürün adı', 'malzeme adı', 'title', 'başlık', 'tanım', 'isim', 'malzeme adı', 'malzeme adi', 'isim'],
+            job_no: ['srm. kodu', 'srm kodu', 'iş no', 'is no', 'job no', 'job number', 'work no', 'work number', 'proje no', 'project no'],
+            quantity: ['miktar', 'quantity', 'adet', 'sayı', 'number', 'amount', 'qty', 'count', 'piece'],
+            unit: ['birim', 'unit', 'ölçü', 'measure', 'uom', 'measurement'],
+            priority: ['öncelik', 'priority', 'aciliyet', 'urgency', 'level', 'seviye'],
+            specs: ['özellik', 'specs', 'specification', 'teknik', 'technical', 'detay', 'detail', 'açıklama', 'description', 'teknik özellikler', 'açıklama-1', 'açıklama-2']
+        };
+
+        headers.forEach((header, index) => {
+            if (!header) return;
+            
+            // Handle Turkish characters properly
+            const headerLower = header.toString().toLowerCase().trim();
+            const headerNormalized = this.normalizeTurkish(header);
+            
+            // First, try exact matches for common Turkish headers
+            if (mapping.code === -1 && (headerLower === 'kod' || headerNormalized === 'kod' || header === 'KOD')) {
+                mapping.code = index;
+            }
+            if (mapping.name === -1 && (headerLower === 'isim' || headerNormalized === 'isim' || header === 'İSİM')) {
+                mapping.name = index;
+            }
+            if (mapping.quantity === -1 && (headerLower === 'miktar' || headerNormalized === 'miktar' || header === 'MİKTAR')) {
+                mapping.quantity = index;
+            }
+            if (mapping.unit === -1 && (headerLower === 'birim' || headerNormalized === 'birim' || header === 'BİRİM')) {
+                mapping.unit = index;
+            }
+            
+            // Then try keyword matching for other cases
+            for (const [field, keywords] of Object.entries(columnKeywords)) {
+                if (mapping[field] === -1) {
+                    for (const keyword of keywords) {
+                        // Try exact match first, then partial match
+                        if (headerLower === keyword || headerLower.includes(keyword)) {
+                            mapping[field] = index;
+                            break;
+                        }
+                        // Also try with normalized Turkish characters
+                        if (headerNormalized === keyword || headerNormalized.includes(keyword)) {
+                            mapping[field] = index;
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+
+        // Smart content-based detection if we have data rows
+        if (dataRows && dataRows.length > 0) {
+            const firstRow = dataRows[0];
+            
+            // Look for numeric columns (quantity)
+            if (mapping.quantity === -1) {
+                for (let i = 0; i < firstRow.length; i++) {
+                    const value = firstRow[i];
+                    if (value && !isNaN(parseFloat(value.toString().replace(',', '.')))) {
+                        mapping.quantity = i;
+                        break;
+                    }
+                }
+            }
+            
+            // Look for short text columns (code)
+            if (mapping.code === -1) {
+                for (let i = 0; i < firstRow.length; i++) {
+                    const value = firstRow[i];
+                    if (value && value.toString().length <= 20 && !isNaN(parseFloat(value))) {
+                        mapping.code = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        // Additional smart detection for common Turkish patterns
+        headers.forEach((header, index) => {
+            if (!header) return;
+            
+            const headerLower = header.toString().toLowerCase().trim();
+            const headerNormalized = this.normalizeTurkish(header);
+            
+            // Smart detection for common Turkish patterns
+            if (mapping.code === -1 && (headerLower.includes('malzeme') && headerLower.includes('kod'))) {
+                mapping.code = index;
+            }
+            if (mapping.name === -1 && (headerLower.includes('malzeme') && headerLower.includes('ad'))) {
+                mapping.name = index;
+            }
+            if (mapping.name === -1 && (headerLower === 'isim' || headerNormalized === 'isim')) {
+                mapping.name = index;
+            }
+            if (mapping.job_no === -1 && (headerLower === 'srm. kodu' || headerNormalized === 'srm. kodu' || headerUpper === 'SRM. KODU')) {
+                mapping.job_no = index;
+            }
+            if (mapping.quantity === -1 && (headerLower === 'miktar' || headerNormalized === 'miktar')) {
+                mapping.quantity = index;
+            }
+            if (mapping.unit === -1 && (headerLower === 'birim' || headerNormalized === 'birim')) {
+                mapping.unit = index;
+            }
+            if (mapping.priority === -1 && (headerLower === 'öncelik' || headerNormalized === 'oncelik')) {
+                mapping.priority = index;
+            }
+            if (mapping.specs === -1 && (headerLower.includes('teknik') && headerLower.includes('özellik'))) {
+                mapping.specs = index;
+            }
+        });
+
+        return mapping;
+    }
+
+    validateRequiredColumns(mapping) {
+        const required = ['code', 'name', 'job_no', 'quantity', 'unit'];
+        return required.filter(field => mapping[field] === -1);
+    }
+
+    showColumnMappingModal(headers, detectedMapping, dataRows) {
+        // Create column mapping interface
+        const mappingContainer = document.getElementById('column-mapping-container');
+        mappingContainer.innerHTML = '';
+        
+        // Add sample data preview
+        if (dataRows.length > 0) {
+            const sampleDiv = document.createElement('div');
+            sampleDiv.className = 'alert alert-secondary mb-3';
+            const sampleRow = dataRows[0];
+            sampleDiv.innerHTML = `
+                <strong>Örnek Veri (İlk Satır):</strong><br>
+                ${headers.map((header, index) => 
+                    `<strong>${header || `Sütun ${index + 1}`}:</strong> "${sampleRow[index] || ''}"<br>`
+                ).join('')}
+            `;
+            mappingContainer.appendChild(sampleDiv);
+        }
+        
+        const requiredFields = [
+            { key: 'code', label: 'Stok Kodu', required: true },
+            { key: 'name', label: 'Malzeme Adı', required: true },
+            { key: 'job_no', label: 'İş No', required: true },
+            { key: 'quantity', label: 'Miktar', required: true },
+            { key: 'unit', label: 'Birim', required: true },
+            { key: 'priority', label: 'Öncelik', required: false },
+            { key: 'specs', label: 'Özellikler', required: false }
+        ];
+
+        requiredFields.forEach(field => {
+            const fieldDiv = document.createElement('div');
+            fieldDiv.className = 'mb-3';
+            const isDetected = detectedMapping[field.key] !== -1;
+            const detectedText = isDetected ? ` (Otomatik algılandı: "${headers[detectedMapping[field.key]] || 'Bilinmeyen'}")` : '';
+            
+            fieldDiv.innerHTML = `
+                <label class="form-label">
+                    ${field.label} ${field.required ? '<span class="text-danger">*</span>' : ''}
+                    ${isDetected ? `<span class="text-success">${detectedText}</span>` : ''}
+                </label>
+                <select class="form-select column-mapping-select" data-field="${field.key}">
+                    <option value="">Seçiniz</option>
+                    ${headers.map((header, index) => 
+                        `<option value="${index}" ${detectedMapping[field.key] === index ? 'selected' : ''}>
+                            ${header || `Sütun ${index + 1}`}
+                        </option>`
+                    ).join('')}
+                </select>
+            `;
+            mappingContainer.appendChild(fieldDiv);
+        });
+
+        // Show mapping modal
+        const mappingModal = new bootstrap.Modal(document.getElementById('columnMappingModal'));
+        mappingModal.show();
+
+        // Store data for later processing
+        this.pendingImportData = { headers, dataRows };
+    }
+
+    // ===== DATA PROCESSING =====
+    processDataWithMapping(dataRows, mapping, headers = []) {
+        const processedItems = [];
+        const errors = [];
+        const warnings = [];
+        let skippedRows = 0;
+
+        dataRows.forEach((row, index) => {
+            if (!row || row.length === 0) {
+                skippedRows++;
+                return;
+            }
+
+            try {
+                // Combine AÇIKLAMA columns for specs if they exist
+                let specs = this.getCellValue(row, mapping.specs) || '';
+                
+                // Look for additional AÇIKLAMA columns to combine
+                const aciklamaIndices = [];
+                headers.forEach((header, index) => {
+                    if (header) {
+                        const headerStr = header.toString();
+                        const headerLower = headerStr.toLowerCase();
+                        const headerUpper = headerStr.toUpperCase();
+                        
+                        if (headerLower.includes('açıklama') || 
+                            headerLower.includes('aciklama') ||
+                            headerUpper.includes('AÇIKLAMA') ||
+                            headerUpper.includes('ACIKLAMA')) {
+                            aciklamaIndices.push(index);
+                        }
+                    }
+                });
+                
+                // Combine all AÇIKLAMA columns
+                const aciklamaValues = aciklamaIndices
+                    .map(index => this.getCellValue(row, index))
+                    .filter(value => value && value.trim() !== '');
+                
+                const combinedAciklama = aciklamaValues.join(' | ');
+                
+                if (combinedAciklama) {
+                    specs = specs ? `${specs} | ${combinedAciklama}` : combinedAciklama;
+                }
+
+                const item = {
+                    code: this.getCellValue(row, mapping.code),
+                    name: this.getCellValue(row, mapping.name),
+                    job_no: this.getCellValue(row, mapping.job_no),
+                    quantity: this.parseQuantity(this.getCellValue(row, mapping.quantity)),
+                    unit: this.getCellValue(row, mapping.unit),
+                    priority: this.getCellValue(row, mapping.priority) || 'normal',
+                    specs: specs
+                };
+
+                // Validate required fields - skip invalid rows instead of stopping
+                let isValid = true;
+                if (!item.code) {
+                    errors.push(`Satır ${index + 2}: Stok kodu eksik - satır atlandı`);
+                    skippedRows++;
+                    isValid = false;
+                }
+                if (!item.name) {
+                    errors.push(`Satır ${index + 2}: Malzeme adı eksik - satır atlandı`);
+                    skippedRows++;
+                    isValid = false;
+                }
+                if (!item.job_no) {
+                    errors.push(`Satır ${index + 2}: İş no eksik - satır atlandı`);
+                    skippedRows++;
+                    isValid = false;
+                }
+                if (item.quantity <= 0) {
+                    errors.push(`Satır ${index + 2}: Geçersiz miktar değeri - satır atlandı`);
+                    skippedRows++;
+                    isValid = false;
+                }
+                if (!item.unit) {
+                    errors.push(`Satır ${index + 2}: Birim eksik - satır atlandı`);
+                    skippedRows++;
+                    isValid = false;
+                }
+
+                // If any validation failed, skip this row
+                if (!isValid) {
+                    return;
+                }
+
+                // Validate priority values
+                if (item.priority && !['normal', 'acil', 'kritik', 'low', 'high', 'urgent'].includes(item.priority.toLowerCase())) {
+                    warnings.push(`Satır ${index + 2}: Geçersiz öncelik değeri "${item.priority}", "normal" olarak ayarlandı`);
+                    item.priority = 'normal';
+                }
+
+                // Normalize priority
+                if (item.priority) {
+                    item.priority = this.normalizePriority(item.priority);
+                }
+
+                processedItems.push(item);
+            } catch (error) {
+                errors.push(`Satır ${index + 2}: ${error.message} - satır atlandı`);
+                skippedRows++;
+            }
+        });
+
+        // Show results summary
+        if (processedItems.length === 0) {
+            this.showImportErrors(errors, warnings);
+            return;
+        }
+
+        // Show warnings if any
+        if (warnings.length > 0) {
+            this.showImportWarnings(warnings);
+        }
+
+        // Show summary of processed data
+        if (errors.length > 0 || skippedRows > 0) {
+            this.showImportSummary(processedItems.length, errors.length, skippedRows, errors, warnings);
+        }
+
+        this.displayImportPreview(processedItems);
+    }
+
+    // ===== UTILITY METHODS =====
+    getCellValue(row, columnIndex) {
+        if (columnIndex === -1 || columnIndex >= row.length) return '';
+        const value = row[columnIndex];
+        return value ? value.toString().trim() : '';
+    }
+
+    parseQuantity(value) {
+        if (!value) return 0;
+        const parsed = parseFloat(value.toString().replace(',', '.'));
+        return isNaN(parsed) ? 0 : parsed;
+    }
+
+    normalizeTurkish(str) {
+        return str.toLowerCase()
+            .replace(/ı/g, 'i')
+            .replace(/ğ/g, 'g')
+            .replace(/ü/g, 'u')
+            .replace(/ş/g, 's')
+            .replace(/ö/g, 'o')
+            .replace(/ç/g, 'c')
+            .replace(/İ/g, 'i')
+            .replace(/Ğ/g, 'g')
+            .replace(/Ü/g, 'u')
+            .replace(/Ş/g, 's')
+            .replace(/Ö/g, 'o')
+            .replace(/Ç/g, 'c');
+    }
+
+    normalizePriority(priority) {
+        const priorityLower = priority.toLowerCase();
+        if (['acil', 'urgent', 'high'].includes(priorityLower)) return 'acil';
+        if (['kritik', 'critical'].includes(priorityLower)) return 'kritik';
+
+        return 'normal';
+    }
+
+    showImportErrors(errors, warnings = []) {
+        const errorContainer = document.getElementById('import-errors');
+        let html = `
+            <div class="alert alert-danger">
+                <h6>İçe aktarma hataları:</h6>
+                <ul class="mb-0">
+                    ${errors.map(error => `<li>${error}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+        
+        if (warnings.length > 0) {
+            html += `
+                <div class="alert alert-warning">
+                    <h6>Uyarılar:</h6>
+                    <ul class="mb-0">
+                        ${warnings.map(warning => `<li>${warning}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        errorContainer.innerHTML = html;
+        errorContainer.style.display = 'block';
+    }
+
+    showImportWarnings(warnings) {
+        const errorContainer = document.getElementById('import-errors');
+        errorContainer.innerHTML = `
+            <div class="alert alert-warning">
+                <h6>Uyarılar:</h6>
+                <ul class="mb-0">
+                    ${warnings.map(warning => `<li>${warning}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+        errorContainer.style.display = 'block';
+    }
+
+    showImportSummary(processedCount, errorCount, skippedCount, errors, warnings) {
+        const errorContainer = document.getElementById('import-errors');
+        let html = `
+            <div class="alert alert-info">
+                <h6>İçe Aktarma Özeti:</h6>
+                <ul class="mb-0">
+                    <li><strong>Başarıyla işlenen:</strong> ${processedCount} satır</li>
+                    <li><strong>Atlanan satırlar:</strong> ${skippedCount} satır</li>
+                    <li><strong>Hatalı satırlar:</strong> ${errorCount} satır</li>
+                </ul>
+            </div>
+        `;
+        
+        if (errors.length > 0) {
+            html += `
+                <div class="alert alert-warning">
+                    <h6>Atlanan Satırlar:</h6>
+                    <ul class="mb-0">
+                        ${errors.map(error => `<li>${error}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        if (warnings.length > 0) {
+            html += `
+                <div class="alert alert-info">
+                    <h6>Uyarılar:</h6>
+                    <ul class="mb-0">
+                        ${warnings.map(warning => `<li>${warning}</li>`).join('')}
+                    </ul>
+                </div>
+            `;
+        }
+        
+        errorContainer.innerHTML = html;
+        errorContainer.style.display = 'block';
+    }
+
+    confirmColumnMapping() {
+        const selects = document.querySelectorAll('.column-mapping-select');
+        const mapping = {};
+
+        selects.forEach(select => {
+            const field = select.dataset.field;
+            const value = parseInt(select.value);
+            mapping[field] = value;
+        });
+
+        // Validate required mappings
+        const missingRequired = ['code', 'name', 'job_no', 'quantity', 'unit'].filter(field => mapping[field] === -1);
+        if (missingRequired.length > 0) {
+            alert('Lütfen gerekli alanları eşleştirin.');
+            return;
+        }
+
+        // Process data with user mapping
+        this.processDataWithMapping(this.pendingImportData.dataRows, mapping, this.pendingImportData.headers);
+        
+        // Close mapping modal
+        bootstrap.Modal.getInstance(document.getElementById('columnMappingModal')).hide();
+    }
+
+    displayImportPreview(processedItems) {
         const previewDiv = document.getElementById('import-preview');
         const tbody = document.getElementById('preview-tbody');
         const importBtn = document.getElementById('import-items-btn');
+        const errorContainer = document.getElementById('import-errors');
         
         tbody.innerHTML = '';
+        errorContainer.style.display = 'none';
         
-        // Skip header row and process data
-        for (let i = 1; i < data.length; i++) {
-            const row = data[i];
-            if (row.length < 4) continue; // Skip empty rows
-            
-            const item = {
-                code: row[0] || '',
-                name: row[1] || '',
-                quantity: parseFloat(row[2]) || 0,
-                unit: row[3] || '',
-                priority: row[4] || 'normal',
-                specs: row[5] || ''
-            };
-
+        processedItems.forEach((item, index) => {
             const tr = document.createElement('tr');
+            const specsCell = this.formatSpecsCell(item.specs);
+            const priorityCell = this.formatPriorityCell(item.priority);
             tr.innerHTML = `
-                <td>${i}</td>
+                <td>${index + 1}</td>
                 <td>${item.code}</td>
                 <td>${item.name}</td>
+                <td>${item.job_no}</td>
                 <td>${item.quantity}</td>
                 <td>${item.unit}</td>
-                <td>${item.priority}</td>
-                <td>${item.specs}</td>
+                <td>${priorityCell}</td>
+                <td>${specsCell}</td>
                 <td><span class="badge bg-success">Geçerli</span></td>
             `;
             tbody.appendChild(tr);
-        }
+        });
         
         previewDiv.style.display = 'block';
         importBtn.disabled = false;
         
-        // Store the parsed data for import
-        this.parsedImportData = data;
+        // Store the processed items for import
+        this.parsedImportData = processedItems;
     }
 
     clearBulkImport() {
         document.getElementById('excel-file-input').value = '';
         document.getElementById('import-preview').style.display = 'none';
+        document.getElementById('import-errors').style.display = 'none';
         document.getElementById('import-items-btn').disabled = true;
         this.parsedImportData = null;
+        this.pendingImportData = null;
     }
 
     importBulkItems() {
         if (!this.parsedImportData) return;
         
-        // Skip header row and process data
-        for (let i = 1; i < this.parsedImportData.length; i++) {
-            const row = this.parsedImportData[i];
-            if (row.length < 4) continue;
-            
-            const item = {
+        this.parsedImportData.forEach(item => {
+            const newItem = {
                 id: this.generateItemId(),
-                code: row[0] || '',
-                name: row[1] || '',
-                quantity: parseFloat(row[2]) || 0,
-                unit: row[3] || '',
-                priority: row[4] || 'normal',
-                specs: row[5] || ''
+                ...item
             };
-            
-            this.requestData.items.push(item);
-        }
+            this.requestData.items.push(newItem);
+        });
         
         this.renderItemsTable();
         this.autoSave();
@@ -301,6 +1756,6 @@ export class ItemsManager {
         bootstrap.Modal.getInstance(document.getElementById('bulkImportModal')).hide();
         this.clearBulkImport();
         
-        alert(`${this.parsedImportData.length - 1} malzeme başarıyla içe aktarıldı.`);
+        alert(`${this.parsedImportData.length} malzeme başarıyla içe aktarıldı.`);
     }
 }

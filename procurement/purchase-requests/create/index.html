@@ -46,17 +46,16 @@
                                 <div class="col-md-6">
                                     <label for="request-priority" class="form-label">Öncelik</label>
                                     <select class="form-select" id="request-priority">
-                                        <option value="low">Düşük</option>
                                         <option value="normal" selected>Normal</option>
-                                        <option value="high">Yüksek</option>
                                         <option value="urgent">Acil</option>
+                                        <option value="critical">Kritik</option>
                                     </select>
                                 </div>
                             </div>
                             <div class="row mt-3">
                                 <div class="col-12">
-                                    <label for="request-description" class="form-label">Talep Açıklaması <span class="text-danger">*</span></label>
-                                    <textarea class="form-control" id="request-description" rows="3" placeholder="Talep açıklamasını girin" required></textarea>
+                                    <label for="request-description" class="form-label">Talep Açıklaması</label>
+                                    <textarea class="form-control" id="request-description" rows="3" placeholder="Talep açıklamasını girin"></textarea>
                                 </div>
                             </div>
                         </div>
@@ -77,12 +76,21 @@
                                 <button class="btn btn-primary btn-sm" id="add-item-btn">
                                     <i class="fas fa-plus me-1"></i>Malzeme Ekle
                                 </button>
+                                <button class="btn btn-outline-success btn-sm" id="merge-items-btn">
+                                    <i class="fas fa-object-group me-1"></i>Birleştir
+                                </button>
                                 <button class="btn btn-outline-danger btn-sm" id="clear-items-btn">
                                     <i class="fas fa-trash me-1"></i>Tüm Malzemeleri Sil
                                 </button>
                             </div>
                         </div>
                         <div class="card-body">
+                            <!-- Inline editing instruction -->
+                            <div class="alert alert-info alert-sm mb-3">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>İpucu:</strong> Malzeme bilgilerini düzenlemek için hücrelere tıklayabilirsiniz. 
+                                <span class="text-muted">(Hücrelerin üzerine geldiğinizde düzenlenebilir olduğunu göreceksiniz)</span>
+                            </div>
                             <div class="table-responsive">
                                 <table class="table table-hover" id="items-table">
                                     <thead class="table-dark">
@@ -90,8 +98,10 @@
                                             <th>#</th>
                                             <th>Malzeme Kodu</th>
                                             <th>Malzeme Adı</th>
+                                            <th>İş No</th>
                                             <th>Miktar</th>
                                             <th>Birim</th>
+                                            <th>Öncelik</th>
                                             <th>Teknik Özellikler</th>
                                             <th>İşlemler</th>
                                         </tr>
@@ -143,6 +153,7 @@
                                     <thead class="table-primary">
                                         <tr>
                                             <th rowspan="2" class="align-middle">Malzeme</th>
+                                            <th rowspan="2" class="align-middle">İş No</th>
                                             <th rowspan="2" class="align-middle">Miktar</th>
                                             <th rowspan="2" class="align-middle">Birim</th>
                                             <th id="supplier-group-header" colspan="1" class="text-center">Tedarikçi Teklifleri</th>
@@ -178,7 +189,13 @@
                                 </div>
                                 <div class="col-md-3">
                                     <div class="summary-item">
-                                        <label class="form-label">Tedarikçi Sayısı</label>
+                                        <label class="form-label">Toplam Miktar</label>
+                                        <div class="form-control-plaintext" id="total-quantity">-</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-3">
+                                    <div class="summary-item">
+                                        <label class="form-label">Önerilen Tedarikçi Sayısı</label>
                                         <div class="form-control-plaintext" id="total-suppliers">0</div>
                                     </div>
                                 </div>
@@ -188,12 +205,7 @@
                                         <div class="form-control-plaintext" id="total-amount">€0.00</div>
                                     </div>
                                 </div>
-                                <div class="col-md-3">
-                                    <div class="summary-item">
-                                        <label class="form-label">Toplam Miktar</label>
-                                        <div class="form-control-plaintext" id="total-quantity">-</div>
-                                    </div>
-                                </div>
+                                
                             </div>
                         </div>
                     </div>
@@ -213,13 +225,17 @@
                 <div class="modal-body">
                     <form id="itemForm">
                         <div class="row">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label class="form-label">Malzeme Kodu</label>
                                 <input type="text" class="form-control" id="item-code" required>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <label class="form-label">Malzeme Adı</label>
                                 <input type="text" class="form-control" id="item-name" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label">İş No</label>
+                                <input type="text" class="form-control" id="item-job-no" placeholder="SRM. KODU">
                             </div>
                         </div>
                         <div class="row mt-3">
@@ -275,8 +291,8 @@
                 <div class="modal-body">
                     <div class="alert alert-info">
                         <i class="fas fa-info-circle me-2"></i>
-                        <strong>Kullanım:</strong> Excel dosyanızı yükleyin. Dosya şu sütunları içermelidir: 
-                        <strong>Stok kodu, Ad, Miktar, Birim, Öncelik</strong> (Öncelik belirtilmemişse "normal" olarak ayarlanır)
+                        <strong>Kullanım:</strong> Excel dosyanızı yükleyin. Sistem otomatik olarak sütunları algılamaya çalışacaktır. 
+                        Eğer algılanamazsa, sütunları manuel olarak eşleştirmeniz istenecektir.
                     </div>
                     
                     <div class="row mb-3">
@@ -285,9 +301,14 @@
                             <div class="form-control-plaintext small bg-light">
                                 <code>Stok kodu - Malzeme kodu<br>
                                 Ad - Malzeme adı<br>
+                                SRM. KODU - İş No<br>
                                 Miktar - Miktar değeri<br>
-                                Birim - Birim türü<br>
-                                Öncelik - Öncelik seviyesi (opsiyonel)</code>
+                                Birim - Birim türü</code>
+                            </div>
+                            <label class="form-label mt-2">Opsiyonel Sütunlar:</label>
+                            <div class="form-control-plaintext small bg-light">
+                                <code>Öncelik - Öncelik seviyesi<br>
+                                Özellikler - Teknik özellikler</code>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -305,20 +326,24 @@
                     <div class="mb-3">
                         <label class="form-label">Excel Dosyası Seçin:</label>
                         <input type="file" class="form-control" id="excel-file-input" 
-                               accept=".xlsx,.xls" placeholder="Excel dosyası seçin...">
-                        <div class="form-text">Desteklenen formatlar: .xlsx, .xls</div>
+                               accept=".xlsx,.xls,.csv" placeholder="Excel veya CSV dosyası seçin...">
+                        <div class="form-text">Desteklenen formatlar: .xlsx, .xls, .csv</div>
                     </div>
                     
                     <div class="mb-3">
                         <button type="button" class="btn btn-outline-primary btn-sm" id="preview-import-btn">
                             <i class="fas fa-eye me-1"></i>Önizleme
                         </button>
+                        <button type="button" class="btn btn-outline-warning btn-sm" id="manual-mapping-btn">
+                            <i class="fas fa-cogs me-1"></i>Manuel Sütun Eşleştirme
+                        </button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-import-btn">
                             <i class="fas fa-trash me-1"></i>Temizle
                         </button>
-                        <a href="example_materials.csv" class="btn btn-outline-info btn-sm" download>
-                            <i class="fas fa-download me-1"></i>Örnek Dosya İndir
-                        </a>
+                    </div>
+                    
+                    <div id="import-errors" style="display: none;">
+                        <!-- Error messages will be displayed here -->
                     </div>
                     
                     <div id="import-preview" style="display: none;">
@@ -330,6 +355,7 @@
                                         <th>#</th>
                                         <th>Malzeme Kodu</th>
                                         <th>Malzeme Adı</th>
+                                        <th>İş No</th>
                                         <th>Miktar</th>
                                         <th>Birim</th>
                                         <th>Öncelik</th>
@@ -348,6 +374,35 @@
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
                     <button type="button" class="btn btn-primary" id="import-items-btn" disabled>
                         <i class="fas fa-upload me-1"></i>Malzemeleri İçe Aktar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Column Mapping Modal -->
+    <div class="modal fade" id="columnMappingModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Sütun Eşleştirme</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>Dikkat:</strong> Excel dosyanızdaki sütunları sistem alanlarıyla eşleştirmeniz gerekiyor. 
+                        Gerekli alanlar <span class="text-danger">*</span> ile işaretlenmiştir.
+                    </div>
+                    
+                    <div id="column-mapping-container">
+                        <!-- Column mapping fields will be added here dynamically -->
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-primary" id="confirm-mapping-btn">
+                        <i class="fas fa-check me-1"></i>Eşleştirmeyi Onayla
                     </button>
                 </div>
             </div>
@@ -428,6 +483,7 @@
                             <thead class="table-light">
                                 <tr>
                                     <th>Malzeme</th>
+                                    <th>İş No</th>
                                     <th>Miktar</th>
                                     <th>Birim</th>
                                     <th>Birim Fiyat</th>

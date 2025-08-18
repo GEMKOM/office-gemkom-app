@@ -5,6 +5,7 @@ import { ItemsManager } from './itemsManager.js';
 import { SuppliersManager } from './suppliersManager.js';
 import { ComparisonManager } from './comparisonManager.js';
 import { DataManager } from './dataManager.js';
+import { ValidationManager } from './validationManager.js';
 import { fetchCurrencyRates } from '../../../generic/formatters.js';
 import { createPurchaseRequest, updatePurchaseRequest, submitPurchaseRequest, getPurchaseRequest, getPurchaseRequests } from '../../../generic/procurement.js';
 
@@ -14,6 +15,7 @@ let itemsManager;
 let suppliersManager;
 let comparisonManager;
 let dataManager;
+let validationManager;
 
 let requestData = {
     requestNumber: '',
@@ -112,6 +114,9 @@ function initializeManagers() {
     // Initialize data manager first
     dataManager = new DataManager(requestData);
     
+    // Initialize validation manager
+    validationManager = new ValidationManager();
+    
     // Initialize other managers
     itemsManager = new ItemsManager(requestData, () => {
         dataManager.autoSave();
@@ -132,6 +137,7 @@ function initializeManagers() {
     window.itemsManager = itemsManager;
     window.suppliersManager = suppliersManager;
     window.comparisonManager = comparisonManager;
+    window.validationManager = validationManager;
 }
 
 
@@ -151,6 +157,7 @@ async function populateRequestData(request) {
         purchase_request_item_id: item.id, // Add the purchase_request_item.id
         code: item.item.code,
         name: item.item.name,
+        job_no: item.item.job_no || '',
         quantity: parseFloat(item.quantity),
         unit: item.item.unit,
         priority: item.priority,
@@ -323,6 +330,11 @@ function renderAll() {
         comparisonManager.renderComparisonTable();
         comparisonManager.updateSummary();
     }
+    
+    // Clear any existing validation states when re-rendering
+    if (validationManager) {
+        validationManager.clearAllFieldValidations();
+    }
 }
 
 function renderFormFields() {
@@ -345,34 +357,99 @@ function initializeFormFieldListeners() {
     if (titleField) {
         titleField.addEventListener('input', (e) => {
             requestData.title = e.target.value;
-            dataManager.saveDraft();
+            dataManager.autoSave();
+            // Show validation feedback on input
+            const validation = validationManager.validateField('request-title', e.target.value);
+            if (validation.isValid && e.target.value.trim() !== '') {
+                validationManager.showFieldValidation('request-title', true, '');
+            } else {
+                validationManager.clearFieldValidation('request-title');
+            }
         });
     }
     
     if (descriptionField) {
         descriptionField.addEventListener('input', (e) => {
             requestData.description = e.target.value;
-            dataManager.saveDraft();
+            dataManager.autoSave();
+            // Show validation feedback on input
+            const validation = validationManager.validateField('request-description', e.target.value);
+            if (validation.isValid && e.target.value.trim() !== '') {
+                validationManager.showFieldValidation('request-description', true, '');
+            } else {
+                validationManager.clearFieldValidation('request-description');
+            }
         });
     }
     
     if (priorityField) {
         priorityField.addEventListener('change', (e) => {
             requestData.priority = e.target.value;
-            dataManager.saveDraft();
+            dataManager.autoSave();
+        });
+    }
+    
+    // Setup validation for form fields
+    validationManager.setupAllFieldValidations();
+    
+    // Add blur validation for immediate feedback
+    if (titleField) {
+        titleField.addEventListener('blur', () => {
+            const validation = validationManager.validateField('request-title', titleField.value);
+            validationManager.showFieldValidation('request-title', validation.isValid, validation.message);
+        });
+    }
+    
+    if (descriptionField) {
+        descriptionField.addEventListener('blur', () => {
+            const validation = validationManager.validateField('request-description', descriptionField.value);
+            validationManager.showFieldValidation('request-description', validation.isValid, validation.message);
         });
     }
 }
 
 async function updateAndSubmitRequest() {
-    // Validate data before submission
-    const validation = dataManager.validateData();
-    if (!validation.isValid) {
-        showNotification('Lütfen tüm gerekli alanları doldurun: ' + validation.errors.join(', '), 'error');
-        return;
+    // Disable submit button to prevent multiple submissions
+    const exportBtn = document.getElementById('export-btn');
+    if (exportBtn) {
+        exportBtn.disabled = true;
+        exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gönderiliyor...';
     }
     
     try {
+        // Validate form fields using validation manager
+        const formData = {
+            'request-title': requestData.title || '',
+            'request-description': requestData.description || ''
+        };
+        
+        // Comprehensive validation using validation manager
+        const validation = validationManager.validateAllData(
+            formData, 
+            requestData.items, 
+            requestData.suppliers, 
+            requestData.itemRecommendations,
+            requestData.offers
+        );
+        
+        if (!validation.isValid) {
+            // Show field-specific validation errors for form fields
+            const formErrorField = validationManager.showAllFieldValidations(formData);
+            
+            // Mark items without recommendations and offers visually and show errors on table
+            const tableErrorElement = validationManager.markItemsWithoutRecommendations(requestData.items, requestData.itemRecommendations, requestData.offers, requestData.suppliers);
+            
+            // Scroll to the first error
+            validationManager.scrollToFirstError(formErrorField, tableErrorElement);
+            
+            // Re-enable submit button after validation failure
+            if (exportBtn) {
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Gönder';
+            }
+            return;
+        }
+        
         // Convert itemRecommendations to recommendations format
         const recommendations = {};
         if (requestData.itemRecommendations) {
@@ -382,17 +459,6 @@ async function updateAndSubmitRequest() {
                     recommendations[itemIndex] = recommendedSupplierId;
                 }
             });
-        }
-        
-        // Validate required fields
-        if (!requestData.title || !requestData.title.trim()) {
-            showNotification('Lütfen talep başlığını girin', 'error');
-            return;
-        }
-        
-        if (!requestData.description || !requestData.description.trim()) {
-            showNotification('Lütfen talep açıklamasını girin', 'error');
-            return;
         }
         
         // Prepare data for backend
@@ -422,18 +488,40 @@ async function updateAndSubmitRequest() {
     } catch (error) {
         console.error('Update and submission error:', error);
         showNotification('Talep güncellenirken hata oluştu: ' + error.message, 'error');
+        
+        // Re-enable submit button on error
+        if (exportBtn) {
+            exportBtn.disabled = false;
+            exportBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Gönder';
+        }
     }
 }
 
 async function saveDraftToBackend() {
-    // Basic validation - at least one item and one supplier
-    if (requestData.items.length === 0) {
-        showNotification('En az bir malzeme eklemelisiniz', 'error');
+    // Basic validation for draft saving
+    const formData = {
+        'request-title': requestData.title || '',
+        'request-description': requestData.description || ''
+    };
+    
+    // Validate form fields and basic requirements for draft
+    const formValidation = validationManager.validateAllFields(formData);
+    const itemsValidation = validationManager.validateItems(requestData.items);
+    const suppliersValidation = validationManager.validateSuppliers(requestData.suppliers);
+    
+    if (!formValidation.isValid) {
+        validationManager.showAllFieldValidations(formData);
+        showNotification('Lütfen form alanlarındaki hataları düzeltin', 'error');
         return;
     }
     
-    if (requestData.suppliers.length === 0) {
-        showNotification('En az bir tedarikçi eklemelisiniz', 'error');
+    if (!itemsValidation.isValid) {
+        showNotification('Lütfen malzeme bilgilerindeki hataları düzeltin:\n' + itemsValidation.errors.join('\n'), 'error');
+        return;
+    }
+    
+    if (!suppliersValidation.isValid) {
+        showNotification('Lütfen tedarikçi bilgilerindeki hataları düzeltin:\n' + suppliersValidation.errors.join('\n'), 'error');
         return;
     }
     
@@ -475,22 +563,44 @@ async function saveDraftToBackend() {
 }
 
 async function submitRequest() {
-    // Validate data before submission
-    const validation = dataManager.validateData();
-    if (!validation.isValid) {
-        showNotification('Lütfen tüm gerekli alanları doldurun: ' + validation.errors.join(', '), 'error');
-        return;
+    // Disable submit button to prevent multiple submissions
+    const exportBtn = document.getElementById('export-btn');
+    if (exportBtn) {
+        exportBtn.disabled = true;
+        exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gönderiliyor...';
     }
     
     try {
-        // Validate required fields
-        if (!requestData.title || !requestData.title.trim()) {
-            showNotification('Lütfen talep başlığını girin', 'error');
-            return;
-        }
+        // Validate form fields using validation manager
+        const formData = {
+            'request-title': requestData.title || '',
+            'request-description': requestData.description || ''
+        };
         
-        if (!requestData.description || !requestData.description.trim()) {
-            showNotification('Lütfen talep açıklamasını girin', 'error');
+        // Comprehensive validation using validation manager
+        const validation = validationManager.validateAllData(
+            formData, 
+            requestData.items, 
+            requestData.suppliers, 
+            requestData.itemRecommendations,
+            requestData.offers
+        );
+        
+        if (!validation.isValid) {
+            // Show field-specific validation errors for form fields
+            const formErrorField = validationManager.showAllFieldValidations(formData);
+            
+            // Mark items without recommendations and offers visually and show errors on table
+            const tableErrorElement = validationManager.markItemsWithoutRecommendations(requestData.items, requestData.itemRecommendations, requestData.offers, requestData.suppliers);
+            
+            // Scroll to the first error
+            validationManager.scrollToFirstError(formErrorField, tableErrorElement);
+            
+            // Re-enable submit button after validation failure
+            if (exportBtn) {
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Gönder';
+            }
             return;
         }
         
@@ -544,9 +654,20 @@ async function submitRequest() {
         
         renderAll();
         
+        // Clear validation states after successful submission
+        if (validationManager) {
+            validationManager.clearAllFieldValidations();
+        }
+        
     } catch (error) {
         console.error('Submission error:', error);
         showNotification('Talep gönderilirken hata oluştu: ' + error.message, 'error');
+        
+        // Re-enable submit button on error
+        if (exportBtn) {
+            exportBtn.disabled = false;
+            exportBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Gönder';
+        }
     }
 }
 
@@ -603,6 +724,10 @@ window.purchaseRequestApp = {
         };
         renderAll();
         dataManager.clearDraft();
+        // Clear validation states when clearing data
+        if (validationManager) {
+            validationManager.clearAllFieldValidations();
+        }
     }
 };
 

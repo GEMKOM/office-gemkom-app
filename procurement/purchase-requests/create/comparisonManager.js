@@ -61,6 +61,7 @@ export class ComparisonManager {
             // Item info
             row.innerHTML = `
                 <td><strong>${item.name}</strong><br><small class="text-muted">${item.code}</small></td>
+                <td>${item.job_no || '-'}</td>
                 <td>${item.quantity}</td>
                 <td>${item.unit}</td>
             `;
@@ -71,30 +72,41 @@ export class ComparisonManager {
                 
                 if (offer && offer.totalPrice > 0) {
                     const cell = document.createElement('td');
-                    const isRecommended = this.getItemRecommendation(itemIndex) === supplier.id;
+                    const itemRecommendation = this.getItemRecommendation(itemIndex);
+                    const isRecommended = itemRecommendation === supplier.id;
                     // Only recommended state paints the cell green
                     cell.className = `price-cell ${isRecommended ? 'recommended-cell' : ''}`;
                     
-                    if (this.currencyRates) {
-                        const convertedPrice = this.convertCurrency(offer.totalPrice, supplier.currency, 'EUR');
-                        cell.innerHTML = `
-                            <div class="d-flex flex-column align-items-center">
-                                <div class="fw-bold">${this.formatCurrency(convertedPrice, 'EUR')}</div>
-                                <small class="text-muted">${this.formatCurrency(offer.totalPrice, supplier.currency)} <span class="currency-badge">${supplier.currency}</span></small>
-                                ${offer.deliveryDays ? `<small class="text-info"><i class="fas fa-clock me-1"></i>${offer.deliveryDays} gün</small>` : ''}
-                                ${offer.notes ? `<small class="text-muted">${offer.notes}</small>` : ''}
-                                <div class="mt-1">
-                                    <button class="btn btn-sm ${this.getItemRecommendation(itemIndex) === supplier.id ? 'btn-warning' : 'btn-outline-warning'}" data-item-index="${itemIndex}" data-supplier-id="${supplier.id}" onclick="window.comparisonManager.toggleItemRecommendation(${itemIndex}, '${supplier.id}')">
-                                        <i class="fas fa-star me-1"></i>${this.getItemRecommendation(itemIndex) === supplier.id ? 'Önerildi' : 'Öner'}
-                                    </button>
-                                </div>
-                            </div>
-                        `;
+                                         if (this.currencyRates) {
+                         const convertedTotalPrice = this.convertCurrency(offer.totalPrice, supplier.currency, 'EUR');
+                         cell.innerHTML = `
+                             <div class="d-flex flex-column align-items-center">
+                                 <div class="fw-bold">${this.formatCurrency(convertedTotalPrice, 'EUR')}</div>
+                                 <small class="text-muted">${this.formatCurrency(offer.totalPrice, supplier.currency)} <span class="currency-badge">${supplier.currency}</span></small>
+                                 <div class="unit-price-display mt-1">
+                                     <small class="text-primary">
+                                         <i class="fas fa-tag me-1"></i>Birim: ${this.formatCurrency(offer.unitPrice, supplier.currency)} <span class="currency-badge">${supplier.currency}</span>
+                                     </small>
+                                 </div>
+                                 ${offer.deliveryDays ? `<small class="text-info"><i class="fas fa-clock me-1"></i>${offer.deliveryDays} gün</small>` : ''}
+                                 ${offer.notes ? `<small class="text-muted">${offer.notes}</small>` : ''}
+                                 <div class="mt-1">
+                                     <button class="btn btn-sm ${this.getItemRecommendation(itemIndex) === supplier.id ? 'btn-warning' : 'btn-outline-warning'}" data-item-index="${itemIndex}" data-supplier-id="${supplier.id}" onclick="window.comparisonManager.toggleItemRecommendation(${itemIndex}, '${supplier.id}')">
+                                         <i class="fas fa-star me-1"></i>${this.getItemRecommendation(itemIndex) === supplier.id ? 'Önerildi' : 'Öner'}
+                                     </button>
+                                 </div>
+                             </div>
+                         `;
                     } else {
                         cell.innerHTML = `
                             <div class="d-flex flex-column align-items-center">
                                 <div class="text-muted">Döviz kurları yüklenemedi</div>
                                 <small class="text-muted">${this.formatCurrency(offer.totalPrice, supplier.currency)} <span class="currency-badge">${supplier.currency}</span></small>
+                                <div class="unit-price-display mt-1">
+                                    <small class="text-primary">
+                                        <i class="fas fa-tag me-1"></i>Birim: ${this.formatCurrency(offer.unitPrice, supplier.currency)} <span class="currency-badge">${supplier.currency}</span>
+                                    </small>
+                                </div>
                                 ${offer.deliveryDays ? `<small class="text-info"><i class="fas fa-clock me-1"></i>${offer.deliveryDays} gün</small>` : ''}
                                 ${offer.notes ? `<small class="text-muted">${offer.notes}</small>` : ''}
                                 <div class="mt-1">
@@ -128,6 +140,19 @@ export class ComparisonManager {
         this.requestData.itemRecommendations[itemIndex] = current === supplierId ? null : supplierId;
         this.renderComparisonTable();
         this.autoSave();
+        
+        // Re-validate ALL items to restore error states after table re-render
+        if (window.validationManager) {
+            this.requestData.items.forEach((_, idx) => {
+                window.validationManager.revalidateItem(
+                    idx, 
+                    this.requestData.items, 
+                    this.requestData.itemRecommendations, 
+                    this.requestData.offers, 
+                    this.requestData.suppliers
+                );
+            });
+        }
     }
 
     recommendSupplierForAll(supplierId) {
@@ -167,6 +192,19 @@ export class ComparisonManager {
         
         this.renderComparisonTable();
         this.autoSave();
+        
+        // Re-validate ALL items to restore error states after table re-render
+        if (window.validationManager) {
+            this.requestData.items.forEach((_, idx) => {
+                window.validationManager.revalidateItem(
+                    idx, 
+                    this.requestData.items, 
+                    this.requestData.itemRecommendations, 
+                    this.requestData.offers, 
+                    this.requestData.suppliers
+                );
+            });
+        }
     }
 
     convertCurrency(amount, fromCurrency, toCurrency) {
@@ -186,7 +224,17 @@ export class ComparisonManager {
 
     updateSummary() {
         document.getElementById('total-items').textContent = this.requestData.items.length;
-        document.getElementById('total-suppliers').textContent = this.requestData.suppliers.length;
+        
+        // Calculate number of different recommended suppliers
+        const recommendedSupplierIds = new Set();
+        if (this.requestData.itemRecommendations) {
+            Object.values(this.requestData.itemRecommendations).forEach(supplierId => {
+                if (supplierId) {
+                    recommendedSupplierIds.add(supplierId);
+                }
+            });
+        }
+        document.getElementById('total-suppliers').textContent = recommendedSupplierIds.size;
         
         // Handle total amount based on currency rates availability
         const totalAmountElement = document.getElementById('total-amount');

@@ -62,7 +62,6 @@ export class DataManager {
             };
             
             localStorage.setItem('purchaseRequestDraft', JSON.stringify(draftData));
-            console.log('Draft saved successfully');
         } catch (error) {
             console.error('Error saving draft:', error);
         }
@@ -89,10 +88,8 @@ export class DataManager {
                     this.requestData.recommendations = draftData.recommendations || {};
                     this.requestData.itemRecommendations = draftData.itemRecommendations || {};
                     
-                    console.log('Draft loaded successfully');
                     return true;
                 } else {
-                    console.log('Draft is too old, clearing...');
                     localStorage.removeItem('purchaseRequestDraft');
                 }
             }
@@ -106,7 +103,6 @@ export class DataManager {
     clearDraft() {
         try {
             localStorage.removeItem('purchaseRequestDraft');
-            console.log('Draft cleared successfully');
         } catch (error) {
             console.error('Error clearing draft:', error);
         }
@@ -134,7 +130,6 @@ export class DataManager {
             link.download = `purchase-request-${new Date().toISOString().split('T')[0]}.json`;
             link.click();
             
-            console.log('Data exported successfully');
         } catch (error) {
             console.error('Error exporting data:', error);
             alert('Veri dışa aktarma hatası: ' + error.message);
@@ -162,7 +157,6 @@ export class DataManager {
                     this.requestData.recommendations = importData.recommendations || {};
                     this.requestData.itemRecommendations = importData.itemRecommendations || {};
                     
-                    console.log('Data imported successfully');
                     resolve(true);
                 } catch (error) {
                     console.error('Error importing data:', error);
@@ -191,6 +185,9 @@ export class DataManager {
         this.requestData.items.forEach((item, index) => {
             if (!item.name || !item.code) {
                 errors.push(`Item ${index + 1}: Name and code are required`);
+            }
+            if (!item.job_no) {
+                errors.push(`Item ${index + 1}: Job number is required`);
             }
             if (!item.quantity || item.quantity <= 0) {
                 errors.push(`Item ${index + 1}: Valid quantity is required`);

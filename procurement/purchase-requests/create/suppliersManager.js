@@ -65,13 +65,33 @@ export class SuppliersManager {
         const form = document.getElementById('supplierForm');
         const editIndex = form.dataset.editIndex;
 
+        // Get form values
+        const name = document.getElementById('supplier-name').value.trim();
+        const contact = document.getElementById('supplier-contact').value.trim();
+        const phone = document.getElementById('supplier-phone').value.trim();
+        const email = document.getElementById('supplier-email').value.trim();
+        const currency = document.getElementById('supplier-currency').value;
+
+        // Validate required fields
+        const errors = [];
+        
+        if (!name) {
+            errors.push('Tedarikçi adı zorunludur');
+        }
+
+        // Show errors if any
+        if (errors.length > 0) {
+            this.showNotification('Lütfen aşağıdaki hataları düzeltin:\n' + errors.join('\n'), 'error');
+            return;
+        }
+
         const supplier = {
             id: editIndex !== undefined ? this.requestData.suppliers[editIndex].id : this.generateSupplierId(),
-            name: document.getElementById('supplier-name').value,
-            contact: document.getElementById('supplier-contact').value,
-            phone: document.getElementById('supplier-phone').value,
-            email: document.getElementById('supplier-email').value,
-            currency: document.getElementById('supplier-currency').value
+            name: name,
+            contact: contact,
+            phone: phone,
+            email: email,
+            currency: currency
         };
 
         if (editIndex !== undefined) {
@@ -202,6 +222,7 @@ export class SuppliersManager {
             const row = document.createElement('tr');
             row.innerHTML = `
                 <td>${item.name}</td>
+                <td>${item.job_no || '-'}</td>
                 <td>${item.quantity}</td>
                 <td>${item.unit}</td>
                 <td>
@@ -271,8 +292,41 @@ export class SuppliersManager {
         
         this.renderSuppliersContainer();
         this.autoSave();
+        
+        // Re-validate all items to update error states when offers are added
+        if (window.validationManager) {
+            this.requestData.items.forEach((_, itemIndex) => {
+                window.validationManager.revalidateItem(
+                    itemIndex, 
+                    this.requestData.items, 
+                    this.requestData.itemRecommendations, 
+                    this.requestData.offers, 
+                    this.requestData.suppliers
+                );
+            });
+        }
 
         // Close modal
         bootstrap.Modal.getInstance(document.getElementById('offerModal')).hide();
+    }
+
+    showNotification(message, type = 'info') {
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+        notification.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        document.body.appendChild(notification);
+        
+        // Auto-remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.remove();
+            }
+        }, 5000);
     }
 }
