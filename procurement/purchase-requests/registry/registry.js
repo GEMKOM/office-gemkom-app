@@ -6,7 +6,8 @@ import { FiltersComponent } from '../../../components/filters/filters.js';
 import { 
     getPurchaseRequests, 
     getPurchaseRequest, 
-    getStatusChoices
+    getStatusChoices,
+    cancelPurchaseRequest
 } from '../../../generic/procurement.js';
 import { fetchCurrencyRates } from '../../../generic/formatters.js';
 
@@ -517,7 +518,11 @@ function setupEventListeners() {
         refreshBtn.addEventListener('click', loadRequests);
     }
     
-
+    // Cancel request button
+    const cancelBtn = document.getElementById('cancel-request-btn');
+    if (cancelBtn) {
+        cancelBtn.addEventListener('click', handleCancelRequest);
+    }
     
     // Add event listeners for modal close to clean up URL
     const modal = document.getElementById('requestDetailsModal');
@@ -551,6 +556,46 @@ async function viewRequestDetails(requestId) {
     }
 }
 
+async function handleCancelRequest() {
+    if (!currentRequest) {
+        showNotification('Talep bilgisi bulunamadı', 'error');
+        return;
+    }
+
+    // Confirm cancellation
+    const confirmed = confirm(`"${currentRequest.request_number}" numaralı talebi iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`);
+    
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        showLoading(true);
+        
+        // Call the cancel API
+        await cancelPurchaseRequest(currentRequest.id);
+        
+        // Show success message
+        showNotification('Talep başarıyla iptal edildi', 'success');
+        
+        // Close the modal
+        const modal = bootstrap.Modal.getInstance(document.getElementById('requestDetailsModal'));
+        if (modal) {
+            modal.hide();
+        }
+        
+        // Refresh the requests list to update the status
+        await loadRequests();
+        updateRequestCounts();
+        
+    } catch (error) {
+        console.error('Error canceling request:', error);
+        showNotification('Talep iptal edilirken hata oluştu: ' + error.message, 'error');
+    } finally {
+        showLoading(false);
+    }
+}
+
 function showRequestDetailsModal() {
     const container = document.getElementById('request-details-container');
     
@@ -565,7 +610,7 @@ function showRequestDetailsModal() {
     if (currentRequest.offers && currentRequest.offers.length > 0) {
         // Calculate recommended totals
         currentRequest.offers.forEach(offer => {
-            const currency = offer.supplier.currency;
+            const currency = offer.currency;
             if (!currencyTotals[currency]) {
                 currencyTotals[currency] = 0;
             }
@@ -604,7 +649,7 @@ function showRequestDetailsModal() {
                             cheapestPrice = totalPrice;
                             cheapestOption = {
                                 price: totalPrice,
-                                currency: offer.supplier.currency,
+                                currency: offer.currency,
                                 supplier: offer.supplier.name
                             };
                         }
@@ -730,6 +775,17 @@ function showRequestDetailsModal() {
         document.getElementById('comparison-table-section').style.display = 'none';
     }
 
+    // Show/hide cancel button based on request status
+    const cancelBtn = document.getElementById('cancel-request-btn');
+    if (cancelBtn) {
+        // Show cancel button only for draft and submitted requests
+        if (currentRequest.status === 'draft' || currentRequest.status === 'submitted') {
+            cancelBtn.style.display = 'inline-block';
+        } else {
+            cancelBtn.style.display = 'none';
+        }
+    }
+
     const modal = new bootstrap.Modal(document.getElementById('requestDetailsModal'));
     modal.show();
 }
@@ -774,7 +830,7 @@ function renderComparisonTable() {
         th.innerHTML = `
             <div class="supplier-header">
                 <div class="fw-semibold">${offer.supplier.name}</div>
-                <div class="supplier-currency">${offer.supplier.currency}</div>
+                <div class="supplier-currency">${offer.currency}</div>
             </div>`;
         th.className = 'text-center align-middle';
         headersRow.appendChild(th);
@@ -811,25 +867,25 @@ function renderComparisonTable() {
                 
                 // Calculate unit price and converted price
                 const unitPrice = parseFloat(itemOffer.unit_price);
-                const convertedPrice = currencyRates ? convertCurrency(unitPrice, offer.supplier.currency, 'EUR') : unitPrice;
+                const convertedPrice = currencyRates ? convertCurrency(unitPrice, offer.currency, 'EUR') : unitPrice;
                 
                 // Calculate total price for this item
                 const quantity = parseFloat(requestItem.quantity || 0);
                 const totalPrice = unitPrice * quantity;
-                const convertedTotalPrice = currencyRates ? convertCurrency(totalPrice, offer.supplier.currency, 'EUR') : totalPrice;
+                const convertedTotalPrice = currencyRates ? convertCurrency(totalPrice, offer.currency, 'EUR') : totalPrice;
                 
                 cell.innerHTML = `
                     <div class="d-flex flex-column align-items-center">
                         ${currencyRates ? `
                             <div class="fw-bold">${formatCurrency(convertedTotalPrice, 'EUR')}</div>
-                            <small class="text-muted">${formatCurrency(totalPrice, offer.supplier.currency)} <span class="currency-badge ${offer.supplier.currency === 'TRY' ? 'try-badge' : ''}">${offer.supplier.currency}</span></small>
+                            <small class="text-muted">${formatCurrency(totalPrice, offer.currency)} <span class="currency-badge ${offer.currency === 'TRY' ? 'try-badge' : ''}">${offer.currency}</span></small>
                         ` : `
                             <div class="text-muted">Döviz kurları yüklenemedi</div>
-                            <small class="text-muted">${formatCurrency(totalPrice, offer.supplier.currency)} <span class="currency-badge ${offer.supplier.currency === 'TRY' ? 'try-badge' : ''}">${offer.supplier.currency}</span></small>
+                            <small class="text-muted">${formatCurrency(totalPrice, offer.currency)} <span class="currency-badge ${offer.currency === 'TRY' ? 'try-badge' : ''}">${offer.currency}</span></small>
                         `}
                         <div class="unit-price-display mt-1">
                             <small class="text-primary">
-                                <i class="fas fa-tag me-1"></i>Birim: ${formatCurrency(unitPrice, offer.supplier.currency)} <span class="currency-badge ${offer.supplier.currency === 'TRY' ? 'try-badge' : ''}">${offer.supplier.currency}</span>
+                                <i class="fas fa-tag me-1"></i>Birim: ${formatCurrency(unitPrice, offer.currency)} <span class="currency-badge ${offer.currency === 'TRY' ? 'try-badge' : ''}">${offer.currency}</span>
                             </small>
                         </div>
                         ${itemOffer.delivery_days ? `<small class="text-info"><i class="fas fa-clock me-1"></i>${itemOffer.delivery_days} gün</small>` : ''}
@@ -870,7 +926,8 @@ function getStatusBadge(status, statusLabel) {
         'draft': 'status-draft',
         'submitted': 'status-submitted',
         'approved': 'status-completed',
-        'rejected': 'status-cancelled'
+        'rejected': 'status-cancelled',
+        'cancelled': 'status-cancelled'
     };
 
     const statusClass = statusMap[status] || 'status-draft';
@@ -1032,3 +1089,4 @@ function showNotification(message, type = 'info') {
 
 // Make functions globally available for onclick handlers
 window.viewRequestDetails = viewRequestDetails;
+window.handleCancelRequest = handleCancelRequest;

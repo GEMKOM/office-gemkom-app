@@ -3,7 +3,7 @@
  * A reusable component for displaying statistics cards with customizable content
  */
 
-class StatisticsCards {
+export class StatisticsCards {
     constructor(containerId, options = {}) {
         this.containerId = containerId;
         this.container = document.getElementById(containerId);

@@ -299,6 +299,185 @@ const NAVIGATION_STRUCTURE = {
         label: 'Kalite Kontrol',
         icon: 'fas fa-clipboard-check',
         children: {}
+    },
+    '/finance': {
+        label: 'Finans',
+        icon: 'fas fa-dollar-sign',
+        children: {
+            '/finance/purchase-orders': {
+                label: 'Satın Alma Siparişleri',
+                icon: 'fas fa-shopping-cart',
+                children: {}
+            },
+            '/finance/invoices': {
+                label: 'Faturalar',
+                icon: 'fas fa-file-invoice-dollar',
+                children: {
+                    '/finance/invoices/incoming': {
+                        label: 'Gelen Faturalar',
+                        icon: 'fas fa-download',
+                        children: {}
+                    },
+                    '/finance/invoices/outgoing': {
+                        label: 'Giden Faturalar',
+                        icon: 'fas fa-upload',
+                        children: {}
+                    },
+                    '/finance/invoices/approval': {
+                        label: 'Onay Süreçleri',
+                        icon: 'fas fa-check-circle',
+                        children: {}
+                    }
+                }
+            },
+            '/finance/payments': {
+                label: 'Ödemeler',
+                icon: 'fas fa-credit-card',
+                children: {
+                    '/finance/payments/schedule': {
+                        label: 'Ödeme Planları',
+                        icon: 'fas fa-calendar-alt',
+                        children: {}
+                    },
+                    '/finance/payments/cashflow': {
+                        label: 'Nakit Akışı',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    },
+                    '/finance/payments/banking': {
+                        label: 'Banka İşlemleri',
+                        icon: 'fas fa-university',
+                        children: {}
+                    }
+                }
+            },
+            '/finance/budget': {
+                label: 'Bütçe',
+                icon: 'fas fa-chart-pie',
+                children: {
+                    '/finance/budget/planning': {
+                        label: 'Bütçe Planlama',
+                        icon: 'fas fa-tasks',
+                        children: {}
+                    },
+                    '/finance/budget/tracking': {
+                        label: 'Bütçe Takibi',
+                        icon: 'fas fa-eye',
+                        children: {}
+                    },
+                    '/finance/budget/analysis': {
+                        label: 'Performans Analizi',
+                        icon: 'fas fa-chart-bar',
+                        children: {}
+                    }
+                }
+            },
+            '/finance/accounting': {
+                label: 'Muhasebe',
+                icon: 'fas fa-calculator',
+                children: {
+                    '/finance/accounting/ledger': {
+                        label: 'Defter Tutma',
+                        icon: 'fas fa-book',
+                        children: {}
+                    },
+                    '/finance/accounting/transactions': {
+                        label: 'İşlem Kayıtları',
+                        icon: 'fas fa-exchange-alt',
+                        children: {}
+                    },
+                    '/finance/accounting/reports': {
+                        label: 'Finansal Raporlar',
+                        icon: 'fas fa-file-alt',
+                        children: {}
+                    }
+                }
+            },
+            '/finance/tax': {
+                label: 'Vergi',
+                icon: 'fas fa-receipt',
+                children: {
+                    '/finance/tax/calculations': {
+                        label: 'Vergi Hesaplamaları',
+                        icon: 'fas fa-calculator',
+                        children: {}
+                    },
+                    '/finance/tax/declarations': {
+                        label: 'Beyanname Takibi',
+                        icon: 'fas fa-file-contract',
+                        children: {}
+                    },
+                    '/finance/tax/compliance': {
+                        label: 'Uyumluluk',
+                        icon: 'fas fa-shield-alt',
+                        children: {}
+                    }
+                }
+            },
+            '/finance/cost-analysis': {
+                label: 'Maliyet Analizi',
+                icon: 'fas fa-chart-area',
+                children: {
+                    '/finance/cost-analysis/production': {
+                        label: 'Üretim Maliyetleri',
+                        icon: 'fas fa-industry',
+                        children: {}
+                    },
+                    '/finance/cost-analysis/profitability': {
+                        label: 'Karlılık Analizi',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    },
+                    '/finance/cost-analysis/breakdown': {
+                        label: 'Maliyet Dağılımı',
+                        icon: 'fas fa-sitemap',
+                        children: {}
+                    }
+                }
+            },
+            '/finance/reports': {
+                label: 'Raporlar',
+                icon: 'fas fa-chart-bar',
+                children: {
+                    '/finance/reports/financial': {
+                        label: 'Finansal Raporlar',
+                        icon: 'fas fa-file-alt',
+                        children: {}
+                    },
+                    '/finance/reports/analytics': {
+                        label: 'Analitik Raporlar',
+                        icon: 'fas fa-chart-pie',
+                        children: {}
+                    },
+                    '/finance/reports/dashboard': {
+                        label: 'Finansal Dashboard',
+                        icon: 'fas fa-tachometer-alt',
+                        children: {}
+                    }
+                }
+            },
+            '/finance/settings': {
+                label: 'Ayarlar',
+                icon: 'fas fa-cog',
+                children: {
+                    '/finance/settings/general': {
+                        label: 'Genel Ayarlar',
+                        icon: 'fas fa-sliders-h',
+                        children: {}
+                    },
+                    '/finance/settings/permissions': {
+                        label: 'Yetki Yönetimi',
+                        icon: 'fas fa-user-shield',
+                        children: {}
+                    },
+                    '/finance/settings/integration': {
+                        label: 'Entegrasyon',
+                        icon: 'fas fa-plug',
+                        children: {}
+                    }
+                }
+            }
+        }
     }
 };
 
@@ -860,6 +1039,12 @@ export function initNavbar() {
                     return;
                 }
                 
+                if (path.startsWith('/finance/')) {
+                    // Allow navigation to finance pages
+                    navigateTo(path);
+                    return;
+                }
+                
                 
                 
                 navigateTo(path);
@@ -908,6 +1093,12 @@ export function initNavbar() {
                 
                 if (path.startsWith('/procurement/')) {
                     // Allow navigation to procurement pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                if (path.startsWith('/finance/')) {
+                    // Allow navigation to finance pages
                     navigateTo(path);
                     return;
                 }

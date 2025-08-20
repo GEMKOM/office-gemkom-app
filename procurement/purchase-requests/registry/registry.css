@@ -36,84 +36,7 @@
     font-weight: 500;
 }
 
-/* Status badges */
-.status-badge {
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.375rem;
-    text-transform: uppercase;
-    letter-spacing: 0.025em;
-    display: inline-block;
-    text-align: center;
-    min-width: 80px;
-    margin: 0 auto;
-    position: static;
-    top: auto;
-    left: auto;
-    transform: none;
-    z-index: auto;
-    white-space: nowrap;
-    overflow: visible;
-}
-
-.status-draft {
-    background-color: #e5e7eb;
-    color: #374151;
-    border: 1px solid #d1d5db;
-}
-
-.status-submitted {
-    background-color: #fef3c7;
-    color: #92400e;
-    border: 1px solid #f59e0b;
-}
-
-.status-completed {
-    background-color: #e1fedb;
-    color: #0c9910;
-    border: 1px solid #0aa30f;
-}
-
-.status-cancelled {
-    background-color: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #ef4444;
-}
-
-
-
-/* Priority badges */
-.priority-badge {
-    font-size: 0.75rem;
-    font-weight: 600;
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.375rem;
-    display: inline-block;
-    text-align: center;
-    min-width: 80px;
-    margin: 0 auto;
-    white-space: nowrap;
-    overflow: visible;
-}
-
-.priority-normal {
-    background-color: #e5e7eb;
-    color: #374151;
-    border: 1px solid #d1d5db;
-}
-
-.priority-urgent {
-    background-color: #fef3c7;
-    color: #92400e;
-    border: 1px solid #f59e0b;
-}
-
-.priority-critical {
-    background-color: #fee2e2;
-    color: #991b1b;
-    border: 1px solid #ef4444;
-}
+/* Status and Priority badges are now handled by procurement-badges.css */
 
 /* Table customizations - Matching Tasks Page */
 .table {
@@ -158,11 +81,7 @@
     vertical-align: middle;
 }
 
-.table tbody td.text-center .status-badge {
-    margin: 0 auto;
-    display: inline-block;
-    position: static;
-}
+/* Table integration styles are now handled by procurement-badges.css */
 
 /* Ensure proper alignment for status and priority columns */
 .table tbody td:nth-child(4),
@@ -233,15 +152,7 @@
     position: relative;
 }
 
-/* Ensure status badges are properly positioned */
-.table-responsive table td:nth-child(4) .status-badge,
-.table-responsive table td:nth-child(5) .priority-badge {
-    display: inline-block;
-    position: relative;
-    top: auto;
-    left: auto;
-    transform: none;
-}
+/* Table responsive styles are now handled by procurement-badges.css */
 
 /* Allow text wrapping for specific columns */
 .table-responsive table td:nth-child(2), /* Request title column */
@@ -362,12 +273,7 @@
         font-size: 0.875rem;
     }
     
-    .status-badge,
-    .priority-badge {
-        font-size: 0.7rem;
-        min-width: 70px;
-        padding: 0.2rem 0.4rem;
-    }
+    /* Badge responsive styles are now handled by procurement-badges.css */
 }
 
 /* Comparison table styles */
@@ -640,4 +546,26 @@
     line-height: 1.2;
     max-width: 180px;
     word-wrap: break-word;
+}
+
+/* Cancel button styling */
+#cancel-request-btn {
+    transition: all 0.3s ease;
+    font-weight: 500;
+}
+
+#cancel-request-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(220, 53, 69, 0.3);
+}
+
+#cancel-request-btn:active {
+    transform: translateY(0);
+}
+
+#cancel-request-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
 }

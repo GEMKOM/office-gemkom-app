@@ -375,28 +375,7 @@ thead .btn.btn-outline-warning {
     justify-content: center;
 }
 
-/* Priority indicators */
-.priority-badge {
-    padding: 0.25rem 0.5rem;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: 500;
-}
-
-.priority-normal {
-    background-color: #e9ecef;
-    color: #6c757d;
-}
-
-.priority-acil {
-    background-color: #fff3cd;
-    color: #856404;
-}
-
-.priority-kritik {
-    background-color: #f8d7da;
-    color: #721c24;
-}
+/* Priority badges are now handled by procurement-badges.css */
 
 /* Auto-save indicator */
 .auto-save-indicator {

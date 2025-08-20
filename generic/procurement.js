@@ -67,6 +67,27 @@ export async function submitPurchaseRequest(requestId) {
     }
 }
 
+export async function cancelPurchaseRequest(requestId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/purchase-requests/${requestId}/cancel/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Talep iptal edilirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error canceling purchase request:', error);
+        throw error;
+    }
+}
+
 export async function getPurchaseRequests(filters = {}) {
     try {
         // Build query parameters
