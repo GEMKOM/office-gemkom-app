@@ -635,7 +635,7 @@ async function viewRequestDetails(requestId) {
     try {
         showLoading(true);
         currentRequest = await getPurchaseRequest(requestId);
-        showRequestDetailsModal();
+        await showRequestDetailsModal();
         
         // Update URL to include the talep no (request number)
         const url = new URL(window.location);
@@ -649,8 +649,41 @@ async function viewRequestDetails(requestId) {
     }
 }
 
-function showRequestDetailsModal() {
+async function showRequestDetailsModal() {
     const container = document.getElementById('request-details-container');
+    
+    // Get current user to check if they've already made a decision
+    let currentUser = null;
+    try {
+        const { getUser } = await import('../../../authService.js');
+        currentUser = await getUser();
+    } catch (error) {
+        console.error('Error getting current user:', error);
+    }
+    
+    // Check if current user has already made a decision on this request
+    let userHasDecided = false;
+    if (currentUser && currentRequest.approval && currentRequest.approval.stage_instances) {
+        currentRequest.approval.stage_instances.forEach(stage => {
+            if (stage.decisions) {
+                stage.decisions.forEach(decision => {
+                    if (decision.approver === currentUser.id) {
+                        userHasDecided = true;
+                    }
+                });
+            }
+        });
+    }
+    
+    // Hide approve/reject buttons if user has already decided or if request is not in submitted status
+    const approveBtn = document.getElementById('approve-request');
+    const rejectBtn = document.getElementById('reject-request');
+    
+    if (approveBtn && rejectBtn) {
+        const shouldShowButtons = currentRequest.status === 'submitted' && !userHasDecided;
+        approveBtn.style.display = shouldShowButtons ? 'inline-block' : 'none';
+        rejectBtn.style.display = shouldShowButtons ? 'inline-block' : 'none';
+    }
     
     // Calculate total amount for recommended items
     let totalRecommendedAmountEUR = 0;
@@ -663,7 +696,7 @@ function showRequestDetailsModal() {
     if (currentRequest.offers && currentRequest.offers.length > 0) {
         // Calculate recommended totals
         currentRequest.offers.forEach(offer => {
-            const currency = offer.supplier.currency;
+            const currency = offer.supplier.default_currency;
             if (!currencyTotals[currency]) {
                 currencyTotals[currency] = 0;
             }
@@ -702,7 +735,7 @@ function showRequestDetailsModal() {
                             cheapestPrice = totalPrice;
                             cheapestOption = {
                                 price: totalPrice,
-                                currency: offer.supplier.currency,
+                                currency: offer.supplier.default_currency,
                                 supplier: offer.supplier.name
                             };
                         }
@@ -834,15 +867,20 @@ function showRequestDetailsModal() {
 
 async function openModalFromTalepNo(talepNo) {
     try {
-        // Find the request with the matching talep no
+        // Find the request with the matching talep no in current requests
         const request = requests.find(r => r.request_number === talepNo);
         if (request) {
             await viewRequestDetails(request.id);
         } else {
-            // If not found in current requests, try to fetch it directly
+            // If not found in current requests, try to search for it using the API
             try {
-                currentRequest = await getPurchaseRequest(null, talepNo); // Assuming API supports talep no lookup
-                showRequestDetailsModal();
+                const searchResponse = await getPurchaseRequests({ request_number: talepNo });
+                if (searchResponse && searchResponse.results && searchResponse.results.length > 0) {
+                    const foundRequest = searchResponse.results[0];
+                    await viewRequestDetails(foundRequest.id);
+                } else {
+                    showNotification(`Talep ${talepNo} bulunamadı`, 'error');
+                }
             } catch (error) {
                 console.error('Request not found:', error);
                 showNotification(`Talep ${talepNo} bulunamadı`, 'error');
@@ -872,7 +910,7 @@ function renderComparisonTable() {
         th.innerHTML = `
             <div class="supplier-header">
                 <div class="fw-semibold">${offer.supplier.name}</div>
-                <div class="supplier-currency">${offer.supplier.currency}</div>
+                <div class="supplier-currency">${offer.supplier.default_currency}</div>
             </div>`;
         th.className = 'text-center align-middle';
         headersRow.appendChild(th);
@@ -909,16 +947,16 @@ function renderComparisonTable() {
                 
                 // Calculate unit price and converted price
                 const unitPrice = parseFloat(itemOffer.unit_price);
-                const convertedPrice = currencyRates ? convertCurrency(unitPrice, offer.supplier.currency, 'EUR') : unitPrice;
+                const convertedPrice = currencyRates ? convertCurrency(unitPrice, offer.supplier.default_currency, 'EUR') : unitPrice;
                 
                 cell.innerHTML = `
                     <div class="d-flex flex-column align-items-center">
                         ${currencyRates ? `
                             <div class="fw-bold">${formatCurrencyDisplay(convertedPrice, 'EUR')}</div>
-                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.supplier.currency)} <span class="currency-badge">${offer.supplier.currency}</span></small>
+                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.supplier.default_currency)} <span class="currency-badge">${offer.supplier.default_currency}</span></small>
                         ` : `
                             <div class="text-muted">Döviz kurları yüklenemedi</div>
-                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.supplier.currency)} <span class="currency-badge">${offer.supplier.currency}</span></small>
+                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.supplier.default_currency)} <span class="currency-badge">${offer.supplier.default_currency}</span></small>
                         `}
                         ${itemOffer.delivery_days ? `<div class="delivery-info"><i class="fas fa-clock me-1"></i>${itemOffer.delivery_days} gün</div>` : ''}
                         ${itemOffer.notes ? `<div class="notes-info">${itemOffer.notes}</div>` : ''}

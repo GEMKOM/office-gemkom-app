@@ -5,6 +5,7 @@ import { authedFetch } from '../../authService.js';
 import { backendBase } from '../../base.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
+import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 
 // Header component instance
 let headerComponent;

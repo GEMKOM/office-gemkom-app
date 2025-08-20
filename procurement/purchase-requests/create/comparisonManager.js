@@ -39,7 +39,7 @@ export class ComparisonManager {
             th.innerHTML = `
                 <div class="d-flex flex-column align-items-center gap-1">
                     <div class="fw-semibold">${supplier.name}</div>
-                    <div class="small text-muted">${supplier.currency}</div>
+                    <div class="small text-muted">${supplier.default_currency}</div>
                     <button class="btn btn-sm btn-outline-warning" onclick="window.comparisonManager.recommendSupplierForAll('${supplier.id}')">
                         <i class="fas fa-star me-1"></i>Hepsi için Öner
                     </button>
@@ -78,14 +78,14 @@ export class ComparisonManager {
                     cell.className = `price-cell ${isRecommended ? 'recommended-cell' : ''}`;
                     
                                          if (this.currencyRates) {
-                         const convertedTotalPrice = this.convertCurrency(offer.totalPrice, supplier.currency, 'EUR');
+                         const convertedTotalPrice = this.convertCurrency(offer.totalPrice, supplier.default_currency, 'EUR');
                          cell.innerHTML = `
                              <div class="d-flex flex-column align-items-center">
                                  <div class="fw-bold">${this.formatCurrency(convertedTotalPrice, 'EUR')}</div>
-                                 <small class="text-muted">${this.formatCurrency(offer.totalPrice, supplier.currency)} <span class="currency-badge">${supplier.currency}</span></small>
+                                 <small class="text-muted">${this.formatCurrency(offer.totalPrice, supplier.default_currency)} <span class="currency-badge">${supplier.default_currency}</span></small>
                                  <div class="unit-price-display mt-1">
                                      <small class="text-primary">
-                                         <i class="fas fa-tag me-1"></i>Birim: ${this.formatCurrency(offer.unitPrice, supplier.currency)} <span class="currency-badge">${supplier.currency}</span>
+                                         <i class="fas fa-tag me-1"></i>Birim: ${this.formatCurrency(offer.unitPrice, supplier.default_currency)} <span class="currency-badge">${supplier.default_currency}</span>
                                      </small>
                                  </div>
                                  ${offer.deliveryDays ? `<small class="text-info"><i class="fas fa-clock me-1"></i>${offer.deliveryDays} gün</small>` : ''}
@@ -101,10 +101,10 @@ export class ComparisonManager {
                         cell.innerHTML = `
                             <div class="d-flex flex-column align-items-center">
                                 <div class="text-muted">Döviz kurları yüklenemedi</div>
-                                <small class="text-muted">${this.formatCurrency(offer.totalPrice, supplier.currency)} <span class="currency-badge">${supplier.currency}</span></small>
+                                <small class="text-muted">${this.formatCurrency(offer.totalPrice, supplier.default_currency)} <span class="currency-badge">${supplier.default_currency}</span></small>
                                 <div class="unit-price-display mt-1">
                                     <small class="text-primary">
-                                        <i class="fas fa-tag me-1"></i>Birim: ${this.formatCurrency(offer.unitPrice, supplier.currency)} <span class="currency-badge">${supplier.currency}</span>
+                                        <i class="fas fa-tag me-1"></i>Birim: ${this.formatCurrency(offer.unitPrice, supplier.default_currency)} <span class="currency-badge">${supplier.default_currency}</span>
                                     </small>
                                 </div>
                                 ${offer.deliveryDays ? `<small class="text-info"><i class="fas fa-clock me-1"></i>${offer.deliveryDays} gün</small>` : ''}
@@ -256,7 +256,7 @@ export class ComparisonManager {
                         const offer = this.requestData.offers[recommendedSupplierId]?.[itemIndex];
                         if (offer && offer.totalPrice > 0) {
                             const supplier = this.requestData.suppliers.find(s => s.id === recommendedSupplierId);
-                            totalAmount += this.convertCurrency(offer.totalPrice, supplier.currency, 'EUR');
+                            totalAmount += this.convertCurrency(offer.totalPrice, supplier.default_currency, 'EUR');
                         }
                     }
                 });

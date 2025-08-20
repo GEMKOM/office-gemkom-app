@@ -62,7 +62,7 @@ function calculateTotalAmountEUR() {
                     const supplier = requestData.suppliers.find(s => s.id === recommendedSupplierId);
                     if (supplier) {
                         // Convert to EUR using the same logic as ComparisonManager
-                        const convertedAmount = (offer.totalPrice / currencyRates[supplier.currency]) * currencyRates['EUR'];
+                        const convertedAmount = (offer.totalPrice / currencyRates[supplier.default_currency]) * currencyRates['EUR'];
                         totalAmount += convertedAmount;
                     }
                 }
@@ -204,7 +204,7 @@ async function populateRequestData(request) {
             contact_person: offer.supplier.contact_person || '',
             phone: offer.supplier.phone || '',
             email: offer.supplier.email || '',
-            currency: offer.supplier.currency || 'TRY'
+            currency: offer.supplier.default_currency || 'TRY'
         };
         
         requestData.suppliers.push(supplier);

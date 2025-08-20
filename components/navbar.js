@@ -189,26 +189,15 @@ const NAVIGATION_STRUCTURE = {
         label: 'Satın Alma',
         icon: 'fas fa-shopping-cart',
         children: {
-            '/procurement/providers': {
+            '/procurement/suppliers': {
                 label: 'Tedarikçiler',
                 icon: 'fas fa-handshake',
-                children: {
-                    '/procurement/providers/list': {
-                        label: 'Tedarikçi Listesi',
-                        icon: 'fas fa-list',
-                        children: {}
-                    },
-                    '/procurement/providers/evaluation': {
-                        label: 'Performans Değerlendirme',
-                        icon: 'fas fa-star',
-                        children: {}
-                    },
-                    '/procurement/providers/contracts': {
-                        label: 'Sözleşmeler',
-                        icon: 'fas fa-file-contract',
-                        children: {}
-                    }
-                }
+                children: {}
+            },
+            '/procurement/payment-terms': {
+                label: 'Ödeme Koşulları',
+                icon: 'fas fa-credit-card',
+                children: {}
             },
             '/procurement/purchase-requests': {
                 label: 'Satın Alma Talepleri',

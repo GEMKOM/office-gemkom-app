@@ -265,9 +265,20 @@ export async function searchSuppliers(searchTerm) {
     }
 }
 
-export async function getSuppliers() {
+export async function getSuppliers(filters = {}) {
     try {
-        const response = await authedFetch(`${backendBase}/procurement/suppliers/`);
+        // Build query parameters
+        const queryParams = new URLSearchParams();
+        
+        // Add filters if provided
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+        
+        const url = `${backendBase}/procurement/suppliers/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const response = await authedFetch(url);
         
         if (!response.ok) {
             const errorData = await response.json();
@@ -277,6 +288,22 @@ export async function getSuppliers() {
         return await response.json();
     } catch (error) {
         console.error('Error fetching suppliers:', error);
+        throw error;
+    }
+}
+
+export async function getSupplier(supplierId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/suppliers/${supplierId}/`);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Tedarikçi yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching supplier:', error);
         throw error;
     }
 }
@@ -299,6 +326,67 @@ export async function createSupplier(supplierData) {
         return await response.json();
     } catch (error) {
         console.error('Error creating supplier:', error);
+        throw error;
+    }
+}
+
+export async function updateSupplier(supplierId, supplierData) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/suppliers/${supplierId}/`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(supplierData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Tedarikçi güncellenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error updating supplier:', error);
+        throw error;
+    }
+}
+
+export async function deleteSupplier(supplierId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/suppliers/${supplierId}/`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Tedarikçi silinirken hata oluştu');
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error deleting supplier:', error);
+        throw error;
+    }
+}
+
+export async function toggleSupplierStatus(supplierId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/suppliers/${supplierId}/toggle_status/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Tedarikçi durumu değiştirilirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error toggling supplier status:', error);
         throw error;
     }
 }
@@ -440,6 +528,158 @@ export async function getStatusChoices() {
         return await response.json();
     } catch (error) {
         console.error('Error fetching status choices:', error);
+        throw error;
+    }
+}
+
+// Payment Terms API Functions
+export async function getPaymentTerms(filters = {}) {
+    try {
+        // Build query parameters
+        const queryParams = new URLSearchParams();
+        
+        // Add filters if provided
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+        
+        const url = `${backendBase}/procurement/payment-terms/${queryParams.toString() ? `?${queryParams.toString()}` : ''}`;
+        const response = await authedFetch(url);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Ödeme koşulları yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching payment terms:', error);
+        throw error;
+    }
+}
+
+export async function getPaymentTerm(paymentTermId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/payment-terms/${paymentTermId}/`);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Ödeme koşulu yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching payment term:', error);
+        throw error;
+    }
+}
+
+export async function createPaymentTerm(paymentTermData) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/payment-terms/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(paymentTermData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Ödeme koşulu oluşturulurken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error creating payment term:', error);
+        throw error;
+    }
+}
+
+export async function updatePaymentTerm(paymentTermId, paymentTermData) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/payment-terms/${paymentTermId}/`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(paymentTermData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Ödeme koşulu güncellenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error updating payment term:', error);
+        throw error;
+    }
+}
+
+export async function deletePaymentTerm(paymentTermId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/payment-terms/${paymentTermId}/`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Ödeme koşulu silinirken hata oluştu');
+        }
+
+        return true; // Successfully deleted
+    } catch (error) {
+        console.error('Error deleting payment term:', error);
+        throw error;
+    }
+}
+
+export async function togglePaymentTermStatus(paymentTermId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/payment-terms/${paymentTermId}/toggle_status/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Ödeme koşulu durumu değiştirilirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error toggling payment term status:', error);
+        throw error;
+    }
+}
+
+// Basis Choices API Function
+export async function getBasisChoices() {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/basis-choices/`, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Basis seçenekleri yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching basis choices:', error);
         throw error;
     }
 }

@@ -58,7 +58,7 @@ export class SuppliersManager {
         document.getElementById('supplier-contact').value = supplier.contact;
         document.getElementById('supplier-phone').value = supplier.phone;
         document.getElementById('supplier-email').value = supplier.email;
-        document.getElementById('supplier-currency').value = supplier.currency;
+        document.getElementById('supplier-currency').value = supplier.default_currency;
     }
 
     saveSupplier() {
@@ -175,7 +175,7 @@ export class SuppliersManager {
                     </div>
                     <div class="supplier-info-item">
                         <div class="supplier-info-label">Para Birimi</div>
-                        <div class="supplier-info-value">${this.currencySymbols[supplier.currency]} ${supplier.currency}</div>
+                        <div class="supplier-info-value">${this.currencySymbols[supplier.default_currency]} ${supplier.default_currency}</div>
                     </div>
                 </div>
                 <div class="supplier-actions">
@@ -210,7 +210,7 @@ export class SuppliersManager {
 
         const modal = new bootstrap.Modal(document.getElementById('offerModal'));
         document.getElementById('offer-supplier-name').textContent = supplier.name;
-        document.getElementById('offer-currency').textContent = `${this.currencySymbols[supplier.currency]} ${supplier.currency}`;
+        document.getElementById('offer-currency').textContent = `${this.currencySymbols[supplier.default_currency]} ${supplier.default_currency}`;
 
         // Populate offer table
         const tbody = document.getElementById('offer-tbody');

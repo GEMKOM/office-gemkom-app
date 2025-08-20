@@ -542,7 +542,7 @@ async function viewRequestDetails(requestId) {
     try {
         showLoading(true);
         currentRequest = await getPurchaseRequest(requestId);
-        showRequestDetailsModal();
+        await showRequestDetailsModal();
         
         // Update URL to include the talep no (request number)
         const url = new URL(window.location);
@@ -596,7 +596,7 @@ async function handleCancelRequest() {
     }
 }
 
-function showRequestDetailsModal() {
+async function showRequestDetailsModal() {
     const container = document.getElementById('request-details-container');
     
     // Calculate total amount for recommended items
@@ -792,15 +792,20 @@ function showRequestDetailsModal() {
 
 async function openModalFromTalepNo(talepNo) {
     try {
-        // Find the request with the matching talep no
+        // Find the request with the matching talep no in current requests
         const request = requests.find(r => r.request_number === talepNo);
         if (request) {
             await viewRequestDetails(request.id);
         } else {
-            // If not found in current requests, try to fetch it directly
+            // If not found in current requests, try to search for it using the API
             try {
-                currentRequest = await getPurchaseRequest(null, talepNo); // Assuming API supports talep no lookup
-                showRequestDetailsModal();
+                const searchResponse = await getPurchaseRequests({ request_number: talepNo });
+                if (searchResponse && searchResponse.results && searchResponse.results.length > 0) {
+                    const foundRequest = searchResponse.results[0];
+                    await viewRequestDetails(foundRequest.id);
+                } else {
+                    showNotification(`Talep ${talepNo} bulunamadı`, 'error');
+                }
             } catch (error) {
                 console.error('Request not found:', error);
                 showNotification(`Talep ${talepNo} bulunamadı`, 'error');

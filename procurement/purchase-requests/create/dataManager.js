@@ -199,7 +199,7 @@ export class DataManager {
             if (!supplier.name) {
                 errors.push(`Supplier ${index + 1}: Name is required`);
             }
-            if (!supplier.currency) {
+            if (!supplier.default_currency) {
                 errors.push(`Supplier ${index + 1}: Currency is required`);
             }
         });
