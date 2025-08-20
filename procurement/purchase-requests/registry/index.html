@@ -79,7 +79,8 @@
                                             <th class="sortable" data-field="created_at">
                                                 Oluşturulma <i class="fas fa-sort sort-icon"></i>
                                             </th>
-                                            <th>İşlemler</th>
+                                            <th>Onay Durumu</th>
+                                            <th class="text-center">Görüntüle</th>
                                         </tr>
                                     </thead>
                                     <tbody id="requests-table-body">
@@ -147,11 +148,8 @@
                     </div>
                 </div>
                 <div class="modal-footer">
-                    <button type="button" class="btn btn-danger" id="reject-request" style="min-width: 120px; height: 38px;">
-                        <i class="fas fa-times me-1"></i>Reddet
-                    </button>
-                    <button type="button" class="btn btn-success" id="approve-request" style="min-width: 120px; height: 38px;">
-                        <i class="fas fa-check me-1"></i>Onayla
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Kapat
                     </button>
                 </div>
             </div>

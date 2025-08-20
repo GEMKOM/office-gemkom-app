@@ -94,6 +94,60 @@ export async function getPurchaseRequests(filters = {}) {
     }
 }
 
+export async function getPendingApprovalRequests(filters = {}) {
+    try {
+        // Build query parameters
+        const queryParams = new URLSearchParams();
+        
+        // Add filters if provided
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+        
+        const url = `${backendBase}/procurement/purchase-requests/pending_approval/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const response = await authedFetch(url);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Onay bekleyen talepler yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching pending approval requests:', error);
+        throw error;
+    }
+}
+
+export async function getApprovedByMeRequests(filters = {}) {
+    try {
+        // Build query parameters
+        const queryParams = new URLSearchParams();
+        
+        // Add filters if provided
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+        
+        const url = `${backendBase}/procurement/purchase-requests/approved_by_me/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const response = await authedFetch(url);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Onayladığınız talepler yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching approved by me requests:', error);
+        throw error;
+    }
+}
+
 export async function getPurchaseRequest(requestId) {
     try {
         const response = await authedFetch(`${backendBase}/procurement/purchase-requests/${requestId}/`);

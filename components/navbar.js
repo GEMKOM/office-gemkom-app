@@ -224,9 +224,9 @@ const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-clock',
                         children: {}
                     },
-                    '/procurement/purchase-requests/approved': {
-                        label: 'Onaylanan Talepler',
-                        icon: 'fas fa-check-circle',
+                    '/procurement/purchase-requests/registry': {
+                        label: 'Kayıt Defteri',
+                        icon: 'fas fa-archive',
                         children: {}
                     }
                 }

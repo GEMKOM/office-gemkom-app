@@ -2,28 +2,38 @@ import { guardRoute } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 
-import { FiltersComponent } from '../../../components/filters/filters.js';
+
 import { 
     getPurchaseRequests, 
+    getPendingApprovalRequests,
+    getApprovedByMeRequests,
     getPurchaseRequest, 
     approvePurchaseRequest, 
-    rejectPurchaseRequest,
-    getStatusChoices
+    rejectPurchaseRequest
 } from '../../../generic/procurement.js';
 import { fetchCurrencyRates } from '../../../generic/formatters.js';
 
 // State management
+// Pending requests state
 let currentPage = 1;
 let currentFilter = 'all';
 let currentOrdering = 'request_number';
 let currentSortField = 'request_number';
 let currentSortDirection = 'desc';
 let requests = [];
-let currentRequest = null;
 let totalRequests = 0;
 let isLoading = false;
-let requestsStats = null; // Statistics Cards component instance
-let requestFilters = null; // Filters component instance
+
+// Approved requests state
+let approvedCurrentPage = 1;
+let approvedCurrentSortField = 'request_number';
+let approvedCurrentSortDirection = 'desc';
+let approvedRequests = [];
+let totalApprovedRequests = 0;
+let isLoadingApproved = false;
+
+// Shared state
+let currentRequest = null;
 let currencyRates = null; // Currency conversion rates
 let currencySymbols = {
     'TRY': '₺',
@@ -45,34 +55,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize header component
     const header = new HeaderComponent({
-        title: 'Bekleyen Satın Alma Talepleri',
-        subtitle: 'Onay bekleyen taleplerin yönetimi ve karşılaştırması',
+        title: 'Onay Bekleyen Satın Alma Talepleri',
+        subtitle: 'Onayınızı bekleyen taleplerin yönetimi ve karşılaştırması',
         icon: 'clock',
         showBackButton: 'block',
         showCreateButton: 'none',
         showBulkCreateButton: 'none',
         showExportButton: 'none',
-        showRefreshButton: 'block',
-        onBackClick: () => window.location.href = '/procurement/purchase-requests/',
-        onRefreshClick: () => loadRequests()
+        showRefreshButton: 'none',
+        onBackClick: () => window.location.href = '/procurement/purchase-requests/'
     });
     
-    // Initialize Statistics Cards component
-    try {
-        requestsStats = new StatisticsCards('requests-statistics', {
-            cards: [
-                { title: 'Tüm Talepler', value: '0', icon: 'fas fa-list', color: 'primary', id: 'all-requests-count' },
-                { title: 'Taslak', value: '0', icon: 'fas fa-edit', color: 'secondary', id: 'draft-requests-count' },
-                { title: 'Onay Bekliyor', value: '0', icon: 'fas fa-paper-plane', color: 'warning', id: 'submitted-requests-count' },
-                { title: 'Onaylandı', value: '0', icon: 'fas fa-check', color: 'success', id: 'approved-requests-count' }
-            ],
-            compact: true,
-            animation: true
-        });
-        console.log('StatisticsCards initialized successfully');
-    } catch (error) {
-        console.error('Error initializing StatisticsCards:', error);
-    }
+
     
     await initializeRequests();
     setupEventListeners();
@@ -80,11 +74,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function initializeRequests() {
     try {
-        await initializeFiltersComponent();
         initializeSortableHeaders();
+        initializeApprovedSortableHeaders();
         
         await loadRequests();
-        updateRequestCounts();
+        await loadApprovedRequests();
         
         // Check if there's a talep parameter in the URL to open modal
         const urlParams = new URLSearchParams(window.location.search);
@@ -98,117 +92,7 @@ async function initializeRequests() {
     }
 }
 
-async function initializeFiltersComponent() {
-    // Fetch users for requestor filter
-    let users = [];
-    try {
-        const { authFetchUsers } = await import('../../../generic/users.js');
-        users = await authFetchUsers();
-    } catch (error) {
-        console.error('Error fetching users:', error);
-    }
 
-    // Fetch status choices from backend
-    let statusChoices = [];
-    try {
-        statusChoices = await getStatusChoices();
-    } catch (error) {
-        console.error('Error fetching status choices:', error);
-        // Fallback to default options if API fails
-        statusChoices = [
-            { value: 'draft', label: 'Taslak' },
-            { value: 'submitted', label: 'Gönderildi' },
-            { value: 'approved', label: 'Onaylandı' },
-            { value: 'rejected', label: 'Reddedildi' }
-        ];
-    }
-
-    // Get current user for default selection
-    let currentUser = null;
-    try {
-        const { getUser } = await import('../../../authService.js');
-        currentUser = await getUser();
-    } catch (error) {
-        console.error('Error fetching current user:', error);
-    }
-
-    // Initialize filters component
-    requestFilters = new FiltersComponent('filters-placeholder', {
-        title: 'Talep Filtreleri',
-        showApplyButton: true,
-        showClearButton: true,
-        applyButtonText: 'Filtrele',
-        clearButtonText: 'Temizle',
-        onApply: () => {
-            currentFilter = 'filtered';
-            currentPage = 1;
-            loadRequests();
-        },
-        onClear: () => {
-            currentFilter = 'all';
-            currentPage = 1;
-            loadRequests();
-        }
-    });
-
-    // Add Talep No filter
-    requestFilters.addTextFilter({
-        id: 'talep-no-filter',
-        label: 'Talep No',
-        placeholder: 'Talep numarası girin...',
-        colSize: 2
-    });
-
-    // Add Requestor filter with current user as default
-    requestFilters.addDropdownFilter({
-        id: 'requestor-filter',
-        label: 'Talep Eden',
-        placeholder: 'Talep eden seçin...',
-        options: [
-            { value: '', label: 'Tüm Kullanıcılar' },
-            ...users.map(user => ({
-                value: user.id,
-                label: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || user.email
-            }))
-        ],
-        value: currentUser ? currentUser.id : '',
-        colSize: 2
-    });
-
-    // Add Status filter with backend options
-    requestFilters.addDropdownFilter({
-        id: 'status-filter',
-        label: 'Durum',
-        placeholder: 'Durum seçin...',
-        options: [
-            { value: '', label: 'Tüm Durumlar' },
-            ...statusChoices
-        ],
-        value: 'submitted', // Default to submitted status
-        colSize: 2
-    });
-
-    // Add Priority filter
-    requestFilters.addDropdownFilter({
-        id: 'priority-filter',
-        label: 'Öncelik',
-        placeholder: 'Öncelik seçin...',
-        options: [
-            { value: '', label: 'Tüm Öncelikler' },
-            { value: 'normal', label: 'Normal' },
-            { value: 'urgent', label: 'Acil' },
-            { value: 'critical', label: 'Kritik' }
-        ],
-        colSize: 2
-    });
-
-    // Add Created At filter
-    requestFilters.addDateFilter({
-        id: 'created-at-filter',
-        label: 'Oluşturulma Tarihi',
-        colSize: 2
-    });
-}
 
 function initializeSortableHeaders() {
     const sortableHeaders = document.querySelectorAll('.sortable');
@@ -224,22 +108,82 @@ function initializeSortableHeaders() {
     updateSortIndicators();
 }
 
+function initializeApprovedSortableHeaders() {
+    const sortableHeaders = document.querySelectorAll('.sortable-approved');
+    sortableHeaders.forEach(header => {
+        header.addEventListener('click', (e) => {
+            e.preventDefault();
+            const field = header.dataset.field;
+            handleApprovedSort(field);
+        });
+    });
+    
+    // Update sort indicators for initial state
+    updateApprovedSortIndicators();
+}
+
 function updateSortIndicators() {
     const sortableHeaders = document.querySelectorAll('.sortable');
+    const hasRequests = requests && requests.length > 0;
+    
     sortableHeaders.forEach(header => {
         const field = header.dataset.field;
         const icon = header.querySelector('.sort-icon');
         
-        if (field === currentSortField) {
-            // Show active sort indicator
-            if (currentSortDirection === 'asc') {
-                icon.className = 'fas fa-sort-up sort-icon text-primary';
-            } else {
-                icon.className = 'fas fa-sort-down sort-icon text-primary';
-            }
-        } else {
-            // Show inactive sort indicator
+        if (!hasRequests) {
+            // Disable sorting when no requests
+            header.style.pointerEvents = 'none';
+            header.style.opacity = '0.5';
             icon.className = 'fas fa-sort sort-icon text-muted';
+        } else {
+            // Enable sorting when there are requests
+            header.style.pointerEvents = 'auto';
+            header.style.opacity = '1';
+            
+            if (field === currentSortField) {
+                // Show active sort indicator
+                if (currentSortDirection === 'asc') {
+                    icon.className = 'fas fa-sort-up sort-icon text-primary';
+                } else {
+                    icon.className = 'fas fa-sort-down sort-icon text-primary';
+                }
+            } else {
+                // Show inactive sort indicator
+                icon.className = 'fas fa-sort sort-icon text-muted';
+            }
+        }
+    });
+}
+
+function updateApprovedSortIndicators() {
+    const sortableHeaders = document.querySelectorAll('.sortable-approved');
+    const hasRequests = approvedRequests && approvedRequests.length > 0;
+    
+    sortableHeaders.forEach(header => {
+        const field = header.dataset.field;
+        const icon = header.querySelector('.sort-icon');
+        
+        if (!hasRequests) {
+            // Disable sorting when no requests
+            header.style.pointerEvents = 'none';
+            header.style.opacity = '0.5';
+            icon.className = 'fas fa-sort sort-icon text-muted';
+        } else {
+            // Enable sorting when there are requests
+            header.style.pointerEvents = 'auto';
+            header.style.opacity = '1';
+            
+            if (field === approvedCurrentSortField) {
+                // Show active sort indicator
+                if (approvedCurrentSortDirection === 'asc') {
+                    icon.className = 'fas fa-sort-up sort-icon text-primary';
+                } else {
+                    icon.className = 'fas fa-sort-down sort-icon text-primary';
+                }
+            } else {
+                // Show inactive sort indicator
+                icon.className = 'fas fa-sort sort-icon text-muted';
+            }
         }
     });
 }
@@ -252,45 +196,8 @@ async function loadRequests() {
         showLoading(true);
         showLoadingState();
         
-        // Get current user for default filtering
-        let currentUser = null;
-        try {
-            const { getUser } = await import('../../../authService.js');
-            currentUser = await getUser();
-        } catch (error) {
-            console.error('Error fetching current user:', error);
-        }
-        
         // Build API filters and ordering
         const apiFilters = {};
-        
-        // Get current filter values to apply server-side filtering
-        if (requestFilters) {
-            const filterValues = requestFilters.getFilterValues();
-            
-            // Add requestor filter to API call
-            if (filterValues['requestor-filter'] && filterValues['requestor-filter'] !== '') {
-                // If a specific user is selected, use that user
-                apiFilters.requestor = filterValues['requestor-filter'];
-            }
-            // If "Tüm Kullanıcılar" is selected (empty value), don't add any requestor filter
-            // This will show all users' requests
-            
-            // Add status filter to API call if set
-            if (filterValues['status-filter']) {
-                apiFilters.status = filterValues['status-filter'];
-            }
-            
-            // Add priority filter to API call if set
-            if (filterValues['priority-filter']) {
-                apiFilters.priority = filterValues['priority-filter'];
-            }
-            
-            // Add created_at filter to API call if set
-            if (filterValues['created-at-filter']) {
-                apiFilters.created_at__gte = filterValues['created-at-filter'];
-            }
-        }
         
         // Add ordering parameters
         if (currentSortField) {
@@ -303,9 +210,9 @@ async function loadRequests() {
         apiFilters.page = currentPage;
         apiFilters.page_size = itemsPerPage;
         
-        const response = await getPurchaseRequests(apiFilters);
+        const response = await getPendingApprovalRequests(apiFilters);
         
-        console.log('API Response:', response);
+        console.log('Pending Approval API Response:', response);
         
         // Handle paginated response
         if (response && response.results) {
@@ -321,58 +228,99 @@ async function loadRequests() {
         
         console.log('Processed requests:', requests);
         
-        // Apply remaining local filters (Talep No only)
-        const filteredRequests = applyLocalFilters(requests);
-        
         // Update the table (no need for client-side sorting or pagination)
-        renderRequestsTable(filteredRequests);
+        renderRequestsTable(requests);
         renderPagination();
-        updateRequestCounts();
+        updateSortIndicators();
         
     } catch (error) {
         console.error('Error loading requests:', error);
-        showNotification('Talepler yüklenirken hata oluştu: ' + error.message, 'error');
+        showNotification('Onay bekleyen talepler yüklenirken hata oluştu: ' + error.message, 'error');
         requests = [];
         totalRequests = 0;
         renderRequestsTable([]);
         renderPagination();
-        updateRequestCounts();
+        updateSortIndicators();
     } finally {
         isLoading = false;
         showLoading(false);
     }
 }
 
-function applyLocalFilters(requests) {
-    if (!requestFilters) return requests;
+async function loadApprovedRequests() {
+    if (isLoadingApproved) return;
     
-    const filters = requestFilters.getFilterValues();
-    let filtered = requests;
-    
-    // Talep No filter (client-side only for real-time search)
-    if (filters['talep-no-filter']) {
-        const searchTerm = filters['talep-no-filter'].toLowerCase();
-        filtered = filtered.filter(request => 
-            request.request_number?.toLowerCase().includes(searchTerm)
-        );
+    try {
+        isLoadingApproved = true;
+        showLoading(true);
+        showApprovedLoadingState();
+        
+        // Build API filters and ordering
+        const apiFilters = {};
+        
+        // Add ordering parameters
+        if (approvedCurrentSortField) {
+            const orderingPrefix = approvedCurrentSortDirection === 'desc' ? '-' : '';
+            apiFilters.ordering = orderingPrefix + approvedCurrentSortField;
+        }
+        
+        // Add pagination parameters
+        const itemsPerPage = 20;
+        apiFilters.page = approvedCurrentPage;
+        apiFilters.page_size = itemsPerPage;
+        
+        const response = await getApprovedByMeRequests(apiFilters);
+        
+        console.log('Approved Requests API Response:', response);
+        
+        // Handle paginated response
+        if (response && response.results) {
+            approvedRequests = response.results;
+            totalApprovedRequests = response.count || response.results.length;
+        } else if (Array.isArray(response)) {
+            approvedRequests = response;
+            totalApprovedRequests = response.length;
+        } else {
+            approvedRequests = [];
+            totalApprovedRequests = 0;
+        }
+        
+        console.log('Processed approved requests:', approvedRequests);
+        
+        // Update the table
+        renderApprovedRequestsTable(approvedRequests);
+        renderApprovedPagination();
+        updateApprovedSortIndicators();
+        
+    } catch (error) {
+        console.error('Error loading approved requests:', error);
+        showNotification('Onayladığınız talepler yüklenirken hata oluştu: ' + error.message, 'error');
+        approvedRequests = [];
+        totalApprovedRequests = 0;
+        renderApprovedRequestsTable([]);
+        renderApprovedPagination();
+        updateApprovedSortIndicators();
+    } finally {
+        isLoadingApproved = false;
+        showLoading(false);
     }
-    
-    return filtered;
 }
+
+
 
 // Client-side sorting and pagination removed - now handled by backend
 
 function renderRequestsTable(requests) {
-    const tbody = document.getElementById('requests-table-body');
+    const tbody = document.getElementById('pending-requests-table-body');
     
     if (!requests || requests.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="8" class="text-center">
+                <td colspan="9" class="text-center">
                     <div class="empty-state">
-                        <i class="fas fa-inbox"></i>
-                        <h5>Henüz talep bulunmuyor</h5>
-                        <p>Bekleyen satın alma talebi bulunmamaktadır.</p>
+                        <i class="fas fa-check-circle"></i>
+                        <h5>Onay bekleyen talep bulunmuyor</h5>
+                        <p>Onayınızı bekleyen satın alma talebi bulunmamaktadır.</p>
                     </div>
                 </td>
             </tr>
@@ -395,13 +343,18 @@ function renderRequestsTable(requests) {
                     ${request.requestor_username || 'Bilinmiyor'}
                 </div>
             </td>
-                         <td class="text-center">${getStatusBadge(request.status, request.status_label)}</td>
+            <td class="text-center">${getStatusBadge(request.status, request.status_label)}</td>
             <td class="text-center">${getPriorityBadge(request.priority)}</td>
             <td>
                 <div class="total-amount">${request.total_amount_eur ? formatCurrency(request.total_amount_eur, 'EUR') : '-'}</div>
             </td>
             <td>
                 <div class="created-date">${formatDate(request.created_at)}</div>
+            </td>
+            <td>
+                <div class="approval-info">
+                    ${getApprovalInfo(request)}
+                </div>
             </td>
             <td>
                 <div class="btn-group btn-group-sm" role="group">
@@ -427,8 +380,66 @@ function renderRequestsTable(requests) {
 
 }
 
+function renderApprovedRequestsTable(requests) {
+    const tbody = document.getElementById('approved-requests-table-body');
+    
+    if (!requests || requests.length === 0) {
+        tbody.innerHTML = `
+            <tr>
+                <td colspan="9" class="text-center">
+                    <div class="empty-state">
+                        <i class="fas fa-check-circle"></i>
+                        <h5>Onayladığınız talep bulunmuyor</h5>
+                        <p>Henüz onayladığınız satın alma talebi bulunmamaktadır.</p>
+                    </div>
+                </td>
+            </tr>
+        `;
+        return;
+    }
+    
+    tbody.innerHTML = requests.map(request => `
+        <tr data-request-id="${request.id}">
+            <td>
+                <span class="request-number">${request.request_number || 'N/A'}</span>
+            </td>
+            <td>
+                <div class="request-title">${request.title || 'Başlıksız'}</div>
+                <small>${request.description || 'Açıklama yok'}</small>
+            </td>
+            <td>
+                <div class="requestor-name">
+                    <i class="fas fa-user-circle me-2 text-muted"></i>
+                    ${request.requestor_username || 'Bilinmiyor'}
+                </div>
+            </td>
+            <td class="text-center">${getStatusBadge(request.status, request.status_label)}</td>
+            <td class="text-center">${getPriorityBadge(request.priority)}</td>
+            <td>
+                <div class="total-amount">${request.total_amount_eur ? formatCurrency(request.total_amount_eur, 'EUR') : '-'}</div>
+            </td>
+            <td>
+                <div class="created-date">${formatDate(request.created_at)}</div>
+            </td>
+            <td>
+                <div class="approval-info">
+                    ${getApprovalInfo(request)}
+                </div>
+            </td>
+            <td>
+                <div class="btn-group btn-group-sm" role="group">
+                    <button class="btn btn-outline-primary btn-sm" onclick="viewRequestDetails(${request.id})" 
+                            title="Detayları Görüntüle">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+            </td>
+        </tr>
+    `).join('');
+}
+
 function renderPagination() {
-    const pagination = document.getElementById('requests-pagination');
+    const pagination = document.getElementById('pending-requests-pagination');
     const itemsPerPage = 20;
     const totalPages = Math.ceil(totalRequests / itemsPerPage);
     
@@ -485,17 +496,62 @@ function renderPagination() {
     });
 }
 
-function updateRequestCounts() {
-    if (!requestsStats) return;
+function renderApprovedPagination() {
+    const pagination = document.getElementById('approved-requests-pagination');
+    const itemsPerPage = 20;
+    const totalPages = Math.ceil(totalApprovedRequests / itemsPerPage);
     
-    const counts = {
-        0: requests.length.toString(),
-        1: requests.filter(r => r.status === 'draft').length.toString(),
-        2: requests.filter(r => r.status === 'submitted').length.toString(),
-        3: requests.filter(r => r.status === 'approved').length.toString()
-    };
+    if (totalPages <= 1) {
+        pagination.innerHTML = '';
+        return;
+    }
     
-    requestsStats.updateValues(counts);
+    let html = '';
+    
+    // Previous button
+    html += `
+        <li class="page-item ${approvedCurrentPage === 1 ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-page="${approvedCurrentPage - 1}">
+                <i class="fas fa-chevron-left"></i>
+            </a>
+        </li>
+    `;
+    
+    // Page numbers
+    const startPage = Math.max(1, approvedCurrentPage - 2);
+    const endPage = Math.min(totalPages, approvedCurrentPage + 2);
+    
+    for (let i = startPage; i <= endPage; i++) {
+        html += `
+            <li class="page-item ${i === approvedCurrentPage ? 'active' : ''}">
+                <a class="page-link" href="#" data-page="${i}">${i}</a>
+            </li>
+        `;
+    }
+    
+    // Next button
+    html += `
+        <li class="page-item ${approvedCurrentPage === totalPages ? 'disabled' : ''}">
+            <a class="page-link" href="#" data-page="${approvedCurrentPage + 1}">
+                <i class="fas fa-chevron-right"></i>
+            </a>
+        </li>
+    `;
+    
+    pagination.innerHTML = html;
+    
+    // Add event listeners
+    const paginationLinks = pagination.querySelectorAll('.page-link[data-page]');
+    paginationLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const page = parseInt(link.dataset.page);
+            if (page >= 1 && page <= totalPages) {
+                approvedCurrentPage = page;
+                loadApprovedRequests();
+            }
+        });
+    });
 }
 
 function handleSort(field) {
@@ -514,17 +570,32 @@ function handleSort(field) {
     updateSortIndicators();
 }
 
-function setupEventListeners() {
-    // Export requests
-    const exportBtn = document.getElementById('export-requests');
-    if (exportBtn) {
-        exportBtn.addEventListener('click', exportRequests);
+function handleApprovedSort(field) {
+    if (approvedCurrentSortField === field) {
+        approvedCurrentSortDirection = approvedCurrentSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        approvedCurrentSortField = field;
+        approvedCurrentSortDirection = 'asc';
     }
     
-    // Refresh requests
-    const refreshBtn = document.getElementById('refresh-requests');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', loadRequests);
+    approvedCurrentPage = 1; // Reset to first page when sorting changes
+    loadApprovedRequests(); // This will now fetch sorted data from backend
+    
+    // Update sort indicators
+    updateApprovedSortIndicators();
+}
+
+function setupEventListeners() {
+    // Refresh pending requests
+    const refreshPendingBtn = document.getElementById('refresh-pending-requests');
+    if (refreshPendingBtn) {
+        refreshPendingBtn.addEventListener('click', loadRequests);
+    }
+    
+    // Refresh approved requests
+    const refreshApprovedBtn = document.getElementById('refresh-approved-requests');
+    if (refreshApprovedBtn) {
+        refreshApprovedBtn.addEventListener('click', loadApprovedRequests);
     }
     
     // Modal approve and reject buttons
@@ -918,10 +989,7 @@ async function rejectRequest(requestId) {
     }
 }
 
-function exportRequests() {
-    // Implementation for exporting requests
-    showNotification('Dışa aktarma özelliği yakında eklenecek', 'info');
-}
+
 
 // Utility functions
 function getStatusBadge(status, statusLabel) {
@@ -932,9 +1000,8 @@ function getStatusBadge(status, statusLabel) {
     const statusMap = {
         'draft': 'status-draft',
         'submitted': 'status-submitted',
-        'approved': 'status-approved',
-        'rejected': 'status-rejected',
-        'completed': 'status-completed'
+        'approved': 'status-completed',
+        'rejected': 'status-cancelled'
     };
 
     const statusClass = statusMap[status] || 'status-draft';
@@ -950,6 +1017,48 @@ function getPriorityBadge(priority) {
 
     const priorityInfo = priorityMap[priority] || { text: priority, class: 'priority-normal' };
     return `<span class="priority-badge ${priorityInfo.class}">${priorityInfo.text}</span>`;
+}
+
+function getApprovalInfo(request) {
+    if (!request.approval || request.status !== 'submitted') {
+        return '<span class="text-muted">-</span>';
+    }
+
+    const { stage_instances } = request.approval;
+    
+    // Find the current stage (first incomplete stage)
+    const currentStage = stage_instances.find(stage => !stage.is_complete && !stage.is_rejected);
+    
+    if (!currentStage) {
+        return '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Tamamlandı</span>';
+    }
+
+    const { name, required_approvals, approved_count, approvers } = currentStage;
+    const remainingApprovals = required_approvals - approved_count;
+    
+    if (remainingApprovals <= 0) {
+        return `<span class="text-success"><i class="fas fa-check-circle me-1"></i>${name}</span>`;
+    }
+
+    // Get the names of remaining approvers
+    const remainingApprovers = approvers.slice(approved_count);
+    const approverNames = remainingApprovers.map(approver => approver.full_name || approver.username).join(', ');
+    
+    return `
+        <div class="approval-status">
+            <div class="stage-name text-primary fw-semibold">${name}</div>
+            <div class="approval-count text-muted small">
+                <i class="fas fa-users me-1"></i>
+                ${remainingApprovals} onay bekleniyor
+            </div>
+            ${approverNames ? `
+                <div class="approver-names text-muted small">
+                    <i class="fas fa-user-clock me-1"></i>
+                    ${approverNames}
+                </div>
+            ` : ''}
+        </div>
+    `;
 }
 
 function formatDate(dateString) {
@@ -1007,7 +1116,7 @@ function showLoading(show) {
 }
 
 function showLoadingState() {
-    const tableBody = document.getElementById('requests-table-body');
+    const tableBody = document.getElementById('pending-requests-table-body');
     if (tableBody) {
         // Create loading rows that maintain table structure
         const loadingRows = [];
@@ -1021,6 +1130,31 @@ function showLoadingState() {
                     <td><div class="loading-skeleton" style="width: 80px;"></div></td>
                     <td><div class="loading-skeleton" style="width: 100px;"></div></td>
                     <td><div class="loading-skeleton" style="width: 120px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                </tr>
+            `);
+        }
+        tableBody.innerHTML = loadingRows.join('');
+    }
+}
+
+function showApprovedLoadingState() {
+    const tableBody = document.getElementById('approved-requests-table-body');
+    if (tableBody) {
+        // Create loading rows that maintain table structure
+        const loadingRows = [];
+        for (let i = 0; i < 5; i++) { // Show 5 loading rows
+            loadingRows.push(`
+                <tr class="loading-row">
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 200px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
                     <td><div class="loading-skeleton" style="width: 100px;"></div></td>
                 </tr>
             `);

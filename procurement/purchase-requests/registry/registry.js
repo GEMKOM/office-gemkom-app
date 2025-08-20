@@ -6,8 +6,6 @@ import { FiltersComponent } from '../../../components/filters/filters.js';
 import { 
     getPurchaseRequests, 
     getPurchaseRequest, 
-    approvePurchaseRequest, 
-    rejectPurchaseRequest,
     getStatusChoices
 } from '../../../generic/procurement.js';
 import { fetchCurrencyRates } from '../../../generic/formatters.js';
@@ -62,9 +60,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         requestsStats = new StatisticsCards('requests-statistics', {
             cards: [
                 { title: 'Tüm Talepler', value: '0', icon: 'fas fa-list', color: 'primary', id: 'all-requests-count' },
-                { title: 'Onay Bekliyor', value: '0', icon: 'fas fa-paper-plane', color: 'warning', id: 'submitted-requests-count' },
-                { title: 'Onaylandı', value: '0', icon: 'fas fa-check', color: 'success', id: 'approved-requests-count' },
-                { title: 'Reddedildi', value: '0', icon: 'fas fa-times', color: 'danger', id: 'rejected-requests-count' },
+                { title: 'Bekleyen', value: '0', icon: 'fas fa-paper-plane', color: 'warning', id: 'submitted-requests-count' },
+                { title: 'Tamamlanan', value: '0', icon: 'fas fa-check', color: 'success', id: 'completed-requests-count' },
+                { title: 'İptal Edilen', value: '0', icon: 'fas fa-times', color: 'danger', id: 'cancelled-requests-count' },
             ],
             compact: true,
             animation: true,
@@ -119,8 +117,8 @@ async function initializeFiltersComponent() {
         statusChoices = [
             { value: 'draft', label: 'Taslak' },
             { value: 'submitted', label: 'Gönderildi' },
-            { value: 'approved', label: 'Onaylandı' },
-            { value: 'rejected', label: 'Reddedildi' }
+            { value: 'completed', label: 'Tamamlandı' },
+            { value: 'cancelled', label: 'İptal Edildi' }
         ];
     }
 
@@ -160,7 +158,7 @@ async function initializeFiltersComponent() {
         colSize: 2
     });
 
-    // Add Requestor filter with all users as default
+    // Add Requestor filter with current user as default
     requestFilters.addDropdownFilter({
         id: 'requestor-filter',
         label: 'Talep Eden',
@@ -172,7 +170,7 @@ async function initializeFiltersComponent() {
                 label: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || user.email
             }))
         ],
-        value: '', // Default to all users
+        value: currentUser ? currentUser.id : '', // Default to current user if available
         colSize: 2
     });
 
@@ -369,7 +367,7 @@ function renderRequestsTable(requests) {
     if (!requests || requests.length === 0) {
         tbody.innerHTML = `
             <tr>
-                <td colspan="8" class="text-center">
+                <td colspan="9" class="text-center">
                     <div class="empty-state">
                         <i class="fas fa-inbox"></i>
                         <h5>Henüz talep bulunmuyor</h5>
@@ -382,7 +380,7 @@ function renderRequestsTable(requests) {
     }
     
     tbody.innerHTML = requests.map(request => `
-        <tr data-request-id="${request.id}">
+        <tr data-request-id="${request.id}" class="clickable-row" onclick="viewRequestDetails(${request.id})" style="cursor: pointer;">
             <td>
                 <span class="request-number">${request.request_number || 'N/A'}</span>
             </td>
@@ -396,7 +394,7 @@ function renderRequestsTable(requests) {
                     ${request.requestor_username || 'Bilinmiyor'}
                 </div>
             </td>
-                         <td class="text-center">${getStatusBadge(request.status, request.status_label)}</td>
+            <td class="text-center">${getStatusBadge(request.status, request.status_label)}</td>
             <td class="text-center">${getPriorityBadge(request.priority)}</td>
             <td>
                 <div class="total-amount">${request.total_amount_eur ? formatCurrency(request.total_amount_eur, 'EUR') : '-'}</div>
@@ -405,28 +403,12 @@ function renderRequestsTable(requests) {
                 <div class="created-date">${formatDate(request.created_at)}</div>
             </td>
             <td>
-                <div class="btn-group btn-group-sm" role="group">
-                    <button class="btn btn-outline-primary btn-sm" onclick="viewRequestDetails(${request.id})" 
-                            title="Detayları Görüntüle">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    ${request.status === 'submitted' ? `
-                        <button class="btn btn-outline-success btn-sm" onclick="approveRequest(${request.id})" 
-                                title="Onayla">
-                            <i class="fas fa-check"></i>
-                        </button>
-                        <button class="btn btn-outline-danger btn-sm" onclick="rejectRequest(${request.id})" 
-                                title="Reddet">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    ` : ''}
-                    ${request.status === 'approved' ? `
-                        <button class="btn btn-outline-info btn-sm" onclick="completeRequest(${request.id})" 
-                                title="Tamamla">
-                            <i class="fas fa-flag-checkered"></i>
-                        </button>
-                    ` : ''}
+                <div class="approval-info">
+                    ${getApprovalInfo(request)}
                 </div>
+            </td>
+            <td class="text-center">
+                <i class="fas fa-eye text-muted"></i>
             </td>
         </tr>
     `).join('');
@@ -499,9 +481,8 @@ function updateRequestCounts() {
         0: requests.length.toString(),
         1: requests.filter(r => r.status === 'draft').length.toString(),
         2: requests.filter(r => r.status === 'submitted').length.toString(),
-        3: requests.filter(r => r.status === 'approved').length.toString(),
-        4: requests.filter(r => r.status === 'rejected').length.toString(),
-        5: requests.filter(r => r.status === 'completed').length.toString()
+        3: requests.filter(r => r.status === 'completed').length.toString(),
+        4: requests.filter(r => r.status === 'cancelled').length.toString()
     };
     
     requestsStats.updateValues(counts);
@@ -536,24 +517,7 @@ function setupEventListeners() {
         refreshBtn.addEventListener('click', loadRequests);
     }
     
-    // Modal approve and reject buttons
-    const approveBtn = document.getElementById('approve-request');
-    if (approveBtn) {
-        approveBtn.addEventListener('click', () => {
-            if (currentRequest) {
-                approveRequest(currentRequest.id);
-            }
-        });
-    }
-    
-    const rejectBtn = document.getElementById('reject-request');
-    if (rejectBtn) {
-        rejectBtn.addEventListener('click', () => {
-            if (currentRequest) {
-                rejectRequest(currentRequest.id);
-            }
-        });
-    }
+
     
     // Add event listeners for modal close to clean up URL
     const modal = document.getElementById('requestDetailsModal');
@@ -849,18 +813,28 @@ function renderComparisonTable() {
                 const unitPrice = parseFloat(itemOffer.unit_price);
                 const convertedPrice = currencyRates ? convertCurrency(unitPrice, offer.supplier.currency, 'EUR') : unitPrice;
                 
+                // Calculate total price for this item
+                const quantity = parseFloat(requestItem.quantity || 0);
+                const totalPrice = unitPrice * quantity;
+                const convertedTotalPrice = currencyRates ? convertCurrency(totalPrice, offer.supplier.currency, 'EUR') : totalPrice;
+                
                 cell.innerHTML = `
                     <div class="d-flex flex-column align-items-center">
                         ${currencyRates ? `
-                            <div class="fw-bold">${formatCurrencyDisplay(convertedPrice, 'EUR')}</div>
-                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.supplier.currency)} <span class="currency-badge">${offer.supplier.currency}</span></small>
+                            <div class="fw-bold">${formatCurrency(convertedTotalPrice, 'EUR')}</div>
+                            <small class="text-muted">${formatCurrency(totalPrice, offer.supplier.currency)} <span class="currency-badge ${offer.supplier.currency === 'TRY' ? 'try-badge' : ''}">${offer.supplier.currency}</span></small>
                         ` : `
                             <div class="text-muted">Döviz kurları yüklenemedi</div>
-                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.supplier.currency)} <span class="currency-badge">${offer.supplier.currency}</span></small>
+                            <small class="text-muted">${formatCurrency(totalPrice, offer.supplier.currency)} <span class="currency-badge ${offer.supplier.currency === 'TRY' ? 'try-badge' : ''}">${offer.supplier.currency}</span></small>
                         `}
-                        ${itemOffer.delivery_days ? `<div class="delivery-info"><i class="fas fa-clock me-1"></i>${itemOffer.delivery_days} gün</div>` : ''}
-                        ${itemOffer.notes ? `<div class="notes-info">${itemOffer.notes}</div>` : ''}
-                        ${isRecommended ? `<div class="mt-1"><span class="badge bg-warning text-dark"><i class="fas fa-star me-1"></i>Önerildi</span></div>` : ''}
+                        <div class="unit-price-display mt-1">
+                            <small class="text-primary">
+                                <i class="fas fa-tag me-1"></i>Birim: ${formatCurrency(unitPrice, offer.supplier.currency)} <span class="currency-badge ${offer.supplier.currency === 'TRY' ? 'try-badge' : ''}">${offer.supplier.currency}</span>
+                            </small>
+                        </div>
+                        ${itemOffer.delivery_days ? `<small class="text-info"><i class="fas fa-clock me-1"></i>${itemOffer.delivery_days} gün</small>` : ''}
+                        ${itemOffer.notes ? `<small class="text-muted">${itemOffer.notes}</small>` : ''}
+                        ${isRecommended ? `<div class="mt-1"><span class="badge bg-warning text-dark"><i class="fas fa-star"></i></span></div>` : ''}
                     </div>
                 `;
                 row.appendChild(cell);
@@ -877,81 +851,9 @@ function renderComparisonTable() {
 }
 
 // Action functions
-async function approveRequest(requestId) {
-    if (!confirm('Bu talebi onaylamak istediğinizden emin misiniz?')) {
-        return;
-    }
 
-    try {
-        showLoading(true);
-        await approvePurchaseRequest(requestId);
-        showNotification('Talep başarıyla onaylandı', 'success');
-        
-        // Close the modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('requestDetailsModal'));
-        if (modal) {
-            modal.hide();
-        }
-        
-        await loadRequests();
-    } catch (error) {
-        console.error('Error approving request:', error);
-        showNotification('Talep onaylanırken hata oluştu: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
-    }
-}
 
-async function rejectRequest(requestId) {
-    if (!confirm('Bu talebi reddetmek istediğinizden emin misiniz?')) {
-        return;
-    }
 
-    try {
-        showLoading(true);
-        await rejectPurchaseRequest(requestId);
-        showNotification('Talep başarıyla reddedildi', 'success');
-        
-        // Close the modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('requestDetailsModal'));
-        if (modal) {
-            modal.hide();
-        }
-        
-        await loadRequests();
-    } catch (error) {
-        console.error('Error rejecting request:', error);
-        showNotification('Talep reddedilirken hata oluştu: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
-    }
-}
-
-async function completeRequest(requestId) {
-    if (!confirm('Bu talebi tamamlamak istediğinizden emin misiniz?')) {
-        return;
-    }
-
-    try {
-        showLoading(true);
-        // Note: You'll need to implement completePurchaseRequest in the procurement.js file
-        // await completePurchaseRequest(requestId);
-        showNotification('Talep başarıyla tamamlandı', 'success');
-        
-        // Close the modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('requestDetailsModal'));
-        if (modal) {
-            modal.hide();
-        }
-        
-        await loadRequests();
-    } catch (error) {
-        console.error('Error completing request:', error);
-        showNotification('Talep tamamlanırken hata oluştu: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
-    }
-}
 
 function exportRequests() {
     // Implementation for exporting requests
@@ -967,9 +869,8 @@ function getStatusBadge(status, statusLabel) {
     const statusMap = {
         'draft': 'status-draft',
         'submitted': 'status-submitted',
-        'approved': 'status-approved',
-        'rejected': 'status-rejected',
-        'completed': 'status-completed'
+        'approved': 'status-completed',
+        'rejected': 'status-cancelled'
     };
 
     const statusClass = statusMap[status] || 'status-draft';
@@ -985,6 +886,48 @@ function getPriorityBadge(priority) {
 
     const priorityInfo = priorityMap[priority] || { text: priority, class: 'priority-normal' };
     return `<span class="priority-badge ${priorityInfo.class}">${priorityInfo.text}</span>`;
+}
+
+function getApprovalInfo(request) {
+    if (!request.approval || request.status !== 'submitted') {
+        return '<span class="text-muted">-</span>';
+    }
+
+    const { stage_instances } = request.approval;
+    
+    // Find the current stage (first incomplete stage)
+    const currentStage = stage_instances.find(stage => !stage.is_complete && !stage.is_rejected);
+    
+    if (!currentStage) {
+        return '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Tamamlandı</span>';
+    }
+
+    const { name, required_approvals, approved_count, approvers } = currentStage;
+    const remainingApprovals = required_approvals - approved_count;
+    
+    if (remainingApprovals <= 0) {
+        return `<span class="text-success"><i class="fas fa-check-circle me-1"></i>${name}</span>`;
+    }
+
+    // Get the names of remaining approvers
+    const remainingApprovers = approvers.slice(approved_count);
+    const approverNames = remainingApprovers.map(approver => approver.full_name || approver.username).join(', ');
+    
+    return `
+        <div class="approval-status">
+            <div class="stage-name text-primary fw-semibold">${name}</div>
+            <div class="approval-count text-muted small">
+                <i class="fas fa-users me-1"></i>
+                ${remainingApprovals} onay bekleniyor
+            </div>
+            ${approverNames ? `
+                <div class="approver-names text-muted small">
+                    <i class="fas fa-user-clock me-1"></i>
+                    ${approverNames}
+                </div>
+            ` : ''}
+        </div>
+    `;
 }
 
 function formatDate(dateString) {
@@ -1056,7 +999,8 @@ function showLoadingState() {
                     <td><div class="loading-skeleton" style="width: 80px;"></div></td>
                     <td><div class="loading-skeleton" style="width: 100px;"></div></td>
                     <td><div class="loading-skeleton" style="width: 120px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 50px;"></div></td>
                 </tr>
             `);
         }
@@ -1088,6 +1032,3 @@ function showNotification(message, type = 'info') {
 
 // Make functions globally available for onclick handlers
 window.viewRequestDetails = viewRequestDetails;
-window.approveRequest = approveRequest;
-window.rejectRequest = rejectRequest;
-window.completeRequest = completeRequest;

@@ -46,6 +46,33 @@ const currencySymbols = {
     GBP: '£'
 };
 
+// Function to calculate total amount in EUR from recommended suppliers
+function calculateTotalAmountEUR() {
+    if (!currencyRates) {
+        return 0;
+    }
+    
+    let totalAmount = 0;
+    if (requestData.itemRecommendations) {
+        Object.keys(requestData.itemRecommendations).forEach(itemIndex => {
+            const recommendedSupplierId = requestData.itemRecommendations[itemIndex];
+            if (recommendedSupplierId) {
+                const offer = requestData.offers[recommendedSupplierId]?.[itemIndex];
+                if (offer && offer.totalPrice > 0) {
+                    const supplier = requestData.suppliers.find(s => s.id === recommendedSupplierId);
+                    if (supplier) {
+                        // Convert to EUR using the same logic as ComparisonManager
+                        const convertedAmount = (offer.totalPrice / currencyRates[supplier.currency]) * currencyRates['EUR'];
+                        totalAmount += convertedAmount;
+                    }
+                }
+            }
+        });
+    }
+    
+    return totalAmount;
+}
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', async () => {
     
@@ -461,6 +488,9 @@ async function updateAndSubmitRequest() {
             });
         }
         
+        // Calculate total amount in EUR from recommended suppliers
+        const totalAmountEUR = calculateTotalAmountEUR();
+        
         // Prepare data for backend
         const submitData = {
             title: requestData.title.trim(),
@@ -469,7 +499,8 @@ async function updateAndSubmitRequest() {
             items: requestData.items,
             suppliers: requestData.suppliers,
             offers: requestData.offers,
-            recommendations: recommendations
+            recommendations: recommendations,
+            total_amount_eur: totalAmountEUR
         };
         
         // Update the existing purchase request
@@ -537,6 +568,9 @@ async function saveDraftToBackend() {
             });
         }
         
+        // Calculate total amount in EUR from recommended suppliers
+        const totalAmountEUR = calculateTotalAmountEUR();
+        
         // Prepare data for backend
         const draftData = {
             title: requestData.title || 'Malzeme Satın Alma Talebi',
@@ -545,7 +579,8 @@ async function saveDraftToBackend() {
             items: requestData.items,
             suppliers: requestData.suppliers,
             offers: requestData.offers,
-            recommendations: recommendations
+            recommendations: recommendations,
+            total_amount_eur: totalAmountEUR
         };
         
         // Create purchase request as draft (no submit call)
@@ -616,6 +651,9 @@ async function submitRequest() {
             });
         }
         
+        // Calculate total amount in EUR from recommended suppliers
+        const totalAmountEUR = calculateTotalAmountEUR();
+        
         // Prepare data for backend
         const submitData = {
             title: requestData.title.trim(),
@@ -624,7 +662,8 @@ async function submitRequest() {
             items: requestData.items,
             suppliers: requestData.suppliers,
             offers: requestData.offers,
-            recommendations: recommendations
+            recommendations: recommendations,
+            total_amount_eur: totalAmountEUR
         };
         
         // Create purchase request using generic function

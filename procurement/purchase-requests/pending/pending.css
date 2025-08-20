@@ -58,28 +58,33 @@
 }
 
 .status-draft {
-    background-color: #f3f4f6;
-    color: #6b7280;
+    background-color: #e5e7eb;
+    color: #374151;
+    border: 1px solid #d1d5db;
 }
 
 .status-submitted {
     background-color: #fef3c7;
-    color: #d97706;
+    color: #92400e;
+    border: 1px solid #f59e0b;
 }
 
 .status-approved {
     background-color: #d1fae5;
-    color: #059669;
+    color: #065f46;
+    border: 1px solid #10b981;
 }
 
 .status-rejected {
     background-color: #fee2e2;
-    color: #dc2626;
+    color: #991b1b;
+    border: 1px solid #ef4444;
 }
 
 .status-completed {
     background-color: #dbeafe;
-    color: #2563eb;
+    color: #1e40af;
+    border: 1px solid #3b82f6;
 }
 
 /* Priority badges */
@@ -97,18 +102,27 @@
 }
 
 .priority-normal {
-    background-color: #f3f4f6;
-    color: #6b7280;
+    background-color: #e5e7eb;
+    color: #374151;
+    border: 1px solid #d1d5db;
 }
 
 .priority-urgent {
     background-color: #fef3c7;
-    color: #d97706;
+    color: #92400e;
+    border: 1px solid #f59e0b;
 }
 
 .priority-critical {
     background-color: #fee2e2;
-    color: #dc2626;
+    color: #991b1b;
+    border: 1px solid #ef4444;
+}
+
+.priority-kritik {
+    background-color: #fee2e2;
+    color: #991b1b;
+    border: 1px solid #ef4444;
 }
 
 /* Table customizations - Matching Tasks Page */
@@ -581,4 +595,30 @@
     100% {
         background-position: 200% 0;
     }
+}
+
+/* Approval info styling */
+.approval-info {
+    min-width: 200px;
+}
+
+.approval-status {
+    line-height: 1.3;
+}
+
+.approval-status .stage-name {
+    font-size: 0.85rem;
+    margin-bottom: 0.25rem;
+}
+
+.approval-status .approval-count {
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
+}
+
+.approval-status .approver-names {
+    font-size: 0.7rem;
+    line-height: 1.2;
+    max-width: 180px;
+    word-wrap: break-word;
 }
