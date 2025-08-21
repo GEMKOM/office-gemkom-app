@@ -4,6 +4,7 @@ import { fetchMachines } from '../../../generic/machines.js';
 import { fetchTasks, deleteTask as deleteTaskAPI, updateTask as updateTaskAPI, fetchTaskById, createTask as createTaskAPI, bulkCreateTasks, markTaskCompleted, unmarkTaskCompleted } from '../../../generic/tasks.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
+import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 
 // State management
 let currentPage = 1;

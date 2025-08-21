@@ -6,6 +6,7 @@ import { fetchUsers } from '../../generic/users.js';
 import { getAllowedTeams } from '../../generic/teams.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
+import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 
 // Jira base URL
 const JIRA_BASE = 'https://gemkom-1.atlassian.net';

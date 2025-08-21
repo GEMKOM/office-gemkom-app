@@ -10,7 +10,7 @@ import {
     cancelPurchaseRequest
 } from '../../../generic/procurement.js';
 import { fetchCurrencyRates } from '../../../generic/formatters.js';
-
+import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 // State management
 let currentPage = 1;
 let currentFilter = 'all';

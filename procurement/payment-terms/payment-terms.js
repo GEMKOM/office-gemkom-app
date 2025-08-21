@@ -9,6 +9,7 @@ import {
     togglePaymentTermStatus,
     getBasisChoices
 } from '../../generic/procurement.js';
+import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 
 // State management
 let currentPage = 1;

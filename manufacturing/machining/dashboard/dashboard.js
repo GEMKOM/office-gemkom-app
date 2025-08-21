@@ -7,6 +7,7 @@ import { getSyncedNow } from '../../../generic/timeService.js';
 import { navigateTo } from '../machining.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { stopTimer } from '../../../generic/timers.js';
+import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 //import { stopTimerShared } from '../../../machining/machiningService.js';
 
 // Dashboard state

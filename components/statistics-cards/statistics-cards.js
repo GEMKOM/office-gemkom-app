@@ -216,10 +216,3 @@ export class StatisticsCards {
         }
     }
 }
-
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-    module.exports = StatisticsCards;
-} else {
-    window.StatisticsCards = StatisticsCards;
-}
