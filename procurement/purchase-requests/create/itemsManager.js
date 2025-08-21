@@ -89,7 +89,6 @@ export class ItemsManager {
         document.getElementById('item-job-no').value = item.job_no || '';
         document.getElementById('item-quantity').value = item.quantity;
         document.getElementById('item-unit').value = item.unit;
-        document.getElementById('item-priority').value = item.priority || 'normal';
         document.getElementById('item-specs').value = item.specs || '';
     }
 
@@ -103,7 +102,6 @@ export class ItemsManager {
         const jobNo = document.getElementById('item-job-no').value.trim();
         const quantity = parseFloat(document.getElementById('item-quantity').value) || 0;
         const unit = document.getElementById('item-unit').value;
-        const priority = document.getElementById('item-priority').value;
         const specs = document.getElementById('item-specs').value;
 
         // Validate required fields
@@ -143,7 +141,6 @@ export class ItemsManager {
             job_no: jobNo,
             quantity: quantity,
             unit: unit,
-            priority: priority,
             specs: specs
         };
 
@@ -203,11 +200,7 @@ export class ItemsManager {
                                         <strong>Miktar:</strong> ${item.quantity} ${item.unit}
                                     </div>
                                 </div>
-                                <div class="row mt-2">
-                                    <div class="col-md-6">
-                                        <strong>Öncelik:</strong> ${item.priority || 'Normal'}
-                                    </div>
-                                </div>
+
                                 ${item.specs ? `
                                 <div class="row mt-2">
                                     <div class="col-12">
@@ -402,7 +395,6 @@ export class ItemsManager {
                                     <th>İş No</th>
                                     <th>Miktar</th>
                                     <th>Birim</th>
-                                    <th>Öncelik</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -413,7 +405,6 @@ export class ItemsManager {
                                         <td>${item.job_no || '-'}</td>
                                         <td>${item.quantity}</td>
                                         <td>${item.unit}</td>
-                                        <td>${this.formatPriorityCell(item.priority)}</td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -422,7 +413,22 @@ export class ItemsManager {
                     <div class="merge-preview mt-2 p-2 bg-light rounded">
                         <small class="text-muted">
                             <i class="fas fa-arrow-right me-1"></i>
-                            <strong>Birleştirilecek:</strong> ${items.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0)} ${items[0].unit}
+                            <strong>Birleştirilecek:</strong> 
+                            ${(() => {
+                                const jobNoGroups = {};
+                                items.forEach(item => {
+                                    const jobNo = item.job_no || '';
+                                    if (!jobNoGroups[jobNo]) {
+                                        jobNoGroups[jobNo] = 0;
+                                    }
+                                    jobNoGroups[jobNo] += parseFloat(item.quantity || 0);
+                                });
+                                const totalQuantity = items.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0);
+                                const allocationText = Object.entries(jobNoGroups).map(([jobNo, totalQty]) => 
+                                    `${totalQty} ${items[0].unit} (${jobNo || 'İş No Yok'})`
+                                ).join(', ');
+                                return `${totalQuantity} ${items[0].unit} toplam - ${allocationText}`;
+                            })()}
                         </small>
                     </div>
                 </div>
@@ -450,7 +456,7 @@ export class ItemsManager {
                             </div>
                             <div class="alert alert-warning">
                                 <i class="fas fa-exclamation-triangle me-2"></i>
-                                <strong>Not:</strong> Birleştirme işlemi sadece aynı ad ve birime sahip malzemeler için yapılır.
+                                <strong>Not:</strong> Birleştirme işlemi aynı kod, ad ve birime sahip malzemeler için yapılır. Farklı iş numaraları tek bir satırda allocations olarak birleştirilecektir.
                             </div>
                         </div>
                         <div class="modal-footer">
@@ -503,7 +509,7 @@ export class ItemsManager {
                         job_no: cells[2].textContent.trim(),
                         quantity: parseFloat(cells[3].textContent) || 0,
                         unit: cells[4].textContent.trim(),
-                        priority: cells[5].textContent.trim(),
+                        specs: this.getSpecsFromOriginalItem(code, cells[1].textContent.trim(), cells[2].textContent.trim()),
                         originalIndex: this.findItemIndexByCodeAndNameAndJobNo(code, cells[1].textContent.trim(), cells[2].textContent.trim())
                     });
                 }
@@ -515,7 +521,7 @@ export class ItemsManager {
         });
 
         duplicates.forEach(({ code, items }) => {
-            // Check if all items have the same name, unit, and job_no
+            // Check if all items have the same name and unit (job_no can be different)
             const firstItem = items[0];
             const sameName = items.every(item => 
                 item.name.trim().toLowerCase() === firstItem.name.trim().toLowerCase()
@@ -523,44 +529,59 @@ export class ItemsManager {
             const sameUnit = items.every(item => 
                 item.unit.trim().toLowerCase() === firstItem.unit.trim().toLowerCase()
             );
-            const sameJobNo = items.every(item => 
-                (item.job_no || '').trim().toLowerCase() === (firstItem.job_no || '').trim().toLowerCase()
-            );
 
-            if (!sameName || !sameUnit || !sameJobNo) {
-                // Items have different names, units, or job numbers - show warning and skip
+            if (!sameName || !sameUnit) {
+                // Items have different names or units - show warning and skip
                 const differentItems = items.filter(item => 
                     item.name.trim().toLowerCase() !== firstItem.name.trim().toLowerCase() ||
-                    item.unit.trim().toLowerCase() !== firstItem.unit.trim().toLowerCase() ||
-                    (item.job_no || '').trim().toLowerCase() !== (firstItem.job_no || '').trim().toLowerCase()
+                    item.unit.trim().toLowerCase() !== firstItem.unit.trim().toLowerCase()
                 );
                 
-                alert(`Kod "${firstItem.code}" için farklı malzeme adı, birim veya iş no bulundu:\n\n` +
-                      `Beklenen: ${firstItem.name} - ${firstItem.unit} - ${firstItem.job_no || '-'}\n` +
+                alert(`Kod "${firstItem.code}" için farklı malzeme adı veya birim bulundu:\n\n` +
+                      `Beklenen: ${firstItem.name} - ${firstItem.unit}\n` +
                       `Farklı olanlar:\n` +
-                      differentItems.map(item => `  ${item.name} - ${item.unit} - ${item.job_no || '-'}`).join('\n') +
+                      differentItems.map(item => `  ${item.name} - ${item.unit}`).join('\n') +
                       '\n\nBu grup birleştirilmeyecek.');
                 return;
             }
 
-            // Merge items
+            // Group items by job_no and sum quantities for each job number
+            const jobNoAllocations = {};
+            items.forEach(item => {
+                const jobNo = item.job_no || '';
+                if (!jobNoAllocations[jobNo]) {
+                    jobNoAllocations[jobNo] = 0;
+                }
+                jobNoAllocations[jobNo] += parseFloat(item.quantity || 0);
+            });
+
+            // Create a single merged item with allocations
+            const totalQuantity = items.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0);
+            const allocations = Object.entries(jobNoAllocations).map(([jobNo, quantity]) => ({
+                job_no: jobNo,
+                quantity: quantity.toFixed(2)
+            }));
+
             const mergedItem = {
-                id: firstItem.id,
-                code: firstItem.code,
-                name: firstItem.name,
-                job_no: firstItem.job_no,
-                quantity: items.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0),
-                unit: firstItem.unit,
-                priority: firstItem.priority || 'normal',
-                specs: this.mergeSpecs(items.map(item => item.specs))
+                id: items[0].id,
+                code: items[0].code,
+                name: items[0].name,
+                job_no: '', // Will be empty since we're using allocations
+                quantity: totalQuantity,
+                unit: items[0].unit,
+                specs: this.mergeSpecs(items.map(item => item.specs)),
+                allocations: allocations // Add allocations array
             };
 
             mergedItems.push(mergedItem);
             itemsToRemove.push(...items.map(item => item.originalIndex));
+
             mergedGroups.push({
                 code: firstItem.code,
                 originalCount: items.length,
-                mergedQuantity: mergedItem.quantity
+                mergedCount: 1,
+                totalQuantity: totalQuantity,
+                allocationCount: allocations.length
             });
         });
 
@@ -590,9 +611,9 @@ export class ItemsManager {
         bootstrap.Modal.getInstance(document.getElementById(modalId)).hide();
         
         // Show success message
-        let successMessage = `${mergedItems.length} grup başarıyla birleştirildi:\n\n`;
+        let successMessage = `${mergedItems.length} malzeme başarıyla birleştirildi:\n\n`;
         mergedGroups.forEach(group => {
-            successMessage += `• ${group.code}: ${group.originalCount} satır → ${group.mergedQuantity} ${mergedItems.find(item => item.code === group.code)?.unit}\n`;
+            successMessage += `• ${group.code}: ${group.originalCount} satır → 1 satır (${group.allocationCount} iş no, ${group.totalQuantity} ${mergedItems.find(item => item.code === group.code)?.unit})\n`;
         });
         this.showNotification(successMessage, 'success');
     }
@@ -625,6 +646,14 @@ export class ItemsManager {
         );
     }
 
+    getSpecsFromOriginalItem(code, name, jobNo) {
+        const itemIndex = this.findItemIndexByCodeAndNameAndJobNo(code, name, jobNo);
+        if (itemIndex !== -1) {
+            return this.requestData.items[itemIndex].specs || '';
+        }
+        return '';
+    }
+
     renderItemsTable() {
         const tbody = document.getElementById('items-tbody');
         tbody.innerHTML = '';
@@ -633,14 +662,22 @@ export class ItemsManager {
             const row = document.createElement('tr');
             row.setAttribute('data-item-index', index);
             const specsCell = this.formatSpecsCell(item.specs);
+            
+            // Handle job_no display - show allocations if they exist
+            let jobNoDisplay = item.job_no || '-';
+            if (item.allocations && Array.isArray(item.allocations) && item.allocations.length > 0) {
+                jobNoDisplay = item.allocations.map(allocation => 
+                    `${allocation.job_no} (${allocation.quantity})`
+                ).join(', ');
+            }
+            
             row.innerHTML = `
                 <td>${index + 1}</td>
                 <td class="editable-cell" data-item-index="${index}" data-field="code">${item.code}</td>
                 <td class="editable-cell" data-item-index="${index}" data-field="name">${item.name}</td>
-                <td class="editable-cell" data-item-index="${index}" data-field="job_no">${item.job_no || '-'}</td>
+                <td class="editable-cell" data-item-index="${index}" data-field="job_no">${jobNoDisplay}</td>
                 <td class="editable-cell" data-item-index="${index}" data-field="quantity">${item.quantity}</td>
                 <td class="editable-cell" data-item-index="${index}" data-field="unit">${item.unit}</td>
-                <td class="editable-cell" data-item-index="${index}" data-field="priority">${this.formatPriorityCell(item.priority)}</td>
                 <td class="editable-cell" data-item-index="${index}" data-field="specs">${specsCell}</td>
                 <td class="action-buttons">
                     <button class="btn btn-outline-danger btn-sm" onclick="window.itemsManager.deleteItem(${index})">
@@ -678,37 +715,7 @@ export class ItemsManager {
         `;
     }
 
-    formatPriorityCell(priority) {
-        if (!priority || priority.trim() === '') {
-            return '<span class="badge bg-secondary">Normal</span>';
-        }
 
-        const priorityLower = priority.toLowerCase();
-        let badgeClass = 'bg-secondary';
-        let displayText = 'Normal';
-
-        switch (priorityLower) {
-            case 'acil':
-            case 'urgent':
-            case 'high':
-                badgeClass = 'bg-danger';
-                displayText = 'Acil';
-                break;
-            case 'kritik':
-            case 'critical':
-                badgeClass = 'bg-warning';
-                displayText = 'Kritik';
-                break;
-
-            case 'normal':
-            default:
-                badgeClass = 'bg-secondary';
-                displayText = 'Normal';
-                break;
-        }
-
-        return `<span class="badge ${badgeClass}">${displayText}</span>`;
-    }
 
     escapeHtml(text) {
         const div = document.createElement('div');
@@ -757,14 +764,11 @@ export class ItemsManager {
                 const itemIndex = parseInt(this.dataset.itemIndex);
                 const field = this.dataset.field;
                 
-                // For specs and priority fields, get the actual value from the item data
+                // For specs field, get the actual value from the item data
                 let currentValue;
                 if (field === 'specs') {
                     const item = window.itemsManager.requestData.items[itemIndex];
                     currentValue = item && item.specs ? item.specs : '';
-                } else if (field === 'priority') {
-                    const item = window.itemsManager.requestData.items[itemIndex];
-                    currentValue = item && item.priority ? item.priority : 'normal';
                 } else {
                     currentValue = this.textContent.trim();
                 }
@@ -827,29 +831,7 @@ export class ItemsManager {
                     input.appendChild(option);
                 });
                 break;
-            case 'priority':
-                // Create dropdown for priority selection
-                input = document.createElement('select');
-                input.className = 'form-control form-control-sm';
-                
-                const priorityOptions = [
-                    { value: 'normal', text: 'Normal' },
-                    { value: 'acil', text: 'Acil' },
-                    { value: 'kritik', text: 'Kritik' }
-                ];
-                
-                priorityOptions.forEach(priority => {
-                    const option = document.createElement('option');
-                    option.value = priority.value;
-                    option.textContent = priority.text;
-                    
-                    if (priority.value === currentValue) {
-                        option.selected = true;
-                    }
-                    
-                    input.appendChild(option);
-                });
-                break;
+
             case 'specs':
                 // Create textarea for specs to handle longer text
                 input = document.createElement('textarea');
@@ -1023,6 +1005,11 @@ export class ItemsManager {
             case 'name':
                 return value && value.trim().length > 0;
             case 'job_no':
+                // For items with allocations, job_no can be empty
+                const editingItem = this.requestData.items[this.currentEditingItemIndex];
+                if (editingItem && editingItem.allocations && Array.isArray(editingItem.allocations) && editingItem.allocations.length > 0) {
+                    return true; // Allow empty job_no if item has allocations
+                }
                 return value && value.trim().length > 0;
             case 'quantity':
                 const numValue = parseFloat(value);
@@ -1037,11 +1024,7 @@ export class ItemsManager {
                 return true;
             case 'unit':
                 return value && value.trim().length > 0;
-            case 'priority':
-                // Priority can be empty (defaults to normal), but if provided should be valid
-                if (!value || value.trim() === '') return true;
-                const validPriorities = ['normal', 'acil', 'kritik', 'urgent', 'critical', 'high'];
-                return validPriorities.includes(value.toLowerCase());
+
             case 'specs':
                 // Specs can be empty, so just return true
                 return true;
@@ -1056,9 +1039,6 @@ export class ItemsManager {
         } else if (field === 'specs') {
             // Use the formatSpecsCell method to maintain the same display format
             cell.innerHTML = this.formatSpecsCell(value);
-        } else if (field === 'priority') {
-            // Use the formatPriorityCell method to maintain the same display format
-            cell.innerHTML = this.formatPriorityCell(value);
         } else if (field === 'job_no') {
             cell.textContent = value || '-';
         } else {
@@ -1404,7 +1384,6 @@ export class ItemsManager {
                     job_no: this.getCellValue(row, mapping.job_no),
                     quantity: this.parseQuantity(this.getCellValue(row, mapping.quantity)),
                     unit: this.getCellValue(row, mapping.unit),
-                    priority: 'normal',
                     specs: specs
                 };
 
@@ -1498,13 +1477,7 @@ export class ItemsManager {
             .replace(/Ç/g, 'c');
     }
 
-    normalizePriority(priority) {
-        const priorityLower = priority.toLowerCase();
-        if (['acil', 'urgent', 'high'].includes(priorityLower)) return 'acil';
-        if (['kritik', 'critical'].includes(priorityLower)) return 'kritik';
 
-        return 'normal';
-    }
 
     showImportErrors(errors, warnings = []) {
         const errorContainer = document.getElementById('import-errors');
@@ -1619,6 +1592,7 @@ export class ItemsManager {
         
         processedItems.forEach((item, index) => {
             const tr = document.createElement('tr');
+            tr.setAttribute('data-item-index', index);
             const specsCell = this.formatSpecsCell(item.specs);
             tr.innerHTML = `
                 <td>${index + 1}</td>
@@ -1629,6 +1603,11 @@ export class ItemsManager {
                 <td>${item.unit}</td>
                 <td>${specsCell}</td>
                 <td><span class="badge bg-success">Geçerli</span></td>
+                <td>
+                    <button class="btn btn-outline-danger btn-sm" onclick="window.itemsManager.deletePreviewItem(${index})">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
             `;
             tbody.appendChild(tr);
         });
@@ -1636,8 +1615,41 @@ export class ItemsManager {
         previewDiv.style.display = 'block';
         importBtn.disabled = false;
         
+        // Update the preview title to show count
+        const previewTitle = previewDiv.querySelector('h6');
+        if (previewTitle) {
+            previewTitle.textContent = `Önizleme (${processedItems.length} malzeme)`;
+        }
+        
+        // Update import button text to show count
+        if (importBtn) {
+            importBtn.innerHTML = `<i class="fas fa-upload me-1"></i>${processedItems.length} Malzemeyi İçe Aktar`;
+        }
+        
         // Store the processed items for import
         this.parsedImportData = processedItems;
+    }
+
+    deletePreviewItem(index) {
+        if (!this.parsedImportData || index < 0 || index >= this.parsedImportData.length) {
+            return;
+        }
+        
+        // Remove the item from the parsed data
+        this.parsedImportData.splice(index, 1);
+        
+        // Re-render the preview table with updated data
+        this.displayImportPreview(this.parsedImportData);
+        
+        // Update the import button state
+        const importBtn = document.getElementById('import-items-btn');
+        if (this.parsedImportData.length === 0) {
+            importBtn.disabled = true;
+            importBtn.innerHTML = '<i class="fas fa-upload me-1"></i>Malzemeleri İçe Aktar';
+        }
+        
+        // Show notification
+        this.showNotification('Satır başarıyla silindi', 'success');
     }
 
     clearBulkImport() {
@@ -1668,5 +1680,69 @@ export class ItemsManager {
         this.clearBulkImport();
         
         alert(`${this.parsedImportData.length} malzeme başarıyla içe aktarıldı.`);
+    }
+
+    // ===== ITEM FORMATTING FOR SUBMISSION =====
+    
+    /**
+     * Transform items to the new submission format where items are grouped by code, name, and unit
+     * with allocations containing job_no and quantity
+     */
+    getFormattedItemsForSubmission() {
+        const groupedItems = {};
+        const originalToGroupedMapping = [];
+        let groupedIndex = 0;
+        
+        // Group items by code, name, and unit
+        this.requestData.items.forEach((item, originalIndex) => {
+            const key = `${item.code}|${item.name}|${item.unit}`;
+            
+            if (!groupedItems[key]) {
+                groupedItems[key] = {
+                    code: item.code,
+                    name: item.name,
+                    unit: item.unit,
+                    quantity: 0,
+                    allocations: [],
+                    groupedIndex: groupedIndex++
+                };
+            }
+            
+            // Check if item already has allocations (from merge)
+            if (item.allocations && Array.isArray(item.allocations)) {
+                // Item already has allocations, add them directly
+                item.allocations.forEach(allocation => {
+                    groupedItems[key].allocations.push({
+                        job_no: allocation.job_no,
+                        quantity: parseFloat(allocation.quantity).toFixed(2)
+                    });
+                    groupedItems[key].quantity += parseFloat(allocation.quantity);
+                });
+            } else {
+                // Regular item, add as single allocation
+                groupedItems[key].allocations.push({
+                    job_no: item.job_no,
+                    quantity: parseFloat(item.quantity).toFixed(2)
+                });
+                groupedItems[key].quantity += parseFloat(item.quantity);
+            }
+            
+            // Store mapping from original index to grouped index
+            originalToGroupedMapping[originalIndex] = groupedItems[key].groupedIndex;
+        });
+        
+        // Convert to array and format quantities as strings
+        const formattedItems = Object.values(groupedItems).map(item => ({
+            code: item.code,
+            name: item.name,
+            unit: item.unit,
+            quantity: item.quantity.toFixed(2),
+            allocations: item.allocations
+        }));
+        
+        return {
+            items: formattedItems,
+            mapping: originalToGroupedMapping
+        };
     }
 }

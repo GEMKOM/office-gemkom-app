@@ -24,6 +24,7 @@ let requestData = {
     title: '',
     description: '',
     priority: 'normal',
+    needed_date: new Date().toISOString().split('T')[0], // Set today's date as default
     items: [],
     suppliers: [],
     offers: {},
@@ -70,7 +71,8 @@ function calculateTotalAmountEUR() {
         });
     }
     
-    return totalAmount;
+    // Return with only 2 decimal places
+    return Math.round(totalAmount * 100) / 100;
 }
 
 // Initialize the application
@@ -177,6 +179,8 @@ async function populateRequestData(request) {
     requestData.title = request.title || '';
     requestData.description = request.description || '';
     requestData.priority = request.priority || 'normal';
+
+    requestData.needed_date = request.needed_date || '';
     
     // Load items
     requestData.items = request.request_items.map(item => ({
@@ -187,7 +191,7 @@ async function populateRequestData(request) {
         job_no: item.item.job_no || '',
         quantity: parseFloat(item.quantity),
         unit: item.item.unit,
-        priority: item.priority,
+
         specifications: item.specifications || '',
         order: item.order
     }));
@@ -369,17 +373,18 @@ function renderFormFields() {
     const titleField = document.getElementById('request-title');
     const descriptionField = document.getElementById('request-description');
     const priorityField = document.getElementById('request-priority');
+    const neededDateField = document.getElementById('needed-date');
     
     if (titleField) titleField.value = requestData.title || '';
     if (descriptionField) descriptionField.value = requestData.description || '';
     if (priorityField) priorityField.value = requestData.priority || 'normal';
+    if (neededDateField) neededDateField.value = requestData.needed_date || '';
 }
 
 // Initialize form field event listeners (called only once)
 function initializeFormFieldListeners() {
     const titleField = document.getElementById('request-title');
     const descriptionField = document.getElementById('request-description');
-    const priorityField = document.getElementById('request-priority');
     
     if (titleField) {
         titleField.addEventListener('input', (e) => {
@@ -409,10 +414,26 @@ function initializeFormFieldListeners() {
         });
     }
     
+    const priorityField = document.getElementById('request-priority');
     if (priorityField) {
         priorityField.addEventListener('change', (e) => {
             requestData.priority = e.target.value;
             dataManager.autoSave();
+        });
+    }
+    
+    const neededDateField = document.getElementById('needed-date');
+    if (neededDateField) {
+        neededDateField.addEventListener('change', (e) => {
+            requestData.needed_date = e.target.value;
+            dataManager.autoSave();
+            // Show validation feedback on change
+            const validation = validationManager.validateField('needed-date', e.target.value);
+            if (validation.isValid && e.target.value !== '') {
+                validationManager.showFieldValidation('needed-date', true, '');
+            } else {
+                validationManager.clearFieldValidation('needed-date');
+            }
         });
     }
     
@@ -433,6 +454,13 @@ function initializeFormFieldListeners() {
             validationManager.showFieldValidation('request-description', validation.isValid, validation.message);
         });
     }
+    
+    if (neededDateField) {
+        neededDateField.addEventListener('blur', () => {
+            const validation = validationManager.validateField('needed-date', neededDateField.value);
+            validationManager.showFieldValidation('needed-date', validation.isValid, validation.message);
+        });
+    }
 }
 
 async function updateAndSubmitRequest() {
@@ -447,7 +475,8 @@ async function updateAndSubmitRequest() {
         // Validate form fields using validation manager
         const formData = {
             'request-title': requestData.title || '',
-            'request-description': requestData.description || ''
+            'request-description': requestData.description || '',
+            'needed-date': requestData.needed_date || ''
         };
         
         // Comprehensive validation using validation manager
@@ -491,15 +520,40 @@ async function updateAndSubmitRequest() {
         // Calculate total amount in EUR from recommended suppliers
         const totalAmountEUR = calculateTotalAmountEUR();
         
+        // Get formatted items and mapping
+        const formattedData = itemsManager.getFormattedItemsForSubmission();
+        
+        // Transform offers and recommendations using the mapping
+        const transformedOffers = {};
+        const transformedRecommendations = {};
+        
+        Object.keys(requestData.offers).forEach(supplierId => {
+            transformedOffers[supplierId] = {};
+            Object.keys(requestData.offers[supplierId]).forEach(originalIndex => {
+                const groupedIndex = formattedData.mapping[originalIndex];
+                if (groupedIndex !== undefined) {
+                    transformedOffers[supplierId][groupedIndex] = requestData.offers[supplierId][originalIndex];
+                }
+            });
+        });
+        
+        Object.keys(recommendations).forEach(originalIndex => {
+            const groupedIndex = formattedData.mapping[originalIndex];
+            if (groupedIndex !== undefined) {
+                transformedRecommendations[groupedIndex] = recommendations[originalIndex];
+            }
+        });
+        
         // Prepare data for backend
         const submitData = {
             title: requestData.title.trim(),
             description: requestData.description.trim(),
             priority: requestData.priority || 'normal',
-            items: requestData.items,
+            needed_date: requestData.needed_date,
+            items: formattedData.items,
             suppliers: requestData.suppliers,
-            offers: requestData.offers,
-            recommendations: recommendations,
+            offers: transformedOffers,
+            recommendations: transformedRecommendations,
             total_amount_eur: totalAmountEUR
         };
         
@@ -532,7 +586,8 @@ async function saveDraftToBackend() {
     // Basic validation for draft saving
     const formData = {
         'request-title': requestData.title || '',
-        'request-description': requestData.description || ''
+        'request-description': requestData.description || '',
+        'needed-date': requestData.needed_date || ''
     };
     
     // Validate form fields and basic requirements for draft
@@ -576,7 +631,8 @@ async function saveDraftToBackend() {
             title: requestData.title || 'Malzeme Satın Alma Talebi',
             description: requestData.description || 'Proje için gerekli malzemeler',
             priority: requestData.priority || 'normal',
-            items: requestData.items,
+            needed_date: requestData.needed_date || '',
+            items: itemsManager.getFormattedItemsForSubmission().items,
             suppliers: requestData.suppliers,
             offers: requestData.offers,
             recommendations: recommendations,
@@ -609,7 +665,8 @@ async function submitRequest() {
         // Validate form fields using validation manager
         const formData = {
             'request-title': requestData.title || '',
-            'request-description': requestData.description || ''
+            'request-description': requestData.description || '',
+            'needed-date': requestData.needed_date || ''
         };
         
         // Comprehensive validation using validation manager
@@ -654,15 +711,40 @@ async function submitRequest() {
         // Calculate total amount in EUR from recommended suppliers
         const totalAmountEUR = calculateTotalAmountEUR();
         
+        // Get formatted items and mapping
+        const formattedData = itemsManager.getFormattedItemsForSubmission();
+        
+        // Transform offers and recommendations using the mapping
+        const transformedOffers = {};
+        const transformedRecommendations = {};
+        
+        Object.keys(requestData.offers).forEach(supplierId => {
+            transformedOffers[supplierId] = {};
+            Object.keys(requestData.offers[supplierId]).forEach(originalIndex => {
+                const groupedIndex = formattedData.mapping[originalIndex];
+                if (groupedIndex !== undefined) {
+                    transformedOffers[supplierId][groupedIndex] = requestData.offers[supplierId][originalIndex];
+                }
+            });
+        });
+        
+        Object.keys(recommendations).forEach(originalIndex => {
+            const groupedIndex = formattedData.mapping[originalIndex];
+            if (groupedIndex !== undefined) {
+                transformedRecommendations[groupedIndex] = recommendations[originalIndex];
+            }
+        });
+        
         // Prepare data for backend
         const submitData = {
             title: requestData.title.trim(),
             description: requestData.description.trim(),
             priority: requestData.priority || 'normal',
-            items: requestData.items,
+            needed_date: requestData.needed_date,
+            items: formattedData.items,
             suppliers: requestData.suppliers,
-            offers: requestData.offers,
-            recommendations: recommendations,
+            offers: transformedOffers,
+            recommendations: transformedRecommendations,
             total_amount_eur: totalAmountEUR
         };
         
@@ -685,6 +767,7 @@ async function submitRequest() {
             title: '',
             description: '',
             priority: 'normal',
+            needed_date: new Date().toISOString().split('T')[0], // Set today's date as default
             items: [],
             suppliers: [],
             offers: {},
@@ -756,6 +839,7 @@ window.purchaseRequestApp = {
             title: '',
             description: '',
             priority: 'normal',
+            needed_date: new Date().toISOString().split('T')[0], // Set today's date as default
             items: [],
             suppliers: [],
             offers: {},

@@ -1,0 +1,184 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Item Format Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; border-radius: 5px; }
+        pre { background: #f5f5f5; padding: 10px; border-radius: 3px; overflow-x: auto; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Malzeme Listesi Format Test</h1>
+    
+    <div class="test-section">
+        <h2>Test Senaryosu</h2>
+        <p>Aşağıdaki malzemelerin yeni formata dönüştürülmesi test edilecek:</p>
+        <ul>
+            <li>F014 kodlu LAZER KESİM malzemesi - RM262-04-04 iş numarası için 25 ADET</li>
+            <li>F014 kodlu LAZER KESİM malzemesi - 5715 iş numarası için 75 ADET</li>
+        </ul>
+    </div>
+
+    <div class="test-section">
+        <h2>Beklenen Sonuç</h2>
+        <pre>{
+  "code": "F014",
+  "name": "LAZER KESİM",
+  "unit": "ADET",
+  "quantity": "100.00",
+  "allocations": [
+    {"job_no": "RM262-04-04", "quantity": "25.00"},
+    {"job_no": "5715", "quantity": "75.00"}
+  ]
+}</pre>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Sonucu</h2>
+        <div id="test-result">Test çalıştırılıyor...</div>
+    </div>
+
+    <script type="module">
+        // Mock ItemsManager class for testing
+        class MockItemsManager {
+            constructor() {
+                this.requestData = {
+                    items: [
+                        {
+                            id: 1,
+                            code: "F014",
+                            name: "LAZER KESİM",
+                            job_no: "RM262-04-04",
+                            quantity: 25,
+                            unit: "ADET",
+                            specs: ""
+                        },
+                        {
+                            id: 2,
+                            code: "F014",
+                            name: "LAZER KESİM",
+                            job_no: "5715",
+                            quantity: 75,
+                            unit: "ADET",
+                            specs: ""
+                        }
+                    ]
+                };
+            }
+
+            getFormattedItemsForSubmission() {
+                const groupedItems = {};
+                const originalToGroupedMapping = [];
+                let groupedIndex = 0;
+                
+                // Group items by code, name, and unit
+                this.requestData.items.forEach((item, originalIndex) => {
+                    const key = `${item.code}|${item.name}|${item.unit}`;
+                    
+                    if (!groupedItems[key]) {
+                        groupedItems[key] = {
+                            code: item.code,
+                            name: item.name,
+                            unit: item.unit,
+                            quantity: 0,
+                            allocations: [],
+                            groupedIndex: groupedIndex++
+                        };
+                    }
+                    
+                    // Add allocation for this item
+                    groupedItems[key].allocations.push({
+                        job_no: item.job_no,
+                        quantity: parseFloat(item.quantity).toFixed(2)
+                    });
+                    
+                    // Sum up total quantity
+                    groupedItems[key].quantity += parseFloat(item.quantity);
+                    
+                    // Store mapping from original index to grouped index
+                    originalToGroupedMapping[originalIndex] = groupedItems[key].groupedIndex;
+                });
+                
+                // Convert to array and format quantities as strings
+                const formattedItems = Object.values(groupedItems).map(item => ({
+                    code: item.code,
+                    name: item.name,
+                    unit: item.unit,
+                    quantity: item.quantity.toFixed(2),
+                    allocations: item.allocations
+                }));
+                
+                return {
+                    items: formattedItems,
+                    mapping: originalToGroupedMapping
+                };
+            }
+        }
+
+        // Run test
+        function runTest() {
+            const itemsManager = new MockItemsManager();
+            const result = itemsManager.getFormattedItemsForSubmission();
+            
+            const expected = {
+                code: "F014",
+                name: "LAZER KESİM",
+                unit: "ADET",
+                quantity: "100.00",
+                allocations: [
+                    {job_no: "RM262-04-04", quantity: "25.00"},
+                    {job_no: "5715", quantity: "75.00"}
+                ]
+            };
+            
+            const actual = result.items[0];
+            
+            const testResult = document.getElementById('test-result');
+            
+            // Check if the result matches expected format
+            const isSuccess = 
+                actual.code === expected.code &&
+                actual.name === expected.name &&
+                actual.unit === expected.unit &&
+                actual.quantity === expected.quantity &&
+                actual.allocations.length === expected.allocations.length &&
+                actual.allocations.every((allocation, index) => 
+                    allocation.job_no === expected.allocations[index].job_no &&
+                    allocation.quantity === expected.allocations[index].quantity
+                );
+            
+            if (isSuccess) {
+                testResult.innerHTML = `
+                    <div class="success">
+                        <h3>✅ Test Başarılı!</h3>
+                        <p>Malzemeler başarıyla yeni formata dönüştürüldü.</p>
+                        <h4>Sonuç:</h4>
+                        <pre>${JSON.stringify(actual, null, 2)}</pre>
+                        <h4>Mapping:</h4>
+                        <pre>${JSON.stringify(result.mapping, null, 2)}</pre>
+                    </div>
+                `;
+            } else {
+                testResult.innerHTML = `
+                    <div class="error">
+                        <h3>❌ Test Başarısız!</h3>
+                        <p>Beklenen sonuç ile gerçek sonuç uyuşmuyor.</p>
+                        <h4>Beklenen:</h4>
+                        <pre>${JSON.stringify(expected, null, 2)}</pre>
+                        <h4>Gerçek:</h4>
+                        <pre>${JSON.stringify(actual, null, 2)}</pre>
+                    </div>
+                `;
+            }
+        }
+
+        // Run test when page loads
+        runTest();
+    </script>
+</body>
+</html>

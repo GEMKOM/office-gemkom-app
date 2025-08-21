@@ -375,7 +375,7 @@ thead .btn.btn-outline-warning {
     justify-content: center;
 }
 
-/* Priority badges are now handled by procurement-badges.css */
+
 
 /* Auto-save indicator */
 .auto-save-indicator {
@@ -458,6 +458,19 @@ thead .btn.btn-outline-warning {
 #preview-table td {
     padding: 0.5rem;
     vertical-align: middle;
+}
+
+/* Preview table delete button styling */
+#preview-table .btn-outline-danger {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+    border-radius: 4px;
+}
+
+#preview-table .btn-outline-danger:hover {
+    background-color: #dc3545;
+    border-color: #dc3545;
+    color: white;
 }
 
 .table-danger {
@@ -608,18 +621,20 @@ thead .btn.btn-outline-warning {
     color: #007bff;
 }
 
+
+
+/* Textarea styling */
+#request-description {
+    resize: vertical;
+    min-height: 80px;
+}
+
 /* Priority select styling */
 #request-priority {
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3e%3cpath fill='none' stroke='%23343a40' stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='m1 6 7 7 7-7'/%3e%3c/svg%3e");
     background-repeat: no-repeat;
     background-position: right 0.75rem center;
     background-size: 16px 12px;
-}
-
-/* Textarea styling */
-#request-description {
-    resize: vertical;
-    min-height: 80px;
 }
 
 /* Required field indicator */
@@ -1310,3 +1325,156 @@ thead .btn.btn-outline-warning {
         min-width: 150px;
     }
 }
+
+/* Default vs Chosen Values Styles */
+.default-values, .chosen-values {
+    padding: 0.5rem;
+}
+
+.default-value-item, .chosen-value-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.default-value-item:last-child, .chosen-value-item:last-child {
+    border-bottom: none;
+}
+
+.default-value-item .label, .chosen-value-item .label {
+    font-weight: 500;
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+.default-value-item .value {
+    color: #6c757d;
+    font-weight: 400;
+}
+
+.chosen-value-item .label {
+    color: #495057;
+}
+
+.chosen-value-item .value {
+    color: #0d6efd;
+    font-weight: 500;
+}
+
+.default-values h6, .chosen-values h6 {
+    margin-bottom: 0.75rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+/* Supplier selection styles */
+#supplier-select {
+    margin-bottom: 1rem;
+}
+
+#default-values-section .card {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+#default-values-section .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 0.75rem 1rem;
+}
+
+#default-values-section .card-body {
+    padding: 1rem;
+}
+
+/* Supplier Info Display Styles */
+#supplier-info-display .card {
+    border: 1px solid #dee2e6;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    margin-bottom: 0.5rem;
+}
+
+#supplier-info-display .card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    padding: 0.4rem 0.75rem;
+}
+
+#supplier-info-display .card-header h6 {
+    font-size: 0.875rem;
+    margin: 0;
+}
+
+#supplier-info-display .card-body {
+    padding: 0.5rem 0.75rem;
+}
+
+#supplier-info-display .supplier-info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+#supplier-info-display .supplier-info-item:last-child {
+    border-bottom: none;
+}
+
+#supplier-info-display .supplier-info-label {
+    font-weight: 500;
+    color: #6c757d;
+    font-size: 0.75rem;
+    min-width: 100px;
+}
+
+#supplier-info-display .supplier-info-value {
+    color: #495057;
+    font-weight: 400;
+    text-align: right;
+    flex: 1;
+    margin-left: 0.75rem;
+    font-size: 0.75rem;
+}
+
+/* Supplier Modal Link Styles */
+#supplierModal .form-text a {
+    color: #0d6efd;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+#supplierModal .form-text a:hover {
+    color: #0a58ca;
+    text-decoration: underline !important;
+}
+
+#supplierModal .form-text {
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+/* Offer Modal Validation Styles */
+#offerModal .table th .text-danger {
+    font-weight: bold;
+}
+
+#offerModal .form-control:required:invalid {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.2rem rgba(220, 53, 69, 0.25);
+}
+
+#offerModal .form-control:required:valid {
+    border-color: #198754;
+    box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.25);
+}
+
+#offerModal .alert-info {
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+    color: #0c5460;
+}
+
+

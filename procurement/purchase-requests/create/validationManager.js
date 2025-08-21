@@ -19,6 +19,12 @@ export class ValidationManager {
                 messages: {
                     maxLength: 'Talep açıklaması en fazla 500 karakter olabilir'
                 }
+            },
+            'needed-date': {
+                required: true,
+                messages: {
+                    required: 'İhtiyaç tarihi zorunludur'
+                }
             }
         };
         
@@ -37,17 +43,27 @@ export class ValidationManager {
         const errors = [];
 
         // Required validation
-        if (rules.required && (!value || value.trim() === '')) {
-            errors.push(rules.messages.required);
+        if (rules.required) {
+            if (fieldId === 'needed-date') {
+                // Special handling for date fields
+                if (!value || value === '') {
+                    errors.push(rules.messages.required);
+                }
+            } else {
+                // Standard text field validation
+                if (!value || value.trim() === '') {
+                    errors.push(rules.messages.required);
+                }
+            }
         }
 
-        // Min length validation
-        if (value && rules.minLength && value.trim().length < rules.minLength) {
+        // Min length validation (only for text fields)
+        if (fieldId !== 'needed-date' && value && rules.minLength && value.trim().length < rules.minLength) {
             errors.push(rules.messages.minLength);
         }
 
-        // Max length validation
-        if (value && rules.maxLength && value.trim().length > rules.maxLength) {
+        // Max length validation (only for text fields)
+        if (fieldId !== 'needed-date' && value && rules.maxLength && value.trim().length > rules.maxLength) {
             errors.push(rules.messages.maxLength);
         }
 
@@ -236,8 +252,12 @@ export class ValidationManager {
                 errors.push(`Malzeme ${index + 1}: Malzeme adı zorunludur`);
             }
             
-            if (!item.job_no || item.job_no.trim() === '') {
-                errors.push(`Malzeme ${index + 1}: İş numarası zorunludur`);
+            // Check for job_no OR allocations (new format)
+            const hasJobNo = item.job_no && item.job_no.trim() !== '';
+            const hasAllocations = item.allocations && Array.isArray(item.allocations) && item.allocations.length > 0;
+            
+            if (!hasJobNo && !hasAllocations) {
+                errors.push(`Malzeme ${index + 1}: İş numarası veya allocations zorunludur`);
             }
             
             if (!item.quantity || item.quantity <= 0) {

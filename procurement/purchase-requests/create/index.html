@@ -40,17 +40,21 @@
                         </div>
                         <div class="card-body">
                             <div class="row">
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <label for="request-title" class="form-label">Talep Başlığı <span class="text-danger">*</span></label>
                                     <input type="text" class="form-control" id="request-title" placeholder="Talep başlığını girin" required>
                                 </div>
-                                <div class="col-md-6">
+                                <div class="col-md-4">
                                     <label for="request-priority" class="form-label">Öncelik</label>
-                                    <select class="form-select" id="request-priority">
+                                    <select class="form-control" id="request-priority">
                                         <option value="normal" selected>Normal</option>
                                         <option value="urgent">Acil</option>
                                         <option value="critical">Kritik</option>
                                     </select>
+                                </div>
+                                <div class="col-md-4">
+                                    <label for="needed-date" class="form-label">İhtiyaç Tarihi <span class="text-danger">*</span></label>
+                                    <input type="date" class="form-control" id="needed-date" required>
                                 </div>
                             </div>
                             <div class="row mt-3">
@@ -102,7 +106,6 @@
                                             <th>İş No</th>
                                             <th>Miktar</th>
                                             <th>Birim</th>
-                                            <th>Öncelik</th>
                                             <th>Teknik Özellikler</th>
                                             <th>İşlemler</th>
                                         </tr>
@@ -244,7 +247,7 @@
                                 <label class="form-label">Miktar</label>
                                 <input type="number" class="form-control" id="item-quantity" step="0.01" required>
                             </div>
-                            <div class="col-md-4">
+                            <div class="col-md-6">
                                 <label class="form-label">Birim</label>
                                 <select class="form-select" id="item-unit" required>
                                     <option value="">Birim Seçin</option>
@@ -254,14 +257,6 @@
                                     <option value="litre">Litre</option>
                                     <option value="paket">Paket</option>
                                     <option value="kutu">Kutu</option>
-                                </select>
-                            </div>
-                            <div class="col-md-4">
-                                <label class="form-label">Öncelik</label>
-                                <select class="form-select" id="item-priority">
-                                    <option value="normal">Normal</option>
-                                    <option value="acil">Acil</option>
-                                    <option value="kritik">Kritik</option>
                                 </select>
                             </div>
                         </div>
@@ -308,8 +303,7 @@
                             </div>
                             <label class="form-label mt-2">Opsiyonel Sütunlar:</label>
                             <div class="form-control-plaintext small bg-light">
-                                <code>Öncelik - Öncelik seviyesi<br>
-                                Özellikler - Teknik özellikler</code>
+                                <code>Özellikler - Teknik özellikler</code>
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -317,10 +311,7 @@
                             <div class="form-control-plaintext small">
                                 adet, kg, metre, litre, paket, kutu
                             </div>
-                            <label class="form-label mt-2">Öncelik Seçenekleri:</label>
-                            <div class="form-control-plaintext small">
-                                normal, acil, kritik
-                            </div>
+
                         </div>
                     </div>
                     
@@ -356,9 +347,9 @@
                                         <th>İş No</th>
                                         <th>Miktar</th>
                                         <th>Birim</th>
-                                        <th>Öncelik</th>
                                         <th>Teknik Özellikler</th>
                                         <th>Durum</th>
+                                        <th>İşlemler</th>
                                     </tr>
                                 </thead>
                                 <tbody id="preview-tbody">
@@ -417,37 +408,132 @@
                 </div>
                 <div class="modal-body">
                     <form id="supplierForm">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <label class="form-label">Tedarikçi Adı</label>
-                                <input type="text" class="form-control" id="supplier-name" required>
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">İletişim Kişisi</label>
-                                <input type="text" class="form-control" id="supplier-contact">
-                            </div>
-                        </div>
-                        <div class="row mt-3">
-                            <div class="col-md-6">
-                                <label class="form-label">Telefon</label>
-                                <input type="tel" class="form-control" id="supplier-phone">
-                            </div>
-                            <div class="col-md-6">
-                                <label class="form-label">E-posta</label>
-                                <input type="email" class="form-control" id="supplier-email">
+                        <!-- Supplier Selection -->
+                        <div class="row mb-4">
+                            <div class="col-12">
+                                <label class="form-label">Tedarikçi Seçimi</label>
+                                <select class="form-select" id="supplier-select">
+                                    <option value="">Tedarikçi seçin...</option>
+                                </select>
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Yeni tedarikçi eklemek için 
+                                    <a href="/procurement/suppliers/" target="_blank" class="text-decoration-none">
+                                        <i class="fas fa-external-link-alt me-1"></i>Tedarikçiler sayfasını
+                                    </a> 
+                                    ziyaret edin.
+                                </div>
                             </div>
                         </div>
+
+                        <!-- Supplier Information -->
+                        <div id="supplier-info-display" style="display: none;">
+                            <div class="card mb-3">
+                                <div class="card-header">
+                                    <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Tedarikçi Bilgileri</h6>
+                                </div>
+                                <div class="card-body">
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="supplier-info-item">
+                                                <div class="supplier-info-label">Tedarikçi Adı</div>
+                                                <div class="supplier-info-value" id="display-supplier-name">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="supplier-info-item">
+                                                <div class="supplier-info-label">İletişim Kişisi</div>
+                                                <div class="supplier-info-value" id="display-supplier-contact">-</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="row mt-2">
+                                        <div class="col-md-6">
+                                            <div class="supplier-info-item">
+                                                <div class="supplier-info-label">Telefon</div>
+                                                <div class="supplier-info-value" id="display-supplier-phone">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="supplier-info-item">
+                                                <div class="supplier-info-label">E-posta</div>
+                                                <div class="supplier-info-value" id="display-supplier-email">-</div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+
+                        
+                        <!-- Currency and Payment Terms -->
                         <div class="row mt-3">
                             <div class="col-md-6">
-                                <label class="form-label">Varsayılan Para Birimi</label>
-                                <select class="form-select" id="supplier-currency">
+                                <label class="form-label">Para Birimi <span class="text-danger">*</span></label>
+                                <select class="form-select" id="supplier-currency" required>
+                                    <option value="">Para birimi seçin...</option>
                                     <option value="TRY">Türk Lirası (₺)</option>
                                     <option value="USD">Amerikan Doları ($)</option>
                                     <option value="EUR">Euro (€)</option>
                                     <option value="GBP">İngiliz Sterlini (£)</option>
                                 </select>
                             </div>
+                            <div class="col-md-6">
+                                <label class="form-label">Ödeme Koşulları <span class="text-danger">*</span></label>
+                                <select class="form-select" id="supplier-payment-terms" required>
+                                    <option value="">Ödeme koşulu seçin...</option>
+                                </select>
+                                <div class="form-text">
+                                    <i class="fas fa-info-circle me-1"></i>
+                                    Yeni ödeme koşulu eklemek için 
+                                    <a href="/procurement/payment-terms/" target="_blank" class="text-decoration-none">
+                                        <i class="fas fa-external-link-alt me-1"></i>Ödeme Koşulları sayfasını
+                                    </a> 
+                                    ziyaret edin.
+                                </div>
+                            </div>
+                        </div>
 
+                        <!-- Default vs Chosen Values Display -->
+                        <div class="row mt-4" id="default-values-section" style="display: none;">
+                            <div class="col-12">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Varsayılan vs Seçilen Değerler</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <div class="default-values">
+                                                    <h6 class="text-muted">Varsayılan Değerler</h6>
+                                                    <div class="default-value-item">
+                                                        <span class="label">Para Birimi:</span>
+                                                        <span class="value" id="default-currency">-</span>
+                                                    </div>
+                                                    <div class="default-value-item">
+                                                        <span class="label">Ödeme Koşulları:</span>
+                                                        <span class="value" id="default-payment-terms">-</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <div class="chosen-values">
+                                                    <h6 class="text-primary">Seçilen Değerler</h6>
+                                                    <div class="chosen-value-item">
+                                                        <span class="label">Para Birimi:</span>
+                                                        <span class="value" id="chosen-currency">-</span>
+                                                    </div>
+                                                    <div class="chosen-value-item">
+                                                        <span class="label">Ödeme Koşulları:</span>
+                                                        <span class="value" id="chosen-payment-terms">-</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </form>
                 </div>
@@ -460,7 +546,7 @@
     </div>
 
     <!-- Offer Modal -->
-    <div class="modal fade" id="offerModal" tabindex="-1">
+    <div class="modal fade" id="offerModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
@@ -476,6 +562,11 @@
                             <strong>Para Birimi:</strong> <span id="offer-currency"></span>
                         </div>
                     </div>
+                    <div class="alert alert-info mb-3">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Bilgi:</strong> En az bir malzeme için hem birim fiyat hem de teslimat süresi girilmelidir. 
+                        <span class="text-danger">*</span> işaretli alanlar zorunludur.
+                    </div>
                     <div class="table-responsive">
                         <table class="table table-bordered" id="offer-table">
                             <thead class="table-light">
@@ -484,8 +575,8 @@
                                     <th>İş No</th>
                                     <th>Miktar</th>
                                     <th>Birim</th>
-                                    <th>Birim Fiyat</th>
-                                    <th>Teslimat Süresi</th>
+                                    <th>Birim Fiyat <span class="text-danger">*</span></th>
+                                    <th>Teslimat Süresi <span class="text-danger">*</span></th>
                                     <th>Notlar</th>
                                     <th>Toplam Fiyat</th>
                                 </tr>
