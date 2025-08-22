@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 # Create your models here.
 class PaymentType(models.Model):
@@ -25,6 +26,13 @@ class Supplier(models.Model):
     currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='TRY')
     default_currency = models.CharField(max_length=3, choices=CURRENCY_CHOICES, default='TRY')  # Fixed max_length
     default_payment_method = models.ForeignKey(PaymentType, on_delete=models.CASCADE, related_name="suppliers", null=True, blank=True)  # Fixed related_name
+    default_tax_rate = models.DecimalField(
+        max_digits=5, 
+        decimal_places=2, 
+        default=18.00, 
+        validators=[MinValueValidator(0), MaxValueValidator(100)],
+        help_text="Default tax rate as percentage (e.g., 18.00 for 18%)"
+    )
     
     # Metadata
     is_active = models.BooleanField(default=True)

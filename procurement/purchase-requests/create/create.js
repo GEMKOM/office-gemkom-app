@@ -196,20 +196,21 @@ async function populateRequestData(request) {
         order: item.order
     }));
     
-    // Load suppliers and offers
-    requestData.suppliers = [];
-    requestData.offers = {};
-    requestData.recommendations = {};
-    
-    request.offers.forEach(offer => {
-        const supplier = {
-            id: offer.supplier.id,
-            name: offer.supplier.name,
-            contact_person: offer.supplier.contact_person || '',
-            phone: offer.supplier.phone || '',
-            email: offer.supplier.email || '',
-            currency: offer.supplier.default_currency || 'TRY'
-        };
+            // Load suppliers and offers
+        requestData.suppliers = [];
+        requestData.offers = {};
+        requestData.recommendations = {};
+        
+        request.offers.forEach(offer => {
+            const supplier = {
+                id: offer.supplier.id,
+                name: offer.supplier.name,
+                contact_person: offer.supplier.contact_person || '',
+                phone: offer.supplier.phone || '',
+                email: offer.supplier.email || '',
+                currency: offer.supplier.default_currency || 'TRY',
+                tax_rate: offer.supplier.default_tax_rate || 18.00
+            };
         
         requestData.suppliers.push(supplier);
         

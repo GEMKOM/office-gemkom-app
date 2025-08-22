@@ -15,7 +15,7 @@ class SupplierSerializer(serializers.ModelSerializer):
         model = Supplier
         fields = [
             'id', 'name', 'contact_person', 'phone', 'email',
-            'currency', 'default_currency', 'default_payment_method',
+            'currency', 'default_currency', 'default_payment_method', 'default_tax_rate',
             'is_active', 'created_at', 'updated_at'
         ]
 

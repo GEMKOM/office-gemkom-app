@@ -53,9 +53,6 @@
                                 <button class="btn btn-sm btn-outline-secondary" id="export-purchase-orders">
                                     <i class="fas fa-download me-1"></i>Dışa Aktar
                                 </button>
-                                <button class="btn btn-sm btn-primary" id="create-invoice-btn">
-                                    <i class="fas fa-file-invoice-dollar me-1"></i>Fatura Oluştur
-                                </button>
                             </div>
                         </div>
                         <div class="card-body">
@@ -84,9 +81,7 @@
                                             <th class="sortable" data-field="created_at">
                                                 Oluşturulma Tarihi <i class="fas fa-sort sort-icon"></i>
                                             </th>
-                                            <th class="sortable" data-field="ordered_at">
-                                                Sipariş Tarihi <i class="fas fa-sort sort-icon"></i>
-                                            </th>
+                                            <th class="text-center">Ödeme Planı</th>
                                             <th class="text-center">İşlemler</th>
                                         </tr>
                                     </thead>
@@ -113,68 +108,7 @@
         </div>
     </section>
 
-    <!-- Create Invoice Modal -->
-    <div class="modal fade" id="createInvoiceModal" tabindex="-1" aria-labelledby="createInvoiceModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="createInvoiceModalLabel">
-                        <i class="fas fa-file-invoice-dollar me-2"></i>
-                        Fatura Oluştur
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="create-invoice-form">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="invoice-number" class="form-label">Fatura Numarası</label>
-                                    <input type="text" class="form-control" id="invoice-number" required>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="invoice-date" class="form-label">Fatura Tarihi</label>
-                                    <input type="date" class="form-control" id="invoice-date" required>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="due-date" class="form-label">Vade Tarihi</label>
-                                    <input type="date" class="form-control" id="due-date" required>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="payment-terms" class="form-label">Ödeme Koşulları</label>
-                                    <select class="form-select" id="payment-terms" required>
-                                        <option value="">Seçiniz</option>
-                                        <option value="30">30 gün</option>
-                                        <option value="60">60 gün</option>
-                                        <option value="90">90 gün</option>
-                                        <option value="immediate">Peşin</option>
-                                    </select>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="mb-3">
-                            <label for="invoice-notes" class="form-label">Notlar</label>
-                            <textarea class="form-control" id="invoice-notes" rows="3"></textarea>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
-                    <button type="button" class="btn btn-primary" id="confirm-create-invoice">
-                        <i class="fas fa-save me-1"></i>Fatura Oluştur
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+
 
     <!-- Purchase Order Details Modal -->
     <div class="modal fade" id="purchaseOrderDetailsModal" tabindex="-1" aria-labelledby="purchaseOrderDetailsModalLabel" aria-hidden="true">
@@ -192,8 +126,60 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
-                    <button type="button" class="btn btn-primary" id="create-invoice-from-details">
-                        <i class="fas fa-file-invoice-dollar me-1"></i>Fatura Oluştur
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mark Payment Schedule as Paid Modal -->
+    <div class="modal fade" id="markPaidModal" tabindex="-1" aria-labelledby="markPaidModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="markPaidModalLabel">
+                        <i class="fas fa-check-circle me-2 text-success"></i>
+                        Ödeme İşaretle
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Ödeme Planı:</strong> <span id="schedule-label"></span>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Ödeme Tutarı</label>
+                                <div class="input-group">
+                                    <input type="text" class="form-control" id="payment-amount" readonly>
+                                    <span class="input-group-text" id="payment-currency"></span>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-3">
+                                <label class="form-label">Vade Tarihi</label>
+                                <input type="text" class="form-control" id="payment-due-date" readonly>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="form-check">
+                            <input class="form-check-input" type="checkbox" id="paid-with-tax" checked>
+                            <label class="form-check-label" for="paid-with-tax">
+                                KDV dahil ödeme yapıldı
+                            </label>
+                        </div>
+                        <small class="form-text text-muted">
+                            Bu seçenek işaretliyse, ödeme KDV dahil olarak işaretlenir.
+                        </small>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-success" id="confirm-mark-paid">
+                        <i class="fas fa-check me-1"></i>Ödeme İşaretle
                     </button>
                 </div>
             </div>

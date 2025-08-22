@@ -180,3 +180,36 @@ export async function exportPurchaseOrders(filters = {}, format = 'excel') {
         throw error;
     }
 }
+
+/**
+ * Mark a payment schedule as paid
+ * @param {string|number} orderId - Purchase order ID
+ * @param {string|number} scheduleId - Payment schedule ID
+ * @param {boolean} paidWithTax - Whether the payment includes tax
+ * @returns {Promise<Object>} Updated purchase order
+ */
+export async function markSchedulePaid(orderId, scheduleId, paidWithTax) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/purchase-orders/${orderId}/mark_schedule_paid/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                schedule_id: scheduleId,
+                paid_with_tax: paidWithTax
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error marking schedule ${scheduleId} as paid for PO ${orderId}:`, error);
+        throw error;
+    }
+}

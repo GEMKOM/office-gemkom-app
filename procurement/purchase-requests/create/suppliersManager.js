@@ -48,9 +48,10 @@ export class SuppliersManager {
             });
         }
 
-        // Currency and payment terms change listeners
+        // Currency, payment terms and tax rate change listeners
         const currencySelect = document.getElementById('supplier-currency');
         const paymentTermsSelect = document.getElementById('supplier-payment-terms');
+        const taxRateInput = document.getElementById('supplier-tax-rate');
         
         if (currencySelect) {
             currencySelect.addEventListener('change', () => this.updateChosenValues());
@@ -58,6 +59,10 @@ export class SuppliersManager {
         
         if (paymentTermsSelect) {
             paymentTermsSelect.addEventListener('change', () => this.updateChosenValues());
+        }
+        
+        if (taxRateInput) {
+            taxRateInput.addEventListener('input', () => this.updateChosenValues());
         }
     }
 
@@ -94,12 +99,9 @@ export class SuppliersManager {
             
             // Hide all fields initially - user must select a supplier first
             this.hideAllFields();
-            
-            // Load available suppliers and payment terms from API
-            await Promise.all([
-                this.loadAvailableSuppliers(),
-                this.loadAvailablePaymentTerms()
-            ]);
+            await this.loadAvailablePaymentTerms();
+            await this.loadAvailableSuppliers();
+
         }
 
         // Hide default values section initially
@@ -215,18 +217,19 @@ export class SuppliersManager {
         // Show supplier info display instead of form fields
         this.showSupplierInfoDisplay(supplier);
         
-        // Show editable fields (currency and payment terms)
+        // Show editable fields (currency, payment terms and tax rate)
         this.showEditableFields();
         
-        // Set editable fields (currency and payment terms)
+        // Set editable fields (currency, payment terms and tax rate)
         const currencyField = document.getElementById('supplier-currency');
         const paymentTermsField = document.getElementById('supplier-payment-terms');
+        const taxRateField = document.getElementById('supplier-tax-rate');
 
         if (currencyField) currencyField.value = supplier.default_currency || '';
         
         // Set payment terms - try to find by ID first, then fallback to value
         if (paymentTermsField) {
-            const paymentTermId = supplier.payment_terms;
+            const paymentTermId = supplier.default_payment_terms;
             if (paymentTermId && this.availablePaymentTerms.length > 0) {
                 const foundPaymentTerm = this.availablePaymentTerms.find(pt => pt.id == paymentTermId);
                 if (foundPaymentTerm) {
@@ -238,6 +241,11 @@ export class SuppliersManager {
                 paymentTermsField.value = '';
             }
         }
+        
+        // Set tax rate
+        if (taxRateField) {
+            taxRateField.value = supplier.default_tax_rate || '18.00';
+        }
 
         // Show default values section
         this.showDefaultValuesSection(supplier);
@@ -247,13 +255,14 @@ export class SuppliersManager {
         const defaultValuesSection = document.getElementById('default-values-section');
         const defaultCurrency = document.getElementById('default-currency');
         const defaultPaymentTerms = document.getElementById('default-payment-terms');
+        const defaultTaxRate = document.getElementById('default-tax-rate');
         
         // Set default values
         if (defaultCurrency) {
             defaultCurrency.textContent = supplier.default_currency ? this.getCurrencyDisplayName(supplier.default_currency) : 'Belirtilmemiş';
         }
         if (defaultPaymentTerms) {
-            const paymentTermId = supplier.payment_terms;
+            const paymentTermId = supplier.default_payment_terms;
             if (paymentTermId && this.availablePaymentTerms.length > 0) {
                 const foundPaymentTerm = this.availablePaymentTerms.find(pt => pt.id == paymentTermId);
                 if (foundPaymentTerm) {
@@ -264,6 +273,9 @@ export class SuppliersManager {
             } else {
                 defaultPaymentTerms.textContent = 'Belirtilmemiş';
             }
+        }
+        if (defaultTaxRate) {
+            defaultTaxRate.textContent = supplier.default_tax_rate ? `${supplier.default_tax_rate}%` : 'Belirtilmemiş';
         }
 
         // Set chosen values (initially same as default)
@@ -278,8 +290,10 @@ export class SuppliersManager {
     updateChosenValues() {
         const currencySelect = document.getElementById('supplier-currency');
         const paymentTermsSelect = document.getElementById('supplier-payment-terms');
+        const taxRateInput = document.getElementById('supplier-tax-rate');
         const chosenCurrency = document.getElementById('chosen-currency');
         const chosenPaymentTerms = document.getElementById('chosen-payment-terms');
+        const chosenTaxRate = document.getElementById('chosen-tax-rate');
 
         if (chosenCurrency && currencySelect) {
             chosenCurrency.textContent = this.getCurrencyDisplayName(currencySelect.value);
@@ -296,6 +310,9 @@ export class SuppliersManager {
             } else {
                 chosenPaymentTerms.textContent = 'Seçilmedi';
             }
+        }
+        if (chosenTaxRate && taxRateInput) {
+            chosenTaxRate.textContent = taxRateInput.value ? `${taxRateInput.value}%` : 'Seçilmedi';
         }
     }
 
@@ -333,9 +350,11 @@ export class SuppliersManager {
     clearSupplierForm() {
         const currencyField = document.getElementById('supplier-currency');
         const paymentTermsField = document.getElementById('supplier-payment-terms');
+        const taxRateField = document.getElementById('supplier-tax-rate');
 
         if (currencyField) currencyField.value = '';
         if (paymentTermsField) paymentTermsField.value = '';
+        if (taxRateField) taxRateField.value = '';
     }
 
     populateSupplierForm(supplier) {
@@ -346,12 +365,13 @@ export class SuppliersManager {
         
         const currencyField = document.getElementById('supplier-currency');
         const paymentTermsField = document.getElementById('supplier-payment-terms');
+        const taxRateField = document.getElementById('supplier-tax-rate');
 
         if (currencyField) currencyField.value = supplier.default_currency || '';
         
         // Set payment terms - try to find by ID first, then fallback to value
         if (paymentTermsField) {
-            const paymentTermId = supplier.payment_terms;
+            const paymentTermId = supplier.default_payment_terms;
             if (paymentTermId && this.availablePaymentTerms.length > 0) {
                 const foundPaymentTerm = this.availablePaymentTerms.find(pt => pt.id == paymentTermId);
                 if (foundPaymentTerm) {
@@ -362,6 +382,11 @@ export class SuppliersManager {
             } else {
                 paymentTermsField.value = '';
             }
+        }
+        
+        // Set tax rate
+        if (taxRateField) {
+            taxRateField.value = supplier.tax_rate || supplier.default_tax_rate || '18.00';
         }
     }
 
@@ -380,8 +405,10 @@ export class SuppliersManager {
         // Get editable form values
         const currencyField = document.getElementById('supplier-currency');
         const paymentTermsField = document.getElementById('supplier-payment-terms');
+        const taxRateField = document.getElementById('supplier-tax-rate');
         const currency = currencyField ? currencyField.value : '';
         const paymentTerms = paymentTermsField ? paymentTermsField.value : '';
+        const taxRate = taxRateField ? parseFloat(taxRateField.value) : 0;
 
         // Validate required fields
         const errors = [];
@@ -390,6 +417,9 @@ export class SuppliersManager {
         }
         if (!paymentTerms) {
             errors.push('Ödeme koşulları seçimi zorunludur');
+        }
+        if (!taxRateField.value || isNaN(taxRate) || taxRate < 0 || taxRate > 100) {
+            errors.push('Geçerli bir vergi oranı giriniz (0-100 arası)');
         }
 
         // Show errors if any
@@ -425,7 +455,8 @@ export class SuppliersManager {
                 phone: cleanPhone,
                 email: cleanEmail,
                 default_currency: currency,
-                payment_terms: paymentTerms
+                payment_terms: paymentTerms,
+                tax_rate: taxRate
             };
         } else {
             // Editing existing supplier - get data from display fields
@@ -452,7 +483,8 @@ export class SuppliersManager {
                 phone: cleanPhone,
                 email: cleanEmail,
                 default_currency: currency,
-                payment_terms: paymentTerms
+                payment_terms: paymentTerms,
+                tax_rate: taxRate
             };
         }
 
@@ -541,7 +573,7 @@ export class SuppliersManager {
                     </div>
                                          <div class="supplier-info-item">
                          <div class="supplier-info-label">Ödeme Koşulları</div>
-                         <div class="supplier-info-value">${this.getPaymentTermsDisplayNameById(supplier.payment_terms)}</div>
+                         <div class="supplier-info-value">${this.getPaymentTermsDisplayNameById(supplier.default_payment_terms)}</div>
                      </div>
                 </div>
                 <div class="supplier-actions">

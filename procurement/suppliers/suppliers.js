@@ -307,7 +307,7 @@ function renderSuppliersTable(suppliers) {
     if (!suppliers || suppliers.length === 0) {
                  tbody.innerHTML = `
              <tr>
-                 <td colspan="8" class="text-center">
+                 <td colspan="9" class="text-center">
                     <div class="empty-state">
                         <i class="fas fa-building"></i>
                         <h5>Henüz tedarikçi bulunmuyor</h5>
@@ -348,12 +348,15 @@ function renderSuppliersTable(suppliers) {
             <td class="text-center">
                 <span class="currency-badge">${supplier.default_currency || 'TRY'}</span>
             </td>
-                         <td class="text-center">
-                 ${getStatusBadge(supplier.is_active)}
-             </td>
-             <td>
-                 <div class="payment-terms">${getPaymentTermName(supplier.default_payment_terms)}</div>
-             </td>
+            <td class="text-center">
+                <span class="tax-rate-badge">${supplier.default_tax_rate || '18.00'}%</span>
+            </td>
+            <td class="text-center">
+                ${getStatusBadge(supplier.is_active)}
+            </td>
+            <td>
+                <div class="payment-terms">${getPaymentTermName(supplier.default_payment_terms)}</div>
+            </td>
              <td class="text-center">
                 <div class="action-buttons">
                     <button class="btn btn-sm btn-outline-primary me-1" onclick="event.stopPropagation(); editSupplier(${supplier.id})">
@@ -522,6 +525,7 @@ function populateSupplierForm() {
     document.getElementById('supplier-phone').value = currentSupplier.phone || '';
     document.getElementById('supplier-email').value = currentSupplier.email || '';
     document.getElementById('supplier-currency').value = currentSupplier.default_currency || 'TRY';
+    document.getElementById('supplier-tax-rate').value = currentSupplier.default_tax_rate || '18.00';
     
     // Populate payment terms dropdown
     populatePaymentTermsDropdown();
@@ -574,13 +578,24 @@ async function saveSupplier() {
         return;
     }
     
+    // Validate tax rate
+    const taxRateInput = document.getElementById('supplier-tax-rate');
+    const taxRate = parseFloat(taxRateInput.value);
+    
+    if (!taxRateInput.value || isNaN(taxRate) || taxRate < 0 || taxRate > 100) {
+        showNotification('Geçerli bir vergi oranı giriniz (0-100 arası)', 'error');
+        taxRateInput.focus();
+        return;
+    }
+    
     const supplierData = {
         name: document.getElementById('supplier-name').value.trim(),
         contact_person: document.getElementById('supplier-contact').value.trim(),
         phone: document.getElementById('supplier-phone').value.trim(),
         email: document.getElementById('supplier-email').value.trim(),
         default_currency: document.getElementById('supplier-currency').value,
-        default_payment_terms: document.getElementById('supplier-payment-terms').value || null
+        default_payment_terms: document.getElementById('supplier-payment-terms').value || null,
+        default_tax_rate: taxRate
     };
     
     try {

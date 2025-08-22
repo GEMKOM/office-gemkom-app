@@ -98,6 +98,109 @@
     color: #28a745;
 }
 
+/* Payment Schedule Styles */
+.payment-schedule-item {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 0.75rem;
+    background: #f8f9fa;
+    transition: all 0.2s ease;
+}
+
+.payment-schedule-item:hover {
+    background: #e9ecef;
+    border-color: #dee2e6;
+}
+
+.payment-schedule-item .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+.payment-schedule-item .badge {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+}
+
+/* Payment Schedule Modal Styles */
+#markPaidModal .modal-body {
+    padding: 1.5rem;
+}
+
+#markPaidModal .alert {
+    border-radius: 8px;
+    border: none;
+}
+
+#markPaidModal .form-check {
+    margin-top: 1rem;
+}
+
+#markPaidModal .form-check-input:checked {
+    background-color: #28a745;
+    border-color: #28a745;
+}
+
+/* Payment Schedule Table Styles */
+.payment-schedule-table {
+    font-size: 0.9rem;
+}
+
+.payment-schedule-table th {
+    font-size: 0.8rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.payment-schedule-table td {
+    vertical-align: middle;
+    padding: 0.75rem 0.5rem;
+}
+
+.payment-schedule-table .badge {
+    font-size: 0.7rem;
+    padding: 0.25rem 0.5rem;
+}
+
+/* Payment Schedule Column in Main Table */
+.payment-schedule-column {
+    max-width: 300px;
+    min-width: 250px;
+}
+
+.payment-schedule-column .payment-schedule-item {
+    margin-bottom: 0.5rem;
+}
+
+.payment-schedule-column .payment-schedule-item:last-child {
+    margin-bottom: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+    .payment-schedule-column {
+        max-width: 250px;
+        min-width: 200px;
+    }
+}
+
+@media (max-width: 768px) {
+    .payment-schedule-column {
+        max-width: 200px;
+        min-width: 150px;
+    }
+    
+    .payment-schedule-item {
+        padding: 0.5rem;
+    }
+    
+    .payment-schedule-item .btn {
+        padding: 0.2rem 0.4rem;
+        font-size: 0.7rem;
+    }
+}
+
 /* Badge styling */
 .badge {
     font-size: 0.75rem;

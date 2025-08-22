@@ -80,13 +80,16 @@
                                             <th class="sortable" data-field="default_currency">
                                                 Para Birimi <i class="fas fa-sort sort-icon"></i>
                                             </th>
-                                                                                         <th class="sortable" data-field="is_active">
-                                                 Durum <i class="fas fa-sort sort-icon"></i>
-                                             </th>
-                                             <th class="sortable" data-field="payment_terms_name">
-                                                 Ödeme Koşulları <i class="fas fa-sort sort-icon"></i>
-                                             </th>
-                                             <th class="text-center">İşlemler</th>
+                                            <th class="sortable" data-field="default_tax_rate">
+                                                Vergi Oranı <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="is_active">
+                                                Durum <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="payment_terms_name">
+                                                Ödeme Koşulları <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="text-center">İşlemler</th>
                                         </tr>
                                     </thead>
                                     <tbody id="suppliers-table-body">
@@ -156,7 +159,7 @@
                             </div>
                         </div>
                         <div class="row">
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <div class="mb-3">
                                     <label for="supplier-currency" class="form-label">Varsayılan Para Birimi</label>
                                     <select class="form-select" id="supplier-currency">
@@ -167,12 +170,19 @@
                                     </select>
                                 </div>
                             </div>
-                            <div class="col-md-6">
+                            <div class="col-md-4">
                                 <div class="mb-3">
                                     <label for="supplier-payment-terms" class="form-label">Varsayılan Ödeme Koşulları</label>
                                     <select class="form-select" id="supplier-payment-terms">
                                         <option value="">Ödeme koşulu seçin...</option>
                                     </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label for="supplier-tax-rate" class="form-label">Varsayılan Vergi Oranı (%)</label>
+                                    <input type="number" class="form-control" id="supplier-tax-rate" min="0" max="100" step="0.01" value="18.00">
+                                    <div class="form-text">Vergi oranını yüzde olarak girin (örn: 18.00)</div>
                                 </div>
                             </div>
                         </div>
