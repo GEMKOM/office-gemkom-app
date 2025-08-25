@@ -79,6 +79,9 @@ export class DataManager {
                 const hoursDiff = (now - draftTime) / (1000 * 60 * 60);
                 
                 if (hoursDiff < 24) {
+                    // Migrate old data format if needed
+                    this.migrateSupplierData(draftData);
+                    
                     this.requestData.title = draftData.title || '';
                     this.requestData.description = draftData.description || '';
                     this.requestData.priority = draftData.priority || 'normal';
@@ -98,6 +101,29 @@ export class DataManager {
             localStorage.removeItem('purchaseRequestDraft');
         }
         return false;
+    }
+
+    migrateSupplierData(draftData) {
+        // Migrate suppliers from old field name to new field name
+        if (draftData.suppliers && Array.isArray(draftData.suppliers)) {
+            console.log('Migrating supplier data:', draftData.suppliers);
+            draftData.suppliers.forEach(supplier => {
+                // If supplier has old 'payment_terms' field, migrate it to 'default_payment_terms'
+                if (supplier.payment_terms !== undefined && supplier.default_payment_terms === undefined) {
+                    console.log('Migrating payment_terms to default_payment_terms for supplier:', supplier.name);
+                    supplier.default_payment_terms = supplier.payment_terms;
+                    delete supplier.payment_terms;
+                }
+                
+                // If supplier has old 'tax_rate' field, migrate it to 'default_tax_rate'
+                if (supplier.tax_rate !== undefined && supplier.default_tax_rate === undefined) {
+                    console.log('Migrating tax_rate to default_tax_rate for supplier:', supplier.name);
+                    supplier.default_tax_rate = supplier.tax_rate;
+                    delete supplier.tax_rate;
+                }
+            });
+            console.log('Migration completed:', draftData.suppliers);
+        }
     }
 
     clearDraft() {
@@ -147,6 +173,9 @@ export class DataManager {
                     if (!importData.items || !importData.suppliers) {
                         throw new Error('Geçersiz veri formatı');
                     }
+                    
+                    // Migrate old data format if needed
+                    this.migrateSupplierData(importData);
                     
                     this.requestData.title = importData.title || '';
                     this.requestData.description = importData.description || '';

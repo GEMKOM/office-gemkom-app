@@ -147,6 +147,12 @@ export class SuppliersManager {
                     paymentTermsSelect.appendChild(option);
                 });
             }
+            
+            // Re-render suppliers container after payment terms are loaded
+            // This ensures payment terms are displayed correctly after page refresh
+            if (this.requestData.suppliers.length > 0) {
+                this.renderSuppliersContainer();
+            }
         } catch (error) {
             console.error('Error loading payment terms:', error);
             this.showNotification('Ödeme koşulları yüklenirken hata oluştu: ' + error.message, 'error');
@@ -386,7 +392,7 @@ export class SuppliersManager {
         
         // Set tax rate
         if (taxRateField) {
-            taxRateField.value = supplier.tax_rate || supplier.default_tax_rate || '18.00';
+            taxRateField.value = supplier.default_tax_rate || '18.00';
         }
     }
 
@@ -455,8 +461,8 @@ export class SuppliersManager {
                 phone: cleanPhone,
                 email: cleanEmail,
                 default_currency: currency,
-                payment_terms: paymentTerms,
-                tax_rate: taxRate
+                default_payment_terms: paymentTerms,
+                default_tax_rate: taxRate
             };
         } else {
             // Editing existing supplier - get data from display fields
@@ -483,8 +489,8 @@ export class SuppliersManager {
                 phone: cleanPhone,
                 email: cleanEmail,
                 default_currency: currency,
-                payment_terms: paymentTerms,
-                tax_rate: taxRate
+                default_payment_terms: paymentTerms,
+                default_tax_rate: taxRate
             };
         }
 
@@ -497,7 +503,13 @@ export class SuppliersManager {
         }
 
         this.renderSuppliersContainer();
-        this.autoSave();
+        
+        // Save immediately instead of using delayed autoSave
+        this.saveImmediately();
+        
+        // Debug: Log the saved supplier data
+        console.log('Saved supplier data:', supplier);
+        console.log('All suppliers after save:', this.requestData.suppliers);
 
         // Close modal
         bootstrap.Modal.getInstance(document.getElementById('supplierModal')).hide();
@@ -511,7 +523,7 @@ export class SuppliersManager {
             this.requestData.suppliers.splice(index, 1);
             
             this.renderSuppliersContainer();
-            this.autoSave();
+            this.saveImmediately();
         }
     }
 
@@ -522,13 +534,15 @@ export class SuppliersManager {
             this.requestData.offers = {};
             this.requestData.recommendations = {};
             this.renderSuppliersContainer();
-            this.autoSave();
+            this.saveImmediately();
         }
     }
 
     renderSuppliersContainer() {
         const container = document.getElementById('suppliers-container');
         container.innerHTML = '';
+
+        console.log('Rendering suppliers container with data:', this.requestData.suppliers);
 
         if (this.requestData.suppliers.length === 0) {
             container.innerHTML = `
@@ -571,10 +585,16 @@ export class SuppliersManager {
                         <div class="supplier-info-label">Para Birimi</div>
                         <div class="supplier-info-value">${this.currencySymbols[supplier.default_currency]} ${supplier.default_currency}</div>
                     </div>
-                                         <div class="supplier-info-item">
-                         <div class="supplier-info-label">Ödeme Koşulları</div>
-                         <div class="supplier-info-value">${this.getPaymentTermsDisplayNameById(supplier.default_payment_terms)}</div>
-                     </div>
+                    <div class="supplier-info-item">
+                        <div class="supplier-info-label">Ödeme Koşulları</div>
+                        <div class="supplier-info-value">
+                            ${this.getPaymentTermsDisplayNameById(supplier.default_payment_terms)}
+                        </div>
+                    </div>
+                    <div class="supplier-info-item">
+                        <div class="supplier-info-label">Vergi Oranı</div>
+                        <div class="supplier-info-value">${supplier.default_tax_rate ? `${supplier.default_tax_rate}%` : 'Belirtilmemiş'}</div>
+                    </div>
                 </div>
                 <div class="supplier-actions">
                     <button class="btn btn-primary btn-sm" onclick="window.suppliersManager.showOfferModal('${supplier.id}')">
@@ -599,6 +619,34 @@ export class SuppliersManager {
 
     generateSupplierId() {
         return 'supplier_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    saveImmediately() {
+        // Save to localStorage immediately
+        try {
+            const draftData = {
+                title: this.requestData.title,
+                description: this.requestData.description,
+                priority: this.requestData.priority,
+                items: this.requestData.items,
+                suppliers: this.requestData.suppliers,
+                offers: this.requestData.offers,
+                recommendations: this.requestData.recommendations,
+                itemRecommendations: this.requestData.itemRecommendations,
+                timestamp: new Date().toISOString()
+            };
+            
+            localStorage.setItem('purchaseRequestDraft', JSON.stringify(draftData));
+            console.log('Data saved immediately to localStorage');
+            
+            // Update comparison table when supplier data changes
+            if (window.comparisonManager) {
+                window.comparisonManager.renderComparisonTable();
+                window.comparisonManager.updateSummary();
+            }
+        } catch (error) {
+            console.error('Error saving data immediately:', error);
+        }
     }
 
     showNotification(message, type = 'info') {
@@ -795,7 +843,7 @@ export class SuppliersManager {
         this.requestData.offers[supplierId] = offers;
         
         this.renderSuppliersContainer();
-        this.autoSave();
+        this.saveImmediately();
         
         // Re-validate all items to update error states when offers are added
         if (window.validationManager) {

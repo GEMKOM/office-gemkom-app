@@ -443,6 +443,13 @@
     margin-top: 0.25rem;
 }
 
+.supplier-payment-terms {
+    font-size: 0.7rem;
+    color: #28a745;
+    margin-top: 0.25rem;
+    font-weight: 500;
+}
+
 .item-info {
     text-align: left;
 }

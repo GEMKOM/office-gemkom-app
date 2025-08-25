@@ -36,6 +36,15 @@ document.addEventListener('DOMContentLoaded', function() {
         onRefreshClick: loadPurchaseOrders
     });
     
+    // Check for order ID in URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const orderId = urlParams.get('order');
+    
+    if (orderId) {
+        // Store the order ID to show modal after data loads
+        window.pendingOrderId = orderId;
+    }
+    
     // Initialize statistics cards component
     window.purchaseOrdersStats = new StatisticsCards('purchase-orders-statistics', {
         cards: [
@@ -149,6 +158,17 @@ function addEventListeners() {
     
     // Handle paid with tax checkbox change
     document.getElementById('paid-with-tax').addEventListener('change', updatePaymentAmountDisplay);
+    
+    // Handle modal close to clean up URL
+    const purchaseOrderDetailsModal = document.getElementById('purchaseOrderDetailsModal');
+    if (purchaseOrderDetailsModal) {
+        purchaseOrderDetailsModal.addEventListener('hidden.bs.modal', function () {
+            // Remove order parameter from URL when modal is closed
+            const url = new URL(window.location);
+            url.searchParams.delete('order');
+            window.history.pushState({}, '', url);
+        });
+    }
 }
 
 // Load purchase orders
@@ -162,6 +182,29 @@ async function loadPurchaseOrders() {
         renderPurchaseOrdersTable();
         renderStatistics();
         renderPagination();
+        
+        // Check if there's a pending order ID to show modal
+        if (window.pendingOrderId) {
+            const orderId = parseInt(window.pendingOrderId);
+            const order = currentPurchaseOrders.find(o => o.id === orderId);
+            
+            if (order) {
+                // Show the modal for the specified order
+                await viewPurchaseOrderDetails(orderId);
+                // Clear the pending order ID
+                window.pendingOrderId = null;
+            } else {
+                // Order not found in current data, try to fetch it directly
+                try {
+                    await viewPurchaseOrderDetails(orderId);
+                    window.pendingOrderId = null;
+                } catch (error) {
+                    console.error('Order not found:', orderId);
+                    showErrorMessage('Belirtilen sipariş bulunamadı.');
+                    window.pendingOrderId = null;
+                }
+            }
+        }
         
     } catch (error) {
         console.error('Error loading purchase orders:', error);
@@ -281,11 +324,24 @@ function renderPaymentSchedules(order) {
                             <span class="text-${statusClass}">
                                 <strong>${formatCurrency(schedule.amount, schedule.currency)}</strong>
                             </span>
-                            ${schedule.effective_tax_due > 0 ? `
-                                <span class="text-${order.tax_outstanding > 0 ? 'danger' : 'success'}">
-                                    <small>+ ${formatCurrency(schedule.effective_tax_due, schedule.currency)} (KDV)</small>
-                                </span>
-                            ` : ''}
+                            ${isPaid ? 
+                                // For paid items, show the tax amount that was actually paid
+                                (schedule.paid_with_tax ? `
+                                    <span class="text-success">
+                                        <small>+ ${formatCurrency(schedule.base_tax || 0, schedule.currency)} (KDV Ödendi)</small>
+                                    </span>
+                                ` : `
+                                    <span class="text-muted">
+                                        <small>+ ${formatCurrency(0, schedule.currency)} (KDV Ödendi)</small>
+                                    </span>
+                                `) :
+                                // For unpaid items, show the tax amount due
+                                (schedule.effective_tax_due > 0 ? `
+                                    <span class="text-${order.tax_outstanding > 0 ? 'danger' : 'success'}">
+                                        <small>+ ${formatCurrency(schedule.effective_tax_due, schedule.currency)} (KDV)</small>
+                                    </span>
+                                ` : '')
+                            }
                         </div>
                         <small class="text-muted">Vade: ${formatDate(schedule.due_date)}</small>
                     </div>
@@ -466,6 +522,11 @@ async function viewPurchaseOrderDetails(orderId) {
         const order = await getPurchaseOrderById(orderId);
         selectedPurchaseOrder = order;
         
+        // Update URL to include the order ID
+        const url = new URL(window.location);
+        url.searchParams.set('order', orderId);
+        window.history.pushState({}, '', url);
+        
         const modal = new bootstrap.Modal(document.getElementById('purchaseOrderDetailsModal'));
         const content = document.getElementById('purchase-order-details-content');
         
@@ -532,7 +593,15 @@ async function viewPurchaseOrderDetails(orderId) {
                                                     ${statusText}
                                                 </span>
                                             </td>
-                                            <td class="text-end">${formatCurrency(schedule.effective_tax_due, schedule.currency)}</td>
+                                                                                         <td class="text-end">
+                                                 ${isPaid ? 
+                                                     (schedule.paid_with_tax ? 
+                                                         formatCurrency(schedule.base_tax || 0, schedule.currency) : 
+                                                         formatCurrency(0, schedule.currency)
+                                                     ) : 
+                                                     formatCurrency(schedule.effective_tax_due, schedule.currency)
+                                                 }
+                                             </td>
                                             <td class="text-center">
                                                 ${!isPaid ? `
                                                     <button class="btn btn-sm btn-outline-success" 

@@ -7,7 +7,7 @@ import { ComparisonManager } from './comparisonManager.js';
 import { DataManager } from './dataManager.js';
 import { ValidationManager } from './validationManager.js';
 import { fetchCurrencyRates } from '../../../generic/formatters.js';
-import { createPurchaseRequest, updatePurchaseRequest, submitPurchaseRequest, getPurchaseRequest, getPurchaseRequests } from '../../../generic/procurement.js';
+import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft } from '../../../generic/procurement.js';
 
 // Global state
 let headerComponent;
@@ -32,9 +32,7 @@ let requestData = {
     itemRecommendations: {}
 };
 
-// Edit mode state
-let isEditMode = false;
-let editingRequestId = null;
+
 
 // Currency conversion rates - will be fetched from backend
 let currencyRates = null;
@@ -46,6 +44,38 @@ const currencySymbols = {
     EUR: '€',
     GBP: '£'
 };
+
+// Function to transform suppliers data for backend submission (remove default_ prefix)
+function transformSuppliersForSubmission(suppliers) {
+    return suppliers.map(supplier => {
+        const transformedSupplier = { ...supplier };
+        
+        // Transform default_currency to currency
+        if (transformedSupplier.default_currency) {
+            transformedSupplier.currency = transformedSupplier.default_currency;
+            delete transformedSupplier.default_currency;
+        }
+        
+        // Transform default_payment_terms to payment_terms_id (integer)
+        if (transformedSupplier.default_payment_terms) {
+            // Convert to integer if it's a string, or keep as is if it's already a number
+            const paymentTermsId = typeof transformedSupplier.default_payment_terms === 'string' 
+                ? parseInt(transformedSupplier.default_payment_terms, 10) 
+                : transformedSupplier.default_payment_terms;
+            
+            transformedSupplier.payment_terms_id = paymentTermsId;
+            delete transformedSupplier.default_payment_terms;
+        }
+        
+        // Transform default_tax_rate to tax_rate
+        if (transformedSupplier.default_tax_rate) {
+            transformedSupplier.tax_rate = transformedSupplier.default_tax_rate;
+            delete transformedSupplier.default_tax_rate;
+        }
+        
+        return transformedSupplier;
+    });
+}
 
 // Function to calculate total amount in EUR from recommended suppliers
 function calculateTotalAmountEUR() {
@@ -84,12 +114,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     initNavbar();
     
+    // Initialize data manager first and load draft data
+    dataManager = new DataManager(requestData);
+    const draftLoaded = dataManager.loadDraftData();
+    
     initializeManagers();
     
     initializeHeader();
-    
-    // Load draft before rendering to ensure we don't double-attach
-    const draftLoaded = dataManager.loadDraftData();
     
     // Fetch currency rates and then render everything
     currencyRates = await fetchCurrencyRates();
@@ -99,7 +130,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeFormFieldListeners();
     
     // Now render all components with proper currency rates
-    renderAll();
+    await renderAll();
     
 });
 
@@ -107,8 +138,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function initializeHeader() {
     const headerConfig = {
-        title: isEditMode ? 'Satın Alma Talebi Düzenle' : 'Satın Alma Talebi Oluştur',
-        subtitle: isEditMode ? 'Mevcut talebi düzenleyin ve gönderin' : 'Malzeme ve tedarikçi bilgilerini girin',
+        title: 'Satın Alma Talebi Oluştur',
+        subtitle: 'Malzeme ve tedarikçi bilgilerini girin',
         icon: 'file-invoice',
         showBackButton: 'block',
         showCreateButton: 'block',
@@ -117,22 +148,18 @@ function initializeHeader() {
         showRefreshButton: 'none',
         createButtonText: 'Taslak Kaydet',
         bulkCreateButtonText: 'Taslakları Görüntüle',
-        exportButtonText: isEditMode ? 'Güncelle ve Gönder' : 'Gönder',
+        exportButtonText: 'Gönder',
         onBackClick: () => {
             window.history.back();
         },
         onCreateClick: () => {
-            saveDraftToBackend();
+            saveDraftAsJSON();
         },
         onBulkCreateClick: () => {
             showDraftRequestsModal();
         },
         onExportClick: () => {
-            if (isEditMode) {
-                updateAndSubmitRequest();
-            } else {
                 submitRequest();
-            }
         }
     };
     
@@ -140,27 +167,29 @@ function initializeHeader() {
 }
 
 function initializeManagers() {
-    // Initialize data manager first
-    dataManager = new DataManager(requestData);
+    // Data manager is already initialized in the main initialization
     
     // Initialize validation manager
     validationManager = new ValidationManager();
     
     // Initialize other managers
-    itemsManager = new ItemsManager(requestData, () => {
+    itemsManager = new ItemsManager(requestData, async () => {
         dataManager.autoSave();
-        renderAll();
+        await renderAll();
     });
     
-    suppliersManager = new SuppliersManager(requestData, () => {
+    suppliersManager = new SuppliersManager(requestData, async () => {
         dataManager.autoSave();
-        renderAll();
+        await renderAll();
     }, currencySymbols);
     
-    comparisonManager = new ComparisonManager(requestData, () => {
+    comparisonManager = new ComparisonManager(requestData, async () => {
         dataManager.autoSave();
-        renderAll();
+        await renderAll();
     }, currencyRates, currencySymbols);
+    
+    // Load payment terms for suppliers manager to ensure proper display
+    suppliersManager.loadAvailablePaymentTerms();
     
     // Make managers globally accessible for onclick handlers
     window.itemsManager = itemsManager;
@@ -171,139 +200,132 @@ function initializeManagers() {
 
 
 
-async function populateRequestData(request) {
-    // Populate request data
-    requestData.requestNumber = request.request_number;
-    requestData.requestDate = request.created_at;
-    requestData.requestor = request.requestor;
-    requestData.title = request.title || '';
-    requestData.description = request.description || '';
-    requestData.priority = request.priority || 'normal';
-
-    requestData.needed_date = request.needed_date || '';
-    
-    // Load items
-    requestData.items = request.request_items.map(item => ({
-        id: item.item.id,
-        purchase_request_item_id: item.id, // Add the purchase_request_item.id
-        code: item.item.code,
-        name: item.item.name,
-        job_no: item.item.job_no || '',
-        quantity: parseFloat(item.quantity),
-        unit: item.item.unit,
-
-        specifications: item.specifications || '',
-        order: item.order
-    }));
-    
-            // Load suppliers and offers
-        requestData.suppliers = [];
-        requestData.offers = {};
-        requestData.recommendations = {};
-        
-        request.offers.forEach(offer => {
-            const supplier = {
-                id: offer.supplier.id,
-                name: offer.supplier.name,
-                contact_person: offer.supplier.contact_person || '',
-                phone: offer.supplier.phone || '',
-                email: offer.supplier.email || '',
-                currency: offer.supplier.default_currency || 'TRY',
-                tax_rate: offer.supplier.default_tax_rate || 18.00
-            };
-        
-        requestData.suppliers.push(supplier);
-        
-        // Load item offers for this supplier
-        const supplierOffers = {};
-        offer.item_offers.forEach(itemOffer => {
-            // Find the item by matching the purchase_request_item.id
-            const itemIndex = requestData.items.findIndex(item => 
-                item.purchase_request_item_id === itemOffer.purchase_request_item
-            );
-            
-            if (itemIndex !== -1) {
-                supplierOffers[itemIndex] = {
-                    unitPrice: parseFloat(itemOffer.unit_price),
-                    totalPrice: parseFloat(itemOffer.total_price),
-                    deliveryDays: itemOffer.delivery_days,
-                    notes: itemOffer.notes || ''
-                };
-                
-                // Check if this item is recommended for this supplier
-                if (itemOffer.is_recommended) {
-                    if (!requestData.itemRecommendations) {
-                        requestData.itemRecommendations = {};
-                    }
-                    requestData.itemRecommendations[itemIndex] = supplier.id;
+async function saveDraftAsJSON() {
+    try {
+        // Convert itemRecommendations to recommendations format
+        const recommendations = {};
+        if (requestData.itemRecommendations) {
+            Object.keys(requestData.itemRecommendations).forEach(itemIndex => {
+                const recommendedSupplierId = requestData.itemRecommendations[itemIndex];
+                if (recommendedSupplierId) {
+                    recommendations[itemIndex] = recommendedSupplierId;
                 }
+            });
+        }
+        
+        // Calculate total amount in EUR from recommended suppliers
+        const totalAmountEUR = calculateTotalAmountEUR();
+        
+        // Get formatted items and mapping
+        const formattedData = itemsManager.getFormattedItemsForSubmission();
+        
+        // Transform offers and recommendations using the mapping
+        const transformedOffers = {};
+        const transformedRecommendations = {};
+        
+        Object.keys(requestData.offers).forEach(supplierId => {
+            transformedOffers[supplierId] = {};
+            Object.keys(requestData.offers[supplierId]).forEach(originalIndex => {
+                const groupedIndex = formattedData.mapping[originalIndex];
+                if (groupedIndex !== undefined) {
+                    transformedOffers[supplierId][groupedIndex] = requestData.offers[supplierId][originalIndex];
+                }
+            });
+        });
+        
+        Object.keys(recommendations).forEach(originalIndex => {
+            const groupedIndex = formattedData.mapping[originalIndex];
+            if (groupedIndex !== undefined) {
+                transformedRecommendations[groupedIndex] = recommendations[originalIndex];
             }
         });
         
-        requestData.offers[supplier.id] = supplierOffers;
-    });
-    
-    // Update the UI
-    renderAll();
+        // Transform suppliers for backend submission
+        const transformedSuppliers = transformSuppliersForSubmission(requestData.suppliers);
+        
+        // Prepare data for backend (same format as submission)
+        const submissionData = {
+            title: requestData.title || 'Malzeme Satın Alma Talebi',
+            description: requestData.description || 'Proje için gerekli malzemeler',
+            priority: requestData.priority || 'normal',
+            needed_date: requestData.needed_date || '',
+            items: formattedData.items,
+            suppliers: transformedSuppliers,
+            offers: transformedOffers,
+            recommendations: transformedRecommendations,
+            total_amount_eur: totalAmountEUR
+        };
+        
+        // Prepare draft data according to the model structure
+        const draftData = {
+            title: requestData.title || 'Malzeme Satın Alma Talebi',
+            description: requestData.description || 'Proje için gerekli malzemeler',
+            needed_date: requestData.needed_date || new Date().toISOString().split('T')[0],
+            priority: requestData.priority || 'normal',
+            data: submissionData  // Store the full submission data in the JSON field
+        };
+        
+        // Send to backend
+        const result = await savePurchaseRequestDraft(draftData);
+        
+        // Log the JSON data for debugging
+        console.log('Draft Data as JSON:', JSON.stringify(draftData, null, 2));
+        console.log('Backend response:', result);
+        
+        showNotification('Taslak başarıyla kaydedildi!', 'success');
+        
+        // Clear the page after successful draft save
+        await clearPage();
+        
+    } catch (error) {
+        console.error('Draft save error:', error);
+        showNotification('Taslak kaydedilirken hata oluştu: ' + error.message, 'error');
+    }
 }
 
 async function showDraftRequestsModal() {
-    let requests = [];
+    let drafts = [];
     try {
-        // Get current user for filtering
-        let currentUser = null;
-        try {
-            const { getUser } = await import('../../../authService.js');
-            currentUser = await getUser();
-        } catch (error) {
-            console.error('Error fetching current user:', error);
-        }
-        
-        // Build API filters for current user and draft status
-        const apiFilters = {
-            status: 'draft'
-        };
-        
-        // Add user filter (send user ID)
-        if (currentUser && currentUser.id) {
-            apiFilters.requestor = currentUser.id;
-        }
-        
-        // Load draft requests with backend filtering
-        const response = await getPurchaseRequests(apiFilters);
-        // Ensure we have an array of requests
+        // Load draft requests from the new endpoint
+        const response = await getPurchaseRequestDrafts();
+        // Ensure we have an array of drafts
         if (Array.isArray(response)) {
-            requests = response;
+            drafts = response;
         } else if (response && Array.isArray(response.results)) {
-            requests = response.results;
+            drafts = response.results;
         } else {
-            requests = [];
+            drafts = [];
         }
         
         const tbody = document.getElementById('draft-requests-tbody');
         const emptyDiv = document.getElementById('draft-requests-empty');
         const table = document.getElementById('draft-requests-table');
         
-        if (!requests || requests.length === 0) {
+        if (!drafts || drafts.length === 0) {
             table.style.display = 'none';
             emptyDiv.style.display = 'block';
         } else {
             table.style.display = 'table';
             emptyDiv.style.display = 'none';
             
-            tbody.innerHTML = requests.map(request => `
+            tbody.innerHTML = drafts.map(draft => `
                 <tr>
                     <td>
-                        <span class="fw-bold text-primary">${request.request_number}</span>
+                        <span class="fw-bold text-primary">${draft.id}</span>
                     </td>
-                    <td>${request.title || 'Başlıksız'}</td>
-                    <td>${formatDate(request.created_at)}</td>
-                    <td>${request.request_items?.length || 0}</td>
-                    <td>${request.offers?.length || 0}</td>
+                    <td>${draft.title || 'Başlıksız'}</td>
+                    <td>${formatDate(draft.created_at)}</td>
+                    <td>${draft.data?.items?.length || 0}</td>
+                    <td>${draft.data?.suppliers?.length || 0}</td>
                     <td>
-                        <button class="btn btn-primary btn-sm" onclick="loadDraftRequest(${request.id})">
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-primary btn-sm" onclick="loadDraftRequest(${draft.id})">
                             <i class="fas fa-edit me-1"></i>Düzenle
                         </button>
+                            <button class="btn btn-danger btn-sm" onclick="deleteDraftRequest(${draft.id})">
+                                <i class="fas fa-trash me-1"></i>Sil
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `).join('');
@@ -319,28 +341,97 @@ async function showDraftRequestsModal() {
     }
 }
 
-async function loadDraftRequest(requestId) {
+async function loadDraftRequest(draftId) {
     try {
         // Close the modal
         const modal = bootstrap.Modal.getInstance(document.getElementById('draftRequestsModal'));
         modal.hide();
         
-        // Set edit mode
-        isEditMode = true;
-        editingRequestId = requestId;
+        // Load the specific draft data by ID
+        const draft = await getPurchaseRequestDraft(draftId);
         
-        // Update header
-        initializeHeader();
+        if (!draft) {
+            showNotification('Taslak bulunamadı', 'error');
+            return;
+        }
         
-        // Load the request data
-        const request = await getPurchaseRequest(requestId);
-        await populateRequestData(request);
+        // Load the draft data into the form
+        await loadDraftData(draft);
         
-        showNotification('Taslak talep yüklendi', 'success');
+        showNotification('Taslak yüklendi', 'success');
         
     } catch (error) {
         console.error('Error loading draft request:', error);
-        showNotification('Taslak talep yüklenirken hata oluştu: ' + error.message, 'error');
+        showNotification('Taslak yüklenirken hata oluştu: ' + error.message, 'error');
+    }
+}
+
+async function loadDraftData(draft) {
+    try {
+        // Load basic form data
+        requestData.title = draft.title || '';
+        requestData.description = draft.description || '';
+        requestData.priority = draft.priority || 'normal';
+        requestData.needed_date = draft.needed_date || '';
+        
+        // Load data from the JSON field
+        if (draft.data) {
+            requestData.items = draft.data.items || [];
+            requestData.suppliers = draft.data.suppliers || [];
+            requestData.offers = draft.data.offers || {};
+            requestData.recommendations = draft.data.recommendations || {};
+            
+            // Convert recommendations back to itemRecommendations format
+            requestData.itemRecommendations = {};
+            if (draft.data.recommendations) {
+                Object.keys(draft.data.recommendations).forEach(itemIndex => {
+                    const supplierId = draft.data.recommendations[itemIndex];
+                    if (supplierId) {
+                        requestData.itemRecommendations[itemIndex] = supplierId;
+                    }
+                });
+            }
+        }
+        
+        // Update managers with the loaded data
+        if (itemsManager) {
+            itemsManager.requestData = requestData;
+        }
+        if (suppliersManager) {
+            suppliersManager.requestData = requestData;
+        }
+        if (comparisonManager) {
+            comparisonManager.requestData = requestData;
+        }
+        
+        // Re-render everything
+        await renderAll();
+        
+    } catch (error) {
+        console.error('Error loading draft data:', error);
+        throw error;
+    }
+}
+
+async function deleteDraftRequest(draftId) {
+    try {
+        // Show confirmation dialog
+        if (!confirm('Bu taslağı silmek istediğinizden emin misiniz?')) {
+            return;
+        }
+        
+        // Delete the draft
+        await deletePurchaseRequestDraft(draftId);
+        
+        // Show success notification
+        showNotification('Taslak başarıyla silindi!', 'success');
+        
+        // Refresh the modal to show updated list
+        await showDraftRequestsModal();
+        
+    } catch (error) {
+        console.error('Error deleting draft request:', error);
+        showNotification('Taslak silinirken hata oluştu: ' + error.message, 'error');
     }
 }
 
@@ -352,9 +443,14 @@ function updateComparisonManagerRates() {
     }
 }
 
-function renderAll() {
+async function renderAll() {
     renderFormFields();
     itemsManager.renderItemsTable();
+    
+    // Wait for payment terms to be loaded before rendering suppliers
+    if (suppliersManager.availablePaymentTerms.length === 0) {
+        await suppliersManager.loadAvailablePaymentTerms();
+    }
     suppliersManager.renderSuppliersContainer();
     
     // Only render comparison if currency rates are available
@@ -464,195 +560,7 @@ function initializeFormFieldListeners() {
     }
 }
 
-async function updateAndSubmitRequest() {
-    // Disable submit button to prevent multiple submissions
-    const exportBtn = document.getElementById('export-btn');
-    if (exportBtn) {
-        exportBtn.disabled = true;
-        exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gönderiliyor...';
-    }
-    
-    try {
-        // Validate form fields using validation manager
-        const formData = {
-            'request-title': requestData.title || '',
-            'request-description': requestData.description || '',
-            'needed-date': requestData.needed_date || ''
-        };
-        
-        // Comprehensive validation using validation manager
-        const validation = validationManager.validateAllData(
-            formData, 
-            requestData.items, 
-            requestData.suppliers, 
-            requestData.itemRecommendations,
-            requestData.offers
-        );
-        
-        if (!validation.isValid) {
-            // Show field-specific validation errors for form fields
-            const formErrorField = validationManager.showAllFieldValidations(formData);
-            
-            // Mark items without recommendations and offers visually and show errors on table
-            const tableErrorElement = validationManager.markItemsWithoutRecommendations(requestData.items, requestData.itemRecommendations, requestData.offers, requestData.suppliers);
-            
-            // Scroll to the first error
-            validationManager.scrollToFirstError(formErrorField, tableErrorElement);
-            
-            // Re-enable submit button after validation failure
-            if (exportBtn) {
-                exportBtn.disabled = false;
-                exportBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Gönder';
-            }
-            return;
-        }
-        
-        // Convert itemRecommendations to recommendations format
-        const recommendations = {};
-        if (requestData.itemRecommendations) {
-            Object.keys(requestData.itemRecommendations).forEach(itemIndex => {
-                const recommendedSupplierId = requestData.itemRecommendations[itemIndex];
-                if (recommendedSupplierId) {
-                    recommendations[itemIndex] = recommendedSupplierId;
-                }
-            });
-        }
-        
-        // Calculate total amount in EUR from recommended suppliers
-        const totalAmountEUR = calculateTotalAmountEUR();
-        
-        // Get formatted items and mapping
-        const formattedData = itemsManager.getFormattedItemsForSubmission();
-        
-        // Transform offers and recommendations using the mapping
-        const transformedOffers = {};
-        const transformedRecommendations = {};
-        
-        Object.keys(requestData.offers).forEach(supplierId => {
-            transformedOffers[supplierId] = {};
-            Object.keys(requestData.offers[supplierId]).forEach(originalIndex => {
-                const groupedIndex = formattedData.mapping[originalIndex];
-                if (groupedIndex !== undefined) {
-                    transformedOffers[supplierId][groupedIndex] = requestData.offers[supplierId][originalIndex];
-                }
-            });
-        });
-        
-        Object.keys(recommendations).forEach(originalIndex => {
-            const groupedIndex = formattedData.mapping[originalIndex];
-            if (groupedIndex !== undefined) {
-                transformedRecommendations[groupedIndex] = recommendations[originalIndex];
-            }
-        });
-        
-        // Prepare data for backend
-        const submitData = {
-            title: requestData.title.trim(),
-            description: requestData.description.trim(),
-            priority: requestData.priority || 'normal',
-            needed_date: requestData.needed_date,
-            items: formattedData.items,
-            suppliers: requestData.suppliers,
-            offers: transformedOffers,
-            recommendations: transformedRecommendations,
-            total_amount_eur: totalAmountEUR
-        };
-        
-        // Update the existing purchase request
-        const result = await updatePurchaseRequest(editingRequestId, submitData);
-        
-        // Submit the request (change status from draft to submitted)
-        await submitPurchaseRequest(editingRequestId);
-        
-        showNotification('Talep başarıyla güncellendi ve gönderildi!', 'success');
-        
-        // Redirect back to the pending requests page
-        setTimeout(() => {
-            window.location.href = '/procurement/purchase-requests/pending/';
-        }, 1500);
-        
-    } catch (error) {
-        console.error('Update and submission error:', error);
-        showNotification('Talep güncellenirken hata oluştu: ' + error.message, 'error');
-        
-        // Re-enable submit button on error
-        if (exportBtn) {
-            exportBtn.disabled = false;
-            exportBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Gönder';
-        }
-    }
-}
 
-async function saveDraftToBackend() {
-    // Basic validation for draft saving
-    const formData = {
-        'request-title': requestData.title || '',
-        'request-description': requestData.description || '',
-        'needed-date': requestData.needed_date || ''
-    };
-    
-    // Validate form fields and basic requirements for draft
-    const formValidation = validationManager.validateAllFields(formData);
-    const itemsValidation = validationManager.validateItems(requestData.items);
-    const suppliersValidation = validationManager.validateSuppliers(requestData.suppliers);
-    
-    if (!formValidation.isValid) {
-        validationManager.showAllFieldValidations(formData);
-        showNotification('Lütfen form alanlarındaki hataları düzeltin', 'error');
-        return;
-    }
-    
-    if (!itemsValidation.isValid) {
-        showNotification('Lütfen malzeme bilgilerindeki hataları düzeltin:\n' + itemsValidation.errors.join('\n'), 'error');
-        return;
-    }
-    
-    if (!suppliersValidation.isValid) {
-        showNotification('Lütfen tedarikçi bilgilerindeki hataları düzeltin:\n' + suppliersValidation.errors.join('\n'), 'error');
-        return;
-    }
-    
-    try {
-        // Convert itemRecommendations to recommendations format
-        const recommendations = {};
-        if (requestData.itemRecommendations) {
-            Object.keys(requestData.itemRecommendations).forEach(itemIndex => {
-                const recommendedSupplierId = requestData.itemRecommendations[itemIndex];
-                if (recommendedSupplierId) {
-                    recommendations[itemIndex] = recommendedSupplierId;
-                }
-            });
-        }
-        
-        // Calculate total amount in EUR from recommended suppliers
-        const totalAmountEUR = calculateTotalAmountEUR();
-        
-        // Prepare data for backend
-        const draftData = {
-            title: requestData.title || 'Malzeme Satın Alma Talebi',
-            description: requestData.description || 'Proje için gerekli malzemeler',
-            priority: requestData.priority || 'normal',
-            needed_date: requestData.needed_date || '',
-            items: itemsManager.getFormattedItemsForSubmission().items,
-            suppliers: requestData.suppliers,
-            offers: requestData.offers,
-            recommendations: recommendations,
-            total_amount_eur: totalAmountEUR
-        };
-        
-        // Create purchase request as draft (no submit call)
-        const result = await createPurchaseRequest(draftData);
-        
-        showNotification('Taslak başarıyla kaydedildi!', 'success');
-        
-        // Clear local draft after successful backend save
-        dataManager.clearDraft();
-        
-    } catch (error) {
-        console.error('Draft save error:', error);
-        showNotification('Taslak kaydedilirken hata oluştu: ' + error.message, 'error');
-    }
-}
 
 async function submitRequest() {
     // Disable submit button to prevent multiple submissions
@@ -736,6 +644,9 @@ async function submitRequest() {
             }
         });
         
+        // Transform suppliers for backend submission
+        const transformedSuppliers = transformSuppliersForSubmission(requestData.suppliers);
+        
         // Prepare data for backend
         const submitData = {
             title: requestData.title.trim(),
@@ -743,7 +654,7 @@ async function submitRequest() {
             priority: requestData.priority || 'normal',
             needed_date: requestData.needed_date,
             items: formattedData.items,
-            suppliers: requestData.suppliers,
+            suppliers: transformedSuppliers,
             offers: transformedOffers,
             recommendations: transformedRecommendations,
             total_amount_eur: totalAmountEUR
@@ -757,30 +668,13 @@ async function submitRequest() {
         
         showNotification('Talep başarıyla gönderildi!', 'success');
         
-        // Clear draft after successful submission
-        dataManager.clearDraft();
+        // Clear the page after successful submission
+        await clearPage();
         
-        // Reset the form
-        requestData = {
-            requestNumber: '',
-            requestDate: '',
-            requestor: '',
-            title: '',
-            description: '',
-            priority: 'normal',
-            needed_date: new Date().toISOString().split('T')[0], // Set today's date as default
-            items: [],
-            suppliers: [],
-            offers: {},
-            recommendations: {},
-            itemRecommendations: {}
-        };
-        
-        renderAll();
-        
-        // Clear validation states after successful submission
-        if (validationManager) {
-            validationManager.clearAllFieldValidations();
+        // Reset submit button to original state after successful submission
+        if (exportBtn) {
+            exportBtn.disabled = false;
+            exportBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Gönder';
         }
         
     } catch (error) {
@@ -832,7 +726,7 @@ window.purchaseRequestApp = {
     getData: () => requestData,
     exportData: () => dataManager.exportData(),
     importData: (file) => dataManager.importData(file),
-    clearData: () => {
+    clearData: async () => {
         requestData = {
             requestNumber: '',
             requestDate: '',
@@ -847,7 +741,19 @@ window.purchaseRequestApp = {
             recommendations: {},
             itemRecommendations: {}
         };
-        renderAll();
+        
+        // Update managers with the cleared data
+        if (itemsManager) {
+            itemsManager.requestData = requestData;
+        }
+        if (suppliersManager) {
+            suppliersManager.requestData = requestData;
+        }
+        if (comparisonManager) {
+            comparisonManager.requestData = requestData;
+        }
+        
+        await renderAll();
         dataManager.clearDraft();
         // Clear validation states when clearing data
         if (validationManager) {
@@ -856,5 +762,47 @@ window.purchaseRequestApp = {
     }
 };
 
+// Function to clear the page data
+async function clearPage() {
+    // Reset the form data
+    requestData = {
+        requestNumber: '',
+        requestDate: '',
+        requestor: '',
+        title: '',
+        description: '',
+        priority: 'normal',
+        needed_date: new Date().toISOString().split('T')[0], // Set today's date as default
+        items: [],
+        suppliers: [],
+        offers: {},
+        recommendations: {},
+        itemRecommendations: {}
+    };
+    
+    // Update managers with the cleared data
+    if (itemsManager) {
+        itemsManager.requestData = requestData;
+    }
+    if (suppliersManager) {
+        suppliersManager.requestData = requestData;
+    }
+    if (comparisonManager) {
+        comparisonManager.requestData = requestData;
+    }
+    
+    // Clear draft from localStorage
+    dataManager.clearDraft();
+    
+    // Re-render everything
+    await renderAll();
+    
+    // Clear validation states
+    if (validationManager) {
+        validationManager.clearAllFieldValidations();
+    }
+}
+
 // Make functions globally available for onclick handlers
 window.loadDraftRequest = loadDraftRequest;
+window.deleteDraftRequest = deleteDraftRequest;

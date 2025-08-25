@@ -696,7 +696,7 @@ async function showRequestDetailsModal() {
     if (currentRequest.offers && currentRequest.offers.length > 0) {
         // Calculate recommended totals
         currentRequest.offers.forEach(offer => {
-            const currency = offer.supplier.default_currency;
+            const currency = offer.currency;
             if (!currencyTotals[currency]) {
                 currencyTotals[currency] = 0;
             }
@@ -735,7 +735,7 @@ async function showRequestDetailsModal() {
                             cheapestPrice = totalPrice;
                             cheapestOption = {
                                 price: totalPrice,
-                                currency: offer.supplier.default_currency,
+                                currency: offer.currency,
                                 supplier: offer.supplier.name
                             };
                         }
@@ -907,10 +907,24 @@ function renderComparisonTable() {
     // Add supplier headers
     currentRequest.offers.forEach(offer => {
         const th = document.createElement('th');
+        
+        // Get payment terms information
+        let paymentTermsDisplay = '';
+        if (offer.payment_terms) {
+            // For now, display the ID. In a real implementation, you might want to fetch payment terms details
+            // or have a mapping of payment_terms_id to display text
+            paymentTermsDisplay = `
+                <div class="supplier-payment-terms">
+                    <i class="fas fa-credit-card me-1"></i>
+                    Ödeme: ${offer.payment_terms}
+                </div>`;
+        }
+        
         th.innerHTML = `
             <div class="supplier-header">
                 <div class="fw-semibold">${offer.supplier.name}</div>
-                <div class="supplier-currency">${offer.supplier.default_currency}</div>
+                <div class="supplier-currency">${offer.currency}</div>
+                ${paymentTermsDisplay}
             </div>`;
         th.className = 'text-center align-middle';
         headersRow.appendChild(th);
@@ -947,16 +961,16 @@ function renderComparisonTable() {
                 
                 // Calculate unit price and converted price
                 const unitPrice = parseFloat(itemOffer.unit_price);
-                const convertedPrice = currencyRates ? convertCurrency(unitPrice, offer.supplier.default_currency, 'EUR') : unitPrice;
+                const convertedPrice = currencyRates ? convertCurrency(unitPrice, offer.currency, 'EUR') : unitPrice;
                 
                 cell.innerHTML = `
                     <div class="d-flex flex-column align-items-center">
                         ${currencyRates ? `
                             <div class="fw-bold">${formatCurrencyDisplay(convertedPrice, 'EUR')}</div>
-                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.supplier.default_currency)} <span class="currency-badge">${offer.supplier.default_currency}</span></small>
+                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.currency)} <span class="currency-badge">${offer.currency}</span></small>
                         ` : `
                             <div class="text-muted">Döviz kurları yüklenemedi</div>
-                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.supplier.default_currency)} <span class="currency-badge">${offer.supplier.default_currency}</span></small>
+                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.currency)} <span class="currency-badge">${offer.currency}</span></small>
                         `}
                         ${itemOffer.delivery_days ? `<div class="delivery-info"><i class="fas fa-clock me-1"></i>${itemOffer.delivery_days} gün</div>` : ''}
                         ${itemOffer.notes ? `<div class="notes-info">${itemOffer.notes}</div>` : ''}

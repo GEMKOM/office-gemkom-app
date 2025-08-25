@@ -78,6 +78,7 @@ export async function cancelPurchaseRequest(requestId) {
 
         if (!response.ok) {
             const errorData = await response.json();
+            console.log(errorData);
             throw new Error(errorData.error || 'Talep iptal edilirken hata oluştu');
         }
 
@@ -181,6 +182,92 @@ export async function getPurchaseRequest(requestId) {
         return await response.json();
     } catch (error) {
         console.error('Error fetching purchase request:', error);
+        throw error;
+    }
+}
+
+export async function savePurchaseRequestDraft(draftData) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/purchase-request-draft/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(draftData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Taslak kaydedilirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error saving purchase request draft:', error);
+        throw error;
+    }
+}
+
+export async function getPurchaseRequestDrafts(filters = {}) {
+    try {
+        // Build query parameters
+        const queryParams = new URLSearchParams();
+        
+        // Add filters if provided
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+        
+        const url = `${backendBase}/procurement/purchase-request-draft/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const response = await authedFetch(url);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Taslaklar yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching purchase request drafts:', error);
+        throw error;
+    }
+}
+
+export async function deletePurchaseRequestDraft(draftId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/purchase-request-draft/${draftId}/`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Taslak silinirken hata oluştu');
+        }
+
+        return true; // Successfully deleted
+    } catch (error) {
+        console.error('Error deleting purchase request draft:', error);
+        throw error;
+    }
+}
+
+export async function getPurchaseRequestDraft(draftId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/purchase-request-draft/${draftId}/`);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Taslak yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching purchase request draft:', error);
         throw error;
     }
 }
