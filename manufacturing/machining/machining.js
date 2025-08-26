@@ -2,6 +2,7 @@
 
 // Import navbar functionality
 import { initNavbar } from '../../components/navbar.js';
+import { MenuComponent } from '../../components/menu/menu.js';
 
 // Navigation function for different sections
 function navigateTo(section) {
@@ -92,6 +93,97 @@ function initMachiningModule() {
     
     // Initialize navbar
     initNavbar();
+    
+    // Initialize menu component
+    const menuComponent = new MenuComponent('menu-container', {
+        title: 'Talaşlı İmalat',
+        subtitle: 'CNC işlemleri ve talaşlı imalat süreçleri yönetimi',
+        cards: [
+            {
+                title: 'Dashboard',
+                description: 'Gerçek zamanlı görünüm ile aktif zamanlayıcıları, makine durumlarını ve istatistikleri takip edin.',
+                icon: 'fas fa-chart-line',
+                iconColor: 'primary',
+                link: '/manufacturing/machining/dashboard'
+            },
+            {
+                title: 'Görevler',
+                description: 'Mevcut görevleri görüntüleyin, yeni görevler oluşturun ve toplu görev yönetimi yapın.',
+                icon: 'fas fa-tasks',
+                iconColor: 'success',
+                link: '/manufacturing/machining/tasks'
+            },
+            {
+                title: 'Raporlar',
+                description: 'Detaylı raporlar ve analizler ile performansınızı ölçün ve veriye dayalı kararlar alın.',
+                icon: 'fas fa-chart-bar',
+                iconColor: 'info',
+                link: '/manufacturing/machining/reports',
+                features: [
+                    {
+                        label: 'Performans raporları',
+                        icon: 'fas fa-chart-line',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/reports/performance'
+                    },
+                    {
+                        label: 'Zaman bazlı analizler',
+                        icon: 'fas fa-calendar',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/reports/time-based'
+                    },
+                    {
+                        label: 'PDF/Excel export',
+                        icon: 'fas fa-download',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/reports/export'
+                    },
+                    {
+                        label: 'Filtreleme seçenekleri',
+                        icon: 'fas fa-filter',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/reports/filters'
+                    }
+                ]
+            },
+            {
+                title: 'Kapasite Görünümü',
+                description: 'Makine kapasitelerini görüntüleyin, planlama yapın ve kaynak optimizasyonu sağlayın.',
+                icon: 'fas fa-industry',
+                iconColor: 'warning',
+                link: '/manufacturing/machining/capacity',
+                features: [
+                    {
+                        label: 'Kapasite planlama',
+                        icon: 'fas fa-calendar-alt',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/capacity/planning'
+                    },
+                    {
+                        label: 'Kapasite analizi',
+                        icon: 'fas fa-chart-pie',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/capacity/analysis'
+                    },
+                    {
+                        label: 'Zaman çizelgesi',
+                        icon: 'fas fa-clock',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/capacity/timeline'
+                    },
+                    {
+                        label: 'Yük dengeleme',
+                        icon: 'fas fa-balance-scale',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/capacity/load-balancing'
+                    }
+                ]
+            }
+        ]
+    });
+    
+    // Render the menu
+    menuComponent.render();
     
     // Add enhanced click event listeners to functionality cards
     const cards = document.querySelectorAll('.functionality-card');

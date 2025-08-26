@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../style.css">
     <link rel="stylesheet" href="../../components/navbar.css">
+    <link rel="stylesheet" href="../../components/menu/menu.css">
     <link rel="icon" type="image/png" href="../../images/gemkom.png">
     <link rel="stylesheet" href="../../pre-auth.css">
     <link rel="stylesheet" href="machining.css">
@@ -18,99 +19,8 @@
     <!-- Navigation -->
     <div id="navbar-container"></div>
 
-    <!-- Main Content Section -->
-    <section class="modules-section py-5">
-        <div class="container">
-            <div class="row">
-                <div class="col-12 text-center mb-5">
-                    <h2 class="section-title">Talaşlı İmalat</h2>
-                    <p class="section-subtitle">CNC işlemleri ve talaşlı imalat süreçleri yönetimi</p>
-                </div>
-            </div>
-            
-            <!-- Functionality Cards -->
-            <div class="row g-4">
-                <!-- Dashboard -->
-                <div class="col-lg-6 col-xl-3 mb-4">
-                    <div class="functionality-card" onclick="navigateTo('dashboard')">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-primary">
-                                <i class="fas fa-chart-line"></i>
-                            </div>
-                            <h5 class="card-title">Dashboard</h5>
-                            <p class="card-text">Gerçek zamanlı görünüm ile aktif zamanlayıcıları, makine durumlarını ve istatistikleri takip edin.</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Tasks -->
-                <div class="col-lg-6 col-xl-3 mb-4">
-                    <div class="functionality-card" onclick="navigateTo('tasks')">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-success">
-                                <i class="fas fa-tasks"></i>
-                            </div>
-                            <h5 class="card-title">Görevler</h5>
-                            <p class="card-text">Mevcut görevleri görüntüleyin, yeni görevler oluşturun ve toplu görev yönetimi yapın.</p>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Reports -->
-                <div class="col-lg-6 col-xl-3 mb-4">
-                    <div class="functionality-card" onclick="navigateTo('reports')">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-info">
-                                <i class="fas fa-chart-bar"></i>
-                            </div>
-                            <h5 class="card-title">Raporlar</h5>
-                            <p class="card-text">Detaylı raporlar ve analizler ile performansınızı ölçün ve veriye dayalı kararlar alın.</p>
-                            <ul class="feature-list">
-                                <li><i class="fas fa-chart-line"></i>Performans raporları</li>
-                                <li><i class="fas fa-calendar"></i>Zaman bazlı analizler</li>
-                                <li><i class="fas fa-download"></i>PDF/Excel export</li>
-                                <li><i class="fas fa-filter"></i>Filtreleme seçenekleri</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-                
-                <!-- Capacity View -->
-                <div class="col-lg-6 col-xl-3 mb-4">
-                    <div class="functionality-card" onclick="navigateTo('capacity')">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-warning">
-                                <i class="fas fa-industry"></i>
-                            </div>
-                            <h5 class="card-title">Kapasite Görünümü</h5>
-                            <p class="card-text">Makine kapasitelerini görüntüleyin, planlama yapın ve kaynak optimizasyonu sağlayın.</p>
-                            <ul class="feature-list">
-                                <li><i class="fas fa-calendar-alt"></i>Kapasite planlama</li>
-                                <li><i class="fas fa-chart-pie"></i>Kapasite analizi</li>
-                                <li><i class="fas fa-clock"></i>Zaman çizelgesi</li>
-                                <li><i class="fas fa-balance-scale"></i>Yük dengeleme</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Additional Information -->
-            <div class="row mt-5">
-                <div class="col-12">
-                    <div class="alert alert-info" role="alert">
-                        <div class="d-flex align-items-center">
-                            <i class="fas fa-info-circle me-3 fa-2x"></i>
-                            <div>
-                                <h6 class="alert-heading mb-1">Modül Durumu</h6>
-                                <p class="mb-0">Talaşlı İmalat modülü aşamalı olarak geliştirilmektedir. Dashboard şu anda kullanıma hazırdır. Diğer özellikler yakında eklenecektir.</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+    <!-- Menu Component Container -->
+    <div id="menu-container"></div>
 
     <!-- Footer -->
     <footer class="footer-section">

@@ -243,6 +243,11 @@ async function saveDraftAsJSON() {
         // Transform suppliers for backend submission
         const transformedSuppliers = transformSuppliersForSubmission(requestData.suppliers);
         
+        // Check if any item has job_no starting with "RM"
+        const isRollingMill = formattedData.items.some(item => 
+            item.job_no && item.job_no.toString().toUpperCase().startsWith('RM')
+        );
+
         // Prepare data for backend (same format as submission)
         const submissionData = {
             title: requestData.title || 'Malzeme Satın Alma Talebi',
@@ -253,7 +258,8 @@ async function saveDraftAsJSON() {
             suppliers: transformedSuppliers,
             offers: transformedOffers,
             recommendations: transformedRecommendations,
-            total_amount_eur: totalAmountEUR
+            total_amount_eur: totalAmountEUR,
+            is_rolling_mill: isRollingMill
         };
         
         // Prepare draft data according to the model structure
@@ -647,6 +653,11 @@ async function submitRequest() {
         // Transform suppliers for backend submission
         const transformedSuppliers = transformSuppliersForSubmission(requestData.suppliers);
         
+        // Check if any item has job_no starting with "RM"
+        const isRollingMill = formattedData.items.some(item => 
+            item.job_no && item.job_no.toString().toUpperCase().startsWith('RM')
+        );
+        
         // Prepare data for backend
         const submitData = {
             title: requestData.title.trim(),
@@ -657,7 +668,8 @@ async function submitRequest() {
             suppliers: transformedSuppliers,
             offers: transformedOffers,
             recommendations: transformedRecommendations,
-            total_amount_eur: totalAmountEUR
+            total_amount_eur: totalAmountEUR,
+            is_rolling_mill: isRollingMill
         };
         
         // Create purchase request using generic function

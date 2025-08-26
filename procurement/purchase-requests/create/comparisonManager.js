@@ -272,13 +272,15 @@ export class ComparisonManager {
             if (!quantityByUnit[unit]) {
                 quantityByUnit[unit] = 0;
             }
-            quantityByUnit[unit] += item.quantity;
+            // Ensure quantity is treated as a number
+            const quantity = parseFloat(item.quantity) || 0;
+            quantityByUnit[unit] += quantity;
         });
         
         const totalQuantityElement = document.getElementById('total-quantity');
         if (Object.keys(quantityByUnit).length > 0) {
             const quantityText = Object.entries(quantityByUnit)
-                .map(([unit, quantity]) => `${quantity} ${unit}`)
+                .map(([unit, quantity]) => `${quantity.toFixed(2)} ${unit}`)
                 .join(', ');
             totalQuantityElement.textContent = quantityText;
         } else {

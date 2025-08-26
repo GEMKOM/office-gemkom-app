@@ -9,21 +9,21 @@ const NAVIGATION_STRUCTURE = {
         icon: 'fas fa-home',
         children: {}
     },
-    '/management': {
-        label: 'Yönetim',
+    '/general': {
+        label: 'Genel',
         icon: 'fas fa-cogs',
         children: {
-            '/management/users': {
+            '/general/users': {
                 label: 'Çalışanlar',
                 icon: 'fas fa-users',
                 children: {}
             },
-            '/management/machines': {
+            '/general/machines': {
                 label: 'Makineler',
                 icon: 'fas fa-cogs',
                 children: {}
             },
-            '/management/overtime': {
+            '/general/overtime': {
                 label: 'Mesailer',
                 icon: 'fas fa-clock',
                 children: {}
@@ -93,75 +93,7 @@ const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
-            '/manufacturing/welding': {
-                label: 'Kaynak',
-                icon: 'fas fa-fire',
-                children: {
-                    '/manufacturing/welding/processes': {
-                        label: 'Kaynak İşlemleri',
-                        icon: 'fas fa-fire',
-                        children: {
-                            '/manufacturing/welding/processes/arc': {
-                                label: 'Ark Kaynağı',
-                                icon: 'fas fa-bolt',
-                                children: {}
-                            },
-                            '/manufacturing/welding/processes/gas': {
-                                label: 'Gaz Kaynağı',
-                                icon: 'fas fa-flame',
-                                children: {}
-                            },
-                            '/manufacturing/welding/processes/resistance': {
-                                label: 'Direnç Kaynağı',
-                                icon: 'fas fa-zap',
-                                children: {}
-                            }
-                        }
-                    },
-                    '/manufacturing/welding/joining': {
-                        label: 'Birleştirme',
-                        icon: 'fas fa-link',
-                        children: {
-                            '/manufacturing/welding/joining/butt': {
-                                label: 'Alın Birleştirme',
-                                icon: 'fas fa-grip-lines',
-                                children: {}
-                            },
-                            '/manufacturing/welding/joining/lap': {
-                                label: 'Bindirme Birleştirme',
-                                icon: 'fas fa-layer-group',
-                                children: {}
-                            },
-                            '/manufacturing/welding/joining/corner': {
-                                label: 'Köşe Birleştirme',
-                                icon: 'fas fa-angle-right',
-                                children: {}
-                            }
-                        }
-                    },
-                    '/manufacturing/welding/quality': {
-                        label: 'Kalite Kontrol',
-                        icon: 'fas fa-clipboard-check',
-                        children: {
-                            '/manufacturing/welding/quality/inspection': {
-                                label: 'Görsel Muayene',
-                                icon: 'fas fa-eye',
-                                children: {}
-                            },
-                            '/manufacturing/welding/quality/testing': {
-                                label: 'Test İşlemleri',
-                                icon: 'fas fa-vial',
-                                children: {}
-                            },
-                            '/manufacturing/welding/quality/certification': {
-                                label: 'Sertifikasyon',
-                                icon: 'fas fa-certificate',
-                                children: {}
-                            }
-                        }
-                    }
-                }
-            },
+
             '/manufacturing/maintenance': {
                 label: 'Bakım',
                 icon: 'fas fa-wrench',
@@ -192,12 +124,18 @@ const NAVIGATION_STRUCTURE = {
             '/procurement/suppliers': {
                 label: 'Tedarikçiler',
                 icon: 'fas fa-handshake',
-                children: {}
-            },
-            '/procurement/payment-terms': {
-                label: 'Ödeme Koşulları',
-                icon: 'fas fa-credit-card',
-                children: {}
+                children: {
+                    '/procurement/suppliers/list': {
+                        label: 'Tedarikçi Listesi',
+                        icon: 'fas fa-list',
+                        children: {}
+                    },
+                    '/procurement/suppliers/payment-terms': {
+                        label: 'Ödeme Koşulları',
+                        icon: 'fas fa-credit-card',
+                        children: {}
+                    }
+                }
             },
             '/procurement/purchase-requests': {
                 label: 'Satın Alma Talepleri',
@@ -264,31 +202,7 @@ const NAVIGATION_STRUCTURE = {
             }
         }
     },
-    '/planning': {
-        label: 'Planlama',
-        icon: 'fas fa-calendar-alt',
-        children: {}
-    },
-    '/rolling-mill': {
-        label: 'Haddehane',
-        icon: 'fas fa-cogs',
-        children: {}
-    },
-    '/logistics': {
-        label: 'Lojistik',
-        icon: 'fas fa-truck',
-        children: {}
-    },
-    '/design': {
-        label: 'Dizayn',
-        icon: 'fas fa-drafting-compass',
-        children: {}
-    },
-    '/quality-control': {
-        label: 'Kalite Kontrol',
-        icon: 'fas fa-clipboard-check',
-        children: {}
-    },
+
     '/finance': {
         label: 'Finans',
         icon: 'fas fa-dollar-sign',
@@ -297,174 +211,6 @@ const NAVIGATION_STRUCTURE = {
                 label: 'Satın Alma Siparişleri',
                 icon: 'fas fa-shopping-cart',
                 children: {}
-            },
-            '/finance/invoices': {
-                label: 'Faturalar',
-                icon: 'fas fa-file-invoice-dollar',
-                children: {
-                    '/finance/invoices/incoming': {
-                        label: 'Gelen Faturalar',
-                        icon: 'fas fa-download',
-                        children: {}
-                    },
-                    '/finance/invoices/outgoing': {
-                        label: 'Giden Faturalar',
-                        icon: 'fas fa-upload',
-                        children: {}
-                    },
-                    '/finance/invoices/approval': {
-                        label: 'Onay Süreçleri',
-                        icon: 'fas fa-check-circle',
-                        children: {}
-                    }
-                }
-            },
-            '/finance/payments': {
-                label: 'Ödemeler',
-                icon: 'fas fa-credit-card',
-                children: {
-                    '/finance/payments/schedule': {
-                        label: 'Ödeme Planları',
-                        icon: 'fas fa-calendar-alt',
-                        children: {}
-                    },
-                    '/finance/payments/cashflow': {
-                        label: 'Nakit Akışı',
-                        icon: 'fas fa-chart-line',
-                        children: {}
-                    },
-                    '/finance/payments/banking': {
-                        label: 'Banka İşlemleri',
-                        icon: 'fas fa-university',
-                        children: {}
-                    }
-                }
-            },
-            '/finance/budget': {
-                label: 'Bütçe',
-                icon: 'fas fa-chart-pie',
-                children: {
-                    '/finance/budget/planning': {
-                        label: 'Bütçe Planlama',
-                        icon: 'fas fa-tasks',
-                        children: {}
-                    },
-                    '/finance/budget/tracking': {
-                        label: 'Bütçe Takibi',
-                        icon: 'fas fa-eye',
-                        children: {}
-                    },
-                    '/finance/budget/analysis': {
-                        label: 'Performans Analizi',
-                        icon: 'fas fa-chart-bar',
-                        children: {}
-                    }
-                }
-            },
-            '/finance/accounting': {
-                label: 'Muhasebe',
-                icon: 'fas fa-calculator',
-                children: {
-                    '/finance/accounting/ledger': {
-                        label: 'Defter Tutma',
-                        icon: 'fas fa-book',
-                        children: {}
-                    },
-                    '/finance/accounting/transactions': {
-                        label: 'İşlem Kayıtları',
-                        icon: 'fas fa-exchange-alt',
-                        children: {}
-                    },
-                    '/finance/accounting/reports': {
-                        label: 'Finansal Raporlar',
-                        icon: 'fas fa-file-alt',
-                        children: {}
-                    }
-                }
-            },
-            '/finance/tax': {
-                label: 'Vergi',
-                icon: 'fas fa-receipt',
-                children: {
-                    '/finance/tax/calculations': {
-                        label: 'Vergi Hesaplamaları',
-                        icon: 'fas fa-calculator',
-                        children: {}
-                    },
-                    '/finance/tax/declarations': {
-                        label: 'Beyanname Takibi',
-                        icon: 'fas fa-file-contract',
-                        children: {}
-                    },
-                    '/finance/tax/compliance': {
-                        label: 'Uyumluluk',
-                        icon: 'fas fa-shield-alt',
-                        children: {}
-                    }
-                }
-            },
-            '/finance/cost-analysis': {
-                label: 'Maliyet Analizi',
-                icon: 'fas fa-chart-area',
-                children: {
-                    '/finance/cost-analysis/production': {
-                        label: 'Üretim Maliyetleri',
-                        icon: 'fas fa-industry',
-                        children: {}
-                    },
-                    '/finance/cost-analysis/profitability': {
-                        label: 'Karlılık Analizi',
-                        icon: 'fas fa-chart-line',
-                        children: {}
-                    },
-                    '/finance/cost-analysis/breakdown': {
-                        label: 'Maliyet Dağılımı',
-                        icon: 'fas fa-sitemap',
-                        children: {}
-                    }
-                }
-            },
-            '/finance/reports': {
-                label: 'Raporlar',
-                icon: 'fas fa-chart-bar',
-                children: {
-                    '/finance/reports/financial': {
-                        label: 'Finansal Raporlar',
-                        icon: 'fas fa-file-alt',
-                        children: {}
-                    },
-                    '/finance/reports/analytics': {
-                        label: 'Analitik Raporlar',
-                        icon: 'fas fa-chart-pie',
-                        children: {}
-                    },
-                    '/finance/reports/dashboard': {
-                        label: 'Finansal Dashboard',
-                        icon: 'fas fa-tachometer-alt',
-                        children: {}
-                    }
-                }
-            },
-            '/finance/settings': {
-                label: 'Ayarlar',
-                icon: 'fas fa-cog',
-                children: {
-                    '/finance/settings/general': {
-                        label: 'Genel Ayarlar',
-                        icon: 'fas fa-sliders-h',
-                        children: {}
-                    },
-                    '/finance/settings/permissions': {
-                        label: 'Yetki Yönetimi',
-                        icon: 'fas fa-user-shield',
-                        children: {}
-                    },
-                    '/finance/settings/integration': {
-                        label: 'Entegrasyon',
-                        icon: 'fas fa-plug',
-                        children: {}
-                    }
-                }
             }
         }
     }
@@ -959,14 +705,9 @@ export function initNavbar() {
           teamInfoBtn.addEventListener('click', (e) => {
               e.preventDefault();
               // Show team info in a simple alert for now
-              const teamName = user.team ? 
-                  (user.team === 'manufacturing' ? 'İmalat' : 
-                   user.team === 'procurement' ? 'Satın Alma' :
-                   user.team === 'planning' ? 'Planlama' :
-                   user.team === 'rolling-mill' ? 'Haddehane' :
-                   user.team === 'logistics' ? 'Lojistik' :
-                   user.team === 'design' ? 'Dizayn' :
-                   user.team === 'quality-control' ? 'Kalite Kontrol' : user.team) : 'Atanmamış';
+                             const teamName = user.team ? 
+                   (user.team === 'manufacturing' ? 'İmalat' : 
+                    user.team === 'procurement' ? 'Satın Alma' : user.team) : 'Atanmamış';
               alert(`Takımınız: ${teamName}`);
           });
       }
@@ -1004,11 +745,7 @@ export function initNavbar() {
                         }
                         
                         
-                        if (path.startsWith('/manufacturing/welding/')) {
-                            // Show placeholder for welding pages
-                            alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
-                            return;
-                        }
+
                         
                                                 if (path.startsWith('/manufacturing/maintenance/')) {
                             // Show placeholder for maintenance pages
@@ -1016,7 +753,7 @@ export function initNavbar() {
                             return;
                         }
                         
-                                        if (path.startsWith('/management/') && !path.startsWith('/management/users') && !path.startsWith('/management/machines') && !path.startsWith('/management/overtime')) {
+                                        if (path.startsWith('/general/') && !path.startsWith('/general/users') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime')) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;
@@ -1062,11 +799,7 @@ export function initNavbar() {
                 }
                 
                 
-                if (path.startsWith('/manufacturing/welding/')) {
-                    // Show placeholder for welding pages
-                    alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
-                    return;
-                }
+
                 
                                 if (path.startsWith('/manufacturing/maintenance/')) {
                     // Show placeholder for maintenance pages
@@ -1074,7 +807,7 @@ export function initNavbar() {
                     return;
                 }
                 
-                if (path.startsWith('/management/') && !path.startsWith('/management/users') && !path.startsWith('/management/machines') && !path.startsWith('/management/overtime')) {
+                if (path.startsWith('/general/') && !path.startsWith('/general/users') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime')) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;

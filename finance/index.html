@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../style.css">
     <link rel="stylesheet" href="../components/navbar.css">
+    <link rel="stylesheet" href="../components/menu/menu.css">
     <link rel="stylesheet" href="finance-badges.css">
     <link rel="icon" type="image/png" href="../images/gemkom.png">
     <link rel="stylesheet" href="../pre-auth.css">
@@ -23,181 +24,8 @@
     <div class="floating-element"></div>
     <div class="floating-element"></div>
 
-    <!-- Header Section -->
-    <section class="modules-section py-5">
-        <div class="container">
-            <div class="row">
-                <div class="col-12 text-center mb-5">
-                    <h2 class="section-title">Finans Modülü</h2>
-                    <p class="section-subtitle">Finansal süreçlerinizi yönetin ve mali durumunuzu takip edin</p>
-                </div>
-            </div>
-            
-            <div class="row g-4">
-                <!-- Satın Alma Siparişleri -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/finance/purchase-orders'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-primary">
-                                <i class="fas fa-shopping-cart"></i>
-                            </div>
-                            <h5 class="card-title">Satın Alma Siparişleri</h5>
-                            <p class="card-text">Satın alma siparişlerini görüntüle, fatura oluştur ve finansal takip yap.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/purchase-orders'"><i class="fas fa-list"></i>Sipariş Listesi</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/purchase-orders'"><i class="fas fa-file-invoice-dollar"></i>Fatura Oluştur</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/purchase-orders'"><i class="fas fa-chart-line"></i>Finansal Analiz</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Faturalar -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/finance/invoices'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-success">
-                                <i class="fas fa-file-invoice-dollar"></i>
-                            </div>
-                            <h5 class="card-title">Faturalar</h5>
-                            <p class="card-text">Gelen ve giden faturaların yönetimi, onay süreçleri ve takip sistemi.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/invoices/incoming'"><i class="fas fa-download"></i>Gelen Faturalar</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/invoices/outgoing'"><i class="fas fa-upload"></i>Giden Faturalar</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/invoices/approval'"><i class="fas fa-check-circle"></i>Onay Süreçleri</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Ödemeler -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/finance/payments'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-success">
-                                <i class="fas fa-credit-card"></i>
-                            </div>
-                            <h5 class="card-title">Ödemeler</h5>
-                            <p class="card-text">Ödeme planları, nakit akışı yönetimi ve banka işlemleri takibi.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/payments/schedule'"><i class="fas fa-calendar-alt"></i>Ödeme Planları</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/payments/cashflow'"><i class="fas fa-chart-line"></i>Nakit Akışı</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/payments/banking'"><i class="fas fa-university"></i>Banka İşlemleri</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Bütçe -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/finance/budget'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-warning">
-                                <i class="fas fa-chart-pie"></i>
-                            </div>
-                            <h5 class="card-title">Bütçe</h5>
-                            <p class="card-text">Bütçe planlaması, maliyet kontrolü ve bütçe performans analizi.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/budget/planning'"><i class="fas fa-tasks"></i>Bütçe Planlama</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/budget/tracking'"><i class="fas fa-eye"></i>Bütçe Takibi</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/budget/analysis'"><i class="fas fa-chart-bar"></i>Performans Analizi</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Muhasebe -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/finance/accounting'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-info">
-                                <i class="fas fa-calculator"></i>
-                            </div>
-                            <h5 class="card-title">Muhasebe</h5>
-                            <p class="card-text">Muhasebe kayıtları, defter tutma ve finansal raporlama sistemi.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/accounting/ledger'"><i class="fas fa-book"></i>Defter Tutma</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/accounting/transactions'"><i class="fas fa-exchange-alt"></i>İşlem Kayıtları</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/accounting/reports'"><i class="fas fa-file-alt"></i>Finansal Raporlar</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Vergi -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/finance/tax'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-danger">
-                                <i class="fas fa-receipt"></i>
-                            </div>
-                            <h5 class="card-title">Vergi</h5>
-                            <p class="card-text">Vergi hesaplamaları, beyanname takibi ve vergi uyumluluğu yönetimi.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/tax/calculations'"><i class="fas fa-calculator"></i>Vergi Hesaplamaları</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/tax/declarations'"><i class="fas fa-file-contract"></i>Beyanname Takibi</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/tax/compliance'"><i class="fas fa-shield-alt"></i>Uyumluluk</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Maliyet Analizi -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/finance/cost-analysis'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-secondary">
-                                <i class="fas fa-chart-area"></i>
-                            </div>
-                            <h5 class="card-title">Maliyet Analizi</h5>
-                            <p class="card-text">Üretim maliyetleri, maliyet analizi ve karlılık hesaplamaları.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/cost-analysis/production'"><i class="fas fa-industry"></i>Üretim Maliyetleri</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/cost-analysis/profitability'"><i class="fas fa-chart-line"></i>Karlılık Analizi</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/cost-analysis/breakdown'"><i class="fas fa-sitemap"></i>Maliyet Dağılımı</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Raporlar -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/finance/reports'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-dark">
-                                <i class="fas fa-chart-bar"></i>
-                            </div>
-                            <h5 class="card-title">Raporlar</h5>
-                            <p class="card-text">Finansal raporlar, analizler ve performans metrikleri.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/reports/financial'"><i class="fas fa-file-alt"></i>Finansal Raporlar</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/reports/analytics'"><i class="fas fa-chart-pie"></i>Analitik Raporlar</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/reports/dashboard'"><i class="fas fa-tachometer-alt"></i>Finansal Dashboard</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Ayarlar -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/finance/settings'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-muted">
-                                <i class="fas fa-cog"></i>
-                            </div>
-                            <h5 class="card-title">Ayarlar</h5>
-                            <p class="card-text">Finans modülü ayarları, kullanıcı yetkileri ve sistem konfigürasyonu.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/settings/general'"><i class="fas fa-sliders-h"></i>Genel Ayarlar</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/settings/permissions'"><i class="fas fa-user-shield"></i>Yetki Yönetimi</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/finance/settings/integration'"><i class="fas fa-plug"></i>Entegrasyon</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+    <!-- Menu Component Container -->
+    <div id="menu-container"></div>
 
     <!-- Footer -->
     <footer class="footer-section">
@@ -215,6 +43,6 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script type="module" src="../main.js"></script>
+    <script type="module" src="finance.js"></script>
 </body>
 </html>

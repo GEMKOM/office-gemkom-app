@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../style.css">
     <link rel="stylesheet" href="../../components/navbar.css">
+    <link rel="stylesheet" href="../../components/menu/menu.css">
     <link rel="icon" type="image/png" href="../../images/gemkom.png">
     <link rel="stylesheet" href="../../pre-auth.css">
 </head>
@@ -22,60 +23,8 @@
     <div class="floating-element"></div>
     <div class="floating-element"></div>
 
-    <!-- Header Section -->
-    <section class="modules-section py-5">
-        <div class="container">
-            <div class="row">
-                <div class="col-12 text-center mb-5">
-                    <h2 class="section-title">Satın Alma Talepleri</h2>
-                    <p class="section-subtitle">Satın alma taleplerinin yönetimi ve takibi</p>
-                </div>
-            </div>
-            
-            <div class="row g-4">
-                <!-- Talep Oluştur -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="functionality-card" onclick="window.location.href='/procurement/purchase-requests/create'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-primary">
-                                <i class="fas fa-plus"></i>
-                            </div>
-                            <h5 class="card-title">Talep Oluştur</h5>
-                            <p class="card-text">Yeni satın alma talebi oluşturma ve form yönetimi.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Bekleyen Talepler -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="functionality-card" onclick="window.location.href='/procurement/purchase-requests/pending'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-warning">
-                                <i class="fas fa-clock"></i>
-                            </div>
-                            <h5 class="card-title">Bekleyen Talepler</h5>
-                            <p class="card-text">Onay bekleyen satın alma taleplerinin listesi ve durum takibi.</p>
-                        </div>
-                    </div>
-                </div>
-
-
-
-                <!-- Kayıt Defteri -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="functionality-card" onclick="window.location.href='/procurement/purchase-requests/registry'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-info">
-                                <i class="fas fa-archive"></i>
-                            </div>
-                            <h5 class="card-title">Kayıt Defteri</h5>
-                            <p class="card-text">Tüm satın alma taleplerinin geçmişi ve kayıt defteri.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+    <!-- Menu Component Container -->
+    <div id="menu-container"></div>
 
     <!-- Footer -->
     <footer class="footer-section">

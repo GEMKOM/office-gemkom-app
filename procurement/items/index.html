@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../style.css">
     <link rel="stylesheet" href="../../components/navbar.css">
+    <link rel="stylesheet" href="../../components/menu/menu.css">
     <link rel="stylesheet" href="../procurement-badges.css">
     <link rel="icon" type="image/png" href="../../images/gemkom.png">
     <link rel="stylesheet" href="../../pre-auth.css">
@@ -23,58 +24,8 @@
     <div class="floating-element"></div>
     <div class="floating-element"></div>
 
-    <!-- Header Section -->
-    <section class="modules-section py-5">
-        <div class="container">
-            <div class="row">
-                <div class="col-12 text-center mb-5">
-                    <h2 class="section-title">Malzemeler</h2>
-                    <p class="section-subtitle">Malzeme kataloğu ve stok yönetimi</p>
-                </div>
-            </div>
-            
-            <div class="row g-4">
-                <!-- Malzeme Kataloğu -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="functionality-card" onclick="window.location.href='/procurement/items/catalog'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-primary">
-                                <i class="fas fa-book"></i>
-                            </div>
-                            <h5 class="card-title">Malzeme Kataloğu</h5>
-                            <p class="card-text">Tüm malzemelerin kataloğu, kategoriler ve arama fonksiyonları.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Stok Takibi -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="functionality-card" onclick="window.location.href='/procurement/items/inventory'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-success">
-                                <i class="fas fa-warehouse"></i>
-                            </div>
-                            <h5 class="card-title">Stok Takibi</h5>
-                            <p class="card-text">Malzeme stok durumu, minimum stok uyarıları ve stok hareketleri.</p>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Teknik Özellikler -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="functionality-card" onclick="window.location.href='/procurement/items/specifications'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-warning">
-                                <i class="fas fa-info-circle"></i>
-                            </div>
-                            <h5 class="card-title">Teknik Özellikler</h5>
-                            <p class="card-text">Malzeme teknik özellikleri, standartlar ve kalite gereksinimleri.</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+    <!-- Menu Component Container -->
+    <div id="menu-container"></div>
 
     <!-- Footer -->
     <footer class="footer-section">

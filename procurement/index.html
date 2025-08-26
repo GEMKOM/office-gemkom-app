@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../style.css">
     <link rel="stylesheet" href="../components/navbar.css">
+    <link rel="stylesheet" href="../components/menu/menu.css">
     <link rel="stylesheet" href="procurement-badges.css">
     <link rel="icon" type="image/png" href="../images/gemkom.png">
     <link rel="stylesheet" href="../pre-auth.css">
@@ -23,91 +24,8 @@
     <div class="floating-element"></div>
     <div class="floating-element"></div>
 
-    <!-- Header Section -->
-    <section class="modules-section py-5">
-        <div class="container">
-            <div class="row">
-                <div class="col-12 text-center mb-5">
-                    <h2 class="section-title">Satın Alma Modülü</h2>
-                    <p class="section-subtitle">Tedarik süreçlerinizi yönetin ve optimize edin</p>
-                </div>
-            </div>
-            
-            <div class="row g-4">
-                <!-- Tedarikçiler -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/procurement/providers'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-primary">
-                                <i class="fas fa-handshake"></i>
-                            </div>
-                            <h5 class="card-title">Tedarikçiler</h5>
-                            <p class="card-text">Tedarikçi bilgileri, performans takibi ve tedarikçi değerlendirme yönetimi.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/providers/list'"><i class="fas fa-list"></i>Tedarikçi Listesi</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/providers/evaluation'"><i class="fas fa-star"></i>Performans Değerlendirme</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/providers/contracts'"><i class="fas fa-file-contract"></i>Sözleşmeler</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Satın Alma Talepleri -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/procurement/purchase-requests'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-success">
-                                <i class="fas fa-shopping-cart"></i>
-                            </div>
-                            <h5 class="card-title">Satın Alma Talepleri</h5>
-                            <p class="card-text">Satın alma taleplerinin oluşturulması, onay süreçleri ve takip yönetimi.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/purchase-requests/create'"><i class="fas fa-plus"></i>Talep Oluştur</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/purchase-requests/pending'"><i class="fas fa-clock"></i>Bekleyen Talepler</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/purchase-requests/approved'"><i class="fas fa-check-circle"></i>Onaylanan Talepler</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Malzemeler -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/procurement/items'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-warning">
-                                <i class="fas fa-boxes"></i>
-                            </div>
-                            <h5 class="card-title">Malzemeler</h5>
-                            <p class="card-text">Malzeme kataloğu, stok takibi ve malzeme bilgileri yönetimi.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/items/catalog'"><i class="fas fa-book"></i>Malzeme Kataloğu</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/items/inventory'"><i class="fas fa-warehouse"></i>Stok Takibi</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/items/specifications'"><i class="fas fa-info-circle"></i>Teknik Özellikler</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Raporlar -->
-                <div class="col-md-6 col-lg-3">
-                    <div class="functionality-card" onclick="window.location.href='/procurement/reports'">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-info">
-                                <i class="fas fa-chart-bar"></i>
-                            </div>
-                            <h5 class="card-title">Raporlar</h5>
-                            <p class="card-text">Satın alma raporları, analizler ve performans metrikleri.</p>
-                            <ul class="feature-list">
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/reports/purchase-analysis'"><i class="fas fa-chart-line"></i>Satın Alma Analizi</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/reports/supplier-performance'"><i class="fas fa-chart-pie"></i>Tedarikçi Performansı</li>
-                                <li onclick="event.stopPropagation(); window.location.href='/procurement/reports/cost-analysis'"><i class="fas fa-dollar-sign"></i>Maliyet Analizi</li>
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </section>
+    <!-- Menu Component Container -->
+    <div id="menu-container"></div>
 
     <!-- Footer -->
     <footer class="footer-section">

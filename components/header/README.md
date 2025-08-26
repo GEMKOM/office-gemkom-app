@@ -184,7 +184,7 @@ const usersHeader = new HeaderComponent({
     showExportButton: 'block',
     createButtonText: 'Yeni Kullanıcı',
     exportButtonText: 'Excel İndir',
-    onBackClick: () => window.location.href = '/management/',
+    onBackClick: () => window.location.href = '/general/',
     onCreateClick: () => openCreateUserModal(),
     onExportClick: () => exportUsersToExcel()
 });

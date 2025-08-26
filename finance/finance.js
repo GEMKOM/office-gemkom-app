@@ -1,10 +1,29 @@
 // Finance Module JavaScript
 import { initNavbar } from '../components/navbar.js';
+import { MenuComponent } from '../components/menu/menu.js';
 
 // Initialize the finance module
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     // Initialize navbar
-    initNavbar();
+    await initNavbar();
+    
+    // Initialize menu component
+    const menuComponent = new MenuComponent('menu-container', {
+        title: 'Finans Modülü',
+        subtitle: 'Finansal süreçlerinizi yönetin ve mali durumunuzu takip edin',
+        cards: [
+            {
+                title: 'Satın Alma Siparişleri',
+                description: 'Satın alma siparişlerini görüntüle, fatura oluştur ve finansal takip yap.',
+                icon: 'fas fa-shopping-cart',
+                iconColor: 'primary',
+                link: '/finance/purchase-orders'
+            }
+        ]
+    });
+    
+    // Render the menu
+    menuComponent.render();
     
     // Add any finance-specific functionality here
     console.log('Finance module initialized');
