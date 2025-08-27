@@ -3,7 +3,7 @@ import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { ItemsManager } from './itemsManager.js';
 import { SuppliersManager } from './suppliersManager.js';
-import { ComparisonManager } from './comparisonManager.js';
+import { ComparisonTable } from '../../../components/comparison-table/comparison-table.js';
 import { DataManager } from './dataManager.js';
 import { ValidationManager } from './validationManager.js';
 import { fetchCurrencyRates } from '../../../generic/formatters.js';
@@ -13,7 +13,7 @@ import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft,
 let headerComponent;
 let itemsManager;
 let suppliersManager;
-let comparisonManager;
+let comparisonTable;
 let dataManager;
 let validationManager;
 
@@ -91,7 +91,7 @@ function calculateTotalAmountEUR() {
                 const offer = requestData.offers[recommendedSupplierId]?.[itemIndex];
                 if (offer && offer.totalPrice > 0) {
                     const supplier = requestData.suppliers.find(s => s.id === recommendedSupplierId);
-                    if (supplier) {
+                    if (supplier && supplier.default_currency) {
                         // Convert to EUR using the same logic as ComparisonManager
                         const convertedAmount = (offer.totalPrice / currencyRates[supplier.default_currency]) * currencyRates['EUR'];
                         totalAmount += convertedAmount;
@@ -120,14 +120,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     initializeManagers();
     
+    // Load payment terms before rendering to ensure proper display
+    await suppliersManager.loadAvailablePaymentTerms();
+    
     initializeHeader();
     
     // Fetch currency rates and then render everything
     currencyRates = await fetchCurrencyRates();
-    updateComparisonManagerRates();
+    updateComparisonTableRates();
     
     // Initialize form field listeners
     initializeFormFieldListeners();
+    
+    // Initialize modal cleanup
+    initializeModalCleanup();
     
     // Now render all components with proper currency rates
     await renderAll();
@@ -183,18 +189,51 @@ function initializeManagers() {
         await renderAll();
     }, currencySymbols);
     
-    comparisonManager = new ComparisonManager(requestData, async () => {
-        dataManager.autoSave();
-        await renderAll();
-    }, currencyRates, currencySymbols);
-    
-    // Load payment terms for suppliers manager to ensure proper display
-    suppliersManager.loadAvailablePaymentTerms();
+    comparisonTable = new ComparisonTable('comparison-table-container', {
+        currencyRates: currencyRates,
+        currencySymbols: currencySymbols,
+        showEuroTotal: false, // Hide Euro Total column specifically for create page
+        columnOrder: ['unitPrice', 'deliveryDays', 'originalTotal', 'recommendations'], // Custom column order for create page
+        autoSave: async () => {
+            dataManager.autoSave();
+            await renderAll();
+        },
+        onRecommendationChange: (itemIndex, supplierId, recommendations) => {
+            requestData.itemRecommendations = recommendations;
+            // Re-validate ALL items to restore error states after table re-render
+            if (window.validationManager) {
+                requestData.items.forEach((_, idx) => {
+                    window.validationManager.revalidateItem(
+                        idx, 
+                        requestData.items, 
+                        requestData.itemRecommendations, 
+                        requestData.offers, 
+                        requestData.suppliers
+                    );
+                });
+            }
+        },
+        onSupplierRecommendAll: (supplierId, recommendations) => {
+            requestData.itemRecommendations = recommendations;
+            // Re-validate ALL items to restore error states after table re-render
+            if (window.validationManager) {
+                requestData.items.forEach((_, idx) => {
+                    window.validationManager.revalidateItem(
+                        idx, 
+                        requestData.items, 
+                        requestData.itemRecommendations, 
+                        requestData.offers, 
+                        requestData.suppliers
+                    );
+                });
+            }
+        }
+    });
     
     // Make managers globally accessible for onclick handlers
     window.itemsManager = itemsManager;
     window.suppliersManager = suppliersManager;
-    window.comparisonManager = comparisonManager;
+    window.comparisonTable = comparisonTable;
     window.validationManager = validationManager;
 }
 
@@ -251,7 +290,7 @@ async function saveDraftAsJSON() {
         // Prepare data for backend (same format as submission)
         const submissionData = {
             title: requestData.title || 'Malzeme Satın Alma Talebi',
-            description: requestData.description || 'Proje için gerekli malzemeler',
+            description: requestData.description,
             priority: requestData.priority || 'normal',
             needed_date: requestData.needed_date || '',
             items: formattedData.items,
@@ -337,8 +376,24 @@ async function showDraftRequestsModal() {
             `).join('');
         }
         
-        // Show the modal
-        const modal = new bootstrap.Modal(document.getElementById('draftRequestsModal'));
+        // Show the modal - check for existing instance first
+        const modalElement = document.getElementById('draftRequestsModal');
+        let modal = bootstrap.Modal.getInstance(modalElement);
+        
+        // If no existing instance, create a new one
+        if (!modal) {
+            modal = new bootstrap.Modal(modalElement);
+        }
+        
+        // Ensure any existing backdrop is removed
+        const existingBackdrop = document.querySelector('.modal-backdrop');
+        if (existingBackdrop) {
+            existingBackdrop.remove();
+        }
+        
+        // Remove any modal-open class from body
+        document.body.classList.remove('modal-open');
+        
         modal.show();
         
     } catch (error) {
@@ -374,14 +429,30 @@ async function loadDraftRequest(draftId) {
 
 async function loadDraftData(draft) {
     try {
+        console.log('Loading draft data:', draft);
+        
+        // Clear existing localStorage first
+        if (dataManager) {
+            dataManager.clearDraft();
+        }
+        
         // Load basic form data
         requestData.title = draft.title || '';
         requestData.description = draft.description || '';
         requestData.priority = draft.priority || 'normal';
         requestData.needed_date = draft.needed_date || '';
         
+        console.log('Initial needed_date from draft:', draft.needed_date);
+        console.log('Initial requestData.needed_date:', requestData.needed_date);
+        
         // Load data from the JSON field
         if (draft.data) {
+            // Also check if needed_date is in the data object (for backend drafts)
+            if (draft.data.needed_date && !requestData.needed_date) {
+                requestData.needed_date = draft.data.needed_date;
+                console.log('Updated needed_date from draft.data:', draft.data.needed_date);
+            }
+            
             requestData.items = draft.data.items || [];
             requestData.suppliers = draft.data.suppliers || [];
             requestData.offers = draft.data.offers || {};
@@ -397,6 +468,11 @@ async function loadDraftData(draft) {
                     }
                 });
             }
+            
+            // Migrate supplier data from backend format to frontend format
+            if (dataManager) {
+                dataManager.migrateSupplierData(draft.data);
+            }
         }
         
         // Update managers with the loaded data
@@ -406,8 +482,24 @@ async function loadDraftData(draft) {
         if (suppliersManager) {
             suppliersManager.requestData = requestData;
         }
-        if (comparisonManager) {
-            comparisonManager.requestData = requestData;
+        if (comparisonTable) {
+            comparisonTable.setData({
+                items: requestData.items,
+                suppliers: requestData.suppliers,
+                offers: requestData.offers,
+                itemRecommendations: requestData.itemRecommendations
+            });
+        }
+        
+        // Ensure payment terms are loaded before rendering
+        if (suppliersManager && suppliersManager.availablePaymentTerms.length === 0) {
+            await suppliersManager.loadAvailablePaymentTerms();
+        }
+        
+        // Save the loaded draft data to localStorage as the new current state
+        if (dataManager) {
+            dataManager.saveDraft();
+            console.log('Saved loaded draft to localStorage as new current state');
         }
         
         // Re-render everything
@@ -433,7 +525,17 @@ async function deleteDraftRequest(draftId) {
         showNotification('Taslak başarıyla silindi!', 'success');
         
         // Refresh the modal to show updated list
-        await showDraftRequestsModal();
+        // First, close the current modal instance if it exists
+        const modalElement = document.getElementById('draftRequestsModal');
+        const existingModal = bootstrap.Modal.getInstance(modalElement);
+        if (existingModal) {
+            existingModal.hide();
+        }
+        
+        // Wait a bit for the modal to close, then refresh
+        setTimeout(async () => {
+            await showDraftRequestsModal();
+        }, 150);
         
     } catch (error) {
         console.error('Error deleting draft request:', error);
@@ -441,11 +543,9 @@ async function deleteDraftRequest(draftId) {
     }
 }
 
-function updateComparisonManagerRates() {
-    if (comparisonManager && currencyRates) {
-        comparisonManager.currencyRates = currencyRates;
-        comparisonManager.renderComparisonTable();
-        comparisonManager.updateSummary();
+function updateComparisonTableRates() {
+    if (comparisonTable && currencyRates) {
+        comparisonTable.setCurrencyRates(currencyRates);
     }
 }
 
@@ -460,9 +560,13 @@ async function renderAll() {
     suppliersManager.renderSuppliersContainer();
     
     // Only render comparison if currency rates are available
-    if (currencyRates) {
-        comparisonManager.renderComparisonTable();
-        comparisonManager.updateSummary();
+    if (currencyRates && comparisonTable) {
+        comparisonTable.setData({
+            items: requestData.items,
+            suppliers: requestData.suppliers,
+            offers: requestData.offers,
+            itemRecommendations: requestData.itemRecommendations
+        });
     }
     
     // Clear any existing validation states when re-rendering
@@ -478,10 +582,15 @@ function renderFormFields() {
     const priorityField = document.getElementById('request-priority');
     const neededDateField = document.getElementById('needed-date');
     
+    console.log('renderFormFields - requestData.needed_date:', requestData.needed_date);
+    
     if (titleField) titleField.value = requestData.title || '';
     if (descriptionField) descriptionField.value = requestData.description || '';
     if (priorityField) priorityField.value = requestData.priority || 'normal';
-    if (neededDateField) neededDateField.value = requestData.needed_date || '';
+    if (neededDateField) {
+        neededDateField.value = requestData.needed_date || '';
+        console.log('Setting neededDateField.value to:', requestData.needed_date || '');
+    }
 }
 
 // Initialize form field event listeners (called only once)
@@ -529,7 +638,9 @@ function initializeFormFieldListeners() {
     if (neededDateField) {
         neededDateField.addEventListener('change', (e) => {
             requestData.needed_date = e.target.value;
-            dataManager.autoSave();
+            // Save immediately when needed_date changes
+            dataManager.saveDraft();
+            dataManager.showAutoSaveIndicator();
             // Show validation feedback on change
             const validation = validationManager.validateField('needed-date', e.target.value);
             if (validation.isValid && e.target.value !== '') {
@@ -761,8 +872,13 @@ window.purchaseRequestApp = {
         if (suppliersManager) {
             suppliersManager.requestData = requestData;
         }
-        if (comparisonManager) {
-            comparisonManager.requestData = requestData;
+        if (comparisonTable) {
+            comparisonTable.setData({
+                items: requestData.items,
+                suppliers: requestData.suppliers,
+                offers: requestData.offers,
+                itemRecommendations: requestData.itemRecommendations
+            });
         }
         
         await renderAll();
@@ -799,8 +915,13 @@ async function clearPage() {
     if (suppliersManager) {
         suppliersManager.requestData = requestData;
     }
-    if (comparisonManager) {
-        comparisonManager.requestData = requestData;
+    if (comparisonTable) {
+        comparisonTable.setData({
+            items: requestData.items,
+            suppliers: requestData.suppliers,
+            offers: requestData.offers,
+            itemRecommendations: requestData.itemRecommendations
+        });
     }
     
     // Clear draft from localStorage
@@ -818,3 +939,18 @@ async function clearPage() {
 // Make functions globally available for onclick handlers
 window.loadDraftRequest = loadDraftRequest;
 window.deleteDraftRequest = deleteDraftRequest;
+
+function initializeModalCleanup() {
+    const draftModal = document.getElementById('draftRequestsModal');
+    if (draftModal) {
+        draftModal.addEventListener('hidden.bs.modal', function() {
+            // Clean up any remaining backdrop
+            const backdrop = document.querySelector('.modal-backdrop');
+            if (backdrop) {
+                backdrop.remove();
+            }
+            // Remove modal-open class from body
+            document.body.classList.remove('modal-open');
+        });
+    }
+}

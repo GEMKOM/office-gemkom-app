@@ -18,7 +18,8 @@
     <link rel="stylesheet" href="../../../components/header/header.css">
     <link rel="stylesheet" href="../../../components/statistics-cards/statistics-cards.css">
     <link rel="stylesheet" href="../../../components/filters/filters.css">
-    <link rel="stylesheet" href="../../../components/table/table.css"
+    <link rel="stylesheet" href="../../../components/table/table.css">
+    <link rel="stylesheet" href="../../../components/comparison-table/comparison-table.css">
 </head>
 <body class="pre-auth">
     <!-- Navigation -->
@@ -128,24 +129,7 @@
                             <i class="fas fa-chart-bar me-2"></i>
                             Teklif Karşılaştırma Tablosu
                         </h6>
-                        <div class="table-responsive">
-                            <table class="table table-bordered" id="comparison-table">
-                                <thead class="table-primary">
-                                    <tr>
-                                        <th rowspan="2" class="align-middle">Malzeme</th>
-                                        <th rowspan="2" class="align-middle">Miktar</th>
-                                        <th rowspan="2" class="align-middle">Birim</th>
-                                        <th id="supplier-group-header" colspan="1" class="text-center">Tedarikçi Teklifleri</th>
-                                    </tr>
-                                    <tr id="supplier-headers">
-                                        <!-- Supplier headers will be added here -->
-                                    </tr>
-                                </thead>
-                                <tbody id="comparison-tbody">
-                                    <!-- Comparison rows will be added here -->
-                                </tbody>
-                            </table>
-                        </div>
+                        <div id="comparison-table-container"></div>
                     </div>
                 </div>
                 <div class="modal-footer">

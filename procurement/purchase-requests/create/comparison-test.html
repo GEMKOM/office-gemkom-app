@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparison Table Test</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="create.css">
+    <style>
+        body { padding: 20px; }
+        .test-container { max-width: 1200px; margin: 0 auto; }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h2>Comparison Table Test - New Multi-Column Structure</h2>
+        <p>This demonstrates the new comparison table structure with separate columns for each data type under each supplier.</p>
+        
+        <div class="table-responsive">
+            <table class="table table-bordered" id="comparison-table">
+                <thead class="table-primary">
+                    <tr>
+                        <th rowspan="3" class="align-middle">Malzeme</th>
+                        <th rowspan="3" class="align-middle">İş No</th>
+                        <th rowspan="3" class="align-middle">Miktar</th>
+                        <th rowspan="3" class="align-middle">Birim</th>
+                        <th id="supplier-group-header" colspan="10" class="text-center">Tedarikçi Teklifleri</th>
+                    </tr>
+                    <tr id="supplier-subheaders">
+                        <th colspan="5" class="text-center align-middle">
+                            <div class="d-flex flex-column align-items-center gap-1">
+                                <div class="fw-semibold">Tedarikçi A</div>
+                                <div class="small text-muted">USD</div>
+                                <button class="btn btn-sm btn-outline-warning">
+                                    <i class="fas fa-star me-1"></i>Hepsi için Öner
+                                </button>
+                            </div>
+                        </th>
+                        <th colspan="5" class="text-center align-middle">
+                            <div class="d-flex flex-column align-items-center gap-1">
+                                <div class="fw-semibold">Tedarikçi B</div>
+                                <div class="small text-muted">EUR</div>
+                                <button class="btn btn-sm btn-outline-warning">
+                                    <i class="fas fa-star me-1"></i>Hepsi için Öner
+                                </button>
+                            </div>
+                        </th>
+                    </tr>
+                    <tr id="supplier-headers">
+                        <!-- Supplier A columns -->
+                        <th class="text-center align-middle">
+                            <div class="text-center"><i class="fas fa-euro-sign me-1"></i>Euro Toplam</div>
+                        </th>
+                        <th class="text-center align-middle">
+                            <div class="text-center">Orijinal Toplam<br><small class="text-muted">USD</small></div>
+                        </th>
+                        <th class="text-center align-middle">
+                            <div class="text-center"><i class="fas fa-tag me-1"></i>Birim Fiyat<br><small class="text-muted">USD</small></div>
+                        </th>
+                        <th class="text-center align-middle">
+                            <div class="text-center"><i class="fas fa-clock me-1"></i>Teslimat<br><small class="text-muted">Gün</small></div>
+                        </th>
+                        <th class="text-center align-middle">
+                            <div class="text-center"><i class="fas fa-star me-1"></i>Öner</div>
+                        </th>
+                        <!-- Supplier B columns -->
+                        <th class="text-center align-middle">
+                            <div class="text-center"><i class="fas fa-euro-sign me-1"></i>Euro Toplam</div>
+                        </th>
+                        <th class="text-center align-middle">
+                            <div class="text-center">Orijinal Toplam<br><small class="text-muted">EUR</small></div>
+                        </th>
+                        <th class="text-center align-middle">
+                            <div class="text-center"><i class="fas fa-tag me-1"></i>Birim Fiyat<br><small class="text-muted">EUR</small></div>
+                        </th>
+                        <th class="text-center align-middle">
+                            <div class="text-center"><i class="fas fa-clock me-1"></i>Teslimat<br><small class="text-muted">Gün</small></div>
+                        </th>
+                        <th class="text-center align-middle">
+                            <div class="text-center"><i class="fas fa-star me-1"></i>Öner</div>
+                        </th>
+                    </tr>
+                </thead>
+                <tbody id="comparison-tbody">
+                    <tr>
+                        <td><strong>Malzeme 1</strong><br><small class="text-muted">CODE001</small></td>
+                        <td>JOB001</td>
+                        <td>100</td>
+                        <td>Adet</td>
+                        <!-- Supplier A data -->
+                        <td class="text-center recommended-cell">
+                            <div class="fw-bold">€850.00</div>
+                        </td>
+                        <td class="text-center recommended-cell">
+                            <div class="fw-bold">$950.00</div>
+                            <small class="text-muted">USD</small>
+                        </td>
+                        <td class="text-center recommended-cell">
+                            <div class="fw-bold">$9.50</div>
+                            <small class="text-muted">USD</small>
+                        </td>
+                        <td class="text-center recommended-cell">
+                            <div class="fw-bold">15</div>
+                            <small class="text-muted">gün</small>
+                        </td>
+                        <td class="text-center recommended-cell">
+                            <button class="btn btn-sm btn-warning">
+                                <i class="fas fa-star"></i>
+                            </button>
+                        </td>
+                        <!-- Supplier B data -->
+                        <td class="text-center">
+                            <div class="fw-bold">€900.00</div>
+                        </td>
+                        <td class="text-center">
+                            <div class="fw-bold">€900.00</div>
+                            <small class="text-muted">EUR</small>
+                        </td>
+                        <td class="text-center">
+                            <div class="fw-bold">€9.00</div>
+                            <small class="text-muted">EUR</small>
+                        </td>
+                        <td class="text-center">
+                            <div class="fw-bold">20</div>
+                            <small class="text-muted">gün</small>
+                        </td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-warning">
+                                <i class="fas fa-star"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr>
+                        <td><strong>Malzeme 2</strong><br><small class="text-muted">CODE002</small></td>
+                        <td>JOB002</td>
+                        <td>50</td>
+                        <td>Kg</td>
+                        <!-- Supplier A data -->
+                        <td class="text-center">
+                            <div class="fw-bold">€450.00</div>
+                        </td>
+                        <td class="text-center">
+                            <div class="fw-bold">$500.00</div>
+                            <small class="text-muted">USD</small>
+                        </td>
+                        <td class="text-center">
+                            <div class="fw-bold">$10.00</div>
+                            <small class="text-muted">USD</small>
+                        </td>
+                        <td class="text-center">
+                            <div class="fw-bold">10</div>
+                            <small class="text-muted">gün</small>
+                        </td>
+                        <td class="text-center">
+                            <button class="btn btn-sm btn-outline-warning">
+                                <i class="fas fa-star"></i>
+                            </button>
+                        </td>
+                        <!-- Supplier B data -->
+                        <td class="text-center recommended-cell">
+                            <div class="fw-bold">€400.00</div>
+                        </td>
+                        <td class="text-center recommended-cell">
+                            <div class="fw-bold">€400.00</div>
+                            <small class="text-muted">EUR</small>
+                        </td>
+                        <td class="text-center recommended-cell">
+                            <div class="fw-bold">€8.00</div>
+                            <small class="text-muted">EUR</small>
+                        </td>
+                        <td class="text-center recommended-cell">
+                            <div class="fw-bold">12</div>
+                            <small class="text-muted">gün</small>
+                        </td>
+                        <td class="text-center recommended-cell">
+                            <button class="btn btn-sm btn-warning">
+                                <i class="fas fa-star"></i>
+                            </button>
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="mt-4">
+            <h4>Key Changes Made:</h4>
+                         <ul>
+                 <li><strong>Separated Data Columns:</strong> Each supplier now has 5 separate columns instead of 1 combined column</li>
+                 <li><strong>Euro Total:</strong> Shows the converted total in Euro</li>
+                 <li><strong>Original Total:</strong> Shows the total in the supplier's original currency</li>
+                 <li><strong>Unit Price:</strong> Shows the unit price in the supplier's currency</li>
+                 <li><strong>Delivery Days:</strong> Shows delivery time</li>
+                 <li><strong>Recommendation Button:</strong> Separate column for recommendation actions</li>
+                 <li><strong>Visual Hierarchy:</strong> Three-row header structure with supplier groups and individual column headers</li>
+                 <li><strong>Responsive Design:</strong> Maintains readability on different screen sizes</li>
+             </ul>
+        </div>
+    </div>
+</body>
+</html>

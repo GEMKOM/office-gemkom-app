@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Comparison Table Component Example</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Component CSS -->
+    <link rel="stylesheet" href="comparison-table.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4">Comparison Table Component Example</h1>
+        
+        <div class="row mb-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Configuration Options</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="showSummary" checked>
+                                    <label class="form-check-label" for="showSummary">
+                                        Show Summary
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="showRecommendations" checked>
+                                    <label class="form-check-label" for="showRecommendations">
+                                        Show Recommendations
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="showDeliveryDays" checked>
+                                    <label class="form-check-label" for="showDeliveryDays">
+                                        Show Delivery Days
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="showNotes" checked>
+                                    <label class="form-check-label" for="showNotes">
+                                        Show Notes
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <button class="btn btn-primary" onclick="updateOptions()">
+                                    <i class="fas fa-refresh me-2"></i>Update Options
+                                </button>
+                                <button class="btn btn-success" onclick="addSampleData()">
+                                    <i class="fas fa-plus me-2"></i>Add Sample Data
+                                </button>
+                                <button class="btn btn-info" onclick="clearData()">
+                                    <i class="fas fa-trash me-2"></i>Clear Data
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Comparison Table Container -->
+        <div id="comparison-table-container"></div>
+        
+        <!-- Event Log -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Event Log</h5>
+                    </div>
+                    <div class="card-body">
+                        <div id="eventLog" style="max-height: 200px; overflow-y: auto; font-family: monospace; font-size: 0.9rem;">
+                            <div class="text-muted">Events will appear here...</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Component JS -->
+    <script type="module">
+        import { ComparisonTable } from './comparison-table.js';
+        
+        // Sample currency rates
+        const currencyRates = {
+            TRY: 1,
+            USD: 0.037,
+            EUR: 0.034,
+            GBP: 0.029
+        };
+        
+        // Sample data
+        const sampleData = {
+            items: [
+                { name: 'Çelik Plaka', code: 'CP001', job_no: 'JOB001', quantity: 100, unit: 'kg' },
+                { name: 'Alüminyum Profil', code: 'AP002', job_no: 'JOB002', quantity: 50, unit: 'm' },
+                { name: 'Paslanmaz Çelik Boru', code: 'PCB003', job_no: 'JOB003', quantity: 25, unit: 'pcs' },
+                { name: 'Bakır Tel', code: 'BT004', job_no: 'JOB004', quantity: 200, unit: 'm' }
+            ],
+            suppliers: [
+                { id: 'supplier1', name: 'Metal A.Ş.', default_currency: 'TRY' },
+                { id: 'supplier2', name: 'Steel Corp', default_currency: 'USD' },
+                { id: 'supplier3', name: 'Metall GmbH', default_currency: 'EUR' }
+            ],
+            offers: {
+                supplier1: {
+                    0: { unitPrice: 15, totalPrice: 1500, deliveryDays: 7, notes: 'Stoktan' },
+                    1: { unitPrice: 120, totalPrice: 6000, deliveryDays: 5, notes: 'Özel kesim' },
+                    2: { unitPrice: 800, totalPrice: 20000, deliveryDays: 10, notes: 'İthal' },
+                    3: { unitPrice: 45, totalPrice: 9000, deliveryDays: 3, notes: 'Bakır saf' }
+                },
+                supplier2: {
+                    0: { unitPrice: 0.5, totalPrice: 50, deliveryDays: 14, notes: 'Import' },
+                    1: { unitPrice: 4, totalPrice: 200, deliveryDays: 12, notes: 'Custom cut' },
+                    2: { unitPrice: 25, totalPrice: 625, deliveryDays: 21, notes: 'Stainless steel' },
+                    3: { unitPrice: 1.5, totalPrice: 300, deliveryDays: 7, notes: 'Pure copper' }
+                },
+                supplier3: {
+                    0: { unitPrice: 0.4, totalPrice: 40, deliveryDays: 10, notes: 'EU stock' },
+                    1: { unitPrice: 3.5, totalPrice: 175, deliveryDays: 8, notes: 'Precision cut' },
+                    2: { unitPrice: 22, totalPrice: 550, deliveryDays: 15, notes: 'V2A steel' },
+                    3: { unitPrice: 1.2, totalPrice: 240, deliveryDays: 5, notes: 'Rein copper' }
+                }
+            },
+            itemRecommendations: {
+                0: 'supplier1',
+                1: 'supplier2',
+                2: 'supplier3',
+                3: 'supplier1'
+            }
+        };
+        
+        // Initialize comparison table
+        let comparisonTable = new ComparisonTable('comparison-table-container', {
+            currencyRates: currencyRates,
+            showSummary: true,
+            showRecommendations: true,
+            showDeliveryDays: true,
+            showNotes: true,
+            autoSave: () => {
+                logEvent('Auto-save triggered');
+            },
+            onRecommendationChange: (itemIndex, supplierId, recommendations) => {
+                logEvent(`Recommendation changed: Item ${itemIndex} -> Supplier ${supplierId || 'None'}`);
+                logEvent(`All recommendations: ${JSON.stringify(recommendations)}`);
+            },
+            onSupplierRecommendAll: (supplierId, recommendations) => {
+                logEvent(`Recommend all for supplier ${supplierId}`);
+                logEvent(`All recommendations: ${JSON.stringify(recommendations)}`);
+            }
+        });
+        
+        // Load sample data
+        comparisonTable.setData(sampleData);
+        
+        // Global functions for the example
+        window.updateOptions = function() {
+            const options = {
+                showSummary: document.getElementById('showSummary').checked,
+                showRecommendations: document.getElementById('showRecommendations').checked,
+                showDeliveryDays: document.getElementById('showDeliveryDays').checked,
+                showNotes: document.getElementById('showNotes').checked,
+                currencyRates: currencyRates,
+                autoSave: () => logEvent('Auto-save triggered'),
+                onRecommendationChange: (itemIndex, supplierId, recommendations) => {
+                    logEvent(`Recommendation changed: Item ${itemIndex} -> Supplier ${supplierId || 'None'}`);
+                },
+                onSupplierRecommendAll: (supplierId, recommendations) => {
+                    logEvent(`Recommend all for supplier ${supplierId}`);
+                }
+            };
+            
+            // Recreate the component with new options
+            comparisonTable = new ComparisonTable('comparison-table-container', options);
+            comparisonTable.setData(sampleData);
+            logEvent('Options updated');
+        };
+        
+        window.addSampleData = function() {
+            // Add a new item
+            const newItem = {
+                name: 'Yeni Malzeme',
+                code: 'YM' + Date.now(),
+                job_no: 'JOB' + Math.floor(Math.random() * 1000),
+                quantity: Math.floor(Math.random() * 100) + 10,
+                unit: ['kg', 'm', 'pcs', 'adet'][Math.floor(Math.random() * 4)]
+            };
+            
+            sampleData.items.push(newItem);
+            
+            // Add offers for the new item
+            const itemIndex = sampleData.items.length - 1;
+            sampleData.offers.supplier1[itemIndex] = {
+                unitPrice: Math.floor(Math.random() * 100) + 10,
+                totalPrice: (Math.floor(Math.random() * 100) + 10) * newItem.quantity,
+                deliveryDays: Math.floor(Math.random() * 20) + 5,
+                notes: 'Yeni teklif'
+            };
+            
+            sampleData.offers.supplier2[itemIndex] = {
+                unitPrice: Math.floor(Math.random() * 10) + 1,
+                totalPrice: (Math.floor(Math.random() * 10) + 1) * newItem.quantity,
+                deliveryDays: Math.floor(Math.random() * 30) + 10,
+                notes: 'Import teklif'
+            };
+            
+            sampleData.offers.supplier3[itemIndex] = {
+                unitPrice: Math.floor(Math.random() * 8) + 0.5,
+                totalPrice: (Math.floor(Math.random() * 8) + 0.5) * newItem.quantity,
+                deliveryDays: Math.floor(Math.random() * 25) + 8,
+                notes: 'EU teklif'
+            };
+            
+            comparisonTable.setData(sampleData);
+            logEvent(`Added new item: ${newItem.name}`);
+        };
+        
+        window.clearData = function() {
+            comparisonTable.setData({
+                items: [],
+                suppliers: [],
+                offers: {},
+                itemRecommendations: {}
+            });
+            logEvent('Data cleared');
+        };
+        
+        function logEvent(message) {
+            const eventLog = document.getElementById('eventLog');
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = document.createElement('div');
+            logEntry.innerHTML = `<span class="text-muted">[${timestamp}]</span> ${message}`;
+            eventLog.appendChild(logEntry);
+            eventLog.scrollTop = eventLog.scrollHeight;
+        }
+        
+        // Initial log
+        logEvent('Comparison table component initialized');
+    </script>
+</body>
+</html>

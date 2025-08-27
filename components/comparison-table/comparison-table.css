@@ -1,0 +1,378 @@
+/* Comparison Table Component Styles */
+
+/* Table styling */
+#comparison-table {
+    font-size: 0.85rem;
+    border-collapse: collapse;
+}
+
+#comparison-table th,
+#comparison-table td {
+    vertical-align: middle;
+    padding: 0.5rem 0.25rem;
+    border: 1px solid #e9ecef;
+    min-width: 80px;
+}
+
+/* Main table headers - cleaner styling without blue */
+#comparison-table thead th {
+    background: #f8f9fa;
+    color: #495057;
+    font-weight: 600;
+    text-align: center;
+    border-bottom: 2px solid #dee2e6;
+}
+
+/* Supplier group headers - cleaner styling without blue */
+#supplier-subheaders th {
+    background: #f8f9fa;
+    color: #495057;
+    font-weight: 700;
+    border-bottom: 2px solid #dee2e6;
+}
+
+/* Individual column headers - matching original #supplier-headers styling */
+#supplier-headers th {
+    background: linear-gradient(135deg, #f8f9ff, #f0f2ff);
+    color: #495057;
+    font-weight: 600;
+    font-size: 0.8rem;
+    border-bottom: 1px solid #d1d5db;
+}
+
+/* Table body styling */
+#comparison-table tbody td {
+    text-align: center;
+    vertical-align: middle;
+    background-color: #ffffff;
+}
+
+#comparison-table tbody tr:hover {
+    background-color: #f8f9fa;
+}
+
+/* Recommended selection highlight - matching original styling */
+#comparison-table td.recommended-cell {
+    background-color: #f3fff6 !important;
+    border: 1px solid #bde5c6 !important;
+    position: relative;
+}
+
+#comparison-table td.recommended-cell::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(45deg, transparent 30%, rgba(40, 167, 69, 0.1) 50%, transparent 70%);
+    pointer-events: none;
+}
+
+/* Summary row styling - more readable and less distracting */
+#comparison-table .summary-row {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef) !important;
+    border-top: 2px solid #6c757d !important;
+}
+
+#comparison-table .summary-row td {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef) !important;
+    border-color: #dee2e6 !important;
+    font-weight: 600;
+    color: #495057;
+}
+
+#comparison-table .summary-cell {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef) !important;
+    border-color: #dee2e6 !important;
+}
+
+#comparison-table .summary-row:hover {
+    background: linear-gradient(135deg, #e9ecef, #dee2e6) !important;
+}
+
+#comparison-table .summary-row:hover td {
+    background: linear-gradient(135deg, #e9ecef, #dee2e6) !important;
+}
+
+/* Summary row text styling for better readability */
+#comparison-table .summary-row .text-primary {
+    color: #495057 !important;
+    font-weight: 700;
+    font-size: 1.1rem;
+}
+
+#comparison-table .summary-row .text-muted {
+    color: #6c757d !important;
+}
+
+/* Header action button styling - matching original styling */
+#comparison-table thead .btn.btn-outline-warning {
+    padding: 0.2rem 0.45rem;
+    font-size: 0.75rem;
+    border-width: 1px;
+}
+
+/* Recommendation button styling */
+#comparison-table .recommendation-btn {
+    transition: all 0.2s ease;
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto;
+}
+
+#comparison-table .recommendation-btn:hover {
+    transform: scale(1.1);
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.4);
+}
+
+#comparison-table .recommendation-btn.btn-warning {
+    background-color: #ffc107;
+    border-color: #ffc107;
+    color: #212529;
+}
+
+#comparison-table .recommendation-btn.btn-outline-warning {
+    color: #ffc107;
+    border-color: #ffc107;
+    background-color: transparent;
+}
+
+#comparison-table .recommendation-btn.btn-outline-warning:hover {
+    color: #212529;
+    background-color: #ffc107;
+    border-color: #ffc107;
+}
+
+/* Ensure recommendation button cells are properly centered */
+#comparison-table td:has(.recommendation-btn) {
+    text-align: center;
+    vertical-align: middle;
+    padding: 0.5rem;
+}
+
+/* Alternative for browsers that don't support :has() */
+#comparison-table td .recommendation-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Currency badge styling - matching original styling */
+.currency-badge {
+    font-size: 0.7rem;
+    padding: 0.1rem 0.3rem;
+    border-radius: 4px;
+    background-color: #e9ecef;
+    color: #6c757d;
+    margin-left: 0.25rem;
+}
+
+/* Summary section styling - matching original styling */
+.summary-item {
+    text-align: center;
+    padding: 1rem;
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+}
+
+.summary-item label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+}
+
+.summary-item .form-control-plaintext {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #495057;
+    margin: 0;
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+
+/* Responsive design - matching original responsive styles */
+@media (max-width: 768px) {
+    #comparison-table {
+        font-size: 0.8rem;
+    }
+    
+    #comparison-table th,
+    #comparison-table td {
+        padding: 0.3rem;
+    }
+    
+    #comparison-table thead .btn.btn-outline-warning {
+        padding: 0.15rem 0.3rem;
+        font-size: 0.7rem;
+    }
+    
+    #comparison-table .recommendation-btn {
+        width: 28px;
+        height: 28px;
+        margin: 0 auto;
+    }
+    
+    #comparison-table td:has(.recommendation-btn) {
+        padding: 0.3rem;
+    }
+    
+    .summary-item {
+        padding: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    
+    .summary-item .form-control-plaintext {
+        font-size: 1.2rem;
+    }
+}
+
+@media (max-width: 576px) {
+    #comparison-table {
+        font-size: 0.75rem;
+    }
+    
+    #comparison-table th,
+    #comparison-table td {
+        padding: 0.25rem;
+    }
+    
+    #comparison-table thead .btn.btn-outline-warning {
+        padding: 0.1rem 0.25rem;
+        font-size: 0.65rem;
+    }
+    
+    #comparison-table .recommendation-btn {
+        width: 24px;
+        height: 24px;
+        margin: 0 auto;
+    }
+    
+    #comparison-table td:has(.recommendation-btn) {
+        padding: 0.25rem;
+    }
+    
+    .summary-item {
+        padding: 0.5rem;
+    }
+    
+    .summary-item .form-control-plaintext {
+        font-size: 1rem;
+    }
+}
+
+/* Animation for recommended items - matching original animation */
+@keyframes pulse-recommended {
+    0% {
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0.4);
+    }
+    70% {
+        box-shadow: 0 0 0 10px rgba(255, 193, 7, 0);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(255, 193, 7, 0);
+    }
+}
+
+#comparison-table td.recommended-cell {
+    animation: pulse-recommended 2s infinite;
+}
+
+/* Loading state */
+#comparison-table.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+#comparison-table.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 20px;
+    height: 20px;
+    margin: -10px 0 0 -10px;
+    border: 2px solid #f3f3f3;
+    border-top: 2px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Empty state styling */
+.comparison-table-empty {
+    text-align: center;
+    padding: 2rem;
+    color: #6c757d;
+}
+
+.comparison-table-empty i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+/* Card styling for the component */
+.comparison-table-container .card {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+    overflow: hidden;
+}
+
+.comparison-table-container .card-header {
+    background: linear-gradient(135deg, #007bff, #0056b3);
+    color: white;
+    border-bottom: none;
+    padding: 1rem 1.5rem;
+}
+
+.comparison-table-container .card-header h5 {
+    margin: 0;
+    font-weight: 600;
+}
+
+.comparison-table-container .card-body {
+    padding: 1.5rem;
+}
+
+/* Table wrapper styling */
+.comparison-table-wrapper {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Print styles - matching original print styles */
+@media print {
+    .comparison-table-container .card {
+        box-shadow: none;
+        border: 1px solid #dee2e6;
+    }
+    
+    #comparison-table thead .btn,
+    #comparison-table .recommendation-btn {
+        display: none;
+    }
+    
+    #comparison-table td.recommended-cell {
+        background-color: #ffff00 !important;
+        border: 2px solid #000 !important;
+    }
+    
+    #comparison-table .summary-row {
+        background: #e3f2fd !important;
+        border-top: 2px solid #2196f3 !important;
+    }
+}

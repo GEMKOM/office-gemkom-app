@@ -133,8 +133,10 @@ export class SuppliersManager {
 
     async loadAvailablePaymentTerms() {
         try {
+            console.log('Loading available payment terms...');
             const response = await getPaymentTerms({ status: 'active' });
             this.availablePaymentTerms = Array.isArray(response) ? response : (response.results || []);
+            console.log('Loaded payment terms:', this.availablePaymentTerms);
             
             const paymentTermsSelect = document.getElementById('supplier-payment-terms');
             if (paymentTermsSelect) {
@@ -151,6 +153,7 @@ export class SuppliersManager {
             // Re-render suppliers container after payment terms are loaded
             // This ensures payment terms are displayed correctly after page refresh
             if (this.requestData.suppliers.length > 0) {
+                console.log('Re-rendering suppliers container after payment terms loaded');
                 this.renderSuppliersContainer();
             }
         } catch (error) {
@@ -231,7 +234,7 @@ export class SuppliersManager {
         const paymentTermsField = document.getElementById('supplier-payment-terms');
         const taxRateField = document.getElementById('supplier-tax-rate');
 
-        if (currencyField) currencyField.value = supplier.default_currency || '';
+        if (currencyField) currencyField.value = supplier.default_currency || 'TRY';
         
         // Set payment terms - try to find by ID first, then fallback to value
         if (paymentTermsField) {
@@ -250,7 +253,7 @@ export class SuppliersManager {
         
         // Set tax rate
         if (taxRateField) {
-            taxRateField.value = supplier.default_tax_rate || '18.00';
+            taxRateField.value = supplier.default_tax_rate || '20.00';
         }
 
         // Show default values section
@@ -265,7 +268,7 @@ export class SuppliersManager {
         
         // Set default values
         if (defaultCurrency) {
-            defaultCurrency.textContent = supplier.default_currency ? this.getCurrencyDisplayName(supplier.default_currency) : 'Belirtilmemiş';
+            defaultCurrency.textContent = supplier.default_currency ? this.getCurrencyDisplayName(supplier.default_currency) : 'Belirtilmemiş (TRY)';
         }
         if (defaultPaymentTerms) {
             const paymentTermId = supplier.default_payment_terms;
@@ -281,7 +284,7 @@ export class SuppliersManager {
             }
         }
         if (defaultTaxRate) {
-            defaultTaxRate.textContent = supplier.default_tax_rate ? `${supplier.default_tax_rate}%` : 'Belirtilmemiş';
+            defaultTaxRate.textContent = supplier.default_tax_rate ? `${supplier.default_tax_rate}%` : 'Belirtilmemiş (20%)';
         }
 
         // Set chosen values (initially same as default)
@@ -344,8 +347,11 @@ export class SuppliersManager {
     }
 
     getPaymentTermsDisplayNameById(paymentTermId) {
+        console.log('getPaymentTermsDisplayNameById called with:', paymentTermId);
+        console.log('availablePaymentTerms:', this.availablePaymentTerms);
         if (paymentTermId && this.availablePaymentTerms.length > 0) {
             const foundPaymentTerm = this.availablePaymentTerms.find(pt => pt.id == paymentTermId);
+            console.log('foundPaymentTerm:', foundPaymentTerm);
             if (foundPaymentTerm) {
                 return foundPaymentTerm.name;
             }
@@ -373,7 +379,7 @@ export class SuppliersManager {
         const paymentTermsField = document.getElementById('supplier-payment-terms');
         const taxRateField = document.getElementById('supplier-tax-rate');
 
-        if (currencyField) currencyField.value = supplier.default_currency || '';
+        if (currencyField) currencyField.value = supplier.default_currency || 'TRY';
         
         // Set payment terms - try to find by ID first, then fallback to value
         if (paymentTermsField) {
@@ -392,7 +398,7 @@ export class SuppliersManager {
         
         // Set tax rate
         if (taxRateField) {
-            taxRateField.value = supplier.default_tax_rate || '18.00';
+            taxRateField.value = supplier.default_tax_rate || '20.00';
         }
     }
 
@@ -583,7 +589,7 @@ export class SuppliersManager {
                     </div>
                     <div class="supplier-info-item">
                         <div class="supplier-info-label">Para Birimi</div>
-                        <div class="supplier-info-value">${this.currencySymbols[supplier.default_currency]} ${supplier.default_currency}</div>
+                        <div class="supplier-info-value">${this.currencySymbols[supplier.default_currency || 'TRY']} ${supplier.default_currency || 'TRY'}</div>
                     </div>
                     <div class="supplier-info-item">
                         <div class="supplier-info-label">Ödeme Koşulları</div>
@@ -593,7 +599,7 @@ export class SuppliersManager {
                     </div>
                     <div class="supplier-info-item">
                         <div class="supplier-info-label">Vergi Oranı</div>
-                        <div class="supplier-info-value">${supplier.default_tax_rate ? `${supplier.default_tax_rate}%` : 'Belirtilmemiş'}</div>
+                        <div class="supplier-info-value">${supplier.default_tax_rate ? `${supplier.default_tax_rate}%` : 'Belirtilmemiş (20%)'}</div>
                     </div>
                 </div>
                 <div class="supplier-actions">
@@ -640,9 +646,18 @@ export class SuppliersManager {
             console.log('Data saved immediately to localStorage');
             
             // Update comparison table when supplier data changes
-            if (window.comparisonManager) {
-                window.comparisonManager.renderComparisonTable();
-                window.comparisonManager.updateSummary();
+            if (window.comparisonTable) {
+                window.comparisonTable.setData({
+                    items: this.requestData.items,
+                    suppliers: this.requestData.suppliers,
+                    offers: this.requestData.offers,
+                    itemRecommendations: this.requestData.itemRecommendations
+                });
+            }
+            
+            // Call the autoSave callback to trigger renderAll
+            if (this.autoSave) {
+                this.autoSave();
             }
         } catch (error) {
             console.error('Error saving data immediately:', error);
@@ -678,7 +693,7 @@ export class SuppliersManager {
         const modal = new bootstrap.Modal(modalElement);
         
         document.getElementById('offer-supplier-name').textContent = supplier.name;
-        document.getElementById('offer-currency').textContent = `${this.currencySymbols[supplier.default_currency]} ${supplier.default_currency}`;
+        document.getElementById('offer-currency').textContent = `${this.currencySymbols[supplier.default_currency || 'TRY']} ${supplier.default_currency || 'TRY'}`;
 
         // Populate offer table
         const tbody = document.getElementById('offer-tbody');

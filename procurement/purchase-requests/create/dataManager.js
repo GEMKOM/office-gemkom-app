@@ -9,17 +9,32 @@ export class DataManager {
     setupAutoSave() {
         // Auto-save every 30 seconds
         setInterval(() => {
-            if (Object.keys(this.requestData).length > 0) {
+            if (this.hasMeaningfulData()) {
                 this.saveDraft();
             }
         }, 30000);
     }
 
+    hasMeaningfulData() {
+        // Check if there's actually meaningful data to save
+        return (
+            (this.requestData.title && this.requestData.title.trim() !== '') ||
+            (this.requestData.description && this.requestData.description.trim() !== '') ||
+            (this.requestData.needed_date && this.requestData.needed_date.trim() !== '') ||
+            (this.requestData.items && this.requestData.items.length > 0) ||
+            (this.requestData.suppliers && this.requestData.suppliers.length > 0) ||
+            (this.requestData.offers && Object.keys(this.requestData.offers).length > 0) ||
+            (this.requestData.itemRecommendations && Object.keys(this.requestData.itemRecommendations).length > 0)
+        );
+    }
+
     autoSave() {
         clearTimeout(this.autoSaveTimeout);
         this.autoSaveTimeout = setTimeout(() => {
-            this.saveDraft();
-            this.showAutoSaveIndicator();
+            if (this.hasMeaningfulData()) {
+                this.saveDraft();
+                this.showAutoSaveIndicator();
+            }
         }, 2000);
     }
 
@@ -53,6 +68,7 @@ export class DataManager {
                 title: this.requestData.title,
                 description: this.requestData.description,
                 priority: this.requestData.priority,
+                needed_date: this.requestData.needed_date,
                 items: this.requestData.items,
                 suppliers: this.requestData.suppliers,
                 offers: this.requestData.offers,
@@ -61,6 +77,7 @@ export class DataManager {
                 timestamp: new Date().toISOString()
             };
             
+            console.log('Saving draft with needed_date:', this.requestData.needed_date);
             localStorage.setItem('purchaseRequestDraft', JSON.stringify(draftData));
         } catch (error) {
             console.error('Error saving draft:', error);
@@ -72,6 +89,7 @@ export class DataManager {
             const savedDraft = localStorage.getItem('purchaseRequestDraft');
             if (savedDraft) {
                 const draftData = JSON.parse(savedDraft);
+                console.log('Loading draft from localStorage:', draftData);
                 
                 // Check if draft is not too old (e.g., 24 hours)
                 const draftTime = new Date(draftData.timestamp);
@@ -85,11 +103,14 @@ export class DataManager {
                     this.requestData.title = draftData.title || '';
                     this.requestData.description = draftData.description || '';
                     this.requestData.priority = draftData.priority || 'normal';
+                    this.requestData.needed_date = draftData.needed_date || '';
                     this.requestData.items = draftData.items || [];
                     this.requestData.suppliers = draftData.suppliers || [];
                     this.requestData.offers = draftData.offers || {};
                     this.requestData.recommendations = draftData.recommendations || {};
                     this.requestData.itemRecommendations = draftData.itemRecommendations || {};
+                    
+                    console.log('Loaded needed_date from localStorage:', this.requestData.needed_date);
                     
                     return true;
                 } else {
@@ -104,22 +125,36 @@ export class DataManager {
     }
 
     migrateSupplierData(draftData) {
-        // Migrate suppliers from old field name to new field name
+        // Migrate suppliers from draft format to frontend format
         if (draftData.suppliers && Array.isArray(draftData.suppliers)) {
-            console.log('Migrating supplier data:', draftData.suppliers);
+            console.log('Migrating supplier data from draft format:', draftData.suppliers);
             draftData.suppliers.forEach(supplier => {
-                // If supplier has old 'payment_terms' field, migrate it to 'default_payment_terms'
+                // Map currency to default_currency (draft format -> frontend format)
+                if (supplier.currency !== undefined && supplier.default_currency === undefined) {
+                    console.log('Migrating currency to default_currency for supplier:', supplier.name);
+                    supplier.default_currency = supplier.currency;
+                    delete supplier.currency;
+                }
+                
+                // Map payment_terms_id to default_payment_terms (draft format -> frontend format)
+                if (supplier.payment_terms_id !== undefined && supplier.default_payment_terms === undefined) {
+                    console.log('Migrating payment_terms_id to default_payment_terms for supplier:', supplier.name, 'value:', supplier.payment_terms_id);
+                    supplier.default_payment_terms = supplier.payment_terms_id;
+                    delete supplier.payment_terms_id;
+                }
+                
+                // Map tax_rate to default_tax_rate (draft format -> frontend format)
+                if (supplier.tax_rate !== undefined && supplier.default_tax_rate === undefined) {
+                    console.log('Migrating tax_rate to default_tax_rate for supplier:', supplier.name, 'value:', supplier.tax_rate);
+                    supplier.default_tax_rate = supplier.tax_rate;
+                    delete supplier.tax_rate;
+                }
+                
+                // Also handle legacy migration from old field names
                 if (supplier.payment_terms !== undefined && supplier.default_payment_terms === undefined) {
                     console.log('Migrating payment_terms to default_payment_terms for supplier:', supplier.name);
                     supplier.default_payment_terms = supplier.payment_terms;
                     delete supplier.payment_terms;
-                }
-                
-                // If supplier has old 'tax_rate' field, migrate it to 'default_tax_rate'
-                if (supplier.tax_rate !== undefined && supplier.default_tax_rate === undefined) {
-                    console.log('Migrating tax_rate to default_tax_rate for supplier:', supplier.name);
-                    supplier.default_tax_rate = supplier.tax_rate;
-                    delete supplier.tax_rate;
                 }
             });
             console.log('Migration completed:', draftData.suppliers);
@@ -140,6 +175,7 @@ export class DataManager {
                 title: this.requestData.title,
                 description: this.requestData.description,
                 priority: this.requestData.priority,
+                needed_date: this.requestData.needed_date,
                 items: this.requestData.items,
                 suppliers: this.requestData.suppliers,
                 offers: this.requestData.offers,
@@ -180,6 +216,7 @@ export class DataManager {
                     this.requestData.title = importData.title || '';
                     this.requestData.description = importData.description || '';
                     this.requestData.priority = importData.priority || 'normal';
+                    this.requestData.needed_date = importData.needed_date || '';
                     this.requestData.items = importData.items || [];
                     this.requestData.suppliers = importData.suppliers || [];
                     this.requestData.offers = importData.offers || {};

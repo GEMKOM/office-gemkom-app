@@ -1,6 +1,7 @@
 import { guardRoute } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
+import { ComparisonTable } from '../../../components/comparison-table/comparison-table.js';
 
 
 import { 
@@ -41,6 +42,7 @@ let currencySymbols = {
     'EUR': '€',
     'GBP': '£'
 };
+let comparisonTable = null; // Comparison table component instance
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -52,6 +54,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Fetch currency rates
     currencyRates = await fetchCurrencyRates();
+    
+    // Initialize comparison table component
+    comparisonTable = new ComparisonTable('comparison-table-container', {
+        currencyRates: currencyRates,
+        currencySymbols: currencySymbols,
+        showRecommendations: false, // Hide recommendations column for pending page
+        showSummary: false, // Hide summary section (Özet Bilgiler)
+        showSummaryRow: true, // Show summary row (totals row in table)
+        showEuroTotal: true, // Show Euro Total column for pending page
+        columnOrder: ['unitPrice', 'deliveryDays', 'originalTotal', 'euroTotal'], // Custom column order for pending page
+        autoSave: null, // No auto-save needed for pending page
+        onRecommendationChange: null, // No recommendation changes needed for pending page
+        onSupplierRecommendAll: null // No bulk recommendations needed for pending page
+    });
     
     // Initialize header component
     const header = new HeaderComponent({
@@ -855,6 +871,7 @@ async function showRequestDetailsModal() {
 
     // Show comparison table if there are offers
     if (currentRequest.offers && currentRequest.offers.length > 0) {
+        updateComparisonTableRates(); // Update currency rates first
         renderComparisonTable();
         document.getElementById('comparison-table-section').style.display = 'block';
     } else {
@@ -893,101 +910,65 @@ async function openModalFromTalepNo(talepNo) {
 }
 
 function renderComparisonTable() {
-    const headersRow = document.getElementById('supplier-headers');
-    const tbody = document.getElementById('comparison-tbody');
-    
-    // Clear existing content
-    headersRow.innerHTML = '';
-    tbody.innerHTML = '';
-
     if (!currentRequest.offers || currentRequest.offers.length === 0 || !currentRequest.request_items || currentRequest.request_items.length === 0) {
         return;
     }
 
-    // Add supplier headers
+    // Transform the data to match the component's expected format
+    const items = currentRequest.request_items.map(item => ({
+        id: item.id,
+        name: item.item.name,
+        code: item.item.code,
+        quantity: item.quantity,
+        unit: item.item.unit
+    }));
+
+    const suppliers = currentRequest.offers.map(offer => ({
+        id: offer.supplier.id,
+        name: offer.supplier.name,
+        default_currency: offer.currency
+    }));
+
+    // Transform offers to match component format
+    const offers = {};
+    const itemRecommendations = {};
+
     currentRequest.offers.forEach(offer => {
-        const th = document.createElement('th');
+        offers[offer.supplier.id] = {};
         
-        // Get payment terms information
-        let paymentTermsDisplay = '';
-        if (offer.payment_terms) {
-            // For now, display the ID. In a real implementation, you might want to fetch payment terms details
-            // or have a mapping of payment_terms_id to display text
-            paymentTermsDisplay = `
-                <div class="supplier-payment-terms">
-                    <i class="fas fa-credit-card me-1"></i>
-                    Ödeme: ${offer.payment_terms}
-                </div>`;
-        }
-        
-        th.innerHTML = `
-            <div class="supplier-header">
-                <div class="fw-semibold">${offer.supplier.name}</div>
-                <div class="supplier-currency">${offer.currency}</div>
-                ${paymentTermsDisplay}
-            </div>`;
-        th.className = 'text-center align-middle';
-        headersRow.appendChild(th);
-    });
-
-    // Update group header colspan
-    const groupHeader = document.getElementById('supplier-group-header');
-    if (groupHeader) {
-        groupHeader.colSpan = Math.max(1, currentRequest.offers.length);
-    }
-
-    // Add comparison rows
-    currentRequest.request_items.forEach((requestItem, itemIndex) => {
-        const row = document.createElement('tr');
-        
-        // Item info
-        row.innerHTML = `
-            <td class="item-info">
-                <div class="item-name">${requestItem.item.name}</div>
-                <div class="item-code">${requestItem.item.code}</div>
-            </td>
-            <td class="text-center">${requestItem.quantity}</td>
-            <td class="text-center">${requestItem.item.unit}</td>
-        `;
-
-        // Supplier offers
-        currentRequest.offers.forEach(offer => {
+        currentRequest.request_items.forEach((requestItem, itemIndex) => {
             const itemOffer = offer.item_offers.find(io => io.purchase_request_item === requestItem.id);
             
             if (itemOffer && itemOffer.unit_price && parseFloat(itemOffer.unit_price) > 0) {
-                const cell = document.createElement('td');
-                const isRecommended = itemOffer.is_recommended;
-                cell.className = `price-cell ${isRecommended ? 'recommended-cell' : ''}`;
-                
-                // Calculate unit price and converted price
-                const unitPrice = parseFloat(itemOffer.unit_price);
-                const convertedPrice = currencyRates ? convertCurrency(unitPrice, offer.currency, 'EUR') : unitPrice;
-                
-                cell.innerHTML = `
-                    <div class="d-flex flex-column align-items-center">
-                        ${currencyRates ? `
-                            <div class="fw-bold">${formatCurrencyDisplay(convertedPrice, 'EUR')}</div>
-                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.currency)} <span class="currency-badge">${offer.currency}</span></small>
-                        ` : `
-                            <div class="text-muted">Döviz kurları yüklenemedi</div>
-                            <small class="text-muted">${formatCurrencyDisplay(unitPrice, offer.currency)} <span class="currency-badge">${offer.currency}</span></small>
-                        `}
-                        ${itemOffer.delivery_days ? `<div class="delivery-info"><i class="fas fa-clock me-1"></i>${itemOffer.delivery_days} gün</div>` : ''}
-                        ${itemOffer.notes ? `<div class="notes-info">${itemOffer.notes}</div>` : ''}
-                        ${isRecommended ? `<div class="mt-1"><span class="badge bg-warning text-dark"><i class="fas fa-star me-1"></i>Önerildi</span></div>` : ''}
-                    </div>
-                `;
-                row.appendChild(cell);
-            } else {
-                const cell = document.createElement('td');
-                cell.className = 'price-cell';
-                cell.innerHTML = '<div class="text-muted">-</div>';
-                row.appendChild(cell);
+                offers[offer.supplier.id][itemIndex] = {
+                    unitPrice: parseFloat(itemOffer.unit_price),
+                    totalPrice: parseFloat(itemOffer.unit_price) * requestItem.quantity,
+                    deliveryDays: itemOffer.delivery_days || null,
+                    notes: itemOffer.notes || null
+                };
+
+                // Track recommendations
+                if (itemOffer.is_recommended) {
+                    itemRecommendations[itemIndex] = offer.supplier.id;
+                }
             }
         });
-
-        tbody.appendChild(row);
     });
+
+    // Update the comparison table with the transformed data
+    comparisonTable.setData({
+        items: items,
+        suppliers: suppliers,
+        offers: offers,
+        itemRecommendations: itemRecommendations
+    });
+}
+
+// Update comparison table currency rates when they change
+function updateComparisonTableRates() {
+    if (comparisonTable && currencyRates) {
+        comparisonTable.setCurrencyRates(currencyRates);
+    }
 }
 
 // Action functions

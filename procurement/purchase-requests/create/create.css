@@ -150,13 +150,64 @@
     background-color: #ffffff;
 }
 
+/* New multi-column comparison table styling */
+#comparison-table {
+    font-size: 0.85rem;
+}
+
+#comparison-table th {
+    background: linear-gradient(135deg, #e9f2ff, #f6faff);
+    color: #0d6efd;
+    font-weight: 600;
+    text-align: center;
+    vertical-align: middle;
+    border-bottom: 2px solid #dbe7ff;
+    padding: 0.5rem 0.25rem;
+}
+
+#comparison-table td {
+    text-align: center;
+    vertical-align: middle;
+    background-color: #ffffff;
+    padding: 0.5rem 0.25rem;
+    min-width: 80px;
+    border: 1px solid #e9ecef;
+}
+
+#comparison-table td:hover:not(.recommended-cell) {
+    background-color: #f8f9fa;
+}
+
+/* Supplier group headers */
+#supplier-subheaders th {
+    background: linear-gradient(135deg, #f0f8ff, #e6f3ff);
+    color: #0056b3;
+    font-weight: 700;
+    border-bottom: 2px solid #b3d9ff;
+}
+
+/* Individual column headers */
+#supplier-headers th {
+    background: linear-gradient(135deg, #f8f9ff, #f0f2ff);
+    color: #495057;
+    font-weight: 600;
+    font-size: 0.8rem;
+    border-bottom: 1px solid #d1d5db;
+}
+
 .price-cell {
     font-weight: 600;
     color: #2a3b47;
-    border-radius: 10px;
+    border-radius: 6px;
     background: #ffffff;
-    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     transition: transform 0.08s ease, box-shadow 0.15s ease;
+    padding: 0.5rem 0.25rem;
+    min-height: 60px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }
 
 .price-cell.recommended {
@@ -175,17 +226,56 @@
 .price-cell .btn.btn-outline-warning {
     padding: 0.15rem 0.4rem;
     font-size: 0.7rem;
+    margin-top: 0.25rem;
 }
 
 /* Recommended selection highlight */
-.price-cell.recommended-cell {
-    background-color: #f3fff6; /* lightest green */
-    border: 1px solid #bde5c6;
+.price-cell.recommended-cell,
+.recommended-cell,
+#comparison-table td.recommended-cell {
+    background-color: #f3fff6 !important; /* lightest green */
+    border: 1px solid #bde5c6 !important;
+}
+
+/* Summary row styling */
+.summary-row {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb) !important;
+    border-top: 2px solid #2196f3 !important;
+}
+
+.summary-row td {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb) !important;
+    border-color: #90caf9 !important;
+    font-weight: 600;
+}
+
+.summary-cell {
+    background: linear-gradient(135deg, #e3f2fd, #bbdefb) !important;
+    border-color: #90caf9 !important;
+}
+
+.summary-row:hover {
+    background: linear-gradient(135deg, #bbdefb, #90caf9) !important;
+}
+
+.summary-row:hover td {
+    background: linear-gradient(135deg, #bbdefb, #90caf9) !important;
 }
 
 .price-cell:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 6px 18px rgba(0,0,0,0.06);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(0,0,0,0.08);
+}
+
+/* Compact styling for the new multi-column layout */
+.price-cell .fw-bold {
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.price-cell small {
+    font-size: 0.75rem;
+    line-height: 1.1;
 }
 
 /* Header action button styling */
