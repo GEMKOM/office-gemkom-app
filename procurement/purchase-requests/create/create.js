@@ -431,9 +431,59 @@ async function loadDraftData(draft) {
     try {
         console.log('Loading draft data:', draft);
         
-        // Clear existing localStorage first
+        // Set flag to prevent auto-save during draft loading
+        if (dataManager) {
+            dataManager.isLoadingDraft = true;
+        }
+        
+        // Clear all localStorage data to ensure clean state
         if (dataManager) {
             dataManager.clearDraft();
+            // Also clear any other localStorage data that might be present
+            localStorage.removeItem('purchaseRequestDraft');
+            localStorage.removeItem('purchaseRequestData');
+            localStorage.removeItem('purchaseRequestItems');
+            localStorage.removeItem('purchaseRequestSuppliers');
+            localStorage.removeItem('purchaseRequestOffers');
+            localStorage.removeItem('purchaseRequestRecommendations');
+            console.log('Cleared all localStorage data');
+        }
+        
+        // Clear the current data without re-rendering
+        requestData = {
+            requestNumber: '',
+            requestDate: '',
+            requestor: '',
+            title: '',
+            description: '',
+            priority: 'normal',
+            needed_date: new Date().toISOString().split('T')[0],
+            items: [],
+            suppliers: [],
+            offers: {},
+            recommendations: {},
+            itemRecommendations: {}
+        };
+        
+        // Update managers with the cleared data
+        if (itemsManager) {
+            itemsManager.requestData = requestData;
+        }
+        if (suppliersManager) {
+            suppliersManager.requestData = requestData;
+        }
+        if (comparisonTable) {
+            comparisonTable.setData({
+                items: requestData.items,
+                suppliers: requestData.suppliers,
+                offers: requestData.offers,
+                itemRecommendations: requestData.itemRecommendations
+            });
+        }
+        
+        // Clear validation states
+        if (validationManager) {
+            validationManager.clearAllFieldValidations();
         }
         
         // Load basic form data
@@ -453,29 +503,151 @@ async function loadDraftData(draft) {
                 console.log('Updated needed_date from draft.data:', draft.data.needed_date);
             }
             
-            requestData.items = draft.data.items || [];
-            requestData.suppliers = draft.data.suppliers || [];
-            requestData.offers = draft.data.offers || {};
-            requestData.recommendations = draft.data.recommendations || {};
+            // Load items and check if they need to be ungrouped
+            let items = draft.data.items || [];
             
-            // Convert recommendations back to itemRecommendations format
-            requestData.itemRecommendations = {};
-            if (draft.data.recommendations) {
-                Object.keys(draft.data.recommendations).forEach(itemIndex => {
-                    const supplierId = draft.data.recommendations[itemIndex];
-                    if (supplierId) {
-                        requestData.itemRecommendations[itemIndex] = supplierId;
+            // Check if items have allocations (indicating they were grouped during save)
+            // If so, ungroup them back to separate items
+            if (items.length > 0 && items[0].allocations && Array.isArray(items[0].allocations)) {
+                console.log('Detected grouped items in draft, ungrouping...');
+                const ungroupedItems = [];
+                
+                items.forEach((groupedItem, groupIndex) => {
+                    if (groupedItem.allocations && Array.isArray(groupedItem.allocations)) {
+                        // This is a grouped item, split it into separate items
+                        groupedItem.allocations.forEach(allocation => {
+                            const separateItem = {
+                                id: `item_${Date.now()}_${Math.random()}`,
+                                code: groupedItem.code,
+                                name: groupedItem.name,
+                                unit: groupedItem.unit,
+                                job_no: allocation.job_no,
+                                quantity: allocation.quantity,
+                                specs: groupedItem.specs || ''
+                            };
+                            ungroupedItems.push(separateItem);
+                        });
+                    } else {
+                        // This is already a separate item
+                        ungroupedItems.push(groupedItem);
                     }
                 });
-            }
-            
-            // Migrate supplier data from backend format to frontend format
-            if (dataManager) {
-                dataManager.migrateSupplierData(draft.data);
-            }
+                
+                                             items = ungroupedItems;
+                 console.log('Ungrouped items:', items);
+                 
+                 // If we ungrouped items, we need to handle offers and recommendations
+                 // that were indexed by the grouped item indices
+                 if (draft.data.offers && Object.keys(draft.data.offers).length > 0) {
+                     console.log('Handling offers for ungrouped items...');
+                     const newOffers = {};
+                     
+                     Object.keys(draft.data.offers).forEach(supplierId => {
+                         newOffers[supplierId] = {};
+                         Object.keys(draft.data.offers[supplierId]).forEach(groupedIndex => {
+                             const groupedIndexNum = parseInt(groupedIndex);
+                             const originalGroupedItem = draft.data.items[groupedIndexNum];
+                             
+                             if (originalGroupedItem && originalGroupedItem.allocations) {
+                                 // Find the ungrouped items that came from this grouped item
+                                 const ungroupedIndices = [];
+                                 items.forEach((item, newIndex) => {
+                                     if (item.code === originalGroupedItem.code && 
+                                         item.name === originalGroupedItem.name && 
+                                         item.unit === originalGroupedItem.unit) {
+                                         ungroupedIndices.push(newIndex);
+                                     }
+                                 });
+                                 
+                                 // Copy the offer to all ungrouped items
+                                 ungroupedIndices.forEach(newIndex => {
+                                     newOffers[supplierId][newIndex] = draft.data.offers[supplierId][groupedIndex];
+                                 });
+                             } else {
+                                 // This was already a separate item, keep the same index
+                                 newOffers[supplierId][groupedIndex] = draft.data.offers[supplierId][groupedIndex];
+                             }
+                         });
+                     });
+                     
+                     requestData.offers = newOffers;
+                 } else {
+                     requestData.offers = draft.data.offers || {};
+                 }
+                 
+                 // Handle recommendations similarly
+                 if (draft.data.recommendations && Object.keys(draft.data.recommendations).length > 0) {
+                     console.log('Handling recommendations for ungrouped items...');
+                     const newRecommendations = {};
+                     
+                     Object.keys(draft.data.recommendations).forEach(groupedIndex => {
+                         const groupedIndexNum = parseInt(groupedIndex);
+                         const originalGroupedItem = draft.data.items[groupedIndexNum];
+                         
+                         if (originalGroupedItem && originalGroupedItem.allocations) {
+                             // Find the ungrouped items that came from this grouped item
+                             const ungroupedIndices = [];
+                             items.forEach((item, newIndex) => {
+                                 if (item.code === originalGroupedItem.code && 
+                                     item.name === originalGroupedItem.name && 
+                                     item.unit === originalGroupedItem.unit) {
+                                     ungroupedIndices.push(newIndex);
+                                 }
+                             });
+                             
+                             // Copy the recommendation to all ungrouped items
+                             ungroupedIndices.forEach(newIndex => {
+                                 newRecommendations[newIndex] = draft.data.recommendations[groupedIndex];
+                             });
+                         } else {
+                             // This was already a separate item, keep the same index
+                             newRecommendations[groupedIndex] = draft.data.recommendations[groupedIndex];
+                         }
+                     });
+                     
+                     requestData.recommendations = newRecommendations;
+                 } else {
+                     requestData.recommendations = draft.data.recommendations || {};
+                 }
+                 
+                 // Assign the ungrouped items to requestData.items
+                 requestData.items = items;
+                 requestData.suppliers = draft.data.suppliers || [];
+             } else {
+                 // No ungrouping needed, load items and data as is
+                 requestData.items = items;
+                 requestData.suppliers = draft.data.suppliers || [];
+                 requestData.offers = draft.data.offers || {};
+                 requestData.recommendations = draft.data.recommendations || {};
+             }
+         } else {
+             // No draft.data, keep empty arrays/objects
+             requestData.items = [];
+             requestData.suppliers = [];
+             requestData.offers = {};
+             requestData.recommendations = {};
+         }
+        
+        // Convert recommendations back to itemRecommendations format
+        requestData.itemRecommendations = {};
+        if (requestData.recommendations) {
+            Object.keys(requestData.recommendations).forEach(itemIndex => {
+                const supplierId = requestData.recommendations[itemIndex];
+                if (supplierId) {
+                    requestData.itemRecommendations[itemIndex] = supplierId;
+                }
+            });
+        }
+        
+        // Migrate supplier data from backend format to frontend format
+        if (dataManager) {
+            dataManager.migrateSupplierData(draft.data);
         }
         
         // Update managers with the loaded data
+        console.log('Final requestData.items before updating managers:', requestData.items);
+        console.log('Final requestData.suppliers before updating managers:', requestData.suppliers);
+        
         if (itemsManager) {
             itemsManager.requestData = requestData;
         }
@@ -496,19 +668,33 @@ async function loadDraftData(draft) {
             await suppliersManager.loadAvailablePaymentTerms();
         }
         
+        // Re-render everything first
+        await renderAll();
+        
         // Save the loaded draft data to localStorage as the new current state
         if (dataManager) {
             dataManager.saveDraft();
             console.log('Saved loaded draft to localStorage as new current state');
         }
         
-        // Re-render everything
-        await renderAll();
+        // Reset the loading flag
+        if (dataManager) {
+            dataManager.isLoadingDraft = false;
+        }
+        
+        console.log('Draft loading completed successfully');
+        console.log('Final items count:', requestData.items.length);
+        console.log('Final suppliers count:', requestData.suppliers.length);
         
     } catch (error) {
         console.error('Error loading draft data:', error);
+        // Reset the loading flag even on error
+        if (dataManager) {
+            dataManager.isLoadingDraft = false;
+        }
         throw error;
     }
+    
 }
 
 async function deleteDraftRequest(draftId) {
@@ -550,6 +736,9 @@ function updateComparisonTableRates() {
 }
 
 async function renderAll() {
+    console.log('renderAll - requestData.items:', requestData.items);
+    console.log('renderAll - requestData.suppliers:', requestData.suppliers);
+    
     renderFormFields();
     itemsManager.renderItemsTable();
     
@@ -924,7 +1113,7 @@ async function clearPage() {
         });
     }
     
-    // Clear draft from localStorage
+    // Clear all localStorage data
     dataManager.clearDraft();
     
     // Re-render everything

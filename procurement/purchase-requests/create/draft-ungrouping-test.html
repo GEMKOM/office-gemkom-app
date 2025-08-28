@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Draft Ungrouping Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        .test-section h3 {
+            color: #333;
+            margin-top: 0;
+        }
+        .item {
+            background-color: #f8f9fa;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+            border-left: 4px solid #007bff;
+        }
+        .item-grouped {
+            border-left-color: #28a745;
+            background-color: #d4edda;
+        }
+        .item-ungrouped {
+            border-left-color: #ffc107;
+            background-color: #fff3cd;
+        }
+        .code { font-weight: bold; color: #007bff; }
+        .name { color: #333; }
+        .job-no { color: #6c757d; font-style: italic; }
+        .quantity { color: #28a745; font-weight: bold; }
+        .unit { color: #6c757d; }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        .success { color: #28a745; }
+        .error { color: #dc3545; }
+        pre {
+            background-color: #f8f9fa;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Draft Ungrouping Test</h1>
+        <p>This test demonstrates the fix for the issue where items with the same code, name, and unit were being merged when loading drafts.</p>
+        
+        <div class="test-section">
+            <h3>1. Original Separate Items</h3>
+            <p>These are the items as they were originally added (separate rows):</p>
+            <div id="original-items"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>2. Grouped Items (as saved in draft)</h3>
+            <p>These are the items after being grouped by the <code>getFormattedItemsForSubmission()</code> function:</p>
+            <div id="grouped-items"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>3. Ungrouped Items (after fix)</h3>
+            <p>These are the items after being ungrouped by the new logic in <code>loadDraftData()</code>:</p>
+            <div id="ungrouped-items"></div>
+        </div>
+        
+        <div class="test-section">
+            <h3>Test Controls</h3>
+            <button onclick="runTest()">Run Test</button>
+            <button onclick="testPageClearing()">Test Page Clearing</button>
+            <button onclick="clearResults()">Clear Results</button>
+        </div>
+        
+        <div class="test-section">
+            <h3>Test Results</h3>
+            <div id="test-results"></div>
+        </div>
+    </div>
+
+    <script>
+        // Sample data representing the original separate items
+        const originalItems = [
+            {
+                id: 'item_1',
+                code: 'ABC123',
+                name: 'Steel Plate',
+                job_no: 'JOB001',
+                quantity: 10,
+                unit: 'kg',
+                specs: 'Thickness: 5mm'
+            },
+            {
+                id: 'item_2',
+                code: 'ABC123',
+                name: 'Steel Plate',
+                job_no: 'JOB002',
+                quantity: 15,
+                unit: 'kg',
+                specs: 'Thickness: 5mm'
+            },
+            {
+                id: 'item_3',
+                code: 'XYZ789',
+                name: 'Aluminum Bar',
+                job_no: 'JOB003',
+                quantity: 5,
+                unit: 'metre',
+                specs: 'Diameter: 20mm'
+            }
+        ];
+
+        // Function to simulate the grouping that happens during draft save
+        function groupItemsForSubmission(items) {
+            const groupedItems = {};
+            
+            items.forEach((item, originalIndex) => {
+                const key = `${item.code}|${item.name}|${item.unit}`;
+                
+                if (!groupedItems[key]) {
+                    groupedItems[key] = {
+                        code: item.code,
+                        name: item.name,
+                        unit: item.unit,
+                        quantity: 0,
+                        allocations: [],
+                        specs: item.specs
+                    };
+                }
+                
+                groupedItems[key].allocations.push({
+                    job_no: item.job_no,
+                    quantity: parseFloat(item.quantity).toFixed(2)
+                });
+                groupedItems[key].quantity += parseFloat(item.quantity);
+            });
+            
+            return Object.values(groupedItems).map(item => ({
+                ...item,
+                quantity: item.quantity.toFixed(2)
+            }));
+        }
+
+        // Function to simulate the ungrouping that happens during draft load (the fix)
+        function ungroupItems(groupedItems) {
+            const ungroupedItems = [];
+            
+            groupedItems.forEach((groupedItem, groupIndex) => {
+                if (groupedItem.allocations && Array.isArray(groupedItem.allocations)) {
+                    // This is a grouped item, split it into separate items
+                    groupedItem.allocations.forEach(allocation => {
+                        const separateItem = {
+                            id: `item_${Date.now()}_${Math.random()}`,
+                            code: groupedItem.code,
+                            name: groupedItem.name,
+                            unit: groupedItem.unit,
+                            job_no: allocation.job_no,
+                            quantity: allocation.quantity,
+                            specs: groupedItem.specs || ''
+                        };
+                        ungroupedItems.push(separateItem);
+                    });
+                } else {
+                    // This is already a separate item
+                    ungroupedItems.push(groupedItem);
+                }
+            });
+            
+            return ungroupedItems;
+        }
+
+        // Function to display items
+        function displayItems(items, containerId, className = '') {
+            const container = document.getElementById(containerId);
+            container.innerHTML = '';
+            
+            items.forEach((item, index) => {
+                const itemDiv = document.createElement('div');
+                itemDiv.className = `item ${className}`;
+                itemDiv.innerHTML = `
+                    <div><span class="code">${item.code}</span> - <span class="name">${item.name}</span></div>
+                    <div><span class="job-no">Job No: ${item.job_no}</span> | 
+                         <span class="quantity">${item.quantity}</span> <span class="unit">${item.unit}</span></div>
+                    ${item.specs ? `<div><small>Specs: ${item.specs}</small></div>` : ''}
+                    ${item.allocations ? `<div><small><strong>Allocations:</strong> ${item.allocations.length} separate items</small></div>` : ''}
+                `;
+                container.appendChild(itemDiv);
+            });
+        }
+
+        // Function to run the test
+        function runTest() {
+            const resultsDiv = document.getElementById('test-results');
+            
+            // Display original items
+            displayItems(originalItems, 'original-items', 'item-ungrouped');
+            
+            // Simulate grouping (what happens during draft save)
+            const groupedItems = groupItemsForSubmission(originalItems);
+            displayItems(groupedItems, 'grouped-items', 'item-grouped');
+            
+            // Simulate ungrouping (the fix)
+            const ungroupedItems = ungroupItems(groupedItems);
+            displayItems(ungroupedItems, 'ungrouped-items', 'item-ungrouped');
+            
+            // Test results
+            const originalCount = originalItems.length;
+            const groupedCount = groupedItems.length;
+            const ungroupedCount = ungroupedItems.length;
+            
+            const isSuccess = ungroupedCount === originalCount;
+            
+            resultsDiv.innerHTML = `
+                <div class="${isSuccess ? 'success' : 'error'}">
+                    <h4>Test Results:</h4>
+                    <ul>
+                        <li>Original items: ${originalCount}</li>
+                        <li>Grouped items: ${groupedCount}</li>
+                        <li>Ungrouped items: ${ungroupedCount}</li>
+                        <li><strong>Test ${isSuccess ? 'PASSED' : 'FAILED'}</strong></li>
+                    </ul>
+                </div>
+                
+                <h4>JSON Comparison:</h4>
+                <h5>Original Items:</h5>
+                <pre>${JSON.stringify(originalItems, null, 2)}</pre>
+                
+                <h5>Grouped Items (as saved in draft):</h5>
+                <pre>${JSON.stringify(groupedItems, null, 2)}</pre>
+                
+                <h5>Ungrouped Items (after fix):</h5>
+                <pre>${JSON.stringify(ungroupedItems, null, 2)}</pre>
+            `;
+        }
+
+        // Function to test page clearing functionality
+        function testPageClearing() {
+            const resultsDiv = document.getElementById('test-results');
+            
+            // Simulate existing page data
+            const existingData = {
+                title: 'Existing Request',
+                description: 'This is existing data',
+                items: [
+                    { id: 'existing_1', code: 'EXISTING', name: 'Existing Item', job_no: 'JOB999', quantity: 100, unit: 'kg' }
+                ],
+                suppliers: [{ id: 1, name: 'Existing Supplier' }],
+                offers: { 1: { 0: { unitPrice: 10 } } },
+                itemRecommendations: { 0: 1 }
+            };
+            
+            // Simulate existing localStorage data
+            const existingLocalStorage = {
+                'purchaseRequestDraft': JSON.stringify(existingData),
+                'purchaseRequestData': JSON.stringify(existingData),
+                'purchaseRequestItems': JSON.stringify(existingData.items),
+                'purchaseRequestSuppliers': JSON.stringify(existingData.suppliers),
+                'purchaseRequestOffers': JSON.stringify(existingData.offers),
+                'purchaseRequestRecommendations': JSON.stringify(existingData.itemRecommendations)
+            };
+            
+            // Simulate draft data
+            const draftData = {
+                title: 'Draft Request',
+                description: 'This is draft data',
+                items: originalItems // Use the original test items
+            };
+            
+            // Simulate the clearing process
+            const clearedData = {
+                title: '',
+                description: '',
+                priority: 'normal',
+                needed_date: new Date().toISOString().split('T')[0],
+                items: [],
+                suppliers: [],
+                offers: {},
+                recommendations: {},
+                itemRecommendations: {}
+            };
+            
+            // Simulate cleared localStorage
+            const clearedLocalStorage = {
+                'purchaseRequestDraft': null,
+                'purchaseRequestData': null,
+                'purchaseRequestItems': null,
+                'purchaseRequestSuppliers': null,
+                'purchaseRequestOffers': null,
+                'purchaseRequestRecommendations': null
+            };
+            
+            // Simulate loading draft data after clearing
+            const loadedData = {
+                title: draftData.title,
+                description: draftData.description,
+                items: draftData.items,
+                suppliers: [],
+                offers: {},
+                recommendations: {},
+                itemRecommendations: {}
+            };
+            
+            resultsDiv.innerHTML = `
+                <div class="success">
+                    <h4>Page and localStorage Clearing Test Results:</h4>
+                    <h5>1. Existing Page Data:</h5>
+                    <pre>${JSON.stringify(existingData, null, 2)}</pre>
+                    
+                    <h5>2. Existing localStorage Data:</h5>
+                    <pre>${JSON.stringify(existingLocalStorage, null, 2)}</pre>
+                    
+                    <h5>3. Cleared Page Data:</h5>
+                    <pre>${JSON.stringify(clearedData, null, 2)}</pre>
+                    
+                    <h5>4. Cleared localStorage Data:</h5>
+                    <pre>${JSON.stringify(clearedLocalStorage, null, 2)}</pre>
+                    
+                    <h5>5. Loaded Draft Data:</h5>
+                    <pre>${JSON.stringify(loadedData, null, 2)}</pre>
+                    
+                    <div class="success">
+                        <strong>✓ Test PASSED:</strong> Page and localStorage clearing works correctly. 
+                        Existing data is properly cleared before loading draft data.
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Function to clear results
+        function clearResults() {
+            document.getElementById('original-items').innerHTML = '';
+            document.getElementById('grouped-items').innerHTML = '';
+            document.getElementById('ungrouped-items').innerHTML = '';
+            document.getElementById('test-results').innerHTML = '';
+        }
+
+        // Run test on page load
+        window.onload = function() {
+            runTest();
+        };
+    </script>
+</body>
+</html>

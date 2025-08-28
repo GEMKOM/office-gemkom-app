@@ -655,6 +655,7 @@ export class ItemsManager {
     }
 
     renderItemsTable() {
+        console.log('itemsManager.renderItemsTable - this.requestData.items:', this.requestData.items);
         const tbody = document.getElementById('items-tbody');
         tbody.innerHTML = '';
 
@@ -1175,10 +1176,10 @@ export class ItemsManager {
         };
 
         const columnKeywords = {
-            code: ['kod', 'code', 'stok', 'ürün', 'malzeme', 'item', 'product', 'material', 'part', 'parça', 'sku', 'malzeme kodu'],
-            name: ['ad', 'name', 'açıklama', 'description', 'ürün adı', 'malzeme adı', 'title', 'başlık', 'tanım', 'isim', 'malzeme adı', 'malzeme adi', 'isim'],
-            job_no: ['srm. kodu', 'srm kodu', 'iş no', 'is no', 'job no', 'job number', 'work no', 'work number', 'proje no', 'project no'],
-            quantity: ['miktar', 'quantity', 'adet', 'sayı', 'number', 'amount', 'qty', 'count', 'piece'],
+            code: ['kod', 'code', 'stok', 'ürün', 'malzeme', 'item', 'product', 'material', 'part', 'parça', 'sku', 'malzeme kodu', 'stok kodu'],
+            name: ['ad', 'name', 'açıklama', 'description', 'ürün adı', 'malzeme adı', 'title', 'başlık', 'tanım', 'isim', 'malzeme adı', 'malzeme adi', 'isim', 'stok ismi'],
+            job_no: ['srm. kodu', 'srm kodu', 'iş no', 'is no', 'job no', 'job number', 'work no', 'work number', 'proje no', 'project no', 'iş ismi'],
+            quantity: ['miktar', 'quantity', 'adet', 'sayı', 'number', 'amount', 'qty', 'count', 'piece', 'talep miktari'],
             unit: ['birim', 'unit', 'ölçü', 'measure', 'uom', 'measurement'],
             specs: ['özellik', 'specs', 'specification', 'teknik', 'technical', 'detay', 'detail', 'açıklama', 'description', 'teknik özellikler', 'açıklama-1', 'açıklama-2']
         };
@@ -1202,6 +1203,20 @@ export class ItemsManager {
             }
             if (mapping.unit === -1 && (headerLower === 'birim' || headerNormalized === 'birim' || header === 'BİRİM')) {
                 mapping.unit = index;
+            }
+            
+            // Exact matches for the new Excel format (sa_raporu.xlsx)
+            if (mapping.code === -1 && (headerLower === 'stok kodu' || headerNormalized === 'stok kodu' || header === 'STOK KODU')) {
+                mapping.code = index;
+            }
+            if (mapping.name === -1 && (headerLower === 'stok ismi' || headerNormalized === 'stok ismi' || header === 'STOK İSMİ')) {
+                mapping.name = index;
+            }
+            if (mapping.job_no === -1 && (headerLower === 'iş ismi' || headerNormalized === 'iş ismi' || header === 'İŞ İSMİ')) {
+                mapping.job_no = index;
+            }
+            if (mapping.quantity === -1 && (headerLower === 'talep miktari' || headerNormalized === 'talep miktari' || header === 'TALEP MİKTARI')) {
+                mapping.quantity = index;
             }
             
             // Then try keyword matching for other cases
@@ -1744,5 +1759,51 @@ export class ItemsManager {
             items: formattedItems,
             mapping: originalToGroupedMapping
         };
+    }
+
+    // ===== TEST FUNCTION FOR NEW EXCEL MAPPINGS =====
+    
+    /**
+     * Test function to verify the new Excel column mappings work correctly
+     * This can be called from browser console for testing
+     */
+    testNewExcelMappings() {
+        console.log('Testing new Excel column mappings...');
+        
+        // Test headers from sa_raporu.xlsx format
+        const testHeaders = [
+            'STOK KODU',
+            'STOK İSMİ', 
+            'İŞ İSMİ',
+            'TALEP MİKTARI',
+            'BİRİM',
+            'TEKNİK ÖZELLİKLER'
+        ];
+        
+        const mapping = this.detectColumnMapping(testHeaders);
+        
+        console.log('Detected mapping:', mapping);
+        
+        // Verify the mappings
+        const expectedMapping = {
+            code: 0,      // STOK KODU
+            name: 1,      // STOK İSMİ
+            job_no: 2,    // İŞ İSMİ
+            quantity: 3,  // TALEP MİKTARI
+            unit: 4,      // BİRİM
+            specs: 5      // TEKNİK ÖZELLİKLER
+        };
+        
+        const isCorrect = JSON.stringify(mapping) === JSON.stringify(expectedMapping);
+        
+        if (isCorrect) {
+            console.log('✅ All new Excel mappings work correctly!');
+        } else {
+            console.log('❌ Some mappings are incorrect:');
+            console.log('Expected:', expectedMapping);
+            console.log('Actual:', mapping);
+        }
+        
+        return isCorrect;
     }
 }

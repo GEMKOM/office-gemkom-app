@@ -3,6 +3,7 @@ export class DataManager {
     constructor(requestData) {
         this.requestData = requestData;
         this.autoSaveTimeout = null;
+        this.isLoadingDraft = false;
         this.setupAutoSave();
     }
 
@@ -29,6 +30,11 @@ export class DataManager {
     }
 
     autoSave() {
+        // Don't auto-save if we're currently loading a draft
+        if (this.isLoadingDraft) {
+            return;
+        }
+        
         clearTimeout(this.autoSaveTimeout);
         this.autoSaveTimeout = setTimeout(() => {
             if (this.hasMeaningfulData()) {
@@ -64,6 +70,9 @@ export class DataManager {
 
     saveDraft() {
         try {
+            console.log('dataManager.saveDraft - this.requestData.items:', this.requestData.items);
+            console.log('dataManager.saveDraft - this.requestData.suppliers:', this.requestData.suppliers);
+            
             const draftData = {
                 title: this.requestData.title,
                 description: this.requestData.description,
@@ -81,6 +90,15 @@ export class DataManager {
             localStorage.setItem('purchaseRequestDraft', JSON.stringify(draftData));
         } catch (error) {
             console.error('Error saving draft:', error);
+        }
+    }
+
+    saveDraftDirectly(draftData) {
+        try {
+            console.log('Saving draft directly with data:', draftData);
+            localStorage.setItem('purchaseRequestDraft', JSON.stringify(draftData));
+        } catch (error) {
+            console.error('Error saving draft directly:', error);
         }
     }
 
@@ -104,7 +122,42 @@ export class DataManager {
                     this.requestData.description = draftData.description || '';
                     this.requestData.priority = draftData.priority || 'normal';
                     this.requestData.needed_date = draftData.needed_date || '';
-                    this.requestData.items = draftData.items || [];
+                    
+                    // Load items and check if they need to be ungrouped
+                    let items = draftData.items || [];
+                    
+                    // Check if items have allocations (indicating they were grouped during save)
+                    // If so, ungroup them back to separate items
+                    if (items.length > 0 && items[0].allocations && Array.isArray(items[0].allocations)) {
+                        console.log('Detected grouped items in localStorage draft, ungrouping...');
+                        const ungroupedItems = [];
+                        
+                        items.forEach((groupedItem, groupIndex) => {
+                            if (groupedItem.allocations && Array.isArray(groupedItem.allocations)) {
+                                // This is a grouped item, split it into separate items
+                                groupedItem.allocations.forEach(allocation => {
+                                    const separateItem = {
+                                        id: `item_${Date.now()}_${Math.random()}`,
+                                        code: groupedItem.code,
+                                        name: groupedItem.name,
+                                        unit: groupedItem.unit,
+                                        job_no: allocation.job_no,
+                                        quantity: allocation.quantity,
+                                        specs: groupedItem.specs || ''
+                                    };
+                                    ungroupedItems.push(separateItem);
+                                });
+                            } else {
+                                // This is already a separate item
+                                ungroupedItems.push(groupedItem);
+                            }
+                        });
+                        
+                        items = ungroupedItems;
+                        console.log('Ungrouped items from localStorage:', items);
+                    }
+                    
+                    this.requestData.items = items;
                     this.requestData.suppliers = draftData.suppliers || [];
                     this.requestData.offers = draftData.offers || {};
                     this.requestData.recommendations = draftData.recommendations || {};
@@ -163,7 +216,14 @@ export class DataManager {
 
     clearDraft() {
         try {
+            // Clear all localStorage data to ensure clean state
             localStorage.removeItem('purchaseRequestDraft');
+            localStorage.removeItem('purchaseRequestData');
+            localStorage.removeItem('purchaseRequestItems');
+            localStorage.removeItem('purchaseRequestSuppliers');
+            localStorage.removeItem('purchaseRequestOffers');
+            localStorage.removeItem('purchaseRequestRecommendations');
+            console.log('Cleared all localStorage data');
         } catch (error) {
             console.error('Error clearing draft:', error);
         }
