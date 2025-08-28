@@ -1567,4 +1567,125 @@ thead .btn.btn-outline-warning {
     color: #0c5460;
 }
 
+/* Merge Modal Styles */
+.duplicate-group {
+    border: 1px solid #dee2e6 !important;
+    border-radius: 8px !important;
+    transition: all 0.3s ease;
+}
+
+.duplicate-group:hover {
+    border-color: #007bff !important;
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.1);
+}
+
+.duplicate-group .form-check {
+    margin: 0;
+}
+
+.duplicate-group .form-check-input {
+    cursor: pointer;
+}
+
+.duplicate-group .form-check-input:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.duplicate-group .form-check-label {
+    font-weight: 500;
+    color: #495057;
+    cursor: pointer;
+}
+
+.duplicate-group .table th {
+    font-size: 0.875rem;
+    font-weight: 600;
+    background-color: #f8f9fa;
+    border-color: #dee2e6;
+}
+
+.duplicate-group .table td {
+    font-size: 0.875rem;
+    vertical-align: middle;
+}
+
+.duplicate-group .merge-preview {
+    background-color: #f8f9fa !important;
+    border: 1px solid #e9ecef !important;
+    border-radius: 6px !important;
+}
+
+.duplicate-group .merge-preview-text {
+    font-weight: 500;
+    color: #495057;
+}
+
+.specs-difference {
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    padding: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.specs-difference:last-child {
+    margin-bottom: 0;
+}
+
+.specs-difference strong {
+    color: #495057;
+    font-weight: 600;
+}
+
+/* Merge Modal Alert Styles */
+.duplicate-group .alert {
+    border-radius: 6px;
+    font-size: 0.875rem;
+    margin-bottom: 0.75rem;
+}
+
+.duplicate-group .alert-warning {
+    background-color: #fff3cd;
+    border-color: #ffeaa7;
+    color: #856404;
+}
+
+.duplicate-group .alert-info {
+    background-color: #d1ecf1;
+    border-color: #bee5eb;
+    color: #0c5460;
+}
+
+/* Merge Modal Checkbox Styles */
+.merge-group-checkbox {
+    transform: scale(1.1);
+}
+
+.merge-item-checkbox {
+    transform: scale(1.05);
+}
+
+.merge-group-checkbox:indeterminate {
+    background-color: #6c757d;
+    border-color: #6c757d;
+}
+
+/* Merge Modal Table Responsive */
+.duplicate-group .table-responsive {
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.duplicate-group .table {
+    margin-bottom: 0;
+}
+
+.duplicate-group .table th:first-child,
+.duplicate-group .table td:first-child {
+    width: 40px;
+    text-align: center;
+}
+
 

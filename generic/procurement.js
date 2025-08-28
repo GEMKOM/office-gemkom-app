@@ -357,8 +357,11 @@ export async function getSuppliers(filters = {}) {
         // Build query parameters
         const queryParams = new URLSearchParams();
         
+        // Set default page size to 1000
+        const filtersWithPageSize = { ...filters, page_size: 1000 };
+        
         // Add filters if provided
-        Object.entries(filters).forEach(([key, value]) => {
+        Object.entries(filtersWithPageSize).forEach(([key, value]) => {
             if (value !== null && value !== undefined && value !== '') {
                 queryParams.append(key, value);
             }

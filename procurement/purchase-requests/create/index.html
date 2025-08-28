@@ -16,6 +16,7 @@
     <link rel="stylesheet" href="create.css">
     <link rel="stylesheet" href="../../../components/header/header.css">
     <link rel="stylesheet" href="../../../components/comparison-table/comparison-table.css">
+    <link rel="stylesheet" href="../../../components/dropdown.css">
 </head>
 <body class="pre-auth">
     <!-- Navigation -->
@@ -346,10 +347,8 @@
                         <!-- Supplier Selection -->
                         <div class="row mb-4">
                             <div class="col-12">
-                                <label class="form-label">Tedarikçi Seçimi</label>
-                                <select class="form-select" id="supplier-select">
-                                    <option value="">Tedarikçi seçin...</option>
-                                </select>
+                                <label class="form-label" for="supplier-dropdown-container">Tedarikçi Seçimi</label>
+                                <div id="supplier-dropdown-container"></div>
                                 <div class="form-text">
                                     <i class="fas fa-info-circle me-1"></i>
                                     Yeni tedarikçi eklemek için 

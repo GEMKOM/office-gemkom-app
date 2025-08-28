@@ -380,31 +380,94 @@ export class ItemsManager {
         
         let duplicatesHtml = '';
         duplicates.forEach(({ code, items }, groupIndex) => {
+            // Check if items have different specs
+            const uniqueSpecs = [...new Set(items.map(item => item.specs || '').filter(specs => specs.trim()))];
+            const hasDifferentSpecs = uniqueSpecs.length > 1;
+            
+            // Check if items have different names or units
+            const firstItem = items[0];
+            const sameName = items.every(item => 
+                item.name.trim().toLowerCase() === firstItem.name.trim().toLowerCase()
+            );
+            const sameUnit = items.every(item => 
+                item.unit.trim().toLowerCase() === firstItem.unit.trim().toLowerCase()
+            );
+            
             duplicatesHtml += `
-                <div class="duplicate-group mb-3 p-3 border rounded">
-                    <h6 class="text-primary mb-2">
-                        <i class="fas fa-tags me-2"></i>Kod: <strong>${items[0].code}</strong>
-                        <span class="badge bg-primary ms-2">${items.length} adet</span>
-                    </h6>
+                <div class="duplicate-group mb-3 p-3 border rounded" data-group-index="${groupIndex}">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="text-primary mb-0">
+                            <i class="fas fa-tags me-2"></i>Kod: <strong>${items[0].code}</strong>
+                            <span class="badge bg-primary ms-2">${items.length} adet</span>
+                        </h6>
+                        <div class="form-check">
+                            <input class="form-check-input merge-group-checkbox" type="checkbox" 
+                                   id="merge-group-${groupIndex}" data-group-index="${groupIndex}" 
+                                   ${sameName && sameUnit ? 'checked' : ''} 
+                                   ${!sameName || !sameUnit ? 'disabled' : ''}>
+                            <label class="form-check-label" for="merge-group-${groupIndex}">
+                                Bu grubu birleştir
+                            </label>
+                        </div>
+                    </div>
+                    
+                    ${(!sameName || !sameUnit) ? `
+                        <div class="alert alert-warning mb-2">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Uyarı:</strong> Bu gruptaki malzemeler farklı ad veya birime sahip olduğu için birleştirilemez.
+                            ${!sameName ? '<br>• Farklı malzeme adları' : ''}
+                            ${!sameUnit ? '<br>• Farklı birimler' : ''}
+                        </div>
+                    ` : ''}
+                    
+                    ${hasDifferentSpecs ? `
+                        <div class="alert alert-info mb-2">
+                            <i class="fas fa-info-circle me-2"></i>
+                            <strong>Teknik Özellikler Farklılığı:</strong> Bu gruptaki malzemeler farklı teknik özelliklere sahip.
+                            <div class="mt-2">
+                                ${uniqueSpecs.map((specs, index) => `
+                                    <div class="specs-difference">
+                                        <strong>Özellik ${index + 1}:</strong> ${specs || 'Özellik belirtilmemiş'}
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                    
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered">
                             <thead class="table-light">
                                 <tr>
+                                    <th style="width: 40px;">Seç</th>
                                     <th>#</th>
                                     <th>Ad</th>
                                     <th>İş No</th>
                                     <th>Miktar</th>
                                     <th>Birim</th>
+                                    <th>Teknik Özellikler</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${items.map((item, i) => `
                                     <tr>
+                                        <td>
+                                            <div class="form-check">
+                                                <input class="form-check-input merge-item-checkbox" type="checkbox" 
+                                                       data-group-index="${groupIndex}" data-item-index="${i}"
+                                                       ${sameName && sameUnit ? 'checked' : ''} 
+                                                       ${!sameName || !sameUnit ? 'disabled' : ''}>
+                                            </div>
+                                        </td>
                                         <td>${i + 1}</td>
                                         <td>${item.name}</td>
                                         <td>${item.job_no || '-'}</td>
                                         <td>${item.quantity}</td>
                                         <td>${item.unit}</td>
+                                        <td>
+                                            <small class="text-muted">
+                                                ${item.specs ? (item.specs.length > 50 ? item.specs.substring(0, 50) + '...' : item.specs) : 'Özellik belirtilmemiş'}
+                                            </small>
+                                        </td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -414,21 +477,23 @@ export class ItemsManager {
                         <small class="text-muted">
                             <i class="fas fa-arrow-right me-1"></i>
                             <strong>Birleştirilecek:</strong> 
-                            ${(() => {
-                                const jobNoGroups = {};
-                                items.forEach(item => {
-                                    const jobNo = item.job_no || '';
-                                    if (!jobNoGroups[jobNo]) {
-                                        jobNoGroups[jobNo] = 0;
-                                    }
-                                    jobNoGroups[jobNo] += parseFloat(item.quantity || 0);
-                                });
-                                const totalQuantity = items.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0);
-                                const allocationText = Object.entries(jobNoGroups).map(([jobNo, totalQty]) => 
-                                    `${totalQty} ${items[0].unit} (${jobNo || 'İş No Yok'})`
-                                ).join(', ');
-                                return `${totalQuantity} ${items[0].unit} toplam - ${allocationText}`;
-                            })()}
+                            <span class="merge-preview-text">
+                                ${(() => {
+                                    const jobNoGroups = {};
+                                    items.forEach(item => {
+                                        const jobNo = item.job_no || '';
+                                        if (!jobNoGroups[jobNo]) {
+                                            jobNoGroups[jobNo] = 0;
+                                        }
+                                        jobNoGroups[jobNo] += parseFloat(item.quantity || 0);
+                                    });
+                                    const totalQuantity = items.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0);
+                                    const allocationText = Object.entries(jobNoGroups).map(([jobNo, totalQty]) => 
+                                        `${totalQty} ${items[0].unit} (${jobNo || 'İş No Yok'})`
+                                    ).join(', ');
+                                    return `${totalQuantity} ${items[0].unit} toplam - ${allocationText}`;
+                                })()}
+                            </span>
                         </small>
                     </div>
                 </div>
@@ -449,7 +514,7 @@ export class ItemsManager {
                             <div class="alert alert-info">
                                 <i class="fas fa-info-circle me-2"></i>
                                 <strong>${duplicates.length} kod</strong> için birden fazla malzeme bulundu. 
-                                Bu malzemeler birleştirilecektir.
+                                Birleştirmek istediğiniz grupları ve öğeleri seçebilirsiniz.
                             </div>
                             <div class="duplicates-container">
                                 ${duplicatesHtml}
@@ -464,7 +529,7 @@ export class ItemsManager {
                                 <i class="fas fa-times me-1"></i>İptal
                             </button>
                             <button type="button" class="btn btn-primary" onclick="window.itemsManager.confirmMergeItems('${modalId}')">
-                                <i class="fas fa-object-group me-1"></i>Birleştir
+                                <i class="fas fa-object-group me-1"></i>Seçilenleri Birleştir
                             </button>
                         </div>
                     </div>
@@ -476,9 +541,89 @@ export class ItemsManager {
         const modal = new bootstrap.Modal(document.getElementById(modalId));
         modal.show();
         
+        // Setup checkbox event listeners
+        this.setupMergeCheckboxListeners(modalId, duplicates);
+        
         document.getElementById(modalId).addEventListener('hidden.bs.modal', function() {
             this.remove();
         });
+    }
+
+    setupMergeCheckboxListeners(modalId, duplicates) {
+        const modal = document.getElementById(modalId);
+        
+        // Group checkbox event listeners
+        const groupCheckboxes = modal.querySelectorAll('.merge-group-checkbox');
+        groupCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                const groupIndex = parseInt(e.target.dataset.groupIndex);
+                const isChecked = e.target.checked;
+                
+                // Update all item checkboxes in this group
+                const itemCheckboxes = modal.querySelectorAll(`.merge-item-checkbox[data-group-index="${groupIndex}"]`);
+                itemCheckboxes.forEach(itemCheckbox => {
+                    itemCheckbox.checked = isChecked;
+                });
+                
+                // Update merge preview for this group
+                this.updateMergePreview(modal, groupIndex, duplicates[groupIndex]);
+            });
+        });
+        
+        // Individual item checkbox event listeners
+        const itemCheckboxes = modal.querySelectorAll('.merge-item-checkbox');
+        itemCheckboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', (e) => {
+                const groupIndex = parseInt(e.target.dataset.groupIndex);
+                
+                // Update group checkbox based on item checkboxes
+                const groupCheckbox = modal.querySelector(`.merge-group-checkbox[data-group-index="${groupIndex}"]`);
+                const itemCheckboxesInGroup = modal.querySelectorAll(`.merge-item-checkbox[data-group-index="${groupIndex}"]`);
+                const checkedItems = Array.from(itemCheckboxesInGroup).filter(cb => cb.checked);
+                
+                groupCheckbox.checked = checkedItems.length === itemCheckboxesInGroup.length;
+                groupCheckbox.indeterminate = checkedItems.length > 0 && checkedItems.length < itemCheckboxesInGroup.length;
+                
+                // Update merge preview for this group
+                this.updateMergePreview(modal, groupIndex, duplicates[groupIndex]);
+            });
+        });
+    }
+
+    updateMergePreview(modal, groupIndex, groupData) {
+        const groupElement = modal.querySelector(`[data-group-index="${groupIndex}"]`);
+        const previewText = groupElement.querySelector('.merge-preview-text');
+        const itemCheckboxes = modal.querySelectorAll(`.merge-item-checkbox[data-group-index="${groupIndex}"]`);
+        
+        // Get selected items
+        const selectedItems = [];
+        itemCheckboxes.forEach((checkbox, index) => {
+            if (checkbox.checked) {
+                selectedItems.push(groupData.items[index]);
+            }
+        });
+        
+        if (selectedItems.length === 0) {
+            previewText.textContent = 'Hiçbir öğe seçilmedi';
+            return;
+        }
+        
+        // Calculate preview for selected items
+        const jobNoGroups = {};
+        selectedItems.forEach(item => {
+            const jobNo = item.job_no || '';
+            if (!jobNoGroups[jobNo]) {
+                jobNoGroups[jobNo] = 0;
+            }
+            jobNoGroups[jobNo] += parseFloat(item.quantity || 0);
+        });
+        
+        const totalQuantity = selectedItems.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0);
+        const allocationText = Object.entries(jobNoGroups).map(([jobNo, totalQty]) => 
+            `${totalQty} ${selectedItems[0].unit} (${jobNo || 'İş No Yok'})`
+        ).join(', ');
+        
+        previewText.textContent = `${totalQuantity} ${selectedItems[0].unit} toplam - ${allocationText}`;
     }
 
     confirmMergeItems(modalId) {
@@ -492,9 +637,9 @@ export class ItemsManager {
         const itemsToRemove = [];
         const mergedGroups = [];
 
-        // Reconstruct duplicates data from the DOM
+        // Reconstruct duplicates data from the DOM and get selected items
         const duplicates = [];
-        duplicateGroups.forEach(group => {
+        duplicateGroups.forEach((group, groupIndex) => {
             const codeElement = group.querySelector('h6 strong');
             const code = codeElement ? codeElement.textContent : '';
             const rows = group.querySelectorAll('tbody tr');
@@ -502,37 +647,52 @@ export class ItemsManager {
             
             rows.forEach((row, index) => {
                 const cells = row.querySelectorAll('td');
-                if (cells.length >= 5) {
+                if (cells.length >= 7) { // Updated to account for checkbox column
+                    const checkbox = row.querySelector('.merge-item-checkbox');
+                    const isSelected = checkbox && checkbox.checked;
+                    
                     items.push({
                         code: code,
-                        name: cells[1].textContent.trim(),
-                        job_no: cells[2].textContent.trim(),
-                        quantity: parseFloat(cells[3].textContent) || 0,
-                        unit: cells[4].textContent.trim(),
-                        specs: this.getSpecsFromOriginalItem(code, cells[1].textContent.trim(), cells[2].textContent.trim()),
-                        originalIndex: this.findItemIndexByCodeAndNameAndJobNo(code, cells[1].textContent.trim(), cells[2].textContent.trim())
+                        name: cells[2].textContent.trim(), // Updated index
+                        job_no: cells[3].textContent.trim(), // Updated index
+                        quantity: parseFloat(cells[4].textContent) || 0, // Updated index
+                        unit: cells[5].textContent.trim(), // Updated index
+                        specs: this.getSpecsFromOriginalItem(code, cells[2].textContent.trim(), cells[3].textContent.trim()),
+                        originalIndex: this.findItemIndexByCodeAndNameAndJobNo(code, cells[2].textContent.trim(), cells[3].textContent.trim()),
+                        isSelected: isSelected
                     });
                 }
             });
             
             if (items.length > 0) {
-                duplicates.push({ code, items });
+                duplicates.push({ code, items, groupIndex });
             }
         });
 
-        duplicates.forEach(({ code, items }) => {
-            // Check if all items have the same name and unit (job_no can be different)
-            const firstItem = items[0];
-            const sameName = items.every(item => 
+        duplicates.forEach(({ code, items, groupIndex }) => {
+            // Get only selected items
+            const selectedItems = items.filter(item => item.isSelected);
+            
+            if (selectedItems.length === 0) {
+                return; // Skip if no items selected
+            }
+            
+            if (selectedItems.length === 1) {
+                return; // Skip if only one item selected (no merging needed)
+            }
+
+            // Check if all selected items have the same name and unit (job_no can be different)
+            const firstItem = selectedItems[0];
+            const sameName = selectedItems.every(item => 
                 item.name.trim().toLowerCase() === firstItem.name.trim().toLowerCase()
             );
-            const sameUnit = items.every(item => 
+            const sameUnit = selectedItems.every(item => 
                 item.unit.trim().toLowerCase() === firstItem.unit.trim().toLowerCase()
             );
 
             if (!sameName || !sameUnit) {
                 // Items have different names or units - show warning and skip
-                const differentItems = items.filter(item => 
+                const differentItems = selectedItems.filter(item => 
                     item.name.trim().toLowerCase() !== firstItem.name.trim().toLowerCase() ||
                     item.unit.trim().toLowerCase() !== firstItem.unit.trim().toLowerCase()
                 );
@@ -547,7 +707,7 @@ export class ItemsManager {
 
             // Group items by job_no and sum quantities for each job number
             const jobNoAllocations = {};
-            items.forEach(item => {
+            selectedItems.forEach(item => {
                 const jobNo = item.job_no || '';
                 if (!jobNoAllocations[jobNo]) {
                     jobNoAllocations[jobNo] = 0;
@@ -556,29 +716,29 @@ export class ItemsManager {
             });
 
             // Create a single merged item with allocations
-            const totalQuantity = items.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0);
+            const totalQuantity = selectedItems.reduce((sum, item) => sum + parseFloat(item.quantity || 0), 0);
             const allocations = Object.entries(jobNoAllocations).map(([jobNo, quantity]) => ({
                 job_no: jobNo,
                 quantity: quantity.toFixed(2)
             }));
 
             const mergedItem = {
-                id: items[0].id,
-                code: items[0].code,
-                name: items[0].name,
+                id: selectedItems[0].id,
+                code: selectedItems[0].code,
+                name: selectedItems[0].name,
                 job_no: '', // Will be empty since we're using allocations
                 quantity: totalQuantity,
-                unit: items[0].unit,
-                specs: this.mergeSpecs(items.map(item => item.specs)),
+                unit: selectedItems[0].unit,
+                specs: this.mergeSpecs(selectedItems.map(item => item.specs)),
                 allocations: allocations // Add allocations array
             };
 
             mergedItems.push(mergedItem);
-            itemsToRemove.push(...items.map(item => item.originalIndex));
+            itemsToRemove.push(...selectedItems.map(item => item.originalIndex));
 
             mergedGroups.push({
                 code: firstItem.code,
-                originalCount: items.length,
+                originalCount: selectedItems.length,
                 mergedCount: 1,
                 totalQuantity: totalQuantity,
                 allocationCount: allocations.length
@@ -611,9 +771,14 @@ export class ItemsManager {
         bootstrap.Modal.getInstance(document.getElementById(modalId)).hide();
         
         // Show success message
-        let successMessage = `${mergedItems.length} malzeme başarıyla birleştirildi:\n\n`;
+        if (mergedItems.length === 0) {
+            this.showNotification('Birleştirilecek seçili malzeme bulunamadı.', 'info');
+            return;
+        }
+        
+        let successMessage = `${mergedItems.length} malzeme grubu başarıyla birleştirildi:\n\n`;
         mergedGroups.forEach(group => {
-            successMessage += `• ${group.code}: ${group.originalCount} satır → 1 satır (${group.allocationCount} iş no, ${group.totalQuantity} ${mergedItems.find(item => item.code === group.code)?.unit})\n`;
+            successMessage += `• ${group.code}: ${group.originalCount} seçili satır → 1 satır (${group.allocationCount} iş no, ${group.totalQuantity} ${mergedItems.find(item => item.code === group.code)?.unit})\n`;
         });
         this.showNotification(successMessage, 'success');
     }
@@ -1212,7 +1377,7 @@ export class ItemsManager {
             if (mapping.name === -1 && (headerLower === 'stok ismi' || headerNormalized === 'stok ismi' || header === 'STOK İSMİ')) {
                 mapping.name = index;
             }
-            if (mapping.job_no === -1 && (headerLower === 'iş ismi' || headerNormalized === 'iş ismi' || header === 'İŞ İSMİ')) {
+            if (mapping.job_no === -1 && (headerLower === 'iş kodu' || headerNormalized === 'iş kodu' || header === 'İŞ KODU')) {
                 mapping.job_no = index;
             }
             if (mapping.quantity === -1 && (headerLower === 'talep miktari' || headerNormalized === 'talep miktari' || header === 'TALEP MİKTARI')) {

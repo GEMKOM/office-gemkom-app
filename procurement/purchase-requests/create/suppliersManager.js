@@ -1,4 +1,5 @@
 import { getSuppliers, getPaymentTerms } from '../../../generic/procurement.js';
+import { ModernDropdown } from '../../../components/dropdown.js';
 
 // Suppliers Manager Module
 export class SuppliersManager {
@@ -8,6 +9,7 @@ export class SuppliersManager {
         this.currencySymbols = currencySymbols;
         this.availableSuppliers = []; // Store available suppliers from API
         this.availablePaymentTerms = []; // Store available payment terms from API
+        this.supplierDropdown = null; // Modern dropdown instance
         this.setupEventListeners();
     }
 
@@ -40,13 +42,7 @@ export class SuppliersManager {
             saveOfferBtn.addEventListener('click', () => this.saveOffer());
         }
 
-        // Supplier selection dropdown
-        const supplierSelect = document.getElementById('supplier-select');
-        if (supplierSelect) {
-            supplierSelect.addEventListener('change', (e) => {
-                this.onSupplierSelect(e.target.value);
-            });
-        }
+        // Supplier dropdown will be initialized in loadAvailableSuppliers
 
         // Currency, payment terms and tax rate change listeners
         const currencySelect = document.getElementById('supplier-currency');
@@ -79,9 +75,9 @@ export class SuppliersManager {
             this.populateSupplierForm(supplier);
             form.dataset.editIndex = supplierIndex;
             // Hide supplier selection for editing
-            const supplierSelect = document.getElementById('supplier-select');
-            const supplierSelectLabel = document.querySelector('label[for="supplier-select"]');
-            if (supplierSelect) supplierSelect.style.display = 'none';
+            const supplierDropdownContainer = document.getElementById('supplier-dropdown-container');
+            const supplierSelectLabel = document.querySelector('label[for="supplier-dropdown-container"]');
+            if (supplierDropdownContainer) supplierDropdownContainer.style.display = 'none';
             if (supplierSelectLabel) supplierSelectLabel.style.display = 'none';
             
             // Show editable fields for editing existing suppliers
@@ -92,9 +88,9 @@ export class SuppliersManager {
             form.reset();
             delete form.dataset.editIndex;
             // Show supplier selection for new suppliers
-            const supplierSelect = document.getElementById('supplier-select');
-            const supplierSelectLabel = document.querySelector('label[for="supplier-select"]');
-            if (supplierSelect) supplierSelect.style.display = 'block';
+            const supplierDropdownContainer = document.getElementById('supplier-dropdown-container');
+            const supplierSelectLabel = document.querySelector('label[for="supplier-dropdown-container"]');
+            if (supplierDropdownContainer) supplierDropdownContainer.style.display = 'block';
             if (supplierSelectLabel) supplierSelectLabel.style.display = 'block';
             
             // Hide all fields initially - user must select a supplier first
@@ -116,15 +112,32 @@ export class SuppliersManager {
             const response = await getSuppliers({ status: 'active' });
             this.availableSuppliers = Array.isArray(response) ? response : (response.results || []);
             
-            const supplierSelect = document.getElementById('supplier-select');
-            supplierSelect.innerHTML = '<option value="">Tedarikçi seçin...</option>';
+            // Initialize the modern dropdown
+            const dropdownContainer = document.getElementById('supplier-dropdown-container');
+            if (dropdownContainer && !this.supplierDropdown) {
+                this.supplierDropdown = new ModernDropdown(dropdownContainer, {
+                    placeholder: 'Tedarikçi seçin...',
+                    searchable: true,
+                    multiple: false,
+                    maxHeight: 300
+                });
+                
+                // Add event listener for supplier selection
+                dropdownContainer.addEventListener('dropdown:select', (e) => {
+                    this.onSupplierSelect(e.detail.value);
+                });
+            }
             
-            this.availableSuppliers.forEach(supplier => {
-                const option = document.createElement('option');
-                option.value = supplier.id;
-                option.textContent = supplier.name;
-                supplierSelect.appendChild(option);
-            });
+            // Convert suppliers to dropdown items format
+            const dropdownItems = this.availableSuppliers.map(supplier => ({
+                value: supplier.id,
+                text: supplier.name
+            }));
+            
+            // Set items in dropdown
+            if (this.supplierDropdown) {
+                this.supplierDropdown.setItems(dropdownItems);
+            }
         } catch (error) {
             console.error('Error loading suppliers:', error);
             this.showNotification('Tedarikçiler yüklenirken hata oluştu: ' + error.message, 'error');
@@ -163,7 +176,7 @@ export class SuppliersManager {
     }
 
     onSupplierSelect(supplierId) {
-        if (!supplierId) {
+        if (!supplierId || supplierId === '') {
             // Clear form if no supplier selected
             this.clearSupplierForm();
             const defaultValuesSection = document.getElementById('default-values-section');
@@ -367,6 +380,11 @@ export class SuppliersManager {
         if (currencyField) currencyField.value = '';
         if (paymentTermsField) paymentTermsField.value = '';
         if (taxRateField) taxRateField.value = '';
+        
+        // Clear dropdown selection
+        if (this.supplierDropdown) {
+            this.supplierDropdown.setValue('');
+        }
     }
 
     populateSupplierForm(supplier) {
@@ -405,8 +423,7 @@ export class SuppliersManager {
     saveSupplier() {
         const form = document.getElementById('supplierForm');
         const editIndex = form.dataset.editIndex;
-        const supplierSelect = document.getElementById('supplier-select');
-        const isApiSupplier = supplierSelect && supplierSelect.value;
+        const isApiSupplier = this.supplierDropdown && this.supplierDropdown.getValue();
 
         // Check if supplier is selected for new suppliers
         if (!editIndex && !isApiSupplier) {
@@ -460,8 +477,12 @@ export class SuppliersManager {
             const cleanPhone = phone === '-' ? '' : phone;
             const cleanEmail = email === '-' ? '' : email;
 
+            // Get the selected supplier ID from dropdown
+            const selectedSupplierId = this.supplierDropdown ? this.supplierDropdown.getValue() : null;
+            const selectedSupplier = this.availableSuppliers.find(s => s.id == selectedSupplierId);
+            
             supplier = {
-                id: this.generateSupplierId(),
+                id: selectedSupplier ? selectedSupplier.id : this.generateSupplierId(),
                 name: cleanName,
                 contact_person: cleanContact,
                 phone: cleanPhone,
@@ -519,6 +540,11 @@ export class SuppliersManager {
 
         // Close modal
         bootstrap.Modal.getInstance(document.getElementById('supplierModal')).hide();
+        
+        // Reset dropdown selection
+        if (this.supplierDropdown) {
+            this.supplierDropdown.setValue('');
+        }
     }
 
     deleteSupplier(index) {
@@ -603,20 +629,44 @@ export class SuppliersManager {
                     </div>
                 </div>
                 <div class="supplier-actions">
-                    <button class="btn btn-primary btn-sm" onclick="window.suppliersManager.showOfferModal('${supplier.id}')">
+                    <button class="btn btn-primary btn-sm offer-btn" data-supplier-id="${supplier.id}">
                         <i class="fas fa-dollar-sign me-1"></i>Teklif Gir
                     </button>
-                    <button class="btn btn-outline-primary btn-sm" onclick="window.suppliersManager.editSupplier(${index})">
+                    <button class="btn btn-outline-primary btn-sm edit-btn" data-supplier-index="${index}">
                         <i class="fas fa-edit me-1"></i>Düzenle
                     </button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="window.suppliersManager.deleteSupplier(${index})">
+                    <button class="btn btn-outline-danger btn-sm delete-btn" data-supplier-index="${index}">
                         <i class="fas fa-trash me-1"></i>Sil
                     </button>
                 </div>
             `;
             
             container.appendChild(card);
+            
+            // Add event listeners directly to the buttons in this card
+            const offerBtn = card.querySelector('.offer-btn');
+            const editBtn = card.querySelector('.edit-btn');
+            const deleteBtn = card.querySelector('.delete-btn');
+            
+            if (offerBtn) {
+                offerBtn.addEventListener('click', () => {
+                    this.showOfferModal(supplier.id);
+                });
+            }
+            
+            if (editBtn) {
+                editBtn.addEventListener('click', () => {
+                    this.editSupplier(index);
+                });
+            }
+            
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', () => {
+                    this.deleteSupplier(index);
+                });
+            }
         });
+        
     }
 
     editSupplier(index) {
@@ -708,13 +758,12 @@ export class SuppliersManager {
                 <td>${item.job_no || '-'}</td>
                 <td>${item.quantity}</td>
                 <td>${item.unit}</td>
-                <td>
-                    <input type="number" class="form-control form-control-sm" 
-                           step="0.01" min="0" 
-                           value="${existingOffer.unitPrice || ''}"
-                           onchange="window.suppliersManager.updateOfferTotal(this, ${index})"
-                           data-item-index="${index}">
-                </td>
+                                 <td>
+                     <input type="number" class="form-control form-control-sm unit-price-input" 
+                            step="0.01" min="0" 
+                            value="${existingOffer.unitPrice || ''}"
+                            data-item-index="${index}">
+                 </td>
                 <td>
                     <input type="number" class="form-control form-control-sm" 
                            min="1" value="${existingOffer.deliveryDays || ''}"
@@ -756,29 +805,97 @@ export class SuppliersManager {
         }
     }
 
-    setupOfferValidationListeners() {
-        const tbody = document.getElementById('offer-tbody');
-        if (!tbody) return;
+         setupOfferValidationListeners() {
+         const tbody = document.getElementById('offer-tbody');
+         if (!tbody) return;
+ 
+         tbody.querySelectorAll('tr').forEach((row, index) => {
+             const inputs = row.querySelectorAll('input');
+             const unitPriceInput = inputs[0];
+             const deliveryDaysInput = inputs[1];
+             const notesInput = inputs[2];
+ 
+             // Add validation listeners for unit price
+             if (unitPriceInput) {
+                 unitPriceInput.addEventListener('input', () => {
+                     this.validateOfferRow(row, index);
+                     this.updateOfferTotal(unitPriceInput, index);
+                 });
+                 
+                 // Add keyboard navigation
+                 unitPriceInput.addEventListener('keydown', (e) => {
+                     this.handleKeyboardNavigation(e, index, 0, tbody);
+                 });
+             }
+ 
+             // Add validation listeners for delivery days
+             if (deliveryDaysInput) {
+                 deliveryDaysInput.addEventListener('input', () => {
+                     this.validateOfferRow(row, index);
+                 });
+                 
+                 // Add keyboard navigation
+                 deliveryDaysInput.addEventListener('keydown', (e) => {
+                     this.handleKeyboardNavigation(e, index, 1, tbody);
+                 });
+             }
+             
+             // Add keyboard navigation for notes input
+             if (notesInput) {
+                 notesInput.addEventListener('keydown', (e) => {
+                     this.handleKeyboardNavigation(e, index, 2, tbody);
+                 });
+             }
+         });
+     }
 
-        tbody.querySelectorAll('tr').forEach((row, index) => {
-            const inputs = row.querySelectorAll('input');
-            const unitPriceInput = inputs[0];
-            const deliveryDaysInput = inputs[1];
-
-            // Add validation listeners for unit price
-            if (unitPriceInput) {
-                unitPriceInput.addEventListener('input', () => {
-                    this.validateOfferRow(row, index);
-                });
+    handleKeyboardNavigation(e, currentRowIndex, currentColIndex, tbody) {
+        const rows = tbody.querySelectorAll('tr');
+        const totalRows = rows.length;
+        const totalCols = 3; // unit price, delivery days, notes
+        
+        let targetRowIndex = currentRowIndex;
+        let targetColIndex = currentColIndex;
+        
+        switch (e.key) {
+            case 'ArrowUp':
+                e.preventDefault();
+                if (currentRowIndex > 0) {
+                    targetRowIndex = currentRowIndex - 1;
+                }
+                break;
+            case 'ArrowDown':
+                e.preventDefault();
+                if (currentRowIndex < totalRows - 1) {
+                    targetRowIndex = currentRowIndex + 1;
+                }
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                if (currentColIndex > 0) {
+                    targetColIndex = currentColIndex - 1;
+                }
+                break;
+            case 'ArrowRight':
+                e.preventDefault();
+                if (currentColIndex < totalCols - 1) {
+                    targetColIndex = currentColIndex + 1;
+                }
+                break;
+            default:
+                return; // Don't prevent default for other keys
+        }
+        
+        // Focus the target input
+        const targetRow = rows[targetRowIndex];
+        if (targetRow) {
+            const targetInputs = targetRow.querySelectorAll('input');
+            const targetInput = targetInputs[targetColIndex];
+            if (targetInput) {
+                targetInput.focus();
+                targetInput.select(); // Select all text for easy editing
             }
-
-            // Add validation listeners for delivery days
-            if (deliveryDaysInput) {
-                deliveryDaysInput.addEventListener('input', () => {
-                    this.validateOfferRow(row, index);
-                });
-            }
-        });
+        }
     }
 
     validateOfferRow(row, index) {
