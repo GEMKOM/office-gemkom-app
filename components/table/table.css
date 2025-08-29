@@ -41,6 +41,12 @@
     padding: 1.5rem;
 }
 
+.dashboard-card .card-footer {
+    background: rgba(248, 249, 250, 0.8);
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding: 1rem 1.5rem;
+}
+
 /* Table Styling */
 .table {
     margin-bottom: 0;

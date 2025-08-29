@@ -114,6 +114,9 @@ export class TableComponent {
                 ${this.options.pagination ? this.renderPagination() : ''}
             </div>
         `;
+        
+        // Re-setup event listeners after rendering
+        this.setupEventListeners();
     }
     
     buildTableClass() {
@@ -158,11 +161,17 @@ export class TableComponent {
             return this.renderEmptyState();
         }
         
-        const startIndex = (this.options.currentPage - 1) * this.options.itemsPerPage;
-        const endIndex = startIndex + this.options.itemsPerPage;
-        const pageData = this.options.pagination ? 
-            this.options.data.slice(startIndex, endIndex) : 
-            this.options.data;
+        // For server-side pagination, use all data as-is
+        // For client-side pagination, slice the data
+        let pageData = this.options.data;
+        let startIndex = 0;
+        
+        if (this.options.pagination && this.options.totalItems > this.options.data.length) {
+            // Client-side pagination: slice the data
+            startIndex = (this.options.currentPage - 1) * this.options.itemsPerPage;
+            const endIndex = startIndex + this.options.itemsPerPage;
+            pageData = this.options.data.slice(startIndex, endIndex);
+        }
         
         return pageData.map((row, index) => this.renderRow(row, startIndex + index)).join('');
     }
@@ -258,7 +267,7 @@ export class TableComponent {
         // Previous button
         html += `
             <li class="page-item ${this.options.currentPage === 1 ? 'disabled' : ''}">
-                <a class="page-link" href="#" data-page="${this.options.currentPage - 1}">
+                <a class="page-link" href="javascript:void(0)" data-page="${this.options.currentPage - 1}">
                     <i class="fas fa-chevron-left"></i>
                 </a>
             </li>
@@ -271,7 +280,7 @@ export class TableComponent {
         for (let i = startPage; i <= endPage; i++) {
             html += `
                 <li class="page-item ${i === this.options.currentPage ? 'active' : ''}">
-                    <a class="page-link" href="#" data-page="${i}">${i}</a>
+                    <a class="page-link" href="javascript:void(0)" data-page="${i}">${i}</a>
                 </li>
             `;
         }
@@ -279,7 +288,7 @@ export class TableComponent {
         // Next button
         html += `
             <li class="page-item ${this.options.currentPage === totalPages ? 'disabled' : ''}">
-                <a class="page-link" href="#" data-page="${this.options.currentPage + 1}">
+                <a class="page-link" href="javascript:void(0)" data-page="${this.options.currentPage + 1}">
                     <i class="fas fa-chevron-right"></i>
                 </a>
             </li>
@@ -308,8 +317,13 @@ export class TableComponent {
             paginationLinks.forEach(link => {
                 link.addEventListener('click', (e) => {
                     e.preventDefault();
+                    e.stopPropagation();
                     const page = parseInt(link.dataset.page);
-                    if (page >= 1 && page <= Math.ceil(this.options.totalItems / this.options.itemsPerPage)) {
+                    const totalPages = Math.ceil(this.options.totalItems / this.options.itemsPerPage);
+                    console.log('Pagination clicked:', page, 'Current page:', this.options.currentPage, 'Total pages:', totalPages);
+                    
+                    // Check if page is valid
+                    if (page >= 1 && page <= totalPages && page !== this.options.currentPage) {
                         this.changePage(page);
                     }
                 });
@@ -553,18 +567,26 @@ export class TableComponent {
     }
     
     changePage(page) {
+        console.log('Changing page from', this.options.currentPage, 'to', page);
         this.options.currentPage = page;
         if (this.options.onPageChange) {
+            console.log('Calling onPageChange callback with page:', page);
             this.options.onPageChange(page);
+        } else {
+            console.log('No onPageChange callback defined');
         }
+        // Re-render the table to update pagination state
         this.render();
     }
     
     // Public methods for updating the table
-    updateData(data, totalItems = null) {
+    updateData(data, totalItems = null, currentPage = null) {
         this.options.data = data;
         if (totalItems !== null) {
             this.options.totalItems = totalItems;
+        }
+        if (currentPage !== null) {
+            this.options.currentPage = currentPage;
         }
         this.render();
     }

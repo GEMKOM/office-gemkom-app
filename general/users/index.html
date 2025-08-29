@@ -4,61 +4,100 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GEMKOM - Çalışan Yönetimi</title>
-    
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
-    
-    <!-- Custom CSS -->
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../style.css">
     <link rel="stylesheet" href="../../components/navbar.css">
+    <link rel="stylesheet" href="../../components/dropdown.css">
+    <link rel="icon" type="image/png" href="../../images/gemkom.png">
+    <link rel="stylesheet" href="../../pre-auth.css">
+    <link rel="stylesheet" href="userList.css">
     <link rel="stylesheet" href="../../components/header/header.css">
     <link rel="stylesheet" href="../../components/statistics-cards/statistics-cards.css">
     <link rel="stylesheet" href="../../components/filters/filters.css">
-    <link rel="stylesheet" href="userList.css">
 </head>
-<body>
+<body class="pre-auth">
     <!-- Navigation -->
     <div id="navbar-container"></div>
 
-    <!-- Floating Elements -->
-    <div class="floating-element"></div>
-    <div class="floating-element"></div>
-    <div class="floating-element"></div>
-
+    <!-- Main Content Section -->
     <section class="modules-section py-5">
         <div class="container-fluid">
             <!-- Header Component Placeholder -->
             <div id="header-placeholder"></div>
-
             <!-- Statistics Cards -->
             <div id="users-statistics"></div>
 
             <!-- Filters Section -->
             <div id="filters-placeholder"></div>
 
-            <!-- Users Table -->
+            <!-- Users Table Section -->
             <div class="row">
                 <div class="col-12">
                     <div class="dashboard-card">
                         <div class="card-header">
-                            <h5 class="card-title mb-0">
-                                <i class="fas fa-users me-2"></i>
+                            <h5 class="card-title">
+                                <i class="fas fa-table me-2 text-primary"></i>
                                 Çalışan Listesi
                             </h5>
+                            <div class="card-actions">
+                                <button class="btn btn-sm btn-outline-secondary" id="refresh-users">
+                                    <i class="fas fa-sync-alt me-1"></i>Yenile
+                                </button>
+                                <button class="btn btn-sm btn-outline-secondary" id="export-users">
+                                    <i class="fas fa-download me-1"></i>Dışa Aktar
+                                </button>
+                            </div>
                         </div>
                         <div class="card-body">
-                            <div id="user-list-table-container">
-                                <div class="text-center py-4">
-                                    <div class="spinner-border text-primary" role="status">
-                                        <span class="visually-hidden">Yükleniyor...</span>
-                                    </div>
-                                    <p class="mt-2">Çalışan listesi yükleniyor...</p>
-                                </div>
+                            <div class="table-responsive">
+                                <table class="table table-hover">
+                                    <thead>
+                                        <tr>
+                                            <th class="sortable" data-field="username">
+                                                Kullanıcı Adı <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="first_name">
+                                                Ad <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="last_name">
+                                                Soyad <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="email">
+                                                E-posta <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="team_label">
+                                                Takım <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="occupation_label">
+                                                Görev <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="work_location_label">
+                                                Çalışma Yeri <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th>İşlemler</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="users-table-body">
+                                        <!-- Users will be loaded here -->
+                                    </tbody>
+                                </table>
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- Pagination -->
+            <div class="row mt-4">
+                <div class="col-12">
+                    <nav aria-label="Users pagination">
+                        <ul class="pagination justify-content-center" id="users-pagination">
+                            <!-- Pagination will be generated here -->
+                        </ul>
+                    </nav>
                 </div>
             </div>
         </div>
@@ -88,7 +127,7 @@
                                             <i class="fas fa-user me-1"></i>Kullanıcı Adı *
                                         </label>
                                         <input type="text" class="form-control form-control-sm" id="user-username" placeholder="Kullanıcı adını girin" required>
-                                        <div class="form-text compact">Sisteme giriş için kullanılacak kullanıcı adı</div>
+                                        <div class="form-text compact">Benzersiz kullanıcı adı</div>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -96,8 +135,8 @@
                                         <label class="form-label compact">
                                             <i class="fas fa-envelope me-1"></i>E-posta
                                         </label>
-                                        <input type="email" class="form-control form-control-sm" id="user-email" placeholder="e-posta@example.com">
-                                        <div class="form-text compact">İletişim için e-posta adresi (opsiyonel)</div>
+                                        <input type="email" class="form-control form-control-sm" id="user-email" placeholder="E-posta adresi">
+                                        <div class="form-text compact">İletişim için e-posta adresi</div>
                                     </div>
                                 </div>
                             </div>
@@ -105,22 +144,29 @@
                                 <div class="col-md-6">
                                     <div class="mb-2">
                                         <label class="form-label compact">
-                                            <i class="fas fa-user me-1"></i>Ad *
+                                            <i class="fas fa-id-card me-1"></i>Ad *
                                         </label>
-                                        <input type="text" class="form-control form-control-sm" id="user-first-name" placeholder="Ad" required>
+                                        <input type="text" class="form-control form-control-sm" id="user-first-name" placeholder="Adını girin" required>
                                         <div class="form-text compact">Çalışanın adı</div>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
                                     <div class="mb-2">
                                         <label class="form-label compact">
-                                            <i class="fas fa-user me-1"></i>Soyad *
+                                            <i class="fas fa-id-card me-1"></i>Soyad *
                                         </label>
-                                        <input type="text" class="form-control form-control-sm" id="user-last-name" placeholder="Soyad" required>
+                                        <input type="text" class="form-control form-control-sm" id="user-last-name" placeholder="Soyadını girin" required>
                                         <div class="form-text compact">Çalışanın soyadı</div>
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        <!-- Work Information Section -->
+                        <div class="form-section compact mb-3">
+                            <h6 class="section-subtitle compact">
+                                <i class="fas fa-briefcase me-2 text-success"></i>İş Bilgileri
+                            </h6>
                             <div class="row g-2">
                                 <div class="col-md-6">
                                     <div class="mb-2">
@@ -130,7 +176,7 @@
                                         <select class="form-control form-control-sm" id="user-team" required>
                                             <option value="">Takım seçin...</option>
                                         </select>
-                                        <div class="form-text compact">Çalışanın dahil olacağı takım</div>
+                                        <div class="form-text compact">Çalışanın bağlı olduğu takım</div>
                                     </div>
                                 </div>
                                 <div class="col-md-6">
@@ -143,13 +189,11 @@
                                             <option value="office">Ofis</option>
                                             <option value="workshop">Atölye</option>
                                         </select>
-                                        <div class="form-text compact">Çalışanın çalışma lokasyonu</div>
+                                        <div class="form-text compact">Çalışanın çalışma yeri</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
-
-
                     </form>
                 </div>
                 <div class="modal-footer compact">
@@ -164,7 +208,112 @@
         </div>
     </div>
 
-    <!-- Bulk Create User Modal -->
+    <!-- Edit User Modal -->
+    <div class="modal fade" id="editUserModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content compact">
+                <div class="modal-header compact">
+                    <h6 class="modal-title">
+                        <i class="fas fa-edit me-2"></i>Çalışan Düzenle
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body compact">
+                    <form id="edit-user-form">
+                        <!-- Basic Information Section -->
+                        <div class="form-section compact mb-3">
+                            <h6 class="section-subtitle compact">
+                                <i class="fas fa-info-circle me-2 text-primary"></i>Temel Bilgiler
+                            </h6>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <div class="mb-2">
+                                        <label class="form-label compact">
+                                            <i class="fas fa-user me-1"></i>Kullanıcı Adı *
+                                        </label>
+                                        <input type="text" class="form-control form-control-sm" id="edit-user-username" placeholder="Kullanıcı adını girin" required>
+                                        <div class="form-text compact">Benzersiz kullanıcı adı</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-2">
+                                        <label class="form-label compact">
+                                            <i class="fas fa-envelope me-1"></i>E-posta
+                                        </label>
+                                        <input type="email" class="form-control form-control-sm" id="edit-user-email" placeholder="E-posta adresi">
+                                        <div class="form-text compact">İletişim için e-posta adresi</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <div class="mb-2">
+                                        <label class="form-label compact">
+                                            <i class="fas fa-id-card me-1"></i>Ad *
+                                        </label>
+                                        <input type="text" class="form-control form-control-sm" id="edit-user-first-name" placeholder="Adını girin" required>
+                                        <div class="form-text compact">Çalışanın adı</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-2">
+                                        <label class="form-label compact">
+                                            <i class="fas fa-id-card me-1"></i>Soyad *
+                                        </label>
+                                        <input type="text" class="form-control form-control-sm" id="edit-user-last-name" placeholder="Soyadını girin" required>
+                                        <div class="form-text compact">Çalışanın soyadı</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Work Information Section -->
+                        <div class="form-section compact mb-3">
+                            <h6 class="section-subtitle compact">
+                                <i class="fas fa-briefcase me-2 text-success"></i>İş Bilgileri
+                            </h6>
+                            <div class="row g-2">
+                                <div class="col-md-6">
+                                    <div class="mb-2">
+                                        <label class="form-label compact">
+                                            <i class="fas fa-users me-1"></i>Takım *
+                                        </label>
+                                        <select class="form-control form-control-sm" id="edit-user-team" required>
+                                            <option value="">Takım seçin...</option>
+                                        </select>
+                                        <div class="form-text compact">Çalışanın bağlı olduğu takım</div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-2">
+                                        <label class="form-label compact">
+                                            <i class="fas fa-map-marker-alt me-1"></i>Çalışma Yeri *
+                                        </label>
+                                        <select class="form-control form-control-sm" id="edit-user-work-location" required>
+                                            <option value="">Çalışma yeri seçin...</option>
+                                            <option value="office">Ofis</option>
+                                            <option value="workshop">Atölye</option>
+                                        </select>
+                                        <div class="form-text compact">Çalışanın çalışma yeri</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer compact">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>İptal
+                    </button>
+                    <button type="button" class="btn btn-sm btn-primary" id="update-user-btn">
+                        <i class="fas fa-save me-1"></i>Değişiklikleri Kaydet
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Create Modal -->
     <div class="modal fade" id="bulkCreateUserModal" tabindex="-1">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
@@ -175,102 +324,31 @@
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    <form id="bulk-create-user-form">
-                        <!-- Instructions Section -->
-                        <div class="alert alert-info">
-                            <i class="fas fa-info-circle me-2"></i>
-                            <strong>Kullanım Talimatları:</strong>
-                            <ul class="mb-0 mt-2">
-                                <li>Her satıra bir çalışan adı yazın</li>
-                                <li>Virgül ile ayırarak da yazabilirsiniz</li>
-                                <li>Boş satırlar otomatik olarak göz ardı edilir</li>
-                            </ul>
-                        </div>
-
-                        <!-- Bulk Input Section -->
-                        <div class="row mb-3">
-                            <div class="col-md-8">
-                                <label for="bulk-user-names" class="form-label">
-                                    <i class="fas fa-users me-2"></i>Çalışan Adları
-                                </label>
-                                <textarea class="form-control" id="bulk-user-names" rows="12" 
-                                    placeholder="Örnek:&#10;AHMET YILMAZ&#10;MEHMET KAYA&#10;AYŞE DEMİR&#10;FATMA ÖZKAN&#10;&#10;veya virgülle ayırarak:&#10;AHMET YILMAZ, MEHMET KAYA, AYŞE DEMİR"></textarea>
-                                <div class="form-text">
-                                    <span id="bulk-user-count">0</span> çalışan tespit edildi
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <label for="bulk-user-team" class="form-label">
-                                    <i class="fas fa-users me-2"></i>Takım *
-                                </label>
-                                <select class="form-control" id="bulk-user-team" required>
-                                    <option value="">Takım seçin...</option>
-                                </select>
-
-                                <label for="bulk-user-work-location" class="form-label mt-3">
-                                    <i class="fas fa-map-marker-alt me-2"></i>Çalışma Yeri *
-                                </label>
-                                <select class="form-control" id="bulk-user-work-location" required>
-                                    <option value="">Çalışma yeri seçin...</option>
-                                    <option value="office">Ofis</option>
-                                    <option value="workshop">Atölye</option>
-                                </select>
-
-                                <!-- Preview Section -->
-                                <div class="mt-4">
-                                    <h6 class="text-muted">Önizleme:</h6>
-                                    <div id="bulk-user-preview" class="border rounded p-2" style="max-height: 200px; overflow-y: auto; background-color: #f8f9fa;">
-                                        <em class="text-muted">Çalışan adlarını yazmaya başlayın...</em>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <!-- Progress Section (initially hidden) -->
-                        <div id="bulk-create-progress" class="mt-3" style="display: none;">
-                            <div class="progress">
-                                <div class="progress-bar" role="progressbar" style="width: 0%"></div>
-                            </div>
-                            <div class="text-center mt-2">
-                                <span id="bulk-progress-text">İşleniyor...</span>
-                            </div>
-                        </div>
-
-                        <!-- Results Section (initially hidden) -->
-                        <div id="bulk-create-results" class="mt-3" style="display: none;">
-                            <!-- Results will be displayed here -->
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-2"></i>Kapat
-                    </button>
-                    <button type="button" class="btn btn-primary" id="save-bulk-users-btn">
-                        <i class="fas fa-save me-2"></i>Çalışanları Oluştur
-                    </button>
+                    <div class="bulk-create-container">
+                        <!-- Bulk create content will be loaded here -->
+                    </div>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- Delete User Confirmation Modal -->
+    <!-- Delete Confirmation Modal -->
     <div class="modal fade" id="deleteUserConfirmModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header bg-danger text-white">
                     <h5 class="modal-title">
-                        <i class="fas fa-exclamation-triangle me-2"></i>Kullanıcı Silme Onayı
+                        <i class="fas fa-exclamation-triangle me-2"></i>Çalışan Silme Onayı
                     </h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
                     <div class="text-center">
-                        <i class="fas fa-user-times fa-3x text-danger mb-3"></i>
-                        <h5>Bu kullanıcıyı silmek istediğinize emin misiniz?</h5>
-                        <p class="text-muted">Bu işlem geri alınamaz ve kullanıcı kalıcı olarak silinecektir.</p>
+                        <i class="fas fa-trash-alt fa-3x text-danger mb-3"></i>
+                        <h5>Bu çalışanı silmek istediğinize emin misiniz?</h5>
+                        <p class="text-muted">Bu işlem geri alınamaz ve çalışan kalıcı olarak silinecektir.</p>
                         <div class="alert alert-warning">
-                            <strong>Kullanıcı:</strong> <span id="delete-user-name">-</span>
+                            <strong>Çalışan:</strong> <span id="delete-user-name">-</span>
                         </div>
                     </div>
                 </div>
@@ -286,22 +364,12 @@
         </div>
     </div>
 
-    <!-- Footer -->
-    <footer class="footer-section">
-        <div class="container">
-            <div class="row">
-                <div class="col-md-6">
-                    <h5>GEMKOM</h5>
-                </div>
-                <div class="col-md-6 text-md-end">
-                    <p class="text-light mb-0">&copy; 2024 GEMKOM. Tüm hakları saklıdır.</p>
-                </div>
-            </div>
-        </div>
-    </footer>
-
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <!-- Header Component -->
+    <script src="../../components/header/header.js"></script>
     <!-- Statistics Cards Component -->
     <script src="../../components/statistics-cards/statistics-cards.js"></script>
     <script type="module" src="userList.js"></script>

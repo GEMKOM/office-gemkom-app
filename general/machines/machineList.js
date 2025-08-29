@@ -7,6 +7,7 @@ import { backendBase } from '../../base.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
+import { fetchUsersSummary } from '../../generic/summaries.js';
 
 // Header component instance
 let headerComponent;
@@ -23,7 +24,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     initNavbar();
-    
     // Initialize header component
     initHeaderComponent();
     
