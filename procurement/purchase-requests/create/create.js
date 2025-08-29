@@ -895,6 +895,12 @@ async function submitRequest() {
         
         if (!validation.isValid) {
             console.log(validation);
+            
+            // Display validation errors to user
+            validation.errors.forEach(error => {
+                showNotification(error, 'error');
+            });
+            
             // Show field-specific validation errors for form fields
             const formErrorField = validationManager.showAllFieldValidations(formData);
             

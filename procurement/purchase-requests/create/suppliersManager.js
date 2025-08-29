@@ -479,10 +479,9 @@ export class SuppliersManager {
 
             // Get the selected supplier ID from dropdown
             const selectedSupplierId = this.supplierDropdown ? this.supplierDropdown.getValue() : null;
-            const selectedSupplier = this.availableSuppliers.find(s => s.id == selectedSupplierId);
             
             supplier = {
-                id: selectedSupplier ? selectedSupplier.id : this.generateSupplierId(),
+                id: this.generateSupplierId(),
                 name: cleanName,
                 contact_person: cleanContact,
                 phone: cleanPhone,
