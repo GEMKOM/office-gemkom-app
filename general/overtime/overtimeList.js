@@ -1,8 +1,8 @@
 import { guardRoute } from '../../authService.js';
 import { initNavbar } from '../../components/navbar.js';
 import { authedFetch } from '../../authService.js';
-import { backendBase, proxyBase } from '../../base.js';
-import { fetchUsers } from '../../generic/users.js';
+import { proxyBase } from '../../base.js';
+import { authFetchUsers } from '../../generic/users.js';
 import { getAllowedTeams } from '../../generic/teams.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
@@ -938,7 +938,7 @@ async function loadUsersForTeam() {
     try {
         const user = JSON.parse(localStorage.getItem('user'));
         const allowedTeams = getAllowedTeams(user.team);
-        const users = await fetchUsers(allowedTeams);
+        const users = await authFetchUsers(allowedTeams);
         return users;
     } catch (error) {
         console.error('Error loading users:', error);
