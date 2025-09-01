@@ -122,7 +122,7 @@ async function loadDashboardData() {
         dashboardState.activeTimers = timersResponse && timersResponse.results ? timersResponse.results : [];
         
         // Load machines
-        const machines = await fetchMachines('machining'); // Get machines used in machining
+        const machines = await fetchMachines({ used_in: 'machining' }); // Get machines used in machining
         dashboardState.machines = Array.isArray(machines) ? machines : [];
         
         console.log('Loaded timers:', dashboardState.activeTimers);

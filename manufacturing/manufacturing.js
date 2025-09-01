@@ -55,22 +55,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/manufacturing/maintenance',
                 features: [
                     {
-                        label: 'Bakım Planı',
+                        label: 'Arıza Talepleri',
+                        icon: 'fas fa-exclamation-triangle',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/maintenance/fault-requests'
+                    },
+                    {
+                        label: 'Bakım Planları',
                         icon: 'fas fa-calendar-check',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/maintenance/plans'
                     },
                     {
-                        label: 'Arıza Takibi',
-                        icon: 'fas fa-exclamation-triangle',
+                        label: 'Ekipman Yönetimi',
+                        icon: 'fas fa-cogs',
                         iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/issues'
-                    },
-                    {
-                        label: 'Önleyici Bakım',
-                        icon: 'fas fa-shield-alt',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/preventive'
+                        link: '/manufacturing/maintenance/equipment'
                     }
                 ]
             }

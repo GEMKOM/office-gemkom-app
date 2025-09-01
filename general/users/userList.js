@@ -195,8 +195,11 @@ function initializeFiltersComponent() {
 
 async function loadUsers(page = 1) {
     try {
+        if (isLoading) return;
+        
         isLoading = true;
         currentPage = page;
+        showLoadingState();
         
         // Get filter values
         const filterValues = userFilters ? userFilters.getFilterValues() : {};
@@ -245,8 +248,11 @@ async function loadUsers(page = 1) {
     } catch (error) {
         console.error('Error loading users:', error);
         showNotification('Çalışanlar yüklenirken hata oluştu', 'error');
+        users = [];
+        totalUsers = 0;
     } finally {
         isLoading = false;
+        hideLoadingState();
     }
 }
 
@@ -684,4 +690,32 @@ function showNotification(message, type = 'info') {
     
     // Simple alert for now
     alert(`${type.toUpperCase()}: ${message}`);
+} 
+
+// Loading state functions
+function showLoadingState() {
+    const tableBody = document.getElementById('users-table-body');
+    if (tableBody) {
+        // Create loading rows that maintain table structure
+        const loadingRows = [];
+        for (let i = 0; i < 5; i++) { // Show 5 loading rows
+            loadingRows.push(`
+                <tr class="loading-row">
+                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
+                </tr>
+            `);
+        }
+        tableBody.innerHTML = loadingRows.join('');
+    }
+}
+
+function hideLoadingState() {
+    // Loading state is cleared when table is rendered
 } 

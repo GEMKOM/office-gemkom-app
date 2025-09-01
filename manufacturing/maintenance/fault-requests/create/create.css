@@ -1,0 +1,155 @@
+/* Custom CSS for fault request create form - Dropdown fixes */
+
+/* Ensure the card container doesn't clip dropdowns */
+.card.maintenance-card {
+    overflow: visible !important;
+    position: relative;
+}
+
+.card-body {
+    overflow: visible !important;
+    position: relative;
+}
+
+/* Fix dropdown z-index and positioning */
+.modern-dropdown-container {
+    position: relative !important;
+    z-index: 10000 !important;
+}
+
+.modern-dropdown {
+    position: relative !important;
+    z-index: 10001 !important;
+}
+
+.modern-dropdown.open {
+    z-index: 10002 !important;
+}
+
+.modern-dropdown .dropdown-menu {
+    position: absolute !important;
+    top: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    z-index: 10003 !important;
+    max-height: 300px !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    background: white !important;
+    border: 1px solid #dee2e6 !important;
+    border-top: none !important;
+    border-radius: 0 0 8px 8px !important;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+}
+
+/* Ensure form rows don't clip dropdowns */
+.row {
+    overflow: visible !important;
+}
+
+.col-12, .col-md-6 {
+    overflow: visible !important;
+    position: relative;
+}
+
+/* Fix for stacked dropdowns - ensure proper layering */
+/* Machine dropdown (top) should have highest z-index */
+#machine-dropdown-container {
+    z-index: 10007 !important;
+}
+
+#machine-dropdown-container .modern-dropdown {
+    z-index: 10008 !important;
+}
+
+#machine-dropdown-container .modern-dropdown.open {
+    z-index: 10009 !important;
+}
+
+#machine-dropdown-container .modern-dropdown.open .dropdown-menu {
+    z-index: 10010 !important;
+}
+
+/* Type dropdown (middle) */
+#type-dropdown-container {
+    z-index: 10004 !important;
+}
+
+#type-dropdown-container .modern-dropdown {
+    z-index: 10005 !important;
+}
+
+#type-dropdown-container .modern-dropdown.open {
+    z-index: 10006 !important;
+}
+
+#type-dropdown-container .modern-dropdown.open .dropdown-menu {
+    z-index: 10007 !important;
+}
+
+/* Breaking dropdown (bottom) */
+#breaking-dropdown-container {
+    z-index: 10001 !important;
+}
+
+#breaking-dropdown-container .modern-dropdown {
+    z-index: 10002 !important;
+}
+
+#breaking-dropdown-container .modern-dropdown.open {
+    z-index: 10003 !important;
+}
+
+#breaking-dropdown-container .modern-dropdown.open .dropdown-menu {
+    z-index: 10004 !important;
+}
+
+/* Ensure dropdowns appear above the card */
+.modern-dropdown.open .dropdown-menu {
+    position: absolute !important;
+    transform: translateY(0) !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    max-height: 300px !important;
+}
+
+/* Ensure proper spacing between dropdowns */
+.modern-dropdown-container {
+    margin-bottom: 0.5rem;
+}
+
+/* Fix dropdown arrow positioning */
+.dropdown-arrow {
+    transition: transform 0.3s ease !important;
+}
+
+.modern-dropdown.open .dropdown-arrow {
+    transform: rotate(180deg) !important;
+}
+
+/* Ensure dropdown items are properly styled */
+.dropdown-item {
+    padding: 0.75rem 1rem !important;
+    border-bottom: 1px solid #f8f9fa !important;
+    cursor: pointer !important;
+    transition: background-color 0.2s ease !important;
+}
+
+.dropdown-item:hover {
+    background-color: #f8f9fa !important;
+}
+
+.dropdown-item:last-child {
+    border-bottom: none !important;
+}
+
+/* Fix for mobile responsiveness */
+@media (max-width: 768px) {
+    .modern-dropdown .dropdown-menu {
+        max-height: 250px !important;
+    }
+    
+    .row .col-md-6 {
+        margin-bottom: 1rem;
+    }
+}

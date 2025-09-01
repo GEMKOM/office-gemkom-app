@@ -46,6 +46,9 @@ export class TableComponent {
             
             // Loading state
             loading: false,
+            // Skeleton loading configuration
+            skeleton: true,
+            skeletonRows: 5,
             
             // Export functionality
             exportable: false,
@@ -203,7 +206,7 @@ export class TableComponent {
         }
         
         const rowClick = this.options.onRowClick ? 
-            `onclick="this.dispatchEvent(new CustomEvent('rowClick', {detail: {row: ${JSON.stringify(row)}, index: ${rowIndex}}}))"` : '';
+            `onclick="this.dispatchEvent(new CustomEvent('rowClick', {detail: {index: ${rowIndex}}}))"` : '';
         
         return `<tr ${rowClick}>${cells.join('')}</tr>`;
     }
@@ -217,7 +220,7 @@ export class TableComponent {
             if (!isVisible) return '';
             
             const onClick = action.onClick ? 
-                `onclick="this.dispatchEvent(new CustomEvent('actionClick', {detail: {action: '${action.key}', row: ${JSON.stringify(row)}, index: ${rowIndex}}}))"` : '';
+                `onclick="document.getElementById('${this.containerId}').dispatchEvent(new CustomEvent('actionClick', {detail: {action: '${action.key}', index: ${rowIndex}}}))"` : '';
             
             return `
                 <button class="btn btn-sm ${action.class || 'btn-outline-secondary'}" 
@@ -231,7 +234,9 @@ export class TableComponent {
     
     renderLoadingState() {
         const colspan = this.options.columns.length + (this.options.actions.length > 0 ? 1 : 0);
-        return `
+        
+        if (!this.options.skeleton) {
+            return `
             <tr>
                 <td colspan="${colspan}" class="text-center">
                     <div class="loading-state">
@@ -239,8 +244,38 @@ export class TableComponent {
                         <p>Yükleniyor...</p>
                     </div>
                 </td>
-            </tr>
-        `;
+            </tr>`;
+        }
+        
+        const rows = [];
+        for (let i = 0; i < (this.options.skeletonRows || 5); i++) {
+            const cells = this.options.columns.map((col) => {
+                const width = this.getSkeletonWidth(col);
+                return `<td><div class="loading-skeleton" style="width: ${width}px;"></div></td>`;
+            });
+            if (this.options.actions.length > 0) {
+                cells.push(`<td><div class="loading-skeleton" style="width: 80px;"></div></td>`);
+            }
+            rows.push(`<tr class="loading-row">${cells.join('')}</tr>`);
+        }
+        
+        return rows.join('');
+    }
+    
+    getSkeletonWidth(column) {
+        // Allow per-column override
+        if (typeof column.skeletonWidth === 'number') return column.skeletonWidth;
+        
+        // Heuristics by type
+        let base = 120;
+        if (column.type === 'number') base = 60;
+        else if (column.type === 'date') base = 90;
+        else if (column.type === 'boolean') base = 50;
+        
+        // Slight variation for natural feel
+        const variance = 30;
+        const delta = Math.floor(Math.random() * (variance * 2 + 1)) - variance;
+        return Math.max(40, base + delta);
     }
     
     renderEmptyState() {
@@ -357,15 +392,22 @@ export class TableComponent {
         // Row click events
         if (this.options.onRowClick) {
             this.container.addEventListener('rowClick', (e) => {
-                this.options.onRowClick(e.detail.row, e.detail.index);
+                const index = e.detail.index;
+                const row = this.options.data[index];
+                this.options.onRowClick(row, index);
             });
         }
         
         // Action click events
         this.container.addEventListener('actionClick', (e) => {
+            console.log('actionClick event received:', e.detail);
             const action = this.options.actions.find(a => a.key === e.detail.action);
+            console.log('Found action:', action);
             if (action && action.onClick) {
-                action.onClick(e.detail.row, e.detail.index);
+                const index = e.detail.index;
+                const row = this.options.data[index];
+                console.log('Calling action onClick with row:', row, 'index:', index);
+                action.onClick(row, index);
             }
         });
         

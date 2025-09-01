@@ -93,28 +93,67 @@ const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
-
             '/manufacturing/maintenance': {
                 label: 'Bakım',
                 icon: 'fas fa-wrench',
                 children: {
-                    '/manufacturing/maintenance/plans': {
-                        label: 'Bakım Planı',
-                        icon: 'fas fa-calendar-check',
-                        children: {}
-                    },
-                    '/manufacturing/maintenance/issues': {
-                        label: 'Arıza Takibi',
+                    '/manufacturing/maintenance/fault-requests': {
+                        label: 'Arıza Talepleri',
                         icon: 'fas fa-exclamation-triangle',
-                        children: {}
+                        children: {
+                            '/manufacturing/maintenance/fault-requests/create': {
+                                label: 'Yeni Arıza Talebi',
+                                icon: 'fas fa-plus-circle',
+                                children: {}
+                            },
+                            '/manufacturing/maintenance/fault-requests/list': {
+                                label: 'Arıza Listesi',
+                                icon: 'fas fa-list',
+                                children: {}
+                            },
+                            '/manufacturing/maintenance/fault-requests/statistics': {
+                                label: 'Arıza İstatistikleri',
+                                icon: 'fas fa-chart-bar',
+                                children: {}
+                            }
+                        }
                     },
-                    '/manufacturing/maintenance/preventive': {
-                        label: 'Önleyici Bakım',
-                        icon: 'fas fa-shield-alt',
-                        children: {}
+                    '/manufacturing/maintenance/plans': {
+                        label: 'Bakım Planları',
+                        icon: 'fas fa-calendar-check',
+                        children: {
+                            '/manufacturing/maintenance/plans/calendar': {
+                                label: 'Bakım Takvimi',
+                                icon: 'fas fa-calendar-alt',
+                                children: {}
+                            },
+                            '/manufacturing/maintenance/plans/history': {
+                                label: 'Bakım Geçmişi',
+                                icon: 'fas fa-history',
+                                children: {}
+                            }
+                        }
+                    },
+                    '/manufacturing/maintenance/equipment': {
+                        label: 'Ekipman Yönetimi',
+                        icon: 'fas fa-cogs',
+                        children: {
+                            '/manufacturing/maintenance/equipment/list': {
+                                label: 'Ekipman Listesi',
+                                icon: 'fas fa-tools',
+                                children: {}
+                            },
+                            '/manufacturing/maintenance/equipment/records': {
+                                label: 'Bakım Kayıtları',
+                                icon: 'fas fa-clipboard-list',
+                                children: {}
+                            }
+                        }
                     }
                 }
-            }
+            },
+
+
         }
     },
     '/procurement': {
@@ -748,8 +787,8 @@ export function initNavbar() {
 
                         
                                                 if (path.startsWith('/manufacturing/maintenance/')) {
-                            // Show placeholder for maintenance pages
-                            alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
+                            // Allow navigation to maintenance pages
+                            navigateTo(path);
                             return;
                         }
                         
@@ -802,8 +841,8 @@ export function initNavbar() {
 
                 
                                 if (path.startsWith('/manufacturing/maintenance/')) {
-                    // Show placeholder for maintenance pages
-                    alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
+                    // Allow navigation to maintenance pages
+                    navigateTo(path);
                     return;
                 }
                 

@@ -305,7 +305,7 @@ async function processReportData(data) {
             };
         });
     } else if (groupBy === 'machine') {
-        const machines = await fetchMachines('machining');
+        const machines = await fetchMachines({ used_in: 'machining' });
         processedData = machines.map(machine => {
             const found = data.find(row => row.group === machine.id);
             return {

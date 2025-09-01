@@ -1,13 +1,33 @@
 import { authedFetch } from '../authService.js';
 import { backendBase } from '../base.js';
+import { extractResultsFromResponse } from './paginationHelper.js';
 
-export async function fetchMachines(used_in = null) {
+export async function fetchMachines(filters = {}) {
     try {
         let url = `${backendBase}/machines/`;
         
-        // Add used_in filter if provided
-        if (used_in) {
-            url += `?used_in=${encodeURIComponent(used_in)}`;
+        // Build query parameters from filters
+        const params = new URLSearchParams();
+        
+        if (filters.name) {
+            params.append('name', filters.name);
+        }
+        
+        if (filters.machine_type) {
+            params.append('machine_type', filters.machine_type);
+        }
+        
+        if (filters.used_in) {
+            params.append('used_in', filters.used_in);
+        }
+        
+        if (filters.is_active !== undefined && filters.is_active !== '') {
+            params.append('is_active', filters.is_active);
+        }
+        
+        // Add query parameters to URL if any exist
+        if (params.toString()) {
+            url += `?${params.toString()}`;
         }
         
         const response = await authedFetch(url);
@@ -17,9 +37,9 @@ export async function fetchMachines(used_in = null) {
         }
         
         const machines = await response.json();
-        return machines;
+        return extractResultsFromResponse(machines);
     } catch (error) {
-        console.error('Error fetching machines:', error);
+        // Error fetching machines
         throw error;
     }
 }
@@ -32,4 +52,57 @@ export async function getMachine(machineId) {
 export async function fetchMachineTypes() {
     const response = await authedFetch(`${backendBase}/machines/types/`);
     return response.json();
+}
+
+export async function fetchMachineUsedIn() {
+    const response = await authedFetch(`${backendBase}/machines/used_in/`);
+    return response.json();
+}
+
+// Create a new machine
+export async function createMachine(payload) {
+    const response = await authedFetch(`${backendBase}/machines/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+        const err = await safeParseJson(response);
+        throw new Error(err?.message || 'Failed to create machine');
+    }
+    return response.json();
+}
+
+// Update an existing machine (PATCH)
+export async function updateMachine(machineId, payload) {
+    const response = await authedFetch(`${backendBase}/machines/${machineId}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+        const err = await safeParseJson(response);
+        throw new Error(err?.message || 'Failed to update machine');
+    }
+    return response.json();
+}
+
+// Delete a machine
+export async function deleteMachine(machineId) {
+    const response = await authedFetch(`${backendBase}/machines/${machineId}/`, {
+        method: 'DELETE'
+    });
+    if (!response.ok) {
+        const err = await safeParseJson(response);
+        throw new Error(err?.message || 'Failed to delete machine');
+    }
+    return response.json();
+}
+
+async function safeParseJson(response) {
+    try {
+        return await response.json();
+    } catch (_) {
+        return null;
+    }
 }
