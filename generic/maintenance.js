@@ -1,5 +1,5 @@
 import { authedFetch } from '../authService.js';
-
+import { extractResultsFromResponse } from './paginationHelper.js';
 import { backendBase } from '../base.js';
 
 export async function createMaintenanceRequest(requestData) {
@@ -18,23 +18,22 @@ export async function createMaintenanceRequest(requestData) {
     return response.json();
 }
 
-export async function resolveMaintenanceRequest(requestId, resolutionDescription) { 
+export async function resolveMaintenanceRequest(requestId, resolutionData) { 
     // Now resolve the maintenance request
     const response = await authedFetch(`${backendBase}/machines/faults/${requestId}/`, {
         method: 'PUT',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            resolution_description: resolutionDescription
-        })
+        body: JSON.stringify(resolutionData)
     });
 
     if (!response.ok) {
         throw new Error('Failed to resolve maintenance request');
     }
     
-    return response.json();
+    const data = await response.json();
+    return extractResultsFromResponse(data);
 }
 
 export async function fetchMachineFaults() {
@@ -49,5 +48,6 @@ export async function fetchMachineFaults() {
         throw new Error('Failed to fetch machine faults');
     }
     
-    return response.json();
+    const data = await response.json();
+    return extractResultsFromResponse(data);
 }

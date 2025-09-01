@@ -1,11 +1,14 @@
 import { guardRoute } from '../../../../authService.js';
 import { initNavbar } from '../../../../components/navbar.js';
 import { fetchMachineFaults, resolveMaintenanceRequest } from '../../../../generic/maintenance.js';
+import { HeaderComponent } from '../../../../components/header/header.js';
+import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
+import { FiltersComponent } from '../../../../components/filters/filters.js';
+import { TableComponent } from '../../../../components/table/table.js';
 
-let currentPage = 1;
-let itemsPerPage = 10;
 let allFaults = [];
 let filteredFaults = [];
+let headerComponent, statisticsCards, filtersComponent, tableComponent;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
@@ -14,30 +17,159 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await initNavbar();
     
+    // Initialize components
+    initializeComponents();
+    
     // Load initial data
     await loadFaultRequests();
-    
-    // Initialize filters
-    initializeFilters();
     
     // Set current user for resolution form
     setCurrentUser();
 });
 
+function initializeComponents() {
+    // Initialize Header Component
+    headerComponent = new HeaderComponent({
+        title: 'Arıza Talepleri',
+        subtitle: 'Tüm arıza taleplerini görüntüleyin ve yönetin',
+        icon: 'exclamation-triangle',
+        showBackButton: 'block',
+        showCreateButton: 'block',
+        createButtonText: 'Yeni Arıza Talebi',
+        backUrl: '/manufacturing/maintenance',
+        onCreateClick: () => {
+            window.location.href = '/manufacturing/maintenance/fault-requests/create';
+        }
+    });
+
+    // Initialize Statistics Cards Component
+    statisticsCards = new StatisticsCards('statistics-container', {
+        cards: [
+            {
+                title: 'Toplam Arıza',
+                value: 0,
+                icon: 'exclamation-triangle',
+                color: 'primary',
+                trend: null
+            },
+            {
+                title: 'Bekleyen',
+                value: 0,
+                icon: 'clock',
+                color: 'warning',
+                trend: null
+            },
+            {
+                title: 'İşlemde',
+                value: 0,
+                icon: 'tools',
+                color: 'info',
+                trend: null
+            },
+            {
+                title: 'Çözüldü',
+                value: 0,
+                icon: 'check-circle',
+                color: 'success',
+                trend: null
+            }
+        ]
+    });
+
+    // Initialize Filters Component
+    filtersComponent = new FiltersComponent('filters-container', {
+        title: 'Filtreler',
+        onApply: applyFilters,
+        onClear: clearFilters
+    });
+
+    // Add filter fields
+    filtersComponent.addSelectFilter({
+        id: 'statusFilter',
+        label: 'Durum',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'pending', label: 'Bekleyen' },
+            { value: 'in_progress', label: 'İşlemde' },
+            { value: 'resolved', label: 'Çözüldü' },
+            { value: 'closed', label: 'Kapatıldı' }
+        ],
+        colSize: 3
+    });
+
+    filtersComponent.addSelectFilter({
+        id: 'priorityFilter',
+        label: 'Öncelik',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'low', label: 'Düşük' },
+            { value: 'medium', label: 'Orta' },
+            { value: 'high', label: 'Yüksek' },
+            { value: 'critical', label: 'Kritik' }
+        ],
+        colSize: 3
+    });
+
+    filtersComponent.addSelectFilter({
+        id: 'machineFilter',
+        label: 'Ekipman',
+        options: [{ value: '', label: 'Tümü' }],
+        colSize: 3
+    });
+
+    filtersComponent.addSelectFilter({
+        id: 'dateFilter',
+        label: 'Tarih Aralığı',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'today', label: 'Bugün' },
+            { value: 'week', label: 'Bu Hafta' },
+            { value: 'month', label: 'Bu Ay' },
+            { value: 'custom', label: 'Özel' }
+        ],
+        colSize: 3
+    });
+
+    // Initialize Table Component
+    tableComponent = new TableComponent('table-container', {
+        title: 'Arıza Talepleri',
+        columns: [
+            { key: 'id', label: 'ID', sortable: true },
+            { key: 'machine_name', label: 'Ekipman', sortable: true },
+            { key: 'description', label: 'Açıklama', sortable: false },
+            { key: 'priority', label: 'Öncelik', sortable: true },
+            { key: 'status', label: 'Durum', sortable: true },
+            { key: 'reported_by_username', label: 'Bildiren', sortable: true },
+            { key: 'reported_at', label: 'Tarih', sortable: true },
+            { key: 'actions', label: 'İşlemler', sortable: false }
+        ],
+        pagination: true,
+        itemsPerPage: 10,
+        refreshable: true,
+        exportable: true,
+        onRefresh: loadFaultRequests,
+        onExport: exportToExcel,
+        onRowClick: (row) => {
+            // Handle row click if needed
+        }
+    });
+}
+
 async function loadFaultRequests() {
     try {
-        showLoading(true);
+        tableComponent.setLoading(true);
         
         // Fetch fault requests from API
         const faults = await fetchMachineFaults();
+        
         allFaults = faults;
         filteredFaults = [...allFaults];
         
         // Update statistics
         updateStatistics();
         
-        // Render table
-        renderTable();
+        // Update table data
+        updateTableData();
         
         // Load machines for filter
         loadMachinesForFilter();
@@ -46,203 +178,165 @@ async function loadFaultRequests() {
         console.error('Error loading fault requests:', error);
         showAlert('Arıza talepleri yüklenirken hata oluştu.', 'danger');
     } finally {
-        showLoading(false);
+        tableComponent.setLoading(false);
     }
 }
 
 function updateStatistics() {
     const total = allFaults.length;
-    const pending = allFaults.filter(fault => fault.status === 'pending').length;
-    const inProgress = allFaults.filter(fault => fault.status === 'in_progress').length;
-    const resolved = allFaults.filter(fault => fault.status === 'resolved' || fault.status === 'closed').length;
+    const pending = allFaults.filter(fault => getStatus(fault) === 'pending').length;
+    const inProgress = allFaults.filter(fault => getStatus(fault) === 'in_progress').length;
+    const resolved = allFaults.filter(fault => getStatus(fault) === 'resolved' || getStatus(fault) === 'closed').length;
     
-    document.getElementById('totalFaults').textContent = total;
-    document.getElementById('pendingFaults').textContent = pending;
-    document.getElementById('inProgressFaults').textContent = inProgress;
-    document.getElementById('resolvedFaults').textContent = resolved;
+    statisticsCards.updateValues({
+        0: total,
+        1: pending,
+        2: inProgress,
+        3: resolved
+    });
 }
 
-function renderTable() {
-    const tableBody = document.getElementById('faultRequestsTableBody');
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const pageData = filteredFaults.slice(startIndex, endIndex);
+function updateTableData() {
+    const tableData = filteredFaults.map(fault => ({
+        id: `#${fault.id}`,
+        machine_name: fault.machine_name || 'Bilinmeyen Ekipman',
+        description: fault.description || 'Açıklama yok',
+        priority: getPriorityBadge(fault),
+        status: getStatusBadge(fault),
+        reported_by_username: fault.reported_by_username || 'Bilinmeyen',
+        reported_at: formatDate(fault.reported_at),
+        actions: getActionButtons(fault)
+    }));
     
-    tableBody.innerHTML = '';
+    tableComponent.updateData(tableData);
+}
+
+function getStatus(fault) {
+    if (fault.resolved_at) {
+        return 'resolved';
+    }
+    if (fault.is_breaking) {
+        return 'in_progress';
+    }
+    return 'pending';
+}
+
+function getPriorityBadge(fault) {
+    // Determine priority based on is_breaking and other factors
+    if (fault.is_breaking) {
+        return '<span class="badge bg-danger">Kritik</span>';
+    }
+    if (fault.is_maintenance) {
+        return '<span class="badge bg-warning">Orta</span>';
+    }
+    return '<span class="badge bg-secondary">Düşük</span>';
+}
+
+function getStatusBadge(fault) {
+    const status = getStatus(fault);
+    const statusMap = {
+        'pending': '<span class="badge bg-warning">Bekleyen</span>',
+        'in_progress': '<span class="badge bg-info">İşlemde</span>',
+        'resolved': '<span class="badge bg-success">Çözüldü</span>',
+        'closed': '<span class="badge bg-secondary">Kapatıldı</span>'
+    };
+    return statusMap[status] || '<span class="badge bg-secondary">Bilinmeyen</span>';
+}
+
+function getActionButtons(fault) {
+    const buttons = [];
     
-    if (pageData.length === 0) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="8" class="text-center text-muted py-4">
-                    <i class="fas fa-inbox fa-3x mb-3"></i>
-                    <p>Arıza talebi bulunamadı</p>
-                </td>
-            </tr>
-        `;
-        return;
+    // View button
+    buttons.push(`<button type="button" class="btn btn-outline-primary" onclick="viewFault(${fault.id})" title="Görüntüle">
+        <i class="fas fa-eye"></i>
+    </button>`);
+    
+    // Resolve button (only for pending/in_progress)
+    if (getStatus(fault) === 'pending' || getStatus(fault) === 'in_progress') {
+        buttons.push(`<button type="button" class="btn btn-outline-success" onclick="resolveFault(${fault.id})" title="Çöz">
+            <i class="fas fa-tools"></i>
+        </button>`);
     }
     
-    pageData.forEach(fault => {
-        const row = document.createElement('tr');
-        row.className = `priority-${fault.priority}`;
-        
-        row.innerHTML = `
-            <td><strong>#${fault.id}</strong></td>
-            <td>
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-cog me-2 text-muted"></i>
-                    <span>${fault.machine_name || 'Bilinmeyen Ekipman'}</span>
-                </div>
-            </td>
-            <td>
-                <div class="fault-title">
-                    <strong>${fault.title}</strong>
-                    <br>
-                    <small class="text-muted">${fault.description.substring(0, 50)}${fault.description.length > 50 ? '...' : ''}</small>
-                </div>
-            </td>
-            <td>
-                <span class="badge ${getPriorityBadgeClass(fault.priority)}">
-                    ${getPriorityText(fault.priority)}
-                </span>
-            </td>
-            <td>
-                <span class="badge ${getStatusBadgeClass(fault.status)}">
-                    ${getStatusText(fault.status)}
-                </span>
-            </td>
-            <td>
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-user me-2 text-muted"></i>
-                    <span>${fault.reported_by}</span>
-                </div>
-            </td>
-            <td>
-                <div class="d-flex align-items-center">
-                    <i class="fas fa-calendar me-2 text-muted"></i>
-                    <span>${formatDate(fault.fault_date)}</span>
-                </div>
-            </td>
-            <td>
-                <div class="btn-group" role="group">
-                    <button type="button" class="btn btn-sm btn-outline-primary" 
-                            onclick="viewFaultDetails(${fault.id})" title="Detayları Görüntüle">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    ${fault.status === 'pending' || fault.status === 'in_progress' ? `
-                        <button type="button" class="btn btn-sm btn-outline-success" 
-                                onclick="openResolutionModal(${fault.id})" title="Çözüm Ekle">
-                            <i class="fas fa-tools"></i>
-                        </button>
-                    ` : ''}
-                    <button type="button" class="btn btn-sm btn-outline-info" 
-                            onclick="editFault(${fault.id})" title="Düzenle">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                </div>
-            </td>
-        `;
-        
-        tableBody.appendChild(row);
+    // Edit button
+    buttons.push(`<button type="button" class="btn btn-outline-secondary" onclick="editFault(${fault.id})" title="Düzenle">
+        <i class="fas fa-edit"></i>
+    </button>`);
+    
+    return `<div class="btn-group btn-group-sm" role="group">${buttons.join('')}</div>`;
+}
+
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('tr-TR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function loadMachinesForFilter() {
+    const machines = [...new Set(allFaults.map(fault => fault.machine_name).filter(Boolean))];
+    const machineOptions = [{ value: '', label: 'Tümü' }];
+    
+    machines.forEach(machine => {
+        machineOptions.push({ value: machine, label: machine });
     });
     
-    // Update pagination
-    renderPagination();
-    
-    // Update total records
-    document.getElementById('totalRecords').textContent = filteredFaults.length;
-}
-
-function renderPagination() {
-    const totalPages = Math.ceil(filteredFaults.length / itemsPerPage);
-    const pagination = document.getElementById('pagination');
-    
-    pagination.innerHTML = '';
-    
-    if (totalPages <= 1) return;
-    
-    // Previous button
-    const prevLi = document.createElement('li');
-    prevLi.className = `page-item ${currentPage === 1 ? 'disabled' : ''}`;
-    prevLi.innerHTML = `
-        <button class="page-link" onclick="changePage(${currentPage - 1})" ${currentPage === 1 ? 'disabled' : ''}>
-            <i class="fas fa-chevron-left"></i>
-        </button>
-    `;
-    pagination.appendChild(prevLi);
-    
-    // Page numbers
-    const startPage = Math.max(1, currentPage - 2);
-    const endPage = Math.min(totalPages, currentPage + 2);
-    
-    for (let i = startPage; i <= endPage; i++) {
-        const pageLi = document.createElement('li');
-        pageLi.className = `page-item ${i === currentPage ? 'active' : ''}`;
-        pageLi.innerHTML = `
-            <button class="page-link" onclick="changePage(${i})">${i}</button>
-        `;
-        pagination.appendChild(pageLi);
-    }
-    
-    // Next button
-    const nextLi = document.createElement('li');
-    nextLi.className = `page-item ${currentPage === totalPages ? 'disabled' : ''}`;
-    nextLi.innerHTML = `
-        <button class="page-link" onclick="changePage(${currentPage + 1})" ${currentPage === totalPages ? 'disabled' : ''}>
-            <i class="fas fa-chevron-right"></i>
-        </button>
-    `;
-    pagination.appendChild(nextLi);
-}
-
-function changePage(page) {
-    const totalPages = Math.ceil(filteredFaults.length / itemsPerPage);
-    if (page < 1 || page > totalPages) return;
-    
-    currentPage = page;
-    renderTable();
-}
-
-function initializeFilters() {
-    // Add event listeners for filter changes
-    document.getElementById('statusFilter').addEventListener('change', applyFilters);
-    document.getElementById('priorityFilter').addEventListener('change', applyFilters);
-    document.getElementById('machineFilter').addEventListener('change', applyFilters);
-    document.getElementById('dateFilter').addEventListener('change', applyFilters);
+    filtersComponent.updateFilterOptions('machineFilter', machineOptions);
 }
 
 function applyFilters() {
-    const statusFilter = document.getElementById('statusFilter').value;
-    const priorityFilter = document.getElementById('priorityFilter').value;
-    const machineFilter = document.getElementById('machineFilter').value;
-    const dateFilter = document.getElementById('dateFilter').value;
+    const filterValues = filtersComponent.getFilterValues();
+    const statusFilter = filterValues.statusFilter;
+    const priorityFilter = filterValues.priorityFilter;
+    const machineFilter = filterValues.machineFilter;
+    const dateFilter = filterValues.dateFilter;
     
     filteredFaults = allFaults.filter(fault => {
         // Status filter
-        if (statusFilter && fault.status !== statusFilter) return false;
+        if (statusFilter && getStatus(fault) !== statusFilter) {
+            return false;
+        }
         
         // Priority filter
-        if (priorityFilter && fault.priority !== priorityFilter) return false;
+        if (priorityFilter) {
+            const faultPriority = fault.is_breaking ? 'critical' : (fault.is_maintenance ? 'medium' : 'low');
+            if (faultPriority !== priorityFilter) {
+                return false;
+            }
+        }
         
         // Machine filter
-        if (machineFilter && fault.machine_id !== parseInt(machineFilter)) return false;
+        if (machineFilter && fault.machine_name !== machineFilter) {
+            return false;
+        }
         
         // Date filter
         if (dateFilter) {
-            const faultDate = new Date(fault.fault_date);
+            const faultDate = new Date(fault.reported_at);
             const today = new Date();
             
             switch (dateFilter) {
                 case 'today':
-                    if (!isSameDay(faultDate, today)) return false;
+                    if (faultDate.toDateString() !== today.toDateString()) {
+                        return false;
+                    }
                     break;
                 case 'week':
                     const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-                    if (faultDate < weekAgo) return false;
+                    if (faultDate < weekAgo) {
+                        return false;
+                    }
                     break;
                 case 'month':
-                    const monthAgo = new Date(today.getTime() - 30 * 24 * 60 * 60 * 1000);
-                    if (faultDate < monthAgo) return false;
+                    const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+                    if (faultDate < monthAgo) {
+                        return false;
+                    }
                     break;
             }
         }
@@ -250,41 +344,26 @@ function applyFilters() {
         return true;
     });
     
-    currentPage = 1;
-    updateStatistics();
-    renderTable();
+    updateTableData();
 }
 
 function clearFilters() {
-    document.getElementById('statusFilter').value = '';
-    document.getElementById('priorityFilter').value = '';
-    document.getElementById('machineFilter').value = '';
-    document.getElementById('dateFilter').value = '';
-    
+    filtersComponent.clearFilters();
     filteredFaults = [...allFaults];
-    currentPage = 1;
-    updateStatistics();
-    renderTable();
+    updateTableData();
 }
 
-function loadMachinesForFilter() {
-    const machineFilter = document.getElementById('machineFilter');
-    const machines = [...new Set(allFaults.map(fault => ({ id: fault.machine_id, name: fault.machine_name })))];
-    
-    machines.forEach(machine => {
-        const option = document.createElement('option');
-        option.value = machine.id;
-        option.textContent = machine.name;
-        machineFilter.appendChild(option);
-    });
+function exportToExcel() {
+    // Implementation for Excel export
+    // You can implement the actual export logic here
 }
 
-function setCurrentUser() {
-    const currentUser = localStorage.getItem('currentUser') || 'Kullanıcı';
-    document.getElementById('resolvedBy').value = currentUser;
+function viewFault(faultId) {
+    // Implementation for viewing fault details
+    // You can implement a modal or navigation to detail page
 }
 
-function openResolutionModal(faultId) {
+function resolveFault(faultId) {
     document.getElementById('faultId').value = faultId;
     
     // Set current date and time
@@ -295,141 +374,63 @@ function openResolutionModal(faultId) {
     // Clear previous form data
     document.getElementById('resolutionDescription').value = '';
     
-    // Show modal
     const modal = new bootstrap.Modal(document.getElementById('resolutionModal'));
     modal.show();
 }
 
+function editFault(faultId) {
+    // Implementation for editing fault
+    // You can implement navigation to edit page
+}
+
 async function submitResolution() {
     const faultId = document.getElementById('faultId').value;
-    const resolutionDescription = document.getElementById('resolutionDescription').value;
-    const resolutionDate = document.getElementById('resolutionDate').value;
+    const description = document.getElementById('resolutionDescription').value;
+    const date = document.getElementById('resolutionDate').value;
     const resolvedBy = document.getElementById('resolvedBy').value;
     
-    if (!resolutionDescription.trim()) {
-        showAlert('Çözüm açıklaması zorunludur.', 'warning');
+    if (!description || !date || !resolvedBy) {
+        showAlert('Lütfen tüm alanları doldurun.', 'warning');
         return;
     }
     
     try {
-        await resolveMaintenanceRequest(faultId, resolutionDescription);
-        
-        showAlert('Arıza çözümü başarıyla kaydedildi!', 'success');
+        await resolveMaintenanceRequest(faultId, {
+            resolution_description: description,
+            resolved_at: date,
+            resolved_by: resolvedBy
+        });
         
         // Close modal
         const modal = bootstrap.Modal.getInstance(document.getElementById('resolutionModal'));
         modal.hide();
         
-        // Refresh data
+        // Reload data
         await loadFaultRequests();
         
+        showAlert('Arıza çözümü başarıyla kaydedildi.', 'success');
+        
     } catch (error) {
-        console.error('Error resolving fault:', error);
-        showAlert('Arıza çözümü kaydedilirken hata oluştu: ' + error.message, 'danger');
+        console.error('Error submitting resolution:', error);
+        showAlert('Arıza çözümü kaydedilirken hata oluştu.', 'danger');
     }
 }
 
-function viewFaultDetails(faultId) {
-    // This would typically open a detailed view modal or navigate to a detail page
-    showAlert('Detay görüntüleme özelliği yakında eklenecek.', 'info');
-}
-
-function editFault(faultId) {
-    // This would typically navigate to an edit page or open an edit modal
-    showAlert('Düzenleme özelliği yakında eklenecek.', 'info');
-}
-
-function exportToExcel() {
-    // This would typically export the filtered data to Excel
-    showAlert('Excel export özelliği yakında eklenecek.', 'info');
-}
-
-function refreshTable() {
-    loadFaultRequests();
-}
-
-// Utility functions
-function getPriorityBadgeClass(priority) {
-    switch (priority) {
-        case 'critical': return 'bg-danger';
-        case 'high': return 'bg-warning';
-        case 'medium': return 'bg-info';
-        case 'low': return 'bg-success';
-        default: return 'bg-secondary';
+function setCurrentUser() {
+    // Set current user for resolution form
+    const currentUser = localStorage.getItem('currentUser');
+    if (currentUser) {
+        try {
+            const user = JSON.parse(currentUser);
+            document.getElementById('resolvedBy').value = user.username || '';
+        } catch (error) {
+            console.error('Error parsing current user:', error);
+        }
     }
 }
 
-function getPriorityText(priority) {
-    switch (priority) {
-        case 'critical': return 'Kritik';
-        case 'high': return 'Yüksek';
-        case 'medium': return 'Orta';
-        case 'low': return 'Düşük';
-        default: return 'Bilinmiyor';
-    }
-}
-
-function getStatusBadgeClass(status) {
-    switch (status) {
-        case 'pending': return 'bg-warning';
-        case 'in_progress': return 'bg-info';
-        case 'resolved': return 'bg-success';
-        case 'closed': return 'bg-secondary';
-        default: return 'bg-secondary';
-    }
-}
-
-function getStatusText(status) {
-    switch (status) {
-        case 'pending': return 'Bekleyen';
-        case 'in_progress': return 'İşlemde';
-        case 'resolved': return 'Çözüldü';
-        case 'closed': return 'Kapatıldı';
-        default: return 'Bilinmiyor';
-    }
-}
-
-function formatDate(dateString) {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('tr-TR', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
-
-function isSameDay(date1, date2) {
-    return date1.getFullYear() === date2.getFullYear() &&
-           date1.getMonth() === date2.getMonth() &&
-           date1.getDate() === date2.getDate();
-}
-
-function showLoading(show) {
-    const tableBody = document.getElementById('faultRequestsTableBody');
-    if (show) {
-        tableBody.innerHTML = `
-            <tr>
-                <td colspan="8" class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Yükleniyor...</span>
-                    </div>
-                    <p class="mt-2 text-muted">Arıza talepleri yükleniyor...</p>
-                </td>
-            </tr>
-        `;
-    }
-}
-
-function showAlert(message, type) {
-    // Remove existing alerts
-    const existingAlert = document.querySelector('.alert');
-    if (existingAlert) {
-        existingAlert.remove();
-    }
-    
-    // Create new alert
+function showAlert(message, type = 'info') {
+    // Create and show alert
     const alertDiv = document.createElement('div');
     alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
     alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
@@ -440,7 +441,7 @@ function showAlert(message, type) {
     
     document.body.appendChild(alertDiv);
     
-    // Auto-dismiss after 5 seconds
+    // Auto remove after 5 seconds
     setTimeout(() => {
         if (alertDiv.parentNode) {
             alertDiv.remove();
@@ -448,13 +449,8 @@ function showAlert(message, type) {
     }, 5000);
 }
 
-// Make functions available globally
-window.applyFilters = applyFilters;
-window.clearFilters = clearFilters;
-window.changePage = changePage;
-window.openResolutionModal = openResolutionModal;
-window.submitResolution = submitResolution;
-window.viewFaultDetails = viewFaultDetails;
+// Make functions globally available for onclick handlers
+window.resolveFault = resolveFault;
+window.viewFault = viewFault;
 window.editFault = editFault;
-window.exportToExcel = exportToExcel;
-window.refreshTable = refreshTable;
+window.submitResolution = submitResolution;

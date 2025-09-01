@@ -8,9 +8,12 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="../../../style.css">
-    <link rel="stylesheet" href="../../../components/navbar.css">
-    <link rel="stylesheet" href="../../../components/table/table.css">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/components/navbar.css">
+    <link rel="stylesheet" href="/components/header/header.css">
+    <link rel="stylesheet" href="/components/table/table.css">
+    <link rel="stylesheet" href="/components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="/components/filters/filters.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
     <link rel="stylesheet" href="../../../pre-auth.css">
     <link rel="stylesheet" href="list.css">
@@ -25,203 +28,18 @@
     <div class="floating-element"></div>
 
     <!-- Main Content -->
-    <div class="container mt-4">
-        <div class="row">
-            <div class="col-12">
-                <div class="d-flex justify-content-between align-items-center mb-4">
-                    <div>
-                        <h2 class="mb-1">
-                            <i class="fas fa-list text-primary me-2"></i>
-                            Arıza Talepleri
-                        </h2>
-                        <p class="text-muted">Tüm arıza taleplerini görüntüleyin ve yönetin</p>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <a href="/manufacturing/maintenance" class="btn btn-outline-secondary">
-                            <i class="fas fa-arrow-left me-2"></i>Geri Dön
-                        </a>
-                        <a href="/manufacturing/maintenance/fault-requests/create" class="btn btn-primary">
-                            <i class="fas fa-plus me-2"></i>Yeni Arıza Talebi
-                        </a>
-                    </div>
-                </div>
-            </div>
-        </div>
+    <div class="container-fluid py-4">
+        <!-- Header Component -->
+        <div id="header-placeholder"></div>
 
-        <!-- Statistics Cards -->
-        <div class="row mb-4">
-            <div class="col-md-3">
-                <div class="card stat-card bg-primary text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 class="mb-0" id="totalFaults">0</h4>
-                                <p class="mb-0">Toplam Arıza</p>
-                            </div>
-                            <div class="stat-icon">
-                                <i class="fas fa-exclamation-triangle fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stat-card bg-warning text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 class="mb-0" id="pendingFaults">0</h4>
-                                <p class="mb-0">Bekleyen</p>
-                            </div>
-                            <div class="stat-icon">
-                                <i class="fas fa-clock fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stat-card bg-info text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 class="mb-0" id="inProgressFaults">0</h4>
-                                <p class="mb-0">İşlemde</p>
-                            </div>
-                            <div class="stat-icon">
-                                <i class="fas fa-tools fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-3">
-                <div class="card stat-card bg-success text-white">
-                    <div class="card-body">
-                        <div class="d-flex justify-content-between">
-                            <div>
-                                <h4 class="mb-0" id="resolvedFaults">0</h4>
-                                <p class="mb-0">Çözüldü</p>
-                            </div>
-                            <div class="stat-icon">
-                                <i class="fas fa-check-circle fa-2x"></i>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Statistics Cards Component -->
+        <div id="statistics-container"></div>
 
-        <!-- Filters -->
-        <div class="card mb-4">
-            <div class="card-header bg-light">
-                <h6 class="mb-0">
-                    <i class="fas fa-filter me-2"></i>
-                    Filtreler
-                </h6>
-            </div>
-            <div class="card-body">
-                <div class="row">
-                    <div class="col-md-3 mb-3">
-                        <label for="statusFilter" class="form-label">Durum</label>
-                        <select class="form-select" id="statusFilter">
-                            <option value="">Tümü</option>
-                            <option value="pending">Bekleyen</option>
-                            <option value="in_progress">İşlemde</option>
-                            <option value="resolved">Çözüldü</option>
-                            <option value="closed">Kapatıldı</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3 mb-3">
-                        <label for="priorityFilter" class="form-label">Öncelik</label>
-                        <select class="form-select" id="priorityFilter">
-                            <option value="">Tümü</option>
-                            <option value="low">Düşük</option>
-                            <option value="medium">Orta</option>
-                            <option value="high">Yüksek</option>
-                            <option value="critical">Kritik</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3 mb-3">
-                        <label for="machineFilter" class="form-label">Ekipman</label>
-                        <select class="form-select" id="machineFilter">
-                            <option value="">Tümü</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3 mb-3">
-                        <label for="dateFilter" class="form-label">Tarih Aralığı</label>
-                        <select class="form-select" id="dateFilter">
-                            <option value="">Tümü</option>
-                            <option value="today">Bugün</option>
-                            <option value="week">Bu Hafta</option>
-                            <option value="month">Bu Ay</option>
-                            <option value="custom">Özel</option>
-                        </select>
-                    </div>
-                </div>
-                <div class="row">
-                    <div class="col-12">
-                        <button type="button" class="btn btn-primary me-2" onclick="applyFilters()">
-                            <i class="fas fa-search me-2"></i>Filtrele
-                        </button>
-                        <button type="button" class="btn btn-outline-secondary" onclick="clearFilters()">
-                            <i class="fas fa-times me-2"></i>Temizle
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
+        <!-- Filters Component -->
+        <div id="filters-container"></div>
 
-        <!-- Fault Requests Table -->
-        <div class="card">
-            <div class="card-header bg-light d-flex justify-content-between align-items-center">
-                <h6 class="mb-0">
-                    <i class="fas fa-table me-2"></i>
-                    Arıza Talepleri
-                </h6>
-                <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-outline-primary btn-sm" onclick="exportToExcel()">
-                        <i class="fas fa-file-excel me-1"></i>Excel
-                    </button>
-                    <button type="button" class="btn btn-outline-secondary btn-sm" onclick="refreshTable()">
-                        <i class="fas fa-sync-alt me-1"></i>Yenile
-                    </button>
-                </div>
-            </div>
-            <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-hover" id="faultRequestsTable">
-                        <thead class="table-dark">
-                            <tr>
-                                <th>ID</th>
-                                <th>Ekipman</th>
-                                <th>Başlık</th>
-                                <th>Öncelik</th>
-                                <th>Durum</th>
-                                <th>Bildiren</th>
-                                <th>Tarih</th>
-                                <th>İşlemler</th>
-                            </tr>
-                        </thead>
-                        <tbody id="faultRequestsTableBody">
-                            <!-- Data will be loaded here -->
-                        </tbody>
-                    </table>
-                </div>
-                
-                <!-- Pagination -->
-                <div class="d-flex justify-content-between align-items-center mt-3">
-                    <div class="text-muted">
-                        Toplam <span id="totalRecords">0</span> kayıt
-                    </div>
-                    <nav aria-label="Fault requests pagination">
-                        <ul class="pagination mb-0" id="pagination">
-                            <!-- Pagination will be generated here -->
-                        </ul>
-                    </nav>
-                </div>
-            </div>
-        </div>
+        <!-- Table Component -->
+        <div id="table-container"></div>
     </div>
 
     <!-- Resolution Modal -->
