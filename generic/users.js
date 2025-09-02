@@ -8,7 +8,7 @@ export async function fetchUsers(team = null) {
     if (team) {
         url += `?team=${team}`;
     }
-    const resp = await authedFetch(url);
+    const resp = await fetch(url);
     if (!resp.ok) return [];
     const data = await resp.json();
     return extractResultsFromResponse(data);
@@ -43,14 +43,7 @@ export async function authFetchUsers(page = 1, pageSize = 20, filters = {}) {
     const resp = await authedFetch(url);
     if (!resp.ok) return { results: [], count: 0, total_pages: 0 };
     const data = await resp.json();
-    
-    // For paginated responses, return the full object
-    if (data.results && Array.isArray(data.results)) {
-        return data;
-    }
-    
-    // For non-paginated responses, extract results
-    return { results: extractResultsFromResponse(data), count: data.length || 0, total_pages: 1 };
+    return extractResultsFromResponse(data);
 }
 
 export async function fetchTeams() {

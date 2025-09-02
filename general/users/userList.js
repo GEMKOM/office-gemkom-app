@@ -17,6 +17,8 @@ let totalUsers = 0;
 let isLoading = false;
 let usersStats = null; // Statistics Cards component instance
 let userFilters = null; // Filters component instance
+let teams = []; // Store teams data for filters
+let occupations = []; // Store occupations data for filters
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -60,6 +62,10 @@ async function initializeUsers() {
         
         await loadTeams();
         await loadOccupations();
+        
+        // Update filter options with the loaded teams and occupations data
+        updateTeamFilterOptions();
+        
         await loadUsers();
         updateUserCounts();
     } catch (error) {
@@ -70,31 +76,32 @@ async function initializeUsers() {
 
 async function loadTeams() {
     try {
-        const teams = await fetchTeams();
+        const teamsData = await fetchTeams();
+        teams = teamsData; // Store teams globally
         
-                 // Populate team dropdown in create user modal
-         const teamSelect = document.getElementById('user-team');
-         if (teamSelect) {
-             teamSelect.innerHTML = '<option value="">Takım seçin...</option>';
-             teams.forEach(team => {
-                 const option = document.createElement('option');
-                 option.value = team.value || team.id;
-                 option.textContent = team.label || team.name;
-                 teamSelect.appendChild(option);
-             });
-         }
-         
-         // Also populate team dropdown in edit user modal
-         const editTeamSelect = document.getElementById('edit-user-team');
-         if (editTeamSelect) {
-             editTeamSelect.innerHTML = '<option value="">Takım seçin...</option>';
-             teams.forEach(team => {
-                 const option = document.createElement('option');
-                 option.value = team.value || team.id;
-                 option.textContent = team.label || team.name;
-                 editTeamSelect.appendChild(option);
-             });
-         }
+        // Populate team dropdown in create user modal
+        const teamSelect = document.getElementById('user-team');
+        if (teamSelect) {
+            teamSelect.innerHTML = '<option value="">Takım seçin...</option>';
+            teams.forEach(team => {
+                const option = document.createElement('option');
+                option.value = team.value || team.id;
+                option.textContent = team.label || team.name;
+                teamSelect.appendChild(option);
+            });
+        }
+        
+        // Also populate team dropdown in edit user modal
+        const editTeamSelect = document.getElementById('edit-user-team');
+        if (editTeamSelect) {
+            editTeamSelect.innerHTML = '<option value="">Takım seçin...</option>';
+            teams.forEach(team => {
+                const option = document.createElement('option');
+                option.value = team.value || team.id;
+                option.textContent = team.label || team.name;
+                editTeamSelect.appendChild(option);
+            });
+        }
     } catch (error) {
         console.error('Error loading teams:', error);
     }
@@ -102,31 +109,32 @@ async function loadTeams() {
 
 async function loadOccupations() {
     try {
-        const occupations = await fetchOccupations();
+        const occupationsData = await fetchOccupations();
+        occupations = occupationsData; // Store occupations globally
         
-                 // Populate occupation dropdown in create user modal
-         const occupationSelect = document.getElementById('user-occupation');
-         if (occupationSelect) {
-             occupationSelect.innerHTML = '<option value="">Görev seçin...</option>';
-             occupations.forEach(occupation => {
-                 const option = document.createElement('option');
-                 option.value = occupation.value || occupation.id;
-                 option.textContent = occupation.label || occupation.name;
-                 occupationSelect.appendChild(option);
-             });
-         }
-         
-         // Also populate occupation dropdown in edit user modal (if it exists)
-         const editOccupationSelect = document.getElementById('edit-user-occupation');
-         if (editOccupationSelect) {
-             editOccupationSelect.innerHTML = '<option value="">Görev seçin...</option>';
-             occupations.forEach(occupation => {
-                 const option = document.createElement('option');
-                 option.value = occupation.value || occupation.id;
-                 option.textContent = occupation.label || occupation.name;
-                 editOccupationSelect.appendChild(option);
-             });
-         }
+        // Populate occupation dropdown in create user modal
+        const occupationSelect = document.getElementById('user-occupation');
+        if (occupationSelect) {
+            occupationSelect.innerHTML = '<option value="">Görev seçin...</option>';
+            occupations.forEach(occupation => {
+                const option = document.createElement('option');
+                option.value = occupation.value || occupation.id;
+                option.textContent = occupation.label || occupation.name;
+                occupationSelect.appendChild(option);
+            });
+        }
+        
+        // Also populate occupation dropdown in edit user modal (if it exists)
+        const editOccupationSelect = document.getElementById('edit-user-occupation');
+        if (editOccupationSelect) {
+            editOccupationSelect.innerHTML = '<option value="">Görev seçin...</option>';
+            occupations.forEach(occupation => {
+                const option = document.createElement('option');
+                option.value = occupation.value || occupation.id;
+                option.textContent = occupation.label || occupation.name;
+                editOccupationSelect.appendChild(option);
+            });
+        }
     } catch (error) {
         console.error('Error loading occupations:', error);
     }
@@ -373,19 +381,24 @@ function updateUserCounts() {
 function updateTeamFilterOptions() {
     if (!userFilters) return;
     
-    const teams = [...new Set(users.map(user => user.team_label).filter(Boolean))].sort();
+    // Use the stored teams data from API instead of extracting from user data
     const teamOptions = [
         { value: '', label: 'Tüm Takımlar' },
-        ...teams.map(team => ({ value: team, label: team }))
+        ...teams.map(team => ({ 
+            value: team.value || team.id, 
+            label: team.label || team.name 
+        }))
     ];
     
     userFilters.updateFilterOptions('team-filter', teamOptions);
     
-    // Also update occupation filter options
-    const occupations = [...new Set(users.map(user => user.occupation_label).filter(Boolean))].sort();
+    // Also update occupation filter options using stored occupations data
     const occupationOptions = [
         { value: '', label: 'Tüm Görevler' },
-        ...occupations.map(occupation => ({ value: occupation, label: occupation }))
+        ...occupations.map(occupation => ({ 
+            value: occupation.value || occupation.id, 
+            label: occupation.label || occupation.name 
+        }))
     ];
     
     userFilters.updateFilterOptions('occupation-filter', occupationOptions);
