@@ -178,6 +178,74 @@ onSupplierRecommendAll: (supplierId, allRecommendations) => {
 }
 ```
 
+## Column Minimization
+        
+The comparison table now includes clickable column headers that allow users to minimize individual columns across all suppliers. This feature is particularly useful for saving space and focusing on specific data types.
+
+### How It Works
+        
+- **Clickable Column Headers**: Each column header acts as a clickable button to minimize/expand that column
+- **Two Column Categories**: 
+  - **General Columns**: Item, Job No, Quantity, Unit (not part of suppliers)
+  - **Supplier Columns**: Unit Price, Delivery Days, Total, Euro Total, Recommendations
+- **Individual Column Control**: Click any column header to minimize/expand that specific column type
+- **Cross-Supplier Application**: When minimized, the column is minimized for ALL suppliers simultaneously
+- **Space Saving**: Minimized columns show as narrow 40px columns with rotated text
+- **Dynamic Adjustment**: The table automatically adjusts its layout when columns are minimized
+
+### General Columns vs Supplier Columns
+
+- **General Columns** (left side of control panel):
+  - `item`: Item name and code
+  - `job_no`: Job number
+  - `quantity`: Item quantity
+  - `unit`: Unit of measurement
+  
+- **Supplier Columns** (right side of control panel):
+  - `unitPrice`: Unit price for each supplier
+  - `deliveryDays`: Delivery time for each supplier
+  - `originalTotal`: Total price in original currency
+  - `euroTotal`: Total price converted to EUR
+  - `recommendations`: Recommendation buttons for each supplier
+
+### Usage
+        
+```javascript
+// Toggle column minimization for general columns
+comparisonTable.toggleColumnMinimization('item');        // Item column
+comparisonTable.toggleColumnMinimization('job_no');     // Job No column
+comparisonTable.toggleColumnMinimization('quantity');   // Quantity column
+comparisonTable.toggleColumnMinimization('unit');       // Unit column
+        
+// Toggle column minimization for supplier columns
+comparisonTable.toggleColumnMinimization('unitPrice');      // Unit Price
+comparisonTable.toggleColumnMinimization('deliveryDays');   // Delivery Days
+comparisonTable.toggleColumnMinimization('originalTotal');  // Original Total
+comparisonTable.toggleColumnMinimization('euroTotal');      // Euro Total
+comparisonTable.toggleColumnMinimization('recommendations'); // Recommendations
+        
+// Set specific minimization state
+comparisonTable.setColumnMinimization('item', true);        // Minimize Item column
+comparisonTable.setColumnMinimization('unitPrice', false);  // Expand Unit Price column
+        
+// Check if column is minimized
+const isItemMinimized = comparisonTable.isColumnMinimized('item');
+const isUnitPriceMinimized = comparisonTable.isColumnMinimized('unitPrice');
+```
+
+**Note**: Users can also click directly on any column header to minimize/expand that column!
+
+### Benefits
+        
+- **Space Efficiency**: Minimized columns take up only 40px width instead of full width
+- **Better Focus**: Users can focus on specific data types while keeping others accessible
+- **Improved UX**: Better use of screen real estate, especially on smaller devices
+- **Consistent Behavior**: Minimization applies to all suppliers uniformly
+- **Visual Clarity**: Rotated text in minimized columns maintains readability
+- **Flexible Control**: Users can minimize any combination of general and supplier columns
+- **Intuitive Interface**: Clicking column headers is more natural than separate control buttons
+- **Clean Design**: No additional UI elements cluttering the interface
+
 ## Styling
 
 The component includes comprehensive CSS styling with:

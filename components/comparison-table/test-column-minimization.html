@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Column Minimization Test - General & Supplier Columns</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Component CSS -->
+    <link rel="stylesheet" href="comparison-table.css">
+</head>
+<body>
+    <div class="container mt-5">
+        <h1 class="mb-4">Column Minimization Test - General & Supplier Columns</h1>
+        
+        <div class="alert alert-info">
+            <h5><i class="fas fa-info-circle me-2"></i>Test Instructions</h5>
+            <p class="mb-0">
+                1. The table below shows 3 suppliers with multiple columns each<br>
+                2. <strong>Click any column header to minimize/expand it!</strong><br>
+                3. <strong>NEW:</strong> You can now minimize both general columns (Item, Job No, Quantity, Unit) and supplier columns<br>
+                4. Notice how minimized columns show as narrow 40px columns with rotated text<br>
+                5. Try minimizing different combinations of columns to see space savings
+            </p>
+        </div>
+        
+        <!-- Comparison Table Container -->
+        <div id="comparison-table-container"></div>
+        
+        <!-- Test Controls -->
+        <div class="row mt-4">
+            <div class="col-12">
+                <div class="card">
+                    <div class="card-header">
+                        <h5 class="mb-0">Test Controls</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-2">
+                                <button class="btn btn-primary w-100" onclick="testMinimizeAll()">
+                                    <i class="fas fa-compress me-2"></i>Minimize All
+                                </button>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-success w-100" onclick="testExpandAll()">
+                                    <i class="fas fa-expand me-2"></i>Expand All
+                                </button>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-info w-100" onclick="testToggleSpecific()">
+                                    <i class="fas fa-random me-2"></i>Toggle Unit Price
+                                </button>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-warning w-100" onclick="testMinimizeFinancial()">
+                                    <i class="fas fa-dollar-sign me-2"></i>Minimize Financial
+                                </button>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-danger w-100" onclick="testMinimizeGeneral()">
+                                    <i class="fas fa-columns me-2"></i>Minimize General
+                                </button>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-dark w-100" onclick="testToggleGeneral()">
+                                    <i class="fas fa-exchange-alt me-2"></i>Toggle General
+                                </button>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-12">
+                                <div class="alert alert-secondary">
+                                    <strong>Current Status:</strong>
+                                    <span id="status-display">All columns expanded</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Component JS -->
+    <script type="module">
+        import { ComparisonTable } from './comparison-table.js';
+        
+        // Test data with 3 suppliers
+        const testData = {
+            items: [
+                { name: 'Test Item 1', code: 'TI001', job_no: 'JOB001', quantity: 100, unit: 'pcs' },
+                { name: 'Test Item 2', code: 'TI002', job_no: 'JOB002', quantity: 50, unit: 'kg' },
+                { name: 'Test Item 3', code: 'TI003', job_no: 'JOB003', quantity: 200, unit: 'm' }
+            ],
+            suppliers: [
+                { id: 'supplier1', name: 'Supplier A (Local)', default_currency: 'TRY' },
+                { id: 'supplier2', name: 'Supplier B (Import)', default_currency: 'USD' },
+                { id: 'supplier3', name: 'Supplier C (EU)', default_currency: 'EUR' }
+            ],
+            offers: {
+                supplier1: {
+                    0: { unitPrice: 25, totalPrice: 2500, deliveryDays: 7, notes: 'Local supplier' },
+                    1: { unitPrice: 12, totalPrice: 600, deliveryDays: 5, notes: 'Fast delivery' },
+                    2: { unitPrice: 8, totalPrice: 1600, deliveryDays: 10, notes: 'Bulk discount' }
+                },
+                supplier2: {
+                    0: { unitPrice: 3.5, totalPrice: 350, deliveryDays: 15, notes: 'Import option' },
+                    1: { unitPrice: 1.8, totalPrice: 90, deliveryDays: 20, notes: 'International' },
+                    2: { unitPrice: 1.2, totalPrice: 240, deliveryDays: 18, notes: 'Container shipping' }
+                },
+                supplier3: {
+                    0: { unitPrice: 3.2, totalPrice: 320, deliveryDays: 12, notes: 'EU supplier' },
+                    1: { unitPrice: 1.6, totalPrice: 80, deliveryDays: 8, notes: 'Express delivery' },
+                    2: { unitPrice: 1.0, totalPrice: 200, deliveryDays: 14, notes: 'European quality' }
+                }
+            },
+            itemRecommendations: {
+                0: 'supplier1',
+                1: 'supplier2',
+                2: 'supplier3'
+            }
+        };
+        
+        // Initialize comparison table
+        const comparisonTable = new ComparisonTable('comparison-table-container', {
+            showSummary: true,
+            showRecommendations: true,
+            showDeliveryDays: true,
+            showNotes: true,
+            showEuroTotal: true,
+            showOriginalTotal: true,
+            showUnitPrice: true
+        });
+        
+        // Set test data
+        comparisonTable.setData(testData);
+        
+        // Make it globally accessible for testing
+        window.comparisonTableInstance = comparisonTable;
+        
+        // Test functions
+        window.testMinimizeAll = function() {
+            // Minimize all columns (general + supplier)
+            comparisonTable.setColumnMinimization('item', true);
+            comparisonTable.setColumnMinimization('job_no', true);
+            comparisonTable.setColumnMinimization('quantity', true);
+            comparisonTable.setColumnMinimization('unit', true);
+            comparisonTable.setColumnMinimization('unitPrice', true);
+            comparisonTable.setColumnMinimization('deliveryDays', true);
+            comparisonTable.setColumnMinimization('originalTotal', true);
+            comparisonTable.setColumnMinimization('euroTotal', true);
+            comparisonTable.setColumnMinimization('recommendations', true);
+            updateStatus();
+        };
+        
+        window.testExpandAll = function() {
+            // Expand all columns (general + supplier)
+            comparisonTable.setColumnMinimization('item', false);
+            comparisonTable.setColumnMinimization('job_no', false);
+            comparisonTable.setColumnMinimization('quantity', false);
+            comparisonTable.setColumnMinimization('unit', false);
+            comparisonTable.setColumnMinimization('unitPrice', false);
+            comparisonTable.setColumnMinimization('deliveryDays', false);
+            comparisonTable.setColumnMinimization('originalTotal', false);
+            comparisonTable.setColumnMinimization('euroTotal', false);
+            comparisonTable.setColumnMinimization('recommendations', false);
+            updateStatus();
+        };
+        
+        window.testToggleSpecific = function() {
+            comparisonTable.toggleColumnMinimization('unitPrice');
+            updateStatus();
+        };
+        
+        window.testMinimizeFinancial = function() {
+            comparisonTable.setColumnMinimization('unitPrice', true);
+            comparisonTable.setColumnMinimization('originalTotal', true);
+            comparisonTable.setColumnMinimization('euroTotal', true);
+            updateStatus();
+        };
+
+        window.testMinimizeGeneral = function() {
+            comparisonTable.setColumnMinimization('item', true);
+            comparisonTable.setColumnMinimization('job_no', true);
+            comparisonTable.setColumnMinimization('quantity', true);
+            comparisonTable.setColumnMinimization('unit', true);
+            updateStatus();
+        };
+
+        window.testToggleGeneral = function() {
+            comparisonTable.toggleColumnMinimization('item');
+            comparisonTable.toggleColumnMinimization('job_no');
+            updateStatus();
+        };
+        
+        function updateStatus() {
+            const minimizedColumns = [];
+            const allColumnNames = {
+                // General columns
+                item: 'Item',
+                job_no: 'Job No',
+                quantity: 'Quantity',
+                unit: 'Unit',
+                // Supplier columns
+                unitPrice: 'Unit Price',
+                deliveryDays: 'Delivery Days',
+                originalTotal: 'Original Total',
+                euroTotal: 'Euro Total',
+                recommendations: 'Recommendations'
+            };
+            
+            Object.keys(allColumnNames).forEach(columnType => {
+                if (comparisonTable.isColumnMinimized(columnType)) {
+                    minimizedColumns.push(allColumnNames[columnType]);
+                }
+            });
+            
+            const statusElement = document.getElementById('status-display');
+            
+            if (minimizedColumns.length === 0) {
+                statusElement.textContent = 'All columns expanded';
+                statusElement.className = 'text-success';
+            } else if (minimizedColumns.length === Object.keys(allColumnNames).length) {
+                statusElement.textContent = 'All columns minimized';
+                statusElement.className = 'text-danger';
+            } else {
+                statusElement.textContent = `Minimized: ${minimizedColumns.join(', ')}`;
+                statusElement.className = 'text-warning';
+            }
+        }
+        
+        // Initial status update
+        updateStatus();
+    </script>
+</body>
+</html>

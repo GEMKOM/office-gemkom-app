@@ -36,6 +36,21 @@ export class ComparisonTable {
             itemRecommendations: {}
         };
         
+        // Column minimization state
+        this.columnStates = {
+            // General columns (not part of suppliers)
+            item: { minimized: false, width: 'auto' },
+            job_no: { minimized: false, width: 'auto' },
+            quantity: { minimized: false, width: 'auto' },
+            unit: { minimized: false, width: 'auto' },
+            // Supplier columns
+            unitPrice: { minimized: false, width: 'auto' },
+            deliveryDays: { minimized: false, width: 'auto' },
+            originalTotal: { minimized: false, width: 'auto' },
+            euroTotal: { minimized: false, width: 'auto' },
+            recommendations: { minimized: false, width: 'auto' }
+        };
+        
         this.init();
     }
     
@@ -56,6 +71,27 @@ export class ComparisonTable {
             itemRecommendations: data.itemRecommendations || {}
         };
         this.render();
+    }
+
+    // Toggle column minimization
+    toggleColumnMinimization(columnType) {
+        if (this.columnStates[columnType]) {
+            this.columnStates[columnType].minimized = !this.columnStates[columnType].minimized;
+            this.render();
+        }
+    }
+
+    // Set column minimization state
+    setColumnMinimization(columnType, minimized) {
+        if (this.columnStates[columnType]) {
+            this.columnStates[columnType].minimized = minimized;
+            this.render();
+        }
+    }
+
+    // Get column minimization state
+    isColumnMinimized(columnType) {
+        return this.columnStates[columnType]?.minimized || false;
     }
     
     setCurrencyRates(rates) {
@@ -93,10 +129,7 @@ export class ComparisonTable {
                         <table class="table table-bordered" id="comparison-table">
                             <thead class="table-primary">
                                 <tr>
-                                    <th rowspan="3" class="align-middle">Malzeme</th>
-                                    <th rowspan="3" class="align-middle">İş No</th>
-                                    <th rowspan="3" class="align-middle">Miktar</th>
-                                    <th rowspan="3" class="align-middle">Birim</th>
+                                    ${this.generateGeneralHeaders()}
                                     <th id="supplier-group-header" colspan="${this.data.suppliers.length * columnsPerSupplier}" class="text-center">Tedarikçi Teklifleri</th>
                                 </tr>
                                 <tr id="supplier-subheaders">
@@ -119,6 +152,59 @@ export class ComparisonTable {
         `;
     }
     
+
+
+
+
+
+
+    generateGeneralHeaders() {
+        const generalColumns = [
+            { key: 'item', name: 'Malzeme', icon: 'fa-box' },
+            { key: 'job_no', name: 'İş No', icon: 'fa-tag' },
+            { key: 'quantity', name: 'Miktar', icon: 'fa-hashtag' },
+            { key: 'unit', name: 'Birim', icon: 'fa-ruler' }
+        ];
+
+        return generalColumns.map(col => {
+            const isMinimized = this.isColumnMinimized(col.key);
+            if (isMinimized) {
+                return `
+                    <th rowspan="3" class="align-middle minimized-column clickable-header" style="width: 40px; min-width: 40px;" 
+                        onclick="window.comparisonTableInstance.toggleColumnMinimization('${col.key}')" 
+                        title="Genişlet ${col.name}">
+                        <div class="minimized-header">
+                            <span class="rotated-text">${col.name}</span>
+                        </div>
+                    </th>
+                `;
+            } else {
+                return `
+                    <th rowspan="3" class="align-middle clickable-header" 
+                        onclick="window.comparisonTableInstance.toggleColumnMinimization('${col.key}')" 
+                        title="Küçült ${col.name}">
+                        <i class="fas ${col.icon} me-1"></i>${col.name}
+                    </th>
+                `;
+            }
+        }).join('');
+    }
+
+    getGeneralColumnsCount() {
+        const generalColumns = ['item', 'job_no', 'quantity', 'unit'];
+        let count = 0;
+        
+        generalColumns.forEach(colKey => {
+            if (!this.isColumnMinimized(colKey)) {
+                count++;
+            } else {
+                count++; // Even minimized columns take up space (40px)
+            }
+        });
+        
+        return count;
+    }
+
     getVisibleColumnsCount() {
         let count = 0;
         
@@ -170,64 +256,134 @@ export class ComparisonTable {
             // Generate headers based on column order
             this.options.columnOrder.forEach(columnType => {
                 switch (columnType) {
-                    case 'unitPrice':
-                        if (this.options.showUnitPrice) {
-                            headers += `
-                                <th class="text-center align-middle">
-                                    <div class="text-center">
-                                        <i class="fas fa-tag me-1"></i>Birim Fiyat<br>
-                                        <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
-                                    </div>
-                                </th>
-                            `;
-                        }
-                        break;
-                    case 'deliveryDays':
-                        if (this.options.showDeliveryDays) {
-                            headers += `
-                                <th class="text-center align-middle">
-                                    <div class="text-center">
-                                        <i class="fas fa-clock me-1"></i>Teslim<br>
-                                        <small class="text-muted">Gün</small>
-                                    </div>
-                                </th>
-                            `;
-                        }
-                        break;
-                    case 'originalTotal':
-                        if (this.options.showOriginalTotal) {
-                            headers += `
-                                <th class="text-center align-middle">
-                                    <div class="text-center">Toplam<br>
-                                        <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
-                                    </div>
-                                </th>
-                            `;
-                        }
-                        break;
-                    case 'euroTotal':
-                        if (this.options.showEuroTotal) {
-                            headers += `
-                                <th class="text-center align-middle">
-                                    <div class="text-center">
-                                        <i class="fas fa-euro-sign me-1"></i>Euro Toplam<br>
-                                        <small class="text-muted">EUR</small>
-                                    </div>
-                                </th>
-                            `;
-                        }
-                        break;
-                    case 'recommendations':
-                        if (this.options.showRecommendations) {
-                            headers += `
-                                <th class="text-center align-middle">
-                                    <div class="text-center">
-                                        <i class="fas fa-star me-1"></i>Öner
-                                    </div>
-                                </th>
-                            `;
-                        }
-                        break;
+                                            case 'unitPrice':
+                            if (this.options.showUnitPrice) {
+                                if (this.isColumnMinimized('unitPrice')) {
+                                    headers += `
+                                        <th class="text-center align-middle minimized-column clickable-header" style="width: 40px; min-width: 40px;" 
+                                            onclick="window.comparisonTableInstance.toggleColumnMinimization('unitPrice')" 
+                                            title="Genişlet Birim Fiyat">
+                                            <div class="minimized-header">
+                                                <span class="rotated-text">Birim Fiyat</span>
+                                            </div>
+                                        </th>
+                                    `;
+                                } else {
+                                    headers += `
+                                        <th class="text-center align-middle clickable-header" 
+                                            onclick="window.comparisonTableInstance.toggleColumnMinimization('unitPrice')" 
+                                            title="Küçült Birim Fiyat">
+                                            <div class="text-center">
+                                                <i class="fas fa-tag me-1"></i>Birim Fiyat<br>
+                                                <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
+                                            </div>
+                                        </th>
+                                    `;
+                                }
+                            }
+                            break;
+                                            case 'deliveryDays':
+                            if (this.options.showDeliveryDays) {
+                                if (this.isColumnMinimized('deliveryDays')) {
+                                    headers += `
+                                        <th class="text-center align-middle minimized-column clickable-header" style="width: 40px; min-width: 40px;" 
+                                            onclick="window.comparisonTableInstance.toggleColumnMinimization('deliveryDays')" 
+                                            title="Genişlet Teslim">
+                                            <div class="minimized-header">
+                                                <span class="rotated-text">Teslim</span>
+                                            </div>
+                                        </th>
+                                    `;
+                                } else {
+                                    headers += `
+                                        <th class="text-center align-middle clickable-header" 
+                                            onclick="window.comparisonTableInstance.toggleColumnMinimization('deliveryDays')" 
+                                            title="Küçült Teslim">
+                                            <div class="text-center">
+                                                <i class="fas fa-clock me-1"></i>Teslim<br>
+                                                <small class="text-muted">Gün</small>
+                                            </div>
+                                        </th>
+                                    `;
+                                }
+                            }
+                            break;
+                                            case 'originalTotal':
+                            if (this.options.showOriginalTotal) {
+                                if (this.isColumnMinimized('originalTotal')) {
+                                    headers += `
+                                        <th class="text-center align-middle minimized-column clickable-header" style="width: 40px; min-width: 40px;" 
+                                            onclick="window.comparisonTableInstance.toggleColumnMinimization('originalTotal')" 
+                                            title="Genişlet Toplam">
+                                            <div class="minimized-header">
+                                                <span class="rotated-text">Toplam</span>
+                                            </div>
+                                        </th>
+                                    `;
+                                } else {
+                                    headers += `
+                                        <th class="text-center align-middle clickable-header" 
+                                            onclick="window.comparisonTableInstance.toggleColumnMinimization('originalTotal')" 
+                                            title="Küçült Toplam">
+                                            <div class="text-center">Toplam<br>
+                                                <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
+                                            </div>
+                                        </th>
+                                    `;
+                                }
+                            }
+                            break;
+                                            case 'euroTotal':
+                            if (this.options.showEuroTotal) {
+                                if (this.isColumnMinimized('euroTotal')) {
+                                    headers += `
+                                        <th class="text-center align-middle minimized-column clickable-header" style="width: 40px; min-width: 40px;" 
+                                            onclick="window.comparisonTableInstance.toggleColumnMinimization('euroTotal')" 
+                                            title="Genişlet Euro Toplam">
+                                            <div class="minimized-header">
+                                                <span class="rotated-text">Euro</span>
+                                            </div>
+                                        </th>
+                                    `;
+                                } else {
+                                    headers += `
+                                        <th class="text-center align-middle clickable-header" 
+                                            onclick="window.comparisonTableInstance.toggleColumnMinimization('euroTotal')" 
+                                            title="Küçült Euro Toplam">
+                                            <div class="text-center">
+                                                <i class="fas fa-euro-sign me-1"></i>Euro Toplam<br>
+                                                <small class="text-muted">EUR</small>
+                                            </div>
+                                        </th>
+                                    `;
+                                }
+                            }
+                            break;
+                                            case 'recommendations':
+                            if (this.options.showRecommendations) {
+                                if (this.isColumnMinimized('recommendations')) {
+                                    headers += `
+                                        <th class="text-center align-middle minimized-column clickable-header" style="width: 40px; min-width: 40px;" 
+                                            onclick="window.comparisonTableInstance.toggleColumnMinimization('recommendations')" 
+                                            title="Genişlet Öneriler">
+                                            <div class="minimized-header">
+                                                <span class="rotated-text">Öner</span>
+                                            </div>
+                                        </th>
+                                    `;
+                                } else {
+                                    headers += `
+                                        <th class="text-center align-middle clickable-header" 
+                                            onclick="window.comparisonTableInstance.toggleColumnMinimization('recommendations')" 
+                                            title="Küçült Öneriler">
+                                            <div class="text-center">
+                                                <i class="fas fa-star me-1"></i>Öner
+                                            </div>
+                                        </th>
+                                    `;
+                                }
+                            }
+                            break;
                 }
             });
             
@@ -238,13 +394,34 @@ export class ComparisonTable {
     generateComparisonRows() {
         return this.data.items.map((item, itemIndex) => `
             <tr>
-                <td><strong>${item.name}</strong><br><small class="text-muted">${item.code}</small></td>
-                <td>${item.job_no || '-'}</td>
-                <td>${item.quantity}</td>
-                <td>${item.unit}</td>
+                ${this.generateGeneralCells(item, itemIndex)}
                 ${this.generateSupplierCells(itemIndex)}
             </tr>
         `).join('');
+    }
+
+    generateGeneralCells(item, itemIndex) {
+        const generalColumns = [
+            { key: 'item', content: `<strong>${item.name}</strong><br><small class="text-muted">${item.code}</small>` },
+            { key: 'job_no', content: item.job_no || '-' },
+            { key: 'quantity', content: item.quantity },
+            { key: 'unit', content: item.unit }
+        ];
+
+        return generalColumns.map(col => {
+            const isMinimized = this.isColumnMinimized(col.key);
+            if (isMinimized) {
+                return `
+                    <td class="minimized-cell" style="width: 40px; min-width: 40px;">
+                        <div class="minimized-content">
+                            <span class="rotated-text">${col.content}</span>
+                        </div>
+                    </td>
+                `;
+            } else {
+                return `<td>${col.content}</td>`;
+            }
+        }).join('');
     }
     
     generateSupplierCells(itemIndex) {
@@ -260,56 +437,109 @@ export class ComparisonTable {
                     switch (columnType) {
                         case 'unitPrice':
                             if (this.options.showUnitPrice) {
-                                cells += `
-                                    <td class="text-center ${isRecommended ? 'recommended-cell' : ''}">
-                                        <div class="fw-bold">${this.formatCurrency(offer.unitPrice, supplier.default_currency || 'TRY')}</div>
-                                        <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
-                                    </td>
-                                `;
+                                if (this.isColumnMinimized('unitPrice')) {
+                                    cells += `
+                                        <td class="text-center minimized-cell ${isRecommended ? 'recommended-cell' : ''}" style="width: 40px; min-width: 40px;">
+                                            <div class="minimized-content">
+                                                <span class="rotated-text">${this.formatCurrency(offer.unitPrice, supplier.default_currency || 'TRY')}</span>
+                                            </div>
+                                        </td>
+                                    `;
+                                } else {
+                                    cells += `
+                                        <td class="text-center ${isRecommended ? 'recommended-cell' : ''}">
+                                            <div class="fw-bold">${this.formatCurrency(offer.unitPrice, supplier.default_currency || 'TRY')}</div>
+                                            <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
+                                        </td>
+                                    `;
+                                }
                             }
                             break;
                         case 'deliveryDays':
                             if (this.options.showDeliveryDays) {
-                                cells += `
-                                    <td class="text-center ${isRecommended ? 'recommended-cell' : ''}">
-                                        <div class="fw-bold">${offer.deliveryDays || '-'}</div>
-                                        <small class="text-muted">gün</small>
-                                        ${this.options.showNotes && offer.notes ? `<br><small class="text-muted">${offer.notes}</small>` : ''}
-                                    </td>
-                                `;
+                                if (this.isColumnMinimized('deliveryDays')) {
+                                    cells += `
+                                        <td class="text-center minimized-cell ${isRecommended ? 'recommended-cell' : ''}" style="width: 40px; min-width: 40px;">
+                                            <div class="minimized-content">
+                                                <span class="rotated-text">${offer.deliveryDays || '-'}</span>
+                                            </div>
+                                        </td>
+                                    `;
+                                } else {
+                                    cells += `
+                                        <td class="text-center ${isRecommended ? 'recommended-cell' : ''}">
+                                            <div class="fw-bold">${offer.deliveryDays || '-'}</div>
+                                            <small class="text-muted">gün</small>
+                                            ${this.options.showNotes && offer.notes ? `<br><small class="text-muted">${offer.notes}</small>` : ''}
+                                        </td>
+                                    `;
+                                }
                             }
                             break;
                         case 'originalTotal':
                             if (this.options.showOriginalTotal) {
-                                cells += `
-                                    <td class="text-center ${isRecommended ? 'recommended-cell' : ''}">
-                                        <div class="fw-bold">${this.formatCurrency(offer.totalPrice, supplier.default_currency || 'TRY')}</div>
-                                        <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
-                                    </td>
-                                `;
+                                if (this.isColumnMinimized('originalTotal')) {
+                                    cells += `
+                                        <td class="text-center minimized-cell ${isRecommended ? 'recommended-cell' : ''}" style="width: 40px; min-width: 40px;">
+                                            <div class="minimized-content">
+                                                <span class="rotated-text">${this.formatCurrency(offer.totalPrice, supplier.default_currency || 'TRY')}</span>
+                                            </div>
+                                        </td>
+                                    `;
+                                } else {
+                                    cells += `
+                                        <td class="text-center ${isRecommended ? 'recommended-cell' : ''}">
+                                            <div class="fw-bold">${this.formatCurrency(offer.totalPrice, supplier.default_currency || 'TRY')}</div>
+                                            <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
+                                        </td>
+                                    `;
+                                }
                             }
                             break;
                         case 'euroTotal':
                             if (this.options.showEuroTotal) {
                                 const euroTotal = this.convertCurrency(offer.totalPrice, supplier.default_currency || 'TRY', 'EUR');
-                                cells += `
-                                    <td class="text-center ${isRecommended ? 'recommended-cell' : ''}">
-                                        <div class="fw-bold">${this.formatCurrency(euroTotal, 'EUR')}</div>
-                                        <small class="text-muted">EUR</small>
-                                    </td>
-                                `;
+                                if (this.isColumnMinimized('euroTotal')) {
+                                    cells += `
+                                        <td class="text-center minimized-cell ${isRecommended ? 'recommended-cell' : ''}" style="width: 40px; min-width: 40px;">
+                                            <div class="minimized-content">
+                                                <span class="rotated-text">${this.formatCurrency(euroTotal, 'EUR')}</span>
+                                            </div>
+                                        </td>
+                                    `;
+                                } else {
+                                    cells += `
+                                        <td class="text-center ${isRecommended ? 'recommended-cell' : ''}">
+                                            <div class="fw-bold">${this.formatCurrency(euroTotal, 'EUR')}</div>
+                                            <small class="text-muted">EUR</small>
+                                        </td>
+                                    `;
+                                }
                             }
                             break;
                         case 'recommendations':
                             if (this.options.showRecommendations) {
-                                cells += `
-                                    <td class="text-center ${isRecommended ? 'recommended-cell' : ''}">
-                                        <button class="btn btn-sm ${isRecommended ? 'btn-warning' : 'btn-outline-warning'} recommendation-btn" 
-                                                data-item-index="${itemIndex}" data-supplier-id="${supplier.id}">
-                                            <i class="fas fa-star"></i>
-                                        </button>
-                                    </td>
-                                `;
+                                if (this.isColumnMinimized('recommendations')) {
+                                    cells += `
+                                        <td class="text-center minimized-cell ${isRecommended ? 'recommended-cell' : ''}" style="width: 40px; min-width: 40px;">
+                                            <div class="minimized-content">
+                                                <button class="btn btn-sm ${isRecommended ? 'btn-warning' : 'btn-outline-warning'} recommendation-btn-mini" 
+                                                        data-item-index="${itemIndex}" data-supplier-id="${supplier.id}">
+                                                    <i class="fas fa-star"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    `;
+                                } else {
+                                    cells += `
+                                        <td class="text-center ${isRecommended ? 'recommended-cell' : ''}">
+                                            <button class="btn btn-sm ${isRecommended ? 'btn-warning' : 'btn-outline-warning'} recommendation-btn" 
+                                                    data-item-index="${itemIndex}" data-supplier-id="${supplier.id}">
+                                                <i class="fas fa-star"></i>
+                                            </button>
+                                        </td>
+                                    `;
+                                }
                             }
                             break;
                     }
@@ -328,9 +558,10 @@ export class ComparisonTable {
     }
     
     generateSummaryRow() {
+        const generalColumnsCount = this.getGeneralColumnsCount();
         return `
             <tr class="table-info summary-row">
-                <td colspan="4" class="text-center fw-bold">
+                <td colspan="${generalColumnsCount}" class="text-center fw-bold">
                     <i class="fas fa-calculator me-2"></i>TOPLAM
                 </td>
                 ${this.data.suppliers.map(supplier => {
@@ -342,51 +573,101 @@ export class ComparisonTable {
                         switch (columnType) {
                             case 'unitPrice':
                                 if (this.options.showUnitPrice) {
-                                    summaryCells += `
-                                        <td class="text-center fw-bold summary-cell">
-                                            <div class="text-primary">${this.formatCurrency(totals.unitPriceTotal, supplier.default_currency || 'TRY')}</div>
-                                            <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
-                                        </td>
-                                    `;
+                                    if (this.isColumnMinimized('unitPrice')) {
+                                        summaryCells += `
+                                            <td class="text-center fw-bold summary-cell minimized-cell" style="width: 40px; min-width: 40px;">
+                                                <div class="minimized-content">
+                                                    <span class="rotated-text">${this.formatCurrency(totals.unitPriceTotal, supplier.default_currency || 'TRY')}</span>
+                                                </div>
+                                            </td>
+                                        `;
+                                    } else {
+                                        summaryCells += `
+                                            <td class="text-center fw-bold summary-cell">
+                                                <div class="text-primary">${this.formatCurrency(totals.unitPriceTotal, supplier.default_currency || 'TRY')}</div>
+                                                <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
+                                            </td>
+                                        `;
+                                    }
                                 }
                                 break;
                             case 'deliveryDays':
                                 if (this.options.showDeliveryDays) {
-                                    summaryCells += `
-                                        <td class="text-center fw-bold summary-cell">
-                                            <div class="text-muted">-</div>
-                                        </td>
-                                    `;
+                                    if (this.isColumnMinimized('deliveryDays')) {
+                                        summaryCells += `
+                                            <td class="text-center fw-bold summary-cell minimized-cell" style="width: 40px; min-width: 40px;">
+                                                <div class="minimized-content">
+                                                    <span class="rotated-text">-</span>
+                                                </div>
+                                            </td>
+                                        `;
+                                    } else {
+                                        summaryCells += `
+                                            <td class="text-center fw-bold summary-cell">
+                                                <div class="text-muted">-</div>
+                                            </td>
+                                        `;
+                                    }
                                 }
                                 break;
                             case 'originalTotal':
                                 if (this.options.showOriginalTotal) {
-                                    summaryCells += `
-                                        <td class="text-center fw-bold summary-cell">
-                                            <div class="text-primary">${this.formatCurrency(totals.originalTotal, supplier.default_currency || 'TRY')}</div>
-                                            <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
-                                        </td>
-                                    `;
+                                    if (this.isColumnMinimized('originalTotal')) {
+                                        summaryCells += `
+                                            <td class="text-center fw-bold summary-cell minimized-cell" style="width: 40px; min-width: 40px;">
+                                                <div class="minimized-content">
+                                                    <span class="rotated-text">${this.formatCurrency(totals.originalTotal, supplier.default_currency || 'TRY')}</span>
+                                                </div>
+                                            </td>
+                                        `;
+                                    } else {
+                                        summaryCells += `
+                                            <td class="text-center fw-bold summary-cell">
+                                                <div class="text-primary">${this.formatCurrency(totals.originalTotal, supplier.default_currency || 'TRY')}</div>
+                                                <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
+                                            </td>
+                                        `;
+                                    }
                                 }
                                 break;
                             case 'euroTotal':
                                 if (this.options.showEuroTotal) {
                                     const euroTotal = this.convertCurrency(totals.originalTotal, supplier.default_currency || 'TRY', 'EUR');
-                                    summaryCells += `
-                                        <td class="text-center fw-bold summary-cell">
-                                            <div class="text-primary">${this.formatCurrency(euroTotal, 'EUR')}</div>
-                                            <small class="text-muted">EUR</small>
-                                        </td>
-                                    `;
+                                    if (this.isColumnMinimized('euroTotal')) {
+                                        summaryCells += `
+                                            <td class="text-center fw-bold summary-cell minimized-cell" style="width: 40px; min-width: 40px;">
+                                                <div class="minimized-content">
+                                                    <span class="rotated-text">${this.formatCurrency(euroTotal, 'EUR')}</span>
+                                                </div>
+                                            </td>
+                                        `;
+                                    } else {
+                                        summaryCells += `
+                                            <td class="text-center fw-bold summary-cell">
+                                                <div class="text-primary">${this.formatCurrency(euroTotal, 'EUR')}</div>
+                                                <small class="text-muted">EUR</small>
+                                            </td>
+                                        `;
+                                    }
                                 }
                                 break;
                             case 'recommendations':
                                 if (this.options.showRecommendations) {
-                                    summaryCells += `
-                                        <td class="text-center summary-cell">
-                                            <div class="text-muted">-</div>
-                                        </td>
-                                    `;
+                                    if (this.isColumnMinimized('recommendations')) {
+                                        summaryCells += `
+                                            <td class="text-center summary-cell minimized-cell" style="width: 40px; min-width: 40px;">
+                                                <div class="minimized-content">
+                                                    <span class="rotated-text">-</span>
+                                                </div>
+                                            </td>
+                                        `;
+                                    } else {
+                                        summaryCells += `
+                                            <td class="text-center summary-cell">
+                                                <div class="text-muted">-</div>
+                                            </td>
+                                        `;
+                                    }
                                 }
                                 break;
                         }
@@ -447,6 +728,15 @@ export class ComparisonTable {
             btn.addEventListener('click', (e) => {
                 const itemIndex = parseInt(e.target.closest('.recommendation-btn').dataset.itemIndex);
                 const supplierId = e.target.closest('.recommendation-btn').dataset.supplierId;
+                this.toggleRecommendation(itemIndex, supplierId);
+            });
+        });
+
+        // Mini recommendation buttons (for minimized columns)
+        this.container.querySelectorAll('.recommendation-btn-mini').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const itemIndex = parseInt(e.target.closest('.recommendation-btn-mini').dataset.itemIndex);
+                const supplierId = e.target.closest('.recommendation-btn-mini').dataset.supplierId;
                 this.toggleRecommendation(itemIndex, supplierId);
             });
         });

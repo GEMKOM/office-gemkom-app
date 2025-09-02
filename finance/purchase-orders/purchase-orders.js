@@ -8,6 +8,7 @@ import {
 import { HeaderComponent } from '../../components/header/header.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
+import { TableComponent } from '../../components/table/table.js';
 
 // Global variables
 let currentPurchaseOrders = [];
@@ -533,143 +534,116 @@ async function viewPurchaseOrderDetails(orderId) {
         content.innerHTML = `
             <div class="row">
                 <div class="col-md-6">
-                    <h6 class="text-primary">Sipariş Bilgileri</h6>
+                    <h6 class="text-primary">Genel</h6>
                     <table class="table table-sm">
                         <tr><td><strong>Sipariş No:</strong></td><td>${order.id}</td></tr>
                         <tr><td><strong>Tedarikçi:</strong></td><td>${order.supplier_name}</td></tr>
                         <tr><td><strong>Durum:</strong></td><td><span class="status-badge ${getStatusBadgeClass(order.status)}">${order.status_label || getStatusText(order.status)}</span></td></tr>
                         <tr><td><strong>Öncelik:</strong></td><td><span class="priority-badge ${getPriorityBadgeClass(order.priority)}">${getPriorityText(order.priority)}</span></td></tr>
-                        <tr><td><strong>Para Birimi:</strong></td><td><span class="currency-badge">${order.currency}</span></td></tr>
-                        <tr><td><strong>Toplam Tutar:</strong></td><td><strong>${formatCurrency(order.total_amount, order.currency)}</strong></td></tr>
-                        <tr><td><strong>KDV Oranı:</strong></td><td>${order.tax_rate}%</td></tr>
-                        <tr><td><strong>KDV Tutarı:</strong></td><td><strong>${formatCurrency(order.total_tax_amount, order.currency)}</strong></td></tr>
-                        <tr><td><strong>KDV Borcu:</strong></td><td><span class="text-${order.tax_outstanding > 0 ? 'danger' : 'success'}"><strong>${formatCurrency(order.tax_outstanding, order.currency)}</strong></span></td></tr>
-                    </table>
-                </div>
-                <div class="col-md-6">
-                    <h6 class="text-primary">Tarih Bilgileri</h6>
-                    <table class="table table-sm">
                         <tr><td><strong>Oluşturulma Tarihi:</strong></td><td>${formatDate(order.created_at)}</td></tr>
                         <tr><td><strong>PR No:</strong></td><td><a href="https://ofis.gemcore.com.tr/procurement/purchase-requests/registry/?talep=${order.purchase_request_number}" target="_blank" class="text-primary">${order.purchase_request_number || 'N/A'}</a></td></tr>
                         <tr><td><strong>Kalem Sayısı:</strong></td><td>${(order.lines || []).length}</td></tr>
                     </table>
                 </div>
+                <div class="col-md-6">
+                    <h6 class="text-primary">Fiyat Bilgileri</h6>
+                                         <table class="table table-sm">
+                         <tr><td><strong>Para Birimi:</strong></td><td><span class="currency-badge">${order.currency}</span></td></tr>
+                         <tr><td><strong>Toplam Tutar:</strong></td><td><strong>${formatCurrency(order.total_amount, order.currency)}</strong></td></tr>
+                         <tr><td><strong>KDV Tutarı:</strong></td><td><strong>${formatCurrency(order.total_tax_amount, order.currency)}</strong></td></tr>
+                         <tr><td><strong>KDV Oranı:</strong></td><td>${order.tax_rate}%</td></tr>
+                         <tr><td><strong>Kalan Tutar:</strong></td><td><span class="text-${(order.payment_schedules || []).filter(s => !s.is_paid).reduce((sum, s) => sum + parseFloat(s.amount), 0) > 0 ? 'danger' : 'success'}"><strong>${formatCurrency((order.payment_schedules || []).filter(s => !s.is_paid).reduce((sum, s) => sum + parseFloat(s.amount), 0), order.currency)}</strong></span></td></tr>
+                         <tr><td><strong>Kalan KDV Borcu:</strong></td><td><span class="text-${order.tax_outstanding > 0 ? 'danger' : 'success'}"><strong>${formatCurrency(order.tax_outstanding, order.currency)}</strong></span></td></tr>
+                     </table>
+                </div>
             </div>
             <div class="row mt-3">
                 <div class="col-12">
-                    <h6 class="text-primary">Ödeme Planı</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-striped">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>Sıra</th>
-                                    <th>Ödeme Türü</th>
-                                    <th class="text-end">Yüzde</th>
-                                    <th class="text-end">Tutar</th>
-                                    <th>Vade Tarihi</th>
-                                    <th>Durum</th>
-                                    <th class="text-end">KDV Tutarı</th>
-                                    <th class="text-center">İşlemler</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${(order.payment_schedules || []).map((schedule, index) => {
-                                    const isPaid = schedule.is_paid;
-                                    const isOverdue = new Date(schedule.due_date) < new Date() && !isPaid;
-                                    const statusClass = isPaid ? 'success' : isOverdue ? 'danger' : 'warning';
-                                    const statusText = isPaid ? 'Ödendi' : isOverdue ? 'Gecikmiş' : 'Bekliyor';
-                                    
-                                    return `
-                                        <tr>
-                                            <td>${schedule.sequence}</td>
-                                            <td>${schedule.label}</td>
-                                            <td class="text-end">${schedule.percentage}%</td>
-                                            <td class="text-end"><strong>${formatCurrency(schedule.amount, schedule.currency)}</strong></td>
-                                            <td>${formatDate(schedule.due_date)}</td>
-                                            <td>
-                                                <span class="badge bg-${statusClass}">
-                                                    ${statusText}
-                                                </span>
-                                            </td>
-                                                                                         <td class="text-end">
-                                                 ${isPaid ? 
-                                                     (schedule.paid_with_tax ? 
-                                                         formatCurrency(schedule.base_tax || 0, schedule.currency) : 
-                                                         formatCurrency(0, schedule.currency)
-                                                     ) : 
-                                                     formatCurrency(schedule.effective_tax_due, schedule.currency)
-                                                 }
-                                             </td>
-                                            <td class="text-center">
-                                                ${!isPaid ? `
-                                                    <button class="btn btn-sm btn-outline-success" 
-                                                            onclick="showMarkPaidModal(${order.id}, ${schedule.id})" 
-                                                            title="Ödeme İşaretle">
-                                                        <i class="fas fa-check"></i>
-                                                    </button>
-                                                ` : `
-                                                    <span class="text-success">
-                                                        <i class="fas fa-check-circle"></i>
-                                                    </span>
-                                                `}
-                                            </td>
-                                        </tr>
-                                    `;
-                                }).join('')}
-                            </tbody>
-                        </table>
-                    </div>
+                    <div id="payment-schedule-table-container"></div>
                 </div>
             </div>
             ${(order.lines || []).length > 0 ? `
             <div class="row mt-3">
                 <div class="col-12">
-                    <h6 class="text-primary">Sipariş Kalemleri</h6>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-striped">
-                            <thead class="table-light">
-                                <tr>
-                                    <th>#</th>
-                                    <th>Malzeme Kodu</th>
-                                    <th>Malzeme Adı</th>
-                                    <th class="text-end">Miktar</th>
-                                    <th class="text-end">Birim Fiyat</th>
-                                    <th class="text-end">Toplam</th>
-                                    <th class="text-center">Teslimat (Gün)</th>
-                                    <th>Notlar</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${(order.lines || []).map((line, index) => `
-                                    <tr>
-                                        <td>${index + 1}</td>
-                                        <td><code>${line.item_code}</code></td>
-                                        <td>${line.item_name}</td>
-                                        <td class="text-end">${parseFloat(line.quantity).toLocaleString('tr-TR')}</td>
-                                        <td class="text-end">${formatCurrency(line.unit_price, order.currency)}</td>
-                                        <td class="text-end"><strong>${formatCurrency(line.total_price, order.currency)}</strong></td>
-                                        <td class="text-center">
-                                            ${line.delivery_days > 0 ? line.delivery_days : '-'}
-                                        </td>
-                                        <td>
-                                            ${line.notes ? `<small class="text-muted">${line.notes}</small>` : '-'}
-                                        </td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
-                            <tfoot class="table-light">
-                                <tr>
-                                    <td colspan="5" class="text-end"><strong>Genel Toplam:</strong></td>
-                                    <td class="text-end"><strong>${formatCurrency(order.total_amount, order.currency)}</strong></td>
-                                    <td colspan="2"></td>
-                                </tr>
-                            </tfoot>
-                        </table>
-                    </div>
+                    <div id="order-lines-table-container"></div>
                 </div>
             </div>
             ` : ''}
         `;
+        
+        // Create payment schedule table using the table component
+        if (order.payment_schedules && order.payment_schedules.length > 0) {
+            const paymentScheduleTable = new TableComponent('payment-schedule-table-container', {
+                title: 'Ödeme Planı',
+                columns: [
+                    { field: 'sequence', label: 'Sıra', sortable: false, formatter: (value) => `<span class="text-center">${value}</span>` },
+                    { field: 'label', label: 'Ödeme Türü', sortable: false },
+                    { field: 'percentage', label: 'Yüzde', sortable: false, formatter: (value) => `<span class="text-end">${value}%</span>` },
+                    { field: 'due_date', label: 'Vade Tarihi', sortable: false, formatter: (value) => `<span class="text-center">${formatDate(value)}</span>` },
+                    { field: 'amount', label: 'Tutar', sortable: false, formatter: (value, row) => `<span class="text-end"><strong>${formatCurrency(value, row.currency)}</strong></span>` },
+                    { field: 'tax_amount', label: 'KDV Tutarı', sortable: false, formatter: (value, row) => {
+                        const isPaid = row.is_paid;
+                        const taxAmount = isPaid ? 
+                            (row.paid_with_tax ? (row.base_tax || 0) : 0) : 
+                            row.effective_tax_due;
+                        return `<span class="text-end">${formatCurrency(taxAmount, row.currency)}</span>`;
+                    }},
+                    { field: 'status', label: 'Durum', sortable: false, formatter: (value, row) => {
+                        const isPaid = row.is_paid;
+                        const isOverdue = new Date(row.due_date) < new Date() && !isPaid;
+                        const statusClass = isPaid ? 'success' : isOverdue ? 'danger' : 'warning';
+                        const statusText = isPaid ? 'Ödendi' : isOverdue ? 'Gecikmiş' : 'Bekliyor';
+                        return `<span class="text-center"><span class="badge bg-${statusClass}">${statusText}</span></span>`;
+                    }},
+                    { field: 'actions', label: 'İşlemler', sortable: false, formatter: (value, row) => {
+                        if (!row.is_paid) {
+                            return `<span class="text-center"><button class="btn btn-sm btn-outline-success" onclick="showMarkPaidModal(${order.id}, ${row.id})" title="Ödeme İşaretle"><i class="fas fa-check"></i></button></span>`;
+                        } else {
+                            return `<span class="text-center"><span class="text-success"><i class="fas fa-check-circle"></i></span></span>`;
+                        }
+                    }}
+                ],
+                data: order.payment_schedules.map(schedule => ({
+                    ...schedule,
+                    tax_amount: schedule.effective_tax_due // Add this field for the formatter
+                })),
+                tableClass: 'table table-sm table-striped',
+                responsive: true,
+                striped: true,
+                small: true,
+                sortable: false,
+                pagination: false
+            });
+        }
+        
+        // Create order lines table using the table component
+        if (order.lines && order.lines.length > 0) {
+            const orderLinesTable = new TableComponent('order-lines-table-container', {
+                title: 'Sipariş Kalemleri',
+                columns: [
+                    { field: 'item_code', label: 'Malzeme Kodu', sortable: false, formatter: (value) => `<code>${value}</code>` },
+                    { field: 'item_name', label: 'Malzeme Adı', sortable: false },
+                    { field: 'job_no', label: 'İş Emri No', sortable: false, formatter: (value, row) => {
+                        if (row.allocations && row.allocations.length > 0) {
+                            return row.allocations.map(allocation => allocation.job_no).join(', ');
+                        }
+                        return '-';
+                    }},
+                    { field: 'quantity', label: 'Miktar', sortable: false, formatter: (value) => `<span class="text-end">${parseFloat(value).toLocaleString('tr-TR')}</span>` },
+                    { field: 'unit_price', label: 'Birim Fiyat', sortable: false, formatter: (value) => `<span class="text-end">${formatCurrency(value, order.currency)}</span>` },
+                    { field: 'total_price', label: 'Toplam', sortable: false, formatter: (value) => `<span class="text-end"><strong>${formatCurrency(value, order.currency)}</strong></span>` },
+                    { field: 'delivery_days', label: 'Teslimat (Gün)', sortable: false, formatter: (value) => `<span class="text-center">${value > 0 ? value : '-'}</span>` },
+                    { field: 'notes', label: 'Notlar', sortable: false, formatter: (value) => value ? `<small class="text-muted">${value}</small>` : '-' }
+                ],
+                data: order.lines,
+                tableClass: 'table table-sm table-striped',
+                responsive: true,
+                striped: true,
+                small: true,
+                sortable: false,
+                pagination: false
+            });
+        }
         
         modal.show();
         

@@ -141,26 +141,9 @@
     border-color: #28a745;
 }
 
-/* Payment Schedule Table Styles */
-.payment-schedule-table {
-    font-size: 0.9rem;
-}
-
-.payment-schedule-table th {
-    font-size: 0.8rem;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.payment-schedule-table td {
-    vertical-align: middle;
-    padding: 0.75rem 0.5rem;
-}
-
-.payment-schedule-table .badge {
-    font-size: 0.7rem;
-    padding: 0.25rem 0.5rem;
+/* Payment Schedule Table Styles - Now using TableComponent */
+.payment-schedule-table-container {
+    margin-top: 1rem;
 }
 
 /* Payment Schedule Column in Main Table */

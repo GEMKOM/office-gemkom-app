@@ -39,7 +39,7 @@
 /* Status and Priority badges are now handled by procurement-badges.css */
 
 /* Table customizations - Matching Tasks Page */
-.table {
+.table:not(#comparison-table) {
     color: #343a40;
     margin: 0;
     border-collapse: collapse;
@@ -102,7 +102,7 @@
 }
 
 /* Ensure table maintains column widths during loading */
-.table-responsive table {
+.table-responsive table:not(#comparison-table) {
     table-layout: fixed;
     width: 100%;
     min-height: 200px; /* Prevent layout shift when empty */
@@ -110,27 +110,27 @@
 }
 
 /* Ensure proper cell alignment and prevent overlapping */
-.table-responsive table td {
+.table-responsive table:not(#comparison-table) td {
     vertical-align: middle;
     text-align: left;
     position: relative;
     overflow: visible;
 }
 
-.table-responsive table th {
+.table-responsive table:not(#comparison-table) th {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.table-responsive table td {
+.table-responsive table:not(#comparison-table) td {
     vertical-align: middle;
     text-align: left;
 }
 
 /* Center align status and priority columns */
-.table-responsive table td:nth-child(4), /* Status column */
-.table-responsive table td:nth-child(5) { /* Priority column */
+.table-responsive table:not(#comparison-table) td:nth-child(4), /* Status column */
+.table-responsive table:not(#comparison-table) td:nth-child(5) { /* Priority column */
     text-align: center;
     vertical-align: middle;
     position: relative;
@@ -139,14 +139,14 @@
 /* Table responsive styles are now handled by procurement-badges.css */
 
 /* Allow text wrapping for specific columns */
-.table-responsive table td:nth-child(2), /* Request title column */
-.table-responsive table td:nth-child(3) { /* Requestor name column */
+.table-responsive table:not(#comparison-table) td:nth-child(2), /* Request title column */
+.table-responsive table:not(#comparison-table) td:nth-child(3) { /* Requestor name column */
     white-space: normal;
     word-wrap: break-word;
 }
 
 /* Ensure status column displays properly */
-.table-responsive table td:nth-child(4) {
+.table-responsive table:not(#comparison-table) td:nth-child(4) {
     white-space: nowrap;
     overflow: visible;
     text-align: center;

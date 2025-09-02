@@ -39,7 +39,7 @@
 /* Status and Priority badges are now handled by procurement-badges.css */
 
 /* Table customizations - Matching Tasks Page */
-.table {
+.table:not(#comparison-table) {
     color: #343a40;
     margin: 0;
     border-collapse: collapse;
@@ -47,7 +47,7 @@
     table-layout: fixed;
 }
 
-.table thead th {
+.table:not(#comparison-table) thead th {
     background: rgba(248, 249, 250, 0.8);
     border-bottom: 2px solid rgba(0, 0, 0, 0.1);
     color: #495057;
@@ -62,12 +62,12 @@
 }
 
 /* Center align status and priority headers */
-.table thead th:nth-child(4),
-.table thead th:nth-child(5) {
+.table:not(#comparison-table) thead th:nth-child(4),
+.table:not(#comparison-table) thead th:nth-child(5) {
     text-align: center;
 }
 
-.table tbody td {
+.table:not(#comparison-table) tbody td {
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
     padding: 1rem;
     vertical-align: middle;
@@ -76,7 +76,7 @@
     overflow: visible;
 }
 
-.table tbody td.text-center {
+.table:not(#comparison-table) tbody td.text-center {
     text-align: center;
     vertical-align: middle;
 }
@@ -84,15 +84,15 @@
 /* Table integration styles are now handled by procurement-badges.css */
 
 /* Ensure proper alignment for status and priority columns */
-.table tbody td:nth-child(4),
-.table tbody td:nth-child(5) {
+.table:not(#comparison-table) tbody td:nth-child(4),
+.table:not(#comparison-table) tbody td:nth-child(5) {
     text-align: center;
     vertical-align: middle;
     white-space: nowrap;
     overflow: visible;
 }
 
-.table tbody tr:hover {
+.table:not(#comparison-table) tbody tr:hover {
     background: rgba(248, 249, 250, 0.5);
 }
 
@@ -118,7 +118,7 @@
 }
 
 /* Ensure table maintains column widths during loading */
-.table-responsive table {
+.table-responsive table:not(#comparison-table) {
     table-layout: fixed;
     width: 100%;
     min-height: 200px; /* Prevent layout shift when empty */
@@ -126,27 +126,27 @@
 }
 
 /* Ensure proper cell alignment and prevent overlapping */
-.table-responsive table td {
+.table-responsive table:not(#comparison-table) td {
     vertical-align: middle;
     text-align: left;
     position: relative;
     overflow: visible;
 }
 
-.table-responsive table th {
+.table-responsive table:not(#comparison-table) th {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
-.table-responsive table td {
+.table-responsive table:not(#comparison-table) td {
     vertical-align: middle;
     text-align: left;
 }
 
 /* Center align status and priority columns */
-.table-responsive table td:nth-child(4), /* Status column */
-.table-responsive table td:nth-child(5) { /* Priority column */
+.table-responsive table:not(#comparison-table) td:nth-child(4), /* Status column */
+.table-responsive table:not(#comparison-table) td:nth-child(5) { /* Priority column */
     text-align: center;
     vertical-align: middle;
     position: relative;
@@ -155,14 +155,14 @@
 /* Table responsive styles are now handled by procurement-badges.css */
 
 /* Allow text wrapping for specific columns */
-.table-responsive table td:nth-child(2), /* Request title column */
-.table-responsive table td:nth-child(3) { /* Requestor name column */
+.table-responsive table:not(#comparison-table) td:nth-child(2), /* Request title column */
+.table-responsive table:not(#comparison-table) td:nth-child(3) { /* Requestor name column */
     white-space: normal;
     word-wrap: break-word;
 }
 
 /* Ensure status column displays properly */
-.table-responsive table td:nth-child(4) {
+.table-responsive table:not(#comparison-table) td:nth-child(4) {
     white-space: nowrap;
     overflow: visible;
     text-align: center;
@@ -264,11 +264,11 @@
     }
     
     /* Ensure table remains properly aligned on mobile */
-    .table {
+    .table:not(#comparison-table) {
         table-layout: auto;
     }
     
-    .table tbody td {
+    .table:not(#comparison-table) tbody td {
         padding: 0.5rem;
         font-size: 0.875rem;
     }
@@ -322,15 +322,15 @@
 }
 
 /* Animation for row selection */
-.table tbody tr {
+.table:not(#comparison-table) tbody tr {
     transition: all 0.2s ease-in-out;
 }
 
-.table tbody tr:hover {
+.table:not(#comparison-table) tbody tr:hover {
     background-color: #f8f9fa;
 }
 
-.table tbody tr.selected {
+.table:not(#comparison-table) tbody tr.selected {
     background-color: #eff6ff;
     border-left: 3px solid #3b82f6;
 }

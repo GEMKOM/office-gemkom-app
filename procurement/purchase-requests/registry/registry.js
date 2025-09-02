@@ -52,7 +52,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         showSummary: false, // Hide summary section (Özet Bilgiler)
         showSummaryRow: true, // Show summary row (totals row in table)
         showEuroTotal: false, // Show Euro Total column for registry page
-        columnOrder: ['unitPrice', 'originalTotal', 'deliveryDays'], // Custom column order for registry page
         autoSave: null, // No auto-save needed for registry page
         onRecommendationChange: null, // No recommendation changes needed for registry page
         onSupplierRecommendAll: null // No bulk recommendations needed for registry page
@@ -896,6 +895,14 @@ function renderComparisonTable() {
         offers: offers,
         itemRecommendations: itemRecommendations
     });
+    
+    // Make the comparison table instance globally accessible for clickable headers
+    window.comparisonTableInstance = comparisonTable;
+    
+    // Set default column minimization for registry page AFTER data is loaded
+    // "Birim" (Unit) and "Teslim" (Delivery Days) columns should be minimized by default
+    comparisonTable.setColumnMinimization('unit', true); // Minimize Unit column
+    comparisonTable.setColumnMinimization('deliveryDays', true); // Minimize Delivery Days column
 }
 
 // Update comparison table currency rates when they change
