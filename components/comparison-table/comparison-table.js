@@ -151,7 +151,7 @@ export class ComparisonTable {
         return this.data.suppliers.map(supplier => `
             <th class="text-center align-middle" colspan="${columnsPerSupplier}">
                 <div class="d-flex flex-column align-items-center gap-1">
-                    <div class="fw-semibold">${supplier.name}</div>
+                    <div class="fw-semibold supplier-name-truncate" title="${supplier.name}">${supplier.name}</div>
                     <div class="small text-muted">${supplier.default_currency || 'TRY'}</div>
                     ${this.options.showRecommendations ? `
                         <button class="btn btn-sm btn-outline-warning recommend-all-btn" data-supplier-id="${supplier.id}">
@@ -187,7 +187,7 @@ export class ComparisonTable {
                             headers += `
                                 <th class="text-center align-middle">
                                     <div class="text-center">
-                                        <i class="fas fa-clock me-1"></i>Teslimat<br>
+                                        <i class="fas fa-clock me-1"></i>Teslim<br>
                                         <small class="text-muted">Gün</small>
                                     </div>
                                 </th>
@@ -198,7 +198,7 @@ export class ComparisonTable {
                         if (this.options.showOriginalTotal) {
                             headers += `
                                 <th class="text-center align-middle">
-                                    <div class="text-center">Orijinal Toplam<br>
+                                    <div class="text-center">Toplam<br>
                                         <small class="text-muted">${supplier.default_currency || 'TRY'}</small>
                                     </div>
                                 </th>
@@ -354,8 +354,7 @@ export class ComparisonTable {
                                 if (this.options.showDeliveryDays) {
                                     summaryCells += `
                                         <td class="text-center fw-bold summary-cell">
-                                            <div class="text-primary">${totals.maxDeliveryDays || '-'}</div>
-                                            <small class="text-muted">gün (maks.)</small>
+                                            <div class="text-muted">-</div>
                                         </td>
                                     `;
                                 }

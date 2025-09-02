@@ -59,18 +59,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         icon: 'fas fa-exclamation-triangle',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/maintenance/fault-requests'
-                    },
-                    {
-                        label: 'Bakım Planları',
-                        icon: 'fas fa-calendar-check',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/plans'
-                    },
-                    {
-                        label: 'Ekipman Yönetimi',
-                        icon: 'fas fa-cogs',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/equipment'
                     }
                 ]
             }

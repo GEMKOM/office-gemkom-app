@@ -117,38 +117,6 @@ const NAVIGATION_STRUCTURE = {
                                 children: {}
                             }
                         }
-                    },
-                    '/manufacturing/maintenance/plans': {
-                        label: 'Bakım Planları',
-                        icon: 'fas fa-calendar-check',
-                        children: {
-                            '/manufacturing/maintenance/plans/calendar': {
-                                label: 'Bakım Takvimi',
-                                icon: 'fas fa-calendar-alt',
-                                children: {}
-                            },
-                            '/manufacturing/maintenance/plans/history': {
-                                label: 'Bakım Geçmişi',
-                                icon: 'fas fa-history',
-                                children: {}
-                            }
-                        }
-                    },
-                    '/manufacturing/maintenance/equipment': {
-                        label: 'Ekipman Yönetimi',
-                        icon: 'fas fa-cogs',
-                        children: {
-                            '/manufacturing/maintenance/equipment/list': {
-                                label: 'Ekipman Listesi',
-                                icon: 'fas fa-tools',
-                                children: {}
-                            },
-                            '/manufacturing/maintenance/equipment/records': {
-                                label: 'Bakım Kayıtları',
-                                icon: 'fas fa-clipboard-list',
-                                children: {}
-                            }
-                        }
                     }
                 }
             },

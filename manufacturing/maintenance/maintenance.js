@@ -40,48 +40,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                         link: '/manufacturing/maintenance/fault-requests/statistics'
                     }
                 ]
-            },
-            {
-                title: 'Bakım Planları',
-                description: 'Önleyici bakım planları oluşturun ve bakım takvimini yönetin.',
-                icon: 'fas fa-calendar-check',
-                iconColor: 'success',
-                link: '/manufacturing/maintenance/plans',
-                features: [
-                    {
-                        label: 'Bakım Takvimi',
-                        icon: 'fas fa-calendar-alt',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/plans/calendar'
-                    },
-                    {
-                        label: 'Bakım Geçmişi',
-                        icon: 'fas fa-history',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/plans/history'
-                    }
-                ]
-            },
-            {
-                title: 'Ekipman Yönetimi',
-                description: 'Ekipman bilgilerini yönetin ve bakım kayıtlarını tutun.',
-                icon: 'fas fa-cogs',
-                iconColor: 'info',
-                link: '/manufacturing/maintenance/equipment',
-                features: [
-                    {
-                        label: 'Ekipman Listesi',
-                        icon: 'fas fa-tools',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/equipment/list'
-                    },
-                    {
-                        label: 'Bakım Kayıtları',
-                        icon: 'fas fa-clipboard-list',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/equipment/records'
-                    }
-                ]
             }
         ]
     });

@@ -31,6 +31,15 @@
     border-bottom: 2px solid #dee2e6;
 }
 
+/* Supplier name truncation */
+.supplier-name-truncate {
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    cursor: help;
+}
+
 /* Individual column headers - matching original #supplier-headers styling */
 #supplier-headers th {
     background: linear-gradient(135deg, #f8f9ff, #f0f2ff);

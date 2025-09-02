@@ -5,6 +5,7 @@ import { fetchUsersSummary } from '../../generic/summaries.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
+import { TableComponent } from '../../components/table/table.js';
 
 // State management
 let currentPage = 1;
@@ -19,6 +20,7 @@ let usersStats = null; // Statistics Cards component instance
 let userFilters = null; // Filters component instance
 let teams = []; // Store teams data for filters
 let occupations = []; // Store occupations data for filters
+let usersTable = null; // Table component instance
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -58,7 +60,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function initializeUsers() {
     try {
         initializeFiltersComponent();
-        initializeSortableHeaders();
+        initializeTableComponent();
         
         await loadTeams();
         await loadOccupations();
@@ -72,6 +74,101 @@ async function initializeUsers() {
         console.error('Error initializing users:', error);
         showNotification('Çalışanlar yüklenirken hata oluştu', 'error');
     }
+}
+
+function initializeTableComponent() {
+    usersTable = new TableComponent('users-table-container', {
+        title: 'Çalışan Listesi',
+        columns: [
+            {
+                field: 'username',
+                label: 'Kullanıcı Adı',
+                sortable: true,
+                formatter: (value) => `<strong>${value || '-'}</strong>`
+            },
+            {
+                field: 'first_name',
+                label: 'Ad',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'last_name',
+                label: 'Soyad',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'email',
+                label: 'E-posta',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'team_label',
+                label: 'Takım',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'occupation_label',
+                label: 'Görev',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'work_location_label',
+                label: 'Çalışma Yeri',
+                sortable: true,
+                formatter: (value) => value || '-'
+            }
+        ],
+        data: [],
+        sortable: true,
+        pagination: true,
+        itemsPerPage: 20,
+        refreshable: true,
+        exportable: true,
+        onRefresh: async () => {
+            // Reset to first page when refreshing
+            currentPage = 1;
+            await loadUsers();
+        },
+        onExport: (format) => {
+            exportUsers(format);
+        },
+        onSort: async (field, direction) => {
+            // Reset to first page when sorting
+            currentPage = 1;
+            currentSortField = field;
+            currentSortDirection = direction;
+            await loadUsers();
+        },
+        onPageChange: async (page) => {
+            currentPage = page;
+            await loadUsers();
+        },
+        actions: [
+            {
+                key: 'edit',
+                label: 'Düzenle',
+                icon: 'fas fa-edit',
+                class: 'btn-outline-primary',
+                onClick: (row) => {
+                    editUser(row.id);
+                }
+            },
+            {
+                key: 'delete',
+                label: 'Sil',
+                icon: 'fas fa-trash',
+                class: 'btn-outline-danger',
+                onClick: (row) => deleteUser(row.id, row.username)
+            }
+        ],
+        emptyMessage: 'Çalışan bulunamadı',
+        emptyIcon: 'fas fa-users'
+    });
 }
 
 async function loadTeams() {
@@ -145,13 +242,14 @@ function initializeFiltersComponent() {
     userFilters = new FiltersComponent('filters-placeholder', {
         title: 'Çalışan Filtreleri',
         onApply: (values) => {
-            // Apply filters and reload users
-            loadUsers(1);
+            // Reset to first page when applying filters
+            currentPage = 1;
+            loadUsers();
         },
         onClear: () => {
-            // Clear filters and reload users
-            loadUsers(1);
-            showNotification('Filtreler temizlendi', 'info');
+            // Reset to first page when clearing filters
+            currentPage = 1;
+            loadUsers();
         },
         onFilterChange: (filterId, value) => {
             // Optional: Handle individual filter changes
@@ -201,20 +299,25 @@ function initializeFiltersComponent() {
     });
 }
 
-async function loadUsers(page = 1) {
+async function loadUsers() {
+    console.log('loadUsers called, currentPage:', currentPage);
+    
     try {
         if (isLoading) return;
         
         isLoading = true;
-        currentPage = page;
-        showLoadingState();
+        if (usersTable) {
+            console.log('Setting table loading state to true');
+            usersTable.setLoading(true);
+        }
         
         // Get filter values
         const filterValues = userFilters ? userFilters.getFilterValues() : {};
+        console.log('Filter values:', filterValues);
         
         // Build query parameters
         const params = new URLSearchParams();
-        params.append('page', page.toString());
+        params.append('page', currentPage.toString());
         params.append('page_size', '20');
         
         // Add filters
@@ -235,7 +338,14 @@ async function loadUsers(page = 1) {
         const orderingParam = currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`;
         params.append('ordering', orderingParam);
         
-        const response = await authFetchUsers(page, 20, {
+        console.log('Calling authFetchUsers with params:', {
+            page: currentPage,
+            pageSize: 20,
+            filters: filterValues,
+            ordering: orderingParam
+        });
+        
+        const usersResponse = await authFetchUsers(currentPage, 20, {
             username: filterValues['username-filter'] || '',
             team: filterValues['team-filter'] || '',
             work_location: filterValues['work-location-filter'] || '',
@@ -243,11 +353,22 @@ async function loadUsers(page = 1) {
             ordering: orderingParam
         });
         
-        users = response.results || [];
-        totalUsers = response.count || 0;
+        console.log('API response:', usersResponse);
         
-        renderUsersTable();
-        renderPagination();
+        // Extract users and total count from response
+        users = usersResponse.results || usersResponse || [];
+        totalUsers = usersResponse.count || usersResponse.total || users.length;
+        
+        console.log('Extracted data:', { users: users.length, totalUsers });
+        
+        // Update table data with pagination info
+        if (usersTable) {
+            console.log('Updating table with data:', { users: users.length, totalUsers, currentPage });
+            usersTable.updateData(users, totalUsers, currentPage);
+        } else {
+            console.warn('usersTable is null, cannot update data');
+        }
+        
         updateUserCounts();
         
         // Update team filter options
@@ -258,98 +379,21 @@ async function loadUsers(page = 1) {
         showNotification('Çalışanlar yüklenirken hata oluştu', 'error');
         users = [];
         totalUsers = 0;
+        if (usersTable) {
+            usersTable.updateData([], 0, currentPage);
+        }
     } finally {
         isLoading = false;
-        hideLoadingState();
+        if (usersTable) {
+            console.log('Setting table loading state to false');
+            usersTable.setLoading(false);
+        }
     }
 }
 
-function renderUsersTable() {
-    const tbody = document.getElementById('users-table-body');
-    if (!tbody) return;
-    
-         if (users.length === 0) {
-         tbody.innerHTML = `
-             <tr>
-                 <td colspan="8" class="text-center">
-                     <div class="empty-state">
-                         <i class="fas fa-users"></i>
-                         <h5>Çalışan Bulunamadı</h5>
-                         <p>Kriterlere uygun çalışan bulunamadı</p>
-                     </div>
-                 </td>
-             </tr>
-         `;
-         return;
-     }
-    
-         tbody.innerHTML = users.map(user => `
-         <tr>
-             <td style="color: #000;">${user.username || '-'}</td>
-             <td>${user.first_name || '-'}</td>
-             <td>${user.last_name || '-'}</td>
-             <td>${user.email || '-'}</td>
-             <td>${user.team_label || '-'}</td>
-             <td>${user.occupation_label || '-'}</td>
-             <td>${user.work_location_label || '-'}</td>
-             <td>
-                 <div class="btn-group btn-group-sm" role="group">
-                     <button type="button" class="btn btn-outline-primary" onclick="editUser('${user.id || ''}')" title="Düzenle">
-                         <i class="fas fa-edit"></i>
-                     </button>
-                     <button type="button" class="btn btn-outline-danger" onclick="deleteUser('${user.id}', '${user.username}')" title="Sil">
-                         <i class="fas fa-trash"></i>
-                     </button>
-                 </div>
-             </td>
-         </tr>
-     `).join('');
-}
+// Table rendering is now handled by TableComponent
 
-function renderPagination() {
-    const pagination = document.getElementById('users-pagination');
-    if (!pagination) return;
-    
-    const totalPages = Math.ceil(totalUsers / 20);
-    if (totalPages <= 1) {
-        pagination.innerHTML = '';
-        return;
-    }
-    
-    let html = '';
-    
-    // Previous button
-    html += `
-        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-        </li>
-    `;
-    
-    // Page numbers
-    const startPage = Math.max(1, currentPage - 2);
-    const endPage = Math.min(totalPages, currentPage + 2);
-    
-    for (let i = startPage; i <= endPage; i++) {
-        html += `
-            <li class="page-item ${i === currentPage ? 'active' : ''}">
-                <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
-            </li>
-        `;
-    }
-    
-    // Next button
-    html += `
-        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-        </li>
-    `;
-    
-    pagination.innerHTML = html;
-}
+// Pagination is now handled by TableComponent
 
 function updateUserCounts() {
     try {
@@ -404,66 +448,13 @@ function updateTeamFilterOptions() {
     userFilters.updateFilterOptions('occupation-filter', occupationOptions);
 }
 
-function initializeSortableHeaders() {
-    const sortableHeaders = document.querySelectorAll('.sortable');
-    sortableHeaders.forEach(header => {
-        header.addEventListener('click', () => {
-            const field = header.getAttribute('data-field');
-            handleColumnSort(field);
-        });
-    });
-    
-    // Set initial sort indicator
-    const initialHeader = document.querySelector(`[data-field="${currentSortField}"]`);
-    if (initialHeader) {
-        initialHeader.classList.add(`sort-${currentSortDirection}`);
-    }
-}
-
-function handleColumnSort(field) {
-    // Clear previous sort indicators
-    document.querySelectorAll('.sortable').forEach(header => {
-        header.classList.remove('sort-asc', 'sort-desc');
-    });
-    
-    // Determine sort direction
-    if (currentSortField === field) {
-        // Toggle direction if same field
-        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-        // New field, start with ascending
-        currentSortField = field;
-        currentSortDirection = 'asc';
-    }
-    
-    // Update current ordering
-    currentOrdering = currentSortDirection === 'asc' ? field : `-${field}`;
-    
-    // Update sort indicator
-    const header = document.querySelector(`[data-field="${field}"]`);
-    if (header) {
-        header.classList.add(`sort-${currentSortDirection}`);
-    }
-    
-    // Reload users with new sorting
-    loadUsers(1);
-}
+// Sorting is now handled by TableComponent
 
 function setupEventListeners() {
-    // Refresh button
-    document.getElementById('refresh-users')?.addEventListener('click', () => {
-        loadUsers(currentPage);
+    // Save user button
+    document.getElementById('save-user-btn')?.addEventListener('click', () => {
+        saveUser();
     });
-    
-    // Export button
-    document.getElementById('export-users')?.addEventListener('click', () => {
-        exportUsers();
-    });
-    
-         // Save user button
-     document.getElementById('save-user-btn')?.addEventListener('click', () => {
-         saveUser();
-     });
      
      // Update user button
      document.getElementById('update-user-btn')?.addEventListener('click', () => {
@@ -481,11 +472,11 @@ function setupEventListeners() {
             if (response.ok) {
                 showNotification('Çalışan silindi', 'success');
                 // Hide the modal
-                bootstrap.Modal.getInstance(document.getElementById('deleteUserConfirmModal')).hide();
+                bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteUserConfirmModal')).hide();
                 // Clear the pending delete key
                 window.pendingDeleteUserId = null;
                 // Reload users
-                loadUsers(currentPage);
+                loadUsers();
             } else {
                 throw new Error('Failed to delete user');
             }
@@ -496,12 +487,7 @@ function setupEventListeners() {
     });
 }
 
-// Global functions for pagination and actions
-window.changePage = function(page) {
-    if (page >= 1 && page <= Math.ceil(totalUsers / 20)) {
-        loadUsers(page);
-    }
-};
+// Global functions for actions
 
  window.editUser = function(userId) {
      // Check if userId is valid
@@ -529,7 +515,7 @@ window.changePage = function(page) {
      document.getElementById('edit-user-work-location').value = user.work_location || '';
      
      // Show the edit modal
-     const modal = new bootstrap.Modal(document.getElementById('editUserModal'));
+     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('editUserModal'));
      modal.show();
  };
 
@@ -537,17 +523,17 @@ window.deleteUser = function(userId, username) {
     window.pendingDeleteUserId = userId;
     document.getElementById('delete-user-name').textContent = username;
     
-    const modal = new bootstrap.Modal(document.getElementById('deleteUserConfirmModal'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteUserConfirmModal'));
     modal.show();
 };
 
 function showCreateUserModal() {
-    const modal = new bootstrap.Modal(document.getElementById('createUserModal'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('createUserModal'));
     modal.show();
 }
 
 function showBulkCreateUserModal() {
-    const modal = new bootstrap.Modal(document.getElementById('bulkCreateUserModal'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('bulkCreateUserModal'));
     modal.show();
 }
 
@@ -571,13 +557,14 @@ async function saveUser() {
             showNotification('Çalışan başarıyla oluşturuldu', 'success');
             
             // Hide modal
-            bootstrap.Modal.getInstance(document.getElementById('createUserModal')).hide();
+            bootstrap.Modal.getOrCreateInstance(document.getElementById('createUserModal')).hide();
             
             // Reset form
             form.reset();
             
-            // Reload users
-            loadUsers(1);
+                         // Reload users
+             currentPage = 1;
+             loadUsers();
         } else {
             const errorData = await response.json();
             throw new Error(errorData.message || 'Çalışan oluşturulamadı');
@@ -611,13 +598,13 @@ async function saveUser() {
              showNotification('Çalışan başarıyla güncellendi', 'success');
              
              // Hide modal
-             bootstrap.Modal.getInstance(document.getElementById('editUserModal')).hide();
+             bootstrap.Modal.getOrCreateInstance(document.getElementById('editUserModal')).hide();
              
              // Clear the editing user ID
              window.editingUserId = null;
              
              // Reload users
-             loadUsers(currentPage);
+             loadUsers();
          } else {
              const errorData = await response.json();
              throw new Error(errorData.message || 'Çalışan güncellenemedi');
@@ -628,72 +615,97 @@ async function saveUser() {
      }
  }
 
-function exportUsers() {
-    if (users.length === 0) {
-        showNotification('Dışa aktarılacak çalışan bulunamadı', 'warning');
-        return;
-    }
-    
+async function exportUsers(format) {
     try {
-                 // Prepare data for Excel
-         const headers = [
-             'Kullanıcı Adı',
-             'Ad',
-             'Soyad',
-             'E-posta',
-             'Takım',
-             'Görev',
-             'Çalışma Yeri'
-         ];
+        // Show loading message
+        const exportBtn = document.querySelector('#users-table-container-export');
+        if (exportBtn) {
+            exportBtn.disabled = true;
+            exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Dışa Aktarılıyor...';
+        }
         
-                 // Convert users to worksheet data
-         const worksheetData = [
-             headers,
-             ...users.map(user => [
-                 user.username || '',
-                 user.first_name || '',
-                 user.last_name || '',
-                 user.email || '',
-                 user.team_label || '',
-                 user.occupation_label || '',
-                 user.work_location_label || ''
-             ])
-         ];
+        // Get filter values
+        const filterValues = userFilters ? userFilters.getFilterValues() : {};
         
-        // Create workbook and worksheet
-        const workbook = XLSX.utils.book_new();
-        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+        // Fetch all users for export (use a large page size)
+        const usersResponse = await authFetchUsers(1, 10000, {
+            username: filterValues['username-filter'] || '',
+            team: filterValues['team-filter'] || '',
+            work_location: filterValues['work-location-filter'] || '',
+            occupation: filterValues['occupation-filter'] || '',
+            ordering: currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`
+        });
         
-                 // Set column widths for better readability
-         const columnWidths = [
-             { wch: 15 }, // Kullanıcı Adı
-             { wch: 15 }, // Ad
-             { wch: 15 }, // Soyad
-             { wch: 25 }, // E-posta
-             { wch: 15 }, // Takım
-             { wch: 15 }, // Görev
-             { wch: 15 }  // Çalışma Yeri
-         ];
-        worksheet['!cols'] = columnWidths;
+        const allUsers = usersResponse.results || usersResponse || [];
         
-        // Add worksheet to workbook
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Çalışanlar');
+        if (allUsers.length === 0) {
+            alert('Dışa aktarılacak çalışan bulunamadı');
+            return;
+        }
         
-        // Generate Excel file
-        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        // Prepare data for export (match visible columns)
+        const headers = [
+            'ID',
+            'Kullanıcı Adı',
+            'Ad',
+            'Soyad',
+            'E-posta',
+            'Takım',
+            'Görev',
+            'Çalışma Yeri'
+        ];
         
-        // Create download link
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `calisanlar_${new Date().toISOString().split('T')[0]}.xlsx`;
-        link.click();
+        const exportData = [
+            headers,
+            ...allUsers.map(user => [
+                user.id ?? '',
+                user.username || '',
+                user.first_name || '',
+                user.last_name || '',
+                user.email || '',
+                user.team_label || '',
+                user.occupation_label || '',
+                user.work_location_label || ''
+            ])
+        ];
         
-        showNotification('Çalışanlar başarıyla dışa aktarıldı', 'success');
+        // Export based on format
+        if (format === 'csv') {
+            exportToCSV(exportData, 'calisanlar');
+        } else if (format === 'excel') {
+            exportToExcel(exportData, 'calisanlar');
+        }
+        
     } catch (error) {
-        console.error('Error exporting users:', error);
-        showNotification('Dışa aktarma sırasında hata oluştu', 'error');
+        // Error exporting users
+        alert('Dışa aktarma sırasında hata oluştu');
+        console.error('Export error:', error);
+    } finally {
+        // Reset export button
+        const exportBtn = document.querySelector('#users-table-container-export');
+        if (exportBtn) {
+            exportBtn.disabled = false;
+            exportBtn.innerHTML = '<i class="fas fa-download me-1"></i>Dışa Aktar';
+        }
     }
+}
+
+function exportToCSV(data, filename) {
+    const csvContent = data.map(row => 
+        row.map(cell => `"${cell}"`).join(',')
+    ).join('\n');
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+}
+
+function exportToExcel(data, filename) {
+    // For Excel export, you would need a library like SheetJS
+    // For now, we'll just show a message
+    alert('Excel export özelliği yakında eklenecek');
 }
 
 // Helper function for notifications
@@ -705,30 +717,4 @@ function showNotification(message, type = 'info') {
     alert(`${type.toUpperCase()}: ${message}`);
 } 
 
-// Loading state functions
-function showLoadingState() {
-    const tableBody = document.getElementById('users-table-body');
-    if (tableBody) {
-        // Create loading rows that maintain table structure
-        const loadingRows = [];
-        for (let i = 0; i < 5; i++) { // Show 5 loading rows
-            loadingRows.push(`
-                <tr class="loading-row">
-                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
-                </tr>
-            `);
-        }
-        tableBody.innerHTML = loadingRows.join('');
-    }
-}
-
-function hideLoadingState() {
-    // Loading state is cleared when table is rendered
-} 
+// Loading state is now handled by TableComponent 

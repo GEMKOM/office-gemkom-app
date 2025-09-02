@@ -26,6 +26,7 @@ let machineTypes = [];
 let machineUsedInOptions = [];
 let currentPage = 1;
 let isLoading = false;
+let totalMachines = 0; // Added for pagination validation
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
@@ -69,7 +70,9 @@ function initHeaderComponent() {
             modal.show();
         },
         onRefreshClick: async () => {
-                await loadMachineData();
+            // Reset to first page when refreshing
+            currentPage = 1;
+            await loadMachineData();
         }
     });
 }
@@ -166,17 +169,21 @@ function initializeTableComponent() {
         refreshable: true,
         exportable: true,
         onRefresh: async () => {
+            // Reset to first page when refreshing
+            currentPage = 1;
             await loadMachineData();
         },
         onExport: (format) => {
             exportMachines(format);
         },
-        onSort: (field, direction) => {
-            // Handle sorting if needed
+        onSort: async (field, direction) => {
+            // Reset to first page when sorting
+            currentPage = 1;
+            await loadMachineData();
         },
-        onPageChange: (page) => {
+        onPageChange: async (page) => {
             currentPage = page;
-            // Handle pagination if needed
+            await loadMachineData();
         },
         actions: [
             {
@@ -206,11 +213,13 @@ function initializeFiltersComponent() {
     machineFilters = new FiltersComponent('filters-placeholder', {
         title: 'Makine Filtreleri',
         onApply: (values) => {
-            // Apply filters and reload machines
+            // Reset to first page when applying filters
+            currentPage = 1;
             loadMachineData();
         },
         onClear: () => {
-            // Clear filters and reload machines
+            // Reset to first page when clearing filters
+            currentPage = 1;
             loadMachineData();
         },
         onFilterChange: (filterId, value) => {
@@ -284,6 +293,16 @@ async function loadMetadata() {
     }
 }
 
+// Validate and adjust current page if needed
+function validateCurrentPage() {
+    if (machinesTable && totalMachines > 0) {
+        const totalPages = Math.ceil(totalMachines / machinesTable.options.itemsPerPage);
+        if (currentPage > totalPages) {
+            currentPage = Math.max(1, totalPages);
+        }
+    }
+}
+
 async function loadMachineData() {
     try {
         isLoading = true;
@@ -294,13 +313,25 @@ async function loadMachineData() {
         // Collect filter values
         const filters = collectFilterValues();
 
-        // Load only machines (types and used_in are loaded once in loadMetadata)
-        const machinesResponse = await fetchMachines(filters);
-        machines = machinesResponse.results || machinesResponse || [];
+        // Load machines with current page and page size
+        const pageSize = machinesTable ? machinesTable.options.itemsPerPage : 20;
+        const machinesResponse = await fetchMachines(currentPage, pageSize, filters);
         
-        // Update table data
+        // Extract machines and total count from response
+        machines = machinesResponse.results || machinesResponse || [];
+        totalMachines = machinesResponse.count || machinesResponse.total || machines.length;
+        
+        // Validate current page after getting total count
+        validateCurrentPage();
+        
+        // Update table data with pagination info
         if (machinesTable) {
-            machinesTable.updateData(machines);
+            machinesTable.updateData(machines, totalMachines, currentPage);
+        }
+        
+        // Show message if no results found
+        if (machines.length === 0 && totalMachines === 0) {
+            // No results found - this will be handled by the table component's empty state
         }
         
         // Update filter options
@@ -318,6 +349,10 @@ async function loadMachineData() {
     } catch (error) {
         // Error loading machine data
         machines = [];
+        totalMachines = 0;
+        if (machinesTable) {
+            machinesTable.updateData([], 0, currentPage);
+        }
     } finally {
         isLoading = false;
         if (machinesTable) {
@@ -346,7 +381,8 @@ function updateFilterOptions() {
 
 function updateMachineCounts() {
     try {
-        const totalCount = machines.length;
+        // Use total count from API for total machines, but calculate others from current page data
+        const totalCount = totalMachines;
         const activeCount = machines.filter(m => m.is_active === true).length;
         const typesCount = new Set(machines.map(m => m.type_label).filter(Boolean)).size;
         const usageAreasCount = new Set(machines.map(m => m.used_in).filter(Boolean)).size;
@@ -365,13 +401,27 @@ function updateMachineCounts() {
     }
 }
 
-function exportMachines(format) {
-    if (machines.length === 0) {
-        alert('Dışa aktarılacak makine bulunamadı');
-        return;
-    }
-    
+async function exportMachines(format) {
     try {
+        // Show loading message
+        const exportBtn = document.querySelector('#machines-table-container-export');
+        if (exportBtn) {
+            exportBtn.disabled = true;
+            exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Dışa Aktarılıyor...';
+        }
+        
+        // Collect filter values
+        const filters = collectFilterValues();
+        
+        // Fetch all machines for export (use a large page size)
+        const machinesResponse = await fetchMachines(1, 10000, filters);
+        const allMachines = machinesResponse.results || machinesResponse || [];
+        
+        if (allMachines.length === 0) {
+            alert('Dışa aktarılacak makine bulunamadı');
+            return;
+        }
+        
         // Prepare data for export (match visible columns)
         const headers = [
             'ID',
@@ -385,7 +435,7 @@ function exportMachines(format) {
         
         const exportData = [
             headers,
-            ...machines.map(machine => [
+            ...allMachines.map(machine => [
                 machine.id ?? '',
                 machine.name || '',
                 machine.machine_type_label || '',
@@ -406,6 +456,14 @@ function exportMachines(format) {
     } catch (error) {
         // Error exporting machines
         alert('Dışa aktarma sırasında hata oluştu');
+        console.error('Export error:', error);
+    } finally {
+        // Reset export button
+        const exportBtn = document.querySelector('#machines-table-container-export');
+        if (exportBtn) {
+            exportBtn.disabled = false;
+            exportBtn.innerHTML = '<i class="fas fa-download me-1"></i>Dışa Aktar';
+        }
     }
 }
 

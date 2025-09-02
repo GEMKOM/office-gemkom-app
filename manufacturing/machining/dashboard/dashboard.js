@@ -122,11 +122,8 @@ async function loadDashboardData() {
         dashboardState.activeTimers = timersResponse && timersResponse.results ? timersResponse.results : [];
         
         // Load machines
-        const machines = await fetchMachines({ used_in: 'machining' }); // Get machines used in machining
-        dashboardState.machines = Array.isArray(machines) ? machines : [];
-        
-        console.log('Loaded timers:', dashboardState.activeTimers);
-        console.log('Loaded machines:', dashboardState.machines);
+        const machinesResponse = await fetchMachines(1, 100, { used_in: 'machining' }); // Get machines used in machining
+        dashboardState.machines = machinesResponse.results || machinesResponse || [];
         
         // Update statistics
         updateStatistics();

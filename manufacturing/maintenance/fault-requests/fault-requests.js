@@ -20,20 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-plus-circle',
                 iconColor: 'success',
                 link: '/manufacturing/maintenance/fault-requests/create',
-                features: [
-                    {
-                        label: 'Talep Oluştur',
-                        icon: 'fas fa-plus',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/fault-requests/create'
-                    },
-                    {
-                        label: 'Talep Şablonları',
-                        icon: 'fas fa-file-alt',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/fault-requests/templates'
-                    }
-                ]
+                features: []
             },
             {
                 title: 'Arıza Listesi',
@@ -41,26 +28,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-list',
                 iconColor: 'primary',
                 link: '/manufacturing/maintenance/fault-requests/list',
-                features: [
-                    {
-                        label: 'Tüm Arızalar',
-                        icon: 'fas fa-th-list',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/fault-requests/list'
-                    },
-                    {
-                        label: 'Filtreleme',
-                        icon: 'fas fa-filter',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/fault-requests/list'
-                    },
-                    {
-                        label: 'Çözüm Ekleme',
-                        icon: 'fas fa-tools',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/fault-requests/list'
-                    }
-                ]
+                features: []
             },
             {
                 title: 'Arıza İstatistikleri',

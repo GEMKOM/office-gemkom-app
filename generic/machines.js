@@ -2,12 +2,20 @@ import { authedFetch } from '../authService.js';
 import { backendBase } from '../base.js';
 import { extractResultsFromResponse } from './paginationHelper.js';
 
-export async function fetchMachines(filters = {}) {
+export async function fetchMachines(page = 1, pageSize = 10, filters = {}) {
     try {
         let url = `${backendBase}/machines/`;
         
         // Build query parameters from filters
         const params = new URLSearchParams();
+        
+        if (page) {
+            params.append('page', page);
+        }
+        
+        if (pageSize) {
+            params.append('page_size', pageSize);
+        }
         
         if (filters.name) {
             params.append('name', filters.name);
@@ -37,7 +45,7 @@ export async function fetchMachines(filters = {}) {
         }
         
         const machines = await response.json();
-        return extractResultsFromResponse(machines);
+        return machines;
     } catch (error) {
         // Error fetching machines
         throw error;

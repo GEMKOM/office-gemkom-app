@@ -72,7 +72,8 @@ async function initializeTasks() {
 
 async function loadMachines() {
     try {
-        machines = await fetchMachines({ used_in: 'machining' });
+        const machinesResponse = await fetchMachines(1, 100, { used_in: 'machining' });
+        machines = machinesResponse.results || machinesResponse || [];
         
         // Update machine filter options if filters component is initialized
         if (taskFilters) {

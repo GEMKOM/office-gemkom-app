@@ -62,8 +62,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         showRecommendations: false, // Hide recommendations column for pending page
         showSummary: false, // Hide summary section (Özet Bilgiler)
         showSummaryRow: true, // Show summary row (totals row in table)
-        showEuroTotal: true, // Show Euro Total column for pending page
-        columnOrder: ['unitPrice', 'deliveryDays', 'originalTotal', 'euroTotal'], // Custom column order for pending page
+        showEuroTotal: false, // Show Euro Total column for pending page
+        columnOrder: ['unitPrice', 'originalTotal', 'deliveryDays'], // Custom column order for pending page (euroTotal removed)
         autoSave: null, // No auto-save needed for pending page
         onRecommendationChange: null, // No recommendation changes needed for pending page
         onSupplierRecommendAll: null // No bulk recommendations needed for pending page

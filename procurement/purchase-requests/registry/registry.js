@@ -51,8 +51,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         showRecommendations: false, // Hide recommendations column for registry page
         showSummary: false, // Hide summary section (Özet Bilgiler)
         showSummaryRow: true, // Show summary row (totals row in table)
-        showEuroTotal: true, // Show Euro Total column for registry page
-        columnOrder: ['unitPrice', 'deliveryDays', 'originalTotal', 'euroTotal'], // Custom column order for registry page
+        showEuroTotal: false, // Show Euro Total column for registry page
+        columnOrder: ['unitPrice', 'originalTotal', 'deliveryDays'], // Custom column order for registry page
         autoSave: null, // No auto-save needed for registry page
         onRecommendationChange: null, // No recommendation changes needed for registry page
         onSupplierRecommendAll: null // No bulk recommendations needed for registry page

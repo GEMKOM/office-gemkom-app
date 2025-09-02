@@ -297,7 +297,18 @@ export class TableComponent {
         const totalPages = Math.ceil(this.options.totalItems / this.options.itemsPerPage);
         if (totalPages <= 1) return '';
         
-        let html = '<div class="card-footer"><nav><ul class="pagination justify-content-center">';
+        const startItem = (this.options.currentPage - 1) * this.options.itemsPerPage + 1;
+        const endItem = Math.min(this.options.currentPage * this.options.itemsPerPage, this.options.totalItems);
+        
+        let html = '<div class="card-footer">';
+        
+        // Page info
+        html += `<div class="text-center mb-2 text-muted small">`;
+        html += `Sayfa ${this.options.currentPage} / ${totalPages} (${startItem}-${endItem} / ${this.options.totalItems} kayıt)`;
+        html += '</div>';
+        
+        // Pagination controls
+        html += '<nav><ul class="pagination justify-content-center">';
         
         // Previous button
         html += `

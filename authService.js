@@ -1,5 +1,4 @@
 import { backendBase } from './base.js';
-import { extractResultsFromResponse } from './generic/paginationHelper.js';
 
 const API_URL = backendBase;
 

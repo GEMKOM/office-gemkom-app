@@ -140,7 +140,7 @@ function initializeFormHandlers() {
 async function loadMachines() {
     try {
         // Fetch machines from API using fetchMachines function
-        const response = await fetchMachines();
+        const response = await fetchMachines(1, 1000);
         
         // Extract machines from the results array
         const machines = response.results || response;
