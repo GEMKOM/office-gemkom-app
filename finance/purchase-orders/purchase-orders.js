@@ -550,10 +550,8 @@ async function viewPurchaseOrderDetails(orderId) {
                     <h6 class="text-primary">Tarih Bilgileri</h6>
                     <table class="table table-sm">
                         <tr><td><strong>Oluşturulma Tarihi:</strong></td><td>${formatDate(order.created_at)}</td></tr>
-                        <tr><td><strong>Sipariş Tarihi:</strong></td><td>${formatDate(order.ordered_at)}</td></tr>
-                        <tr><td><strong>PR No:</strong></td><td>${order.pr || 'N/A'}</td></tr>
-                        <tr><td><strong>Tedarikçi Teklifi:</strong></td><td>${order.supplier_offer || 'N/A'}</td></tr>
-                        <tr><td><strong>Kalem Sayısı:</strong></td><td>${order.line_count || 0}</td></tr>
+                        <tr><td><strong>PR No:</strong></td><td><a href="https://ofis.gemcore.com.tr/procurement/purchase-requests/registry/?talep=${order.purchase_request_number}" target="_blank" class="text-primary">${order.purchase_request_number || 'N/A'}</a></td></tr>
+                        <tr><td><strong>Kalem Sayısı:</strong></td><td>${(order.lines || []).length}</td></tr>
                     </table>
                 </div>
             </div>

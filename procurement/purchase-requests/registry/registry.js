@@ -559,6 +559,7 @@ async function viewRequestDetails(requestId) {
     try {
         showLoading(true);
         currentRequest = await getPurchaseRequest(requestId);
+        
         await showRequestDetailsModal();
         
         // Update URL to include the talep no (request number)
@@ -567,7 +568,7 @@ async function viewRequestDetails(requestId) {
         window.history.pushState({}, '', url);
     } catch (error) {
         console.error('Error loading request details:', error);
-        showNotification('Talep detayları yüklenirken hata oluştu: ' + error.message, 'error');
+        showNotification('Talep detayları açılırken hata oluştu: ' + error.message, 'error');
     } finally {
         showLoading(false);
     }
@@ -818,9 +819,16 @@ async function openModalFromTalepNo(talepNo) {
             // If not found in current requests, try to search for it using the API
             try {
                 const searchResponse = await getPurchaseRequests({ request_number: talepNo });
+                
                 if (searchResponse && searchResponse.results && searchResponse.results.length > 0) {
-                    const foundRequest = searchResponse.results[0];
-                    await viewRequestDetails(foundRequest.id);
+                    // Try to find the exact match first
+                    const exactMatch = searchResponse.results.find(r => r.request_number === talepNo);
+                    
+                    if (exactMatch) {
+                        await viewRequestDetails(exactMatch.id);
+                    } else {
+                        showNotification(`API arama hatası: ${talepNo} için tam eşleşme bulunamadı`, 'error');
+                    }
                 } else {
                     showNotification(`Talep ${talepNo} bulunamadı`, 'error');
                 }
