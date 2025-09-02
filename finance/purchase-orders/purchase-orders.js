@@ -9,6 +9,7 @@ import { HeaderComponent } from '../../components/header/header.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { TableComponent } from '../../components/table/table.js';
+import { backendBase } from '../../base.js';
 
 // Global variables
 let currentPurchaseOrders = [];
@@ -541,7 +542,7 @@ async function viewPurchaseOrderDetails(orderId) {
                         <tr><td><strong>Durum:</strong></td><td><span class="status-badge ${getStatusBadgeClass(order.status)}">${order.status_label || getStatusText(order.status)}</span></td></tr>
                         <tr><td><strong>Öncelik:</strong></td><td><span class="priority-badge ${getPriorityBadgeClass(order.priority)}">${getPriorityText(order.priority)}</span></td></tr>
                         <tr><td><strong>Oluşturulma Tarihi:</strong></td><td>${formatDate(order.created_at)}</td></tr>
-                        <tr><td><strong>PR No:</strong></td><td><a href="https://ofis.gemcore.com.tr/procurement/purchase-requests/registry/?talep=${order.purchase_request_number}" target="_blank" class="text-primary">${order.purchase_request_number || 'N/A'}</a></td></tr>
+                        <tr><td><strong>PR No:</strong></td><td><a href="${backendBase}procurement/purchase-requests/registry/?talep=${order.purchase_request_number}" target="_blank" class="text-primary">${order.purchase_request_number || 'N/A'}</a></td></tr>
                         <tr><td><strong>Kalem Sayısı:</strong></td><td>${(order.lines || []).length}</td></tr>
                     </table>
                 </div>
