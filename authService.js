@@ -29,8 +29,51 @@ let isRedirecting = false;
 let isFreshLogin = false;
 
 export async function getUser() {
-    const user_data = await authedFetch(`${backendBase}/users/me/`);
-    return await user_data.json();
+    // Try to get user data from localStorage first
+    const cachedUser = localStorage.getItem('user');
+    if (cachedUser) {
+        try {
+            const userData = JSON.parse(cachedUser);
+            console.log('User data loaded from localStorage');
+            return userData;
+        } catch (error) {
+            console.warn('Failed to parse cached user data, falling back to API');
+            localStorage.removeItem('user'); // Remove corrupted data
+        }
+    }
+    
+    // If not in localStorage, fetch from API
+    try {
+        const user_data = await authedFetch(`${backendBase}/users/me/`);
+        const userData = await user_data.json();
+        
+        // Store in localStorage for future use
+        localStorage.setItem('user', JSON.stringify(userData));
+        console.log('User data fetched from API and cached');
+        
+        return userData;
+    } catch (error) {
+        console.error('Failed to fetch user data from API:', error);
+        throw error;
+    }
+}
+
+// Helper function to clear cached user data (useful for logout)
+export function clearCachedUser() {
+    localStorage.removeItem('user');
+    localStorage.removeItem('userTeam');
+    console.log('Cached user data cleared');
+}
+
+// Helper function to get user team specifically
+export async function getUserTeam() {
+    try {
+        const userData = await getUser();
+        return userData.team || 'other';
+    } catch (error) {
+        console.error('Failed to get user team:', error);
+        return 'other';
+    }
 }
 
 function setTokens(newAccessToken, newRefreshToken) {

@@ -10,6 +10,7 @@ export class HeaderComponent {
             title: 'Sayfa Başlığı',
             subtitle: 'Sayfa açıklaması',
             icon: 'home',
+            containerId: 'header-placeholder', // Default container ID
             
             // Button visibility
             showBackButton: 'block',
@@ -117,13 +118,13 @@ export class HeaderComponent {
     }
     
     insertHeader(html) {
-        // Find the placeholder element where the header should be inserted
-        const placeholder = document.getElementById('header-placeholder');
-        if (placeholder) {
-            // Replace the placeholder with the header HTML
-            placeholder.outerHTML = html;
+        // Find the container element where the header should be inserted
+        const container = document.getElementById(this.config.containerId);
+        if (container) {
+            // Insert the header HTML into the container
+            container.innerHTML = html;
         } else {
-            console.warn('HeaderComponent: No header placeholder found. Add <div id="header-placeholder"></div> where you want the header to appear.');
+            console.warn(`HeaderComponent: No container found with id '${this.config.containerId}'. Add <div id="${this.config.containerId}"></div> where you want the header to appear.`);
         }
     }
     

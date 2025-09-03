@@ -362,6 +362,29 @@ export class FiltersComponent {
                     </div>
                 `;
 
+            case 'date-range':
+                return `
+                    <div class="${colClass}">
+                        <label class="form-label small mb-1">${filter.label}</label>
+                        <div class="row g-2">
+                            <div class="col-6">
+                                <input type="date" 
+                                       class="form-control form-control-sm" 
+                                       id="${filter.id}-start" 
+                                       placeholder="Başlangıç"
+                                       value="${filter.startDate}">
+                            </div>
+                            <div class="col-6">
+                                <input type="date" 
+                                       class="form-control form-control-sm" 
+                                       id="${filter.id}-end" 
+                                       placeholder="Bitiş"
+                                       value="${filter.endDate}">
+                            </div>
+                        </div>
+                    </div>
+                `;
+
             default:
                 return '';
         }
@@ -500,6 +523,13 @@ export class FiltersComponent {
             } else if (filter.type === 'checkbox') {
                 const element = document.getElementById(filter.id);
                 values[filter.id] = element ? element.checked : false;
+            } else if (filter.type === 'date-range') {
+                const startElement = document.getElementById(`${filter.id}-start`);
+                const endElement = document.getElementById(`${filter.id}-end`);
+                values[filter.id] = {
+                    start: startElement ? startElement.value : '',
+                    end: endElement ? endElement.value : ''
+                };
             } else {
                 const element = document.getElementById(filter.id);
                 values[filter.id] = element ? element.value : '';
@@ -527,6 +557,15 @@ export class FiltersComponent {
                     if (element) {
                         element.checked = values[filterId];
                     }
+                } else if (filter.type === 'date-range') {
+                    const startElement = document.getElementById(`${filterId}-start`);
+                    const endElement = document.getElementById(`${filterId}-end`);
+                    if (startElement && values[filterId].start) {
+                        startElement.value = values[filterId].start;
+                    }
+                    if (endElement && values[filterId].end) {
+                        endElement.value = values[filterId].end;
+                    }
                 } else {
                     const element = document.getElementById(filterId);
                     if (element) {
@@ -551,6 +590,15 @@ export class FiltersComponent {
                 const element = document.getElementById(filter.id);
                 if (element) {
                     element.checked = false;
+                }
+            } else if (filter.type === 'date-range') {
+                const startElement = document.getElementById(`${filter.id}-start`);
+                const endElement = document.getElementById(`${filter.id}-end`);
+                if (startElement) {
+                    startElement.value = '';
+                }
+                if (endElement) {
+                    endElement.value = '';
                 }
             } else {
                 const element = document.getElementById(filter.id);
@@ -634,6 +682,31 @@ export class FiltersComponent {
         if (component) {
             component.classList.remove('loading');
         }
+    }
+
+    /**
+     * Add a date range filter
+     * @param {Object} config - Filter configuration
+     * @param {string} config.id - Unique filter ID
+     * @param {string} config.label - Filter label
+     * @param {string} config.startDate - Default start date value
+     * @param {string} config.endDate - Default end date value
+     * @param {number} config.colSize - Bootstrap column size (default: 3)
+     */
+    addDateRangeFilter(config) {
+        const filter = {
+            type: 'date-range',
+            id: config.id,
+            label: config.label,
+            startDate: config.startDate || '',
+            endDate: config.endDate || '',
+            colSize: config.colSize || 3,
+            ...config
+        };
+
+        this.filters.push(filter);
+        this.renderFilters();
+        return this;
     }
 
     /**

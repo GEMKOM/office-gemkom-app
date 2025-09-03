@@ -920,7 +920,10 @@ function renderComparisonTable() {
         name: item.item.name,
         code: item.item.code,
         quantity: item.quantity,
-        unit: item.item.unit
+        unit: item.item.unit,
+        job_no: item.allocations && item.allocations.length > 0 
+            ? item.allocations.map(allocation => allocation.job_no).join(', ')
+            : '-'
     }));
 
     const suppliers = currentRequest.offers.map(offer => ({

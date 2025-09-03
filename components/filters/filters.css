@@ -51,9 +51,9 @@
     outline: 0;
 }
 
-/* Force the entire filters section to have higher z-index */
+/* Force the entire filters section to have lower z-index to not interfere with modals */
 .dashboard-card.compact {
-    z-index: 10000 !important;
+    z-index: 100 !important;
     position: relative;
 }
 
