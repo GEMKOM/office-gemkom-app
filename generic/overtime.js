@@ -81,7 +81,18 @@ export async function createOvertimeRequest(overtimeData) {
         method: 'POST',
         body: JSON.stringify(overtimeData)
     });
+    
     const data = await resp.json();
+    
+    // Check if the response is successful
+    if (!resp.ok) {
+        // If the response is not ok, throw an error with the API error message
+        const errorMessage = data.errors || data.error || data.detail || 'Mesai talebi oluşturulurken hata oluştu.';
+        const error = new Error(Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage);
+        error.response = data; // Attach the full response for detailed error handling
+        throw error;
+    }
+    
     return data;
 }
 
@@ -215,7 +226,7 @@ export function validateOvertimeRequest(overtimeData) {
         errors.push('Bitiş zamanı gereklidir');
     }
     if (!overtimeData.entries || overtimeData.entries.length === 0) {
-        errors.push('En az bir katılımcı eklemelisiniz');
+        errors.push('En az 1 katılımcı eklemelisiniz');
     }
 
     // Check date logic
@@ -233,7 +244,7 @@ export function validateOvertimeRequest(overtimeData) {
     }
 
     // Check entries
-    if (overtimeData.entries) {
+    if (overtimeData.entries && overtimeData.entries.length > 0) {
         overtimeData.entries.forEach((entry, index) => {
             if (!entry.user) {
                 errors.push(`Katılımcı ${index + 1}: Kullanıcı seçimi gereklidir`);
@@ -249,3 +260,106 @@ export function validateOvertimeRequest(overtimeData) {
         errors: errors
     };
 }
+
+/**
+ * Approve an overtime request
+ * @param {number} requestId - Overtime request ID
+ * @returns {Promise<Object>} Response data
+ */
+export async function approveOvertimeRequest(requestId) {
+    const url = `${backendBase}/overtime/requests/${requestId}/approve/`;
+    const resp = await authedFetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    if (!resp.ok) {
+        const errorData = await resp.json();
+        throw new Error(errorData.detail || errorData.message || 'Onaylama işlemi başarısız');
+    }
+    
+    return await resp.json();
+}
+
+/**
+ * Reject an overtime request
+ * @param {number} requestId - Overtime request ID
+ * @param {string} reason - Rejection reason (optional)
+ * @returns {Promise<Object>} Response data
+ */
+export async function rejectOvertimeRequest(requestId, reason = '') {
+    const url = `${backendBase}/overtime/requests/${requestId}/reject/`;
+    const resp = await authedFetch(url, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            reason: reason
+        })
+    });
+    
+    if (!resp.ok) {
+        const errorData = await resp.json();
+        throw new Error(errorData.detail || errorData.message || 'Reddetme işlemi başarısız');
+    }
+    
+    return await resp.json();
+}
+
+export async function getPendingOvertimeApprovalRequests(filters = {}) {
+    try {
+        // Build query parameters
+        const queryParams = new URLSearchParams();
+        
+        // Add filters if provided
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+        
+        const url = `${backendBase}/overtime/requests/pending_approval/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const response = await authedFetch(url);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Onay bekleyen talepler yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching pending approval requests:', error);
+        throw error;
+    }
+}
+
+export async function getOvertimeApprovedByMeRequests(filters = {}) {
+    try {
+        // Build query parameters
+        const queryParams = new URLSearchParams();
+        
+        // Add filters if provided
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== null && value !== undefined && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+        
+        const url = `${backendBase}/overtime/requests/approved_by_me/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const response = await authedFetch(url);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Onayladığınız talepler yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching approved by me requests:', error);
+        throw error;
+    }
+}
+

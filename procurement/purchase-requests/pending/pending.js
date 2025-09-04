@@ -2,6 +2,7 @@ import { guardRoute } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { ComparisonTable } from '../../../components/comparison-table/comparison-table.js';
+import { TableComponent } from '../../../components/table/table.js';
 
 
 import { 
@@ -43,6 +44,8 @@ let currencySymbols = {
     'GBP': '£'
 };
 let comparisonTable = null; // Comparison table component instance
+let pendingTable = null; // Pending requests table component instance
+let approvedTable = null; // Approved requests table component instance
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -69,6 +72,214 @@ document.addEventListener('DOMContentLoaded', async () => {
         onSupplierRecommendAll: null // No bulk recommendations needed for pending page
     });
     
+    // Initialize pending requests table component
+    pendingTable = new TableComponent('pending-requests-table-container', {
+        title: 'Onay Bekleyen Talepler',
+        icon: 'fas fa-clock',
+        iconColor: 'text-warning',
+        columns: [
+            {
+                field: 'request_number',
+                label: 'Talep No',
+                sortable: true,
+                formatter: (value) => `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value || '-'}</span>`
+            },
+            {
+                field: 'title',
+                label: 'Başlık',
+                sortable: true,
+                formatter: (value, row) => `
+                    <div style="font-weight: 600; color: #343a40;">${value || 'Başlıksız'}</div>
+                    <small style="color: #6c757d; font-size: 0.85rem;">${row.description || 'Açıklama yok'}</small>
+                `
+            },
+            {
+                field: 'requestor_username',
+                label: 'Talep Eden',
+                sortable: true,
+                formatter: (value) => `
+                    <div style="font-weight: 500; color: #495057;">
+                        <i class="fas fa-user-circle me-2 text-muted"></i>
+                        ${value || 'Bilinmiyor'}
+                    </div>
+                `
+            },
+            {
+                field: 'status',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value, row) => getStatusBadge(value, row.status_label)
+            },
+            {
+                field: 'priority',
+                label: 'Öncelik',
+                sortable: true,
+                formatter: (value) => getPriorityBadge(value)
+            },
+            {
+                field: 'total_amount_eur',
+                label: 'Toplam Tutar',
+                sortable: true,
+                formatter: (value) => `
+                    <div style="color: #495057; font-weight: 500;">${value ? formatCurrency(value, 'EUR') : '-'}</div>
+                `
+            },
+            {
+                field: 'created_at',
+                label: 'Oluşturulma',
+                sortable: true,
+                type: 'date'
+            },
+            {
+                field: 'approval',
+                label: 'Onay Durumu',
+                sortable: false,
+                formatter: (value, row) => `
+                    <div style="min-width: 200px; text-align: middle; vertical-align: middle;">
+                        ${getApprovalInfo(row)}
+                    </div>
+                `
+            }
+        ],
+        actions: [
+            {
+                key: 'view',
+                label: 'Detayları Görüntüle',
+                icon: 'fas fa-eye',
+                class: 'btn-outline-primary',
+                onClick: (row) => viewRequestDetails(row.id)
+            },
+            {
+                key: 'approve',
+                label: 'Onayla',
+                icon: 'fas fa-check',
+                class: 'btn-outline-success',
+                visible: (row) => row.status === 'submitted',
+                onClick: (row) => approveRequest(row.id)
+            },
+            {
+                key: 'reject',
+                label: 'Reddet',
+                icon: 'fas fa-times',
+                class: 'btn-outline-danger',
+                visible: (row) => row.status === 'submitted',
+                onClick: (row) => rejectRequest(row.id)
+            }
+        ],
+        pagination: true,
+        itemsPerPage: 20,
+        refreshable: true,
+        onRefresh: loadRequests,
+        onSort: (field, direction) => {
+            currentSortField = field;
+            currentSortDirection = direction;
+            currentPage = 1;
+            loadRequests();
+        },
+        onPageChange: (page) => {
+            currentPage = page;
+            loadRequests();
+        },
+        emptyMessage: 'Onayınızı bekleyen satın alma talebi bulunmamaktadır.',
+        emptyIcon: 'fas fa-check-circle'
+    });
+    
+    // Initialize approved requests table component
+    approvedTable = new TableComponent('approved-requests-table-container', {
+        title: 'Onayladığınız Talepler',
+        icon: 'fas fa-check-circle',
+        iconColor: 'text-success',
+        columns: [
+            {
+                field: 'request_number',
+                label: 'Talep No',
+                sortable: true,
+                formatter: (value) => `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value || '-'}</span>`
+            },
+            {
+                field: 'title',
+                label: 'Başlık',
+                sortable: true,
+                formatter: (value, row) => `
+                    <div style="font-weight: 600; color: #343a40;">${value || 'Başlıksız'}</div>
+                    <small style="color: #6c757d; font-size: 0.85rem;">${row.description || 'Açıklama yok'}</small>
+                `
+            },
+            {
+                field: 'requestor_username',
+                label: 'Talep Eden',
+                sortable: true,
+                formatter: (value) => `
+                    <div style="font-weight: 500; color: #495057;">
+                        <i class="fas fa-user-circle me-2 text-muted"></i>
+                        ${value || 'Bilinmiyor'}
+                    </div>
+                `
+            },
+            {
+                field: 'status',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value, row) => getStatusBadge(value, row.status_label)
+            },
+            {
+                field: 'priority',
+                label: 'Öncelik',
+                sortable: true,
+                formatter: (value) => getPriorityBadge(value)
+            },
+            {
+                field: 'total_amount_eur',
+                label: 'Toplam Tutar',
+                sortable: true,
+                formatter: (value) => `
+                    <div style="color: #495057; font-weight: 500;">${value ? formatCurrency(value, 'EUR') : '-'}</div>
+                `
+            },
+            {
+                field: 'created_at',
+                label: 'Oluşturulma',
+                sortable: true,
+                type: 'date'
+            },
+            {
+                field: 'approval',
+                label: 'Onay Durumu',
+                sortable: false,
+                formatter: (value, row) => `
+                    <div style="min-width: 200px; text-align: left; vertical-align: middle;">
+                        ${getApprovalInfo(row)}
+                    </div>
+                `
+            }
+        ],
+        actions: [
+            {
+                key: 'view',
+                label: 'Detayları Görüntüle',
+                icon: 'fas fa-eye',
+                class: 'btn-outline-primary',
+                onClick: (row) => viewRequestDetails(row.id)
+            }
+        ],
+        pagination: true,
+        itemsPerPage: 20,
+        refreshable: true,
+        onRefresh: loadApprovedRequests,
+        onSort: (field, direction) => {
+            approvedCurrentSortField = field;
+            approvedCurrentSortDirection = direction;
+            approvedCurrentPage = 1;
+            loadApprovedRequests();
+        },
+        onPageChange: (page) => {
+            approvedCurrentPage = page;
+            loadApprovedRequests();
+        },
+        emptyMessage: 'Henüz onayladığınız satın alma talebi bulunmamaktadır.',
+        emptyIcon: 'fas fa-check-circle'
+    });
+    
     // Initialize header component
     const header = new HeaderComponent({
         title: 'Onay Bekleyen Satın Alma Talepleri',
@@ -90,9 +301,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function initializeRequests() {
     try {
-        initializeSortableHeaders();
-        initializeApprovedSortableHeaders();
-        
         await loadRequests();
         await loadApprovedRequests();
         
@@ -110,107 +318,13 @@ async function initializeRequests() {
 
 
 
-function initializeSortableHeaders() {
-    const sortableHeaders = document.querySelectorAll('.sortable');
-    sortableHeaders.forEach(header => {
-        header.addEventListener('click', (e) => {
-            e.preventDefault();
-            const field = header.dataset.field;
-            handleSort(field);
-        });
-    });
-    
-    // Update sort indicators for initial state
-    updateSortIndicators();
-}
-
-function initializeApprovedSortableHeaders() {
-    const sortableHeaders = document.querySelectorAll('.sortable-approved');
-    sortableHeaders.forEach(header => {
-        header.addEventListener('click', (e) => {
-            e.preventDefault();
-            const field = header.dataset.field;
-            handleApprovedSort(field);
-        });
-    });
-    
-    // Update sort indicators for initial state
-    updateApprovedSortIndicators();
-}
-
-function updateSortIndicators() {
-    const sortableHeaders = document.querySelectorAll('.sortable');
-    const hasRequests = requests && requests.length > 0;
-    
-    sortableHeaders.forEach(header => {
-        const field = header.dataset.field;
-        const icon = header.querySelector('.sort-icon');
-        
-        if (!hasRequests) {
-            // Disable sorting when no requests
-            header.style.pointerEvents = 'none';
-            header.style.opacity = '0.5';
-            icon.className = 'fas fa-sort sort-icon text-muted';
-        } else {
-            // Enable sorting when there are requests
-            header.style.pointerEvents = 'auto';
-            header.style.opacity = '1';
-            
-            if (field === currentSortField) {
-                // Show active sort indicator
-                if (currentSortDirection === 'asc') {
-                    icon.className = 'fas fa-sort-up sort-icon text-primary';
-                } else {
-                    icon.className = 'fas fa-sort-down sort-icon text-primary';
-                }
-            } else {
-                // Show inactive sort indicator
-                icon.className = 'fas fa-sort sort-icon text-muted';
-            }
-        }
-    });
-}
-
-function updateApprovedSortIndicators() {
-    const sortableHeaders = document.querySelectorAll('.sortable-approved');
-    const hasRequests = approvedRequests && approvedRequests.length > 0;
-    
-    sortableHeaders.forEach(header => {
-        const field = header.dataset.field;
-        const icon = header.querySelector('.sort-icon');
-        
-        if (!hasRequests) {
-            // Disable sorting when no requests
-            header.style.pointerEvents = 'none';
-            header.style.opacity = '0.5';
-            icon.className = 'fas fa-sort sort-icon text-muted';
-        } else {
-            // Enable sorting when there are requests
-            header.style.pointerEvents = 'auto';
-            header.style.opacity = '1';
-            
-            if (field === approvedCurrentSortField) {
-                // Show active sort indicator
-                if (approvedCurrentSortDirection === 'asc') {
-                    icon.className = 'fas fa-sort-up sort-icon text-primary';
-                } else {
-                    icon.className = 'fas fa-sort-down sort-icon text-primary';
-                }
-            } else {
-                // Show inactive sort indicator
-                icon.className = 'fas fa-sort sort-icon text-muted';
-            }
-        }
-    });
-}
 
 async function loadRequests() {
     if (isLoading) return;
     
     try {
         isLoading = true;
-        showLoading(true);
-        showLoadingState();
+        pendingTable.setLoading(true);
         
         // Build API filters and ordering
         const apiFilters = {};
@@ -244,22 +358,18 @@ async function loadRequests() {
         
         console.log('Processed requests:', requests);
         
-        // Update the table (no need for client-side sorting or pagination)
-        renderRequestsTable(requests);
-        renderPagination();
-        updateSortIndicators();
+        // Update the table component
+        pendingTable.updateData(requests, totalRequests, currentPage);
         
     } catch (error) {
         console.error('Error loading requests:', error);
         showNotification('Onay bekleyen talepler yüklenirken hata oluştu: ' + error.message, 'error');
         requests = [];
         totalRequests = 0;
-        renderRequestsTable([]);
-        renderPagination();
-        updateSortIndicators();
+        pendingTable.updateData([], 0, 1);
     } finally {
         isLoading = false;
-        showLoading(false);
+        pendingTable.setLoading(false);
     }
 }
 
@@ -268,8 +378,7 @@ async function loadApprovedRequests() {
     
     try {
         isLoadingApproved = true;
-        showLoading(true);
-        showApprovedLoadingState();
+        approvedTable.setLoading(true);
         
         // Build API filters and ordering
         const apiFilters = {};
@@ -303,317 +412,27 @@ async function loadApprovedRequests() {
         
         console.log('Processed approved requests:', approvedRequests);
         
-        // Update the table
-        renderApprovedRequestsTable(approvedRequests);
-        renderApprovedPagination();
-        updateApprovedSortIndicators();
+        // Update the table component
+        approvedTable.updateData(approvedRequests, totalApprovedRequests, approvedCurrentPage);
         
     } catch (error) {
         console.error('Error loading approved requests:', error);
         showNotification('Onayladığınız talepler yüklenirken hata oluştu: ' + error.message, 'error');
         approvedRequests = [];
         totalApprovedRequests = 0;
-        renderApprovedRequestsTable([]);
-        renderApprovedPagination();
-        updateApprovedSortIndicators();
+        approvedTable.updateData([], 0, 1);
     } finally {
         isLoadingApproved = false;
-        showLoading(false);
+        approvedTable.setLoading(false);
     }
 }
 
 
 
-// Client-side sorting and pagination removed - now handled by backend
 
-function renderRequestsTable(requests) {
-    const tbody = document.getElementById('pending-requests-table-body');
-    
-    if (!requests || requests.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="9" class="text-center">
-                    <div class="empty-state">
-                        <i class="fas fa-check-circle"></i>
-                        <h5>Onay bekleyen talep bulunmuyor</h5>
-                        <p>Onayınızı bekleyen satın alma talebi bulunmamaktadır.</p>
-                    </div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tbody.innerHTML = requests.map(request => `
-        <tr data-request-id="${request.id}">
-            <td>
-                <span class="request-number">${request.request_number || 'N/A'}</span>
-            </td>
-            <td>
-                <div class="request-title">${request.title || 'Başlıksız'}</div>
-                <small>${request.description || 'Açıklama yok'}</small>
-            </td>
-            <td>
-                <div class="requestor-name">
-                    <i class="fas fa-user-circle me-2 text-muted"></i>
-                    ${request.requestor_username || 'Bilinmiyor'}
-                </div>
-            </td>
-            <td class="text-center">${getStatusBadge(request.status, request.status_label)}</td>
-            <td class="text-center">${getPriorityBadge(request.priority)}</td>
-            <td>
-                <div class="total-amount">${request.total_amount_eur ? formatCurrency(request.total_amount_eur, 'EUR') : '-'}</div>
-            </td>
-            <td>
-                <div class="created-date">${formatDate(request.created_at)}</div>
-            </td>
-            <td>
-                <div class="approval-info">
-                    ${getApprovalInfo(request)}
-                </div>
-            </td>
-            <td>
-                <div class="btn-group btn-group-sm" role="group">
-                    <button class="btn btn-outline-primary btn-sm" onclick="viewRequestDetails(${request.id})" 
-                            title="Detayları Görüntüle">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                    ${request.status === 'submitted' ? `
-                        <button class="btn btn-outline-success btn-sm" onclick="approveRequest(${request.id})" 
-                                title="Onayla">
-                            <i class="fas fa-check"></i>
-                        </button>
-                        <button class="btn btn-outline-danger btn-sm" onclick="rejectRequest(${request.id})" 
-                                title="Reddet">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    ` : ''}
-                </div>
-            </td>
-        </tr>
-    `).join('');
-    
 
-}
-
-function renderApprovedRequestsTable(requests) {
-    const tbody = document.getElementById('approved-requests-table-body');
-    
-    if (!requests || requests.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="9" class="text-center">
-                    <div class="empty-state">
-                        <i class="fas fa-check-circle"></i>
-                        <h5>Onayladığınız talep bulunmuyor</h5>
-                        <p>Henüz onayladığınız satın alma talebi bulunmamaktadır.</p>
-                    </div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tbody.innerHTML = requests.map(request => `
-        <tr data-request-id="${request.id}">
-            <td>
-                <span class="request-number">${request.request_number || 'N/A'}</span>
-            </td>
-            <td>
-                <div class="request-title">${request.title || 'Başlıksız'}</div>
-                <small>${request.description || 'Açıklama yok'}</small>
-            </td>
-            <td>
-                <div class="requestor-name">
-                    <i class="fas fa-user-circle me-2 text-muted"></i>
-                    ${request.requestor_username || 'Bilinmiyor'}
-                </div>
-            </td>
-            <td class="text-center">${getStatusBadge(request.status, request.status_label)}</td>
-            <td class="text-center">${getPriorityBadge(request.priority)}</td>
-            <td>
-                <div class="total-amount">${request.total_amount_eur ? formatCurrency(request.total_amount_eur, 'EUR') : '-'}</div>
-            </td>
-            <td>
-                <div class="created-date">${formatDate(request.created_at)}</div>
-            </td>
-            <td>
-                <div class="approval-info">
-                    ${getApprovalInfo(request)}
-                </div>
-            </td>
-            <td>
-                <div class="btn-group btn-group-sm" role="group">
-                    <button class="btn btn-outline-primary btn-sm" onclick="viewRequestDetails(${request.id})" 
-                            title="Detayları Görüntüle">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                </div>
-            </td>
-        </tr>
-    `).join('');
-}
-
-function renderPagination() {
-    const pagination = document.getElementById('pending-requests-pagination');
-    const itemsPerPage = 20;
-    const totalPages = Math.ceil(totalRequests / itemsPerPage);
-    
-    if (totalPages <= 1) {
-        pagination.innerHTML = '';
-        return;
-    }
-    
-    let html = '';
-    
-    // Previous button
-    html += `
-        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-            <a class="page-link" href="#" data-page="${currentPage - 1}">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-        </li>
-    `;
-    
-    // Page numbers
-    const startPage = Math.max(1, currentPage - 2);
-    const endPage = Math.min(totalPages, currentPage + 2);
-    
-    for (let i = startPage; i <= endPage; i++) {
-        html += `
-            <li class="page-item ${i === currentPage ? 'active' : ''}">
-                <a class="page-link" href="#" data-page="${i}">${i}</a>
-            </li>
-        `;
-    }
-    
-    // Next button
-    html += `
-        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-            <a class="page-link" href="#" data-page="${currentPage + 1}">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-        </li>
-    `;
-    
-    pagination.innerHTML = html;
-    
-    // Add event listeners
-    const paginationLinks = pagination.querySelectorAll('.page-link[data-page]');
-    paginationLinks.forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const page = parseInt(link.dataset.page);
-            if (page >= 1 && page <= totalPages) {
-                currentPage = page;
-                loadRequests(); // This will now fetch the specific page from backend
-            }
-        });
-    });
-}
-
-function renderApprovedPagination() {
-    const pagination = document.getElementById('approved-requests-pagination');
-    const itemsPerPage = 20;
-    const totalPages = Math.ceil(totalApprovedRequests / itemsPerPage);
-    
-    if (totalPages <= 1) {
-        pagination.innerHTML = '';
-        return;
-    }
-    
-    let html = '';
-    
-    // Previous button
-    html += `
-        <li class="page-item ${approvedCurrentPage === 1 ? 'disabled' : ''}">
-            <a class="page-link" href="#" data-page="${approvedCurrentPage - 1}">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-        </li>
-    `;
-    
-    // Page numbers
-    const startPage = Math.max(1, approvedCurrentPage - 2);
-    const endPage = Math.min(totalPages, approvedCurrentPage + 2);
-    
-    for (let i = startPage; i <= endPage; i++) {
-        html += `
-            <li class="page-item ${i === approvedCurrentPage ? 'active' : ''}">
-                <a class="page-link" href="#" data-page="${i}">${i}</a>
-            </li>
-        `;
-    }
-    
-    // Next button
-    html += `
-        <li class="page-item ${approvedCurrentPage === totalPages ? 'disabled' : ''}">
-            <a class="page-link" href="#" data-page="${approvedCurrentPage + 1}">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-        </li>
-    `;
-    
-    pagination.innerHTML = html;
-    
-    // Add event listeners
-    const paginationLinks = pagination.querySelectorAll('.page-link[data-page]');
-    paginationLinks.forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const page = parseInt(link.dataset.page);
-            if (page >= 1 && page <= totalPages) {
-                approvedCurrentPage = page;
-                loadApprovedRequests();
-            }
-        });
-    });
-}
-
-function handleSort(field) {
-    if (currentSortField === field) {
-        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-        currentSortField = field;
-        currentSortDirection = 'asc';
-    }
-    
-    currentOrdering = field;
-    currentPage = 1; // Reset to first page when sorting changes
-    loadRequests(); // This will now fetch sorted data from backend
-    
-    // Update sort indicators
-    updateSortIndicators();
-}
-
-function handleApprovedSort(field) {
-    if (approvedCurrentSortField === field) {
-        approvedCurrentSortDirection = approvedCurrentSortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-        approvedCurrentSortField = field;
-        approvedCurrentSortDirection = 'asc';
-    }
-    
-    approvedCurrentPage = 1; // Reset to first page when sorting changes
-    loadApprovedRequests(); // This will now fetch sorted data from backend
-    
-    // Update sort indicators
-    updateApprovedSortIndicators();
-}
 
 function setupEventListeners() {
-    // Refresh pending requests
-    const refreshPendingBtn = document.getElementById('refresh-pending-requests');
-    if (refreshPendingBtn) {
-        refreshPendingBtn.addEventListener('click', loadRequests);
-    }
-    
-    // Refresh approved requests
-    const refreshApprovedBtn = document.getElementById('refresh-approved-requests');
-    if (refreshApprovedBtn) {
-        refreshApprovedBtn.addEventListener('click', loadApprovedRequests);
-    }
-    
     // Modal approve and reject buttons
     const approveBtn = document.getElementById('approve-request');
     if (approveBtn) {
@@ -649,7 +468,6 @@ function setupEventListeners() {
 
 async function viewRequestDetails(requestId) {
     try {
-        showLoading(true);
         currentRequest = await getPurchaseRequest(requestId);
         await showRequestDetailsModal();
         
@@ -660,8 +478,6 @@ async function viewRequestDetails(requestId) {
     } catch (error) {
         console.error('Error loading request details:', error);
         showNotification('Talep detayları yüklenirken hata oluştu: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
     }
 }
 
@@ -878,7 +694,7 @@ async function showRequestDetailsModal() {
         document.getElementById('comparison-table-section').style.display = 'none';
     }
 
-    const modal = new bootstrap.Modal(document.getElementById('requestDetailsModal'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('requestDetailsModal'));
     modal.show();
 }
 
@@ -989,12 +805,11 @@ async function approveRequest(requestId) {
     }
 
     try {
-        showLoading(true);
         await approvePurchaseRequest(requestId);
         showNotification('Talep başarıyla onaylandı', 'success');
         
         // Close the modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('requestDetailsModal'));
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('requestDetailsModal'));
         if (modal) {
             modal.hide();
         }
@@ -1003,8 +818,6 @@ async function approveRequest(requestId) {
     } catch (error) {
         console.error('Error approving request:', error);
         showNotification('Talep onaylanırken hata oluştu: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
     }
 }
 
@@ -1014,12 +827,11 @@ async function rejectRequest(requestId) {
     }
 
     try {
-        showLoading(true);
         await rejectPurchaseRequest(requestId);
         showNotification('Talep başarıyla reddedildi', 'success');
         
         // Close the modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('requestDetailsModal'));
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('requestDetailsModal'));
         if (modal) {
             modal.hide();
         }
@@ -1028,8 +840,6 @@ async function rejectRequest(requestId) {
     } catch (error) {
         console.error('Error rejecting request:', error);
         showNotification('Talep reddedilirken hata oluştu: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
     }
 }
 
@@ -1065,7 +875,7 @@ function getPriorityBadge(priority) {
 
 function getApprovalInfo(request) {
     if (!request.approval || request.status !== 'submitted') {
-        return '<span class="text-muted">-</span>';
+        return '<span style="color: #6c757d;">-</span>';
     }
 
     const { stage_instances } = request.approval;
@@ -1074,14 +884,14 @@ function getApprovalInfo(request) {
     const currentStage = stage_instances.find(stage => !stage.is_complete && !stage.is_rejected);
     
     if (!currentStage) {
-        return '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Tamamlandı</span>';
+        return '<span style="color: #198754;"><i class="fas fa-check-circle me-1"></i>Tamamlandı</span>';
     }
 
     const { name, required_approvals, approved_count, approvers } = currentStage;
     const remainingApprovals = required_approvals - approved_count;
     
     if (remainingApprovals <= 0) {
-        return `<span class="text-success"><i class="fas fa-check-circle me-1"></i>${name}</span>`;
+        return `<span style="color: #198754;"><i class="fas fa-check-circle me-1"></i>${name}</span>`;
     }
 
     // Get the names of remaining approvers
@@ -1089,14 +899,14 @@ function getApprovalInfo(request) {
     const approverNames = remainingApprovers.map(approver => approver.full_name || approver.username).join(', ');
     
     return `
-        <div class="approval-status">
-            <div class="stage-name text-primary fw-semibold">${name}</div>
-            <div class="approval-count text-muted small">
+        <div style="line-height: 1.3; text-align: middle;">
+            <div style="font-size: 0.85rem; margin-bottom: 0.25rem; color: #0d6efd; font-weight: 600; text-align: middle;">${name}</div>
+            <div style="font-size: 0.75rem; margin-bottom: 0.25rem; color: #6c757d; text-align: middle;">
                 <i class="fas fa-users me-1"></i>
                 ${remainingApprovals} onay bekleniyor
             </div>
             ${approverNames ? `
-                <div class="approver-names text-muted small">
+                <div style="font-size: 0.7rem; line-height: 1.2; word-wrap: break-word; color: #6c757d; text-align: middle;">
                     <i class="fas fa-user-clock me-1"></i>
                     ${approverNames}
                 </div>
@@ -1151,65 +961,6 @@ function formatCurrencyDisplay(amount, currency) {
     return `${symbol}${numAmount.toFixed(2)}`;
 }
 
-function showLoading(show) {
-    // Simple loading state - just disable/enable buttons
-    const buttons = document.querySelectorAll('.btn');
-    buttons.forEach(btn => {
-        btn.disabled = show;
-    });
-}
-
-function showLoadingState() {
-    const tableBody = document.getElementById('pending-requests-table-body');
-    if (tableBody) {
-        // Create loading rows that maintain table structure
-        const loadingRows = [];
-        for (let i = 0; i < 5; i++) { // Show 5 loading rows
-            loadingRows.push(`
-                <tr class="loading-row">
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 200px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                </tr>
-            `);
-        }
-        tableBody.innerHTML = loadingRows.join('');
-    }
-}
-
-function showApprovedLoadingState() {
-    const tableBody = document.getElementById('approved-requests-table-body');
-    if (tableBody) {
-        // Create loading rows that maintain table structure
-        const loadingRows = [];
-        for (let i = 0; i < 5; i++) { // Show 5 loading rows
-            loadingRows.push(`
-                <tr class="loading-row">
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 200px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                </tr>
-            `);
-        }
-        tableBody.innerHTML = loadingRows.join('');
-    }
-}
-
-function hideLoadingState() {
-    // Loading state is cleared when table is rendered
-}
 
 function showNotification(message, type = 'info') {
     const notification = document.createElement('div');

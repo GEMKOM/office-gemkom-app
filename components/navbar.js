@@ -26,7 +26,18 @@ const NAVIGATION_STRUCTURE = {
             '/general/overtime': {
                 label: 'Mesailer',
                 icon: 'fas fa-clock',
-                children: {}
+                children: {
+                    '/general/overtime/pending': {
+                        label: 'Bekleyen Talepler',
+                        icon: 'fas fa-clock',
+                        children: {}
+                    },
+                    '/general/overtime/registry': {
+                        label: 'Kayıt Defteri',
+                        icon: 'fas fa-archive',
+                        children: {}
+                    }
+                }
             }
         }
     },
@@ -846,8 +857,7 @@ export function setupLogoutButton() {
     const logoutButton = document.getElementById('logout-button');
     if (logoutButton) {
         logoutButton.onclick = () => {
-            localStorage.clear();
-            navigateTo(ROUTES.LOGIN);
+            logout();
         };
     }
 }

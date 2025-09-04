@@ -86,7 +86,7 @@ export class TableComponent {
             <div class="dashboard-card">
                 <div class="card-header">
                     <h5 class="card-title">
-                        <i class="fas fa-table me-2 text-primary"></i>
+                        <i class="${this.options.icon || 'fas fa-table'} me-2 ${this.options.iconColor || 'text-primary'}"></i>
                         ${this.options.title || 'Tablo'}
                     </h5>
                     <div class="card-actions">
@@ -344,7 +344,19 @@ export class TableComponent {
         return html;
     }
     
+    removeEventListeners() {
+        // Remove all event listeners by cloning the container
+        if (this.container) {
+            const newContainer = this.container.cloneNode(true);
+            this.container.parentNode.replaceChild(newContainer, this.container);
+            this.container = newContainer;
+        }
+    }
+    
     setupEventListeners() {
+        // Remove existing event listeners to prevent duplicates
+        this.removeEventListeners();
+        
         // Sort functionality
         if (this.options.sortable) {
             const sortableHeaders = this.container.querySelectorAll('.sortable');
@@ -581,7 +593,16 @@ export class TableComponent {
         }
         
         if (column.type === 'date') {
-            return new Date(value).toLocaleDateString('tr-TR');
+            if (!value) return '-';
+            const date = new Date(value);
+            const formattedDate = date.toLocaleDateString('tr-TR', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            return `<div style="color: #6c757d; font-weight: 500;">${formattedDate}</div>`;
         }
         
         if (column.type === 'number') {

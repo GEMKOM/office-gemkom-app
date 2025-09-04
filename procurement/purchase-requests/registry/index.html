@@ -40,69 +40,7 @@
             <!-- Requests Table Section -->
             <div class="row">
                 <div class="col-12">
-                    <div class="dashboard-card">
-                        <div class="card-header">
-                            <h5 class="card-title">
-                                <i class="fas fa-table me-2 text-primary"></i>
-                                Tüm Satın Alma Talepleri
-                            </h5>
-                            <div class="card-actions">
-                                <button class="btn btn-sm btn-outline-secondary" id="refresh-requests">
-                                    <i class="fas fa-sync-alt me-1"></i>Yenile
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary" id="export-requests">
-                                    <i class="fas fa-download me-1"></i>Dışa Aktar
-                                </button>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-hover">
-                                    <thead>
-                                        <tr>
-                                            <th class="sortable" data-field="request_number">
-                                                Talep No <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="title">
-                                                Başlık <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="requestor">
-                                                Talep Eden <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="status">
-                                                Durum <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="priority">
-                                                Öncelik <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="total_amount_eur">
-                                                Toplam Tutar <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="created_at">
-                                                Oluşturulma <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th>Onay Durumu</th>
-                                            <th class="text-center">Görüntüle</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="requests-table-body">
-                                        <!-- Requests will be loaded here -->
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Pagination -->
-            <div class="row mt-4">
-                <div class="col-12">
-                    <nav aria-label="Requests pagination">
-                        <ul class="pagination justify-content-center" id="requests-pagination">
-                            <!-- Pagination will be generated here -->
-                        </ul>
-                    </nav>
+                    <div id="requests-table-container"></div>
                 </div>
             </div>
         </div>

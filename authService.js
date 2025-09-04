@@ -11,13 +11,11 @@ export const ROUTES = {
     RESET_PASSWORD: '/login/reset-password/',
     HOME: '/',
     ADMIN: '/admin/',
-    MACHINING: '/machining/',
-    MACHINING_TASKS: '/machining/tasks/',
-    MAINTENANCE: '/maintenance/',
+    MACHINING: '/manufacturing/machining/',
+    MACHINING_TASKS: '/manufacturing/machining/tasks/',
+    MAINTENANCE: '/manufacturing/maintenance/',
     MANUFACTURING: '/manufacturing/',
-    MANUFACTURING_WELDED: '/manufacturing/welded/',
-    MANUFACTURING_MACHINING: '/manufacturing/machining/',
-    MANUFACTURING_MAINTENANCE: '/manufacturing/maintenance/'
+    MANUFACTURING_WELDED: '/manufacturing/welded/'
 };
 
 // Track if we're currently redirecting to prevent loops
@@ -62,6 +60,7 @@ export async function getUser() {
 export function clearCachedUser() {
     localStorage.removeItem('user');
     localStorage.removeItem('userTeam');
+    localStorage.removeItem('purchaseRequestDraft');
     console.log('Cached user data cleared');
 }
 
@@ -121,6 +120,7 @@ export async function login(username, password) {
 
 export function logout() {
     clearTokens();
+    clearCachedUser();
     navigateTo(ROUTES.LOGIN);
 }
 
@@ -178,6 +178,11 @@ export function navigateByTeam() {
         navigateTo(ROUTES.MACHINING);
     } else if (user.team === 'maintenance') {
         navigateTo(ROUTES.MAINTENANCE);
+    } else if (user.team === 'manufacturing') {
+        navigateTo(ROUTES.MANUFACTURING);
+    } else {
+        // Fallback: redirect all other teams to home page
+        navigateTo(ROUTES.HOME);
     }
 }
 

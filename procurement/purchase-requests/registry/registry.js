@@ -2,6 +2,7 @@ import { guardRoute } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { ComparisonTable } from '../../../components/comparison-table/comparison-table.js';
+import { TableComponent } from '../../../components/table/table.js';
 
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { 
@@ -24,6 +25,7 @@ let totalRequests = 0;
 let isLoading = false;
 let requestsStats = null; // Statistics Cards component instance
 let requestFilters = null; // Filters component instance
+let requestsTable = null; // Requests table component instance
 let currencyRates = null; // Currency conversion rates
 let currencySymbols = {
     'TRY': '₺',
@@ -55,6 +57,110 @@ document.addEventListener('DOMContentLoaded', async () => {
         autoSave: null, // No auto-save needed for registry page
         onRecommendationChange: null, // No recommendation changes needed for registry page
         onSupplierRecommendAll: null // No bulk recommendations needed for registry page
+    });
+    
+    // Initialize requests table component
+    requestsTable = new TableComponent('requests-table-container', {
+        title: 'Tüm Satın Alma Talepleri',
+        icon: 'fas fa-table',
+        iconColor: 'text-primary',
+        columns: [
+            {
+                field: 'request_number',
+                label: 'Talep No',
+                sortable: true,
+                formatter: (value) => `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value || '-'}</span>`
+            },
+            {
+                field: 'title',
+                label: 'Başlık',
+                sortable: true,
+                formatter: (value, row) => {
+                    const title = value || 'Başlıksız';
+                    const description = row.description || 'Açıklama yok';
+                    const truncatedDescription = description.length > 50 ? description.substring(0, 50) + '...' : description;
+                    
+                    return `
+                        <div style="font-weight: 600; color: #343a40;">${title}</div>
+                        <small style="color: #6c757d; font-size: 0.85rem; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: inline-block; cursor: help;" title="${description}">${truncatedDescription}</small>
+                    `;
+                }
+            },
+            {
+                field: 'requestor_username',
+                label: 'Talep Eden',
+                sortable: true,
+                formatter: (value) => `
+                    <div style="font-weight: 500; color: #495057;">
+                        <i class="fas fa-user-circle me-2 text-muted"></i>
+                        ${value || 'Bilinmiyor'}
+                    </div>
+                `
+            },
+            {
+                field: 'status',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value, row) => getStatusBadge(value, row.status_label)
+            },
+            {
+                field: 'priority',
+                label: 'Öncelik',
+                sortable: true,
+                formatter: (value) => getPriorityBadge(value)
+            },
+            {
+                field: 'total_amount_eur',
+                label: 'Toplam Tutar',
+                sortable: true,
+                formatter: (value) => `
+                    <div style="color: #495057; font-weight: 500;">${value ? formatCurrency(value, 'EUR') : '-'}</div>
+                `
+            },
+            {
+                field: 'created_at',
+                label: 'Oluşturulma',
+                sortable: true,
+                type: 'date'
+            },
+            {
+                field: 'approval',
+                label: 'Onay Durumu',
+                sortable: false,
+                formatter: (value, row) => `
+                    <div style="min-width: 200px; text-align: middle; vertical-align: middle;">
+                        ${getApprovalInfo(row)}
+                    </div>
+                `
+            }
+        ],
+        actions: [
+            {
+                key: 'view',
+                label: 'Detayları Görüntüle',
+                icon: 'fas fa-eye',
+                class: 'btn-outline-primary',
+                onClick: (row) => viewRequestDetails(row.id)
+            }
+        ],
+        pagination: true,
+        itemsPerPage: 20,
+        refreshable: true,
+        exportable: true,
+        onRefresh: loadRequests,
+        onExport: exportRequests,
+        onSort: (field, direction) => {
+            currentSortField = field;
+            currentSortDirection = direction;
+            currentPage = 1;
+            loadRequests();
+        },
+        onPageChange: (page) => {
+            currentPage = page;
+            loadRequests();
+        },
+        emptyMessage: 'Satın alma talebi bulunamadı.',
+        emptyIcon: 'fas fa-inbox'
     });
     
     // Initialize header component
@@ -96,7 +202,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function initializeRequests() {
     try {
         await initializeFiltersComponent();
-        initializeSortableHeaders();
         
         await loadRequests();
         updateRequestCounts();
@@ -226,47 +331,13 @@ async function initializeFiltersComponent() {
     });
 }
 
-function initializeSortableHeaders() {
-    const sortableHeaders = document.querySelectorAll('.sortable');
-    sortableHeaders.forEach(header => {
-        header.addEventListener('click', (e) => {
-            e.preventDefault();
-            const field = header.dataset.field;
-            handleSort(field);
-        });
-    });
-    
-    // Update sort indicators for initial state
-    updateSortIndicators();
-}
-
-function updateSortIndicators() {
-    const sortableHeaders = document.querySelectorAll('.sortable');
-    sortableHeaders.forEach(header => {
-        const field = header.dataset.field;
-        const icon = header.querySelector('.sort-icon');
-        
-        if (field === currentSortField) {
-            // Show active sort indicator
-            if (currentSortDirection === 'asc') {
-                icon.className = 'fas fa-sort-up sort-icon text-primary';
-            } else {
-                icon.className = 'fas fa-sort-down sort-icon text-primary';
-            }
-        } else {
-            // Show inactive sort indicator
-            icon.className = 'fas fa-sort sort-icon text-muted';
-        }
-    });
-}
 
 async function loadRequests() {
     if (isLoading) return;
     
     try {
         isLoading = true;
-        showLoading(true);
-        showLoadingState();
+        requestsTable.setLoading(true);
         
         // Get current user for default filtering
         let currentUser = null;
@@ -340,9 +411,8 @@ async function loadRequests() {
         // Apply remaining local filters (Talep No only)
         const filteredRequests = applyLocalFilters(requests);
         
-        // Update the table (no need for client-side sorting or pagination)
-        renderRequestsTable(filteredRequests);
-        renderPagination();
+        // Update the table component
+        requestsTable.updateData(filteredRequests, totalRequests, currentPage);
         updateRequestCounts();
         
     } catch (error) {
@@ -350,12 +420,11 @@ async function loadRequests() {
         showNotification('Talepler yüklenirken hata oluştu: ' + error.message, 'error');
         requests = [];
         totalRequests = 0;
-        renderRequestsTable([]);
-        renderPagination();
+        requestsTable.updateData([], 0, 1);
         updateRequestCounts();
     } finally {
         isLoading = false;
-        showLoading(false);
+        requestsTable.setLoading(false);
     }
 }
 
@@ -378,118 +447,6 @@ function applyLocalFilters(requests) {
 
 // Client-side sorting and pagination removed - now handled by backend
 
-function renderRequestsTable(requests) {
-    const tbody = document.getElementById('requests-table-body');
-    
-    if (!requests || requests.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="9" class="text-center">
-                    <div class="empty-state">
-                        <i class="fas fa-inbox"></i>
-                        <h5>Henüz talep bulunmuyor</h5>
-                        <p>Satın alma talebi bulunmamaktadır.</p>
-                    </div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tbody.innerHTML = requests.map(request => `
-        <tr data-request-id="${request.id}" class="clickable-row" onclick="viewRequestDetails(${request.id})" style="cursor: pointer;">
-            <td>
-                <span class="request-number">${request.request_number || 'N/A'}</span>
-            </td>
-            <td>
-                <div class="request-title">${request.title || 'Başlıksız'}</div>
-                <small>${request.description || 'Açıklama yok'}</small>
-            </td>
-            <td>
-                <div class="requestor-name">
-                    <i class="fas fa-user-circle me-2 text-muted"></i>
-                    ${request.requestor_username || 'Bilinmiyor'}
-                </div>
-            </td>
-            <td class="text-center">${getStatusBadge(request.status, request.status_label)}</td>
-            <td class="text-center">${getPriorityBadge(request.priority)}</td>
-            <td>
-                <div class="total-amount">${request.total_amount_eur ? formatCurrency(request.total_amount_eur, 'EUR') : '-'}</div>
-            </td>
-            <td>
-                <div class="created-date">${formatDate(request.created_at)}</div>
-            </td>
-            <td>
-                <div class="approval-info">
-                    ${getApprovalInfo(request)}
-                </div>
-            </td>
-            <td class="text-center">
-                <i class="fas fa-eye text-muted"></i>
-            </td>
-        </tr>
-    `).join('');
-    
-
-}
-
-function renderPagination() {
-    const pagination = document.getElementById('requests-pagination');
-    const itemsPerPage = 20;
-    const totalPages = Math.ceil(totalRequests / itemsPerPage);
-    
-    if (totalPages <= 1) {
-        pagination.innerHTML = '';
-        return;
-    }
-    
-    let html = '';
-    
-    // Previous button
-    html += `
-        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-            <a class="page-link" href="#" data-page="${currentPage - 1}">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-        </li>
-    `;
-    
-    // Page numbers
-    const startPage = Math.max(1, currentPage - 2);
-    const endPage = Math.min(totalPages, currentPage + 2);
-    
-    for (let i = startPage; i <= endPage; i++) {
-        html += `
-            <li class="page-item ${i === currentPage ? 'active' : ''}">
-                <a class="page-link" href="#" data-page="${i}">${i}</a>
-            </li>
-        `;
-    }
-    
-    // Next button
-    html += `
-        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-            <a class="page-link" href="#" data-page="${currentPage + 1}">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-        </li>
-    `;
-    
-    pagination.innerHTML = html;
-    
-    // Add event listeners
-    const paginationLinks = pagination.querySelectorAll('.page-link[data-page]');
-    paginationLinks.forEach(link => {
-        link.addEventListener('click', (e) => {
-            e.preventDefault();
-            const page = parseInt(link.dataset.page);
-            if (page >= 1 && page <= totalPages) {
-                currentPage = page;
-                loadRequests(); // This will now fetch the specific page from backend
-            }
-        });
-    });
-}
 
 function updateRequestCounts() {
     if (!requestsStats) return;
@@ -505,35 +462,8 @@ function updateRequestCounts() {
     requestsStats.updateValues(counts);
 }
 
-function handleSort(field) {
-    if (currentSortField === field) {
-        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-        currentSortField = field;
-        currentSortDirection = 'asc';
-    }
-    
-    currentOrdering = field;
-    currentPage = 1; // Reset to first page when sorting changes
-    loadRequests(); // This will now fetch sorted data from backend
-    
-    // Update sort indicators
-    updateSortIndicators();
-}
 
 function setupEventListeners() {
-    // Export requests
-    const exportBtn = document.getElementById('export-requests');
-    if (exportBtn) {
-        exportBtn.addEventListener('click', exportRequests);
-    }
-    
-    // Refresh requests
-    const refreshBtn = document.getElementById('refresh-requests');
-    if (refreshBtn) {
-        refreshBtn.addEventListener('click', loadRequests);
-    }
-    
     // Cancel request button
     const cancelBtn = document.getElementById('cancel-request-btn');
     if (cancelBtn) {
@@ -556,7 +486,6 @@ function setupEventListeners() {
 
 async function viewRequestDetails(requestId) {
     try {
-        showLoading(true);
         currentRequest = await getPurchaseRequest(requestId);
         
         await showRequestDetailsModal();
@@ -568,8 +497,6 @@ async function viewRequestDetails(requestId) {
     } catch (error) {
         console.error('Error loading request details:', error);
         showNotification('Talep detayları açılırken hata oluştu: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
     }
 }
 
@@ -587,8 +514,6 @@ async function handleCancelRequest() {
     }
 
     try {
-        showLoading(true);
-        
         // Call the cancel API
         await cancelPurchaseRequest(currentRequest.id);
         
@@ -596,7 +521,7 @@ async function handleCancelRequest() {
         showNotification('Talep başarıyla iptal edildi', 'success');
         
         // Close the modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('requestDetailsModal'));
+        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('requestDetailsModal'));
         if (modal) {
             modal.hide();
         }
@@ -608,8 +533,6 @@ async function handleCancelRequest() {
     } catch (error) {
         console.error('Error canceling request:', error);
         showNotification('Talep iptal edilirken hata oluştu: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
     }
 }
 
@@ -980,14 +903,14 @@ function getApprovalInfo(request) {
     const approverNames = remainingApprovers.map(approver => approver.full_name || approver.username).join(', ');
     
     return `
-        <div class="approval-status">
-            <div class="stage-name text-primary fw-semibold">${name}</div>
-            <div class="approval-count text-muted small">
+        <div style="line-height: 1.3; text-align: middle;">
+            <div style="font-size: 0.85rem; margin-bottom: 0.25rem; color: #0d6efd; font-weight: 600; text-align: middle;">${name}</div>
+            <div style="font-size: 0.75rem; margin-bottom: 0.25rem; color: #6c757d; text-align: middle;">
                 <i class="fas fa-users me-1"></i>
                 ${remainingApprovals} onay bekleniyor
             </div>
             ${approverNames ? `
-                <div class="approver-names text-muted small">
+                <div style="font-size: 0.7rem; line-height: 1.2; word-wrap: break-word; color: #6c757d; text-align: middle;">
                     <i class="fas fa-user-clock me-1"></i>
                     ${approverNames}
                 </div>
@@ -1042,41 +965,6 @@ function formatCurrencyDisplay(amount, currency) {
     return `${symbol}${numAmount.toFixed(2)}`;
 }
 
-function showLoading(show) {
-    // Simple loading state - just disable/enable buttons
-    const buttons = document.querySelectorAll('.btn');
-    buttons.forEach(btn => {
-        btn.disabled = show;
-    });
-}
-
-function showLoadingState() {
-    const tableBody = document.getElementById('requests-table-body');
-    if (tableBody) {
-        // Create loading rows that maintain table structure
-        const loadingRows = [];
-        for (let i = 0; i < 5; i++) { // Show 5 loading rows
-            loadingRows.push(`
-                <tr class="loading-row">
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 200px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 150px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 50px;"></div></td>
-                </tr>
-            `);
-        }
-        tableBody.innerHTML = loadingRows.join('');
-    }
-}
-
-function hideLoadingState() {
-    // Loading state is cleared when table is rendered
-}
 
 function showNotification(message, type = 'info') {
     const notification = document.createElement('div');

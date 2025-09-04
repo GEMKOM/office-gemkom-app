@@ -407,3 +407,8 @@
     color: #dc3545; /* Bootstrap danger */
 }
 
+.created-date {
+    color: #6c757d;
+    font-weight: 500;
+}
+
