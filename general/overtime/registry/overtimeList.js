@@ -168,68 +168,72 @@ function initializeTableComponent() {
                 field: 'id',
                 label: 'Talep No',
                 sortable: true,
-                type: 'number',
-                skeletonWidth: 80,
-                formatter: (value) => `<strong>#${value || '-'}</strong>`
+                formatter: (value) => `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value || '-'}</span>`
             },
             {
                 field: 'requester_username',
                 label: 'Talep Eden',
                 sortable: true,
-                formatter: (value) => value || '-'
+                formatter: (value) => `
+                    <div style="font-weight: 500; color: #495057;">
+                        <i class="fas fa-user-circle me-2 text-muted"></i>
+                        ${value || 'Bilinmiyor'}
+                    </div>
+                `
             },
             {
                 field: 'team_label',
                 label: 'Departman',
                 sortable: true,
-                formatter: (value) => `<strong>${value || '-'}</strong>`
+                formatter: (value) => `
+                    <div style="color: #495057; font-weight: 500;">${value || '-'}</div>
+                `
             },
             {
                 field: 'start_at',
                 label: 'Başlangıç',
                 sortable: true,
-                type: 'date',
-                skeletonWidth: 120,
-                formatter: (value) => formatDateTime(value)
+                type: 'date'
             },
             {
                 field: 'end_at',
                 label: 'Bitiş',
                 sortable: true,
-                type: 'date',
-                skeletonWidth: 120,
-                formatter: (value) => formatDateTime(value)
+                type: 'date'
             },
             {
                 field: 'duration_hours',
                 label: 'Süre',
                 sortable: true,
-                type: 'number',
-                skeletonWidth: 80,
-                formatter: (value) => `<span class="badge bg-info text-dark">${formatOvertimeDuration(parseFloat(value))}</span>`
+                formatter: (value) => `
+                    <div style="color: #495057; font-weight: 500;">${formatOvertimeDuration(value)}</div>
+                `
             },
             {
                 field: 'total_users',
                 label: 'Katılımcı',
                 sortable: true,
-                type: 'number',
-                skeletonWidth: 80,
-                formatter: (value) => `<span class="badge bg-secondary">${value || 0} kişi</span>`
+                formatter: (value) => `
+                    <div style="color: #495057; font-weight: 500;">${value || 0} kişi</div>
+                `
+            },
+            {
+                field: 'approval',
+                label: 'Onay Durumu',
+                sortable: false,
+                formatter: (value, row) => getApprovalInfo(row)
             },
             {
                 field: 'status',
                 label: 'Durum',
                 sortable: true,
-                skeletonWidth: 100,
                 formatter: (value, row) => renderStatusBadge(value, row.status_label)
             },
             {
                 field: 'created_at',
                 label: 'Oluşturulma',
                 sortable: true,
-                type: 'date',
-                skeletonWidth: 100,
-                formatter: (value) => formatDate(value)
+                type: 'date'
             }
         ],
         data: [],
@@ -824,10 +828,14 @@ async function submitOvertimeRequest() {
             return;
         }
         
+        // Convert local datetime to UTC ISO string
+        const startAtUTC = new Date(startAt).toISOString();
+        const endAtUTC = new Date(endAt).toISOString();
+        
         // Prepare request data
         const requestData = {
-            start_at: startAt,
-            end_at: endAt,
+            start_at: startAtUTC,
+            end_at: endAtUTC,
             reason: reason.trim(),
             entries: participants
         };
@@ -893,6 +901,9 @@ async function viewOvertimeDetails(requestId) {
         const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('overtimeDetailsModal'));
         const content = document.getElementById('overtime-details-content');
         
+        // Get rejection comments
+        const rejectionComments = getRejectionComments(request);
+        
         content.innerHTML = `
             <div class="row">
                 <div class="col-md-6">
@@ -917,6 +928,39 @@ async function viewOvertimeDetails(requestId) {
                     </table>
                 </div>
             </div>
+            ${rejectionComments.length > 0 ? `
+            <div class="row mt-4">
+                <div class="col-12">
+                    <h6 class="text-danger">
+                        <i class="fas fa-times-circle me-2"></i>
+                        Reddetme Gerekçeleri
+                    </h6>
+                    <div class="alert alert-danger">
+                        ${rejectionComments.map(comment => `
+                            <div class="mb-3 p-3 border border-danger rounded" style="background-color: rgba(220, 53, 69, 0.1);">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <strong class="text-danger">
+                                            <i class="fas fa-user-times me-1"></i>
+                                            ${comment.approver}
+                                        </strong>
+                                        <span class="badge bg-danger ms-2">${comment.stage}</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock me-1"></i>
+                                        ${comment.date ? formatDateTime(comment.date) : '-'}
+                                    </small>
+                                </div>
+                                <div class="text-dark" style="line-height: 1.4;">
+                                    <i class="fas fa-comment-alt me-1 text-muted"></i>
+                                    ${comment.comment}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+            ` : ''}
             <div class="row mt-4">
                 <div class="col-12">
                     <div id="participants-table-container" style="display: none;">
@@ -1216,6 +1260,73 @@ function showErrorMessage(message) {
     
     // Show the error message
     alert('Hata: ' + cleanMessage);
+}
+
+function getApprovalInfo(request) {
+    if (!request.approval || request.status !== 'submitted') {
+        return '<span class="text-muted">-</span>';
+    }
+
+    const { stage_instances } = request.approval;
+    
+    // Find the current stage (first incomplete stage)
+    const currentStage = stage_instances.find(stage => !stage.is_complete && !stage.is_rejected);
+    
+    if (!currentStage) {
+        return '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Tamamlandı</span>';
+    }
+
+    const { name, required_approvals, approved_count, approvers } = currentStage;
+    const remainingApprovals = required_approvals - approved_count;
+    
+    if (remainingApprovals <= 0) {
+        return `<span class="text-success"><i class="fas fa-check-circle me-1"></i>${name}</span>`;
+    }
+
+    // Get the names of remaining approvers
+    const remainingApprovers = approvers.slice(approved_count);
+    const approverNames = remainingApprovers.map(approver => approver.full_name || approver.username).join(', ');
+    
+    return `
+        <div style="line-height: 1.3; text-align: middle;">
+            <div style="font-size: 0.85rem; margin-bottom: 0.25rem; color: #0d6efd; font-weight: 600; text-align: middle;">${name}</div>
+            <div style="font-size: 0.75rem; margin-bottom: 0.25rem; color: #6c757d; text-align: middle;">
+                <i class="fas fa-users me-1"></i>
+                ${remainingApprovals} onay bekleniyor
+            </div>
+            ${approverNames ? `
+                <div style="font-size: 0.7rem; line-height: 1.2; word-wrap: break-word; color: #6c757d; text-align: middle;">
+                    <i class="fas fa-user-clock me-1"></i>
+                    ${approverNames}
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+function getRejectionComments(request) {
+    if (!request.approval || !request.approval.stage_instances) {
+        return [];
+    }
+
+    const rejectionComments = [];
+    
+    request.approval.stage_instances.forEach(stage => {
+        if (stage.decisions) {
+            stage.decisions.forEach(decision => {
+                if (decision.decision === "reject" && decision.comment) {
+                    rejectionComments.push({
+                        stage: stage.name,
+                        approver: decision.approver_detail?.full_name || decision.approver_detail?.username || 'Bilinmeyen',
+                        comment: decision.comment,
+                        date: decision.decided_at
+                    });
+                }
+            });
+        }
+    });
+    
+    return rejectionComments;
 }
 
 // Global functions for onclick handlers

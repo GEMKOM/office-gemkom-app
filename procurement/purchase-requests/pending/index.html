@@ -81,6 +81,57 @@
         </div>
     </div>
 
+    <!-- Rejection Comment Modal -->
+    <div class="modal fade" id="rejectRequestModal" tabindex="-1" aria-labelledby="rejectRequestModalLabel" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title" id="rejectRequestModalLabel">
+                        <i class="fas fa-times-circle me-2"></i>
+                        Satın Alma Talebini Reddet
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning d-flex align-items-center" role="alert">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <div>
+                            <strong>Dikkat!</strong> Bu işlem geri alınamaz. Satın alma talebini reddetmek için bir gerekçe belirtmeniz önerilir.
+                        </div>
+                    </div>
+                    
+                    <form id="rejectRequestForm">
+                        <div class="mb-3">
+                            <label for="rejectComment" class="form-label">
+                                <i class="fas fa-comment-alt me-1"></i>
+                                Reddetme Gerekçesi <span class="text-muted">(İsteğe bağlı)</span>
+                            </label>
+                            <textarea 
+                                class="form-control" 
+                                id="rejectComment" 
+                                name="comment" 
+                                rows="4" 
+                                placeholder="Satın alma talebini neden reddettiğinizi açıklayın..."
+                                maxlength="500"
+                            ></textarea>
+                            <div class="form-text">
+                                <span id="commentCounter">0</span>/500 karakter
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>İptal
+                    </button>
+                    <button type="button" class="btn btn-danger" id="confirmRejectRequest">
+                        <i class="fas fa-times-circle me-1"></i>Reddet
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module" src="pending.js"></script>

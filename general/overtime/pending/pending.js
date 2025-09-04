@@ -65,7 +65,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 formatter: (value) => `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value || '-'}</span>`
             },
             {
-                field: 'requester',
+                field: 'requester_username',
                 label: 'Talep Eden',
                 sortable: true,
                 formatter: (value) => `
@@ -76,7 +76,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 `
             },
             {
-                field: 'team',
+                field: 'team_label',
                 label: 'Departman',
                 sortable: true,
                 formatter: (value) => `
@@ -112,10 +112,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                 `
             },
             {
-                field: 'created_at',
-                label: 'Oluşturulma',
+                field: 'approval',
+                label: 'Onay Durumu',
+                sortable: false,
+                formatter: (value, row) => getApprovalInfo(row)
+            },
+            {
+                field: 'status',
+                label: 'Durum',
                 sortable: true,
-                type: 'date'
+                formatter: (value, row) => renderStatusBadge(value, row.status_label)
             }
         ],
         actions: [
@@ -185,7 +191,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 `
             },
             {
-                field: 'team',
+                field: 'team_label',
                 label: 'Departman',
                 sortable: true,
                 formatter: (value) => `
@@ -219,6 +225,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 formatter: (value) => `
                     <div style="color: #495057; font-weight: 500;">${value || 0} kişi</div>
                 `
+            },
+            {
+                field: 'approval',
+                label: 'Onay Durumu',
+                sortable: false,
+                formatter: (value, row) => getApprovalInfo(row)
+            },
+            {
+                field: 'status',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value, row) => renderStatusBadge(value, row.status_label)
             },
             {
                 field: 'created_at',
@@ -286,16 +304,10 @@ async function loadRequests() {
         // Use the pending approvals API endpoint
         const response = await getPendingOvertimeApprovalRequests();
         
-        console.log('Pending Overtime API Response:', response);
-        
+        requests = response.results || response || [];
+        totalRequests = response.count || response.results.length;
         // Handle response - this endpoint returns an array directly
-        if (Array.isArray(response)) {
-            requests = response;
-            totalRequests = response.length;
-        } else {
-            requests = [];
-            totalRequests = 0;
-        }
+
         
         console.log('Processed requests:', requests);
         
@@ -386,6 +398,96 @@ function setupEventListeners() {
             window.history.pushState({}, '', url);
         });
     }
+    
+    // Rejection modal event listeners
+    const rejectModal = document.getElementById('rejectOvertimeModal');
+    if (rejectModal) {
+        // Character counter for comment textarea
+        const commentTextarea = document.getElementById('rejectComment');
+        const commentCounter = document.getElementById('commentCounter');
+        
+        if (commentTextarea && commentCounter) {
+            commentTextarea.addEventListener('input', () => {
+                const length = commentTextarea.value.length;
+                commentCounter.textContent = length;
+                
+                // Change color based on length
+                if (length > 450) {
+                    commentCounter.style.color = '#dc3545';
+                } else if (length > 400) {
+                    commentCounter.style.color = '#fd7e14';
+                } else {
+                    commentCounter.style.color = '#6c757d';
+                }
+            });
+        }
+        
+        // Confirm reject button
+        const confirmRejectBtn = document.getElementById('confirmRejectOvertime');
+        if (confirmRejectBtn) {
+            confirmRejectBtn.addEventListener('click', async () => {
+                const comment = commentTextarea ? commentTextarea.value.trim() : '';
+                const requestId = window.currentRejectRequestId;
+                
+                if (!requestId) {
+                    showNotification('Hata: Talep ID bulunamadı', 'error');
+                    return;
+                }
+                
+                try {
+                    // Disable button during request
+                    confirmRejectBtn.disabled = true;
+                    confirmRejectBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reddediliyor...';
+                    
+                    await rejectOvertimeRequest(requestId, comment);
+                    showNotification('Mesai talebi başarıyla reddedildi', 'success');
+                    
+                    // Close both modals
+                    const rejectModalInstance = bootstrap.Modal.getOrCreateInstance(rejectModal);
+                    rejectModalInstance.hide();
+                    
+                    const detailsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('overtimeDetailsModal'));
+                    detailsModal.hide();
+                    
+                    // Clear the form
+                    if (commentTextarea) {
+                        commentTextarea.value = '';
+                        commentCounter.textContent = '0';
+                        commentCounter.style.color = '#6c757d';
+                    }
+                    
+                    // Reload data
+                    await loadRequests();
+                    await loadApprovedRequests();
+                    
+                } catch (error) {
+                    console.error('Error rejecting overtime request:', error);
+                    showNotification('Mesai talebi reddedilirken hata oluştu: ' + error.message, 'error');
+                } finally {
+                    // Re-enable button
+                    confirmRejectBtn.disabled = false;
+                    confirmRejectBtn.innerHTML = '<i class="fas fa-times-circle me-1"></i>Reddet';
+                }
+            });
+        }
+        
+        // Clear form when modal is hidden
+        rejectModal.addEventListener('hidden.bs.modal', () => {
+            const commentTextarea = document.getElementById('rejectComment');
+            const commentCounter = document.getElementById('commentCounter');
+            
+            if (commentTextarea) {
+                commentTextarea.value = '';
+            }
+            if (commentCounter) {
+                commentCounter.textContent = '0';
+                commentCounter.style.color = '#6c757d';
+            }
+            
+            // Clear stored request ID
+            window.currentRejectRequestId = null;
+        });
+    }
 }
 
 async function viewOvertimeDetails(requestId) {
@@ -416,6 +518,9 @@ async function showOvertimeDetailsModal() {
         rejectBtn.style.display = shouldShowButtons ? 'inline-block' : 'none';
     }
     
+    // Get rejection comments
+    const rejectionComments = getRejectionComments(currentRequest);
+    
     container.innerHTML = `
         <div class="row">
             <div class="col-md-6">
@@ -440,6 +545,39 @@ async function showOvertimeDetailsModal() {
                 </table>
             </div>
         </div>
+        ${rejectionComments.length > 0 ? `
+        <div class="row mt-4">
+            <div class="col-12">
+                <h6 class="text-danger">
+                    <i class="fas fa-times-circle me-2"></i>
+                    Reddetme Gerekçeleri
+                </h6>
+                <div class="alert alert-danger">
+                    ${rejectionComments.map(comment => `
+                        <div class="mb-3 p-3 border border-danger rounded" style="background-color: rgba(220, 53, 69, 0.1);">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div>
+                                    <strong class="text-danger">
+                                        <i class="fas fa-user-times me-1"></i>
+                                        ${comment.approver}
+                                    </strong>
+                                    <span class="badge bg-danger ms-2">${comment.stage}</span>
+                                </div>
+                                <small class="text-muted">
+                                    <i class="fas fa-clock me-1"></i>
+                                    ${comment.date ? formatDateTime(comment.date) : '-'}
+                                </small>
+                            </div>
+                            <div class="text-dark" style="line-height: 1.4;">
+                                <i class="fas fa-comment-alt me-1 text-muted"></i>
+                                ${comment.comment}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        </div>
+        ` : ''}
         <div class="row mt-4">
             <div class="col-12">
                 <div id="participants-table-container" style="display: none;">
@@ -541,26 +679,12 @@ async function approveOvertime(requestId) {
 }
 
 async function rejectOvertime(requestId) {
-    if (!confirm('Bu mesai talebini reddetmek istediğinizden emin misiniz?')) {
-        return;
-    }
-
-    try {
-        await rejectOvertimeRequest(requestId);
-        showNotification('Mesai talebi başarıyla reddedildi', 'success');
-        
-        // Close the modal
-        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('overtimeDetailsModal'));
-        if (modal) {
-            modal.hide();
-        }
-        
-        await loadRequests();
-        await loadApprovedRequests();
-    } catch (error) {
-        console.error('Error rejecting overtime request:', error);
-        showNotification('Mesai talebi reddedilirken hata oluştu: ' + error.message, 'error');
-    }
+    // Store the request ID for the modal
+    window.currentRejectRequestId = requestId;
+    
+    // Show the rejection modal
+    const rejectModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectOvertimeModal'));
+    rejectModal.show();
 }
 
 // Utility functions
@@ -595,6 +719,81 @@ function showNotification(message, type = 'info') {
             notification.remove();
         }
     }, 5000);
+}
+
+function renderStatusBadge(status, statusLabel) {
+    return `
+        <span class="status-badge status-${status}">
+            ${statusLabel}
+        </span>
+    `;
+}
+
+function getApprovalInfo(request) {
+    if (!request.approval || request.status !== 'submitted') {
+        return '<span style="color: #6c757d;">-</span>';
+    }
+
+    const { stage_instances } = request.approval;
+    
+    // Find the current stage (first incomplete stage)
+    const currentStage = stage_instances.find(stage => !stage.is_complete && !stage.is_rejected);
+    
+    if (!currentStage) {
+        return '<span style="color: #198754;"><i class="fas fa-check-circle me-1"></i>Tamamlandı</span>';
+    }
+
+    const { name, required_approvals, approved_count, approvers } = currentStage;
+    const remainingApprovals = required_approvals - approved_count;
+    
+    if (remainingApprovals <= 0) {
+        return `<span style="color: #198754;"><i class="fas fa-check-circle me-1"></i>${name}</span>`;
+    }
+
+    // Get the names of remaining approvers
+    const remainingApprovers = approvers.slice(approved_count);
+    const approverNames = remainingApprovers.map(approver => approver.full_name || approver.username).join(', ');
+    
+    return `
+        <div style="line-height: 1.3; text-align: middle;">
+            <div style="font-size: 0.85rem; margin-bottom: 0.25rem; color: #0d6efd; font-weight: 600; text-align: middle;">${name}</div>
+            <div style="font-size: 0.75rem; margin-bottom: 0.25rem; color: #6c757d; text-align: middle;">
+                <i class="fas fa-users me-1"></i>
+                ${remainingApprovals} onay bekleniyor
+            </div>
+            ${approverNames ? `
+                <div style="font-size: 0.7rem; line-height: 1.2; word-wrap: break-word; color: #6c757d; text-align: middle;">
+                    <i class="fas fa-user-clock me-1"></i>
+                    ${approverNames}
+                </div>
+            ` : ''}
+        </div>
+    `;
+}
+
+function getRejectionComments(request) {
+    if (!request.approval || !request.approval.stage_instances) {
+        return [];
+    }
+
+    const rejectionComments = [];
+    
+    request.approval.stage_instances.forEach(stage => {
+        if (stage.decisions) {
+            stage.decisions.forEach(decision => {
+                if (decision.decision === "reject" && decision.comment) {
+                    rejectionComments.push({
+                        stage: stage.name,
+                        approver: decision.approver_detail?.full_name || decision.approver_detail?.username || 'Bilinmeyen',
+                        comment: decision.comment,
+                        date: decision.decided_at
+                    });
+                }
+            });
+        }
+    });
+    
+    return rejectionComments;
 }
 
 // Make functions globally available for onclick handlers

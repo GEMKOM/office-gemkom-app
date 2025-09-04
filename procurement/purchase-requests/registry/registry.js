@@ -705,6 +705,47 @@ async function showRequestDetailsModal() {
         `;
     }
     
+    // Get rejection comments
+    const rejectionComments = getRejectionComments(currentRequest);
+    
+    // Add rejection comments section if there are any
+    if (rejectionComments.length > 0) {
+        const rejectionSection = `
+            <div class="row mt-4">
+                <div class="col-12">
+                    <h6 class="text-danger">
+                        <i class="fas fa-times-circle me-2"></i>
+                        Reddetme Gerekçeleri
+                    </h6>
+                    <div class="alert alert-danger">
+                        ${rejectionComments.map(comment => `
+                            <div class="mb-3 p-3 border border-danger rounded" style="background-color: rgba(220, 53, 69, 0.1);">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <strong class="text-danger">
+                                            <i class="fas fa-user-times me-1"></i>
+                                            ${comment.approver}
+                                        </strong>
+                                        <span class="badge bg-danger ms-2">${comment.stage}</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock me-1"></i>
+                                        ${comment.date ? formatDateTime(comment.date) : '-'}
+                                    </small>
+                                </div>
+                                <div class="text-dark" style="line-height: 1.4;">
+                                    <i class="fas fa-comment-alt me-1 text-muted"></i>
+                                    ${comment.comment}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+        cardsHTML += rejectionSection;
+    }
+    
     container.innerHTML = cardsHTML;
 
     // Show comparison table if there are offers
@@ -917,6 +958,31 @@ function getApprovalInfo(request) {
             ` : ''}
         </div>
     `;
+}
+
+function getRejectionComments(request) {
+    if (!request.approval || !request.approval.stage_instances) {
+        return [];
+    }
+
+    const rejectionComments = [];
+    
+    request.approval.stage_instances.forEach(stage => {
+        if (stage.decisions) {
+            stage.decisions.forEach(decision => {
+                if (decision.decision === "reject" && decision.comment) {
+                    rejectionComments.push({
+                        stage: stage.name,
+                        approver: decision.approver_detail?.full_name || decision.approver_detail?.username || 'Bilinmeyen',
+                        comment: decision.comment,
+                        date: decision.decided_at
+                    });
+                }
+            });
+        }
+    });
+    
+    return rejectionComments;
 }
 
 function formatDate(dateString) {

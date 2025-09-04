@@ -462,6 +462,95 @@ function setupEventListeners() {
             window.history.pushState({}, '', url);
         });
     }
+    
+    // Rejection modal event listeners
+    const rejectModal = document.getElementById('rejectRequestModal');
+    if (rejectModal) {
+        // Character counter for comment textarea
+        const commentTextarea = document.getElementById('rejectComment');
+        const commentCounter = document.getElementById('commentCounter');
+        
+        if (commentTextarea && commentCounter) {
+            commentTextarea.addEventListener('input', () => {
+                const length = commentTextarea.value.length;
+                commentCounter.textContent = length;
+                
+                // Change color based on length
+                if (length > 450) {
+                    commentCounter.style.color = '#dc3545';
+                } else if (length > 400) {
+                    commentCounter.style.color = '#fd7e14';
+                } else {
+                    commentCounter.style.color = '#6c757d';
+                }
+            });
+        }
+        
+        // Confirm reject button
+        const confirmRejectBtn = document.getElementById('confirmRejectRequest');
+        if (confirmRejectBtn) {
+            confirmRejectBtn.addEventListener('click', async () => {
+                const comment = commentTextarea ? commentTextarea.value.trim() : '';
+                const requestId = window.currentRejectRequestId;
+                
+                if (!requestId) {
+                    showNotification('Hata: Talep ID bulunamadı', 'error');
+                    return;
+                }
+                
+                try {
+                    // Disable button during request
+                    confirmRejectBtn.disabled = true;
+                    confirmRejectBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reddediliyor...';
+                    
+                    await rejectPurchaseRequest(requestId, comment);
+                    showNotification('Talep başarıyla reddedildi', 'success');
+                    
+                    // Close both modals
+                    const rejectModalInstance = bootstrap.Modal.getOrCreateInstance(rejectModal);
+                    rejectModalInstance.hide();
+                    
+                    const detailsModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('requestDetailsModal'));
+                    detailsModal.hide();
+                    
+                    // Clear the form
+                    if (commentTextarea) {
+                        commentTextarea.value = '';
+                        commentCounter.textContent = '0';
+                        commentCounter.style.color = '#6c757d';
+                    }
+                    
+                    // Reload data
+                    await loadRequests();
+                    
+                } catch (error) {
+                    console.error('Error rejecting request:', error);
+                    showNotification('Talep reddedilirken hata oluştu: ' + error.message, 'error');
+                } finally {
+                    // Re-enable button
+                    confirmRejectBtn.disabled = false;
+                    confirmRejectBtn.innerHTML = '<i class="fas fa-times-circle me-1"></i>Reddet';
+                }
+            });
+        }
+        
+        // Clear form when modal is hidden
+        rejectModal.addEventListener('hidden.bs.modal', () => {
+            const commentTextarea = document.getElementById('rejectComment');
+            const commentCounter = document.getElementById('commentCounter');
+            
+            if (commentTextarea) {
+                commentTextarea.value = '';
+            }
+            if (commentCounter) {
+                commentCounter.textContent = '0';
+                commentCounter.style.color = '#6c757d';
+            }
+            
+            // Clear stored request ID
+            window.currentRejectRequestId = null;
+        });
+    }
 }
 
 
@@ -683,6 +772,47 @@ async function showRequestDetailsModal() {
         `;
     }
     
+    // Get rejection comments
+    const rejectionComments = getRejectionComments(currentRequest);
+    
+    // Add rejection comments section if there are any
+    if (rejectionComments.length > 0) {
+        const rejectionSection = `
+            <div class="row mt-4">
+                <div class="col-12">
+                    <h6 class="text-danger">
+                        <i class="fas fa-times-circle me-2"></i>
+                        Reddetme Gerekçeleri
+                    </h6>
+                    <div class="alert alert-danger">
+                        ${rejectionComments.map(comment => `
+                            <div class="mb-3 p-3 border border-danger rounded" style="background-color: rgba(220, 53, 69, 0.1);">
+                                <div class="d-flex justify-content-between align-items-start mb-2">
+                                    <div>
+                                        <strong class="text-danger">
+                                            <i class="fas fa-user-times me-1"></i>
+                                            ${comment.approver}
+                                        </strong>
+                                        <span class="badge bg-danger ms-2">${comment.stage}</span>
+                                    </div>
+                                    <small class="text-muted">
+                                        <i class="fas fa-clock me-1"></i>
+                                        ${comment.date ? formatDateTime(comment.date) : '-'}
+                                    </small>
+                                </div>
+                                <div class="text-dark" style="line-height: 1.4;">
+                                    <i class="fas fa-comment-alt me-1 text-muted"></i>
+                                    ${comment.comment}
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            </div>
+        `;
+        cardsHTML += rejectionSection;
+    }
+    
     container.innerHTML = cardsHTML;
 
     // Show comparison table if there are offers
@@ -822,25 +952,12 @@ async function approveRequest(requestId) {
 }
 
 async function rejectRequest(requestId) {
-    if (!confirm('Bu talebi reddetmek istediğinizden emin misiniz?')) {
-        return;
-    }
-
-    try {
-        await rejectPurchaseRequest(requestId);
-        showNotification('Talep başarıyla reddedildi', 'success');
-        
-        // Close the modal
-        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('requestDetailsModal'));
-        if (modal) {
-            modal.hide();
-        }
-        
-        await loadRequests();
-    } catch (error) {
-        console.error('Error rejecting request:', error);
-        showNotification('Talep reddedilirken hata oluştu: ' + error.message, 'error');
-    }
+    // Store the request ID for the modal
+    window.currentRejectRequestId = requestId;
+    
+    // Show the rejection modal
+    const rejectModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectRequestModal'));
+    rejectModal.show();
 }
 
 
@@ -913,6 +1030,31 @@ function getApprovalInfo(request) {
             ` : ''}
         </div>
     `;
+}
+
+function getRejectionComments(request) {
+    if (!request.approval || !request.approval.stage_instances) {
+        return [];
+    }
+
+    const rejectionComments = [];
+    
+    request.approval.stage_instances.forEach(stage => {
+        if (stage.decisions) {
+            stage.decisions.forEach(decision => {
+                if (decision.decision === "reject" && decision.comment) {
+                    rejectionComments.push({
+                        stage: stage.name,
+                        approver: decision.approver_detail?.full_name || decision.approver_detail?.username || 'Bilinmeyen',
+                        comment: decision.comment,
+                        date: decision.decided_at
+                    });
+                }
+            });
+        }
+    });
+    
+    return rejectionComments;
 }
 
 function formatDate(dateString) {

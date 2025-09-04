@@ -293,13 +293,16 @@ export async function approvePurchaseRequest(requestId) {
     }
 }
 
-export async function rejectPurchaseRequest(requestId) {
+export async function rejectPurchaseRequest(requestId, comment = '') {
     try {
         const response = await authedFetch(`${backendBase}/procurement/purchase-requests/${requestId}/reject/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            }
+            },
+            body: JSON.stringify({
+                comment: comment
+            })
         });
 
         if (!response.ok) {

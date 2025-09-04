@@ -286,10 +286,10 @@ export async function approveOvertimeRequest(requestId) {
 /**
  * Reject an overtime request
  * @param {number} requestId - Overtime request ID
- * @param {string} reason - Rejection reason (optional)
+ * @param {string} comment - Rejection comment (optional)
  * @returns {Promise<Object>} Response data
  */
-export async function rejectOvertimeRequest(requestId, reason = '') {
+export async function rejectOvertimeRequest(requestId, comment = '') {
     const url = `${backendBase}/overtime/requests/${requestId}/reject/`;
     const resp = await authedFetch(url, {
         method: 'POST',
@@ -297,7 +297,7 @@ export async function rejectOvertimeRequest(requestId, reason = '') {
             'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-            reason: reason
+            comment: comment
         })
     });
     
@@ -348,7 +348,7 @@ export async function getOvertimeApprovedByMeRequests(filters = {}) {
             }
         });
         
-        const url = `${backendBase}/overtime/requests/approved_by_me/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const url = `${backendBase}/overtime/requests/decision_by_me/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
         const response = await authedFetch(url);
         
         if (!response.ok) {
