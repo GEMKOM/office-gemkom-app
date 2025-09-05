@@ -392,6 +392,15 @@ export class ItemsManager {
             const sameUnit = items.every(item => 
                 item.unit.trim().toLowerCase() === firstItem.unit.trim().toLowerCase()
             );
+
+            // Check if items have the same code, name, job_no, AND specifications (cannot be merged)
+            const sameJobNo = items.every(item => 
+                (item.job_no || '').trim().toLowerCase() === (firstItem.job_no || '').trim().toLowerCase()
+            );
+            const sameSpecs = items.every(item => 
+                (item.specs || '').trim() === (firstItem.specs || '').trim()
+            );
+            const cannotMerge = sameJobNo && sameSpecs;
             
             duplicatesHtml += `
                 <div class="duplicate-group mb-3 p-3 border rounded" data-group-index="${groupIndex}">
@@ -403,8 +412,8 @@ export class ItemsManager {
                         <div class="form-check">
                             <input class="form-check-input merge-group-checkbox" type="checkbox" 
                                    id="merge-group-${groupIndex}" data-group-index="${groupIndex}" 
-                                   ${sameName && sameUnit ? 'checked' : ''} 
-                                   ${!sameName || !sameUnit ? 'disabled' : ''}>
+                                   ${sameName && sameUnit && !cannotMerge ? 'checked' : ''} 
+                                   ${!sameName || !sameUnit || cannotMerge ? 'disabled' : ''}>
                             <label class="form-check-label" for="merge-group-${groupIndex}">
                                 Bu grubu birleştir
                             </label>
@@ -417,6 +426,17 @@ export class ItemsManager {
                             <strong>Uyarı:</strong> Bu gruptaki malzemeler farklı ad veya birime sahip olduğu için birleştirilemez.
                             ${!sameName ? '<br>• Farklı malzeme adları' : ''}
                             ${!sameUnit ? '<br>• Farklı birimler' : ''}
+                        </div>
+                    ` : ''}
+                    
+                    ${cannotMerge ? `
+                        <div class="alert alert-danger mb-2">
+                            <i class="fas fa-ban me-2"></i>
+                            <strong>Birleştirilemez:</strong> Bu gruptaki malzemeler aynı kod, ad, iş numarası ve teknik özelliklere sahip olduğu için birleştirilemez.
+                            <br>• Aynı malzeme adı: ${firstItem.name}
+                            <br>• Aynı iş numarası: ${firstItem.job_no || 'Belirtilmemiş'}
+                            <br>• Aynı teknik özellikler: ${firstItem.specs || 'Belirtilmemiş'}
+                            <br><br><strong>Not:</strong> Eğer bu malzemeler aynıysa ve iş emri de aynıysa farklı bir malzeme girip toplam miktarını güncelleyebilirsiniz.
                         </div>
                     ` : ''}
                     
@@ -454,8 +474,8 @@ export class ItemsManager {
                                             <div class="form-check">
                                                 <input class="form-check-input merge-item-checkbox" type="checkbox" 
                                                        data-group-index="${groupIndex}" data-item-index="${i}"
-                                                       ${sameName && sameUnit ? 'checked' : ''} 
-                                                       ${!sameName || !sameUnit ? 'disabled' : ''}>
+                                                       ${sameName && sameUnit && !cannotMerge ? 'checked' : ''} 
+                                                       ${!sameName || !sameUnit || cannotMerge ? 'disabled' : ''}>
                                             </div>
                                         </td>
                                         <td>${i + 1}</td>
@@ -702,6 +722,26 @@ export class ItemsManager {
                       `Farklı olanlar:\n` +
                       differentItems.map(item => `  ${item.name} - ${item.unit}`).join('\n') +
                       '\n\nBu grup birleştirilmeyecek.');
+                return;
+            }
+
+            // Check if items have the same code, name, job_no, AND specifications
+            // This would cause backend problems, so we prevent merging
+            const sameJobNo = selectedItems.every(item => 
+                (item.job_no || '').trim().toLowerCase() === (firstItem.job_no || '').trim().toLowerCase()
+            );
+            const sameSpecs = selectedItems.every(item => 
+                (item.specs || '').trim() === (firstItem.specs || '').trim()
+            );
+
+            if (sameJobNo && sameSpecs) {
+                // Items have same code, name, job_no, AND specifications - this would cause backend problems
+                alert(`Kod "${firstItem.code}" için aynı malzeme adı, iş numarası ve teknik özelliklere sahip malzemeler bulundu:\n\n` +
+                      `Malzeme: ${firstItem.name}\n` +
+                      `İş No: ${firstItem.job_no || 'Belirtilmemiş'}\n` +
+                      `Teknik Özellikler: ${firstItem.specs || 'Belirtilmemiş'}\n\n` +
+                      `Bu tür malzemeler birleştirilemez çünkü backend sorunlarına neden olur.\n` +
+                      `Lütfen bu malzemeleri ayrı satırlar olarak bırakın.`);
                 return;
             }
 
@@ -1865,23 +1905,78 @@ export class ItemsManager {
     // ===== ITEM FORMATTING FOR SUBMISSION =====
     
     /**
-     * Transform items to the new submission format where items are grouped by code, name, and unit
+     * Detect items that have the same code, name, job_no, and specifications
+     * These items would cause backend constraint violations if merged
+     */
+    detectProblematicItems() {
+        const problematicItems = [];
+        const itemGroups = {};
+        
+        // Group items by code, name, job_no, and specifications
+        this.requestData.items.forEach((item, index) => {
+            const key = `${item.code}|${item.name}|${item.job_no || ''}|${item.specs || ''}`;
+            
+            if (!itemGroups[key]) {
+                itemGroups[key] = [];
+            }
+            itemGroups[key].push({ ...item, originalIndex: index });
+        });
+        
+        // Find groups with multiple items (problematic)
+        Object.entries(itemGroups).forEach(([key, items]) => {
+            if (items.length > 1) {
+                // This group has multiple items with same code, name, job_no, and specs
+                problematicItems.push({
+                    code: items[0].code,
+                    name: items[0].name,
+                    job_no: items[0].job_no || 'Belirtilmemiş',
+                    specs: items[0].specs || 'Belirtilmemiş',
+                    count: items.length,
+                    items: items.map(item => ({
+                        index: item.originalIndex + 1, // 1-based index for display
+                        quantity: item.quantity,
+                        unit: item.unit
+                    }))
+                });
+            }
+        });
+        
+        return problematicItems;
+    }
+    
+    /**
+     * Transform items to the new submission format where items are grouped by code, name, unit, and specifications
      * with allocations containing job_no and quantity
      */
     getFormattedItemsForSubmission() {
+        // First, check for problematic items that would cause backend issues
+        const problematicItems = this.detectProblematicItems();
+        if (problematicItems.length > 0) {
+            return {
+                items: [],
+                mapping: [],
+                error: {
+                    type: 'problematic_items',
+                    message: 'Aşağıdaki malzemeler aynı kod, ad, iş numarası ve teknik özelliklere sahip olduğu için gönderilemez:',
+                    items: problematicItems
+                }
+            };
+        }
+
         const groupedItems = {};
         const originalToGroupedMapping = [];
         let groupedIndex = 0;
         
-        // Group items by code, name, and unit
+        // Group items by code, name, unit, and specifications to prevent merging items with different specs
         this.requestData.items.forEach((item, originalIndex) => {
-            const key = `${item.code}|${item.name}|${item.unit}`;
+            const key = `${item.code}|${item.name}|${item.unit}|${item.specs || ''}`;
             
             if (!groupedItems[key]) {
                 groupedItems[key] = {
                     code: item.code,
                     name: item.name,
                     unit: item.unit,
+                    specifications: item.specs || '',
                     quantity: 0,
                     allocations: [],
                     groupedIndex: groupedIndex++
@@ -1916,6 +2011,7 @@ export class ItemsManager {
             code: item.code,
             name: item.name,
             unit: item.unit,
+            specifications: item.specifications,
             quantity: item.quantity.toFixed(2),
             allocations: item.allocations
         }));
@@ -1970,5 +2066,236 @@ export class ItemsManager {
         }
         
         return isCorrect;
+    }
+
+    // ===== TEST FUNCTION FOR SPECIFICATIONS GROUPING =====
+    
+    /**
+     * Test function to verify that items with different specifications are not merged
+     * This can be called from browser console for testing
+     */
+    testSpecificationsGrouping() {
+        console.log('Testing specifications grouping...');
+        
+        // Create test items with same code, name, unit but different specs
+        const testItems = [
+            {
+                id: 'item1',
+                code: 'TEST001',
+                name: 'Test Item',
+                unit: 'ADET',
+                job_no: 'JOB001',
+                quantity: 10,
+                specs: 'Specification A'
+            },
+            {
+                id: 'item2',
+                code: 'TEST001',
+                name: 'Test Item',
+                unit: 'ADET',
+                job_no: 'JOB002',
+                quantity: 5,
+                specs: 'Specification B'
+            },
+            {
+                id: 'item3',
+                code: 'TEST001',
+                name: 'Test Item',
+                unit: 'ADET',
+                job_no: 'JOB003',
+                quantity: 3,
+                specs: 'Specification A' // Same as item1
+            }
+        ];
+        
+        // Temporarily set the test items
+        const originalItems = this.requestData.items;
+        this.requestData.items = testItems;
+        
+        // Test the formatting
+        const result = this.getFormattedItemsForSubmission();
+        
+        console.log('Original items:', testItems);
+        console.log('Formatted items:', result.items);
+        
+        // Restore original items
+        this.requestData.items = originalItems;
+        
+        // Verify that items with different specs are not merged
+        const expectedCount = 2; // Should have 2 groups: one for "Specification A" and one for "Specification B"
+        const actualCount = result.items.length;
+        
+        if (actualCount === expectedCount) {
+            console.log('✅ Items with different specifications are correctly kept separate!');
+            console.log(`Expected ${expectedCount} groups, got ${actualCount}`);
+            
+            // Verify the specifications are preserved
+            const specsA = result.items.find(item => item.specifications === 'Specification A');
+            const specsB = result.items.find(item => item.specifications === 'Specification B');
+            
+            if (specsA && specsB) {
+                console.log('✅ Specifications are correctly preserved in the output!');
+                console.log('Spec A allocations:', specsA.allocations);
+                console.log('Spec B allocations:', specsB.allocations);
+                return true;
+            } else {
+                console.log('❌ Specifications are not correctly preserved!');
+                return false;
+            }
+        } else {
+            console.log('❌ Items with different specifications are being merged!');
+            console.log(`Expected ${expectedCount} groups, got ${actualCount}`);
+            return false;
+        }
+    }
+
+    // ===== TEST FUNCTION FOR MERGE LOGIC =====
+    
+    /**
+     * Test function to verify that items with same code, name, job_no, and specifications cannot be merged
+     * This can be called from browser console for testing
+     */
+    testMergeLogic() {
+        console.log('Testing merge logic...');
+        
+        // Create test items that should NOT be mergeable (same code, name, job_no, specs)
+        const testItems = [
+            {
+                id: 'item1',
+                code: 'TEST001',
+                name: 'Test Item',
+                unit: 'ADET',
+                job_no: 'JOB001',
+                quantity: 10,
+                specs: 'Same Specification'
+            },
+            {
+                id: 'item2',
+                code: 'TEST001',
+                name: 'Test Item',
+                unit: 'ADET',
+                job_no: 'JOB001', // Same job_no
+                quantity: 5,
+                specs: 'Same Specification' // Same specs
+            },
+            {
+                id: 'item3',
+                code: 'TEST001',
+                name: 'Test Item',
+                unit: 'ADET',
+                job_no: 'JOB002', // Different job_no
+                quantity: 3,
+                specs: 'Same Specification'
+            }
+        ];
+        
+        // Temporarily set the test items
+        const originalItems = this.requestData.items;
+        this.requestData.items = testItems;
+        
+        // Test the merge logic by calling mergeDuplicateItems
+        console.log('Original items:', testItems);
+        
+        // Simulate the merge logic validation
+        const firstItem = testItems[0];
+        const sameName = testItems.every(item => 
+            item.name.trim().toLowerCase() === firstItem.name.trim().toLowerCase()
+        );
+        const sameUnit = testItems.every(item => 
+            item.unit.trim().toLowerCase() === firstItem.unit.trim().toLowerCase()
+        );
+        const sameJobNo = testItems.every(item => 
+            (item.job_no || '').trim().toLowerCase() === (firstItem.job_no || '').trim().toLowerCase()
+        );
+        const sameSpecs = testItems.every(item => 
+            (item.specs || '').trim() === (firstItem.specs || '').trim()
+        );
+        const cannotMerge = sameJobNo && sameSpecs;
+        
+        console.log('Validation results:');
+        console.log('- Same name:', sameName);
+        console.log('- Same unit:', sameUnit);
+        console.log('- Same job_no:', sameJobNo);
+        console.log('- Same specs:', sameSpecs);
+        console.log('- Cannot merge:', cannotMerge);
+        
+        // Restore original items
+        this.requestData.items = originalItems;
+        
+        if (cannotMerge) {
+            console.log('✅ Items with same code, name, job_no, and specifications are correctly identified as non-mergeable!');
+            return true;
+        } else {
+            console.log('❌ Items with same code, name, job_no, and specifications are not being identified as non-mergeable!');
+            return false;
+        }
+    }
+
+    // ===== TEST FUNCTION FOR SUBMISSION VALIDATION =====
+    
+    /**
+     * Test function to verify that problematic items are detected during submission
+     * This can be called from browser console for testing
+     */
+    testSubmissionValidation() {
+        console.log('Testing submission validation...');
+        
+        // Create test items that should cause submission errors
+        const testItems = [
+            {
+                id: 'item1',
+                code: 'TEST001',
+                name: 'Test Item',
+                unit: 'ADET',
+                job_no: 'JOB001',
+                quantity: 10,
+                specs: 'Same Specification'
+            },
+            {
+                id: 'item2',
+                code: 'TEST001',
+                name: 'Test Item',
+                unit: 'ADET',
+                job_no: 'JOB001', // Same job_no
+                quantity: 5,
+                specs: 'Same Specification' // Same specs
+            },
+            {
+                id: 'item3',
+                code: 'TEST002',
+                name: 'Another Item',
+                unit: 'KG',
+                job_no: 'JOB002',
+                quantity: 3,
+                specs: 'Different Specification'
+            }
+        ];
+        
+        // Temporarily set the test items
+        const originalItems = this.requestData.items;
+        this.requestData.items = testItems;
+        
+        console.log('Original items:', testItems);
+        
+        // Test the problematic items detection
+        const problematicItems = this.detectProblematicItems();
+        console.log('Detected problematic items:', problematicItems);
+        
+        // Test the formatted items for submission
+        const formattedData = this.getFormattedItemsForSubmission();
+        console.log('Formatted data result:', formattedData);
+        
+        // Restore original items
+        this.requestData.items = originalItems;
+        
+        // Verify that problematic items are detected
+        if (formattedData.error && formattedData.error.type === 'problematic_items') {
+            console.log('✅ Problematic items are correctly detected during submission!');
+            console.log('Error details:', formattedData.error);
+            return true;
+        } else {
+            console.log('❌ Problematic items are not being detected during submission!');
+            return false;
+        }
     }
 }

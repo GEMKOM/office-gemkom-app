@@ -258,6 +258,27 @@ async function saveDraftAsJSON() {
         // Get formatted items and mapping
         const formattedData = itemsManager.getFormattedItemsForSubmission();
         
+        // Check for problematic items that would cause backend issues
+        if (formattedData.error) {
+            console.log('Problematic items detected in draft:', formattedData.error);
+            
+            // Show detailed error message to user
+            let errorMessage = formattedData.error.message + '\n\n';
+            formattedData.error.items.forEach((problematicItem, index) => {
+                errorMessage += `${index + 1}. Kod: ${problematicItem.code}\n`;
+                errorMessage += `   Ad: ${problematicItem.name}\n`;
+                errorMessage += `   İş No: ${problematicItem.job_no}\n`;
+                errorMessage += `   Teknik Özellikler: ${problematicItem.specs}\n`;
+                errorMessage += `   Tekrarlanan satırlar: ${problematicItem.items.map(item => `Satır ${item.index} (${item.quantity} ${item.unit})`).join(', ')}\n\n`;
+            });
+            
+            errorMessage += 'Bu malzemeler aynı kod, ad, iş numarası ve teknik özelliklere sahip olduğu için backend sorunlarına neden olur.\n';
+            errorMessage += 'Lütfen bu malzemeleri düzenleyin veya silin.';
+            
+            showNotification(errorMessage, 'error');
+            return;
+        }
+        
         // Transform offers and recommendations using the mapping
         const transformedOffers = {};
         const transformedRecommendations = {};
@@ -934,6 +955,33 @@ async function submitRequest() {
         
         // Get formatted items and mapping
         const formattedData = itemsManager.getFormattedItemsForSubmission();
+        
+        // Check for problematic items that would cause backend issues
+        if (formattedData.error) {
+            console.log('Problematic items detected:', formattedData.error);
+            
+            // Show detailed error message to user
+            let errorMessage = formattedData.error.message + '\n\n';
+            formattedData.error.items.forEach((problematicItem, index) => {
+                errorMessage += `${index + 1}. Kod: ${problematicItem.code}\n`;
+                errorMessage += `   Ad: ${problematicItem.name}\n`;
+                errorMessage += `   İş No: ${problematicItem.job_no}\n`;
+                errorMessage += `   Teknik Özellikler: ${problematicItem.specs}\n`;
+                errorMessage += `   Tekrarlanan satırlar: ${problematicItem.items.map(item => `Satır ${item.index} (${item.quantity} ${item.unit})`).join(', ')}\n\n`;
+            });
+            
+            errorMessage += 'Bu malzemeler aynı kod, ad, iş numarası ve teknik özelliklere sahip olduğu için backend sorunlarına neden olur.\n';
+            errorMessage += 'Lütfen bu malzemeleri düzenleyin veya silin.';
+            
+            showNotification(errorMessage, 'error');
+            
+            // Re-enable submit button
+            if (exportBtn) {
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Gönder';
+            }
+            return;
+        }
         
         // Transform offers and recommendations using the mapping
         const transformedOffers = {};
