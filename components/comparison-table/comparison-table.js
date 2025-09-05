@@ -43,6 +43,7 @@ export class ComparisonTable {
             job_no: { minimized: false, width: 'auto' },
             quantity: { minimized: false, width: 'auto' },
             unit: { minimized: false, width: 'auto' },
+            specifications: { minimized: true, width: 'auto' },
             // Supplier columns
             unitPrice: { minimized: false, width: 'auto' },
             deliveryDays: { minimized: false, width: 'auto' },
@@ -163,18 +164,20 @@ export class ComparisonTable {
             { key: 'item', name: 'Malzeme', icon: 'fa-box' },
             { key: 'job_no', name: 'İş No', icon: 'fa-tag' },
             { key: 'quantity', name: 'Miktar', icon: 'fa-hashtag' },
-            { key: 'unit', name: 'Birim', icon: 'fa-ruler' }
+            { key: 'unit', name: 'Birim', icon: 'fa-ruler' },
+            { key: 'specifications', name: '', icon: 'fa-cogs' }
         ];
 
         return generalColumns.map(col => {
             const isMinimized = this.isColumnMinimized(col.key);
+            const displayName = col.name || 'Teknik Özellikler'; // Fallback for tooltip
             if (isMinimized) {
                 return `
                     <th rowspan="3" class="align-middle minimized-column clickable-header" style="width: 40px; min-width: 40px;" 
                         onclick="window.comparisonTableInstance.toggleColumnMinimization('${col.key}')" 
-                        title="Genişlet ${col.name}">
+                        title="Genişlet ${displayName}">
                         <div class="minimized-header">
-                            <span class="rotated-text">${col.name}</span>
+                            <span class="rotated-text">${col.name || '⚙'}</span>
                         </div>
                     </th>
                 `;
@@ -182,8 +185,8 @@ export class ComparisonTable {
                 return `
                     <th rowspan="3" class="align-middle clickable-header" 
                         onclick="window.comparisonTableInstance.toggleColumnMinimization('${col.key}')" 
-                        title="Küçült ${col.name}">
-                        <i class="fas ${col.icon} me-1"></i>${col.name}
+                        title="Küçült ${displayName}">
+                        ${col.name ? `<i class="fas ${col.icon} me-1"></i>${col.name}` : `<i class="fas ${col.icon}" title="${displayName}"></i>`}
                     </th>
                 `;
             }
@@ -191,7 +194,7 @@ export class ComparisonTable {
     }
 
     getGeneralColumnsCount() {
-        const generalColumns = ['item', 'job_no', 'quantity', 'unit'];
+        const generalColumns = ['item', 'job_no', 'quantity', 'unit', 'specifications'];
         let count = 0;
         
         generalColumns.forEach(colKey => {
@@ -405,7 +408,8 @@ export class ComparisonTable {
             { key: 'item', content: `<strong>${item.name}</strong><br><small class="text-muted">${item.code}</small>` },
             { key: 'job_no', content: item.job_no || '-' },
             { key: 'quantity', content: item.quantity },
-            { key: 'unit', content: item.unit }
+            { key: 'unit', content: item.unit },
+            { key: 'specifications', content: this.formatSpecificationsCell(item.specifications) }
         ];
 
         return generalColumns.map(col => {
@@ -422,6 +426,26 @@ export class ComparisonTable {
                 return `<td>${col.content}</td>`;
             }
         }).join('');
+    }
+
+    formatSpecificationsCell(specifications) {
+        if (!specifications || specifications.trim() === '') {
+            return '-';
+        }
+
+        const specsText = specifications.trim();
+        
+        return `
+            <div class="specs-cell" style="position: relative; justify-content: center;">
+                <i class="fas fa-comment-dots text-info" title="${this.escapeHtml(specsText)}"></i>
+            </div>
+        `;
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
     }
     
     generateSupplierCells(itemIndex) {

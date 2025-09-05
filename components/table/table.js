@@ -136,7 +136,25 @@ export class TableComponent {
         const headers = this.options.columns.map(column => {
             const sortable = this.options.sortable && column.sortable !== false;
             const sortClass = sortable ? 'sortable' : '';
-            const sortIcon = sortable ? '<i class="fas fa-sort sort-icon"></i>' : '';
+            
+            // Determine sort icon based on current sort state
+            let sortIcon = '';
+            if (sortable) {
+                const currentField = this.options.currentSortField;
+                const currentDirection = this.options.currentSortDirection;
+                
+                if (currentField === column.field) {
+                    if (currentDirection === 'asc') {
+                        sortIcon = '<i class="fas fa-sort-up sort-icon text-primary"></i>';
+                    } else if (currentDirection === 'desc') {
+                        sortIcon = '<i class="fas fa-sort-down sort-icon text-primary"></i>';
+                    } else {
+                        sortIcon = '<i class="fas fa-sort sort-icon"></i>';
+                    }
+                } else {
+                    sortIcon = '<i class="fas fa-sort sort-icon"></i>';
+                }
+            }
             
             return `
                 <th class="${sortClass}" data-field="${column.field}">

@@ -867,6 +867,7 @@ function renderComparisonTable() {
         code: item.item.code,
         quantity: item.quantity,
         unit: item.item.unit,
+        specifications: item.specifications || '',
         job_no: item.allocations && item.allocations.length > 0 
             ? item.allocations.map(allocation => allocation.job_no).join(', ')
             : '-'

@@ -201,19 +201,14 @@ const NAVIGATION_STRUCTURE = {
                 label: 'Raporlar',
                 icon: 'fas fa-chart-bar',
                 children: {
-                    '/procurement/reports/purchase-analysis': {
-                        label: 'Satın Alma Analizi',
-                        icon: 'fas fa-chart-line',
+                    '/procurement/reports/items': {
+                        label: 'Ürün Raporu',
+                        icon: 'fas fa-chart-bar',
                         children: {}
                     },
-                    '/procurement/reports/supplier-performance': {
-                        label: 'Tedarikçi Performansı',
+                    '/procurement/reports/suppliers': {
+                        label: 'Tedarikçi Raporu',
                         icon: 'fas fa-chart-pie',
-                        children: {}
-                    },
-                    '/procurement/reports/cost-analysis': {
-                        label: 'Maliyet Analizi',
-                        icon: 'fas fa-dollar-sign',
                         children: {}
                     }
                 }

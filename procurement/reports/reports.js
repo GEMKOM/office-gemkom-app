@@ -15,25 +15,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         subtitle: 'Satın alma analizleri ve performans raporları',
         cards: [
             {
-                title: 'Satın Alma Analizi',
-                description: 'Satın alma trendleri, miktar analizleri ve karşılaştırmalı raporlar.',
-                icon: 'fas fa-chart-line',
+                title: 'Ürün Raporu',
+                description: 'Ürün satın alma analizleri, miktar ve maliyet metrikleri.',
+                icon: 'fas fa-chart-bar',
                 iconColor: 'primary',
-                link: '/procurement/reports/purchase-analysis'
+                link: '/procurement/reports/items'
             },
             {
-                title: 'Tedarikçi Performansı',
-                description: 'Tedarikçi performans metrikleri, değerlendirme raporları ve karşılaştırmalar.',
+                title: 'Tedarikçi Raporu',
+                description: 'Tedarikçi performans analizleri, satın alma metrikleri ve DBS durumları.',
                 icon: 'fas fa-chart-pie',
                 iconColor: 'success',
-                link: '/procurement/reports/supplier-performance'
-            },
-            {
-                title: 'Maliyet Analizi',
-                description: 'Maliyet trendleri, bütçe analizleri ve tasarruf raporları.',
-                icon: 'fas fa-dollar-sign',
-                iconColor: 'warning',
-                link: '/procurement/reports/cost-analysis'
+                link: '/procurement/reports/suppliers'
             }
         ]
     });

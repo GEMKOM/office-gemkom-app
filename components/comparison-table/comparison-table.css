@@ -479,6 +479,37 @@
     height: 24px !important;
 }
 
+/* Specifications cell styling */
+.specs-cell {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0.25rem;
+    width: 100%;
+    height: 100%;
+}
+
+.specs-cell i {
+    font-size: 1rem;
+    cursor: help;
+}
+
+/* Specifications tooltip styling */
+.specs-cell:hover {
+    background-color: rgba(13, 202, 240, 0.1);
+    border-radius: 4px;
+}
+
+/* Minimized specifications column */
+.minimized-cell .specs-cell {
+    justify-content: center;
+}
+
+.minimized-cell .specs-cell i {
+    font-size: 1rem;
+}
+
 /* Responsive adjustments for clickable headers */
 @media (max-width: 768px) {
     .clickable-header {
@@ -487,5 +518,9 @@
     
     .minimized-column .rotated-text {
         font-size: 0.7rem;
+    }
+    
+    .specs-cell i {
+        font-size: 0.9rem;
     }
 }
