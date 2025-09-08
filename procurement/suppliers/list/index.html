@@ -89,6 +89,12 @@
                                             <th class="sortable" data-field="payment_terms_name">
                                                 Ödeme Koşulları <i class="fas fa-sort sort-icon"></i>
                                             </th>
+                                            <th class="sortable" data-field="has_dbs">
+                                                DBS Kullanıyor <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable" data-field="dbs_limit">
+                                                DBS Limiti <i class="fas fa-sort sort-icon"></i>
+                                            </th>
                                             <th class="text-center">İşlemler</th>
                                         </tr>
                                     </thead>
@@ -181,6 +187,26 @@
                                     <label for="supplier-tax-rate" class="form-label">Varsayılan Vergi Oranı (%)</label>
                                     <input type="number" class="form-control" id="supplier-tax-rate" min="0" max="100" step="0.01" value="18.00">
                                     <div class="form-text">Vergi oranını yüzde olarak girin (örn: 18.00)</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="supplier-has-dbs">
+                                        <label class="form-check-label" for="supplier-has-dbs">
+                                            DBS Kullanıyor
+                                        </label>
+                                        <div class="form-text">Tedarikçinin DBS (Döviz Bazlı Satış) kullanıp kullanmadığını belirtir</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="supplier-dbs-limit" class="form-label">DBS Limiti</label>
+                                    <input type="number" class="form-control" id="supplier-dbs-limit" min="0" step="0.01" placeholder="DBS limitini girin...">
+                                    <div class="form-text">DBS limitini para birimi cinsinden girin</div>
                                 </div>
                             </div>
                         </div>

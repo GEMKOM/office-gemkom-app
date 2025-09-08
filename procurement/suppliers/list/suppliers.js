@@ -307,7 +307,7 @@ function renderSuppliersTable(suppliers) {
     if (!suppliers || suppliers.length === 0) {
                  tbody.innerHTML = `
              <tr>
-                 <td colspan="9" class="text-center">
+                 <td colspan="11" class="text-center">
                     <div class="empty-state">
                         <i class="fas fa-building"></i>
                         <h5>Henüz tedarikçi bulunmuyor</h5>
@@ -356,6 +356,12 @@ function renderSuppliersTable(suppliers) {
             </td>
             <td>
                 <div class="payment-terms">${getPaymentTermName(supplier.default_payment_terms)}</div>
+            </td>
+            <td class="text-center">
+                ${getDbsStatusBadge(supplier.has_dbs)}
+            </td>
+            <td class="text-center">
+                <div class="dbs-limit">${formatDbsLimit(supplier.dbs_limit, supplier.default_currency)}</div>
             </td>
              <td class="text-center">
                 <div class="action-buttons">
@@ -489,7 +495,17 @@ function setupEventListeners() {
         saveBtn.addEventListener('click', saveSupplier);
     }
     
-
+    // DBS checkbox change handler
+    const hasDbsCheckbox = document.getElementById('supplier-has-dbs');
+    const dbsLimitInput = document.getElementById('supplier-dbs-limit');
+    if (hasDbsCheckbox && dbsLimitInput) {
+        hasDbsCheckbox.addEventListener('change', (e) => {
+            dbsLimitInput.disabled = !e.target.checked;
+            if (!e.target.checked) {
+                dbsLimitInput.value = '';
+            }
+        });
+    }
 }
 
 
@@ -511,6 +527,12 @@ function showSupplierFormModal() {
         title.innerHTML = '<i class="fas fa-plus me-2"></i>Yeni Tedarikçi';
         form.reset();
         currentSupplier = null;
+        
+        // Ensure DBS limit field starts disabled
+        const dbsLimitInput = document.getElementById('supplier-dbs-limit');
+        if (dbsLimitInput) {
+            dbsLimitInput.disabled = true;
+        }
     }
     
     const modalInstance = new bootstrap.Modal(modal);
@@ -526,6 +548,13 @@ function populateSupplierForm() {
     document.getElementById('supplier-email').value = currentSupplier.email || '';
     document.getElementById('supplier-currency').value = currentSupplier.default_currency || 'TRY';
     document.getElementById('supplier-tax-rate').value = currentSupplier.default_tax_rate || '18.00';
+    
+    // Populate DBS fields
+    const hasDbsCheckbox = document.getElementById('supplier-has-dbs');
+    const dbsLimitInput = document.getElementById('supplier-dbs-limit');
+    hasDbsCheckbox.checked = currentSupplier.has_dbs || false;
+    dbsLimitInput.value = currentSupplier.dbs_limit || '';
+    dbsLimitInput.disabled = !hasDbsCheckbox.checked;
     
     // Populate payment terms dropdown
     populatePaymentTermsDropdown();
@@ -588,6 +617,18 @@ async function saveSupplier() {
         return;
     }
     
+    // Get DBS limit value and validate if has_dbs is checked
+    const hasDbs = document.getElementById('supplier-has-dbs').checked;
+    const dbsLimitInput = document.getElementById('supplier-dbs-limit');
+    const dbsLimit = dbsLimitInput.value.trim();
+    
+    // Validate DBS limit if has_dbs is checked
+    if (hasDbs && dbsLimit && (isNaN(parseFloat(dbsLimit)) || parseFloat(dbsLimit) < 0)) {
+        showNotification('Geçerli bir DBS limiti giriniz (0 veya daha büyük bir sayı)', 'error');
+        dbsLimitInput.focus();
+        return;
+    }
+    
     const supplierData = {
         name: document.getElementById('supplier-name').value.trim(),
         contact_person: document.getElementById('supplier-contact').value.trim(),
@@ -595,7 +636,9 @@ async function saveSupplier() {
         email: document.getElementById('supplier-email').value.trim(),
         default_currency: document.getElementById('supplier-currency').value,
         default_payment_terms: document.getElementById('supplier-payment-terms').value || null,
-        default_tax_rate: taxRate
+        default_tax_rate: taxRate,
+        has_dbs: hasDbs,
+        dbs_limit: hasDbs && dbsLimit ? parseFloat(dbsLimit) : null
     };
     
     try {
@@ -715,6 +758,20 @@ function getStatusBadge(isActive) {
     }
 }
 
+function getDbsStatusBadge(hasDbs) {
+    if (hasDbs) {
+        return '<span class="status-badge status-active">Evet</span>';
+    } else {
+        return '<span class="status-badge status-inactive">Hayır</span>';
+    }
+}
+
+function formatDbsLimit(dbsLimit, currency) {
+    if (!dbsLimit) return '-';
+    const currencySymbol = currency || 'TRY';
+    return `${parseFloat(dbsLimit).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currencySymbol}`;
+}
+
 function formatDate(dateString) {
     if (!dateString) return '-';
     const date = new Date(dateString);
@@ -748,7 +805,10 @@ function showLoadingState() {
                      <td><div class="loading-skeleton" style="width: 150px;"></div></td>
                      <td><div class="loading-skeleton" style="width: 80px;"></div></td>
                      <td><div class="loading-skeleton" style="width: 60px;"></div></td>
+                     <td><div class="loading-skeleton" style="width: 80px;"></div></td>
                      <td><div class="loading-skeleton" style="width: 120px;"></div></td>
+                     <td><div class="loading-skeleton" style="width: 80px;"></div></td>
+                     <td><div class="loading-skeleton" style="width: 100px;"></div></td>
                  </tr>
             `);
         }

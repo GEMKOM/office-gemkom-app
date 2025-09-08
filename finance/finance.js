@@ -18,6 +18,13 @@ document.addEventListener('DOMContentLoaded', async function() {
                 icon: 'fas fa-shopping-cart',
                 iconColor: 'primary',
                 link: '/finance/purchase-orders'
+            },
+            {
+                title: 'Proje Raporu',
+                description: 'Proje bazlı satın alma analizleri, maliyet metrikleri ve performans takibi.',
+                icon: 'fas fa-chart-line',
+                iconColor: 'success',
+                link: '/finance/reports/projects'
             }
         ]
     });

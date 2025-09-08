@@ -82,6 +82,21 @@
     letter-spacing: 0.5px;
 }
 
+/* DBS limit display */
+.dbs-limit {
+    font-weight: 500;
+    color: #495057;
+    font-family: 'Courier New', monospace;
+    font-size: 0.875rem;
+}
+
+/* DBS limit input styling */
+#supplier-dbs-limit:disabled {
+    background-color: #f8f9fa;
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
 /* Table customizations - Matching Registry Page */
 .table {
     color: #343a40;
@@ -105,10 +120,12 @@
     position: relative;
 }
 
-/* Center align status, currency and tax rate headers */
+/* Center align status, currency, tax rate, DBS status and DBS limit headers */
 .table thead th:nth-child(6),
 .table thead th:nth-child(7),
-.table thead th:nth-child(8) {
+.table thead th:nth-child(8),
+.table thead th:nth-child(10),
+.table thead th:nth-child(11) {
     text-align: center;
 }
 
@@ -126,9 +143,12 @@
     vertical-align: middle;
 }
 
-/* Ensure proper alignment for status and currency columns */
+/* Ensure proper alignment for status, currency, tax rate, DBS status and DBS limit columns */
 .table tbody td:nth-child(6),
-.table tbody td:nth-child(7) {
+.table tbody td:nth-child(7),
+.table tbody td:nth-child(8),
+.table tbody td:nth-child(10),
+.table tbody td:nth-child(11) {
     text-align: center;
     vertical-align: middle;
     white-space: nowrap;
@@ -173,9 +193,12 @@
     text-align: left;
 }
 
-/* Center align status and currency columns */
+/* Center align status, currency, tax rate, DBS status and DBS limit columns */
 .table-responsive table td:nth-child(6), /* Currency column */
-.table-responsive table td:nth-child(7) { /* Status column */
+.table-responsive table td:nth-child(7), /* Tax rate column */
+.table-responsive table td:nth-child(8), /* Status column */
+.table-responsive table td:nth-child(10), /* DBS status column */
+.table-responsive table td:nth-child(11) { /* DBS limit column */
     text-align: center;
     vertical-align: middle;
     position: relative;
@@ -185,13 +208,14 @@
 .table-responsive table td:nth-child(2), /* Supplier name column */
 .table-responsive table td:nth-child(3), /* Contact person column */
 .table-responsive table td:nth-child(4), /* Phone column */
-.table-responsive table td:nth-child(5) { /* Email column */
+.table-responsive table td:nth-child(5), /* Email column */
+.table-responsive table td:nth-child(9) { /* Payment terms column */
     white-space: normal;
     word-wrap: break-word;
 }
 
 /* Ensure status column displays properly */
-.table-responsive table td:nth-child(7) {
+.table-responsive table td:nth-child(8) {
     white-space: nowrap;
     overflow: visible;
     text-align: center;
