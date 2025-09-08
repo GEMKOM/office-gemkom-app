@@ -21,7 +21,7 @@ export async function getItemsReport(filters = {}, ordering = null) {
         }
         
         const queryString = params.toString();
-        const url = `${backendBase}/procurement/items/report${queryString ? `?${queryString}` : ''}`;
+        const url = `${backendBase}/procurement/reports/items${queryString ? `?${queryString}` : ''}`;
         
         const response = await authedFetch(url);
         
@@ -68,7 +68,7 @@ export async function getSuppliersReport(filters = {}, ordering = null) {
         }
         
         const queryString = params.toString();
-        const url = `${backendBase}/procurement/suppliers/report${queryString ? `?${queryString}` : ''}`;
+        const url = `${backendBase}/procurement/reports/suppliers${queryString ? `?${queryString}` : ''}`;
         
         const response = await authedFetch(url);
         
@@ -80,6 +80,38 @@ export async function getSuppliersReport(filters = {}, ordering = null) {
         return await response.json();
     } catch (error) {
         console.error('Error fetching suppliers report:', error);
+        throw error;
+    }
+}
+
+export async function getStaffReport(filters = {}, ordering = null) {
+    try {
+        // Build query parameters
+        const params = new URLSearchParams();
+        
+        // Add filters
+        if (filters['user']) {
+            params.append('user_id', filters['user']);
+        }
+        
+        // Add ordering
+        if (ordering) {
+            params.append('ordering', ordering);
+        }
+        
+        const queryString = params.toString();
+        const url = `${backendBase}/procurement/reports/staff${queryString ? `?${queryString}` : ''}`;
+        
+        const response = await authedFetch(url);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Personel raporu yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching staff report:', error);
         throw error;
     }
 }

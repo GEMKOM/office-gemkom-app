@@ -27,6 +27,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-chart-pie',
                 iconColor: 'success',
                 link: '/procurement/reports/suppliers'
+            },
+            {
+                title: 'Personel Raporu',
+                description: 'Satın alma personeli performans analizleri, PR/PO metrikleri ve aktivite durumları.',
+                icon: 'fas fa-users',
+                iconColor: 'info',
+                link: '/procurement/reports/staff'
             }
         ]
     });

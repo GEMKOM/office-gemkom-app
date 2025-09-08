@@ -210,6 +210,11 @@ const NAVIGATION_STRUCTURE = {
                         label: 'Tedarikçi Raporu',
                         icon: 'fas fa-chart-pie',
                         children: {}
+                    },
+                    '/procurement/reports/staff': {
+                        label: 'Personel Raporu',
+                        icon: 'fas fa-users',
+                        children: {}
                     }
                 }
             }
