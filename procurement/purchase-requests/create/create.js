@@ -303,9 +303,11 @@ async function saveDraftAsJSON() {
         // Transform suppliers for backend submission
         const transformedSuppliers = transformSuppliersForSubmission(requestData.suppliers);
         
-        // Check if any item has job_no starting with "RM"
+        // Check if any item has job_no starting with "RM" in allocations
         const isRollingMill = formattedData.items.some(item => 
-            item.job_no && item.job_no.toString().toUpperCase().startsWith('RM')
+            item.allocations && item.allocations.some(allocation => 
+                allocation.job_no && allocation.job_no.toString().toUpperCase().startsWith('RM')
+            )
         );
 
         // Prepare data for backend (same format as submission)
@@ -1007,9 +1009,11 @@ async function submitRequest() {
         // Transform suppliers for backend submission
         const transformedSuppliers = transformSuppliersForSubmission(requestData.suppliers);
         
-        // Check if any item has job_no starting with "RM"
+        // Check if any item has job_no starting with "RM" in allocations
         const isRollingMill = formattedData.items.some(item => 
-            item.job_no && item.job_no.toString().toUpperCase().startsWith('RM')
+            item.allocations && item.allocations.some(allocation => 
+                allocation.job_no && allocation.job_no.toString().toUpperCase().startsWith('RM')
+            )
         );
         
         // Prepare data for backend
