@@ -23,13 +23,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         subtitle: 'Proje bazlı satın alma analizleri ve maliyet metrikleri',
         icon: 'chart-line',
         showBackButton: 'block',
-        showExportButton: 'block',
-        showRefreshButton: 'block',
-        exportButtonText: 'Excel\'e Aktar',
-        refreshButtonText: 'Yenile',
-        backUrl: '/finance',
-        onExportClick: handleExport,
-        onRefreshClick: loadProjectsReport
+        showExportButton: 'none',
+        showRefreshButton: 'none',
+        backUrl: '/finance/reports'
     });
     
     // Initialize filters component
@@ -78,6 +74,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize table component
     const tableComponent = new TableComponent('table-placeholder', {
         title: 'Proje Raporu',
+        icon: 'chart-line',
+        iconColor: 'text-success',
+        loading: true, // Show loading state initially
+        refreshable: true,
+        onRefresh: loadProjectsReport,
+        exportable: true,
+        onExport: handleExport,
         columns: [
             { 
                 field: 'job_no', 
@@ -94,6 +97,19 @@ document.addEventListener('DOMContentLoaded', async () => {
                 formatter: (value) => `<span class="badge bg-light text-dark border">${value || 0}</span>`
             },
             { 
+                field: 'ordered_qty_by_unit', 
+                label: 'Sipariş Miktarı', 
+                sortable: false, 
+                type: 'text',
+                formatter: (value) => {
+                    if (!value || typeof value !== 'object') return '-';
+                    const quantities = Object.entries(value).map(([unit, qty]) => 
+                        `${parseFloat(qty).toLocaleString('tr-TR')} ${unit}`
+                    ).join(', ');
+                    return `<small class="text-muted">${quantities}</small>`;
+                }
+            },
+            { 
                 field: 'total_pos', 
                 label: 'Toplam PO', 
                 sortable: true, 
@@ -108,15 +124,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 formatter: (value) => `<span class="badge bg-success text-white">${value || 0}</span>`
             },
             { 
-                field: 'committed_gross_eur', 
+                field: 'committed_net_eur', 
                 label: 'Taahhüt Edilen (EUR)', 
-                sortable: true, 
-                type: 'number',
-                formatter: (value) => `<span class="currency-value">${formatCurrency(value)}</span>`
-            },
-            { 
-                field: 'paid_eur', 
-                label: 'Ödenen (EUR)', 
                 sortable: true, 
                 type: 'number',
                 formatter: (value) => `<span class="currency-value">${formatCurrency(value)}</span>`
@@ -143,6 +152,35 @@ document.addEventListener('DOMContentLoaded', async () => {
                 formatter: (value) => `<span class="currency-value">${formatCurrency(value)}</span>`
             },
             { 
+                field: 'top_suppliers_by_spend', 
+                label: 'Ana Tedarikçiler', 
+                sortable: false, 
+                type: 'text',
+                formatter: (value) => {
+                    if (!value || !Array.isArray(value) || value.length === 0) return '-';
+                    const suppliers = value.slice(0, 2).map(supplier => {
+                        const supplierName = supplier.name;
+                        const displayName = supplierName.length > 15 ? 
+                            `${supplierName.substring(0, 15)}...` : 
+                            supplierName;
+                        
+                        return `
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <span class="supplier-name" 
+                                      title="${supplierName}" 
+                                      style="cursor: help; max-width: 60%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                    ${displayName}
+                                </span>
+                                <small class="text-muted ms-2" style="font-size: 0.75rem;">
+                                    ${formatCurrency(supplier.total_eur)}
+                                </small>
+                            </div>
+                        `;
+                    }).join('');
+                    return `<div class="supplier-list" style="min-width: 200px;">${suppliers}</div>`;
+                }
+            },
+            { 
                 field: 'last_activity_at', 
                 label: 'Son Aktivite', 
                 sortable: true, 
@@ -151,7 +189,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         ],
         onSort: handleSort,
         onRowClick: handleRowClick,
-        skeletonLoading: true
+        skeleton: true,
+        emptyMessage: 'Proje raporu verisi bulunamadı.',
+        emptyIcon: 'fas fa-chart-line'
     });
     
     // Load initial data
@@ -208,6 +248,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     async function loadProjectsReport() {
         try {
+            // Set loading state on table
+            tableComponent.setLoading(true);
+            
             const filters = filtersComponent.getFilterValues();
             const ordering = currentSortDirection === 'desc' ? `-${currentSortField}` : currentSortField;
             
@@ -225,20 +268,27 @@ document.addEventListener('DOMContentLoaded', async () => {
             const transformedData = data.results.map(project => ({
                 ...project,
                 // Keep currency values as strings for formatter functions to handle
-                committed_gross_eur: project.committed_gross_eur || '0',
-                paid_eur: project.paid_eur || '0',
+                committed_net_eur: project.committed_net_eur || '0',
                 unpaid_eur: project.unpaid_eur || '0',
                 pending_pr_estimate_eur: project.pending_pr_estimate_eur || '0',
                 forecast_eur: project.forecast_eur || '0',
                 // Keep datetime as string for formatter to handle
-                last_activity_at: project.last_activity_at || null
+                last_activity_at: project.last_activity_at || null,
+                // Ensure arrays are properly formatted
+                top_suppliers_by_spend: project.top_suppliers_by_spend || [],
+                ordered_qty_by_unit: project.ordered_qty_by_unit || {}
             }));
             
+            // Update table with new data
+            tableComponent.setLoading(false);
             tableComponent.updateData(transformedData);
             
         } catch (error) {
             console.error('Error loading projects report:', error);
             showNotification('Proje raporu yüklenirken hata oluştu: ' + error.message, 'error');
+            
+            // Update table with empty data on error
+            tableComponent.setLoading(false);
             tableComponent.updateData([]);
         }
     }

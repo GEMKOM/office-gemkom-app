@@ -1,0 +1,475 @@
+/* Capacity Planning Specific Styles */
+
+/* Planning specific card styling */
+.planning-card {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border: 2px solid #dee2e6;
+    border-radius: 15px;
+    transition: all 0.3s ease;
+}
+
+.planning-card:hover {
+    border-color: #667eea;
+    box-shadow: 0 15px 35px rgba(102, 126, 234, 0.1);
+}
+
+/* Machine table styling */
+.machine-row {
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.machine-row:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+    transform: translateX(2px);
+}
+
+.machine-row.table-active {
+    background-color: rgba(0, 123, 255, 0.2);
+    border-left: 4px solid #007bff;
+}
+
+/* Table component row selection styling */
+.table tbody tr.selected {
+    background-color: rgba(0, 123, 255, 0.2) !important;
+    border-left: 4px solid #007bff;
+    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
+    transform: translateX(2px);
+}
+
+.table tbody tr.selected:hover {
+    background-color: rgba(0, 123, 255, 0.3) !important;
+    box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
+}
+
+.table tbody tr.selected td {
+    font-weight: 600;
+    color: #0056b3;
+}
+
+.table tbody tr.selected .machine-name {
+    color: #0056b3;
+    font-weight: 700;
+}
+
+/* Machine selection header styling */
+#selected-machine-name {
+    transition: all 0.3s ease;
+}
+
+#machine-status-badge {
+    transition: all 0.3s ease;
+    animation: fadeInScale 0.3s ease-out;
+}
+
+@keyframes fadeInScale {
+    0% {
+        opacity: 0;
+        transform: scale(0.8);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1);
+    }
+}
+
+/* Initial state styling */
+#selected-machine-name:not([style*="color"]) {
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Loading disabled rows styling */
+.table tbody tr.loading-disabled {
+    opacity: 0.6 !important;
+    pointer-events: none !important;
+    cursor: not-allowed !important;
+    background-color: rgba(108, 117, 125, 0.1) !important;
+}
+
+.table tbody tr.loading-disabled:hover {
+    background-color: rgba(108, 117, 125, 0.1) !important;
+    transform: none !important;
+}
+
+/* Skeleton loading styles */
+.skeleton {
+    height: 16px;
+    background: linear-gradient(90deg, #f2f2f2 25%, #e6e6e6 50%, #f2f2f2 75%);
+    background-size: 200% 100%;
+    border-radius: 4px;
+    animation: loading-shimmer 1.5s infinite;
+    margin: 6px 0;
+}
+
+.skeleton-text {
+    height: 16px;
+}
+
+@keyframes loading-shimmer {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
+}
+
+.skeleton-row {
+    opacity: 0.85;
+}
+
+.skeleton-row td {
+    padding: 12px 8px;
+    vertical-align: middle;
+}
+
+/* Task table styling */
+.task-row {
+    transition: all 0.3s ease;
+}
+
+.task-row:hover {
+    background-color: rgba(0, 123, 255, 0.05);
+}
+
+.unplanned-task-row {
+    transition: all 0.3s ease;
+}
+
+.unplanned-task-row:hover {
+    background-color: rgba(255, 193, 7, 0.1);
+}
+
+/* Gantt Chart Styles */
+.gantt-container {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid #dee2e6;
+    overflow: hidden;
+    margin-top: 1rem;
+}
+
+.gantt-chart {
+    overflow-x: auto;
+    overflow-y: hidden;
+    max-height: 400px;
+}
+
+.gantt-chart-container {
+    min-width: 100%;
+    position: relative;
+}
+
+.gantt-timeline {
+    min-width: 100%;
+    position: relative;
+}
+
+.gantt-header-row {
+    display: flex;
+    background: #f8f9fa;
+    border-bottom: 2px solid #dee2e6;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.gantt-header-cell {
+    border-right: 1px solid #dee2e6;
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #495057;
+    min-width: 40px;
+    flex-shrink: 0;
+}
+
+.gantt-date {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.gantt-month {
+    font-size: 0.7rem;
+    color: #6c757d;
+    text-transform: uppercase;
+}
+
+.gantt-tasks {
+    position: relative;
+}
+
+.gantt-task-row {
+    display: flex;
+    border-bottom: 1px solid #e9ecef;
+    min-height: 50px;
+    align-items: center;
+}
+
+.gantt-task-label {
+    width: 200px;
+    padding: 8px 12px;
+    background: #f8f9fa;
+    border-right: 1px solid #dee2e6;
+    flex-shrink: 0;
+    font-size: 0.85rem;
+}
+
+.gantt-task-label strong {
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.gantt-task-label small {
+    color: #6c757d;
+    font-size: 0.75rem;
+}
+
+.gantt-task-bar-container {
+    flex: 1;
+    position: relative;
+    height: 40px;
+    margin: 5px 0;
+}
+
+.gantt-task-bar {
+    position: absolute;
+    height: 30px;
+    border-radius: 4px;
+    cursor: move;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.gantt-task-bar.unlocked {
+    background: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    border: 1px solid #004085;
+}
+
+.gantt-task-bar.locked {
+    background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+    border: 1px solid #d39e00;
+}
+
+.gantt-task-bar:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.gantt-task-bar.dragging {
+    opacity: 0.7;
+    transform: rotate(2deg);
+    z-index: 1000;
+}
+
+.gantt-task-content {
+    color: white;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+
+.gantt-task-text {
+    display: block;
+}
+
+/* Drag and drop styles */
+.gantt-header-cell.drag-over {
+    background-color: rgba(0, 123, 255, 0.2);
+    border: 2px dashed #007bff;
+}
+
+/* Button styling */
+.btn-group-sm .btn {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+}
+
+/* Modal styling */
+.modal-content {
+    border-radius: 10px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 10px 10px 0 0;
+}
+
+.modal-footer {
+    background: #f8f9fa;
+    border-top: 1px solid #dee2e6;
+    border-radius: 0 0 10px 10px;
+}
+
+/* Form styling */
+.form-control {
+    border-radius: 6px;
+    border: 1px solid #ced4da;
+    transition: all 0.3s ease;
+}
+
+.form-control:focus {
+    border-color: #007bff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+/* Badge styling */
+.badge {
+    font-size: 0.75rem;
+    padding: 0.35em 0.65em;
+    border-radius: 6px;
+}
+
+/* Alert styling */
+.alert-info {
+    background: linear-gradient(135deg, #d1ecf1 0%, #bee5eb 100%);
+    border: 1px solid #b8daff;
+    border-radius: 10px;
+    color: #0c5460;
+}
+
+.alert-info i {
+    color: #0c5460;
+}
+
+/* Unplanned tasks section */
+#unplanned-tasks-section {
+    transition: all 0.3s ease;
+}
+
+.card.border-warning {
+    border-color: #ffc107 !important;
+}
+
+.card-header.bg-warning {
+    background: linear-gradient(135deg, #ffc107 0%, #e0a800 100%) !important;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .gantt-task-label {
+        width: 150px;
+        font-size: 0.8rem;
+    }
+    
+    .gantt-header-cell {
+        min-width: 30px;
+        padding: 6px 2px;
+    }
+    
+    .gantt-date {
+        font-size: 0.8rem;
+    }
+    
+    .gantt-month {
+        font-size: 0.6rem;
+    }
+    
+    .gantt-task-bar {
+        height: 25px;
+    }
+    
+    .gantt-task-content {
+        font-size: 0.7rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .gantt-task-label {
+        width: 120px;
+        padding: 6px 8px;
+    }
+    
+    .gantt-header-cell {
+        min-width: 25px;
+        padding: 4px 1px;
+    }
+    
+    .gantt-task-row {
+        min-height: 40px;
+    }
+    
+    .gantt-task-bar-container {
+        height: 30px;
+    }
+    
+    .gantt-task-bar {
+        height: 20px;
+    }
+}
+
+/* Animation keyframes */
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(100%);
+    }
+}
+
+/* Custom notification styles */
+.custom-notification {
+    transition: all 0.3s ease;
+}
+
+.custom-notification:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+/* Loading states */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.loading::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 40px;
+    height: 40px;
+    border: 4px solid #f3f3f3;
+    border-top: 4px solid #007bff;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: translate(-50%, -50%) rotate(0deg); }
+    100% { transform: translate(-50%, -50%) rotate(360deg); }
+}

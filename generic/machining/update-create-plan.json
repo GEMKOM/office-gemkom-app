@@ -1,0 +1,27 @@
+{
+    "items": [
+      {
+        "key": "TI-001",
+        "machine_fk": 5,
+        "planned_start_ms": 1757480400000,
+        "planned_end_ms": 1757489400000,
+        "plan_order": 1,
+        "plan_locked": true,
+        "in_plan": true
+      },
+      {
+        "key": "TI-002",
+        "machine_fk": 5,
+        "planned_start_ms": 1757491200000,
+        "planned_end_ms": 1757500200000,
+        "plan_order": 2,
+        "in_plan": true
+      },
+      {
+        "key": "TI-003",
+        "machine_fk": 5,
+        "in_plan": false
+      }
+    ]
+  }
+  

@@ -86,18 +86,13 @@ const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-industry',
                         children: {
                             '/manufacturing/machining/capacity/planning': {
-                                label: 'Kapasite Planlama',
+                                label: 'Kapasite Planlayıcı',
                                 icon: 'fas fa-calendar-alt',
                                 children: {}
                             },
-                            '/manufacturing/machining/capacity/monitoring': {
-                                label: 'Kapasite İzleme',
-                                icon: 'fas fa-eye',
-                                children: {}
-                            },
-                            '/manufacturing/machining/capacity/optimization': {
-                                label: 'Kapasite Optimizasyonu',
-                                icon: 'fas fa-cogs',
+                            '/manufacturing/machining/capacity/history': {
+                                label: 'Makine Çalışma Geçmişi',
+                                icon: 'fas fa-history',
                                 children: {}
                             }
                         }
@@ -229,6 +224,17 @@ const NAVIGATION_STRUCTURE = {
                 label: 'Satın Alma Siparişleri',
                 icon: 'fas fa-shopping-cart',
                 children: {}
+            },
+            '/finance/reports': {
+                label: 'Raporlar',
+                icon: 'fas fa-chart-bar',
+                children: {
+                    '/finance/reports/projects': {
+                        label: 'Proje Raporu',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    }
+                }
             }
         }
     }

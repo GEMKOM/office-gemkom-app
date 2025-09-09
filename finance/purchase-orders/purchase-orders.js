@@ -20,9 +20,8 @@ let selectedPurchaseOrder = null;
 let selectedPaymentSchedule = null;
 
 // Initialize the page
-document.addEventListener('DOMContentLoaded', function() {
+document.addEventListener('DOMContentLoaded', async function() {
     initNavbar();
-    
     // Initialize header component
     new HeaderComponent({
         title: 'Satın Alma Siparişleri',
@@ -36,6 +35,93 @@ document.addEventListener('DOMContentLoaded', function() {
         onBackClick: () => window.location.href = '/finance',
         onExportClick: exportPurchaseOrdersData,
         onRefreshClick: loadPurchaseOrders
+    });
+
+    // Initializ++++e table component
+    window.purchaseOrdersTable = new TableComponent('purchase-orders-table-container', {
+        title: 'Satın Alma Siparişleri',
+        icon: 'shopping-cart',
+        iconColor: 'text-primary',
+        loading: true, // Show loading state initially
+        columns: [
+            { 
+                field: 'id', 
+                label: 'Sipariş No', 
+                sortable: true, 
+                type: 'text',
+                formatter: (value) => `<strong>${value}</strong>`
+            },
+            { 
+                field: 'supplier_name', 
+                label: 'Tedarikçi', 
+                sortable: true, 
+                type: 'text',
+                formatter: (value) => value || '-'
+            },
+            { 
+                field: 'status', 
+                label: 'Durum', 
+                sortable: true, 
+                type: 'text',
+                formatter: (value, row) => `<span class="status-badge ${getStatusBadgeClass(value)}">${row.status_label || getStatusText(value)}</span>`
+            },
+            { 
+                field: 'total_amount', 
+                label: 'Toplam Tutar', 
+                sortable: true, 
+                type: 'number',
+                formatter: (value, row) => {
+                    const amount = formatCurrency(value, row.currency);
+                    const taxInfo = row.tax_outstanding > 0 ? `<br><small class="text-danger">+ ${formatCurrency(row.tax_outstanding, row.currency)} (KDV)</small>` : '';
+                    return `<div>${amount}${taxInfo}</div>`;
+                }
+            },
+            { 
+                field: 'currency', 
+                label: 'Para Birimi', 
+                sortable: true, 
+                type: 'text',
+                formatter: (value) => `<span class="currency-badge">${value || 'TRY'}</span>`
+            },
+            { 
+                field: 'priority', 
+                label: 'Öncelik', 
+                sortable: true, 
+                type: 'text',
+                formatter: (value) => `<span class="priority-badge ${getPriorityBadgeClass(value)}">${getPriorityText(value)}</span>`
+            },
+            { 
+                field: 'created_at', 
+                label: 'Oluşturulma Tarihi', 
+                sortable: true, 
+                type: 'date'
+            },
+            { 
+                field: 'payment_schedules', 
+                label: 'Ödeme Planı', 
+                sortable: false, 
+                type: 'text',
+                formatter: (value, row) => renderPaymentSchedules(row)
+            }
+        ],
+        actions: [
+            {
+                key: 'view',
+                label: 'Detayları Görüntüle',
+                icon: 'fas fa-eye',
+                class: 'btn-outline-primary',
+                onClick: (row) => viewPurchaseOrderDetails(row.id)
+            }
+        ],
+        onSort: handleSort,
+        onRowClick: handleRowClick,
+        refreshable: true,
+        onRefresh: loadPurchaseOrders,
+        exportable: true,
+        onExport: exportPurchaseOrdersData,
+        skeleton: true,
+        emptyMessage: 'Henüz satın alma siparişi bulunmamaktadır.',
+        emptyIcon: 'fas fa-inbox'
     });
     
     // Check for order ID in URL parameters
@@ -147,14 +233,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Add event listeners
 function addEventListeners() {
-    // Refresh button
-    document.getElementById('refresh-purchase-orders').addEventListener('click', loadPurchaseOrders);
-    
-    // Export button
-    document.getElementById('export-purchase-orders').addEventListener('click', exportPurchaseOrdersData);
-    
-
-    
     // Mark payment as paid
     document.getElementById('confirm-mark-paid').addEventListener('click', confirmMarkPaid);
     
@@ -176,14 +254,21 @@ function addEventListeners() {
 // Load purchase orders
 async function loadPurchaseOrders() {
     try {
-        showLoadingState();
+        // Set loading state on table
+        if (window.purchaseOrdersTable) {
+            window.purchaseOrdersTable.setLoading(true);
+        }
         
         const data = await getPurchaseOrders(currentFilters);
         currentPurchaseOrders = data.results || data;
         
-        renderPurchaseOrdersTable();
+        // Update table with new data
+        if (window.purchaseOrdersTable) {
+            window.purchaseOrdersTable.setLoading(false);
+            window.purchaseOrdersTable.updateData(currentPurchaseOrders);
+        }
+        
         renderStatistics();
-        renderPagination();
         
         // Check if there's a pending order ID to show modal
         if (window.pendingOrderId) {
@@ -211,73 +296,25 @@ async function loadPurchaseOrders() {
     } catch (error) {
         console.error('Error loading purchase orders:', error);
         showErrorMessage('Satın alma siparişleri yüklenirken hata oluştu.');
-    } finally {
-        hideLoadingState();
+        
+        // Update table with empty data on error
+        if (window.purchaseOrdersTable) {
+            window.purchaseOrdersTable.setLoading(false);
+            window.purchaseOrdersTable.updateData([]);
+        }
     }
 }
 
-// Render purchase orders table
-function renderPurchaseOrdersTable() {
-    const tbody = document.getElementById('purchase-orders-table-body');
-    
-    if (!currentPurchaseOrders || currentPurchaseOrders.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="9" class="text-center text-muted py-4">
-                    <i class="fas fa-inbox fa-2x mb-3"></i>
-                    <p>Henüz satın alma siparişi bulunmamaktadır.</p>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    const startIndex = (currentPage - 1) * itemsPerPage;
-    const endIndex = startIndex + itemsPerPage;
-    const pageData = currentPurchaseOrders.slice(startIndex, endIndex);
-    
-    tbody.innerHTML = pageData.map(order => `
-        <tr>
-            <td>
-                <strong>${order.id}</strong>
-            </td>
-            <td>${order.supplier_name || 'N/A'}</td>
-            <td>
-                <span class="status-badge ${getStatusBadgeClass(order.status)}">
-                    ${order.status_label || getStatusText(order.status)}
-                </span>
-            </td>
-            <td>
-                <div>
-                    <strong>${formatCurrency(order.total_amount, order.currency)}</strong>
-                    ${order.tax_outstanding > 0 ? `
-                        <br><small class="text-${order.tax_outstanding > 0}">
-                            + ${formatCurrency(order.tax_outstanding, order.currency)} (KDV)
-                        </small>
-                    ` : ''}
-                </div>
-            </td>
-            <td>
-                <span class="currency-badge">${order.currency || 'TRY'}</span>
-            </td>
-            <td>
-                <span class="priority-badge ${getPriorityBadgeClass(order.priority)}">
-                    ${getPriorityText(order.priority)}
-                </span>
-            </td>
-            <td>${formatDate(order.created_at)}</td>
-            <td class="text-center payment-schedule-column">
-                ${renderPaymentSchedules(order)}
-            </td>
-            <td class="text-center">
-                <div class="btn-group" role="group">
-                    <button class="btn btn-sm btn-outline-primary" onclick="viewPurchaseOrderDetails(${order.id})" title="Detayları Görüntüle">
-                        <i class="fas fa-eye"></i>
-                    </button>
-                </div>
-            </td>
-        </tr>
-    `).join('');
+// Event handlers for table
+function handleSort(field, direction) {
+    // Handle sorting if needed
+    console.log('Sort:', field, direction);
+    loadPurchaseOrders();
+}
+
+function handleRowClick(row) {
+    // Handle row click if needed
+    console.log('Row clicked:', row);
 }
 
 // Render statistics
@@ -472,51 +509,6 @@ async function confirmMarkPaid() {
     }
 }
 
-// Render pagination
-function renderPagination() {
-    const paginationContainer = document.getElementById('purchase-orders-pagination');
-    const totalPages = Math.ceil(currentPurchaseOrders.length / itemsPerPage);
-    
-    if (totalPages <= 1) {
-        paginationContainer.innerHTML = '';
-        return;
-    }
-    
-    let paginationHTML = '';
-    
-    // Previous button
-    paginationHTML += `
-        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-        </li>
-    `;
-    
-    // Page numbers
-    for (let i = 1; i <= totalPages; i++) {
-        if (i === 1 || i === totalPages || (i >= currentPage - 2 && i <= currentPage + 2)) {
-            paginationHTML += `
-                <li class="page-item ${i === currentPage ? 'active' : ''}">
-                    <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
-                </li>
-            `;
-        } else if (i === currentPage - 3 || i === currentPage + 3) {
-            paginationHTML += '<li class="page-item disabled"><span class="page-link">...</span></li>';
-        }
-    }
-    
-    // Next button
-    paginationHTML += `
-        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-        </li>
-    `;
-    
-    paginationContainer.innerHTML = paginationHTML;
-}
 
 // View purchase order details
 async function viewPurchaseOrderDetails(orderId) {
@@ -740,23 +732,6 @@ function formatDate(dateString) {
     return new Date(dateString).toLocaleDateString('tr-TR');
 }
 
-function showLoadingState() {
-    const tbody = document.getElementById('purchase-orders-table-body');
-    tbody.innerHTML = `
-        <tr>
-            <td colspan="9" class="text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Yükleniyor...</span>
-                </div>
-                <p class="mt-2">Yükleniyor...</p>
-            </td>
-        </tr>
-    `;
-}
-
-function hideLoadingState() {
-    // Loading state is handled by renderPurchaseOrdersTable
-}
 
 function showSuccessMessage(message) {
     // You can implement a toast notification system here
@@ -770,10 +745,4 @@ function showErrorMessage(message) {
 
 // Global functions for onclick handlers
 window.viewPurchaseOrderDetails = viewPurchaseOrderDetails;
-
-window.changePage = function(page) {
-    currentPage = page;
-    renderPurchaseOrdersTable();
-    renderPagination();
-};
 window.showMarkPaidModal = showMarkPaidModal;

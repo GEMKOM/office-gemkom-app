@@ -92,7 +92,7 @@ async function handleLandingPage() {
                             link: '/procurement/purchase-requests'
                         },
                         {
-                            label: 'Fiyat Analizi',
+                            label: 'Raporlar',
                             icon: 'fas fa-balance-scale',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/procurement/reports'

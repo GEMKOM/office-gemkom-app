@@ -1,35 +1,25 @@
-// Machining Module JavaScript
+// Capacity Management Module JavaScript
 
 // Import navbar functionality
-import { initNavbar } from '../../components/navbar.js';
-import { MenuComponent } from '../../components/menu/menu.js';
+import { initNavbar } from '../../../components/navbar.js';
+import { MenuComponent } from '../../../components/menu/menu.js';
 
-// Navigation function for different sections
-function navigateTo(section) {
+// Navigation function for different capacity sections
+function navigateToCapacity(section) {
     switch(section) {
-        case 'dashboard':
-            // Navigate to dashboard
-            console.log('Navigating to dashboard...');
-            window.location.href = '/manufacturing/machining/dashboard/';
+        case 'planning':
+            // Navigate to capacity planning
+            console.log('Navigating to capacity planning...');
+            window.location.href = '/manufacturing/machining/capacity/planning/';
             break;
-        case 'tasks':
-            // Navigate to tasks
-            console.log('Navigating to tasks...');
-            window.location.href = '/manufacturing/machining/tasks/';
-            break;
-        case 'reports':
-            // Navigate to reports
-            console.log('Navigating to reports...');
-            window.location.href = '/manufacturing/machining/reports/';
-            break;
-        case 'capacity':
-            // Navigate to capacity management
-            console.log('Navigating to capacity management...');
-            window.location.href = '/manufacturing/machining/capacity/';
+        case 'history':
+            // Navigate to machine work history
+            console.log('Navigating to machine work history...');
+            window.location.href = '/manufacturing/machining/capacity/history/';
             break;
         default:
-            console.log('Unknown section:', section);
-            showNotification('Bilinmeyen bölüm!', 'error');
+            console.log('Unknown capacity section:', section);
+            showNotification('Bilinmeyen kapasite bölümü!', 'error');
     }
 }
 
@@ -86,81 +76,79 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 
-// Initialize machining module with enhanced features
-function initMachiningModule() {
-    console.log('Machining module initialized');
+// Initialize capacity management module
+function initCapacityModule() {
+    console.log('Capacity management module initialized');
     
     // Initialize navbar
     initNavbar();
     
     // Initialize menu component
     const menuComponent = new MenuComponent('menu-container', {
-        title: 'Talaşlı İmalat',
-        subtitle: 'CNC işlemleri ve talaşlı imalat süreçleri yönetimi',
+        title: 'Kapasite Yönetimi',
+        subtitle: 'Makine kapasitelerini planlayın ve geçmiş çalışma verilerini analiz edin',
         cards: [
             {
-                title: 'Dashboard',
-                description: 'Gerçek zamanlı görünüm ile aktif zamanlayıcıları, makine durumlarını ve istatistikleri takip edin.',
-                icon: 'fas fa-chart-line',
+                title: 'Kapasite Planlayıcı',
+                description: 'Makine kapasitelerini planlayın, kaynak optimizasyonu yapın ve üretim programını oluşturun.',
+                icon: 'fas fa-calendar-alt',
                 iconColor: 'primary',
-                link: '/manufacturing/machining/dashboard'
-            },
-            {
-                title: 'Görevler',
-                description: 'Mevcut görevleri görüntüleyin, yeni görevler oluşturun ve toplu görev yönetimi yapın.',
-                icon: 'fas fa-tasks',
-                iconColor: 'success',
-                link: '/manufacturing/machining/tasks'
-            },
-            {
-                title: 'Raporlar',
-                description: 'Detaylı raporlar ve analizler ile performansınızı ölçün ve veriye dayalı kararlar alın.',
-                icon: 'fas fa-chart-bar',
-                iconColor: 'info',
-                link: '/manufacturing/machining/reports',
+                link: '/manufacturing/machining/capacity/planning',
                 features: [
                     {
-                        label: 'Performans raporları',
+                        label: 'Kapasite planlama',
                         icon: 'fas fa-chart-line',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/reports/performance'
-                    },
-                    {
-                        label: 'Zaman bazlı analizler',
-                        icon: 'fas fa-calendar',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/reports/time-based'
-                    },
-                    {
-                        label: 'PDF/Excel export',
-                        icon: 'fas fa-download',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/reports/export'
-                    },
-                    {
-                        label: 'Filtreleme seçenekleri',
-                        icon: 'fas fa-filter',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/reports/filters'
-                    }
-                ]
-            },
-            {
-                title: 'Kapasite Yönetimi',
-                description: 'Makine kapasitelerini planlayın ve geçmiş çalışma verilerini analiz edin.',
-                icon: 'fas fa-industry',
-                iconColor: 'warning',
-                link: '/manufacturing/machining/capacity',
-                features: [
-                    {
-                        label: 'Kapasite Planlayıcı',
-                        icon: 'fas fa-calendar-alt',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/machining/capacity/planning'
                     },
                     {
-                        label: 'Makine Çalışma Geçmişi',
-                        icon: 'fas fa-history',
+                        label: 'Kaynak optimizasyonu',
+                        icon: 'fas fa-cogs',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/capacity/planning'
+                    },
+                    {
+                        label: 'Üretim programı',
+                        icon: 'fas fa-calendar',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/capacity/planning'
+                    },
+                    {
+                        label: 'Yük dengeleme',
+                        icon: 'fas fa-balance-scale',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/capacity/planning'
+                    }
+                ]
+            },
+            {
+                title: 'Makine Çalışma Geçmişi',
+                description: 'Makinelerin geçmiş çalışma verilerini görüntüleyin, performans analizi yapın ve trendleri takip edin.',
+                icon: 'fas fa-history',
+                iconColor: 'info',
+                link: '/manufacturing/machining/capacity/history',
+                features: [
+                    {
+                        label: 'Çalışma geçmişi',
+                        icon: 'fas fa-clock',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/capacity/history'
+                    },
+                    {
+                        label: 'Performans analizi',
+                        icon: 'fas fa-chart-bar',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/capacity/history'
+                    },
+                    {
+                        label: 'Trend analizi',
+                        icon: 'fas fa-chart-line',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/capacity/history'
+                    },
+                    {
+                        label: 'Verimlilik raporları',
+                        icon: 'fas fa-tachometer-alt',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/machining/capacity/history'
                     }
@@ -194,9 +182,9 @@ function initMachiningModule() {
             // Get the section from onclick attribute
             const onclick = this.getAttribute('onclick');
             if (onclick) {
-                const match = onclick.match(/navigateTo\('([^']+)'\)/);
+                const match = onclick.match(/navigateToCapacity\('([^']+)'\)/);
                 if (match) {
-                    navigateTo(match[1]);
+                    navigateToCapacity(match[1]);
                 }
             }
         });
@@ -289,10 +277,8 @@ function initMachiningModule() {
 
 // Module status tracking
 const moduleStatus = {
-    dashboard: 'ready',
-    tasks: 'development',
-    reports: 'coming-soon',
-    capacity: 'ready'
+    planning: 'ready',
+    history: 'ready'
 };
 
 // Get module status
@@ -352,9 +338,9 @@ function addCustomStyles() {
 
 // Export functions for use in other modules
 export {
-    navigateTo,
+    navigateToCapacity,
     showNotification,
-    initMachiningModule,
+    initCapacityModule,
     getModuleStatus,
     isModuleAvailable
 };
@@ -362,9 +348,9 @@ export {
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
     addCustomStyles();
-    initMachiningModule();
+    initCapacityModule();
 });
 
 // Make functions globally available
-window.navigateTo = navigateTo;
+window.navigateToCapacity = navigateToCapacity;
 window.showNotification = showNotification;
