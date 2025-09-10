@@ -5,6 +5,7 @@ import { initNavbar } from '../../../../components/navbar.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { TableComponent } from '../../../../components/table/table.js';
+import { GanttChart } from '../../../../components/gantt/gantt.js';
 import { fetchMachines } from '../../../../generic/machines.js';
 import { getCapacityPlanning, updateCapacityPlanning } from '../../../../generic/machining/capacityPlanning.js';
 
@@ -18,12 +19,11 @@ let unplannedTasks = [];
 let hasUnsavedChanges = false;
 let machinesTable = null;
 let isLoadingMachine = false;
+let ganttChart = null;
 
-// Gantt chart state
+// Gantt chart state (kept for compatibility with existing code)
 let ganttCurrentDate = new Date();
 let ganttPeriod = 'month'; // 'week', 'month', 'year'
-let ganttViewStart = null;
-let ganttViewEnd = null;
 
 // Initialize capacity planning module
 function initCapacityPlanning() {
@@ -40,6 +40,9 @@ function initCapacityPlanning() {
     
     // Initialize machines table
     initMachinesTable();
+    
+    // Initialize Gantt chart
+    initGanttChart();
     
     // Reset selection state
     resetMachineSelection();
@@ -164,6 +167,42 @@ function initMachinesTable() {
         console.log('Machines table initialized successfully');
     } catch (error) {
         console.error('Error initializing machines table:', error);
+    }
+}
+
+// Initialize Gantt chart component
+function initGanttChart() {
+    console.log('Initializing Gantt chart...');
+    
+    try {
+        ganttChart = new GanttChart('gantt-container', {
+            title: 'Zaman Çizelgesi',
+            defaultPeriod: 'month',
+            showDateOverlay: true,
+            showCurrentTime: true,
+            onPeriodChange: (period, date) => {
+                console.log('Gantt period changed:', period, date);
+                // Update the global state to match the component
+                ganttPeriod = period;
+                ganttCurrentDate = new Date(date);
+                
+                // Re-render with current tasks if any
+                if (currentMachineId) {
+                    const plannedTasks = currentTasks.filter(t => t.in_plan);
+                    ganttChart.setTasks(plannedTasks);
+                }
+            },
+            onTaskClick: (task, event) => {
+                console.log('Task clicked:', task);
+                if (task && task.key) {
+                    editTask(task.key);
+                }
+            }
+        });
+        
+        console.log('Gantt chart initialized successfully');
+    } catch (error) {
+        console.error('Error initializing Gantt chart:', error);
     }
 }
 
@@ -352,7 +391,7 @@ async function loadMachineTasks(machineId) {
         
         renderTasksTable(planned);
         renderUnplannedTasksTable(unplanned);
-        renderGanttChart(planned);
+        updateGanttChart(planned);
         
         // Update machine task count
         updateMachineTaskCount(machineId, tasks.length);
@@ -452,310 +491,30 @@ function renderUnplannedTasksTable(tasks) {
     `).join('');
 }
 
-// Calculate Gantt view date range based on current date and period
-function calculateGanttViewRange() {
-    const date = new Date(ganttCurrentDate);
-    
-    switch (ganttPeriod) {
-        case 'day':
-            // Single day view - start and end of the same day
-            ganttViewStart = new Date(date);
-            ganttViewStart.setHours(0, 0, 0, 0); // Start of day
-            ganttViewEnd = new Date(date);
-            ganttViewEnd.setHours(23, 59, 59, 999); // End of day
-            break;
-            
-        case 'week':
-            // Start from Monday of the current week
-            const dayOfWeek = date.getDay();
-            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
-            ganttViewStart = new Date(date);
-            ganttViewStart.setDate(date.getDate() + mondayOffset);
-            ganttViewEnd = new Date(ganttViewStart);
-            ganttViewEnd.setDate(ganttViewStart.getDate() + 6);
-            break;
-            
-        case 'month':
-            // First day of the month
-            ganttViewStart = new Date(date.getFullYear(), date.getMonth(), 1);
-            // Last day of the month
-            ganttViewEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
-            break;
-            
-        case 'year':
-            // First day of the year
-            ganttViewStart = new Date(date.getFullYear(), 0, 1);
-            // Last day of the year
-            ganttViewEnd = new Date(date.getFullYear(), 11, 31);
-            break;
-    }
-    
-    // Add some padding
-    ganttViewStart.setDate(ganttViewStart.getDate() - 1);
-    ganttViewEnd.setDate(ganttViewEnd.getDate() + 1);
-}
 
-// Render Gantt chart
-function renderGanttChart(tasks) {
-    const ganttContainer = document.getElementById('gantt-chart');
-    if (!ganttContainer) return;
-
-    if (tasks.length === 0) {
-        ganttContainer.innerHTML = `
-            <div class="text-center text-muted py-5">
-                <i class="fas fa-chart-gantt fa-3x mb-3"></i>
-                <p>Planlanmış görev bulunmuyor</p>
-            </div>
-        `;
+// Update Gantt chart with tasks
+function updateGanttChart(tasks) {
+    if (!ganttChart) {
+        console.warn('Gantt chart not initialized');
         return;
     }
 
-    // Calculate view range
-    calculateGanttViewRange();
+    // Transform tasks to match the Gantt component's expected format
+    const transformedTasks = tasks.map(task => ({
+        id: task.key,
+        title: task.name,
+        name: task.name,
+        key: task.key,
+        planned_start_ms: task.planned_start_ms,
+        planned_end_ms: task.planned_end_ms,
+        plan_order: task.plan_order,
+        plan_locked: task.plan_locked
+    }));
 
-    // Sort tasks by plan_order
-    const sortedTasks = [...tasks].sort((a, b) => (a.plan_order || 0) - (b.plan_order || 0));
-    
-    // Filter tasks that are visible in current view
-    const visibleTasks = sortedTasks.filter(task => {
-        if (!task.planned_start_ms || !task.planned_end_ms) return false;
-        
-        const taskStart = new Date(task.planned_start_ms);
-        const taskEnd = new Date(task.planned_end_ms);
-        
-        // Task is visible if it overlaps with the view range
-        return taskStart <= ganttViewEnd && taskEnd >= ganttViewStart;
-    });
-
-    if (visibleTasks.length === 0) {
-        ganttContainer.innerHTML = `
-            <div class="text-center text-muted py-5">
-                <i class="fas fa-calendar-alt fa-3x mb-3"></i>
-                <p>Bu dönemde planlanmış görev bulunmuyor</p>
-            </div>
-        `;
-        return;
-    }
-
-    // Calculate timeline based on period
-    let timelineData = [];
-    let dayWidth = 30;
-    
-    if (ganttPeriod === 'day') {
-        // Show 30-minute intervals for single day view
-        const totalIntervals = 48; // 24 hours * 2 (30-minute intervals)
-        dayWidth = Math.max(20, Math.min(40, 1200 / totalIntervals));
-        
-        for (let i = 0; i < totalIntervals; i++) {
-            const hour = Math.floor(i / 2);
-            const minute = (i % 2) * 30;
-            const timeString = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-            
-            timelineData.push({
-                date: new Date(ganttViewStart.getFullYear(), ganttViewStart.getMonth(), ganttViewStart.getDate(), hour, minute),
-                label: minute === 0 ? hour.toString().padStart(2, '0') : '',
-                sublabel: minute === 0 ? `${hour}:00` : '',
-                width: dayWidth
-            });
-        }
-    } else if (ganttPeriod === 'week') {
-        // Show days with hour resolution for better time display
-        const totalDays = Math.ceil((ganttViewEnd - ganttViewStart) / (1000 * 60 * 60 * 24));
-        dayWidth = Math.max(40, Math.min(80, 800 / totalDays));
-        
-        for (let i = 0; i < totalDays; i++) {
-            const date = new Date(ganttViewStart);
-            date.setDate(date.getDate() + i);
-            timelineData.push({
-                date: date,
-                label: date.getDate().toString(),
-                sublabel: date.toLocaleDateString('tr-TR', { weekday: 'short' }),
-                width: dayWidth
-            });
-        }
-    } else if (ganttPeriod === 'month') {
-        // Show days with hour resolution for better time display
-        const totalDays = Math.ceil((ganttViewEnd - ganttViewStart) / (1000 * 60 * 60 * 24));
-        dayWidth = Math.max(25, Math.min(40, 1000 / totalDays));
-        
-        for (let i = 0; i < totalDays; i++) {
-            const date = new Date(ganttViewStart);
-            date.setDate(date.getDate() + i);
-            timelineData.push({
-                date: date,
-                label: date.getDate().toString(),
-                sublabel: date.toLocaleDateString('tr-TR', { month: 'short' }),
-                width: dayWidth
-            });
-        }
-    } else if (ganttPeriod === 'year') {
-        // Show months
-        const totalMonths = 12;
-        dayWidth = Math.max(60, Math.min(100, 1200 / totalMonths));
-        
-        for (let i = 0; i < totalMonths; i++) {
-            const date = new Date(ganttViewStart.getFullYear(), i, 1);
-            timelineData.push({
-                date: date,
-                label: date.toLocaleDateString('tr-TR', { month: 'short' }),
-                sublabel: date.getFullYear().toString(),
-                width: dayWidth
-            });
-        }
-    }
-
-    // Create Gantt chart HTML
-    let ganttHTML = `
-        <div class="gantt-chart-container">
-            <div class="gantt-timeline" style="width: ${timelineData.length * dayWidth}px;">
-                <div class="gantt-header-row">
-                    ${timelineData.map(item => `
-                        <div class="gantt-header-cell" style="width: ${item.width}px;">
-                            <div class="gantt-date">${item.label}</div>
-                            <div class="gantt-month">${item.sublabel}</div>
-                        </div>
-                    `).join('')}
-                </div>
-                <div class="gantt-tasks">
-    `;
-
-    console.log('Rendering Gantt chart with visible tasks:', visibleTasks.length);
-    
-    visibleTasks.forEach((task, index) => {
-        if (task.planned_start_ms && task.planned_end_ms) {
-            const startDate = new Date(task.planned_start_ms);
-            const endDate = new Date(task.planned_end_ms);
-            
-            console.log(`Rendering task ${task.key}:`, {
-                startDate: startDate.toLocaleString('tr-TR', { 
-                    year: 'numeric', 
-                    month: '2-digit', 
-                    day: '2-digit', 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                }),
-                endDate: endDate.toLocaleString('tr-TR', { 
-                    year: 'numeric', 
-                    month: '2-digit', 
-                    day: '2-digit', 
-                    hour: '2-digit', 
-                    minute: '2-digit' 
-                }),
-                duration: `${(endDate - startDate) / (1000 * 60 * 60)}h`
-            });
-            
-            // Calculate position and width
-            let left, width;
-            
-            if (ganttPeriod === 'year') {
-                // For year view, position based on months
-                const startMonth = startDate.getMonth();
-                const endMonth = endDate.getMonth();
-                left = startMonth * dayWidth;
-                width = Math.max((endMonth - startMonth + 1) * dayWidth, 20);
-            } else if (ganttPeriod === 'day') {
-                // For day view, position based on 30-minute intervals
-                const startOffsetMinutes = (startDate - ganttViewStart) / (1000 * 60 * 30); // 30-minute intervals from view start
-                const durationMinutes = (endDate - startDate) / (1000 * 60 * 30); // Duration in 30-minute intervals
-                
-                left = startOffsetMinutes * dayWidth;
-                width = Math.max(durationMinutes * dayWidth, 20);
-            } else {
-                // For week/month view, position based on hours for better time resolution
-                const startOffsetHours = (startDate - ganttViewStart) / (1000 * 60 * 60); // Hours from view start
-                const durationHours = (endDate - startDate) / (1000 * 60 * 60); // Duration in hours
-                
-                // Calculate position and width based on hours
-                const hourWidth = dayWidth / 24; // Each hour takes 1/24 of a day width
-                left = startOffsetHours * hourWidth;
-                width = Math.max(durationHours * hourWidth, 20);
-            }
-            
-            ganttHTML += `
-                <div class="gantt-task-row">
-                    <div class="gantt-task-label">
-                        <strong>${task.key}</strong>
-                        <small class="text-muted d-block">${task.name}</small>
-                    </div>
-                    <div class="gantt-task-bar-container">
-                        <div class="gantt-task-bar ${task.plan_locked ? 'locked' : 'unlocked'}" 
-                             style="left: ${left}px; width: ${width}px;"
-                             data-task-key="${task.key}"
-                             title="${task.name} (${startDate.toLocaleString('tr-TR', { 
-                                 year: 'numeric', 
-                                 month: '2-digit', 
-                                 day: '2-digit', 
-                                 hour: '2-digit', 
-                                 minute: '2-digit' 
-                             })} - ${endDate.toLocaleString('tr-TR', { 
-                                 year: 'numeric', 
-                                 month: '2-digit', 
-                                 day: '2-digit', 
-                                 hour: '2-digit', 
-                                 minute: '2-digit' 
-                             })})">
-                            <div class="gantt-task-content">
-                                <span class="gantt-task-text">${task.key}</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-    });
-
-    ganttHTML += `
-                </div>
-            </div>
-        </div>
-    `;
-
-    ganttContainer.innerHTML = ganttHTML;
-
-    // Add drag functionality to task bars
-    setupGanttDragAndDrop();
+    console.log('Updating Gantt chart with tasks:', transformedTasks);
+    ganttChart.setTasks(transformedTasks);
 }
 
-// Set Gantt chart period
-function setGanttPeriod(period) {
-    ganttPeriod = period;
-    
-    // Update button states
-    document.querySelectorAll('[data-period]').forEach(btn => {
-        btn.classList.remove('active');
-    });
-    document.getElementById(`gantt-period-${period}`).classList.add('active');
-    
-    // Re-render Gantt chart
-    const plannedTasks = currentTasks.filter(t => t.in_plan);
-    renderGanttChart(plannedTasks);
-}
-
-// Navigate Gantt chart
-function navigateGantt(direction) {
-    const date = new Date(ganttCurrentDate);
-    
-    switch (ganttPeriod) {
-        case 'day':
-            date.setDate(date.getDate() + direction);
-            break;
-        case 'week':
-            date.setDate(date.getDate() + (direction * 7));
-            break;
-        case 'month':
-            date.setMonth(date.getMonth() + direction);
-            break;
-        case 'year':
-            date.setFullYear(date.getFullYear() + direction);
-            break;
-    }
-    
-    ganttCurrentDate = date;
-    
-    // Re-render Gantt chart
-    const plannedTasks = currentTasks.filter(t => t.in_plan);
-    renderGanttChart(plannedTasks);
-}
 
 // Setup drag and drop for task table rows
 function setupTaskRowDragAndDrop() {
@@ -849,89 +608,11 @@ function reorderTasks(draggedTaskKey, targetTaskKey) {
     // Re-render the table and Gantt chart
     const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
     renderTasksTable(updatedPlannedTasks);
-    renderGanttChart(updatedPlannedTasks);
+    updateGanttChart(updatedPlannedTasks);
     
     showNotification('Görev sırası güncellendi', 'success', 2000);
 }
 
-// Setup drag and drop for Gantt chart
-function setupGanttDragAndDrop() {
-    const taskBars = document.querySelectorAll('.gantt-task-bar');
-    
-    taskBars.forEach(bar => {
-        bar.draggable = true;
-        
-        bar.addEventListener('dragstart', (e) => {
-            e.dataTransfer.setData('text/plain', bar.dataset.taskKey);
-            bar.classList.add('dragging');
-        });
-        
-        bar.addEventListener('dragend', (e) => {
-            bar.classList.remove('dragging');
-        });
-    });
-
-    // Add drop zones (timeline cells)
-    const timelineCells = document.querySelectorAll('.gantt-header-cell');
-    timelineCells.forEach((cell, index) => {
-        cell.addEventListener('dragover', (e) => {
-            e.preventDefault();
-            cell.classList.add('drag-over');
-        });
-        
-        cell.addEventListener('dragleave', (e) => {
-            cell.classList.remove('drag-over');
-        });
-        
-        cell.addEventListener('drop', (e) => {
-            e.preventDefault();
-            cell.classList.remove('drag-over');
-            
-            const taskKey = e.dataTransfer.getData('text/plain');
-            const newStartDate = calculateDateFromCellIndex(index);
-            
-            updateTaskDates(taskKey, newStartDate);
-        });
-    });
-}
-
-// Calculate date from cell index based on current period
-function calculateDateFromCellIndex(cellIndex) {
-    if (ganttPeriod === 'year') {
-        // For year view, cell index represents month
-        return new Date(ganttViewStart.getFullYear(), cellIndex, 1);
-    } else if (ganttPeriod === 'day') {
-        // For day view, cell index represents 30-minute interval
-        const newDate = new Date(ganttViewStart);
-        const hour = Math.floor(cellIndex / 2);
-        const minute = (cellIndex % 2) * 30;
-        newDate.setHours(hour, minute, 0, 0); // Set to specific hour and minute
-        return newDate;
-    } else {
-        // For week/month view, cell index represents day (snap to start of day)
-        const newDate = new Date(ganttViewStart);
-        newDate.setDate(ganttViewStart.getDate() + cellIndex);
-        newDate.setHours(0, 0, 0, 0); // Set to start of day
-        return newDate;
-    }
-}
-
-// Update task dates
-function updateTaskDates(taskKey, newStartDate) {
-    const task = currentTasks.find(t => t.key === taskKey);
-    if (!task) return;
-
-    const remainingHours = task.remaining_hours || task.estimated_hours || 2;
-    const duration = remainingHours * 60 * 60 * 1000; // Convert hours to milliseconds
-
-    task.planned_start_ms = newStartDate.getTime();
-    task.planned_end_ms = newStartDate.getTime() + duration;
-    
-    hasUnsavedChanges = true;
-    const plannedTasks = currentTasks.filter(t => t.in_plan);
-    renderGanttChart(plannedTasks);
-    renderTasksTable(plannedTasks);
-}
 
 // Edit task
 function editTask(taskKey) {
@@ -950,7 +631,7 @@ function editTask(taskKey) {
     document.getElementById('edit-plan-locked').checked = task.plan_locked || false;
 
     // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('editTaskModal'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('editTaskModal'));
     modal.show();
 }
 
@@ -976,7 +657,7 @@ function addToPlan(taskKey) {
     // Update the display immediately
     const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
     renderTasksTable(updatedPlannedTasks);
-    renderGanttChart(updatedPlannedTasks);
+    updateGanttChart(updatedPlannedTasks);
     renderUnplannedTasksTable(currentTasks.filter(t => !t.in_plan));
     
     showNotification('Görev plana eklendi', 'success', 2000);
@@ -999,7 +680,7 @@ function removeFromPlan(taskKey) {
     // Update the display immediately
     const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
     renderTasksTable(updatedPlannedTasks);
-    renderGanttChart(updatedPlannedTasks);
+    updateGanttChart(updatedPlannedTasks);
     renderUnplannedTasksTable(currentTasks.filter(t => !t.in_plan));
     
     showNotification('Görev plandan çıkarıldı', 'info', 2000);
@@ -1007,7 +688,7 @@ function removeFromPlan(taskKey) {
 
 // Autoschedule tasks
 function autoscheduleTasks() {
-    const modal = new bootstrap.Modal(document.getElementById('autoscheduleModal'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('autoscheduleModal'));
     
     // Set default start date to now
     const now = new Date();
@@ -1097,7 +778,7 @@ async function confirmAutoschedule() {
     // Update display (frontend only)
     const plannedTasks = currentTasks.filter(t => t.in_plan);
     renderTasksTable(plannedTasks);
-    renderGanttChart(plannedTasks);
+    updateGanttChart(plannedTasks);
     
     showNotification('Görevler otomatik olarak planlandı', 'success');
 }
@@ -1314,37 +995,6 @@ function setupEventListeners() {
     // Confirm autoschedule
     document.getElementById('confirm-autoschedule').addEventListener('click', confirmAutoschedule);
     
-    // Gantt chart period controls
-    document.getElementById('gantt-period-day').addEventListener('click', () => {
-        setGanttPeriod('day');
-    });
-    
-    document.getElementById('gantt-period-week').addEventListener('click', () => {
-        setGanttPeriod('week');
-    });
-    
-    document.getElementById('gantt-period-month').addEventListener('click', () => {
-        setGanttPeriod('month');
-    });
-    
-    document.getElementById('gantt-period-year').addEventListener('click', () => {
-        setGanttPeriod('year');
-    });
-    
-    // Gantt chart navigation controls
-    document.getElementById('gantt-prev').addEventListener('click', () => {
-        navigateGantt(-1);
-    });
-    
-    document.getElementById('gantt-next').addEventListener('click', () => {
-        navigateGantt(1);
-    });
-    
-    document.getElementById('gantt-today').addEventListener('click', () => {
-        ganttCurrentDate = new Date();
-        const plannedTasks = currentTasks.filter(t => t.in_plan);
-        renderGanttChart(plannedTasks);
-    });
 }
 
 // Show notification

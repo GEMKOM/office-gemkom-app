@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gantt Chart Component Test</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Gantt Component CSS -->
+    <link rel="stylesheet" href="gantt.css">
+    
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: white;
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .test-controls .btn {
+            margin-bottom: 5px;
+        }
+        .test-info {
+            background: #e3f2fd;
+            border: 1px solid #90caf9;
+            border-radius: 4px;
+            padding: 10px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1 class="mb-4">
+            <i class="fas fa-chart-gantt me-2"></i>
+            Gantt Chart Component Test
+        </h1>
+        
+        <!-- Test Controls -->
+        <div class="test-section">
+            <h3>Test Controls</h3>
+            <div class="test-controls">
+                <button class="btn btn-primary" onclick="loadTestData('basic')">
+                    <i class="fas fa-play me-1"></i>Load Basic Data
+                </button>
+                <button class="btn btn-success" onclick="loadTestData('complex')">
+                    <i class="fas fa-cogs me-1"></i>Load Complex Data
+                </button>
+                <button class="btn btn-warning" onclick="loadTestData('mixed')">
+                    <i class="fas fa-random me-1"></i>Load Mixed Data
+                </button>
+                <button class="btn btn-info" onclick="loadTestData('empty')">
+                    <i class="fas fa-ban me-1"></i>Load Empty Data
+                </button>
+                <button class="btn btn-secondary" onclick="clearData()">
+                    <i class="fas fa-trash me-1"></i>Clear Data
+                </button>
+            </div>
+            
+            <div class="test-info">
+                <strong>Test Data Info:</strong>
+                <ul class="mb-0">
+                    <li><strong>Basic:</strong> Simple tasks with clear start/end times</li>
+                    <li><strong>Complex:</strong> Multiple overlapping tasks with different durations</li>
+                    <li><strong>Mixed:</strong> Combination of locked and unlocked tasks</li>
+                    <li><strong>Empty:</strong> No tasks to test empty state</li>
+                </ul>
+            </div>
+        </div>
+        
+        <!-- Gantt Chart Test -->
+        <div class="test-section">
+            <h3>Gantt Chart Component</h3>
+            <div id="test-gantt-chart"></div>
+        </div>
+        
+        <!-- Test Results -->
+        <div class="test-section">
+            <h3>Test Results & Debug Info</h3>
+            <div id="test-results" class="bg-light p-3 rounded">
+                <p class="text-muted mb-0">Test results will appear here...</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="gantt.js"></script>
+    <script>
+        // Test data sets - using current dates
+        const now = new Date();
+        const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+        
+        const testDataSets = {
+            basic: [
+                {
+                    id: 1,
+                    title: 'Proje Planlama',
+                    planned_start_ms: new Date(today.getTime() + 8 * 60 * 60 * 1000).getTime(), // Today 8:00
+                    planned_end_ms: new Date(today.getTime() + 17 * 60 * 60 * 1000).getTime(), // Today 17:00
+                    plan_order: 1,
+                    plan_locked: false,
+                    in_plan: true
+                },
+                {
+                    id: 2,
+                    title: 'Tasarım Geliştirme',
+                    planned_start_ms: new Date(today.getTime() + 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000).getTime(), // Tomorrow 9:00
+                    planned_end_ms: new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000 + 16 * 60 * 60 * 1000).getTime(), // Day after tomorrow 16:00
+                    plan_order: 2,
+                    plan_locked: false,
+                    in_plan: true
+                },
+                {
+                    id: 3,
+                    title: 'Test ve Doğrulama',
+                    planned_start_ms: new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000).getTime(), // 3 days from now 10:00
+                    planned_end_ms: new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000 + 15 * 60 * 60 * 1000).getTime(), // 3 days from now 15:00
+                    plan_order: 3,
+                    plan_locked: true,
+                    in_plan: true
+                }
+            ],
+            
+            complex: [
+                {
+                    id: 1,
+                    title: 'Analiz ve Gereksinimler',
+                    planned_start_ms: new Date(today.getTime() + 8 * 60 * 60 * 1000).getTime(), // Today 8:00
+                    planned_end_ms: new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000 + 17 * 60 * 60 * 1000).getTime(), // 2 days from now 17:00
+                    plan_order: 1,
+                    plan_locked: false,
+                    in_plan: true
+                },
+                {
+                    id: 2,
+                    title: 'Sistem Tasarımı',
+                    planned_start_ms: new Date(today.getTime() + 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000).getTime(), // Tomorrow 10:00
+                    planned_end_ms: new Date(today.getTime() + 4 * 24 * 60 * 60 * 1000 + 16 * 60 * 60 * 1000).getTime(), // 4 days from now 16:00
+                    plan_order: 2,
+                    plan_locked: false,
+                    in_plan: true
+                },
+                {
+                    id: 3,
+                    title: 'Veritabanı Tasarımı',
+                    planned_start_ms: new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000).getTime(), // 2 days from now 9:00
+                    planned_end_ms: new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000 + 14 * 60 * 60 * 1000).getTime(), // 3 days from now 14:00
+                    plan_order: 3,
+                    plan_locked: true,
+                    in_plan: true
+                },
+                {
+                    id: 4,
+                    title: 'Frontend Geliştirme',
+                    planned_start_ms: new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000 + 8 * 60 * 60 * 1000).getTime(), // 3 days from now 8:00
+                    planned_end_ms: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000 + 17 * 60 * 60 * 1000).getTime(), // 7 days from now 17:00
+                    plan_order: 4,
+                    plan_locked: false,
+                    in_plan: true
+                },
+                {
+                    id: 5,
+                    title: 'Backend Geliştirme',
+                    planned_start_ms: new Date(today.getTime() + 4 * 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000).getTime(), // 4 days from now 9:00
+                    planned_end_ms: new Date(today.getTime() + 8 * 24 * 60 * 60 * 1000 + 16 * 60 * 60 * 1000).getTime(), // 8 days from now 16:00
+                    plan_order: 5,
+                    plan_locked: false,
+                    in_plan: true
+                },
+                {
+                    id: 6,
+                    title: 'Entegrasyon Testleri',
+                    planned_start_ms: new Date(today.getTime() + 7 * 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000).getTime(), // 7 days from now 10:00
+                    planned_end_ms: new Date(today.getTime() + 9 * 24 * 60 * 60 * 1000 + 15 * 60 * 60 * 1000).getTime(), // 9 days from now 15:00
+                    plan_order: 6,
+                    plan_locked: true,
+                    in_plan: true
+                },
+                {
+                    id: 7,
+                    title: 'Kullanıcı Kabul Testleri',
+                    planned_start_ms: new Date(today.getTime() + 9 * 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000).getTime(), // 9 days from now 9:00
+                    planned_end_ms: new Date(today.getTime() + 11 * 24 * 60 * 60 * 1000 + 17 * 60 * 60 * 1000).getTime(), // 11 days from now 17:00
+                    plan_order: 7,
+                    plan_locked: true,
+                    in_plan: true
+                }
+            ],
+            
+            mixed: [
+                {
+                    id: 1,
+                    title: 'Kritik Görev 1 (Kilitli)',
+                    planned_start_ms: new Date(today.getTime() + 8 * 60 * 60 * 1000).getTime(), // Today 8:00
+                    planned_end_ms: new Date(today.getTime() + 12 * 60 * 60 * 1000).getTime(), // Today 12:00
+                    plan_order: 1,
+                    plan_locked: true,
+                    in_plan: true
+                },
+                {
+                    id: 2,
+                    title: 'Esnek Görev 1',
+                    planned_start_ms: new Date(today.getTime() + 13 * 60 * 60 * 1000).getTime(), // Today 13:00
+                    planned_end_ms: new Date(today.getTime() + 24 * 60 * 60 * 1000 + 10 * 60 * 60 * 1000).getTime(), // Tomorrow 10:00
+                    plan_order: 2,
+                    plan_locked: false,
+                    in_plan: true
+                },
+                {
+                    id: 3,
+                    title: 'Kritik Görev 2 (Kilitli)',
+                    planned_start_ms: new Date(today.getTime() + 24 * 60 * 60 * 1000 + 11 * 60 * 60 * 1000).getTime(), // Tomorrow 11:00
+                    planned_end_ms: new Date(today.getTime() + 24 * 60 * 60 * 1000 + 17 * 60 * 60 * 1000).getTime(), // Tomorrow 17:00
+                    plan_order: 3,
+                    plan_locked: true,
+                    in_plan: true
+                },
+                {
+                    id: 4,
+                    title: 'Esnek Görev 2',
+                    planned_start_ms: new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000 + 9 * 60 * 60 * 1000).getTime(), // 2 days from now 9:00
+                    planned_end_ms: new Date(today.getTime() + 2 * 24 * 60 * 60 * 1000 + 15 * 60 * 60 * 1000).getTime(), // 2 days from now 15:00
+                    plan_order: 4,
+                    plan_locked: false,
+                    in_plan: true
+                },
+                {
+                    id: 5,
+                    title: 'Uzun Süreli Görev',
+                    planned_start_ms: new Date(today.getTime() + 3 * 24 * 60 * 60 * 1000 + 8 * 60 * 60 * 1000).getTime(), // 3 days from now 8:00
+                    planned_end_ms: new Date(today.getTime() + 5 * 24 * 60 * 60 * 1000 + 17 * 60 * 60 * 1000).getTime(), // 5 days from now 17:00
+                    plan_order: 5,
+                    plan_locked: false,
+                    in_plan: true
+                }
+            ],
+            
+            empty: []
+        };
+        
+        // Initialize Gantt chart
+        let ganttChart = null;
+        
+        function initTestGantt() {
+            try {
+                ganttChart = new GanttChart('test-gantt-chart', {
+                    title: 'Test Gantt Chart',
+                    defaultPeriod: 'month',
+                    showDateOverlay: true,
+                    showCurrentTime: true,
+                    onPeriodChange: (period, date) => {
+                        logTestResult(`Period changed to: ${period}`, 'info');
+                    },
+                    onTaskClick: (task, event) => {
+                        logTestResult(`Task clicked: ${task.title} (ID: ${task.id})`, 'success');
+                    }
+                });
+                
+                logTestResult('Gantt chart initialized successfully', 'success');
+            } catch (error) {
+                logTestResult(`Error initializing Gantt chart: ${error.message}`, 'danger');
+            }
+        }
+        
+        function loadTestData(dataType) {
+            if (!ganttChart) {
+                logTestResult('Gantt chart not initialized', 'danger');
+                return;
+            }
+            
+            const data = testDataSets[dataType];
+            if (!data) {
+                logTestResult(`Unknown data type: ${dataType}`, 'danger');
+                return;
+            }
+            
+            try {
+                logTestResult(`Loading ${dataType} data with ${data.length} tasks...`, 'info');
+                logTestResult(`Current date: ${new Date().toLocaleString('tr-TR')}`, 'info');
+                logTestResult(`Current period: ${ganttChart.getCurrentPeriod()}`, 'info');
+                
+                ganttChart.setTasks(data);
+                logTestResult(`Loaded ${dataType} data with ${data.length} tasks`, 'success');
+                
+                // Log task details
+                data.forEach(task => {
+                    const startDate = new Date(task.planned_start_ms).toLocaleString('tr-TR');
+                    const endDate = new Date(task.planned_end_ms).toLocaleString('tr-TR');
+                    const status = task.plan_locked ? 'Kilitli' : 'Esnek';
+                    logTestResult(`- ${task.title}: ${startDate} → ${endDate} (${status})`, 'info');
+                });
+                
+                // Check browser console for detailed logs
+                logTestResult('Check browser console (F12) for detailed rendering logs', 'info');
+            } catch (error) {
+                logTestResult(`Error loading data: ${error.message}`, 'danger');
+                console.error('Error details:', error);
+            }
+        }
+        
+        function clearData() {
+            if (!ganttChart) {
+                logTestResult('Gantt chart not initialized', 'danger');
+                return;
+            }
+            
+            try {
+                ganttChart.setTasks([]);
+                logTestResult('Data cleared successfully', 'warning');
+            } catch (error) {
+                logTestResult(`Error clearing data: ${error.message}`, 'danger');
+            }
+        }
+        
+        function logTestResult(message, type = 'info') {
+            const resultsDiv = document.getElementById('test-results');
+            const timestamp = new Date().toLocaleTimeString('tr-TR');
+            const alertClass = `alert-${type}`;
+            
+            const logEntry = document.createElement('div');
+            logEntry.className = `alert ${alertClass} alert-sm mb-2`;
+            logEntry.innerHTML = `
+                <small class="text-muted">[${timestamp}]</small> ${message}
+            `;
+            
+            resultsDiv.appendChild(logEntry);
+            resultsDiv.scrollTop = resultsDiv.scrollHeight;
+        }
+        
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            initTestGantt();
+            logTestResult('Test page loaded successfully', 'success');
+        });
+    </script>
+</body>
+</html>

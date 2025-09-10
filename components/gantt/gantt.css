@@ -1,0 +1,643 @@
+/* Gantt Chart Component Styles */
+
+.gantt-container {
+    background: white;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-top: 1rem;
+}
+
+.gantt-header-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding: 0.5rem 1rem;
+}
+
+.gantt-title {
+    margin: 0;
+    font-weight: 600;
+    color: #2c3e50;
+    font-size: 1.1rem;
+}
+
+.gantt-controls {
+    display: flex;
+    align-items: center;
+}
+
+.gantt-period-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    height: 40px;
+}
+
+.gantt-period-controls .btn-group {
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    border-radius: 8px;
+    overflow: hidden;
+    display: flex;
+    height: 40px;
+    align-items: stretch;
+}
+
+.gantt-period-controls .btn-group .btn {
+    border-radius: 0;
+    border-right: 1px solid rgba(139, 0, 0, 0.1);
+}
+
+.gantt-period-controls .btn-group .btn:first-child {
+    border-top-left-radius: 8px;
+    border-bottom-left-radius: 8px;
+}
+
+.gantt-period-controls .btn-group .btn:last-child {
+    border-top-right-radius: 8px;
+    border-bottom-right-radius: 8px;
+    border-right: none;
+}
+
+.gantt-controls .btn {
+    padding: 0.5rem 0.8rem;
+    border-radius: 6px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight: 600;
+    font-size: 0.8rem;
+    border: 2px solid transparent;
+    position: relative;
+    overflow: hidden;
+    min-width: 60px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+}
+
+.gantt-controls .btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+    transition: left 0.5s;
+}
+
+.gantt-controls .btn:hover::before {
+    left: 100%;
+}
+
+.gantt-controls .btn.active {
+    background: linear-gradient(135deg, #8b0000 0%, #660000 100%);
+    border-color: #4d0000;
+    color: white;
+    box-shadow: 0 4px 12px rgba(139, 0, 0, 0.4);
+    transform: translateY(-2px);
+}
+
+.gantt-controls .btn.active:hover {
+    background: linear-gradient(135deg, #660000 0%, #4d0000 100%);
+    box-shadow: 0 6px 16px rgba(139, 0, 0, 0.5);
+    transform: translateY(-3px);
+}
+
+.gantt-controls .btn:not(.active) {
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    border-color: #dee2e6;
+    color: #495057;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.gantt-controls .btn:not(.active):hover {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-color: #8b0000;
+    color: #8b0000;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(139, 0, 0, 0.2);
+}
+
+/* Date overlay positioning */
+/* Period indicator button styling */
+#gantt-current-period {
+    min-width: 120px;
+    font-weight: 600;
+    pointer-events: none;
+    cursor: default;
+    display: inline-block !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+
+#gantt-current-period:hover {
+    background-color: transparent;
+    border-color: #0dcaf0;
+    color: #0dcaf0;
+}
+
+.period-label {
+    font-weight: 600;
+    font-size: 0.9rem;
+    display: inline-block;
+}
+
+/* Ensure the period indicator button group is visible */
+.gantt-period-controls .btn-group:has(#gantt-current-period) {
+    display: flex !important;
+    visibility: visible !important;
+}
+
+.gantt-chart {
+    max-height: 500px;
+    position: relative;
+    min-height: 200px;
+    width: 100%;
+}
+
+
+
+.gantt-empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 200px;
+}
+
+.gantt-empty-message {
+    margin: 0;
+    font-size: 1rem;
+}
+
+/* Gantt Chart Content */
+.gantt-chart-container {
+    position: relative;
+    border: 1px solid #e0e7ff;
+    border-radius: 12px;
+    overflow: hidden;
+    background: white;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+    backdrop-filter: blur(10px);
+    display: flex;
+    width: 100%;
+}
+
+/* Ensure minimum width for different views - applied to timeline content */
+.gantt-chart-container.day-view .gantt-timeline-content {
+    min-width: 100%; /* Day view fits in visible area */
+}
+
+.gantt-chart-container.week-view .gantt-timeline-content {
+    min-width: 100%; /* Week view fits in visible area */
+}
+
+.gantt-chart-container.month-view .gantt-timeline-content {
+    min-width: auto; /* Width set dynamically based on actual days in month */
+}
+
+.gantt-chart-container.year-view .gantt-timeline-content {
+    min-width: 100%; /* Year view fits in visible area */
+}
+
+.gantt-header-row {
+    display: flex;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-bottom: 2px solid #cbd5e1;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    min-height: 60px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+    width: 100%;
+    flex: 1;
+}
+
+.gantt-fixed-column {
+    width: 220px;
+    flex-shrink: 0;
+    background: white;
+    border-right: 3px solid #8b0000;
+    display: flex;
+    flex-direction: column;
+}
+
+.gantt-header-label-cell {
+    width: 100%;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #e2e8f0 0%, #cbd5e1 100%);
+    border-bottom: 2px solid #cbd5e1;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-weight: 700;
+    color: #334155;
+    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
+    min-height: 60px;
+}
+
+.gantt-scrolling-column {
+    flex: 1;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: #8b0000 #f1f1f1;
+    scroll-behavior: smooth;
+    position: relative;
+    min-height: 200px;
+}
+
+.gantt-scrolling-column::-webkit-scrollbar {
+    height: 8px;
+}
+
+.gantt-scrolling-column::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.gantt-scrolling-column::-webkit-scrollbar-thumb {
+    background: #8b0000;
+    border-radius: 4px;
+}
+
+.gantt-scrolling-column::-webkit-scrollbar-thumb:hover {
+    background: #660000;
+}
+
+.gantt-timeline-content {
+    display: flex;
+    flex-direction: column;
+    min-width: 100%;
+    background-attachment: local;
+    background-position: 0 0;
+    background-color: white;
+}
+
+.gantt-timeline-header {
+    display: flex;
+    flex: 1;
+    min-width: 100%;
+}
+
+.gantt-header-cell {
+    border-right: 1px solid #cbd5e1;
+    border-bottom: 1px solid #cbd5e1;
+    padding: 12px 8px;
+    text-align: center;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #475569;
+    min-width: 40px;
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    position: relative;
+    transition: background-color 0.2s ease;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    box-sizing: border-box;
+}
+
+.gantt-header-cell:hover {
+    background-color: rgba(139, 0, 0, 0.05);
+}
+
+.gantt-header-cell:last-child {
+    border-right: none;
+}
+
+.gantt-date {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: #1e293b;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+.gantt-month {
+    font-size: 0.7rem;
+    color: #64748b;
+    text-transform: uppercase;
+    font-weight: 500;
+    letter-spacing: 0.5px;
+}
+
+/* Task Rows */
+
+.gantt-task-label {
+    width: 100%;
+    padding: 12px 16px;
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    border-bottom: 1px solid #e5e7eb;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    font-weight: 600;
+    color: #374151;
+    font-size: 0.9rem;
+    line-height: 1.4;
+    min-height: 60px;
+}
+
+.gantt-task-bar-container {
+    height: 60px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    position: relative;
+    background: transparent;
+}
+
+.gantt-task-bar {
+    height: 36px;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.2);
+    min-width: 20px;
+}
+
+.gantt-task-bar.unlocked {
+    background: linear-gradient(135deg, #8b0000 0%, #660000 100%);
+    border: 1px solid #4d0000;
+    box-shadow: 0 2px 8px rgba(139, 0, 0, 0.3);
+}
+
+.gantt-task-bar.locked {
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    border: 1px solid #b45309;
+    box-shadow: 0 2px 8px rgba(245, 158, 11, 0.3);
+}
+
+.gantt-task-bar:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+    z-index: 5;
+}
+
+.gantt-task-bar.unlocked:hover {
+    box-shadow: 0 6px 20px rgba(139, 0, 0, 0.4);
+}
+
+.gantt-task-bar.locked:hover {
+    box-shadow: 0 6px 20px rgba(245, 158, 11, 0.4);
+}
+
+.gantt-task-content {
+    color: white;
+    font-size: 0.75rem;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+    padding: 0 8px;
+    text-align: center;
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* Current time indicator */
+.gantt-current-time {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 2px;
+    background: #dc2626;
+    z-index: 15;
+    pointer-events: none;
+}
+
+.gantt-current-time::before {
+    content: '';
+    position: absolute;
+    top: -4px;
+    left: -3px;
+    width: 8px;
+    height: 8px;
+    background: #dc2626;
+    border-radius: 50%;
+}
+
+.gantt-current-time-label {
+    position: absolute;
+    top: -25px;
+    left: -20px;
+    background: #dc2626;
+    color: white;
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Drag and drop styles */
+.gantt-header-cell.drag-over {
+    background-color: rgba(139, 0, 0, 0.2);
+    border: 2px dashed #8b0000;
+}
+
+/* Navigation buttons styling */
+.gantt-controls .btn-group .btn {
+    padding: 0.5rem 0.6rem;
+    border-radius: 6px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-weight: 600;
+    border: 2px solid #dee2e6;
+    background: linear-gradient(135deg, #ffffff 0%, #f8f9fa 100%);
+    color: #495057;
+    min-width: 36px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+}
+
+.gantt-controls .btn-group .btn::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent);
+    transition: left 0.5s;
+}
+
+.gantt-controls .btn-group .btn:hover::before {
+    left: 100%;
+}
+
+.gantt-controls .btn-group .btn:hover {
+    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+    border-color: #8b0000;
+    color: #8b0000;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(139, 0, 0, 0.2);
+}
+
+.gantt-controls .btn-group .btn:active {
+    transform: translateY(0);
+    box-shadow: 0 2px 4px rgba(139, 0, 0, 0.3);
+}
+
+/* Special styling for Today button */
+.gantt-controls .btn-group .btn[title="Bugün"] {
+    background: linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%);
+    border-color: #90caf9;
+    color: #1976d2;
+}
+
+.gantt-controls .btn-group .btn[title="Bugün"]:hover {
+    background: linear-gradient(135deg, #bbdefb 0%, #90caf9 100%);
+    border-color: #1976d2;
+    color: #0d47a1;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .gantt-header-content {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+    }
+    
+    .gantt-period-controls {
+        gap: 0.5rem;
+    }
+    
+    .gantt-controls .btn {
+        padding: 0.4rem 0.6rem;
+        font-size: 0.75rem;
+        min-width: 50px;
+        height: 36px;
+    }
+    
+    .gantt-controls .btn-group .btn {
+        padding: 0.4rem 0.5rem;
+        min-width: 32px;
+        height: 36px;
+    }
+    
+    .gantt-period-controls {
+        height: 36px;
+    }
+    
+    .gantt-period-controls .btn-group {
+        height: 36px;
+    }
+    
+    .gantt-date-overlay {
+        top: 10px;
+    }
+    
+    .gantt-current-period {
+        padding: 0.5rem 1rem;
+        min-width: 150px;
+    }
+    
+    .period-label {
+        font-size: 0.9rem;
+    }
+    
+    .period-details {
+        font-size: 0.8rem;
+    }
+    
+    /* Adjust minimum widths for mobile */
+    .gantt-chart-container.day-view {
+        min-width: 5040px; /* 7 days * 24 hours * 30px (reduced) */
+    }
+    
+    .gantt-chart-container.week-view {
+        min-width: 1750px; /* 5 weeks * 7 days * 50px (reduced) */
+    }
+    
+    .gantt-chart-container.month-view {
+        min-width: 2700px; /* 3 months * 30 days * 30px (reduced) */
+    }
+    
+    .gantt-chart-container.year-view {
+        min-width: 2700px; /* 3 years * 12 months * 75px (reduced) */
+    }
+    
+    .gantt-task-label {
+        width: 180px;
+        padding: 8px 12px;
+        font-size: 0.8rem;
+    }
+    
+    .gantt-header-label-cell {
+        width: 180px;
+        padding: 8px 12px;
+    }
+    
+    .gantt-header-cell {
+        min-width: 30px;
+        padding: 8px 4px;
+        font-size: 0.7rem;
+    }
+    
+    .gantt-task-bar-container {
+        background-size: 30px 60px;
+    }
+}
+
+@media (max-width: 576px) {
+    .gantt-period-controls {
+        flex-direction: column;
+        gap: 0.5rem;
+        width: 100%;
+    }
+    
+    .gantt-controls .btn {
+        padding: 0.35rem 0.5rem;
+        font-size: 0.7rem;
+        min-width: 45px;
+        height: 32px;
+    }
+    
+    .gantt-controls .btn-group .btn {
+        padding: 0.35rem 0.4rem;
+        min-width: 28px;
+        height: 32px;
+    }
+    
+    .gantt-period-controls {
+        height: 32px;
+    }
+    
+    .gantt-period-controls .btn-group {
+        height: 32px;
+    }
+    
+    .gantt-task-label {
+        width: 150px;
+        padding: 6px 8px;
+        font-size: 0.75rem;
+    }
+    
+    .gantt-header-label-cell {
+        width: 150px;
+        padding: 6px 8px;
+    }
+    
+    .gantt-header-cell {
+        min-width: 25px;
+        padding: 6px 2px;
+        font-size: 0.65rem;
+    }
+    
+    .gantt-task-bar-container {
+        background-size: 25px 60px;
+    }
+}
