@@ -26,6 +26,7 @@ class GanttChart {
         this.currentPeriod = this.options.defaultPeriod;
         this.currentDate = new Date();
         this.tasks = [];
+        this.allTasks = []; // Store all tasks separately
         this.viewStart = new Date();
         this.viewEnd = new Date();
 
@@ -120,6 +121,7 @@ class GanttChart {
     setPeriod(period) {
         this.currentPeriod = period;
         this.setActivePeriodButton(period);
+        this.filterTasksForCurrentView();
         this.updateCurrentPeriodIndicator();
         this.renderChart();
         
@@ -157,6 +159,7 @@ class GanttChart {
         }
         
         this.currentDate = date;
+        this.filterTasksForCurrentView();
         this.updateCurrentPeriodIndicator();
         this.renderChart();
         
@@ -167,6 +170,7 @@ class GanttChart {
 
     goToToday() {
         this.currentDate = new Date();
+        this.filterTasksForCurrentView();
         this.updateCurrentPeriodIndicator();
         this.renderChart();
         
@@ -225,8 +229,37 @@ class GanttChart {
     }
 
     setTasks(tasks) {
-        this.tasks = tasks || [];
+        this.allTasks = tasks || [];
+        this.filterTasksForCurrentView();
         this.renderChart();
+    }
+    
+    getAllTasks() {
+        return this.allTasks;
+    }
+    
+    getCurrentTasks() {
+        return this.tasks;
+    }
+    
+    filterTasksForCurrentView() {
+        // Calculate view range based on current navigation date
+        this.calculateViewRange();
+        
+        // Filter tasks that are visible in the current view period
+        this.tasks = this.allTasks.filter(task => {
+            if (!task.planned_start_ms || !task.planned_end_ms) {
+                return false;
+            }
+            
+            const taskStart = new Date(task.planned_start_ms);
+            const taskEnd = new Date(task.planned_end_ms);
+            
+            // Check if task overlaps with current view period
+            return taskStart <= this.viewEnd && taskEnd >= this.viewStart;
+        });
+        
+        console.log(`Filtered ${this.tasks.length} tasks for current view period`);
     }
 
     renderChart() {
@@ -257,23 +290,7 @@ class GanttChart {
             // Sort tasks by plan_order
             sortedTasks = [...this.tasks].sort((a, b) => (a.plan_order || 0) - (b.plan_order || 0));
             console.log('Sorted tasks:', sortedTasks);
-            
-            // Filter tasks that are visible in current view
-            visibleTasks = sortedTasks.filter(task => {
-                if (!task.planned_start_ms || !task.planned_end_ms) {
-                    console.log('Task missing time data:', task);
-                    return false;
-                }
-                
-                const taskStart = new Date(task.planned_start_ms);
-                const taskEnd = new Date(task.planned_end_ms);
-                
-                const isVisible = taskStart <= this.viewEnd && taskEnd >= this.viewStart;
-                console.log(`Task ${task.title}: ${taskStart} to ${taskEnd}, visible: ${isVisible}`);
-                
-                return isVisible;
-            });
-
+            visibleTasks = sortedTasks;
             console.log('Visible tasks:', visibleTasks);
         } else {
             console.log('No tasks available');
@@ -399,8 +416,12 @@ class GanttChart {
 
 
     calculateViewRange() {
+        // Always calculate view range based on current navigation date
         const date = new Date(this.currentDate);
-        
+        this.calculateViewRangeForDate(date);
+    }
+    
+    calculateViewRangeForDate(date) {
         switch (this.currentPeriod) {
             case 'day':
                 // Show only current day (00:00 to 23:59)
@@ -435,7 +456,7 @@ class GanttChart {
                 break;
         }
         
-        console.log(`Extended view range for ${this.currentPeriod}:`, this.viewStart, 'to', this.viewEnd);
+        console.log(`View range for ${this.currentPeriod} based on date:`, this.viewStart, 'to', this.viewEnd);
     }
 
     generateTimelineHeader() {
@@ -448,7 +469,7 @@ class GanttChart {
                 const hourWidth = this.calculateCellWidth();
                 
                 for (let i = 0; i < totalHours; i++) {
-                    const currentHour = new Date(this.currentDate);
+                    const currentHour = new Date(this.viewStart);
                     currentHour.setHours(i, 0, 0, 0);
                     const hour = currentHour.getHours();
                     const day = currentHour.getDate();
@@ -491,11 +512,11 @@ class GanttChart {
                 
             case 'month':
                 // Daily view for current month - fit in visible area
-                const totalDaysInMonth = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth() + 1, 0).getDate();
+                const totalDaysInMonth = new Date(this.viewStart.getFullYear(), this.viewStart.getMonth() + 1, 0).getDate();
                 const monthDayWidth = this.calculateCellWidth();
                 console.log('totalDaysInMonth', totalDaysInMonth);
                 for (let i = 0; i < totalDaysInMonth; i++) {
-                    const currentDate = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth(), i + 1);
+                    const currentDate = new Date(this.viewStart.getFullYear(), this.viewStart.getMonth(), i + 1);
                     
                     const day = currentDate.getDate();
                     const month = currentDate.toLocaleDateString('tr-TR', { month: 'short' });
@@ -516,7 +537,7 @@ class GanttChart {
                 const yearMonthWidth = this.calculateCellWidth();
                 
                 for (let i = 0; i < totalMonthsInYear; i++) {
-                    const currentMonth = new Date(this.currentDate.getFullYear(), i, 1);
+                    const currentMonth = new Date(this.viewStart.getFullYear(), i, 1);
                     
                     const monthName = monthNames[currentMonth.getMonth()];
                     const year = currentMonth.getFullYear();
@@ -545,12 +566,28 @@ class GanttChart {
         switch (this.currentPeriod) {
             case 'day':
                 // Position based on hours in current day (25 hours)
-                const startOffsetHours = (taskStart - this.viewStart) / (1000 * 60 * 60);
-                const durationHours = duration / (1000 * 60 * 60);
-                const hourWidth = this.calculateCellWidth();
+                // Clip task to only show the portion within the current day view
+                const dayStart = new Date(this.viewStart);
+                const dayEnd = new Date(this.viewStart);
+                dayEnd.setHours(23, 59, 59, 999); // End of current day
                 
-                left = Math.max(0, startOffsetHours * hourWidth);
-                width = Math.max(20, durationHours * hourWidth);
+                // Calculate the actual start and end times within the current day
+                const actualStart = new Date(Math.max(taskStart.getTime(), dayStart.getTime()));
+                const actualEnd = new Date(Math.min(taskEnd.getTime(), dayEnd.getTime()));
+                
+                // Only show task if it has any portion within the current day
+                if (actualStart < actualEnd) {
+                    const startOffsetHours = (actualStart - this.viewStart) / (1000 * 60 * 60);
+                    const durationHours = (actualEnd - actualStart) / (1000 * 60 * 60);
+                    const hourWidth = this.calculateCellWidth();
+                    
+                    left = Math.max(0, startOffsetHours * hourWidth);
+                    width = Math.max(20, durationHours * hourWidth);
+                } else {
+                    // Task is completely outside current day, hide it
+                    left = -1000;
+                    width = 0;
+                }
                 break;
                 
             case 'week':
@@ -571,6 +608,7 @@ class GanttChart {
                 
                 left = Math.max(0, monthStartOffsetDays * monthDayWidth);
                 width = Math.max(20, monthDurationDays * monthDayWidth);
+                
                 break;
                 
             case 'year':
@@ -582,6 +620,15 @@ class GanttChart {
                 left = Math.max(0, startMonth * yearMonthWidth);
                 width = Math.max(20, (endMonth - startMonth + 1) * yearMonthWidth);
                 break;
+        }
+        
+        // Don't render task if it's hidden (completely outside current view)
+        if (left < -500) {
+            return `
+                <div class="gantt-task-bar-container">
+                    <!-- Task hidden - outside current view -->
+                </div>
+            `;
         }
         
         const isLocked = task.plan_locked || false;

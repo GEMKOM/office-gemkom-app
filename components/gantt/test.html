@@ -84,6 +84,72 @@
                 </ul>
             </div>
         </div>
+
+        <!-- Task Management -->
+        <div class="test-section">
+            <h3>Task Management</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>Add/Edit Task</h5>
+                    <form id="task-form" class="mb-3">
+                        <div class="mb-3">
+                            <label for="task-title" class="form-label">Task Title</label>
+                            <input type="text" class="form-control" id="task-title" required>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="task-start-date" class="form-label">Start Date</label>
+                                    <input type="date" class="form-control" id="task-start-date" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="task-start-time" class="form-label">Start Time</label>
+                                    <input type="time" class="form-control" id="task-start-time" value="09:00" required>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="task-end-date" class="form-label">End Date</label>
+                                    <input type="date" class="form-control" id="task-end-date" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label for="task-end-time" class="form-label">End Time</label>
+                                    <input type="time" class="form-control" id="task-end-time" value="17:00" required>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="task-locked">
+                                <label class="form-check-label" for="task-locked">
+                                    Locked Task (cannot be moved)
+                                </label>
+                            </div>
+                        </div>
+                        <div class="d-flex gap-2">
+                            <button type="submit" class="btn btn-primary" id="task-submit-btn">
+                                <i class="fas fa-plus me-1"></i>Add Task
+                            </button>
+                            <button type="button" class="btn btn-secondary" onclick="cancelTaskEdit()" id="task-cancel-btn" style="display: none;">
+                                <i class="fas fa-times me-1"></i>Cancel
+                            </button>
+                        </div>
+                    </form>
+                </div>
+                <div class="col-md-6">
+                    <h5>Current Tasks</h5>
+                    <div id="task-list" class="border rounded p-3" style="max-height: 300px; overflow-y: auto;">
+                        <p class="text-muted mb-0">No tasks added yet. Use the form to add tasks.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
         
         <!-- Gantt Chart Test -->
         <div class="test-section">
@@ -257,6 +323,9 @@
         
         // Initialize Gantt chart
         let ganttChart = null;
+        let currentTasks = [];
+        let nextTaskId = 1;
+        let editingTaskId = null;
         
         function initTestGantt() {
             try {
@@ -273,10 +342,22 @@
                     }
                 });
                 
+                // Set default dates
+                setDefaultDates();
+                
                 logTestResult('Gantt chart initialized successfully', 'success');
             } catch (error) {
                 logTestResult(`Error initializing Gantt chart: ${error.message}`, 'danger');
             }
+        }
+        
+        function setDefaultDates() {
+            const today = new Date();
+            const tomorrow = new Date(today);
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            
+            document.getElementById('task-start-date').value = today.toISOString().split('T')[0];
+            document.getElementById('task-end-date').value = tomorrow.toISOString().split('T')[0];
         }
         
         function loadTestData(dataType) {
@@ -296,7 +377,12 @@
                 logTestResult(`Current date: ${new Date().toLocaleString('tr-TR')}`, 'info');
                 logTestResult(`Current period: ${ganttChart.getCurrentPeriod()}`, 'info');
                 
+                // Update current tasks and find next ID
+                currentTasks = [...data];
+                nextTaskId = Math.max(...data.map(t => t.id), 0) + 1;
+                
                 ganttChart.setTasks(data);
+                updateTaskList();
                 logTestResult(`Loaded ${dataType} data with ${data.length} tasks`, 'success');
                 
                 // Log task details
@@ -322,11 +408,161 @@
             }
             
             try {
+                currentTasks = [];
+                nextTaskId = 1;
+                editingTaskId = null;
                 ganttChart.setTasks([]);
+                updateTaskList();
+                resetTaskForm();
                 logTestResult('Data cleared successfully', 'warning');
             } catch (error) {
                 logTestResult(`Error clearing data: ${error.message}`, 'danger');
             }
+        }
+        
+        // Task Management Functions
+        function addOrUpdateTask(event) {
+            event.preventDefault();
+            
+            const title = document.getElementById('task-title').value.trim();
+            const startDate = document.getElementById('task-start-date').value;
+            const startTime = document.getElementById('task-start-time').value;
+            const endDate = document.getElementById('task-end-date').value;
+            const endTime = document.getElementById('task-end-time').value;
+            const locked = document.getElementById('task-locked').checked;
+            
+            if (!title || !startDate || !startTime || !endDate || !endTime) {
+                logTestResult('Please fill in all required fields', 'danger');
+                return;
+            }
+            
+            // Create date objects
+            const startDateTime = new Date(`${startDate}T${startTime}`);
+            const endDateTime = new Date(`${endDate}T${endTime}`);
+            
+            if (endDateTime <= startDateTime) {
+                logTestResult('End date/time must be after start date/time', 'danger');
+                return;
+            }
+            
+            const task = {
+                id: editingTaskId || nextTaskId,
+                title: title,
+                planned_start_ms: startDateTime.getTime(),
+                planned_end_ms: endDateTime.getTime(),
+                plan_order: editingTaskId ? currentTasks.find(t => t.id === editingTaskId).plan_order : currentTasks.length + 1,
+                plan_locked: locked,
+                in_plan: true
+            };
+            
+            if (editingTaskId) {
+                // Update existing task
+                const index = currentTasks.findIndex(t => t.id === editingTaskId);
+                if (index !== -1) {
+                    currentTasks[index] = task;
+                    logTestResult(`Updated task: ${task.title}`, 'success');
+                }
+            } else {
+                // Add new task
+                currentTasks.push(task);
+                nextTaskId++;
+                logTestResult(`Added new task: ${task.title}`, 'success');
+            }
+            
+            // Update Gantt chart with all tasks
+            ganttChart.setTasks(currentTasks);
+            updateTaskList();
+            resetTaskForm();
+        }
+        
+        function editTask(taskId) {
+            const task = currentTasks.find(t => t.id === taskId);
+            if (!task) return;
+            
+            editingTaskId = taskId;
+            
+            // Fill form with task data
+            document.getElementById('task-title').value = task.title;
+            
+            const startDate = new Date(task.planned_start_ms);
+            const endDate = new Date(task.planned_end_ms);
+            
+            document.getElementById('task-start-date').value = startDate.toISOString().split('T')[0];
+            document.getElementById('task-start-time').value = startDate.toTimeString().slice(0, 5);
+            document.getElementById('task-end-date').value = endDate.toISOString().split('T')[0];
+            document.getElementById('task-end-time').value = endDate.toTimeString().slice(0, 5);
+            document.getElementById('task-locked').checked = task.plan_locked;
+            
+            // Update button
+            document.getElementById('task-submit-btn').innerHTML = '<i class="fas fa-save me-1"></i>Update Task';
+            document.getElementById('task-cancel-btn').style.display = 'inline-block';
+            
+            logTestResult(`Editing task: ${task.title}`, 'info');
+        }
+        
+        function deleteTask(taskId) {
+            const task = currentTasks.find(t => t.id === taskId);
+            if (!task) return;
+            
+            if (confirm(`Are you sure you want to delete "${task.title}"?`)) {
+                currentTasks = currentTasks.filter(t => t.id !== taskId);
+                ganttChart.setTasks(currentTasks);
+                updateTaskList();
+                logTestResult(`Deleted task: ${task.title}`, 'warning');
+            }
+        }
+        
+        function cancelTaskEdit() {
+            editingTaskId = null;
+            resetTaskForm();
+        }
+        
+        function resetTaskForm() {
+            document.getElementById('task-form').reset();
+            setDefaultDates();
+            document.getElementById('task-submit-btn').innerHTML = '<i class="fas fa-plus me-1"></i>Add Task';
+            document.getElementById('task-cancel-btn').style.display = 'none';
+            editingTaskId = null;
+        }
+        
+        function updateTaskList() {
+            const taskListDiv = document.getElementById('task-list');
+            
+            if (currentTasks.length === 0) {
+                taskListDiv.innerHTML = '<p class="text-muted mb-0">No tasks added yet. Use the form to add tasks.</p>';
+                return;
+            }
+            
+            taskListDiv.innerHTML = currentTasks.map(task => {
+                const startDate = new Date(task.planned_start_ms);
+                const endDate = new Date(task.planned_end_ms);
+                const status = task.plan_locked ? 'Locked' : 'Flexible';
+                const statusClass = task.plan_locked ? 'text-danger' : 'text-success';
+                
+                return `
+                    <div class="border-bottom pb-2 mb-2">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div class="flex-grow-1">
+                                <h6 class="mb-1">${task.title}</h6>
+                                <small class="text-muted">
+                                    ${startDate.toLocaleDateString('tr-TR')} ${startDate.toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'})} - 
+                                    ${endDate.toLocaleDateString('tr-TR')} ${endDate.toLocaleTimeString('tr-TR', {hour: '2-digit', minute: '2-digit'})}
+                                </small>
+                                <br>
+                                <span class="badge ${task.plan_locked ? 'bg-danger' : 'bg-success'}">${status}</span>
+                            </div>
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-primary" onclick="editTask(${task.id})" title="Edit">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn btn-outline-danger" onclick="deleteTask(${task.id})" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
         }
         
         function logTestResult(message, type = 'info') {
@@ -347,6 +583,10 @@
         // Initialize when page loads
         document.addEventListener('DOMContentLoaded', function() {
             initTestGantt();
+            
+            // Bind form submit event
+            document.getElementById('task-form').addEventListener('submit', addOrUpdateTask);
+            
             logTestResult('Test page loaded successfully', 'success');
         });
     </script>
