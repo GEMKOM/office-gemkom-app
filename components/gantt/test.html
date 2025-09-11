@@ -66,6 +66,9 @@
                 <button class="btn btn-warning" onclick="loadTestData('mixed')">
                     <i class="fas fa-random me-1"></i>Load Mixed Data
                 </button>
+                <button class="btn btn-success" onclick="loadTestData('workingHours')">
+                    <i class="fas fa-clock me-1"></i>Load Working Hours Test
+                </button>
                 <button class="btn btn-info" onclick="loadTestData('empty')">
                     <i class="fas fa-ban me-1"></i>Load Empty Data
                 </button>
@@ -80,8 +83,110 @@
                     <li><strong>Basic:</strong> Simple tasks with clear start/end times</li>
                     <li><strong>Complex:</strong> Multiple overlapping tasks with different durations</li>
                     <li><strong>Mixed:</strong> Combination of locked and unlocked tasks</li>
+                    <li><strong>Working Hours:</strong> Task from 11.09.2025 9:00 to 19.09.2025 17:00 to test working hours display</li>
                     <li><strong>Empty:</strong> No tasks to test empty state</li>
                 </ul>
+            </div>
+        </div>
+
+        <!-- Machine Calendar Configuration -->
+        <div class="test-section">
+            <h3>Machine Calendar Configuration</h3>
+            <div class="row">
+                <div class="col-md-8">
+                    <div class="mb-3">
+                        <label for="machine-calendar-json" class="form-label">Machine Calendar JSON</label>
+                        <textarea class="form-control" id="machine-calendar-json" rows="15" placeholder="Enter machine calendar JSON...">{
+    "machine_id": 10,
+    "timezone": "Europe/Istanbul",
+    "week_template": {
+        "0": [
+            {
+                "start": "07:30",
+                "end": "12:00"
+            },
+            {
+                "start": "12:30",
+                "end": "17:00"
+            }
+        ],
+        "1": [
+            {
+                "start": "07:30",
+                "end": "12:00"
+            },
+            {
+                "start": "12:30",
+                "end": "17:00"
+            }
+        ],
+        "2": [
+            {
+                "start": "07:30",
+                "end": "12:00"
+            },
+            {
+                "start": "12:30",
+                "end": "17:00"
+            }
+        ],
+        "3": [
+            {
+                "start": "07:30",
+                "end": "12:00"
+            },
+            {
+                "start": "12:30",
+                "end": "17:00"
+            }
+        ],
+        "4": [
+            {
+                "start": "07:30",
+                "end": "12:00"
+            },
+            {
+                "start": "12:30",
+                "end": "17:00"
+            }
+        ],
+        "5": [],
+        "6": []
+    },
+    "work_exceptions": [],
+    "is_default": true
+}</textarea>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary" onclick="applyMachineCalendar()">
+                            <i class="fas fa-cog me-1"></i>Apply Machine Calendar
+                        </button>
+                        <button class="btn btn-secondary" onclick="clearMachineCalendar()">
+                            <i class="fas fa-times me-1"></i>Clear Calendar
+                        </button>
+                        <button class="btn btn-info" onclick="loadDefaultCalendar()">
+                            <i class="fas fa-undo me-1"></i>Load Default
+                        </button>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <h5>Calendar Info</h5>
+                    <div id="calendar-info" class="bg-light p-3 rounded">
+                        <p class="text-muted mb-0">No machine calendar applied yet.</p>
+                    </div>
+                    
+                    <h5 class="mt-3">Day Mapping</h5>
+                    <div class="small text-muted">
+                        <strong>Calendar Days:</strong><br>
+                        0 = Monday<br>
+                        1 = Tuesday<br>
+                        2 = Wednesday<br>
+                        3 = Thursday<br>
+                        4 = Friday<br>
+                        5 = Saturday<br>
+                        6 = Sunday
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -318,6 +423,18 @@
                 }
             ],
             
+            workingHours: [
+                {
+                    id: 1,
+                    title: 'Test Task - Working Hours',
+                    planned_start_ms: new Date('2025-09-11T09:00:00').getTime(), // 11.09.2025 9:00
+                    planned_end_ms: new Date('2025-09-19T17:00:00').getTime(), // 19.09.2025 17:00
+                    plan_order: 1,
+                    plan_locked: false,
+                    in_plan: true
+                }
+            ],
+            
             empty: []
         };
         
@@ -326,7 +443,150 @@
         let currentTasks = [];
         let nextTaskId = 1;
         let editingTaskId = null;
+        let machineCalendar = null;
         
+        // Machine Calendar Functions
+        function applyMachineCalendar() {
+            try {
+                const jsonText = document.getElementById('machine-calendar-json').value.trim();
+                
+                if (!jsonText) {
+                    logTestResult('Please enter machine calendar JSON', 'danger');
+                    return;
+                }
+                
+                machineCalendar = JSON.parse(jsonText);
+                
+                // Validate the calendar structure
+                if (!machineCalendar.week_template || typeof machineCalendar.week_template !== 'object') {
+                    throw new Error('Invalid week_template in machine calendar');
+                }
+                
+                // Apply to Gantt chart
+                if (ganttChart) {
+                    ganttChart.setMachineCalendar(machineCalendar);
+                    logTestResult('Machine calendar applied successfully', 'success');
+                    updateCalendarInfo();
+                } else {
+                    logTestResult('Gantt chart not initialized', 'danger');
+                }
+                
+            } catch (error) {
+                logTestResult(`Error applying machine calendar: ${error.message}`, 'danger');
+                console.error('Calendar JSON error:', error);
+            }
+        }
+        
+        function clearMachineCalendar() {
+            machineCalendar = null;
+            
+            if (ganttChart) {
+                ganttChart.setMachineCalendar(null);
+                logTestResult('Machine calendar cleared', 'warning');
+                updateCalendarInfo();
+            }
+        }
+        
+        function loadDefaultCalendar() {
+            const defaultCalendar = {
+                "machine_id": 10,
+                "timezone": "Europe/Istanbul",
+                "week_template": {
+                    "0": [
+                        {
+                            "start": "07:30",
+                            "end": "12:00"
+                        },
+                        {
+                            "start": "12:30",
+                            "end": "17:00"
+                        }
+                    ],
+                    "1": [
+                        {
+                            "start": "07:30",
+                            "end": "12:00"
+                        },
+                        {
+                            "start": "12:30",
+                            "end": "17:00"
+                        }
+                    ],
+                    "2": [
+                        {
+                            "start": "07:30",
+                            "end": "12:00"
+                        },
+                        {
+                            "start": "12:30",
+                            "end": "17:00"
+                        }
+                    ],
+                    "3": [
+                        {
+                            "start": "07:30",
+                            "end": "12:00"
+                        },
+                        {
+                            "start": "12:30",
+                            "end": "17:00"
+                        }
+                    ],
+                    "4": [
+                        {
+                            "start": "07:30",
+                            "end": "12:00"
+                        },
+                        {
+                            "start": "12:30",
+                            "end": "17:00"
+                        }
+                    ],
+                    "5": [],
+                    "6": []
+                },
+                "work_exceptions": [],
+                "is_default": true
+            };
+            
+            document.getElementById('machine-calendar-json').value = JSON.stringify(defaultCalendar, null, 4);
+            logTestResult('Default calendar loaded', 'info');
+        }
+        
+        function updateCalendarInfo() {
+            const infoDiv = document.getElementById('calendar-info');
+            
+            if (!machineCalendar) {
+                infoDiv.innerHTML = '<p class="text-muted mb-0">No machine calendar applied yet.</p>';
+                return;
+            }
+            
+            const workingDays = [];
+            const dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            
+            for (let i = 0; i < 7; i++) {
+                const dayTemplate = machineCalendar.week_template[i.toString()];
+                if (dayTemplate && dayTemplate.length > 0) {
+                    const windows = dayTemplate.map(w => `${w.start}-${w.end}`).join(', ');
+                    workingDays.push(`<strong>${dayNames[i]}:</strong> ${windows}`);
+                } else {
+                    workingDays.push(`<strong>${dayNames[i]}:</strong> <span class="text-muted">No work</span>`);
+                }
+            }
+            
+            infoDiv.innerHTML = `
+                <div class="mb-2">
+                    <strong>Machine ID:</strong> ${machineCalendar.machine_id}<br>
+                    <strong>Timezone:</strong> ${machineCalendar.timezone}<br>
+                    <strong>Exceptions:</strong> ${machineCalendar.work_exceptions.length} configured
+                </div>
+                <div class="small">
+                    <strong>Working Hours:</strong><br>
+                    ${workingDays.join('<br>')}
+                </div>
+            `;
+        }
+
         function initTestGantt() {
             try {
                 ganttChart = new GanttChart('test-gantt-chart', {

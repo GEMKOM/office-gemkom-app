@@ -36,12 +36,23 @@ export async function getCapacityPlanning(machine_id, filters = {}) {
 
 
 export async function updateCapacityPlanning(data) {
-    const response = await authedFetch(`${backendBase}/machining/planning/bulk-save/`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(data),
-    });
-    return response.json();
+    try {
+        const response = await authedFetch(`${backendBase}/machining/planning/bulk-save/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(data),
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        return result;
+    } catch (error) {
+        console.error('Error updating capacity planning:', error);
+        throw error;
+    }
 }

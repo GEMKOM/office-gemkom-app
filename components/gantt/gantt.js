@@ -29,6 +29,7 @@ class GanttChart {
         this.allTasks = []; // Store all tasks separately
         this.viewStart = new Date();
         this.viewEnd = new Date();
+        this.machineCalendar = null; // Store machine calendar for working hours
 
         // Initialize
         this.init();
@@ -234,6 +235,11 @@ class GanttChart {
         this.renderChart();
     }
     
+    setMachineCalendar(calendar) {
+        this.machineCalendar = calendar;
+        this.renderChart(); // Re-render to show working hours
+    }
+    
     getAllTasks() {
         return this.allTasks;
     }
@@ -248,8 +254,9 @@ class GanttChart {
         
         // Filter tasks that are visible in the current view period
         this.tasks = this.allTasks.filter(task => {
+            // If task has no dates, show it anyway (it might be newly added or reordered)
             if (!task.planned_start_ms || !task.planned_end_ms) {
-                return false;
+                return true;
             }
             
             const taskStart = new Date(task.planned_start_ms);
@@ -324,8 +331,11 @@ class GanttChart {
                 </div>
                 <div class="gantt-scrolling-column">
                     <div class="gantt-timeline-content">
-                        <div class="gantt-timeline-header">
+                        <div id="gantt-timeline-header" class="gantt-timeline-header">
                             ${timelineHeader}
+                        </div>
+                        <div class="gantt-working-hours-background">
+                            <!-- Working hours background will be generated after DOM is created -->
                         </div>
                         ${taskBars}
                     </div>
@@ -333,11 +343,17 @@ class GanttChart {
             </div>
         `;
         
+        // Generate working hours background after DOM is created
+        const workingHoursContainer = chartContainer.querySelector('.gantt-working-hours-background');
+        if (workingHoursContainer) {
+            workingHoursContainer.innerHTML = this.generateWorkingHoursBackground();
+        }
+        
         // Apply grid background to timeline content
         const timelineContent = chartContainer.querySelector('.gantt-timeline-content');
         if (timelineContent) {
             const cellWidth = this.calculateCellWidth();
-            const cellHeight = 60; // Height of each task row
+            const cellHeight = this.calculateCellHeight(); // Height of each task row
             
             // Calculate the exact width needed for the current view
             let totalWidth;
@@ -412,6 +428,18 @@ class GanttChart {
             default:
                 return 100;
         }
+    }
+
+    calculateCellHeight() {
+        const headerElement = this.container.querySelector('#gantt-timeline-header');
+        if (headerElement) {
+            const headerHeight = headerElement.offsetHeight;
+            console.log('Timeline header height:', headerHeight);
+            return headerHeight;
+        }
+        // Fallback to default height if element not found
+        console.log('Timeline header not found, using default height: 60px');
+        return 60;
     }
 
 
@@ -556,8 +584,79 @@ class GanttChart {
     }
 
     generateTaskBar(task) {
+        // Handle tasks without dates
+        if (!task.planned_start_ms || !task.planned_end_ms) {
+            const taskTitle = task.title || task.name || `Görev ${task.id}`;
+            const isLocked = task.plan_locked || false;
+            const taskClass = isLocked ? 'locked' : 'unlocked';
+            
+            return `
+                <div class="gantt-task-bar-container">
+                    <div class="gantt-task-bar ${taskClass} no-dates" 
+                         style="left: 0px; width: 100px; opacity: 0.6;"
+                         data-task-id="${task.id}"
+                         title="${taskTitle} - Tarih atanmamış">
+                        <div class="gantt-task-content">${taskTitle}</div>
+                    </div>
+                </div>
+            `;
+        }
+        
         const taskStart = new Date(task.planned_start_ms);
         const taskEnd = new Date(task.planned_end_ms);
+        const isLocked = task.plan_locked || false;
+        const taskClass = isLocked ? 'locked' : 'unlocked';
+        const taskTitle = task.title || task.name || `Görev ${task.id}`;
+        
+        // If no machine calendar is set, use the old continuous bar approach
+        if (!this.machineCalendar) {
+            return this.generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, taskTitle);
+        }
+        
+        // Generate working hours segments for the task
+        const workingSegments = this.calculateWorkingHoursSegments(taskStart, taskEnd);
+        
+        if (workingSegments.length === 0) {
+            // Task has no working hours overlap
+            return `
+                <div class="gantt-task-bar-container">
+                    <div class="gantt-task-bar ${taskClass} no-working-hours" 
+                         style="left: 0px; width: 100px; opacity: 0.3;"
+                         data-task-id="${task.id}"
+                         title="${taskTitle} - Çalışma saatleri dışında">
+                        <div class="gantt-task-content">${taskTitle}</div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Generate multiple segments for working hours
+        const segments = workingSegments.map(segment => {
+            const left = this.calculateSegmentPosition(segment.start);
+            const width = this.calculateSegmentWidth(segment.start, segment.end);
+            
+            if (left < -500) {
+                return ''; // Segment is outside current view
+            }
+            
+            return `
+                <div class="gantt-task-bar ${taskClass}" 
+                     style="left: ${left}px; width: ${width}px;"
+                     data-task-id="${task.id}"
+                     title="${taskTitle} (${segment.start.toLocaleString('tr-TR')} - ${segment.end.toLocaleString('tr-TR')})">
+                    <div class="gantt-task-content">${taskTitle}</div>
+                </div>
+            `;
+        }).filter(segment => segment !== '').join('');
+        
+        return `
+            <div class="gantt-task-bar-container">
+                ${segments}
+            </div>
+        `;
+    }
+    
+    generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, taskTitle) {
         const duration = taskEnd - taskStart;
         
         // Calculate position and width based on current period
@@ -631,10 +730,6 @@ class GanttChart {
             `;
         }
         
-        const isLocked = task.plan_locked || false;
-        const taskClass = isLocked ? 'locked' : 'unlocked';
-        const taskTitle = task.title || task.name || `Görev ${task.id}`;
-        
         return `
             <div class="gantt-task-bar-container">
                 <div class="gantt-task-bar ${taskClass}" 
@@ -645,6 +740,420 @@ class GanttChart {
                 </div>
             </div>
         `;
+    }
+    
+    calculateWorkingHoursSegments(taskStart, taskEnd) {
+        const segments = [];
+        
+        // For day view, only calculate segments for the current day
+        if (this.currentPeriod === 'day') {
+            const currentDay = new Date(this.viewStart);
+            currentDay.setHours(0, 0, 0, 0);
+            
+            // Check if task overlaps with current day
+            const dayStart = new Date(currentDay);
+            const dayEnd = new Date(currentDay);
+            dayEnd.setHours(23, 59, 59, 999);
+            
+            // Only process if task overlaps with current day
+            if (taskStart <= dayEnd && taskEnd >= dayStart) {
+                const workingHours = this.getWorkingHoursForDate(currentDay);
+                
+                if (workingHours.length > 0) {
+                    // For each working hour window on this day
+                    workingHours.forEach(window => {
+                        const windowStart = new Date(currentDay);
+                        const windowEnd = new Date(currentDay);
+                        
+                        // Parse time strings (e.g., "07:30" -> 7:30 AM)
+                        const [startHour, startMinute] = window.start.split(':').map(Number);
+                        const [endHour, endMinute] = window.end.split(':').map(Number);
+                        
+                        windowStart.setHours(startHour, startMinute, 0, 0);
+                        windowEnd.setHours(endHour, endMinute, 0, 0);
+                        
+                        // Find intersection with task duration
+                        const segmentStart = new Date(Math.max(taskStart.getTime(), windowStart.getTime()));
+                        const segmentEnd = new Date(Math.min(taskEnd.getTime(), windowEnd.getTime()));
+                        
+                        // Only add segment if there's an actual intersection
+                        if (segmentStart < segmentEnd) {
+                            segments.push({
+                                start: segmentStart,
+                                end: segmentEnd
+                            });
+                        }
+                    });
+                }
+            }
+        } else if (this.currentPeriod === 'week') {
+            // For week view, merge consecutive working days into single bars
+            const currentDate = new Date(this.viewStart);
+            let currentSegmentStart = null;
+            let currentSegmentEnd = null;
+            
+            // Iterate through each day in the current week (Monday to Sunday)
+            for (let dayOffset = 0; dayOffset < 7; dayOffset++) {
+                const dayInWeek = new Date(currentDate);
+                dayInWeek.setDate(currentDate.getDate() + dayOffset);
+                dayInWeek.setHours(0, 0, 0, 0);
+                
+                // Check if task overlaps with this day in the week
+                const dayStart = new Date(dayInWeek);
+                const dayEnd = new Date(dayInWeek);
+                dayEnd.setHours(23, 59, 59, 999);
+                
+                // Only process if task overlaps with this day
+                if (taskStart <= dayEnd && taskEnd >= dayStart) {
+                    const workingHours = this.getWorkingHoursForDate(dayInWeek);
+                    
+                    if (workingHours.length > 0) {
+                        // Calculate the working time for this day
+                        const dayWorkingStart = new Date(dayInWeek);
+                        const dayWorkingEnd = new Date(dayInWeek);
+                        
+                        // Use the first working window start and last working window end
+                        const firstWindow = workingHours[0];
+                        const lastWindow = workingHours[workingHours.length - 1];
+                        
+                        const [startHour, startMinute] = firstWindow.start.split(':').map(Number);
+                        const [endHour, endMinute] = lastWindow.end.split(':').map(Number);
+                        
+                        dayWorkingStart.setHours(startHour, startMinute, 0, 0);
+                        dayWorkingEnd.setHours(endHour, endMinute, 0, 0);
+                        
+                        // Find intersection with task duration
+                        const segmentStart = new Date(Math.max(taskStart.getTime(), dayWorkingStart.getTime()));
+                        const segmentEnd = new Date(Math.min(taskEnd.getTime(), dayWorkingEnd.getTime()));
+                        
+                        // Only process if there's an actual intersection
+                        if (segmentStart < segmentEnd) {
+                            if (currentSegmentStart === null) {
+                                // Start a new segment
+                                currentSegmentStart = segmentStart;
+                                currentSegmentEnd = segmentEnd;
+                            } else {
+                                // Check if this day is consecutive (next day)
+                                const prevDay = new Date(currentSegmentEnd);
+                                prevDay.setHours(0, 0, 0, 0);
+                                const currentDay = new Date(segmentStart);
+                                currentDay.setHours(0, 0, 0, 0);
+                                
+                                const daysDiff = (currentDay - prevDay) / (1000 * 60 * 60 * 24);
+                                
+                                if (daysDiff === 1) {
+                                    // Consecutive day - extend the current segment
+                                    currentSegmentEnd = segmentEnd;
+                                } else {
+                                    // Non-consecutive day - finish current segment and start new one
+                                    segments.push({
+                                        start: currentSegmentStart,
+                                        end: currentSegmentEnd
+                                    });
+                                    currentSegmentStart = segmentStart;
+                                    currentSegmentEnd = segmentEnd;
+                                }
+                            }
+                        }
+                    } else {
+                        // Non-working day - finish current segment if exists
+                        if (currentSegmentStart !== null) {
+                            segments.push({
+                                start: currentSegmentStart,
+                                end: currentSegmentEnd
+                            });
+                            currentSegmentStart = null;
+                            currentSegmentEnd = null;
+                        }
+                    }
+                } else {
+                    // Task doesn't overlap with this day - finish current segment if exists
+                    if (currentSegmentStart !== null) {
+                        segments.push({
+                            start: currentSegmentStart,
+                            end: currentSegmentEnd
+                        });
+                        currentSegmentStart = null;
+                        currentSegmentEnd = null;
+                    }
+                }
+            }
+            
+            // Finish the last segment if exists
+            if (currentSegmentStart !== null) {
+                segments.push({
+                    start: currentSegmentStart,
+                    end: currentSegmentEnd
+                });
+            }
+        } else if (this.currentPeriod === 'month') {
+            // For month view, merge consecutive working days into single bars
+            const currentDate = new Date(this.viewStart);
+            let currentSegmentStart = null;
+            let currentSegmentEnd = null;
+            
+            // Iterate through each day in the current month
+            const totalDaysInMonth = new Date(this.viewStart.getFullYear(), this.viewStart.getMonth() + 1, 0).getDate();
+            
+            for (let dayOffset = 0; dayOffset < totalDaysInMonth; dayOffset++) {
+                const dayInMonth = new Date(currentDate);
+                dayInMonth.setDate(currentDate.getDate() + dayOffset);
+                dayInMonth.setHours(0, 0, 0, 0);
+                
+                // Check if task overlaps with this day in the month
+                const dayStart = new Date(dayInMonth);
+                const dayEnd = new Date(dayInMonth);
+                dayEnd.setHours(23, 59, 59, 999);
+                
+                // Only process if task overlaps with this day
+                if (taskStart <= dayEnd && taskEnd >= dayStart) {
+                    const workingHours = this.getWorkingHoursForDate(dayInMonth);
+                    
+                    if (workingHours.length > 0) {
+                        // Calculate the working time for this day
+                        const dayWorkingStart = new Date(dayInMonth);
+                        const dayWorkingEnd = new Date(dayInMonth);
+                        
+                        // Use the first working window start and last working window end
+                        const firstWindow = workingHours[0];
+                        const lastWindow = workingHours[workingHours.length - 1];
+                        
+                        const [startHour, startMinute] = firstWindow.start.split(':').map(Number);
+                        const [endHour, endMinute] = lastWindow.end.split(':').map(Number);
+                        
+                        dayWorkingStart.setHours(startHour, startMinute, 0, 0);
+                        dayWorkingEnd.setHours(endHour, endMinute, 0, 0);
+                        
+                        // Find intersection with task duration
+                        const segmentStart = new Date(Math.max(taskStart.getTime(), dayWorkingStart.getTime()));
+                        const segmentEnd = new Date(Math.min(taskEnd.getTime(), dayWorkingEnd.getTime()));
+                        
+                        // Only process if there's an actual intersection
+                        if (segmentStart < segmentEnd) {
+                            if (currentSegmentStart === null) {
+                                // Start a new segment
+                                currentSegmentStart = segmentStart;
+                                currentSegmentEnd = segmentEnd;
+                            } else {
+                                // Check if this day is consecutive (next day)
+                                const prevDay = new Date(currentSegmentEnd);
+                                prevDay.setHours(0, 0, 0, 0);
+                                const currentDay = new Date(segmentStart);
+                                currentDay.setHours(0, 0, 0, 0);
+                                
+                                const daysDiff = (currentDay - prevDay) / (1000 * 60 * 60 * 24);
+                                
+                                if (daysDiff === 1) {
+                                    // Consecutive day - extend the current segment
+                                    currentSegmentEnd = segmentEnd;
+                                } else {
+                                    // Non-consecutive day - finish current segment and start new one
+                                    segments.push({
+                                        start: currentSegmentStart,
+                                        end: currentSegmentEnd
+                                    });
+                                    currentSegmentStart = segmentStart;
+                                    currentSegmentEnd = segmentEnd;
+                                }
+                            }
+                        }
+                    } else {
+                        // Non-working day - finish current segment if exists
+                        if (currentSegmentStart !== null) {
+                            segments.push({
+                                start: currentSegmentStart,
+                                end: currentSegmentEnd
+                            });
+                            currentSegmentStart = null;
+                            currentSegmentEnd = null;
+                        }
+                    }
+                } else {
+                    // Task doesn't overlap with this day - finish current segment if exists
+                    if (currentSegmentStart !== null) {
+                        segments.push({
+                            start: currentSegmentStart,
+                            end: currentSegmentEnd
+                        });
+                        currentSegmentStart = null;
+                        currentSegmentEnd = null;
+                    }
+                }
+            }
+            
+            // Finish the last segment if exists
+            if (currentSegmentStart !== null) {
+                segments.push({
+                    start: currentSegmentStart,
+                    end: currentSegmentEnd
+                });
+            }
+        } else if (this.currentPeriod === 'year') {
+            // For year view, we only display months, so we only need segments when task spans across months
+            const startOfYear = new Date(this.viewStart.getFullYear(), 0, 1);
+            const endOfYear = new Date(this.viewStart.getFullYear(), 11, 31);
+            
+            // Start from the beginning of the year or task start, whichever is later
+            const startDate = new Date(Math.max(startOfYear.getTime(), taskStart.getTime()));
+            // End at the end of the year or task end, whichever is earlier
+            const endDate = new Date(Math.min(endOfYear.getTime(), taskEnd.getTime()));
+            
+            // Check if task spans across multiple months
+            const taskStartMonth = taskStart.getMonth();
+            const taskEndMonth = taskEnd.getMonth();
+            const taskStartYear = taskStart.getFullYear();
+            const taskEndYear = taskEnd.getFullYear();
+            
+            if (taskStartYear === taskEndYear && taskStartMonth === taskEndMonth) {
+                // Task is within the same month - create one segment
+                segments.push({
+                    start: taskStart,
+                    end: taskEnd
+                });
+            } else {
+                // Task spans across multiple months - create segments for each month
+                const currentMonth = new Date(Math.max(startDate.getTime(), taskStart.getTime()));
+                currentMonth.setDate(1); // Start of month
+                currentMonth.setHours(0, 0, 0, 0);
+                
+                while (currentMonth <= endDate) {
+                    const monthStart = new Date(currentMonth);
+                    const monthEnd = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 0, 23, 59, 59, 999);
+                    
+                    // Find intersection with task duration
+                    const segmentStart = new Date(Math.max(taskStart.getTime(), monthStart.getTime()));
+                    const segmentEnd = new Date(Math.min(taskEnd.getTime(), monthEnd.getTime()));
+                    
+                    // Only add segment if there's an actual intersection
+                    if (segmentStart < segmentEnd) {
+                        segments.push({
+                            start: segmentStart,
+                            end: segmentEnd
+                        });
+                    }
+                    
+                    // Move to next month
+                    currentMonth.setMonth(currentMonth.getMonth() + 1);
+                }
+            }
+        } else {
+            // Fallback for any other period types
+            const currentDate = new Date(taskStart);
+            
+            // Iterate through each day from task start to end
+            while (currentDate <= taskEnd) {
+                const dayStart = new Date(currentDate);
+                dayStart.setHours(0, 0, 0, 0);
+                
+                const dayEnd = new Date(currentDate);
+                dayEnd.setHours(23, 59, 59, 999);
+                
+                // Get working hours for this day
+                const workingHours = this.getWorkingHoursForDate(currentDate);
+                
+                if (workingHours.length > 0) {
+                    // For each working hour window on this day
+                    workingHours.forEach(window => {
+                        const windowStart = new Date(currentDate);
+                        const windowEnd = new Date(currentDate);
+                        
+                        // Parse time strings (e.g., "07:30" -> 7:30 AM)
+                        const [startHour, startMinute] = window.start.split(':').map(Number);
+                        const [endHour, endMinute] = window.end.split(':').map(Number);
+                        
+                        windowStart.setHours(startHour, startMinute, 0, 0);
+                        windowEnd.setHours(endHour, endMinute, 0, 0);
+                        
+                        // Find intersection with task duration
+                        const segmentStart = new Date(Math.max(taskStart.getTime(), windowStart.getTime()));
+                        const segmentEnd = new Date(Math.min(taskEnd.getTime(), windowEnd.getTime()));
+                        
+                        // Only add segment if there's an actual intersection
+                        if (segmentStart < segmentEnd) {
+                            segments.push({
+                                start: segmentStart,
+                                end: segmentEnd
+                            });
+                        }
+                    });
+                }
+                
+                // Move to next day
+                currentDate.setDate(currentDate.getDate() + 1);
+                currentDate.setHours(0, 0, 0, 0);
+            }
+        }
+        
+        return segments;
+    }
+    
+    getWorkingHoursForDate(date) {
+        if (!this.machineCalendar || !this.machineCalendar.week_template) {
+            return [];
+        }
+        
+        const jsDayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+        const calendarDayOfWeek = jsDayOfWeek === 0 ? 6 : jsDayOfWeek - 1; // Convert to 0=Monday, 1=Tuesday, ..., 6=Sunday
+        const workingDay = this.machineCalendar.week_template[calendarDayOfWeek.toString()];
+        
+        return workingDay || [];
+    }
+    
+    calculateSegmentPosition(segmentStart) {
+        switch (this.currentPeriod) {
+            case 'day':
+                const startOffsetHours = (segmentStart - this.viewStart) / (1000 * 60 * 60);
+                const hourWidth = this.calculateCellWidth();
+                return Math.max(0, startOffsetHours * hourWidth);
+                
+            case 'week':
+                const startOffsetDays = (segmentStart - this.viewStart) / (1000 * 60 * 60 * 24);
+                const weekDayWidth = this.calculateCellWidth();
+                return Math.max(0, startOffsetDays * weekDayWidth);
+                
+            case 'month':
+                const monthStartOffsetDays = (segmentStart - this.viewStart) / (1000 * 60 * 60 * 24);
+                const monthDayWidth = this.calculateCellWidth();
+                return Math.max(0, monthStartOffsetDays * monthDayWidth);
+                
+            case 'year':
+                const startMonth = segmentStart.getMonth();
+                const yearMonthWidth = this.calculateCellWidth();
+                return Math.max(0, startMonth * yearMonthWidth);
+                
+            default:
+                return 0;
+        }
+    }
+    
+    calculateSegmentWidth(segmentStart, segmentEnd) {
+        const duration = segmentEnd - segmentStart;
+        
+        switch (this.currentPeriod) {
+            case 'day':
+                const durationHours = duration / (1000 * 60 * 60);
+                const hourWidth = this.calculateCellWidth();
+                return Math.max(20, durationHours * hourWidth);
+                
+            case 'week':
+                const durationDays = duration / (1000 * 60 * 60 * 24);
+                const weekDayWidth = this.calculateCellWidth();
+                return Math.max(20, durationDays * weekDayWidth);
+                
+            case 'month':
+                const monthDurationDays = duration / (1000 * 60 * 60 * 24);
+                const monthDayWidth = this.calculateCellWidth();
+                return Math.max(20, monthDurationDays * monthDayWidth);
+                
+            case 'year':
+                const startMonth = segmentStart.getMonth();
+                const endMonth = segmentEnd.getMonth();
+                const yearMonthWidth = this.calculateCellWidth();
+                return Math.max(20, (endMonth - startMonth + 1) * yearMonthWidth);
+                
+            default:
+                return 100;
+        }
     }
 
     addCurrentTimeIndicator() {
@@ -720,6 +1229,173 @@ class GanttChart {
     getTasks() {
         return [...this.tasks];
     }
+
+    generateWorkingHoursBackground() {
+        if (!this.machineCalendar) {
+            return '';
+        }
+
+        // For year view, we don't show working hours background since we only display months
+        if (this.currentPeriod === 'year') {
+            return '';
+        }
+
+        const workingHoursHTML = [];
+        const cellWidth = this.calculateCellWidth();
+        const headerHeight = this.calculateCellHeight(); // Height of the timeline header
+        const taskRowHeight = 60; // Height of each task row
+        const totalDays = Math.ceil((this.viewEnd - this.viewStart) / (1000 * 60 * 60 * 24));
+        
+        // Calculate total height to match the timeline content area
+        // Header height + all task rows (tasks.length * taskRowHeight)
+        const totalTasks = this.tasks.length;
+        const totalHeight = headerHeight + (totalTasks * taskRowHeight);
+        
+        // Generate working hours background for each day in the view
+        for (let dayOffset = 0; dayOffset < totalDays; dayOffset++) {
+            const currentDate = new Date(this.viewStart);
+            currentDate.setDate(currentDate.getDate() + dayOffset);
+            
+            const jsDayOfWeek = currentDate.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
+            const calendarDayOfWeek = jsDayOfWeek === 0 ? 6 : jsDayOfWeek - 1; // Convert to 0=Monday, 1=Tuesday, ..., 6=Sunday
+            const workingDay = this.machineCalendar.week_template[calendarDayOfWeek.toString()];
+            
+            if (workingDay && workingDay.length > 0) {
+                // Day has working hours
+                if (this.currentPeriod === 'day') {
+                    // For day view, show working time blocks and non-working time blocks
+                    const allWorkingMinutes = [];
+                    
+                    // Collect all working minutes
+                    workingDay.forEach(window => {
+                        const startTime = this.parseTimeToMinutes(window.start);
+                        const endTime = this.parseTimeToMinutes(window.end);
+                        
+                        const startTimeInHours = startTime / 60;
+                        const endTimeInHours = endTime / 60;
+                        
+                        const left = startTimeInHours * cellWidth;
+                        const width = (endTimeInHours - startTimeInHours) * cellWidth;
+                        
+                        workingHoursHTML.push(`
+                            <div class="gantt-working-hour-block" 
+                                 style="left: ${left}px; width: ${width}px; height: ${totalHeight}px;"
+                                 title="Working hours: ${window.start}-${window.end}">
+                            </div>
+                        `);
+                        
+                        allWorkingMinutes.push({ start: startTime, end: endTime });
+                    });
+                    
+                    // Add non-working hour blocks (gaps between working hours and before/after)
+                    const dayStartMinutes = 0; // 00:00
+                    const dayEndMinutes = 24 * 60; // 24:00
+                    
+                    // Sort working periods by start time
+                    allWorkingMinutes.sort((a, b) => a.start - b.start);
+                    
+                    // Add non-working block before first working period
+                    if (allWorkingMinutes.length > 0 && allWorkingMinutes[0].start > dayStartMinutes) {
+                        const left = dayStartMinutes / 60 * cellWidth;
+                        const width = (allWorkingMinutes[0].start - dayStartMinutes) / 60 * cellWidth;
+                        
+                        workingHoursHTML.push(`
+                            <div class="gantt-non-working-hour-block" 
+                                 style="left: ${left}px; width: ${width}px; height: ${totalHeight}px;"
+                                 title="Non-working hours: 00:00-${this.formatMinutesToTime(allWorkingMinutes[0].start)}">
+                            </div>
+                        `);
+                    }
+                    
+                    // Add non-working blocks between working periods
+                    for (let i = 0; i < allWorkingMinutes.length - 1; i++) {
+                        const currentEnd = allWorkingMinutes[i].end;
+                        const nextStart = allWorkingMinutes[i + 1].start;
+                        
+                        if (nextStart > currentEnd) {
+                            const left = currentEnd / 60 * cellWidth;
+                            const width = (nextStart - currentEnd) / 60 * cellWidth;
+                            
+                            workingHoursHTML.push(`
+                                <div class="gantt-non-working-hour-block" 
+                                     style="left: ${left}px; width: ${width}px; height: ${totalHeight}px;"
+                                     title="Non-working hours: ${this.formatMinutesToTime(currentEnd)}-${this.formatMinutesToTime(nextStart)}">
+                                </div>
+                            `);
+                        }
+                    }
+                    
+                    // Add non-working block after last working period
+                    if (allWorkingMinutes.length > 0) {
+                        const lastEnd = allWorkingMinutes[allWorkingMinutes.length - 1].end;
+                        if (lastEnd < dayEndMinutes) {
+                            const left = lastEnd / 60 * cellWidth;
+                            const width = (dayEndMinutes - lastEnd) / 60 * cellWidth;
+                            
+                            workingHoursHTML.push(`
+                                <div class="gantt-non-working-hour-block" 
+                                     style="left: ${left}px; width: ${width}px; height: ${totalHeight}px;"
+                                     title="Non-working hours: ${this.formatMinutesToTime(lastEnd)}-24:00">
+                                </div>
+                            `);
+                        }
+                    }
+                } else {
+                    // For week/month view, show full day working blocks
+                    workingDay.forEach(window => {
+                        const left = dayOffset * cellWidth;
+                        const width = cellWidth;
+                        
+                        workingHoursHTML.push(`
+                            <div class="gantt-working-day-block" 
+                                 style="left: ${left}px; width: ${width}px; height: ${totalHeight}px;"
+                                 title="Working day: ${workingDay.map(w => w.start + '-' + w.end).join(', ')}">
+                            </div>
+                        `);
+                    });
+                }
+            } else {
+                // Day has no working hours - add non-working day block
+                if (this.currentPeriod === 'day') {
+                    // For day view, show full day as non-working
+                    const left = 0;
+                    const width = 24 * cellWidth; // Full day width
+                    
+                    workingHoursHTML.push(`
+                        <div class="gantt-non-working-day-block" 
+                             style="left: ${left}px; width: ${width}px; height: ${totalHeight}px;"
+                             title="Non-working day">
+                        </div>
+                    `);
+                } else {
+                    // For week/month view, show full day as non-working
+                    const left = dayOffset * cellWidth;
+                    const width = cellWidth;
+                    
+                    workingHoursHTML.push(`
+                        <div class="gantt-non-working-day-block" 
+                             style="left: ${left}px; width: ${width}px; height: ${totalHeight}px;"
+                             title="Non-working day">
+                        </div>
+                    `);
+                }
+            }
+        }
+        
+        return workingHoursHTML.join('');
+    }
+
+    parseTimeToMinutes(timeString) {
+        const [hours, minutes] = timeString.split(':').map(Number);
+        return hours * 60 + minutes;
+    }
+    
+    formatMinutesToTime(minutes) {
+        const hours = Math.floor(minutes / 60);
+        const mins = minutes % 60;
+        return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+    }
+
 
     destroy() {
         if (this.container) {

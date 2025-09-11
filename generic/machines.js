@@ -114,3 +114,8 @@ async function safeParseJson(response) {
         return null;
     }
 }
+
+export async function getMachineCalendar(machineId) {
+    const response = await authedFetch(`${backendBase}/machines/calendar?machine_fk=${machineId}`);
+    return response.json();
+}
