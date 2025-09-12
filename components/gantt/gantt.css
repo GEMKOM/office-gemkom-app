@@ -343,6 +343,24 @@
     min-height: 60px;
 }
 
+.gantt-task-ti-number {
+    font-weight: 700;
+    color: #1f2937;
+    font-size: 0.8rem;
+    margin-bottom: 2px;
+    line-height: 1.2;
+}
+
+.gantt-task-name {
+    font-weight: 500;
+    color: #6b7280;
+    font-size: 0.75rem;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .gantt-task-bar-container {
     height: 60px;
     display: flex;
@@ -714,4 +732,47 @@
 .gantt-task-bar-container {
     position: relative;
     z-index: 2;
+}
+
+/* Day view specific styles for initial visible hours (7-17) */
+.gantt-chart-container.day-view .gantt-timeline-content {
+    overflow-x: auto;
+    scroll-behavior: smooth;
+}
+
+.gantt-chart-container.day-view .gantt-header-cell.initial-visible {
+    background: linear-gradient(135deg, #f0f9ff 0%, #e0f2fe 100%);
+    border-color: #0ea5e9;
+    color: #0369a1;
+    font-weight: 700;
+}
+
+.gantt-chart-container.day-view .gantt-header-cell:not(.initial-visible) {
+    background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+    opacity: 0.7;
+}
+
+/* Ensure proper scrolling for day view */
+.gantt-chart-container.day-view .gantt-scrolling-column {
+    overflow-x: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #8b0000 #f1f1f1;
+}
+
+.gantt-chart-container.day-view .gantt-scrolling-column::-webkit-scrollbar {
+    height: 8px;
+}
+
+.gantt-chart-container.day-view .gantt-scrolling-column::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.gantt-chart-container.day-view .gantt-scrolling-column::-webkit-scrollbar-thumb {
+    background: #8b0000;
+    border-radius: 4px;
+}
+
+.gantt-chart-container.day-view .gantt-scrolling-column::-webkit-scrollbar-thumb:hover {
+    background: #660000;
 }

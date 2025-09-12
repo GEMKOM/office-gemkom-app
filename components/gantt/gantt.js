@@ -126,6 +126,19 @@ class GanttChart {
         this.updateCurrentPeriodIndicator();
         this.renderChart();
         
+        // For day view, set initial scroll position after rendering
+        if (period === 'day') {
+            setTimeout(() => {
+                const scrollingColumn = this.container.querySelector('.gantt-scrolling-column');
+                if (scrollingColumn) {
+                    const cellWidth = this.calculateCellWidth();
+                    const initialScrollLeft = 7 * cellWidth; // Scroll to show hour 7
+                    scrollingColumn.scrollLeft = initialScrollLeft;
+                    console.log('Day view scroll position set after period change to:', initialScrollLeft);
+                }
+            }, 300);
+        }
+        
         if (this.options.onPeriodChange) {
             this.options.onPeriodChange(period, this.currentDate);
         }
@@ -313,7 +326,11 @@ class GanttChart {
         if (visibleTasks.length > 0) {
             taskLabels = visibleTasks.map(task => {
                 const taskTitle = task.title || task.name || `Görev ${task.id}`;
-                return `<div class="gantt-task-label">${taskTitle}</div>`;
+                const tiNumber = task.ti_number || task.key || task.id;
+                return `<div class="gantt-task-label">
+                    <div class="gantt-task-ti-number">${tiNumber}</div>
+                    <div class="gantt-task-name">${taskTitle}</div>
+                </div>`;
             }).join('');
 
             taskBars = visibleTasks.map(task => this.generateTaskBar(task)).join('');
@@ -359,7 +376,7 @@ class GanttChart {
             let totalWidth;
             switch (this.currentPeriod) {
                 case 'day':
-                    totalWidth = 25 * cellWidth; // 25 hours
+                    totalWidth = 24 * cellWidth; // 24 hours (full day)
                     break;
                 case 'week':
                     totalWidth = 7 * cellWidth; // 7 days
@@ -383,6 +400,15 @@ class GanttChart {
             timelineContent.style.backgroundSize = backgroundSize;
             timelineContent.style.backgroundRepeat = 'repeat';
             timelineContent.style.width = `${totalWidth}px`;
+            
+            // For day view, set initial scroll position to show hours 7-17
+            if (this.currentPeriod === 'day') {
+                const initialScrollLeft = 7 * cellWidth; // Scroll to show hour 7
+                // Use setTimeout to ensure the scroll happens after the DOM is fully rendered
+                setTimeout(() => {
+                    timelineContent.scrollLeft = initialScrollLeft;
+                }, 100);
+            }
         }
         
         // Debug: Log the generated HTML structure
@@ -401,6 +427,19 @@ class GanttChart {
         // Bind task events
         this.bindTaskEvents();
         
+        // For day view, ensure initial scroll position is set after everything is rendered
+        if (this.currentPeriod === 'day') {
+            setTimeout(() => {
+                const scrollingColumn = this.container.querySelector('.gantt-scrolling-column');
+                if (scrollingColumn) {
+                    const cellWidth = this.calculateCellWidth();
+                    const initialScrollLeft = 7 * cellWidth; // Scroll to show hour 7
+                    scrollingColumn.scrollLeft = initialScrollLeft;
+                    console.log('Day view scroll position set to:', initialScrollLeft);
+                }
+            }, 200);
+        }
+        
         console.log('Chart rendered successfully');
     }
 
@@ -410,8 +449,8 @@ class GanttChart {
         
         switch (this.currentPeriod) {
             case 'day':
-                const totalHours = 25; // Show only current day hours
-                return Math.max(20, containerWidth / totalHours);
+                const visibleHours = 11; // Initially show 7-17 (11 hours)
+                return Math.max(20, containerWidth / visibleHours);
                 
             case 'week':
                 const totalDaysInWeek = 7; // Show only current week
@@ -452,7 +491,7 @@ class GanttChart {
     calculateViewRangeForDate(date) {
         switch (this.currentPeriod) {
             case 'day':
-                // Show only current day (00:00 to 23:59)
+                // Show full day range (00:00 to 23:59) but initially display only 7-17
                 this.viewStart = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0);
                 this.viewEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999);
                 break;
@@ -492,8 +531,8 @@ class GanttChart {
         
         switch (this.currentPeriod) {
             case 'day':
-                // Hourly view for current day (25 hours) - fit in visible area
-                const totalHours = 25; // Show only current day hours
+                // Hourly view for current day (24 hours) - initially show 7-17, scrollable to show all
+                const totalHours = 24; // Full day hours
                 const hourWidth = this.calculateCellWidth();
                 
                 for (let i = 0; i < totalHours; i++) {
@@ -506,8 +545,12 @@ class GanttChart {
                     const label = `${hour.toString().padStart(2, '0')}`;
                     const sublabel = i === 0 ? `${day}/${month}` : (hour < 12 ? 'ÖÖ' : 'ÖS');
                     
+                    // Add class to identify initial visible hours (7-17)
+                    const isInitialVisible = hour >= 7 && hour <= 17;
+                    const cellClass = isInitialVisible ? 'gantt-header-cell initial-visible' : 'gantt-header-cell';
+                    
                     headerCells += `
-                        <div class="gantt-header-cell" style="min-width: ${hourWidth}px;">
+                        <div class="${cellClass}" style="min-width: ${hourWidth}px;">
                             <div class="gantt-date">${label}</div>
                             <div class="gantt-month">${sublabel}</div>
                         </div>
@@ -583,10 +626,27 @@ class GanttChart {
         return headerCells;
     }
 
+    generateTaskTooltip(task, startTime, endTime) {
+        if (!startTime || !endTime) {
+            return `Tarih atanmamış`;
+        }
+        
+        const durationMs = endTime.getTime() - startTime.getTime();
+        const hours = Math.round((durationMs / (1000 * 60 * 60)) * 10) / 10; // Round to 1 decimal place
+        
+        const startDateStr = startTime.toLocaleDateString('tr-TR');
+        const startTimeStr = startTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        const endDateStr = endTime.toLocaleDateString('tr-TR');
+        const endTimeStr = endTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        
+        return `${hours} saat\n${startDateStr} ${startTimeStr} - ${endDateStr} ${endTimeStr}`;
+    }
+
     generateTaskBar(task) {
         // Handle tasks without dates
         if (!task.planned_start_ms || !task.planned_end_ms) {
             const taskTitle = task.title || task.name || `Görev ${task.id}`;
+            const tiNumber = task.ti_number || task.key || task.id;
             const isLocked = task.plan_locked || false;
             const taskClass = isLocked ? 'locked' : 'unlocked';
             
@@ -595,8 +655,8 @@ class GanttChart {
                     <div class="gantt-task-bar ${taskClass} no-dates" 
                          style="left: 0px; width: 100px; opacity: 0.6;"
                          data-task-id="${task.id}"
-                         title="${taskTitle} - Tarih atanmamış">
-                        <div class="gantt-task-content">${taskTitle}</div>
+                         title="${this.generateTaskTooltip(task, null, null)}">
+                        <div class="gantt-task-content">${tiNumber}</div>
                     </div>
                 </div>
             `;
@@ -607,10 +667,11 @@ class GanttChart {
         const isLocked = task.plan_locked || false;
         const taskClass = isLocked ? 'locked' : 'unlocked';
         const taskTitle = task.title || task.name || `Görev ${task.id}`;
+        const tiNumber = task.ti_number || task.key || task.id;
         
         // If no machine calendar is set, use the old continuous bar approach
         if (!this.machineCalendar) {
-            return this.generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, taskTitle);
+            return this.generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, taskTitle, tiNumber);
         }
         
         // Generate working hours segments for the task
@@ -623,8 +684,8 @@ class GanttChart {
                     <div class="gantt-task-bar ${taskClass} no-working-hours" 
                          style="left: 0px; width: 100px; opacity: 0.3;"
                          data-task-id="${task.id}"
-                         title="${taskTitle} - Çalışma saatleri dışında">
-                        <div class="gantt-task-content">${taskTitle}</div>
+                         title="${this.generateTaskTooltip(task, taskStart, taskEnd)} - Çalışma saatleri dışında">
+                        <div class="gantt-task-content">${tiNumber}</div>
                     </div>
                 </div>
             `;
@@ -643,8 +704,8 @@ class GanttChart {
                 <div class="gantt-task-bar ${taskClass}" 
                      style="left: ${left}px; width: ${width}px;"
                      data-task-id="${task.id}"
-                     title="${taskTitle} (${segment.start.toLocaleString('tr-TR')} - ${segment.end.toLocaleString('tr-TR')})">
-                    <div class="gantt-task-content">${taskTitle}</div>
+                     title="${this.generateTaskTooltip(task, segment.start, segment.end)}">
+                    <div class="gantt-task-content">${tiNumber}</div>
                 </div>
             `;
         }).filter(segment => segment !== '').join('');
@@ -656,7 +717,7 @@ class GanttChart {
         `;
     }
     
-    generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, taskTitle) {
+    generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, taskTitle, tiNumber) {
         const duration = taskEnd - taskStart;
         
         // Calculate position and width based on current period
@@ -664,7 +725,7 @@ class GanttChart {
         
         switch (this.currentPeriod) {
             case 'day':
-                // Position based on hours in current day (25 hours)
+                // Position based on hours in current day (24 hours)
                 // Clip task to only show the portion within the current day view
                 const dayStart = new Date(this.viewStart);
                 const dayEnd = new Date(this.viewStart);
@@ -680,7 +741,7 @@ class GanttChart {
                     const durationHours = (actualEnd - actualStart) / (1000 * 60 * 60);
                     const hourWidth = this.calculateCellWidth();
                     
-                    left = Math.max(0, startOffsetHours * hourWidth);
+                    left = startOffsetHours * hourWidth; // Allow negative positions for scrolling
                     width = Math.max(20, durationHours * hourWidth);
                 } else {
                     // Task is completely outside current day, hide it
@@ -735,8 +796,8 @@ class GanttChart {
                 <div class="gantt-task-bar ${taskClass}" 
                      style="left: ${left}px; width: ${width}px;"
                      data-task-id="${task.id}"
-                     title="${taskTitle}">
-                    <div class="gantt-task-content">${taskTitle}</div>
+                     title="${this.generateTaskTooltip(task, taskStart, taskEnd)}">
+                    <div class="gantt-task-content">${tiNumber}</div>
                 </div>
             </div>
         `;

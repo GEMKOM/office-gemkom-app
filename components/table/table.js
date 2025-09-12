@@ -59,6 +59,9 @@ export class TableComponent {
             refreshable: false,
             onRefresh: null,
             
+            // Custom row attributes
+            rowAttributes: null, // Function that returns attributes for each row
+            
             ...options
         };
         
@@ -226,7 +229,11 @@ export class TableComponent {
         const rowClick = this.options.onRowClick ? 
             `onclick="this.dispatchEvent(new CustomEvent('rowClick', {detail: {index: ${rowIndex}}}))"` : '';
         
-        return `<tr ${rowClick}>${cells.join('')}</tr>`;
+        // Get custom row attributes if provided
+        const customAttributes = this.options.rowAttributes ? 
+            this.options.rowAttributes(row, rowIndex) : '';
+        
+        return `<tr ${customAttributes} ${rowClick}>${cells.join('')}</tr>`;
     }
     
     renderActions(row, rowIndex) {

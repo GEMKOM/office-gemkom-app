@@ -336,3 +336,82 @@
     0% { transform: translate(-50%, -50%) rotate(0deg); }
     100% { transform: translate(-50%, -50%) rotate(360deg); }
 }
+
+/* Drag and Drop Styles */
+.dragging {
+    opacity: 0.5;
+    background-color: #f8f9fa !important;
+}
+
+.drag-over {
+    border-top: 2px solid #007bff !important;
+    background-color: #e3f2fd !important;
+}
+
+.drag-over-top {
+    border-top: 3px solid #28a745 !important;
+    background-color: #d4edda !important;
+    box-shadow: 0 -2px 8px rgba(40, 167, 69, 0.3) !important;
+}
+
+.drag-over-bottom {
+    border-bottom: 3px solid #28a745 !important;
+    background-color: #d4edda !important;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3) !important;
+}
+
+tr[draggable="true"] {
+    cursor: move;
+}
+
+tr[draggable="true"]:hover {
+    background-color: #f8f9fa;
+}
+
+/* Editable cell styles */
+.editable-cell {
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+    border-radius: 4px;
+    padding: 2px 4px;
+    display: inline-block;
+    min-width: 100%;
+}
+
+.editable-cell:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+    border: 1px dashed #007bff;
+}
+
+.editable-cell:hover::after {
+    content: '✏️';
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 0.8rem;
+    opacity: 0.7;
+}
+
+.editable-cell input {
+    border: 2px solid #007bff;
+    border-radius: 4px;
+    padding: 4px 8px;
+    font-size: 0.9rem;
+    width: 100%;
+    background: white;
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.2);
+}
+
+.editable-cell input:focus {
+    outline: none;
+    border-color: #0056b3;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.25);
+}
+
+/* Special styling for date cells */
+.editable-cell[data-field="planned_start_ms"],
+.editable-cell[data-field="planned_end_ms"] {
+    min-width: 150px;
+}

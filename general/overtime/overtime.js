@@ -27,6 +27,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-archive',
                 iconColor: 'info',
                 link: '/general/overtime/registry'
+            },
+            {
+                title: 'Mesai Kullanıcıları',
+                description: 'Belirli bir tarihte mesai yapacak kullanıcıların listesi.',
+                icon: 'fas fa-users',
+                iconColor: 'primary',
+                link: '/general/overtime/users'
             }
         ]
     });

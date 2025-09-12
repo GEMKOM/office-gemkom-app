@@ -363,3 +363,12 @@ export async function getOvertimeApprovedByMeRequests(filters = {}) {
     }
 }
 
+
+export async function getOvertimeUsersForDate(dateStr) {
+    const url = `${backendBase}/overtime/users-for-date/${dateStr}/`;
+    const response = await authedFetch(url);
+    const data = await response.json();
+    return data;
+}
+
+

@@ -8,6 +8,7 @@ import { TableComponent } from '../../../../components/table/table.js';
 import { GanttChart } from '../../../../components/gantt/gantt.js';
 import { fetchMachines, getMachineCalendar } from '../../../../generic/machines.js';
 import { getCapacityPlanning, updateCapacityPlanning } from '../../../../generic/machining/capacityPlanning.js';
+import { formatDateTime } from '../../../../generic/formatters.js';
 
 // Global state
 let currentMachineId = null;
@@ -18,9 +19,12 @@ let plannedTasks = [];
 let unplannedTasks = [];
 let hasUnsavedChanges = false;
 let machinesTable = null;
+let tasksTable = null;
 let isLoadingMachine = false;
+let isLoadingTasks = false;
 let ganttChart = null;
 let machineCalendar = null;
+let isInlineEditing = false; // Flag to prevent multiple simultaneous inline edits
 
 // Gantt chart state (kept for compatibility with existing code)
 let ganttCurrentDate = new Date();
@@ -54,8 +58,9 @@ function minutesToTime(minutes) {
 function isTimeInWorkingHours(date, timeString, calendar) {
     if (!calendar || !calendar.week_template) return true;
     
-    const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
-    const workingDay = calendar.week_template[dayOfWeek.toString()];
+    const jsDayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, etc.
+    const calendarDayOfWeek = (jsDayOfWeek + 6) % 7; // Convert to 0=Monday, 1=Tuesday, ..., 6=Sunday
+    const workingDay = calendar.week_template[calendarDayOfWeek.toString()];
     
     if (!workingDay || workingDay.length === 0) return false;
     
@@ -98,7 +103,7 @@ function getNextWorkingTime(startTime, calendar) {
     
     while (attempts < maxAttempts) {
         const jsDayOfWeek = currentTime.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-        const calendarDayOfWeek = jsDayOfWeek === 0 ? 6 : jsDayOfWeek - 1; // Convert to 0=Monday, 1=Tuesday, ..., 6=Sunday
+        const calendarDayOfWeek = (jsDayOfWeek + 6) % 7; // Convert to 0=Monday, 1=Tuesday, ..., 6=Sunday
         const workingDay = calendar.week_template[calendarDayOfWeek.toString()];
         
         console.log(`JS Day ${jsDayOfWeek} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][jsDayOfWeek]}) -> Calendar Day ${calendarDayOfWeek}, working windows:`, workingDay);
@@ -110,7 +115,7 @@ function getNextWorkingTime(startTime, calendar) {
             if (exception && exception.windows.length > 0) {
                 // Use exception windows instead of regular schedule
                 const timeString = currentTime.toTimeString().slice(0, 5);
-                if (isTimeInWorkingHours(currentTime, timeString, { week_template: { [dayOfWeek]: exception.windows } })) {
+                if (isTimeInWorkingHours(currentTime, timeString, { week_template: { [calendarDayOfWeek]: exception.windows } })) {
                     console.log(`Found working time in exception: ${currentTime.toLocaleString('tr-TR')}`);
                     return currentTime;
                 }
@@ -185,7 +190,7 @@ function getWorkingTimeEnd(startTime, durationMs, calendar) {
     
     while (remainingDuration > 0 && attempts < maxAttempts) {
         const jsDayOfWeek = currentTime.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-        const calendarDayOfWeek = jsDayOfWeek === 0 ? 6 : jsDayOfWeek - 1; // Convert to 0=Monday, 1=Tuesday, ..., 6=Sunday
+        const calendarDayOfWeek = (jsDayOfWeek + 6) % 7; // Convert to 0=Monday, 1=Tuesday, ..., 6=Sunday
         const workingDay = calendar.week_template[calendarDayOfWeek.toString()];
         
         console.log(`JS Day ${jsDayOfWeek} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][jsDayOfWeek]}) -> Calendar Day ${calendarDayOfWeek}, working windows:`, workingDay);
@@ -272,7 +277,9 @@ function getWorkingTimeEnd(startTime, durationMs, calendar) {
                     // Check if there's another window today
                     const nextWindow = workingDay.find(window => {
                         const windowStart = parseTimeToMinutes(window.start);
-                        return windowStart > currentMinutes;
+                        const windowEnd = parseTimeToMinutes(window.end);
+                        // Find a window that starts after the current window ends
+                        return windowStart > parseTimeToMinutes(currentWindow.end);
                     });
                     
                     if (nextWindow) {
@@ -337,6 +344,9 @@ function initCapacityPlanning() {
     
     // Initialize machines table
     initMachinesTable();
+    
+    // Initialize tasks table
+    initTasksTable();
     
     // Initialize Gantt chart
     initGanttChart();
@@ -425,21 +435,13 @@ function initMachinesTable() {
             columns: [
                 {
                     field: 'name',
-                    label: 'Makine Adı',
+                    label: 'Makineler',
                     sortable: true,
                     formatter: (value, row) => `
                         <div class="d-flex align-items-center">
-                            <i class="fas fa-cog me-2 text-primary"></i>
-                            <span class="machine-name">${value}</span>
+                            <span class="currency-badge me-2" style="flex-shrink: 0;">${row.tasks_count || 0}</span>
+                            <span class="machine-name" style="font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${value}</span>
                         </div>
-                    `
-                },
-                {
-                    field: 'tasks_count',
-                    label: 'Görevler',
-                    sortable: true,
-                    formatter: (value) => `
-                        <span class="currency-badge">${value || 0}</span>
                     `
                 }
             ],
@@ -464,6 +466,133 @@ function initMachinesTable() {
         console.log('Machines table initialized successfully');
     } catch (error) {
         console.error('Error initializing machines table:', error);
+    }
+}
+
+// Initialize tasks table component
+function initTasksTable() {
+    console.log('Initializing tasks table...');
+    
+    try {
+        tasksTable = new TableComponent('tasks-table-container', {
+            title: 'Planlanmış Görevler',
+            icon: 'tasks',
+            iconColor: 'text-success',
+            rowAttributes: (row, rowIndex) => `data-task-key="${row.key}" draggable="true"`,
+            skeleton: true,
+            skeletonRows: 5,
+            columns: [
+                {
+                    field: 'plan_order',
+                    label: 'Sıra',
+                    sortable: true,
+                    width: '30px',
+                    formatter: (value) => `
+                        <span class="badge bg-primary">${value || '-'}</span>
+                    `
+                },
+                {
+                    field: 'key',
+                    label: 'TI No',
+                    sortable: true,
+                    formatter: (value) => `<strong>${value}</strong>`
+                },
+                {
+                    field: 'name',
+                    label: 'Görev Adı',
+                    sortable: true
+                },
+                {
+                    field: 'job_no',
+                    label: 'İş No',
+                    sortable: true,
+                    formatter: (value) => value || '-'
+                },
+                {
+                    field: 'quantity',
+                    label: 'Adet',
+                    sortable: true,
+                    formatter: (value) => value || '-'
+                },
+                {
+                    field: 'estimated_hours',
+                    label: 'Tahmini Saat',
+                    sortable: true,
+                    formatter: (value) => value ? `${value}h` : '-'
+                },
+                {
+                    field: 'remaining_hours',
+                    label: 'Kalan Saat',
+                    sortable: true,
+                    formatter: (value) => value ? `${value}h` : '-'
+                },
+                {
+                    field: 'planned_start_ms',
+                    label: 'Planlanan Başlangıç',
+                    sortable: true,
+                    formatter: (value, row) => {
+                        if (!value) return '<span class="editable-cell" data-field="planned_start_ms" data-task-key="' + row.key + '">-</span>';
+                        return `<span class="editable-cell" data-field="planned_start_ms" data-task-key="${row.key}"><div class="created-date">${formatDateTime(new Date(value).toISOString())}</div></span>`;
+                    }
+                },
+                {
+                    field: 'planned_end_ms',
+                    label: 'Planlanan Bitiş',
+                    sortable: true,
+                    formatter: (value, row) => {
+                        if (!value) return '<span class="editable-cell" data-field="planned_end_ms" data-task-key="' + row.key + '">-</span>';
+                        return `<span class="editable-cell" data-field="planned_end_ms" data-task-key="${row.key}"><div class="created-date">${formatDateTime(new Date(value).toISOString())}</div></span>`;
+                    }
+                },
+                {
+                    field: 'finish_time',
+                    label: 'Bitiş Tarihi',
+                    sortable: true,
+                    formatter: (value) => {
+                        if (!value) return '-';
+                        return `<div class="created-date">${formatDateTime(value, false)}</div>`; // false = date only, no time
+                    }
+                },
+                {
+                    field: 'plan_locked',
+                    label: 'Durum',
+                    sortable: true,
+                    formatter: (value) => `
+                        <span class="badge ${value ? 'bg-warning' : 'bg-success'}">
+                            ${value ? 'Kilitli' : 'Aktif'}
+                        </span>
+                    `
+                },
+                {
+                    field: 'actions',
+                    label: 'İşlemler',
+                    sortable: false,
+                    width: '100px',
+                    formatter: (value, row) => `
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-primary btn-sm" onclick="editTask('${row.key}')" title="Düzenle">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" onclick="removeFromPlan('${row.key}')" title="Plandan Çıkar">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                    `
+                }
+            ],
+            sortable: true,
+            refreshable: false,
+            emptyMessage: 'Planlamak için bir makine seçin',
+            emptyIcon: 'fas fa-mouse-pointer',
+            onRowClick: (row, index) => {
+                // Handle row click if needed
+                console.log('Task row clicked:', row);
+            }
+        });
+        
+        console.log('Tasks table initialized successfully');
+    } catch (error) {
+        console.error('Error initializing tasks table:', error);
     }
 }
 
@@ -540,11 +669,9 @@ async function loadMachines() {
             ];
         }
         
-        // Add tasks_count field to each machine (initially 0)
-        machines = machines.map(machine => ({
-            ...machine,
-            tasks_count: 0
-        }));
+        // Use tasks_count from API response (don't override it)
+        // Sort machines by task count (most to least)
+        machines = machines.sort((a, b) => (b.tasks_count || 0) - (a.tasks_count || 0));
         
         if (machinesTable) {
             console.log('Updating table with machines data');
@@ -641,6 +768,9 @@ async function selectMachine(machineId, machineName) {
         document.getElementById('autoschedule-btn').disabled = true;
         document.getElementById('save-plan-btn').disabled = true;
         
+        // Add a small delay to ensure skeleton is visible
+        await new Promise(resolve => setTimeout(resolve, 100));
+        
         // Load machine calendar and tasks
         await Promise.all([
             loadMachineCalendar(machineId),
@@ -706,9 +836,6 @@ async function loadMachineTasks(machineId) {
         renderUnplannedTasksTable(unplanned);
         updateGanttChart(planned);
         
-        // Update machine task count
-        updateMachineTaskCount(machineId, tasks.length);
-        
     } catch (error) {
         console.error('Error loading machine tasks:', error);
         showNotification('Görevler yüklenirken hata oluştu', 'error');
@@ -717,58 +844,28 @@ async function loadMachineTasks(machineId) {
 
 // Render tasks table
 function renderTasksTable(tasks) {
-    const tbody = document.getElementById('tasks-table-body');
-    if (!tbody) return;
-
-    if (tasks.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="10" class="text-center text-muted">
-                    <i class="fas fa-tasks me-2"></i>
-                    Bu makine için planlanmış görev bulunmuyor
-                </td>
-            </tr>
-        `;
+    console.log('renderTasksTable called with tasks:', tasks.length, 'tasksTable:', tasksTable);
+    if (!tasksTable) {
+        console.error('Tasks table not initialized in renderTasksTable');
         return;
     }
+
+    // Turn off loading state
+    tasksTable.setLoading(false);
+    console.log('Loading state disabled');
 
     // Sort tasks by plan_order
     const sortedTasks = [...tasks].sort((a, b) => (a.plan_order || 0) - (b.plan_order || 0));
 
-    tbody.innerHTML = sortedTasks.map(task => `
-        <tr class="task-row" data-task-key="${task.key}" draggable="true">
-            <td>
-                <span class="badge bg-primary">${task.plan_order || '-'}</span>
-            </td>
-            <td>
-                <strong>${task.key}</strong>
-            </td>
-            <td>${task.name}</td>
-            <td>${task.job_no || '-'}</td>
-            <td>${task.quantity || '-'}</td>
-            <td>${task.estimated_hours || '-'}h</td>
-            <td>${task.remaining_hours || '-'}h</td>
-            <td>${task.finish_time ? new Date(task.finish_time).toLocaleDateString('tr-TR') : '-'}</td>
-            <td>
-                <span class="badge ${task.plan_locked ? 'bg-warning' : 'bg-success'}">
-                    ${task.plan_locked ? 'Kilitli' : 'Aktif'}
-                </span>
-            </td>
-            <td>
-                <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-primary btn-sm" onclick="editTask('${task.key}')" title="Düzenle">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-outline-danger btn-sm" onclick="removeFromPlan('${task.key}')" title="Plandan Çıkar">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            </td>
-        </tr>
-    `).join('');
+    // Update the table with new data
+    tasksTable.updateData(sortedTasks);
+    console.log('Table data updated with', sortedTasks.length, 'tasks');
 
-    // Setup drag and drop for task reordering
-    setupTaskRowDragAndDrop();
+    // Setup drag and drop for task reordering after table is updated
+    setTimeout(() => {
+        setupTaskRowDragAndDrop();
+        setupInlineEditing();
+    }, 100);
 }
 
 // Render unplanned tasks table
@@ -818,6 +915,7 @@ function updateGanttChart(tasks) {
         title: task.name,
         name: task.name,
         key: task.key,
+        ti_number: task.key, // Add TI number for gantt display
         planned_start_ms: task.planned_start_ms,
         planned_end_ms: task.planned_end_ms,
         plan_order: task.plan_order,
@@ -837,13 +935,13 @@ function updateGanttChart(tasks) {
 
 // Setup drag and drop for task table rows
 function setupTaskRowDragAndDrop() {
-    const tbody = document.querySelector('#tasks-table-body');
+    const tbody = document.querySelector('#tasks-table-container-tbody');
     if (!tbody) return;
     
     // Add event listeners to the tbody instead of individual rows
     tbody.addEventListener('dragstart', (e) => {
-        if (e.target.closest('.task-row')) {
-            const row = e.target.closest('.task-row');
+        const row = e.target.closest('tr');
+        if (row && row.dataset.taskKey) {
             e.dataTransfer.setData('text/plain', row.dataset.taskKey);
             row.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
@@ -851,11 +949,11 @@ function setupTaskRowDragAndDrop() {
     });
     
     tbody.addEventListener('dragend', (e) => {
-        if (e.target.closest('.task-row')) {
-            const row = e.target.closest('.task-row');
+        const row = e.target.closest('tr');
+        if (row && row.dataset.taskKey) {
             row.classList.remove('dragging');
             // Remove all drag-over classes
-            document.querySelectorAll('.task-row').forEach(r => r.classList.remove('drag-over'));
+            tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
         }
     });
     
@@ -865,15 +963,37 @@ function setupTaskRowDragAndDrop() {
         
         // Add visual feedback but don't move DOM elements yet
         const afterElement = getDragAfterElement(tbody, e.clientY);
-        const dragging = document.querySelector('.dragging');
+        const dragging = tbody.querySelector('.dragging');
         
         if (dragging) {
             // Remove drag-over class from all rows
-            document.querySelectorAll('.task-row').forEach(r => r.classList.remove('drag-over'));
+            tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom'));
             
-            // Add drag-over class to the row we're hovering over
+            // Add appropriate drag-over class based on position
             if (afterElement) {
-                afterElement.classList.add('drag-over');
+                const rect = afterElement.getBoundingClientRect();
+                const midPoint = rect.top + rect.height / 2;
+                
+                if (e.clientY < midPoint) {
+                    afterElement.classList.add('drag-over-top');
+                } else {
+                    afterElement.classList.add('drag-over-bottom');
+                }
+            } else {
+                // Check if we're at the very top or bottom
+                const allRows = tbody.querySelectorAll('tr[data-task-key]:not(.dragging)');
+                if (allRows.length > 0) {
+                    const firstRow = allRows[0];
+                    const lastRow = allRows[allRows.length - 1];
+                    const firstRect = firstRow.getBoundingClientRect();
+                    const lastRect = lastRow.getBoundingClientRect();
+                    
+                    if (e.clientY < firstRect.top + firstRect.height / 2) {
+                        firstRow.classList.add('drag-over-top');
+                    } else if (e.clientY > lastRect.bottom - lastRect.height / 2) {
+                        lastRow.classList.add('drag-over-bottom');
+                    }
+                }
             }
         }
     });
@@ -884,37 +1004,63 @@ function setupTaskRowDragAndDrop() {
         
         if (!draggedTaskKey) return;
         
+        // Remove drag-over classes
+        tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom'));
+        
         // Find the target position based on mouse position
         const afterElement = getDragAfterElement(tbody, e.clientY);
         let targetTaskKey = null;
+        let insertPosition = 'after'; // 'before', 'after', 'top', 'bottom'
         
         if (afterElement) {
-            targetTaskKey = afterElement.dataset.taskKey;
+            const rect = afterElement.getBoundingClientRect();
+            const midPoint = rect.top + rect.height / 2;
+            
+            if (e.clientY < midPoint) {
+                // Insert before this element
+                targetTaskKey = afterElement.dataset.taskKey;
+                insertPosition = 'before';
+            } else {
+                // Insert after this element
+                targetTaskKey = afterElement.dataset.taskKey;
+                insertPosition = 'after';
+            }
         } else {
-            // If dropping at the end, find the last task
-            const allRows = tbody.querySelectorAll('.task-row');
+            // Check if we're at the very top or bottom
+            const allRows = tbody.querySelectorAll('tr[data-task-key]:not(.dragging)');
             if (allRows.length > 0) {
+                const firstRow = allRows[0];
                 const lastRow = allRows[allRows.length - 1];
-                targetTaskKey = lastRow.dataset.taskKey;
+                const firstRect = firstRow.getBoundingClientRect();
+                const lastRect = lastRow.getBoundingClientRect();
+                
+                if (e.clientY < firstRect.top + firstRect.height / 2) {
+                    // Move to very top
+                    targetTaskKey = firstRow.dataset.taskKey;
+                    insertPosition = 'before';
+                } else if (e.clientY > lastRect.bottom - lastRect.height / 2) {
+                    // Move to very bottom
+                    targetTaskKey = lastRow.dataset.taskKey;
+                    insertPosition = 'after';
+                }
             }
         }
         
-        // Remove drag-over classes
-        document.querySelectorAll('.task-row').forEach(r => r.classList.remove('drag-over'));
-        
         // Only reorder if we have a valid target and it's different from dragged task
         if (targetTaskKey && targetTaskKey !== draggedTaskKey) {
-            console.log('Drag and drop: Moving task', draggedTaskKey, 'to position after', targetTaskKey);
-            reorderTasks(draggedTaskKey, targetTaskKey);
+            console.log('Drag and drop: Moving task', draggedTaskKey, 'to position', insertPosition, 'of', targetTaskKey);
+            reorderTasks(draggedTaskKey, targetTaskKey, insertPosition);
         } else {
-            console.log('Drag and drop: No valid reorder - dragged:', draggedTaskKey, 'target:', targetTaskKey);
+            console.log('Drag and drop: No valid reorder - dragged:', draggedTaskKey, 'target:', targetTaskKey, 'position:', insertPosition);
         }
     });
 }
 
 // Get the element after which to insert the dragged element
 function getDragAfterElement(container, y) {
-    const draggableElements = [...container.querySelectorAll('.task-row:not(.dragging)')];
+    const draggableElements = [...container.querySelectorAll('tr[data-task-key]:not(.dragging)')];
+    
+    if (draggableElements.length === 0) return null;
     
     return draggableElements.reduce((closest, child) => {
         const box = child.getBoundingClientRect();
@@ -929,7 +1075,7 @@ function getDragAfterElement(container, y) {
 }
 
 // Reorder tasks and update plan_order
-function reorderTasks(draggedTaskKey, targetTaskKey) {
+function reorderTasks(draggedTaskKey, targetTaskKey, insertPosition = 'after') {
     const draggedTask = currentTasks.find(t => t.key === draggedTaskKey);
     const targetTask = currentTasks.find(t => t.key === targetTaskKey);
     
@@ -947,8 +1093,20 @@ function reorderTasks(draggedTaskKey, targetTaskKey) {
     // Remove dragged task from array
     plannedTasks.splice(draggedIndex, 1);
     
+    // Calculate new index based on insert position
+    let newIndex;
+    if (insertPosition === 'before') {
+        // Insert before the target task
+        newIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    } else {
+        // Insert after the target task (default behavior)
+        newIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+    }
+    
+    // Ensure newIndex is within bounds
+    newIndex = Math.max(0, Math.min(newIndex, plannedTasks.length));
+    
     // Insert at new position
-    const newIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
     plannedTasks.splice(newIndex, 0, draggedTask);
     
     // Update plan_order for all tasks in the original currentTasks array
@@ -1276,26 +1434,15 @@ function resetMachineSelection() {
 
 // Show skeleton loading in tasks table
 function showTasksTableSkeleton() {
-    const tasksTableBody = document.getElementById('tasks-table-body');
-    if (!tasksTableBody) return;
+    console.log('showTasksTableSkeleton called, tasksTable:', tasksTable);
+    if (!tasksTable) {
+        console.error('Tasks table not initialized');
+        return;
+    }
     
-    // Create skeleton rows (5 rows for loading effect)
-    const skeletonRows = Array.from({ length: 5 }, (_, index) => `
-        <tr class="skeleton-row">
-            <td><div class="skeleton skeleton-text" style="width: 30px; height: 16px;"></div></td>
-            <td><div class="skeleton skeleton-text" style="width: 80px; height: 16px;"></div></td>
-            <td><div class="skeleton skeleton-text" style="width: 150px; height: 16px;"></div></td>
-            <td><div class="skeleton skeleton-text" style="width: 60px; height: 16px;"></div></td>
-            <td><div class="skeleton skeleton-text" style="width: 50px; height: 16px;"></div></td>
-            <td><div class="skeleton skeleton-text" style="width: 80px; height: 16px;"></div></td>
-            <td><div class="skeleton skeleton-text" style="width: 80px; height: 16px;"></div></td>
-            <td><div class="skeleton skeleton-text" style="width: 100px; height: 16px;"></div></td>
-            <td><div class="skeleton skeleton-text" style="width: 70px; height: 16px;"></div></td>
-            <td><div class="skeleton skeleton-text" style="width: 60px; height: 16px;"></div></td>
-        </tr>
-    `).join('');
-    
-    tasksTableBody.innerHTML = skeletonRows;
+    // Set loading state to show skeleton
+    tasksTable.setLoading(true);
+    console.log('Skeleton loading enabled');
 }
 
 // Show error message in tasks table
@@ -1315,17 +1462,11 @@ function showTasksTableError(message) {
 
 // Show empty state in tasks table
 function showTasksTableEmpty() {
-    const tasksTableBody = document.getElementById('tasks-table-body');
-    if (!tasksTableBody) return;
+    if (!tasksTable) return;
     
-    tasksTableBody.innerHTML = `
-        <tr>
-            <td colspan="10" class="text-center text-muted">
-                <i class="fas fa-mouse-pointer me-2"></i>
-                Planlamak için bir makine seçin
-            </td>
-        </tr>
-    `;
+    // Set loading to false and update with empty data
+    tasksTable.setLoading(false);
+    tasksTable.updateData([]);
 }
 
 // Add manual row click listeners as fallback
@@ -1480,6 +1621,219 @@ function showNotification(message, type = 'info', timeout = 5000) {
             }, 500);
         }
     }, timeout);
+}
+
+// Setup inline editing for editable cells
+function setupInlineEditing() {
+    const editableCells = document.querySelectorAll('.editable-cell');
+    
+    editableCells.forEach(cell => {
+        cell.addEventListener('click', function(e) {
+            // Don't trigger if clicking on action buttons
+            if (e.target.closest('.action-buttons')) {
+                return;
+            }
+            
+            // Skip if already editing globally
+            if (isInlineEditing) {
+                return;
+            }
+            
+            const taskKey = this.dataset.taskKey;
+            const field = this.dataset.field;
+            const currentValue = this.textContent.trim();
+            
+            // Skip if already editing this cell
+            if (this.querySelector('input')) {
+                return;
+            }
+            
+            startInlineEdit(this, taskKey, field, currentValue);
+        });
+    });
+}
+
+function startInlineEdit(cell, taskKey, field, currentValue) {
+    // Prevent multiple simultaneous inline edits
+    if (isInlineEditing) {
+        return;
+    }
+    
+    // Set inline editing flag
+    isInlineEditing = true;
+    
+    // Clear the flag after 30 seconds as a safety measure
+    setTimeout(() => {
+        isInlineEditing = false;
+    }, 30000);
+    
+    // Create input element based on field type
+    let input;
+    
+    // Set input type and attributes based on field
+    switch (field) {
+        case 'planned_start_ms':
+        case 'planned_end_ms':
+            input = document.createElement('input');
+            input.type = 'datetime-local';
+            input.className = 'form-control form-control-sm';
+            
+            // Convert current value to datetime-local format
+            if (currentValue && currentValue !== '-') {
+                try {
+                    // Parse the formatted date string
+                    const date = new Date(currentValue);
+                    if (!isNaN(date.getTime())) {
+                        // Format for datetime-local input (YYYY-MM-DDTHH:MM)
+                        const year = date.getFullYear();
+                        const month = String(date.getMonth() + 1).padStart(2, '0');
+                        const day = String(date.getDate()).padStart(2, '0');
+                        const hours = String(date.getHours()).padStart(2, '0');
+                        const minutes = String(date.getMinutes()).padStart(2, '0');
+                        input.value = `${year}-${month}-${day}T${hours}:${minutes}`;
+                    } else {
+                        input.value = '';
+                    }
+                } catch (e) {
+                    input.value = '';
+                }
+            } else {
+                input.value = '';
+            }
+            break;
+        default:
+            input = document.createElement('input');
+            input.type = 'text';
+            input.className = 'form-control form-control-sm';
+            input.value = currentValue === '-' ? '' : currentValue;
+    }
+    
+    // Store original content
+    const originalContent = cell.innerHTML;
+    
+    // Replace cell content with input
+    cell.innerHTML = '';
+    cell.appendChild(input);
+    
+    // Focus on input
+    input.focus();
+    if (input.type !== 'select-one') {
+        input.select();
+    }
+    
+    // Handle input events
+    input.addEventListener('blur', (e) => {
+        // Check if input still exists in DOM before proceeding
+        if (!input.parentNode) {
+            return;
+        }
+        
+        // Add a small delay to prevent race conditions
+        setTimeout(() => {
+            // Check again if input still exists
+            if (input.parentNode) {
+                finishInlineEdit(cell, taskKey, field, input.value, originalContent);
+            }
+        }, 100);
+    });
+    
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            finishInlineEdit(cell, taskKey, field, input.value, originalContent);
+        } else if (e.key === 'Escape') {
+            // Check if cell still exists before setting innerHTML
+            if (cell && cell.parentNode) {
+                cell.innerHTML = originalContent;
+                isInlineEditing = false;
+            }
+        }
+    });
+}
+
+async function finishInlineEdit(cell, taskKey, field, newValue, originalContent) {
+    try {
+        // Clear inline editing flag
+        isInlineEditing = false;
+        
+        // Check if this cell is already being processed
+        if (cell.dataset.processing === 'true') {
+            return;
+        }
+        
+        // Mark this cell as being processed
+        cell.dataset.processing = 'true';
+        
+        // Find the task in our local array
+        const task = currentTasks.find(t => t.key === taskKey);
+        if (!task) {
+            // Check if cell still exists before setting innerHTML
+            if (cell && cell.parentNode) {
+                cell.innerHTML = originalContent;
+            }
+            showNotification('Görev bulunamadı', 'error');
+            return;
+        }
+        
+        // Update the task data based on field
+        let hasChanges = false;
+        
+        switch (field) {
+            case 'planned_start_ms':
+                if (newValue) {
+                    const newDate = new Date(newValue);
+                    if (!isNaN(newDate.getTime())) {
+                        task.planned_start_ms = newDate.getTime();
+                        hasChanges = true;
+                    }
+                } else {
+                    task.planned_start_ms = null;
+                    hasChanges = true;
+                }
+                break;
+            case 'planned_end_ms':
+                if (newValue) {
+                    const newDate = new Date(newValue);
+                    if (!isNaN(newDate.getTime())) {
+                        task.planned_end_ms = newDate.getTime();
+                        hasChanges = true;
+                    }
+                } else {
+                    task.planned_end_ms = null;
+                    hasChanges = true;
+                }
+                break;
+        }
+        
+        if (hasChanges) {
+            hasUnsavedChanges = true;
+            
+            // Update the display immediately
+            const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
+            renderTasksTable(updatedPlannedTasks);
+            updateGanttChart(updatedPlannedTasks);
+            
+            showNotification('Görev güncellendi', 'success', 2000);
+        } else {
+            // No changes, restore original content
+            if (cell && cell.parentNode) {
+                cell.innerHTML = originalContent;
+            }
+        }
+        
+    } catch (error) {
+        console.error('Error in finishInlineEdit:', error);
+        showNotification('Güncelleme sırasında hata oluştu', 'error');
+        
+        // Restore original content on error
+        if (cell && cell.parentNode) {
+            cell.innerHTML = originalContent;
+        }
+    } finally {
+        // Clear processing flag
+        if (cell) {
+            cell.dataset.processing = 'false';
+        }
+    }
 }
 
 // Make functions globally available
