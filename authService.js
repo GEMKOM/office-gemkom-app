@@ -129,28 +129,31 @@ export function isLoggedIn() {
 }
 
 export function mustResetPassword() {
-    const user = JSON.parse(localStorage.getItem('user'));
-    if (user) {
-        return user.must_reset_password;
-    } else {
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        return user.must_reset_password === true;
+    } catch (error) {
+        console.warn('Failed to parse user data for mustResetPassword check:', error);
         return false;
     }
 }
 
 export function isAdmin() {
-    const user = JSON.parse(localStorage.getItem('user'));
-    if (user) { 
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
         return user?.is_superuser || user?.is_admin;
-    } else {
+    } catch (error) {
+        console.warn('Failed to parse user data for isAdmin check:', error);
         return false;
     }
 }
 
 export function isLead() {
-    const user = JSON.parse(localStorage.getItem('user'));
-    if (user) { 
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
         return user?.is_lead;
-    } else {
+    } catch (error) {
+        console.warn('Failed to parse user data for isLead check:', error);
         return false;
     }
 }
@@ -169,19 +172,24 @@ export function navigateTo(path, options = {}) {
 }
 
 export function navigateByTeam() {
-    const user = JSON.parse(localStorage.getItem('user'));
-    if (isAdmin() || user.team === null){
-        navigateTo(ROUTES.HOME);
-        return;
-    }
-    if (user.team === 'machining') {
-        navigateTo(ROUTES.MACHINING);
-    } else if (user.team === 'maintenance') {
-        navigateTo(ROUTES.MAINTENANCE);
-    } else if (user.team === 'manufacturing') {
-        navigateTo(ROUTES.MANUFACTURING);
-    } else {
-        // Fallback: redirect all other teams to home page
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (isAdmin() || user.team === null){
+            navigateTo(ROUTES.HOME);
+            return;
+        }
+        if (user.team === 'machining') {
+            navigateTo(ROUTES.MACHINING);
+        } else if (user.team === 'maintenance') {
+            navigateTo(ROUTES.MAINTENANCE);
+        } else if (user.team === 'manufacturing') {
+            navigateTo(ROUTES.MANUFACTURING);
+        } else {
+            // Fallback: redirect all other teams to home page
+            navigateTo(ROUTES.HOME);
+        }
+    } catch (error) {
+        console.warn('Failed to parse user data for team navigation:', error);
         navigateTo(ROUTES.HOME);
     }
 }
@@ -201,7 +209,12 @@ export function shouldBeOnLoginPage() {
 }
 
 export function shouldBeOnResetPasswordPage() {
-    return isLoggedIn() && mustResetPassword();
+    if (!isLoggedIn()) {
+        return false;
+    }
+    
+    const user = JSON.parse(localStorage.getItem('user') || '{}');
+    return user.must_reset_password === true;
 }
 
 export function shouldBeOnMainPage() {

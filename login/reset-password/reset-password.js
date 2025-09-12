@@ -43,15 +43,26 @@ document.addEventListener('DOMContentLoaded', function() {
                 // Update the user data in localStorage to reflect the password reset
                 try {
                     const updatedUser = await getUser();
+                    // Ensure must_reset_password is set to false after successful reset
+                    updatedUser.must_reset_password = false;
                     localStorage.setItem('user', JSON.stringify(updatedUser));
                 } catch (userError) {
                     console.warn('Failed to refresh user data after password reset:', userError);
+                    // Fallback: manually update the cached user data
+                    const cachedUser = JSON.parse(localStorage.getItem('user') || '{}');
+                    cachedUser.must_reset_password = false;
+                    localStorage.setItem('user', JSON.stringify(cachedUser));
                 }
                 
                 successDiv.textContent = 'Şifreniz başarıyla güncellendi. Ana sayfaya yönlendiriliyorsunuz...';
                 successDiv.style.display = 'block';
+                
+                // Clear the form
+                form.reset();
+                
                 setTimeout(() => {
-                    navigateTo(ROUTES.HOME);
+                    // Force navigation to home page
+                    window.location.href = ROUTES.HOME;
                 }, 1500);
             } else {
                 const data = await res.json().catch(() => ({}));
