@@ -90,36 +90,11 @@ function initCapacityModule() {
         cards: [
             {
                 title: 'Kapasite Planlayıcı',
-                description: 'Makine kapasitelerini planlayın, kaynak optimizasyonu yapın ve üretim programını oluşturun.',
+                description: 'Makine kapasitelerini planlayın ve üretim programını oluşturun.',
                 icon: 'fas fa-calendar-alt',
                 iconColor: 'primary',
                 link: '/manufacturing/machining/capacity/planning',
-                features: [
-                    {
-                        label: 'Kapasite planlama',
-                        icon: 'fas fa-chart-line',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/capacity/planning'
-                    },
-                    {
-                        label: 'Kaynak optimizasyonu',
-                        icon: 'fas fa-cogs',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/capacity/planning'
-                    },
-                    {
-                        label: 'Üretim programı',
-                        icon: 'fas fa-calendar',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/capacity/planning'
-                    },
-                    {
-                        label: 'Yük dengeleme',
-                        icon: 'fas fa-balance-scale',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/capacity/planning'
-                    }
-                ]
+                features: []
             },
             {
                 title: 'Makine Çalışma Geçmişi',
@@ -127,32 +102,7 @@ function initCapacityModule() {
                 icon: 'fas fa-history',
                 iconColor: 'info',
                 link: '/manufacturing/machining/capacity/history',
-                features: [
-                    {
-                        label: 'Çalışma geçmişi',
-                        icon: 'fas fa-clock',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/capacity/history'
-                    },
-                    {
-                        label: 'Performans analizi',
-                        icon: 'fas fa-chart-bar',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/capacity/history'
-                    },
-                    {
-                        label: 'Trend analizi',
-                        icon: 'fas fa-chart-line',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/capacity/history'
-                    },
-                    {
-                        label: 'Verimlilik raporları',
-                        icon: 'fas fa-tachometer-alt',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/capacity/history'
-                    }
-                ]
+                features: []
             }
         ]
     });

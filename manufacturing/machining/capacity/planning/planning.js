@@ -26,6 +26,10 @@ let ganttChart = null;
 let machineCalendar = null;
 let isInlineEditing = false; // Flag to prevent multiple simultaneous inline edits
 
+// Change tracking for efficient submissions
+let originalTasks = []; // Store original state for comparison
+let changedTasks = new Set(); // Track which tasks have been modified
+
 // Gantt chart state (kept for compatibility with existing code)
 let ganttCurrentDate = new Date();
 let ganttPeriod = 'month'; // 'week', 'month', 'year'
@@ -39,6 +43,94 @@ function formatDateForInput(date) {
     const hours = String(date.getHours()).padStart(2, '0');
     const minutes = String(date.getMinutes()).padStart(2, '0');
     return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
+// Change tracking utility functions
+function markTaskAsChanged(taskKey) {
+    changedTasks.add(taskKey);
+    hasUnsavedChanges = true;
+}
+
+function isTaskChanged(taskKey) {
+    return changedTasks.has(taskKey);
+}
+
+function resetChangeTracking() {
+    changedTasks.clear();
+    hasUnsavedChanges = false;
+    originalTasks = JSON.parse(JSON.stringify(currentTasks)); // Deep copy
+}
+
+function getChangedTasks() {
+    const changed = [];
+    const processedKeys = new Set(); // Track processed task keys to avoid duplicates
+    
+    console.log('Checking for changes...');
+    console.log('Original tasks count:', originalTasks.length);
+    console.log('Current tasks count:', currentTasks.length);
+    
+    // Check for new tasks and existing task changes
+    currentTasks.forEach(task => {
+        const original = originalTasks.find(ot => ot.key === task.key);
+        
+        if (!original) {
+            // New task that wasn't in original data
+            if (task.in_plan) {
+                console.log('New task added to plan:', task.key);
+                changed.push(task);
+                processedKeys.add(task.key);
+            }
+        } else {
+            // Existing task - check for changes
+            const hasChanges = 
+                task.in_plan !== original.in_plan ||
+                task.plan_order !== original.plan_order ||
+                task.planned_start_ms !== original.planned_start_ms ||
+                task.planned_end_ms !== original.planned_end_ms ||
+                task.plan_locked !== original.plan_locked;
+            
+            if (hasChanges) {
+                console.log('Task changed:', task.key, {
+                    in_plan: { original: original.in_plan, current: task.in_plan },
+                    plan_order: { original: original.plan_order, current: task.plan_order },
+                    planned_start_ms: { original: original.planned_start_ms, current: task.planned_start_ms },
+                    planned_end_ms: { original: original.planned_end_ms, current: task.planned_end_ms },
+                    plan_locked: { original: original.plan_locked, current: task.plan_locked }
+                });
+                
+                // If task was removed from plan, create a minimal payload
+                if (original.in_plan && !task.in_plan) {
+                    changed.push({
+                        key: task.key,
+                        in_plan: false
+                    });
+                } else {
+                    // For other changes, include the full task data
+                    changed.push(task);
+                }
+                processedKeys.add(task.key);
+            }
+        }
+    });
+    
+    // Check for deleted tasks that are no longer in currentTasks at all
+    originalTasks.forEach(original => {
+        if (!processedKeys.has(original.key)) {
+            const current = currentTasks.find(ct => ct.key === original.key);
+            
+            if (original.in_plan && (!current || !current.in_plan)) {
+                // Task was removed from plan and not already processed
+                console.log('Task removed from plan (not in current):', original.key);
+                changed.push({
+                    key: original.key,
+                    in_plan: false
+                });
+            }
+        }
+    });
+    
+    console.log('Total changed tasks:', changed.length);
+    return changed;
 }
 
 // Machine Calendar Utility Functions
@@ -369,13 +461,8 @@ function initHeader() {
         icon: 'calendar-alt',
         containerId: 'header-placeholder',
         showBackButton: 'block',
-        showRefreshButton: 'block',
-        backUrl: '/manufacturing/machining/capacity/',
-        onRefreshClick: () => {
-            if (currentMachineId) {
-                loadMachineTasks(currentMachineId);
-            }
-        }
+        showRefreshButton: 'none',
+        backUrl: '/manufacturing/machining/capacity/'
     });
 }
 
@@ -581,7 +668,15 @@ function initTasksTable() {
                 }
             ],
             sortable: true,
-            refreshable: false,
+            refreshable: true,
+            onRefresh: () => {
+                console.log('Tasks table refresh requested');
+                if (currentMachineId) {
+                    loadMachineTasks(currentMachineId);
+                } else {
+                    showNotification('Önce bir makine seçin', 'warning');
+                }
+            },
             emptyMessage: 'Planlamak için bir makine seçin',
             emptyIcon: 'fas fa-mouse-pointer',
             onRowClick: (row, index) => {
@@ -825,6 +920,9 @@ async function loadMachineTasks(machineId) {
     try {
         const tasks = await getCapacityPlanning(machineId);
         currentTasks = tasks;
+        
+        // Initialize change tracking with original state
+        resetChangeTracking();
         
         // Separate planned and unplanned tasks
         const planned = tasks.filter(task => task.in_plan);
@@ -1116,10 +1214,9 @@ function reorderTasks(draggedTaskKey, targetTaskKey, insertPosition = 'after') {
         const originalTask = currentTasks.find(t => t.key === task.key);
         if (originalTask) {
             originalTask.plan_order = index + 1;
+            markTaskAsChanged(task.key);
         }
     });
-    
-    hasUnsavedChanges = true;
     
     // Re-render the table and Gantt chart
     const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
@@ -1168,7 +1265,7 @@ function addToPlan(taskKey) {
     task.planned_start_ms = null;
     task.planned_end_ms = null;
 
-    hasUnsavedChanges = true;
+    markTaskAsChanged(taskKey);
     
     // Update the display immediately
     const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
@@ -1191,7 +1288,7 @@ function removeFromPlan(taskKey) {
     task.planned_end_ms = null;
     task.plan_locked = false;
 
-    hasUnsavedChanges = true;
+    markTaskAsChanged(taskKey);
     
     // Update the display immediately
     const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
@@ -1328,6 +1425,9 @@ async function confirmAutoschedule() {
         task.planned_end_ms = taskEndTime.getTime();
         // Don't overwrite plan_order here - it should already be set correctly from sorting
         
+        // Mark task as changed
+        markTaskAsChanged(task.key);
+        
         console.log(`Task ${index + 1} (${task.key}):`, {
             planOrder: task.plan_order,
             remainingHours: remainingHours,
@@ -1349,8 +1449,6 @@ async function confirmAutoschedule() {
             respectsCalendar: !!machineCalendar
         });
     });
-
-    hasUnsavedChanges = true;
     
     // Close modal
     const modal = bootstrap.Modal.getInstance(document.getElementById('autoscheduleModal'));
@@ -1372,24 +1470,77 @@ async function savePlan() {
     }
 
     try {
-        const plannedTasks = currentTasks.filter(task => task.in_plan);
+        // Get only the changed tasks
+        const changedTasks = getChangedTasks();
+        
+        if (changedTasks.length === 0) {
+            showNotification('Kaydedilecek değişiklik bulunmuyor', 'info');
+            return;
+        }
+
+        // Build the payload according to the required format
         const updateData = {
-            items: plannedTasks.map(task => ({
-                key: task.key,
-                machine_fk: task.machine_fk,
-                planned_start_ms: task.planned_start_ms,
-                planned_end_ms: task.planned_end_ms,
-                plan_order: task.plan_order,
-                plan_locked: task.plan_locked,
-                in_plan: task.in_plan
-            }))
+            items: changedTasks.map(task => {
+                const payload = {
+                    key: task.key
+                };
+
+                // For new tasks or tasks being added to plan
+                if (task.in_plan) {
+                    payload.in_plan = true;
+                    
+                    // Include machine_fk if available
+                    if (task.machine_fk) {
+                        payload.machine_fk = task.machine_fk;
+                    }
+                    
+                    // Include name for new tasks
+                    if (task.name) {
+                        payload.name = task.name;
+                    }
+                    
+                    // Include timing information if available
+                    if (task.planned_start_ms) {
+                        payload.planned_start_ms = task.planned_start_ms;
+                    }
+                    if (task.planned_end_ms) {
+                        payload.planned_end_ms = task.planned_end_ms;
+                    }
+                    
+                    // Include order if available
+                    if (task.plan_order) {
+                        payload.plan_order = task.plan_order;
+                    }
+                    
+                    // Include lock status if available
+                    if (task.plan_locked !== undefined) {
+                        payload.plan_locked = task.plan_locked;
+                    }
+                } else {
+                    // For tasks being removed from plan
+                    payload.in_plan = false;
+                }
+
+                return payload;
+            })
         };
 
-        console.log('Saving plan with data:', updateData);
+        console.log('Saving plan with changed data:', updateData);
+        console.log('Changed tasks count:', changedTasks.length);
+        console.log('Changed tasks details:', changedTasks.map(t => ({
+            key: t.key,
+            in_plan: t.in_plan,
+            plan_order: t.plan_order,
+            planned_start_ms: t.planned_start_ms,
+            planned_end_ms: t.planned_end_ms,
+            plan_locked: t.plan_locked
+        })));
+        
         const result = await updateCapacityPlanning(updateData);
         console.log('Save result:', result);
         
-        hasUnsavedChanges = false;
+        // Reset change tracking after successful save
+        resetChangeTracking();
         showNotification('Plan başarıyla kaydedildi', 'success');
         
     } catch (error) {
@@ -1424,6 +1575,9 @@ function resetMachineSelection() {
     plannedTasks = [];
     unplannedTasks = [];
     machineCalendar = null;
+    
+    // Reset change tracking
+    resetChangeTracking();
     
     // Reset loading state
     isLoadingMachine = false;
@@ -1553,7 +1707,7 @@ function setupEventListeners() {
             task.plan_order = planOrder ? parseInt(planOrder) : null;
             task.plan_locked = planLocked;
             
-            hasUnsavedChanges = true;
+            markTaskAsChanged(taskKey);
             
             const modal = bootstrap.Modal.getInstance(document.getElementById('editTaskModal'));
             modal.hide();
@@ -1805,7 +1959,7 @@ async function finishInlineEdit(cell, taskKey, field, newValue, originalContent)
         }
         
         if (hasChanges) {
-            hasUnsavedChanges = true;
+            markTaskAsChanged(taskKey);
             
             // Update the display immediately
             const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);

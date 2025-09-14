@@ -631,8 +631,8 @@ class GanttChart {
             return `Tarih atanmamış`;
         }
         
-        const durationMs = endTime.getTime() - startTime.getTime();
-        const hours = Math.round((durationMs / (1000 * 60 * 60)) * 10) / 10; // Round to 1 decimal place
+        // Use remaining_hours from task data instead of calculating from duration
+        const hours = task.remaining_hours || task.estimated_hours || 0;
         
         const startDateStr = startTime.toLocaleDateString('tr-TR');
         const startTimeStr = startTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
@@ -648,13 +648,16 @@ class GanttChart {
             const taskTitle = task.title || task.name || `Görev ${task.id}`;
             const tiNumber = task.ti_number || task.key || task.id;
             const isLocked = task.plan_locked || false;
+            const category = task.category || 'work';
             const taskClass = isLocked ? 'locked' : 'unlocked';
+            const categoryClass = `category-${category}`;
             
             return `
                 <div class="gantt-task-bar-container">
-                    <div class="gantt-task-bar ${taskClass} no-dates" 
+                    <div class="gantt-task-bar ${taskClass} ${categoryClass} no-dates" 
                          style="left: 0px; width: 100px; opacity: 0.6;"
                          data-task-id="${task.id}"
+                         data-category="${category}"
                          title="${this.generateTaskTooltip(task, null, null)}">
                         <div class="gantt-task-content">${tiNumber}</div>
                     </div>
@@ -665,13 +668,15 @@ class GanttChart {
         const taskStart = new Date(task.planned_start_ms);
         const taskEnd = new Date(task.planned_end_ms);
         const isLocked = task.plan_locked || false;
+        const category = task.category || 'work';
         const taskClass = isLocked ? 'locked' : 'unlocked';
+        const categoryClass = `category-${category}`;
         const taskTitle = task.title || task.name || `Görev ${task.id}`;
         const tiNumber = task.ti_number || task.key || task.id;
         
         // If no machine calendar is set, use the old continuous bar approach
         if (!this.machineCalendar) {
-            return this.generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, taskTitle, tiNumber);
+            return this.generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, categoryClass, taskTitle, tiNumber);
         }
         
         // Generate working hours segments for the task
@@ -681,9 +686,10 @@ class GanttChart {
             // Task has no working hours overlap
             return `
                 <div class="gantt-task-bar-container">
-                    <div class="gantt-task-bar ${taskClass} no-working-hours" 
+                    <div class="gantt-task-bar ${taskClass} ${categoryClass} no-working-hours" 
                          style="left: 0px; width: 100px; opacity: 0.3;"
                          data-task-id="${task.id}"
+                         data-category="${category}"
                          title="${this.generateTaskTooltip(task, taskStart, taskEnd)} - Çalışma saatleri dışında">
                         <div class="gantt-task-content">${tiNumber}</div>
                     </div>
@@ -701,9 +707,10 @@ class GanttChart {
             }
             
             return `
-                <div class="gantt-task-bar ${taskClass}" 
+                <div class="gantt-task-bar ${taskClass} ${categoryClass}" 
                      style="left: ${left}px; width: ${width}px;"
                      data-task-id="${task.id}"
+                     data-category="${category}"
                      title="${this.generateTaskTooltip(task, segment.start, segment.end)}">
                     <div class="gantt-task-content">${tiNumber}</div>
                 </div>
@@ -717,7 +724,7 @@ class GanttChart {
         `;
     }
     
-    generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, taskTitle, tiNumber) {
+    generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, categoryClass, taskTitle, tiNumber) {
         const duration = taskEnd - taskStart;
         
         // Calculate position and width based on current period
@@ -793,9 +800,10 @@ class GanttChart {
         
         return `
             <div class="gantt-task-bar-container">
-                <div class="gantt-task-bar ${taskClass}" 
+                <div class="gantt-task-bar ${taskClass} ${categoryClass}" 
                      style="left: ${left}px; width: ${width}px;"
                      data-task-id="${task.id}"
+                     data-category="${task.category || 'work'}"
                      title="${this.generateTaskTooltip(task, taskStart, taskEnd)}">
                     <div class="gantt-task-content">${tiNumber}</div>
                 </div>
