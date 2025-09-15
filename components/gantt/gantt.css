@@ -2,10 +2,11 @@
 
 .gantt-container {
     background: white;
-    border: 1px solid #dee2e6;
-    border-radius: 8px;
+    border: none; /* Remove border since it's inside a card */
+    border-radius: 0 0 15px 15px; /* Match card border radius */
     overflow: hidden;
-    margin-top: 1rem;
+    margin: 0; /* Remove margins to fit perfectly in card */
+    width: 100%; /* Ensure full width */
 }
 
 .gantt-header-content {
@@ -13,7 +14,7 @@
     justify-content: space-between;
     align-items: center;
     margin-bottom: 1rem;
-    padding: 0.5rem 1rem;
+    padding: 1rem 1.5rem 0.5rem 1.5rem; /* Add proper padding to match card spacing */
 }
 
 .gantt-title {
@@ -152,10 +153,11 @@
 }
 
 .gantt-chart {
-    max-height: 500px;
     position: relative;
     min-height: 200px;
     width: 100%;
+    padding: 0 1.5rem 1.5rem 1.5rem; /* Add padding to match card spacing */
+    /* Height will be set dynamically by JavaScript */
 }
 
 
@@ -209,7 +211,7 @@
     position: sticky;
     top: 0;
     z-index: 10;
-    min-height: 60px;
+    height: 60px;
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
     width: 100%;
     flex: 1;
@@ -236,7 +238,8 @@
     font-weight: 700;
     color: #334155;
     box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.1);
-    min-height: 60px;
+    height: 60px;
+    box-sizing: border-box;
 }
 
 .gantt-scrolling-column {
@@ -301,6 +304,7 @@
     transition: background-color 0.2s ease;
     background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
     box-sizing: border-box;
+    height: 60px;
 }
 
 .gantt-header-cell:hover {
@@ -340,7 +344,8 @@
     color: #374151;
     font-size: 0.9rem;
     line-height: 1.4;
-    min-height: 60px;
+    height: 60px;
+    box-sizing: border-box;
 }
 
 .gantt-task-ti-number {
@@ -368,6 +373,7 @@
     padding: 0 8px;
     position: relative;
     background: transparent;
+    box-sizing: border-box;
 }
 
 .gantt-task-bar {
@@ -650,17 +656,20 @@
         width: 180px;
         padding: 8px 12px;
         font-size: 0.8rem;
+        height: 60px;
     }
     
     .gantt-header-label-cell {
         width: 180px;
         padding: 8px 12px;
+        height: 60px;
     }
     
     .gantt-header-cell {
         min-width: 30px;
         padding: 8px 4px;
         font-size: 0.7rem;
+        height: 60px;
     }
     
     .gantt-task-bar-container {
@@ -700,17 +709,20 @@
         width: 150px;
         padding: 6px 8px;
         font-size: 0.75rem;
+        height: 60px;
     }
     
     .gantt-header-label-cell {
         width: 150px;
         padding: 6px 8px;
+        height: 60px;
     }
     
     .gantt-header-cell {
         min-width: 25px;
         padding: 6px 2px;
         font-size: 0.65rem;
+        height: 60px;
     }
     
     .gantt-task-bar-container {
@@ -806,4 +818,61 @@
 
 .gantt-chart-container.day-view .gantt-scrolling-column::-webkit-scrollbar-thumb:hover {
     background: #660000;
+}
+
+/* Skeleton Loading Styles */
+.skeleton-text {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-loading 1.5s infinite;
+    border-radius: 4px;
+    height: 12px;
+    margin: 2px 0;
+}
+
+.skeleton-text:nth-child(2) {
+    width: 80%;
+    height: 10px;
+}
+
+.skeleton-text:nth-child(1) {
+    width: 60%;
+    height: 14px;
+}
+
+.skeleton-header-cell .skeleton-text {
+    width: 70%;
+    height: 10px;
+    margin: 1px auto;
+}
+
+.skeleton-header-cell .skeleton-text:nth-child(2) {
+    width: 50%;
+    height: 8px;
+}
+
+.skeleton-task-bar {
+    background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%) !important;
+    background-size: 200% 100% !important;
+    animation: skeleton-loading 1.5s infinite !important;
+    border: 1px solid #e0e0e0 !important;
+    box-shadow: none !important;
+    border-radius: 6px !important;
+}
+
+.skeleton-task-bar .skeleton-text {
+    background: transparent !important;
+    animation: none !important;
+    color: #999 !important;
+    font-size: 0.7rem !important;
+    text-shadow: none !important;
+}
+
+@keyframes skeleton-loading {
+    0% {
+        background-position: -200% 0;
+    }
+    100% {
+        background-position: 200% 0;
+    }
 }

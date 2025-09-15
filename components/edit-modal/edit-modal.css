@@ -1,0 +1,383 @@
+/* Edit Modal Component Styles */
+.edit-modal-container {
+    /* Let Bootstrap handle the positioning */
+}
+
+/* Modal Content Styling - Only custom styling, let Bootstrap handle structure */
+.edit-modal-container .modal-content.compact {
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.edit-modal-container .modal-header.compact {
+    background: linear-gradient(135deg, #8B0000, #DC143C);
+    color: white;
+    border-radius: 12px 12px 0 0;
+    padding: 1rem 1.5rem;
+    border-bottom: none;
+}
+
+.edit-modal-container .modal-header.compact .modal-title {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.edit-modal-container .modal-header.compact .modal-icon {
+    font-size: 1rem;
+}
+
+.edit-modal-container .modal-header.compact .btn-close {
+    filter: invert(1);
+    opacity: 0.8;
+}
+
+.edit-modal-container .modal-header.compact .btn-close:hover {
+    opacity: 1;
+}
+
+.edit-modal-container .modal-body.compact {
+    padding: 1.5rem;
+    background: white;
+}
+
+.edit-modal-container .modal-footer.compact {
+    background: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+    border-radius: 0 0 12px 12px;
+    padding: 1rem 1.5rem;
+}
+
+/* Custom submit button styling */
+.edit-modal-container .modal-footer.compact .btn-primary {
+    background-color: #8B0000;
+    border-color: #8B0000;
+    padding: 0.625rem 1.25rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.edit-modal-container .modal-footer.compact .btn-primary:hover {
+    background-color: #660000;
+    border-color: #660000;
+}
+
+.edit-modal-container .modal-footer.compact .btn-primary:focus {
+    background-color: #8B0000;
+    border-color: #8B0000;
+    box-shadow: 0 0 0 0.25rem rgba(139, 0, 0, 0.25);
+}
+
+.edit-modal-container .modal-footer.compact .btn-primary:active {
+    background-color: #660000;
+    border-color: #660000;
+}
+
+/* Form Section Styling */
+.edit-modal-container .form-section {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #DC143C;
+}
+
+.edit-modal-container .form-section:last-child {
+    margin-bottom: 0;
+}
+
+.edit-modal-container .section-subtitle {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    font-size: 0.95rem;
+}
+
+.edit-modal-container .section-subtitle i {
+    margin-right: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.edit-modal-container .section-subtitle.text-primary i {
+    color: #0d6efd;
+}
+
+.edit-modal-container .section-subtitle.text-success i {
+    color: #198754;
+}
+
+.edit-modal-container .section-subtitle.text-warning i {
+    color: #ffc107;
+}
+
+.edit-modal-container .section-subtitle.text-info i {
+    color: #0dcaf0;
+}
+
+.edit-modal-container .section-subtitle.text-danger i {
+    color: #dc3545;
+}
+
+/* Field Styling */
+.edit-modal-container .field-group {
+    margin-bottom: 1rem;
+}
+
+.edit-modal-container .field-group:last-child {
+    margin-bottom: 0;
+}
+
+.edit-modal-container .field-label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
+}
+
+.edit-modal-container .field-label i {
+    margin-right: 0.5rem;
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.edit-modal-container .field-label.required::after {
+    content: " *";
+    color: #dc3545;
+    font-weight: bold;
+}
+
+/* Field inputs - Bootstrap form-control with custom touches */
+.edit-modal-container .field-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #495057;
+    background-color: #fff;
+    border: 1px solid #ced4da;
+    border-radius: 0.375rem;
+    transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+}
+
+.edit-modal-container .field-input:focus {
+    color: #495057;
+    background-color: #fff;
+    border-color: #86b7fe;
+    outline: 0;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.25);
+}
+
+.edit-modal-container .field-input:invalid {
+    border-color: #dc3545;
+}
+
+.edit-modal-container .field-input:invalid:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25);
+}
+
+.edit-modal-container .field-help {
+    font-size: 0.75rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+.edit-modal-container .field-error {
+    font-size: 0.75rem;
+    color: #dc3545;
+    margin-top: 0.25rem;
+    display: none;
+}
+
+.edit-modal-container .field-error.show {
+    display: block;
+}
+
+/* Dropdown Field Styling */
+.edit-modal-container .dropdown-field-container {
+    position: relative;
+}
+
+.edit-modal-container .dropdown-field-container .modern-dropdown-container {
+    width: 100%;
+}
+
+/* Date Field Styling */
+.edit-modal-container .date-field {
+    position: relative;
+}
+
+.edit-modal-container .date-field .field-input {
+    padding-right: 2.5rem;
+}
+
+.edit-modal-container .date-field .date-icon {
+    position: absolute;
+    right: 0.75rem;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #6c757d;
+    pointer-events: none;
+}
+
+/* Number Field Styling */
+.edit-modal-container .number-field .field-input {
+    text-align: right;
+}
+
+/* Textarea Field Styling */
+.edit-modal-container .textarea-field .field-input {
+    min-height: 80px;
+    resize: vertical;
+}
+
+/* Checkbox Field Styling */
+.edit-modal-container .checkbox-field {
+    display: flex;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.edit-modal-container .checkbox-field .field-input {
+    width: auto;
+    margin-right: 0.5rem;
+    margin-bottom: 0;
+}
+
+.edit-modal-container .checkbox-field .field-label {
+    margin-bottom: 0;
+    font-weight: normal;
+}
+
+/* Radio Field Styling */
+.edit-modal-container .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.edit-modal-container .radio-field {
+    display: flex;
+    align-items: center;
+}
+
+.edit-modal-container .radio-field .field-input {
+    width: auto;
+    margin-right: 0.5rem;
+    margin-bottom: 0;
+}
+
+.edit-modal-container .radio-field .field-label {
+    margin-bottom: 0;
+    font-weight: normal;
+}
+
+/* Loading State */
+.edit-modal-container .modal-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    border-radius: 12px;
+}
+
+.edit-modal-container .modal-loading .spinner {
+    width: 2rem;
+    height: 2rem;
+    border: 0.25rem solid #f3f3f3;
+    border-top: 0.25rem solid #DC143C;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Responsive Design - Only custom form sections, let Bootstrap handle modal responsive */
+@media (max-width: 768px) {
+    .edit-modal-container .form-section {
+        padding: 0.75rem;
+    }
+}
+
+/* Animation for modal appearance - let Bootstrap handle this */
+
+/* Field validation states */
+.edit-modal-container .field-group.has-error .field-input {
+    border-color: #dc3545;
+}
+
+.edit-modal-container .field-group.has-error .field-input:focus {
+    border-color: #dc3545;
+    box-shadow: 0 0 0 0.25rem rgba(220, 53, 69, 0.25);
+}
+
+.edit-modal-container .field-group.has-success .field-input {
+    border-color: #198754;
+}
+
+.edit-modal-container .field-group.has-success .field-input:focus {
+    border-color: #198754;
+    box-shadow: 0 0 0 0.25rem rgba(25, 135, 84, 0.25);
+}
+
+/* Custom field types */
+.edit-modal-container .file-field .field-input {
+    padding: 0.375rem 0.75rem;
+}
+
+.edit-modal-container .color-field .field-input {
+    width: 60px;
+    height: 38px;
+    padding: 0.25rem;
+    border-radius: 0.375rem;
+}
+
+.edit-modal-container .range-field .field-input {
+    width: 100%;
+    height: 6px;
+    border-radius: 3px;
+    background: #ddd;
+    outline: none;
+    -webkit-appearance: none;
+}
+
+.edit-modal-container .range-field .field-input::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #DC143C;
+    cursor: pointer;
+}
+
+.edit-modal-container .range-field .field-input::-moz-range-thumb {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: #DC143C;
+    cursor: pointer;
+    border: none;
+}
+
+.edit-modal-container .range-value {
+    font-size: 0.875rem;
+    color: #495057;
+    margin-top: 0.25rem;
+    text-align: center;
+}

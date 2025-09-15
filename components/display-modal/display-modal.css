@@ -1,0 +1,337 @@
+/* Display Modal Component Styles */
+.display-modal-container {
+    /* Let Bootstrap handle the positioning */
+}
+
+/* Modal Content Styling - Only custom styling, let Bootstrap handle structure */
+.display-modal-container .modal-content.compact {
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+}
+
+.display-modal-container .modal-header.compact {
+    background: linear-gradient(135deg, #8B0000, #DC143C);
+    color: white;
+    border-radius: 12px 12px 0 0;
+    padding: 1rem 1.5rem;
+    border-bottom: none;
+}
+
+.display-modal-container .modal-header.compact .modal-title {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin: 0;
+    display: flex;
+    align-items: center;
+}
+
+.display-modal-container .modal-header.compact .modal-icon {
+    font-size: 1rem;
+}
+
+.display-modal-container .modal-header.compact .btn-close {
+    filter: invert(1);
+    opacity: 0.8;
+}
+
+.display-modal-container .modal-header.compact .btn-close:hover {
+    opacity: 1;
+}
+
+.display-modal-container .modal-body.compact {
+    padding: 1.5rem;
+    background: white;
+}
+
+.display-modal-container .modal-footer.compact {
+    background: #f8f9fa;
+    border-top: 1px solid #e9ecef;
+    border-radius: 0 0 12px 12px;
+    padding: 1rem 1.5rem;
+}
+
+/* Custom submit button styling */
+.display-modal-container .modal-footer.compact .btn-primary {
+    background-color: #8B0000;
+    border-color: #8B0000;
+    padding: 0.625rem 1.25rem;
+    font-size: 0.95rem;
+    font-weight: 500;
+}
+
+.display-modal-container .modal-footer.compact .btn-primary:hover {
+    background-color: #660000;
+    border-color: #660000;
+}
+
+.display-modal-container .modal-footer.compact .btn-primary:focus {
+    background-color: #8B0000;
+    border-color: #8B0000;
+    box-shadow: 0 0 0 0.25rem rgba(139, 0, 0, 0.25);
+}
+
+.display-modal-container .modal-footer.compact .btn-primary:active {
+    background-color: #660000;
+    border-color: #660000;
+}
+
+/* Form Section Styling */
+.display-modal-container .display-section {
+    margin-bottom: 1.5rem;
+    padding: 1rem;
+    background: #f8f9fa;
+    border-radius: 8px;
+    border-left: 4px solid #DC143C;
+}
+
+.display-modal-container .display-section:last-child {
+    margin-bottom: 0;
+}
+
+.display-modal-container .section-subtitle {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    font-size: 0.95rem;
+}
+
+.display-modal-container .section-subtitle i {
+    margin-right: 0.5rem;
+    font-size: 0.9rem;
+}
+
+.display-modal-container .section-subtitle.text-primary i {
+    color: #0d6efd;
+}
+
+.display-modal-container .section-subtitle.text-success i {
+    color: #198754;
+}
+
+.display-modal-container .section-subtitle.text-warning i {
+    color: #ffc107;
+}
+
+.display-modal-container .section-subtitle.text-info i {
+    color: #0dcaf0;
+}
+
+.display-modal-container .section-subtitle.text-danger i {
+    color: #dc3545;
+}
+
+/* Field Display Styling */
+.display-modal-container .field-display {
+    margin-bottom: 1rem;
+}
+
+.display-modal-container .field-display:last-child {
+    margin-bottom: 0;
+}
+
+.display-modal-container .field-label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
+}
+
+.display-modal-container .field-label i {
+    margin-right: 0.5rem;
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.display-modal-container .field-value {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #2c3e50;
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 0.375rem;
+    min-height: 2.5rem;
+    display: flex;
+    align-items: center;
+    word-break: break-word;
+}
+
+.display-modal-container .field-value.empty {
+    color: #6c757d;
+    font-style: italic;
+}
+
+.display-modal-container .field-value.empty::before {
+    content: "-";
+}
+
+/* Special field types */
+.display-modal-container .field-value.boolean {
+    font-weight: 500;
+}
+
+.display-modal-container .field-value.boolean.true {
+    color: #198754;
+}
+
+.display-modal-container .field-value.boolean.false {
+    color: #dc3545;
+}
+
+.display-modal-container .field-value.number {
+    text-align: right;
+    font-family: 'Courier New', monospace;
+}
+
+.display-modal-container .field-value.date {
+    font-family: 'Courier New', monospace;
+}
+
+.display-modal-container .field-value.email {
+    color: #0d6efd;
+}
+
+.display-modal-container .field-value.email:hover {
+    text-decoration: underline;
+}
+
+.display-modal-container .field-value.url {
+    color: #0d6efd;
+    text-decoration: underline;
+}
+
+.display-modal-container .field-value.url:hover {
+    text-decoration: none;
+}
+
+/* Image field */
+.display-modal-container .field-value.image {
+    padding: 0.5rem;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #f8f9fa;
+}
+
+.display-modal-container .field-value.image img {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 0.375rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Badge field */
+.display-modal-container .field-value.badge {
+    background: transparent;
+    border: none;
+    padding: 0;
+    min-height: auto;
+}
+
+.display-modal-container .field-value.badge .badge {
+    font-size: 0.8rem;
+    padding: 0.375rem 0.75rem;
+}
+
+/* List field */
+.display-modal-container .field-value.list {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 0.75rem;
+}
+
+.display-modal-container .field-value.list .list-item {
+    padding: 0.25rem 0;
+    border-bottom: 1px solid #e9ecef;
+    width: 100%;
+}
+
+.display-modal-container .field-value.list .list-item:last-child {
+    border-bottom: none;
+}
+
+/* Loading State */
+.display-modal-container .modal-loading {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    border-radius: 12px;
+}
+
+.display-modal-container .modal-loading .spinner {
+    width: 2rem;
+    height: 2rem;
+    border: 0.25rem solid #f3f3f3;
+    border-top: 0.25rem solid #DC143C;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* Responsive Design - Only custom form sections, let Bootstrap handle modal responsive */
+@media (max-width: 768px) {
+    .display-modal-container .display-section {
+        padding: 0.75rem;
+    }
+    
+    .display-modal-container .modal-body.compact {
+        padding: 1rem;
+    }
+    
+    .display-modal-container .modal-footer.compact {
+        padding: 0.75rem 1rem;
+    }
+}
+
+/* Animation for modal appearance - let Bootstrap handle this */
+
+/* Copy to clipboard functionality */
+.display-modal-container .field-value.copyable {
+    cursor: pointer;
+    position: relative;
+    transition: background-color 0.2s ease;
+}
+
+.display-modal-container .field-value.copyable:hover {
+    background-color: #f8f9fa;
+}
+
+.display-modal-container .field-value.copyable::after {
+    content: "📋";
+    position: absolute;
+    right: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    font-size: 0.8rem;
+}
+
+.display-modal-container .field-value.copyable:hover::after {
+    opacity: 1;
+}
+
+.display-modal-container .field-value.copied {
+    background-color: #d4edda;
+    border-color: #c3e6cb;
+    color: #155724;
+}
+
+.display-modal-container .field-value.copied::after {
+    content: "✓";
+    color: #155724;
+    opacity: 1;
+}

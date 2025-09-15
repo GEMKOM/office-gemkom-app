@@ -1,5 +1,7 @@
 import { initNavbar } from '../../../../components/navbar.js';
 import { ModernDropdown } from '../../../../components/dropdown.js';
+import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
+import { TableComponent } from '../../../../components/table/table.js';
 import { fetchMachines } from '../../../../generic/machines.js';
 import { fetchUsers } from '../../../../generic/users.js';
 import { fetchTaskById } from '../../../../generic/tasks.js';
@@ -27,6 +29,12 @@ let headerComponent;
 // Statistics Cards component instance
 let finishedTimersStats = null;
 
+// Edit Modal component instance
+let editTimerModal = null;
+
+// Table component instance
+let timersTable = null;
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
@@ -46,9 +54,271 @@ document.addEventListener('DOMContentLoaded', async () => {
         animation: true
     });
     
-    await initializeFinishedTimers();
+    initializeEditModal();
+    initializeTable();
     setupEventListeners();
+    await initializeFinishedTimers();
+    
+    // Check for edit parameter in URL
+    checkForEditParameter();
 });
+
+// Initialize Edit Modal
+function initializeEditModal() {
+    editTimerModal = new EditModal('edit-timer-modal-container', {
+        title: 'Zamanlayıcıyı Düzenle',
+        icon: 'fas fa-edit',
+        saveButtonText: 'Kaydet',
+        size: 'lg'
+    });
+    
+    // Configure the modal with timer fields
+    editTimerModal
+        .addSection({
+            title: 'Temel Bilgiler',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary',
+            fields: [
+                {
+                    id: 'job_no',
+                    name: 'job_no',
+                    label: 'İş No',
+                    type: 'text',
+                    placeholder: 'İş numarasını girin',
+                    icon: 'fas fa-hashtag',
+                    colSize: 6
+                },
+                {
+                    id: 'image_no',
+                    name: 'image_no',
+                    label: 'Resim No',
+                    type: 'text',
+                    placeholder: 'Resim numarasını girin',
+                    icon: 'fas fa-image',
+                    colSize: 6
+                },
+                {
+                    id: 'position_no',
+                    name: 'position_no',
+                    label: 'Pozisyon No',
+                    type: 'text',
+                    placeholder: 'Pozisyon numarasını girin',
+                    icon: 'fas fa-map-marker-alt',
+                    colSize: 6
+                },
+                {
+                    id: 'quantity',
+                    name: 'quantity',
+                    label: 'Adet',
+                    type: 'number',
+                    placeholder: 'Adet girin',
+                    min: 1,
+                    icon: 'fas fa-cubes',
+                    colSize: 6
+                }
+            ]
+        })
+        .addSection({
+            title: 'Zamanlayıcı Bilgileri',
+            icon: 'fas fa-clock',
+            iconColor: 'text-success',
+            fields: [
+                {
+                    id: 'machine',
+                    name: 'machine',
+                    label: 'Makine',
+                    type: 'dropdown',
+                    placeholder: 'Makine seçin...',
+                    icon: 'fas fa-cogs',
+                    options: [], // Will be populated with machines
+                    colSize: 6
+                },
+                {
+                    id: 'finish_time',
+                    name: 'finish_time',
+                    label: 'Bitiş Zamanı',
+                    type: 'datetime-local',
+                    icon: 'fas fa-calendar-times',
+                    colSize: 6
+                },
+                {
+                    id: 'comment',
+                    name: 'comment',
+                    label: 'Yorum',
+                    type: 'textarea',
+                    placeholder: 'Yorum girin...',
+                    rows: 3,
+                    icon: 'fas fa-comment',
+                    colSize: 12
+                },
+                {
+                    id: 'manual_entry',
+                    name: 'manual_entry',
+                    label: 'Manuel Giriş',
+                    type: 'checkbox',
+                    icon: 'fas fa-hand-paper',
+                    colSize: 12
+                }
+            ]
+        })
+        .render()
+        .onSaveCallback(async (formData) => {
+            await saveEditTimer(formData);
+        });
+}
+
+// Initialize Table Component
+function initializeTable() {
+    timersTable = new TableComponent('timers-table-container', {
+        title: 'Zamanlayıcı Listesi',
+        icon: 'fas fa-table',
+        iconColor: 'text-primary',
+        columns: [
+            {
+                field: 'username',
+                label: 'Kullanıcı',
+                sortable: false,
+                type: 'text',
+                formatter: (value) => `<span style="font-weight: 600; color: #343a40;">${value || '-'}</span>`
+            },
+            {
+                field: 'issue_key',
+                label: 'TI No',
+                sortable: true,
+                type: 'text',
+                formatter: (value) => {
+                    if (!value) return '-';
+                    return `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value}</span>`;
+                }
+            },
+            {
+                field: 'job_no',
+                label: 'İş No',
+                sortable: false,
+                type: 'text',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'image_no',
+                label: 'Resim No',
+                sortable: false,
+                type: 'text',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'position_no',
+                label: 'Poz No',
+                sortable: false,
+                type: 'text',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'quantity',
+                label: 'Adet',
+                sortable: false,
+                type: 'number',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'machine_name',
+                label: 'Makine',
+                sortable: false,
+                type: 'text',
+                formatter: (value) => `<span style="font-weight: 500; color: #495057;">${value || '-'}</span>`
+            },
+            {
+                field: 'start_time',
+                label: 'Başlangıç',
+                sortable: true,
+                type: 'text',
+                formatter: (value) => `<span style="color: #6c757d; font-weight: 500;">${formatDateTime(value)}</span>`
+            },
+            {
+                field: 'finish_time',
+                label: 'Bitiş',
+                sortable: true,
+                type: 'text',
+                formatter: (value) => `<span style="color: #495057; font-weight: 500;">${formatDateTime(value)}</span>`
+            },
+            {
+                field: 'duration',
+                label: 'Süre (Saat)',
+                sortable: true,
+                type: 'text',
+                formatter: (value, row) => {
+                    const duration = calculateDuration(row.start_time, row.finish_time);
+                    return `<span style="display: inline-block; padding: 0.25rem 0.5rem; background: #f8f9fa; color: #495057; border: 1px solid #dee2e6; border-radius: 4px; font-size: 0.75rem; font-weight: 500;">${duration}</span>`;
+                }
+            },
+            {
+                field: 'comment',
+                label: 'Yorum',
+                sortable: true,
+                type: 'text',
+                formatter: (value) => {
+                    if (!value) return '<span class="text-muted">-</span>';
+                    return `<button class="btn btn-sm btn-outline-info" data-comment="${value}" title="Yorumu görüntüle" style="font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 4px; transition: all 0.2s ease;">
+                        <i class="fas fa-comment me-1"></i>Yorum
+                    </button>`;
+                }
+            },
+            {
+                field: 'manual_entry',
+                label: 'Manuel Giriş',
+                sortable: true,
+                type: 'text',
+                formatter: (value) => {
+                    return value ? 
+                        '<span style="display: inline-block; padding: 0.25rem 0.5rem; border-radius: 4px; font-size: 0.75rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; background: rgba(40, 167, 69, 0.1); color: #198754; border: 1px solid rgba(40, 167, 69, 0.2);">Manuel</span>' : 
+                        '<span class="text-muted">-</span>';
+                }
+            }
+        ],
+        actions: [
+            {
+                key: 'edit',
+                label: 'Düzenle',
+                icon: 'fas fa-edit',
+                class: 'btn-outline-primary',
+                onClick: (row) => showEditTimerModal(row)
+            },
+            {
+                key: 'delete',
+                label: 'Sil',
+                icon: 'fas fa-trash',
+                class: 'btn-outline-danger',
+                onClick: (row) => deleteTimer(row.id)
+            }
+        ],
+        data: timers,
+        sortable: true,
+        pagination: true,
+        serverSidePagination: true,
+        itemsPerPage: pageSize,
+        currentPage: currentPage,
+        totalItems: totalTimers,
+        responsive: true,
+        emptyMessage: 'Zamanlayıcı bulunamadı',
+        emptyIcon: 'fas fa-inbox',
+        loading: true,
+        skeleton: true,
+        skeletonRows: 5,
+        onSort: (field, direction) => {
+            currentSortField = field;
+            currentSortDirection = direction;
+            loadTimers(currentPage);
+        },
+        onPageChange: (page) => {
+            currentPage = page;
+            loadTimers(page);
+        },
+        onRowClick: (row) => {
+            // Optional: Add row click functionality if needed
+        }
+    });
+    
+    timersTable.render();
+}
 
 // Initialize header component
 function initHeaderComponent() {
@@ -101,6 +371,16 @@ async function loadMachines() {
                 ...machines.map(machine => ({ value: machine.id.toString(), label: machine.name }))
             ];
             timerFilters.updateFilterOptions('machine-filter', machineOptions);
+        }
+        
+        // Update EditModal machine dropdown options
+        if (editTimerModal && editTimerModal.dropdowns && editTimerModal.dropdowns.has('machine')) {
+            const machineDropdown = editTimerModal.dropdowns.get('machine');
+            const machineItems = [
+                { value: '', text: 'Makine seçin...' },
+                ...machines.map(machine => ({ value: machine.id.toString(), text: machine.name }))
+            ];
+            machineDropdown.setItems(machineItems);
         }
     } catch (error) {
         console.error('Error loading machines:', error);
@@ -265,8 +545,7 @@ async function loadTimers(page = 1) {
         timers = data.results || [];
         totalTimers = data.count || 0;
         
-        renderTimersTable();
-        renderPagination();
+        updateTable();
         updateStatistics();
         
     } catch (error) {
@@ -275,6 +554,48 @@ async function loadTimers(page = 1) {
     } finally {
         hideLoadingState();
     }
+}
+
+// Update table with new data
+function updateTable() {
+    if (timersTable) {
+        timersTable.updateData(timers, totalTimers, currentPage);
+        timersTable.setLoading(false);
+        
+        // Add event listeners for task info links and comment buttons
+        addTableEventListeners();
+    }
+}
+
+// Add event listeners for table-specific elements
+function addTableEventListeners() {
+    // Task info links
+    document.querySelectorAll('.task-info-link').forEach(link => {
+        link.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const timerData = JSON.parse(link.getAttribute('data-task'));
+            
+            if (!timerData.issue_is_hold_task) {
+                const taskDetails = await fetchTaskById(timerData.issue_key);
+                if (taskDetails) {
+                    showTaskInfoModal(timerData, taskDetails);
+                } else {
+                    showTaskInfoModal(timerData);
+                }
+            } else {
+                showTaskInfoModal(timerData);
+            }
+        });
+    });
+    
+    // Comment buttons
+    document.querySelectorAll('.comment-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const comment = btn.getAttribute('data-comment');
+            showCommentPopup(comment, btn);
+        });
+    });
 }
 
 function buildTimerQuery(page = 1) {
@@ -330,102 +651,6 @@ function buildTimerQuery(page = 1) {
     return params.toString();
 }
 
-function renderTimersTable() {
-    const tbody = document.getElementById('timers-table-body');
-    
-    if (timers.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="13" class="text-center text-muted py-4">
-                    <i class="fas fa-inbox fa-2x mb-2"></i><br>
-                    Zamanlayıcı bulunamadı
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tbody.innerHTML = timers.map(timer => `
-        <tr>
-            <td>
-                <span class="user-name">${timer.username || '-'}</span>
-            </td>
-            <td>
-                <a href="#" class="timer-issue-key task-info-link" data-task='${JSON.stringify(timer)}'>
-                    ${timer.issue_key || '-'}
-                </a>
-            </td>
-            <td>${timer.job_no || '-'}</td>
-            <td>${timer.image_no || '-'}</td>
-            <td>${timer.position_no || '-'}</td>
-            <td>${timer.quantity || '-'}</td>
-            <td>
-                <span class="machine-name">${timer.machine_name || '-'}</span>
-            </td>
-            <td>${formatDateTime(timer.start_time)}</td>
-            <td>${formatDateTime(timer.finish_time)}</td>
-            <td>
-                <span class="duration-badge">
-                    ${calculateDuration(timer.start_time, timer.finish_time)}
-                </span>
-            </td>
-            <td>
-                ${timer.comment ? 
-                    `<button class="btn btn-sm btn-outline-info comment-btn" data-comment="${timer.comment}" title="Yorumu görüntüle">
-                        <i class="fas fa-comment me-1"></i>Yorum
-                    </button>` : 
-                    '<span class="text-muted">-</span>'
-                }
-            </td>
-            <td>
-                ${timer.manual_entry ? 
-                    '<span class="manual-entry-badge">Manuel</span>' : 
-                    '<span class="text-muted">-</span>'
-                }
-            </td>
-            <td>
-                <div class="btn-group btn-group-sm">
-                    <button class="btn btn-outline-primary btn-action edit-timer-btn" 
-                            data-timer-id="${timer.id}" title="Düzenle">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                    <button class="btn btn-outline-danger btn-action delete-timer-btn" 
-                            data-timer-id="${timer.id}" title="Sil">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </td>
-        </tr>
-    `).join('');
-    
-    // Add event listeners for task info links
-    document.querySelectorAll('.task-info-link').forEach(link => {
-        link.addEventListener('click', async (e) => {
-            e.preventDefault();
-            const timerData = JSON.parse(link.getAttribute('data-task'));
-            
-            if (!timerData.issue_is_hold_task) {
-                const taskDetails = await fetchTaskById(timerData.issue_key);
-                if (taskDetails) {
-                    showTaskInfoModal(timerData, taskDetails);
-                } else {
-                    showTaskInfoModal(timerData);
-                }
-            } else {
-                showTaskInfoModal(timerData);
-            }
-        });
-    });
-    
-    // Add event listeners for comment buttons
-    document.querySelectorAll('.comment-btn').forEach(btn => {
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            const comment = btn.getAttribute('data-comment');
-            showCommentPopup(comment, btn);
-        });
-    });
-}
 
 function calculateDuration(startTime, finishTime) {
     if (!startTime || !finishTime) return '-';
@@ -447,50 +672,6 @@ function formatDateTime(timestamp) {
     });
 }
 
-function renderPagination() {
-    const pagination = document.getElementById('pagination');
-    if (!pagination) return;
-    
-    const totalPages = Math.ceil(totalTimers / 20);
-    if (totalPages <= 1) {
-        pagination.innerHTML = '';
-        return;
-    }
-    
-    let html = '';
-    
-    // Previous button
-    html += `
-        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-        </li>
-    `;
-    
-    // Page numbers
-    const startPage = Math.max(1, currentPage - 2);
-    const endPage = Math.min(totalPages, currentPage + 2);
-    
-    for (let i = startPage; i <= endPage; i++) {
-        html += `
-            <li class="page-item ${i === currentPage ? 'active' : ''}">
-                <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
-            </li>
-        `;
-    }
-    
-    // Next button
-    html += `
-        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-        </li>
-    `;
-    
-    pagination.innerHTML = html;
-}
 
 function updateStatistics() {
     // Calculate statistics from current data
@@ -518,37 +699,8 @@ function updateStatistics() {
 
 
 function setupEventListeners() {
-    // Pagination
-    document.addEventListener('click', (e) => {
-        if (e.target.classList.contains('page-link')) {
-            e.preventDefault();
-            const page = parseInt(e.target.getAttribute('data-page'));
-            if (page && page > 0) {
-                loadTimers(page);
-            }
-        }
-    });
-    
-    // Edit and delete buttons
-    document.addEventListener('click', (e) => {
-        if (e.target.closest('.edit-timer-btn')) {
-            const timerId = e.target.closest('.edit-timer-btn').getAttribute('data-timer-id');
-            const timer = timers.find(t => t.id == timerId);
-            if (timer) {
-                showEditTimerModal(timer);
-            }
-        }
-        
-        if (e.target.closest('.delete-timer-btn')) {
-            const timerId = e.target.closest('.delete-timer-btn').getAttribute('data-timer-id');
-            if (confirm('Bu zamanlayıcıyı silmek istediğinizden emin misiniz?')) {
-                deleteTimer(timerId);
-            }
-        }
-    });
-    
-    // Save edit button
-    document.getElementById('save-edit-timer-btn').addEventListener('click', saveEditTimer);
+    // Event listeners are now handled by the TableComponent
+    // Task info links and comment buttons are handled in the table render functions
 }
 
 
@@ -572,46 +724,55 @@ async function deleteTimer(timerId) {
 }
 
 function showEditTimerModal(timer) {
-    // Populate modal fields
-    document.getElementById('edit-timer-id').value = timer.id;
-    document.getElementById('edit-job_no').value = timer.job_no || '';
-    document.getElementById('edit-image_no').value = timer.image_no || '';
-    document.getElementById('edit-position_no').value = timer.position_no || '';
-    document.getElementById('edit-quantity').value = timer.quantity || '';
-    document.getElementById('edit-comment').value = timer.comment || '';
-    document.getElementById('edit-manual_entry').checked = !!timer.manual_entry;
+    if (!editTimerModal) {
+        console.error('Edit modal not initialized');
+        return;
+    }
     
-    // Populate machine dropdown
-    const machineSelect = document.getElementById('edit-machine');
-    machineSelect.innerHTML = '<option>Yükleniyor...</option>';
+    // Store the timer ID for saving
+    editTimerModal.timerId = timer.id;
     
-    const machineOptions = machines.map(machine =>
-        `<option value="${machine.id}"${machine.id == timer.machine_fk ? ' selected' : ''}>${machine.name || ''}</option>`
-    ).join('');
+    // Populate modal fields with timer data
+    const formData = {
+        job_no: timer.job_no || '',
+        image_no: timer.image_no || '',
+        position_no: timer.position_no || '',
+        quantity: timer.quantity || '',
+        comment: timer.comment || '',
+        manual_entry: !!timer.manual_entry
+    };
     
-    machineSelect.innerHTML = machineOptions;
+    // Set machine value
+    formData.machine = timer.machine_fk || '';
     
     // Set finish time
-    document.getElementById('edit-finish_time').value = timer.finish_time ? 
+    formData.finish_time = timer.finish_time ? 
         toLocalDatetimeInput(timer.finish_time) : '';
     
+    // Set form data
+    editTimerModal.setFormData(formData);
+    
     // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('edit-timer-modal'));
-    modal.show();
+    editTimerModal.show();
 }
 
-async function saveEditTimer() {
-    const timerId = document.getElementById('edit-timer-id').value;
+async function saveEditTimer(formData) {
+    if (!editTimerModal || !editTimerModal.timerId) {
+        console.error('No timer ID available for saving');
+        return;
+    }
+    
+    const timerId = editTimerModal.timerId;
     const patch = {
-        job_no: document.getElementById('edit-job_no').value,
-        image_no: document.getElementById('edit-image_no').value,
-        position_no: document.getElementById('edit-position_no').value,
-        quantity: parseInt(document.getElementById('edit-quantity').value) || null,
-        comment: document.getElementById('edit-comment').value,
-        manual_entry: document.getElementById('edit-manual_entry').checked,
-        machine_fk: document.getElementById('edit-machine').value,
-        finish_time: document.getElementById('edit-finish_time').value ? 
-            new Date(document.getElementById('edit-finish_time').value).getTime() : null,
+        job_no: formData.job_no,
+        image_no: formData.image_no,
+        position_no: formData.position_no,
+        quantity: parseInt(formData.quantity) || null,
+        comment: formData.comment,
+        manual_entry: formData.manual_entry,
+        machine_fk: formData.machine,
+        finish_time: formData.finish_time ? 
+            new Date(formData.finish_time).getTime() : null,
     };
     
     try {
@@ -625,7 +786,7 @@ async function saveEditTimer() {
             throw new Error('Zamanlayıcı güncellenemedi');
         }
         
-        bootstrap.Modal.getInstance(document.getElementById('edit-timer-modal')).hide();
+        editTimerModal.hide();
         showNotification('Zamanlayıcı başarıyla güncellendi', 'success');
         loadTimers(currentPage);
     } catch (error) {
@@ -845,21 +1006,15 @@ function exportTimers() {
 }
 
 function showLoadingState() {
-    const tbody = document.getElementById('timers-table-body');
-    tbody.innerHTML = `
-        <tr>
-            <td colspan="13" class="text-center py-4">
-                <div class="spinner-border text-primary" role="status">
-                    <span class="visually-hidden">Yükleniyor...</span>
-                </div>
-                <div class="mt-2">Zamanlayıcılar yükleniyor...</div>
-            </td>
-        </tr>
-    `;
+    if (timersTable) {
+        timersTable.setLoading(true);
+    }
 }
 
 function hideLoadingState() {
-    // Loading state is handled in renderTimersTable
+    if (timersTable) {
+        timersTable.setLoading(false);
+    }
 }
 
 function showNotification(message, type = 'info') {
@@ -880,6 +1035,40 @@ function showNotification(message, type = 'info') {
             notification.remove();
         }
     }, 5000);
+}
+
+// Check for edit parameter in URL and open modal if found
+function checkForEditParameter() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const editTimerId = urlParams.get('edit');
+    
+    if (editTimerId) {
+        // Find the timer in the current data
+        const timer = timers.find(t => t.id == editTimerId);
+        if (timer) {
+            // Open the edit modal
+            showEditTimerModal(timer);
+        } else {
+            // Timer not found in current page, try to load it
+            loadTimerById(editTimerId);
+        }
+    }
+}
+
+// Load a specific timer by ID
+async function loadTimerById(timerId) {
+    try {
+        const response = await authedFetch(`${backendBase}/machining/timers/${timerId}/`);
+        if (response.ok) {
+            const timer = await response.json();
+            showEditTimerModal(timer);
+        } else {
+            showNotification('Zamanlayıcı bulunamadı', 'error');
+        }
+    } catch (error) {
+        console.error('Error loading timer:', error);
+        showNotification('Zamanlayıcı yüklenirken hata oluştu', 'error');
+    }
 }
 
 // Global function for pagination

@@ -1,64 +1,7 @@
 /* Capacity History Specific Styles */
-
-/* History specific card styling */
-.history-card {
-    background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-    border: 2px solid #dee2e6;
-    border-radius: 15px;
-    transition: all 0.3s ease;
-}
-
-.history-card:hover {
-    border-color: #667eea;
-    box-shadow: 0 15px 35px rgba(102, 126, 234, 0.1);
-}
-
-/* Machine table styling */
-.machine-row {
-    cursor: pointer;
-    transition: all 0.3s ease;
-}
-
-.machine-row:hover {
-    background-color: rgba(0, 123, 255, 0.1);
-    transform: translateX(2px);
-}
-
-.machine-row.table-active {
-    background-color: rgba(0, 123, 255, 0.2);
-    border-left: 4px solid #007bff;
-}
-
-/* Table component row selection styling */
-.table tbody tr.selected {
-    background-color: rgba(0, 123, 255, 0.2) !important;
-    border-left: 4px solid #007bff;
-    box-shadow: 0 2px 8px rgba(0, 123, 255, 0.3);
-    transform: translateX(2px);
-}
+@import url('/manufacturing/machining/shared.css');
 
 /* All machines option styling */
-.table tbody tr.all-machines {
-    background-color: rgba(40, 167, 69, 0.1);
-    border-left: 3px solid #28a745;
-}
-
-.table tbody tr.all-machines:hover {
-    background-color: rgba(40, 167, 69, 0.2);
-    transform: translateX(2px);
-}
-
-.table tbody tr.all-machines.selected {
-    background-color: rgba(40, 167, 69, 0.3) !important;
-    border-left: 4px solid #28a745;
-    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.4);
-}
-
-.table tbody tr.all-machines .machine-name {
-    font-weight: 700;
-    color: #28a745;
-}
-
 .table tbody tr.selected:hover {
     background-color: rgba(0, 123, 255, 0.3) !important;
     box-shadow: 0 4px 12px rgba(0, 123, 255, 0.4);
@@ -74,249 +17,58 @@
     font-weight: 700;
 }
 
-/* Machine selection header styling */
-#selected-machine-name {
-    transition: all 0.3s ease;
+/* Make the dashboard card and card-body fill the full height of the section */
+.dashboard-card {
+    height: 100%;
+    display: flex;
+    flex-direction: column;
 }
 
-/* Initial state styling */
-#selected-machine-name:not([style*="color"]) {
-    color: #6c757d;
-    font-style: italic;
+.dashboard-card .card-body {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: auto;
 }
 
-/* Loading disabled rows styling */
-.table tbody tr.loading-disabled {
-    opacity: 0.6 !important;
-    pointer-events: none !important;
-    cursor: not-allowed !important;
-    background-color: rgba(108, 117, 125, 0.1) !important;
+/* Ensure the gantt container takes full available space */
+#gantt-container {
+    min-height: 100%;
+    width: 100%;
 }
 
-.table tbody tr.loading-disabled:hover {
-    background-color: rgba(108, 117, 125, 0.1) !important;
-    transform: none !important;
+/* Compact form elements for modals */
+.modal-content.compact .modal-header {
+    padding: 1rem;
 }
 
-
-/* Gantt chart category colors are now handled by the Gantt component itself */
-
-/* Statistics cards styling for history */
-.statistics-cards-container {
-    margin-bottom: 2rem;
+.modal-content.compact .modal-body {
+    padding: 1rem;
 }
 
-.statistics-card {
-    background: white;
-    border: 1px solid #dee2e6;
-    border-radius: 10px;
-    padding: 1.5rem;
-    text-align: center;
-    transition: all 0.3s ease;
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+.modal-content.compact .modal-footer {
+    padding: 1rem;
 }
 
-.statistics-card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+.form-section.compact {
+    margin-bottom: 1.5rem;
 }
 
-.statistics-card .icon {
-    font-size: 2rem;
+.section-subtitle.compact {
+    font-size: 0.875rem;
+    font-weight: 600;
     margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid #e5e7eb;
 }
 
-.statistics-card .value {
-    font-size: 2rem;
-    font-weight: 700;
-    margin-bottom: 0.5rem;
-}
-
-.statistics-card .label {
-    font-size: 0.9rem;
-    color: #6c757d;
+.form-label.compact {
+    font-size: 0.875rem;
     font-weight: 500;
+    margin-bottom: 0.25rem;
 }
 
-.statistics-card.productive .icon {
-    color: #28a745;
-}
-
-.statistics-card.productive .value {
-    color: #28a745;
-}
-
-.statistics-card.hold .icon {
-    color: #ffc107;
-}
-
-.statistics-card.hold .value {
-    color: #ffc107;
-}
-
-.statistics-card.idle .icon {
-    color: #dc3545;
-}
-
-.statistics-card.idle .value {
-    color: #dc3545;
-}
-
-/* Responsive adjustments */
-@media (max-width: 768px) {
-    .gantt-task-label {
-        width: 150px;
-        font-size: 0.8rem;
-    }
-    
-    .gantt-header-cell {
-        min-width: 30px;
-        padding: 6px 2px;
-    }
-    
-    .gantt-date {
-        font-size: 0.8rem;
-    }
-    
-    .gantt-month {
-        font-size: 0.6rem;
-    }
-    
-    .gantt-task-bar {
-        height: 25px;
-    }
-    
-    .gantt-task-content {
-        font-size: 0.7rem;
-    }
-    
-    .statistics-card {
-        margin-bottom: 1rem;
-    }
-    
-    .statistics-card .value {
-        font-size: 1.5rem;
-    }
-    
-    .statistics-card .icon {
-        font-size: 1.5rem;
-    }
-}
-
-@media (max-width: 576px) {
-    .gantt-task-label {
-        width: 120px;
-        padding: 6px 8px;
-    }
-    
-    .gantt-header-cell {
-        min-width: 25px;
-        padding: 4px 1px;
-    }
-    
-    .gantt-task-row {
-        min-height: 40px;
-    }
-    
-    .gantt-task-bar-container {
-        height: 30px;
-    }
-    
-    .gantt-task-bar {
-        height: 20px;
-    }
-    
-    .statistics-card {
-        padding: 1rem;
-    }
-    
-    .statistics-card .value {
-        font-size: 1.25rem;
-    }
-    
-    .statistics-card .icon {
-        font-size: 1.25rem;
-    }
-}
-
-/* Animation keyframes */
-@keyframes slideInRight {
-    from {
-        opacity: 0;
-        transform: translateX(100%);
-    }
-    to {
-        opacity: 1;
-        transform: translateX(0);
-    }
-}
-
-@keyframes slideOutRight {
-    from {
-        opacity: 1;
-        transform: translateX(0);
-    }
-    to {
-        opacity: 0;
-        transform: translateX(100%);
-    }
-}
-
-/* Custom notification styles */
-.custom-notification {
-    transition: all 0.3s ease;
-}
-
-.custom-notification:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
-}
-
-/* Loading states */
-.loading {
-    opacity: 0.6;
-    pointer-events: none;
-}
-
-.loading::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 40px;
-    height: 40px;
-    border: 4px solid #f3f3f3;
-    border-top: 4px solid #007bff;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-}
-
-@keyframes spin {
-    0% { transform: translate(-50%, -50%) rotate(0deg); }
-    100% { transform: translate(-50%, -50%) rotate(360deg); }
-}
-
-/* Empty state styling */
-.empty-state {
-    text-align: center;
-    padding: 3rem 1rem;
+.form-text.compact {
+    font-size: 0.75rem;
     color: #6c757d;
+    margin-top: 0.25rem;
 }
-
-.empty-state i {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-    opacity: 0.5;
-}
-
-.empty-state h5 {
-    margin-bottom: 0.5rem;
-    color: #495057;
-}
-
-.empty-state p {
-    margin-bottom: 0;
-    font-size: 0.9rem;
-}
-

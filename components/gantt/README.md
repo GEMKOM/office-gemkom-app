@@ -42,6 +42,7 @@ const ganttChart = new GanttChart('my-gantt-chart', {
 const options = {
     title: 'Zaman Çizelgesi',           // Chart title
     defaultPeriod: 'month',             // Initial period: 'day', 'week', 'month', 'year'
+    availableViews: ['day', 'week', 'month', 'year'], // Available view options
     showDateOverlay: true,              // Show current period indicator
     showCurrentTime: true,              // Show current time line
     onPeriodChange: (period, date) => { // Callback when period changes
@@ -91,6 +92,9 @@ const date = ganttChart.getCurrentDate();
 
 // Get all tasks
 const tasks = ganttChart.getTasks();
+
+// Get available views
+const availableViews = ganttChart.getAvailableViews();
 
 // Destroy the component
 ganttChart.destroy();
@@ -143,6 +147,27 @@ const tasks = [
 ];
 
 gantt.setTasks(tasks);
+```
+
+### Customizing Available Views
+
+```javascript
+// Only show day and week views
+const gantt = new GanttChart('gantt-container', {
+    availableViews: ['day', 'week'],
+    defaultPeriod: 'day'
+});
+
+// Only show month and year views
+const gantt = new GanttChart('gantt-container', {
+    availableViews: ['month', 'year'],
+    defaultPeriod: 'month'
+});
+
+// Show all views (default behavior)
+const gantt = new GanttChart('gantt-container', {
+    availableViews: ['day', 'week', 'month', 'year']
+});
 ```
 
 ### With Event Handlers

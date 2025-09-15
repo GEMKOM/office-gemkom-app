@@ -17,6 +17,7 @@ export class TableComponent {
             itemsPerPage: 20,
             currentPage: 1,
             totalItems: 0,
+            serverSidePagination: false,
             
             // Editable configuration
             editable: false,
@@ -190,7 +191,7 @@ export class TableComponent {
         let pageData = this.options.data;
         let startIndex = 0;
         
-        if (this.options.pagination && this.options.totalItems > this.options.data.length) {
+        if (this.options.pagination && !this.options.serverSidePagination && this.options.totalItems > this.options.data.length) {
             // Client-side pagination: slice the data
             startIndex = (this.options.currentPage - 1) * this.options.itemsPerPage;
             const endIndex = startIndex + this.options.itemsPerPage;

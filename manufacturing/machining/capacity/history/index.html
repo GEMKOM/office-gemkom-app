@@ -11,7 +11,6 @@
     <link rel="stylesheet" href="../../../../style.css">
     <link rel="stylesheet" href="../../../../components/navbar.css">
     <link rel="stylesheet" href="../../../../components/header/header.css">
-    <link rel="stylesheet" href="../../../../components/filters/filters.css">
     <link rel="stylesheet" href="../../../../components/table/table.css">
     <link rel="stylesheet" href="../../../../components/statistics-cards/statistics-cards.css">
     <link rel="icon" type="image/png" href="../../../../images/gemkom.png">
@@ -29,9 +28,6 @@
         <div class="container-fluid">
             <!-- Header Component Placeholder -->
             <div id="header-placeholder"></div>
-
-            <!-- Filters Section -->
-            <div id="filters-placeholder"></div>
 
             <!-- Statistics Cards Section -->
             <div class="row mb-4">
@@ -66,12 +62,41 @@
         </div>
     </section>
 
+    <!-- Timer Details Modal -->
+    <div class="modal fade" id="timerDetailsModal" tabindex="-1" aria-labelledby="timerDetailsModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content compact">
+                <div class="modal-header compact">
+                    <h6 class="modal-title" id="timerDetailsModalLabel">
+                        <i class="fas fa-clock me-2"></i> 
+                        Zamanlayıcı Detayları - <span id="timer-modal-key">-</span>
+                    </h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body compact">
+                    <div id="timer-details-content">
+                        <!-- Timer details will be loaded here -->
+                        <div class="text-center">
+                            <div class="spinner-border text-primary" role="status">
+                                <span class="visually-hidden">Yükleniyor...</span>
+                            </div>
+                            <p class="mt-2">Zamanlayıcı detayları yükleniyor...</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer compact">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Kapat
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Header Component -->
     <script src="../../../../components/header/header.js"></script>
-    <!-- Filters Component -->
-    <script src="../../../../components/filters/filters.js"></script>
     <!-- Table Component -->
     <script src="../../../../components/table/table.js"></script>
     <!-- Statistics Cards Component -->

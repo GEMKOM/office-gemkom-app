@@ -3,12 +3,11 @@
 // Import required modules
 import { initNavbar } from '../../../../components/navbar.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
-import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
 import { GanttChart } from '../../../../components/gantt/gantt.js';
 import { fetchMachines, getMachineCalendar } from '../../../../generic/machines.js';
 import { getMachineTimeline } from '../../../../generic/machining/capacityPlanning.js';
-import { formatDateTime } from '../../../../generic/formatters.js';
+import { fetchTimerById } from '../../../../generic/timers.js';
 import { TableComponent } from '../../../../components/table/table.js'
 
 // Global state
@@ -24,16 +23,12 @@ let isLoadingMachine = false;
 
 // Initialize capacity history module
 function initCapacityHistory() {
-    console.log('Capacity history module initialized');
     
     // Initialize navbar
     initNavbar();
     
     // Initialize header component
     initHeader();
-    
-    // Initialize filters
-    initFilters();
     
     // Initialize statistics cards
     initStatisticsCards();
@@ -84,60 +79,101 @@ function getCurrentWeek() {
     return { monday, sunday };
 }
 
-// Format dates for input fields (YYYY-MM-DD)
-function formatDateForInput(date) {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
-}
-
-// Initialize filters component
-function initFilters() {
-    const filters = new FiltersComponent('filters-placeholder', {
-        title: 'Geçmiş Filtreleri',
-        showApplyButton: true,
-        showClearButton: true,
-        onApply: (values) => {
-            console.log('Filters applied:', values);
-            applyFilters(values);
-        },
-        onClear: () => {
-            console.log('Filters cleared');
-            if (currentMachineId) {
-                loadMachineTimeline(currentMachineId);
-            }
-        }
-    });
-
-    // Add filter fields with default values (current week)
-    const { monday, sunday } = getCurrentWeek();
+// Calculate date range based on Gantt period and date
+function calculateDateRangeFromGantt(period, date) {
+    const ganttDate = new Date(date);
     
-    filters
-        .addDateFilter({
-            id: 'start-date',
-            label: 'Başlangıç Tarihi',
-            colSize: 2,
-            value: formatDateForInput(monday)
-        })
-        .addDateFilter({
-            id: 'end-date',
-            label: 'Bitiş Tarihi',
-            colSize: 2,
-            value: formatDateForInput(sunday)
-        })
-        .addSelectFilter({
-            id: 'category-filter',
-            label: 'Kategori',
-            options: [
-                { value: '', label: 'Tümü' },
-                { value: 'work', label: 'Çalışma' },
-                { value: 'hold', label: 'Bekleme' },
-                { value: 'idle', label: 'Boşta' }
-            ],
-            colSize: 2
-        });
+    switch (period) {
+        case 'day':
+            // For day view, show the specific day
+            const dayStart = new Date(ganttDate);
+            dayStart.setHours(0, 0, 0, 0);
+            
+            const dayEnd = new Date(ganttDate);
+            dayEnd.setHours(23, 59, 59, 999);
+            
+            return { start: dayStart, end: dayEnd };
+            
+        case 'week':
+            // For week view, show Monday to Sunday of the week containing the date
+            const dayOfWeek = ganttDate.getDay();
+            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            
+            const weekStart = new Date(ganttDate);
+            weekStart.setDate(ganttDate.getDate() + mondayOffset);
+            weekStart.setHours(0, 0, 0, 0);
+            
+            const weekEnd = new Date(weekStart);
+            weekEnd.setDate(weekStart.getDate() + 6);
+            weekEnd.setHours(23, 59, 59, 999);
+            
+            return { start: weekStart, end: weekEnd };
+            
+        default:
+            // Fallback to current week
+            return getCurrentWeek();
+    }
 }
+
+
+
+// Handle Gantt chart period changes
+async function handlePeriodChange(period, date) {
+    console.log('Handling period change:', { period, date });
+    
+    // Only proceed if a machine is selected
+    if (!currentMachineId) {
+        console.log('No machine selected, skipping period change handling');
+        showNotification('Önce bir makine seçin', 'info', 2000);
+        return;
+    }
+    
+    try {
+        // Calculate the new date range based on the Gantt period and date
+        const dateRange = calculateDateRangeFromGantt(period, date);
+        console.log('Calculated date range:', dateRange);
+        
+        // Reload the machine timeline data for the new period
+        console.log('Reloading timeline data for new period...');
+        await loadMachineTimelineForPeriod(currentMachineId, dateRange.start, dateRange.end);
+        
+        console.log('Period change handled successfully');
+    } catch (error) {
+        console.error('Error handling period change:', error);
+        showNotification('Dönem değiştirilirken hata oluştu', 'error');
+    }
+}
+
+// Load timeline for selected machine (uses current week as default)
+async function loadMachineTimeline(machineId) {
+    // Use current week as default
+    const { monday, sunday } = getCurrentWeek();
+    return await loadMachineTimelineForPeriod(machineId, monday, sunday);
+}
+
+// Calculate dynamic height for Gantt chart based on number of tasks
+function calculateGanttHeight(taskCount) {
+    const minHeight = 200; // Minimum height
+    const maxHeight = window.innerHeight * 0.7; // Maximum height as 70% of viewport height
+    const taskRowHeight = 60; // Height per task row
+    const headerHeight = 120; // Height for header and controls (increased for padding)
+    const chartPadding = 60; // Padding for chart content (1.5rem top + 1.5rem bottom)
+    
+    // Adjust for mobile screens
+    const isMobile = window.innerWidth <= 768;
+    const adjustedMaxHeight = isMobile ? Math.min(600, maxHeight) : maxHeight;
+    const adjustedTaskRowHeight = isMobile ? 50 : taskRowHeight;
+    
+    // Calculate height based on tasks
+    const calculatedHeight = headerHeight + chartPadding + (taskCount * adjustedTaskRowHeight);
+    
+    // Apply min/max constraints
+    const finalHeight = Math.max(minHeight, Math.min(adjustedMaxHeight, calculatedHeight));
+    
+    console.log(`Calculated Gantt height: ${finalHeight}px for ${taskCount} tasks (mobile: ${isMobile})`);
+    return finalHeight;
+}
+
 
 // Initialize statistics cards component
 function initStatisticsCards() {
@@ -152,26 +188,34 @@ function initStatisticsCards() {
                 {
                     id: 'productive-time',
                     title: 'Üretken Zaman',
-                    icon: 'fas fa-cogs',
+                    icon: 'fas fa-play-circle',
                     value: '0h 0m',
-                    color: 'productive',
+                    color: 'success',
                     description: 'Toplam çalışma süresi'
                 },
                 {
                     id: 'hold-time',
                     title: 'Bekleme Zamanı',
-                    icon: 'fas fa-pause',
+                    icon: 'fas fa-pause-circle',
                     value: '0h 0m',
-                    color: 'hold',
+                    color: 'warning',
                     description: 'Toplam bekleme süresi'
                 },
                 {
                     id: 'idle-time',
                     title: 'Boşta Zaman',
-                    icon: 'fas fa-stop',
+                    icon: 'fas fa-stop-circle',
                     value: '0h 0m',
-                    color: 'idle',
+                    color: 'danger',
                     description: 'Toplam boşta kalma süresi'
+                },
+                {
+                    id: 'total-time',
+                    title: 'Toplam Zaman',
+                    icon: 'fas fa-clock',
+                    value: '0h 0m',
+                    color: 'primary',
+                    description: 'Tüm kategorilerin toplamı'
                 }
             ]
         });
@@ -236,18 +280,24 @@ function initGanttChart() {
     try {
         ganttChart = new GanttChart('gantt-container', {
             title: 'Zaman Çizelgesi',
-            defaultPeriod: 'month',
+            defaultPeriod: 'week',
+            availableViews: ['day', 'week'], // Only show day and week views
             showDateOverlay: true,
             showCurrentTime: true,
             onPeriodChange: (period, date) => {
                 console.log('Gantt period changed:', period, date);
-                // Re-render with current timeline data if any
-                if (currentMachineId && currentTimelineData) {
-                    updateGanttChart(currentTimelineData);
-                }
+                handlePeriodChange(period, date);
             },
             onTaskClick: (task, event) => {
                 console.log('Task clicked:', task);
+                console.log('Task timer_id:', task?.timer_id);
+                if (task && task.timer_id) {
+                    console.log('Opening timer details for timer_id:', task.timer_id);
+                    showTimerDetails(task.timer_id);
+                } else {
+                    console.warn('Task clicked but no timer_id found. Task data:', task);
+                    showNotification('Bu görev için zamanlayıcı detayları bulunamadı', 'warning', 3000);
+                }
             }
         });
         
@@ -425,34 +475,14 @@ async function loadMachineCalendar(machineId) {
     }
 }
 
-// Load timeline for selected machine
-async function loadMachineTimeline(machineId) {
+// Load timeline for selected machine with specific date range
+async function loadMachineTimelineForPeriod(machineId, startDate, endDate) {
     try {
-        console.log('Loading machine timeline for machine:', machineId);
+        console.log('Loading machine timeline for machine:', machineId, 'from', startDate, 'to', endDate);
         
-        // Get filter values
-        const startDate = document.getElementById('start-date')?.value;
-        const endDate = document.getElementById('end-date')?.value;
-        
-        // Convert dates to timestamps if provided, otherwise use default (current week)
-        let startAfter = null;
-        let startBefore = null;
-        
-        if (startDate) {
-            startAfter = new Date(startDate).getTime();
-        } else {
-            // Default to current week (Monday)
-            const { monday } = getCurrentWeek();
-            startAfter = monday.getTime();
-        }
-        
-        if (endDate) {
-            startBefore = new Date(endDate).getTime();
-        } else {
-            // Default to current week (Sunday)
-            const { sunday } = getCurrentWeek();
-            startBefore = sunday.getTime();
-        }
+        // Convert dates to timestamps
+        const startAfter = startDate.getTime();
+        const startBefore = endDate.getTime();
         
         // For "all" option, send "all" to backend instead of machine ID
         const backendMachineId = machineId === 'all' ? 'all' : machineId;
@@ -472,26 +502,22 @@ async function loadMachineTimeline(machineId) {
         if (responseData.machines && Array.isArray(responseData.machines)) {
             console.log('Processing new response format with machines array');
             
+            // Check if overall_totals is available in the response
+            const hasOverallTotals = responseData.overall_totals && 
+                                   typeof responseData.overall_totals === 'object';
+            
+            if (hasOverallTotals) {
+                console.log('Using overall_totals from API response:', responseData.overall_totals);
+            }
+            
             if (machineId === 'all') {
-                // For "all" option, combine all machines' data
+                // For "all" option, pass machines array directly to preserve structure
                 console.log('Processing all machines data');
-                const allSegments = [];
                 let totalProductive = 0;
                 let totalHold = 0;
                 let totalIdle = 0;
                 
                 responseData.machines.forEach(machine => {
-                    if (machine.segments && Array.isArray(machine.segments)) {
-                        // Add machine name to each segment for identification
-                        machine.segments.forEach(segment => {
-                            allSegments.push({
-                                ...segment,
-                                machine_name: machine.machine_name,
-                                machine_id: machine.machine_id
-                            });
-                        });
-                    }
-                    
                     if (machine.totals) {
                         totalProductive += machine.totals.productive_seconds || 0;
                         totalHold += machine.totals.hold_seconds || 0;
@@ -500,8 +526,8 @@ async function loadMachineTimeline(machineId) {
                 });
                 
                 processedData = {
-                    segments: allSegments,
-                    totals: {
+                    machines: responseData.machines, // Pass machines array directly
+                    totals: hasOverallTotals ? responseData.overall_totals : {
                         productive_seconds: totalProductive,
                         hold_seconds: totalHold,
                         idle_seconds: totalIdle
@@ -515,17 +541,17 @@ async function loadMachineTimeline(machineId) {
                     console.log('Found machine data:', machineData);
                     processedData = {
                         segments: machineData.segments || [],
-                        totals: machineData.totals || {
+                        totals: hasOverallTotals ? responseData.overall_totals : (machineData.totals || {
                             productive_seconds: 0,
                             hold_seconds: 0,
                             idle_seconds: 0
-                        }
+                        })
                     };
                 } else {
                     console.warn('No data found for selected machine in response');
                     processedData = {
                         segments: [],
-                        totals: {
+                        totals: hasOverallTotals ? responseData.overall_totals : {
                             productive_seconds: 0,
                             hold_seconds: 0,
                             idle_seconds: 0
@@ -536,20 +562,38 @@ async function loadMachineTimeline(machineId) {
         } else if (responseData.segments) {
             // Handle legacy format (direct segments)
             console.log('Processing legacy response format');
+            
+            // Check if overall_totals is available in the response
+            const hasOverallTotals = responseData.overall_totals && 
+                                   typeof responseData.overall_totals === 'object';
+            
+            if (hasOverallTotals) {
+                console.log('Using overall_totals from legacy response:', responseData.overall_totals);
+            }
+            
             processedData = {
                 segments: responseData.segments,
-                totals: responseData.totals || {
+                totals: hasOverallTotals ? responseData.overall_totals : (responseData.totals || {
                     productive_seconds: 0,
                     hold_seconds: 0,
                     idle_seconds: 0
-                }
+                })
             };
         } else if (Array.isArray(responseData)) {
             // Handle array format (fallback)
             console.log('Processing array response format');
+            
+            // Check if overall_totals is available in the response
+            const hasOverallTotals = responseData.overall_totals && 
+                                   typeof responseData.overall_totals === 'object';
+            
+            if (hasOverallTotals) {
+                console.log('Using overall_totals from array response:', responseData.overall_totals);
+            }
+            
             processedData = {
                 segments: [],
-                totals: {
+                totals: hasOverallTotals ? responseData.overall_totals : {
                     productive_seconds: 0,
                     hold_seconds: 0,
                     idle_seconds: 0
@@ -585,6 +629,7 @@ async function loadMachineTimeline(machineId) {
         currentTimelineData = processedData;
         
         // Update statistics cards
+        console.log('About to update statistics cards with processedData.totals:', processedData.totals);
         updateStatisticsCards(processedData.totals);
         
         // Update Gantt chart
@@ -598,7 +643,10 @@ async function loadMachineTimeline(machineId) {
 
 // Update statistics cards with totals data
 function updateStatisticsCards(totals) {
-    if (!statisticsCards || !totals) return;
+    if (!statisticsCards || !totals) {
+        console.warn('Statistics cards not available or no totals data:', { statisticsCards: !!statisticsCards, totals });
+        return;
+    }
     
     console.log('Updating statistics cards with totals:', totals);
     
@@ -607,18 +655,34 @@ function updateStatisticsCards(totals) {
     const holdTime = formatDuration(totals.hold_seconds || 0);
     const idleTime = formatDuration(totals.idle_seconds || 0);
     
+    // Calculate total time
+    const totalSeconds = (totals.productive_seconds || 0) + (totals.hold_seconds || 0) + (totals.idle_seconds || 0);
+    const totalTime = formatDuration(totalSeconds);
+    
+    console.log('Formatted times:', { productiveTime, holdTime, idleTime, totalTime });
+    
     // Update cards
-    statisticsCards.updateCard('productive-time', {
-        value: productiveTime
-    });
-    
-    statisticsCards.updateCard('hold-time', {
-        value: holdTime
-    });
-    
-    statisticsCards.updateCard('idle-time', {
-        value: idleTime
-    });
+    try {
+        statisticsCards.updateCardById('productive-time', {
+            value: productiveTime
+        });
+        
+        statisticsCards.updateCardById('hold-time', {
+            value: holdTime
+        });
+        
+        statisticsCards.updateCardById('idle-time', {
+            value: idleTime
+        });
+        
+        statisticsCards.updateCardById('total-time', {
+            value: totalTime
+        });
+        
+        console.log('Statistics cards updated successfully with values:', { productiveTime, holdTime, idleTime, totalTime });
+    } catch (error) {
+        console.error('Error updating statistics cards:', error);
+    }
 }
 
 
@@ -634,45 +698,120 @@ function updateGanttChart(timelineData) {
     // Transform segments data to match Gantt component's expected format
     const ganttTasks = [];
     
-    if (timelineData.segments && Array.isArray(timelineData.segments)) {
-        timelineData.segments.forEach((segment, index) => {
-            // Determine title and task key based on category
-            let title;
-            let taskKey;
-            
-            if (segment.category === 'work') {
-                title = segment.task_name || 'Bilinmeyen Görev';
-                taskKey = segment.task_key;
-            } else if (segment.category === 'hold') {
-                title = segment.task_name || 'Bekleme';
-                taskKey = segment.task_key;
-            } else if (segment.category === 'idle') {
-                title = 'Boşta';
-                taskKey = 'Boşta';
-            } else {
-                title = segment.task_name || 'Bilinmeyen';
-                taskKey = segment.task_key;
-            }
-            
-            // Add machine name to title if showing all machines
-            if (currentMachineId === 'all' && segment.machine_name) {
-                title = `[${segment.machine_name}] ${title}`;
-            }
-            
-            ganttTasks.push({
-                id: `segment-${index}`,
-                title: title,
-                name: title,
-                key: taskKey,
-                ti_number: taskKey,
-                planned_start_ms: segment.start_ms,
-                planned_end_ms: segment.end_ms,
-                category: segment.category,
-                is_hold: segment.is_hold,
-                machine_name: segment.machine_name || null,
-                machine_id: segment.machine_id || null
+    if (currentMachineId === 'all') {
+        // For "All Machines" option, process each machine's segments
+        if (timelineData.machines && Array.isArray(timelineData.machines)) {
+            console.log('Processing machines for Gantt chart:', timelineData.machines);
+            timelineData.machines.forEach((machine, machineIndex) => {
+                const machineName = machine.machine_name || 'Bilinmeyen Makine';
+                const machineSegments = machine.segments || [];
+                
+                if (machineSegments.length === 0) {
+                    return; // Skip machines with no segments
+                }
+                
+                // Sort segments by start time
+                machineSegments.sort((a, b) => a.start_ms - b.start_ms);
+                
+                // Find the overall start and end time for this machine
+                const machineStart = machineSegments[0].start_ms;
+                const machineEnd = machineSegments[machineSegments.length - 1].end_ms;
+                
+                // Create one task per machine with multiple segments
+                const machineTask = {
+                    id: `machine-${machineIndex}`,
+                    title: machineName,
+                    name: machineName,
+                    key: machineName,
+                    ti_number: machineName,
+                    planned_start_ms: machineStart,
+                    planned_end_ms: machineEnd,
+                    category: 'machine',
+                    is_hold: false,
+                    machine_name: machineName,
+                    machine_id: machine.machine_id,
+                    timer_id: null,
+                    segments: machineSegments.map((segment, segmentIndex) => {
+                        let title;
+                        let taskKey;
+                        
+                        if (segment.category === 'work') {
+                            title = segment.task_name || 'Bilinmeyen Görev';
+                            taskKey = segment.task_key;
+                        } else if (segment.category === 'hold') {
+                            title = segment.task_name || 'Bekleme';
+                            taskKey = segment.task_key;
+                        } else if (segment.category === 'idle') {
+                            title = 'Boşta';
+                            taskKey = 'Boşta';
+                        } else {
+                            title = segment.task_name || 'Bilinmeyen';
+                            taskKey = segment.task_key;
+                        }
+                        
+                        return {
+                            id: `machine-${machineIndex}-segment-${segmentIndex}`,
+                            title: title,
+                            name: title,
+                            key: taskKey,
+                            ti_number: taskKey,
+                            planned_start_ms: segment.start_ms,
+                            planned_end_ms: segment.end_ms,
+                            category: segment.category,
+                            is_hold: segment.is_hold,
+                            machine_name: machineName,
+                            machine_id: machine.machine_id,
+                            timer_id: segment.timer_id || null
+                        };
+                    })
+                };
+                
+                ganttTasks.push(machineTask);
             });
-        });
+        }
+    } else {
+        // For individual machine, process segments normally
+        if (timelineData.segments && Array.isArray(timelineData.segments)) {
+            console.log('Processing segments for Gantt chart:', timelineData.segments);
+            timelineData.segments.forEach((segment, index) => {
+                console.log(`Processing segment ${index}:`, segment);
+                // Determine title and task key based on category
+                let title;
+                let taskKey;
+                
+                if (segment.category === 'work') {
+                    title = segment.task_name || 'Bilinmeyen Görev';
+                    taskKey = segment.task_key;
+                } else if (segment.category === 'hold') {
+                    title = segment.task_name || 'Bekleme';
+                    taskKey = segment.task_key;
+                } else if (segment.category === 'idle') {
+                    title = 'Boşta';
+                    taskKey = 'Boşta';
+                } else {
+                    title = segment.task_name || 'Bilinmeyen';
+                    taskKey = segment.task_key;
+                }
+                
+                const task = {
+                    id: `segment-${index}`,
+                    title: title,
+                    name: title,
+                    key: taskKey,
+                    ti_number: taskKey,
+                    planned_start_ms: segment.start_ms,
+                    planned_end_ms: segment.end_ms,
+                    category: segment.category,
+                    is_hold: segment.is_hold,
+                    machine_name: segment.machine_name || null,
+                    machine_id: segment.machine_id || null,
+                    timer_id: segment.timer_id || null
+                };
+                
+                console.log(`Created Gantt task ${index}:`, task);
+                ganttTasks.push(task);
+            });
+        }
     }
     
     console.log('Updating Gantt chart with tasks:', ganttTasks);
@@ -683,33 +822,30 @@ function updateGanttChart(timelineData) {
         ganttChart.setMachineCalendar(machineCalendar);
     }
     
+    // Set dynamic height based on number of tasks
+    const taskCount = ganttTasks.length > 0 ? ganttTasks.length : 1; // Ensure minimum height even with no tasks
+    const dynamicHeight = calculateGanttHeight(taskCount);
+    const ganttContainer = document.getElementById('gantt-container');
+    if (ganttContainer) {
+        ganttContainer.style.height = `${dynamicHeight}px`;
+        console.log(`Set Gantt container height to ${dynamicHeight}px for ${ganttTasks.length} tasks`);
+    }
+    
     ganttChart.setTasks(ganttTasks);
 }
 
 // Format duration from seconds to human readable format
 function formatDuration(seconds) {
-    if (!seconds || seconds === 0) return '0m';
+    if (!seconds || seconds === 0) {
+        return '0m';
+    }
     
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     
-    if (hours > 0) {
-        return `${hours}h ${minutes}m`;
-    } else {
-        return `${minutes}m`;
-    }
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
 }
 
-// Apply filters
-function applyFilters(values) {
-    console.log('Applying filters:', values);
-    
-    if (currentMachineId) {
-        loadMachineTimeline(currentMachineId);
-    } else {
-        showNotification('Önce bir makine seçin', 'warning');
-    }
-}
 
 // Reset machine selection state
 function resetMachineSelection() {
@@ -825,6 +961,278 @@ function showNotification(message, type = 'info', timeout = 5000) {
             }, 500);
         }
     }, timeout);
+}
+
+// Show timer details modal
+async function showTimerDetails(timerId) {
+    console.log('Showing timer details for ID:', timerId);
+    
+    // Show modal with loading state
+    const modal = new bootstrap.Modal(document.getElementById('timerDetailsModal'));
+    modal.show();
+    
+    try {
+        // Fetch timer data
+        const timer = await fetchTimerById(timerId);
+        
+        if (!timer) {
+            throw new Error('Timer not found');
+        }
+        
+        // Display timer data
+        displayTimerData(timer);
+        
+    } catch (error) {
+        console.error('Error fetching timer details:', error);
+        displayTimerError('Zamanlayıcı detayları yüklenirken hata oluştu: ' + error.message);
+    }
+}
+
+// Display timer data in modal
+function displayTimerData(timer) {
+    const content = document.getElementById('timer-details-content');
+    const modalKey = document.getElementById('timer-modal-key');
+    
+    // Update modal title with task key
+    if (timer.issue_key) {
+        modalKey.textContent = timer.issue_key;
+    } else {
+        modalKey.textContent = 'Bilinmeyen';
+    }
+    
+    // Format dates and times
+    const startTime = timer.start_time ? formatDateTime(timer.start_time) : '-';
+    const finishTime = timer.finish_time ? formatDateTime(timer.finish_time) : '-';
+    const duration = timer.duration ? formatDuration(timer.duration) : '-';
+    
+    // Determine status badge
+    let statusBadge = '';
+    if (timer.finish_time) {
+        statusBadge = '<span class="badge bg-success timer-status-badge">Tamamlandı</span>';
+    } else {
+        statusBadge = '<span class="badge bg-warning timer-status-badge">Devam Ediyor</span>';
+    }
+    
+    // Determine task type badge
+    let taskTypeBadge = '';
+    if (timer.issue_is_hold_task) {
+        taskTypeBadge = '<span class="badge bg-warning">Bekleme</span>';
+    } else {
+        taskTypeBadge = '<span class="badge bg-primary">Üretim</span>';
+    }
+    
+    content.innerHTML = `
+        <!-- Top Row: Task Information and Time Information -->
+        <div class="row mb-3">
+            <div class="col-md-6">
+                <div class="form-section compact">
+                    <h6 class="section-subtitle compact">
+                        <i class="fas fa-tasks me-2 text-primary"></i>Görev Bilgileri
+                    </h6>
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-tag me-1"></i>Görev Adı
+                                </label>
+                                <div class="form-control-plaintext">${timer.issue_name || '-'}</div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-hashtag me-1"></i>İş No
+                                </label>
+                                <div class="form-control-plaintext">${timer.job_no || '-'}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-image me-1"></i>Resim No
+                                </label>
+                                <div class="form-control-plaintext">${timer.image_no || '-'}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-map-marker-alt me-1"></i>Pozisyon No
+                                </label>
+                                <div class="form-control-plaintext">${timer.position_no || '-'}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-boxes me-1"></i>Miktar
+                                </label>
+                                <div class="form-control-plaintext">${timer.quantity || '-'}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-industry me-1"></i>Makine
+                                </label>
+                                <div class="form-control-plaintext">${timer.machine_name || '-'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-6">
+                <div class="form-section compact">
+                    <h6 class="section-subtitle compact">
+                        <i class="fas fa-clock me-2 text-success"></i>Zaman Bilgileri
+                    </h6>
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-id-badge me-1"></i>Zamanlayıcı ID
+                                </label>
+                                <div class="form-control-plaintext">
+                                    <a href="/manufacturing/machining/reports/finished-timers/?edit=${timer.id}" 
+                                       class="text-decoration-none" 
+                                       target="_blank"
+                                       title="Zamanlayıcıyı düzenlemek için tıklayın">
+                                        <i class="fas fa-external-link-alt me-1"></i>${timer.id}
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-clock me-1"></i>Süre
+                                </label>
+                                <div class="form-control-plaintext"><span class="timer-duration">${duration}</span></div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-play me-1"></i>Başlangıç
+                                </label>
+                                <div class="form-control-plaintext">${startTime}</div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-stop me-1"></i>Bitiş
+                                </label>
+                                <div class="form-control-plaintext">${finishTime}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-check-circle me-1"></i>Durum
+                                </label>
+                                <div class="form-control-plaintext">${statusBadge}</div>
+                            </div>
+                        </div>
+                        <div class="col-6">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-tag me-1"></i>Görev Türü
+                                </label>
+                                <div class="form-control-plaintext">${taskTypeBadge}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bottom Row: User Information -->
+        <div class="row mb-3">
+            <div class="col-12">
+                <div class="form-section compact">
+                    <h6 class="section-subtitle compact">
+                        <i class="fas fa-user me-2 text-info"></i>Kullanıcı Bilgileri
+                    </h6>
+                    <div class="row g-2">
+                        <div class="col-md-6">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-user me-1"></i>Kullanıcı
+                                </label>
+                                <div class="form-control-plaintext">${timer.username || '-'}</div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-user-times me-1"></i>Durduran
+                                </label>
+                                <div class="form-control-plaintext">${timer.stopped_by_first_name && timer.stopped_by_last_name ? 
+                                    `${timer.stopped_by_first_name} ${timer.stopped_by_last_name}` : '-'}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        ${timer.comment ? `
+        <div class="form-section compact mb-3">
+            <h6 class="section-subtitle compact">
+                <i class="fas fa-comment me-2 text-info"></i>Yorum
+            </h6>
+            <div class="alert alert-light">
+                <p class="mb-0">${timer.comment}</p>
+            </div>
+        </div>
+        ` : ''}
+        
+        ${timer.manual_entry ? `
+        <div class="form-section compact">
+            <h6 class="section-subtitle compact">
+                <i class="fas fa-edit me-2 text-warning"></i>Manuel Giriş
+            </h6>
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                <strong>Manuel Olarak Girildi</strong> - Bu zamanlayıcı manuel olarak sisteme girilmiştir.
+            </div>
+        </div>
+        ` : ''}
+    `;
+}
+
+// Display error in timer modal
+function displayTimerError(message) {
+    const content = document.getElementById('timer-details-content');
+    content.innerHTML = `
+        <div class="text-center">
+            <i class="fas fa-exclamation-triangle text-warning" style="font-size: 3rem;"></i>
+            <h5 class="mt-3 text-danger">Hata</h5>
+            <p class="text-muted">${message}</p>
+        </div>
+    `;
+}
+
+// Format date and time for display
+function formatDateTime(dateTimeString) {
+    if (!dateTimeString) return '-';
+    
+    try {
+        const date = new Date(dateTimeString);
+        return date.toLocaleString('tr-TR', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit'
+        });
+    } catch (error) {
+        console.error('Error formatting date:', error);
+        return dateTimeString;
+    }
 }
 
 // Initialize when DOM is loaded

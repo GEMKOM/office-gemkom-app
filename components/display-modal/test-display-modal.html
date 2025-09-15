@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Display Modal Component Test</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Component CSS -->
+    <link rel="stylesheet" href="display-modal.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 2rem 0;
+        }
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        .test-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+        .test-header {
+            background: linear-gradient(135deg, #8B0000, #DC143C);
+            color: white;
+            padding: 1.5rem;
+            text-align: center;
+        }
+        .test-body {
+            padding: 2rem;
+        }
+        .demo-button {
+            margin: 0.5rem;
+            min-width: 200px;
+        }
+        .demo-section {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #DC143C;
+        }
+        .demo-section h4 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+        .demo-section p {
+            color: #6c757d;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="test-card">
+            <div class="test-header">
+                <h1><i class="fas fa-eye me-2"></i>Display Modal Component Test</h1>
+                <p class="mb-0">Test the reusable DisplayModal component for showing data in various formats</p>
+            </div>
+            <div class="test-body">
+                <!-- User Profile Demo -->
+                <div class="demo-section">
+                    <h4><i class="fas fa-user me-2"></i>User Profile Demo</h4>
+                    <p>Display user information with various field types</p>
+                    <button class="btn btn-primary demo-button" onclick="showUserProfile()">
+                        <i class="fas fa-play me-2"></i>Show User Profile
+                    </button>
+                </div>
+
+                <!-- Product Details Demo -->
+                <div class="demo-section">
+                    <h4><i class="fas fa-box me-2"></i>Product Details Demo</h4>
+                    <p>Display product information with images, prices, and specifications</p>
+                    <button class="btn btn-success demo-button" onclick="showProductDetails()">
+                        <i class="fas fa-play me-2"></i>Show Product Details
+                    </button>
+                </div>
+
+                <!-- System Information Demo -->
+                <div class="demo-section">
+                    <h4><i class="fas fa-server me-2"></i>System Information Demo</h4>
+                    <p>Display system data with technical details and status information</p>
+                    <button class="btn btn-info demo-button" onclick="showSystemInfo()">
+                        <i class="fas fa-play me-2"></i>Show System Info
+                    </button>
+                </div>
+
+                <!-- Financial Report Demo -->
+                <div class="demo-section">
+                    <h4><i class="fas fa-chart-line me-2"></i>Financial Report Demo</h4>
+                    <p>Display financial data with currency, percentages, and calculations</p>
+                    <button class="btn btn-warning demo-button" onclick="showFinancialReport()">
+                        <i class="fas fa-play me-2"></i>Show Financial Report
+                    </button>
+                </div>
+
+                <!-- Read-Only with Edit Demo -->
+                <div class="demo-section">
+                    <h4><i class="fas fa-edit me-2"></i>Read-Only with Edit Demo</h4>
+                    <p>Display data with edit button functionality</p>
+                    <button class="btn btn-secondary demo-button" onclick="showEditableData()">
+                        <i class="fas fa-play me-2"></i>Show Editable Data
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Display Modal Container -->
+    <div id="display-modal-container"></div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Component JS -->
+    <script type="module" src="display-modal.js"></script>
+
+    <script type="module">
+        import { DisplayModal } from './display-modal.js';
+
+        // Global modal instance
+        let currentModal = null;
+
+        // Initialize modal container
+        function initModal() {
+            if (!currentModal) {
+                try {
+                    currentModal = new DisplayModal('display-modal-container', {
+                        title: 'Test Modal',
+                        icon: 'fas fa-eye',
+                        showEditButton: false
+                    });
+                } catch (error) {
+                    console.error('Error initializing modal:', error);
+                    return null;
+                }
+            }
+            return currentModal;
+        }
+
+        // User Profile Demo
+        window.showUserProfile = function() {
+            const modal = initModal();
+            if (!modal) {
+                console.error('Failed to initialize modal');
+                alert('Modal başlatılamadı. Lütfen sayfayı yenileyin.');
+                return;
+            }
+            
+            modal
+                .setTitle('Kullanıcı Profili')
+                .setIcon('fas fa-user')
+                .setShowEditButton(false)
+                .clearData();
+
+            modal.sections = [];
+            
+            modal
+                .addSection({
+                    title: 'Kişisel Bilgiler',
+                    icon: 'fas fa-user',
+                    iconColor: 'text-primary',
+                    fields: [
+                        {
+                            id: 'first_name',
+                            label: 'Ad',
+                            type: 'text',
+                            value: 'Ahmet',
+                            icon: 'fas fa-id-card',
+                            colSize: 6
+                        },
+                        {
+                            id: 'last_name',
+                            label: 'Soyad',
+                            type: 'text',
+                            value: 'Yılmaz',
+                            icon: 'fas fa-id-card',
+                            colSize: 6
+                        },
+                        {
+                            id: 'email',
+                            label: 'E-posta',
+                            type: 'email',
+                            value: 'ahmet.yilmaz@company.com',
+                            icon: 'fas fa-envelope',
+                            copyable: true,
+                            colSize: 12
+                        },
+                        {
+                            id: 'phone',
+                            label: 'Telefon',
+                            type: 'text',
+                            value: '+90 532 123 45 67',
+                            icon: 'fas fa-phone',
+                            copyable: true,
+                            colSize: 6
+                        },
+                        {
+                            id: 'birth_date',
+                            label: 'Doğum Tarihi',
+                            type: 'date',
+                            value: '1985-06-15',
+                            icon: 'fas fa-calendar',
+                            colSize: 6
+                        }
+                    ]
+                })
+                .addSection({
+                    title: 'İş Bilgileri',
+                    icon: 'fas fa-briefcase',
+                    iconColor: 'text-success',
+                    fields: [
+                        {
+                            id: 'department',
+                            label: 'Departman',
+                            type: 'text',
+                            value: 'Bilgi İşlem',
+                            icon: 'fas fa-building',
+                            colSize: 6
+                        },
+                        {
+                            id: 'position',
+                            label: 'Pozisyon',
+                            type: 'text',
+                            value: 'Yazılım Geliştirici',
+                            icon: 'fas fa-user-tie',
+                            colSize: 6
+                        },
+                        {
+                            id: 'start_date',
+                            label: 'İşe Başlama',
+                            type: 'date',
+                            value: '2020-03-01',
+                            icon: 'fas fa-calendar-check',
+                            colSize: 6
+                        },
+                        {
+                            id: 'salary',
+                            label: 'Maaş',
+                            type: 'currency',
+                            value: 15000,
+                            icon: 'fas fa-money-bill',
+                            colSize: 6
+                        },
+                        {
+                            id: 'is_active',
+                            label: 'Aktif',
+                            type: 'boolean',
+                            value: true,
+                            icon: 'fas fa-check-circle',
+                            colSize: 12
+                        }
+                    ]
+                })
+                .render()
+                .onCloseCallback(() => {
+                    console.log('User profile modal closed');
+                })
+                .show();
+        };
+
+        // Product Details Demo
+        window.showProductDetails = function() {
+            const modal = initModal();
+            if (!modal) {
+                console.error('Failed to initialize modal');
+                alert('Modal başlatılamadı. Lütfen sayfayı yenileyin.');
+                return;
+            }
+            
+            modal
+                .setTitle('Ürün Detayları')
+                .setIcon('fas fa-box')
+                .setShowEditButton(false)
+                .clearData();
+
+            modal.sections = [];
+            
+            modal
+                .addSection({
+                    title: 'Temel Bilgiler',
+                    icon: 'fas fa-info-circle',
+                    iconColor: 'text-primary',
+                    fields: [
+                        {
+                            id: 'product_name',
+                            label: 'Ürün Adı',
+                            type: 'text',
+                            value: 'MacBook Pro 16" M2 Max',
+                            icon: 'fas fa-laptop',
+                            colSize: 8
+                        },
+                        {
+                            id: 'sku',
+                            label: 'SKU',
+                            type: 'text',
+                            value: 'MBP16-M2MAX-1TB',
+                            icon: 'fas fa-barcode',
+                            copyable: true,
+                            colSize: 4
+                        },
+                        {
+                            id: 'description',
+                            label: 'Açıklama',
+                            type: 'text',
+                            value: 'Apple MacBook Pro 16 inç M2 Max çip, 1TB SSD, 32GB RAM',
+                            icon: 'fas fa-align-left',
+                            colSize: 12
+                        },
+                        {
+                            id: 'image',
+                            label: 'Ürün Görseli',
+                            type: 'image',
+                            value: 'https://via.placeholder.com/300x200/8B0000/FFFFFF?text=MacBook+Pro',
+                            icon: 'fas fa-image',
+                            colSize: 6
+                        },
+                        {
+                            id: 'category',
+                            label: 'Kategori',
+                            type: 'badge',
+                            value: 'Laptop',
+                            badgeClass: 'bg-primary',
+                            icon: 'fas fa-tags',
+                            colSize: 6
+                        }
+                    ]
+                })
+                .addSection({
+                    title: 'Fiyat ve Stok',
+                    icon: 'fas fa-dollar-sign',
+                    iconColor: 'text-success',
+                    fields: [
+                        {
+                            id: 'price',
+                            label: 'Fiyat',
+                            type: 'currency',
+                            value: 45000,
+                            icon: 'fas fa-money-bill-wave',
+                            colSize: 4
+                        },
+                        {
+                            id: 'discount',
+                            label: 'İndirim',
+                            type: 'percentage',
+                            value: 15,
+                            icon: 'fas fa-percentage',
+                            colSize: 4
+                        },
+                        {
+                            id: 'stock',
+                            label: 'Stok',
+                            type: 'number',
+                            value: 25,
+                            icon: 'fas fa-boxes',
+                            colSize: 4
+                        },
+                        {
+                            id: 'in_stock',
+                            label: 'Stokta Var',
+                            type: 'boolean',
+                            value: true,
+                            icon: 'fas fa-check-circle',
+                            colSize: 12
+                        }
+                    ]
+                })
+                .render()
+                .show();
+        };
+
+        // System Information Demo
+        window.showSystemInfo = function() {
+            const modal = initModal();
+            if (!modal) {
+                console.error('Failed to initialize modal');
+                alert('Modal başlatılamadı. Lütfen sayfayı yenileyin.');
+                return;
+            }
+            
+            modal
+                .setTitle('Sistem Bilgileri')
+                .setIcon('fas fa-server')
+                .setShowEditButton(false)
+                .clearData();
+
+            modal.sections = [];
+            
+            modal
+                .addSection({
+                    title: 'Sunucu Bilgileri',
+                    icon: 'fas fa-server',
+                    iconColor: 'text-info',
+                    fields: [
+                        {
+                            id: 'server_name',
+                            label: 'Sunucu Adı',
+                            type: 'text',
+                            value: 'PROD-WEB-01',
+                            icon: 'fas fa-server',
+                            copyable: true,
+                            colSize: 6
+                        },
+                        {
+                            id: 'ip_address',
+                            label: 'IP Adresi',
+                            type: 'text',
+                            value: '192.168.1.100',
+                            icon: 'fas fa-network-wired',
+                            copyable: true,
+                            colSize: 6
+                        },
+                        {
+                            id: 'os',
+                            label: 'İşletim Sistemi',
+                            type: 'text',
+                            value: 'Ubuntu Server 22.04 LTS',
+                            icon: 'fas fa-desktop',
+                            colSize: 6
+                        },
+                        {
+                            id: 'uptime',
+                            label: 'Çalışma Süresi',
+                            type: 'text',
+                            value: '45 gün, 12 saat',
+                            icon: 'fas fa-clock',
+                            colSize: 6
+                        }
+                    ]
+                })
+                .addSection({
+                    title: 'Performans Metrikleri',
+                    icon: 'fas fa-chart-line',
+                    iconColor: 'text-warning',
+                    fields: [
+                        {
+                            id: 'cpu_usage',
+                            label: 'CPU Kullanımı',
+                            type: 'percentage',
+                            value: 35,
+                            icon: 'fas fa-microchip',
+                            colSize: 4
+                        },
+                        {
+                            id: 'memory_usage',
+                            label: 'RAM Kullanımı',
+                            type: 'percentage',
+                            value: 68,
+                            icon: 'fas fa-memory',
+                            colSize: 4
+                        },
+                        {
+                            id: 'disk_usage',
+                            label: 'Disk Kullanımı',
+                            type: 'percentage',
+                            value: 42,
+                            icon: 'fas fa-hdd',
+                            colSize: 4
+                        },
+                        {
+                            id: 'status',
+                            label: 'Durum',
+                            type: 'badge',
+                            value: 'Aktif',
+                            badgeClass: 'bg-success',
+                            icon: 'fas fa-check-circle',
+                            colSize: 12
+                        }
+                    ]
+                })
+                .render()
+                .show();
+        };
+
+        // Financial Report Demo
+        window.showFinancialReport = function() {
+            const modal = initModal();
+            if (!modal) {
+                console.error('Failed to initialize modal');
+                alert('Modal başlatılamadı. Lütfen sayfayı yenileyin.');
+                return;
+            }
+            
+            modal
+                .setTitle('Finansal Rapor')
+                .setIcon('fas fa-chart-line')
+                .setShowEditButton(false)
+                .clearData();
+
+            modal.sections = [];
+            
+            modal
+                .addSection({
+                    title: 'Gelir Tablosu',
+                    icon: 'fas fa-arrow-up',
+                    iconColor: 'text-success',
+                    fields: [
+                        {
+                            id: 'total_revenue',
+                            label: 'Toplam Gelir',
+                            type: 'currency',
+                            value: 1250000,
+                            icon: 'fas fa-money-bill-wave',
+                            colSize: 6
+                        },
+                        {
+                            id: 'growth_rate',
+                            label: 'Büyüme Oranı',
+                            type: 'percentage',
+                            value: 12.5,
+                            icon: 'fas fa-chart-line',
+                            colSize: 6
+                        },
+                        {
+                            id: 'quarter',
+                            label: 'Çeyrek',
+                            type: 'text',
+                            value: 'Q3 2024',
+                            icon: 'fas fa-calendar',
+                            colSize: 6
+                        },
+                        {
+                            id: 'report_date',
+                            label: 'Rapor Tarihi',
+                            type: 'datetime',
+                            value: new Date(),
+                            icon: 'fas fa-calendar-check',
+                            colSize: 6
+                        }
+                    ]
+                })
+                .addSection({
+                    title: 'Gider Analizi',
+                    icon: 'fas fa-arrow-down',
+                    iconColor: 'text-danger',
+                    fields: [
+                        {
+                            id: 'operating_costs',
+                            label: 'İşletme Giderleri',
+                            type: 'currency',
+                            value: 850000,
+                            icon: 'fas fa-building',
+                            colSize: 6
+                        },
+                        {
+                            id: 'marketing_costs',
+                            label: 'Pazarlama Giderleri',
+                            type: 'currency',
+                            value: 150000,
+                            icon: 'fas fa-bullhorn',
+                            colSize: 6
+                        },
+                        {
+                            id: 'profit_margin',
+                            label: 'Kar Marjı',
+                            type: 'percentage',
+                            value: 20,
+                            icon: 'fas fa-percentage',
+                            colSize: 12
+                        }
+                    ]
+                })
+                .render()
+                .show();
+        };
+
+        // Editable Data Demo
+        window.showEditableData = function() {
+            const modal = initModal();
+            if (!modal) {
+                console.error('Failed to initialize modal');
+                alert('Modal başlatılamadı. Lütfen sayfayı yenileyin.');
+                return;
+            }
+            
+            modal
+                .setTitle('Düzenlenebilir Veri')
+                .setIcon('fas fa-edit')
+                .setShowEditButton(true)
+                .setEditButtonText('Düzenle')
+                .clearData();
+
+            modal.sections = [];
+            
+            modal
+                .addSection({
+                    title: 'Proje Bilgileri',
+                    icon: 'fas fa-project-diagram',
+                    iconColor: 'text-primary',
+                    fields: [
+                        {
+                            id: 'project_name',
+                            label: 'Proje Adı',
+                            type: 'text',
+                            value: 'E-Ticaret Platformu',
+                            icon: 'fas fa-project-diagram',
+                            colSize: 8
+                        },
+                        {
+                            id: 'status',
+                            label: 'Durum',
+                            type: 'badge',
+                            value: 'Devam Ediyor',
+                            badgeClass: 'bg-warning',
+                            icon: 'fas fa-clock',
+                            colSize: 4
+                        },
+                        {
+                            id: 'description',
+                            label: 'Açıklama',
+                            type: 'text',
+                            value: 'Modern e-ticaret platformu geliştirme projesi',
+                            icon: 'fas fa-align-left',
+                            colSize: 12
+                        },
+                        {
+                            id: 'start_date',
+                            label: 'Başlangıç Tarihi',
+                            type: 'date',
+                            value: '2024-01-15',
+                            icon: 'fas fa-calendar',
+                            colSize: 6
+                        },
+                        {
+                            id: 'end_date',
+                            label: 'Bitiş Tarihi',
+                            type: 'date',
+                            value: '2024-06-30',
+                            icon: 'fas fa-calendar-check',
+                            colSize: 6
+                        },
+                        {
+                            id: 'budget',
+                            label: 'Bütçe',
+                            type: 'currency',
+                            value: 500000,
+                            icon: 'fas fa-money-bill',
+                            colSize: 6
+                        },
+                        {
+                            id: 'progress',
+                            label: 'İlerleme',
+                            type: 'percentage',
+                            value: 65,
+                            icon: 'fas fa-chart-pie',
+                            colSize: 6
+                        }
+                    ]
+                })
+                .render()
+                .onEditCallback((data) => {
+                    console.log('Edit button clicked with data:', data);
+                    alert('Düzenleme moduna geçiliyor...');
+                    modal.hide();
+                })
+                .onCloseCallback(() => {
+                    console.log('Editable data modal closed');
+                })
+                .show();
+        };
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, initializing display modal...');
+            const modal = initModal();
+            if (modal) {
+                console.log('Display modal initialized successfully:', modal);
+            } else {
+                console.error('Failed to initialize display modal');
+            }
+        });
+    </script>
+</body>
+</html>

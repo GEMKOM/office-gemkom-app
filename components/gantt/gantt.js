@@ -14,6 +14,7 @@ class GanttChart {
         this.options = {
             title: 'Zaman Çizelgesi',
             defaultPeriod: 'month',
+            availableViews: ['day', 'week', 'month', 'year'], // All views available by default
             showDateOverlay: true,
             showCurrentTime: true,
             onPeriodChange: null,
@@ -21,6 +22,12 @@ class GanttChart {
             onTaskDrag: null,
             ...options
         };
+
+        // Validate that defaultPeriod is in availableViews
+        if (!this.options.availableViews.includes(this.options.defaultPeriod)) {
+            console.warn(`Default period '${this.options.defaultPeriod}' is not in availableViews. Using first available view: '${this.options.availableViews[0]}'`);
+            this.options.defaultPeriod = this.options.availableViews[0];
+        }
 
         // State
         this.currentPeriod = this.options.defaultPeriod;
@@ -41,6 +48,25 @@ class GanttChart {
         this.updateCurrentPeriodIndicator();
     }
 
+    generatePeriodButtons() {
+        const periodConfig = {
+            day: { icon: 'fas fa-calendar-day', label: 'Gün' },
+            week: { icon: 'fas fa-calendar-week', label: 'Hafta' },
+            month: { icon: 'fas fa-calendar-alt', label: 'Ay' },
+            year: { icon: 'fas fa-calendar', label: 'Yıl' }
+        };
+
+        return this.options.availableViews.map(period => {
+            const config = periodConfig[period];
+            const isActive = period === this.currentPeriod ? 'active' : '';
+            return `
+                <button type="button" class="btn btn-outline-primary ${isActive}" data-period="${period}">
+                    <i class="${config.icon} me-1"></i>${config.label}
+                </button>
+            `;
+        }).join('');
+    }
+
     render() {
         this.container.innerHTML = `
             <div class="gantt-header">
@@ -52,18 +78,7 @@ class GanttChart {
                     <div class="gantt-controls">
                         <div class="gantt-period-controls">
                             <div class="btn-group btn-group-sm me-3" role="group">
-                                <button type="button" class="btn btn-outline-primary" data-period="day">
-                                    <i class="fas fa-calendar-day me-1"></i>Gün
-                                </button>
-                                <button type="button" class="btn btn-outline-primary" data-period="week">
-                                    <i class="fas fa-calendar-week me-1"></i>Hafta
-                                </button>
-                                <button type="button" class="btn btn-outline-primary active" data-period="month">
-                                    <i class="fas fa-calendar-alt me-1"></i>Ay
-                                </button>
-                                <button type="button" class="btn btn-outline-primary" data-period="year">
-                                    <i class="fas fa-calendar me-1"></i>Yıl
-                                </button>
+                                ${this.generatePeriodButtons()}
                             </div>
                             <div class="btn-group btn-group-sm me-3" role="group">
                                 <button type="button" class="btn btn-outline-info" id="gantt-current-period" disabled>
@@ -120,24 +135,19 @@ class GanttChart {
     }
 
     setPeriod(period) {
+        // Validate that the period is available
+        if (!this.options.availableViews.includes(period)) {
+            console.warn(`Period '${period}' is not in availableViews. Available views: ${this.options.availableViews.join(', ')}`);
+            return;
+        }
+
         this.currentPeriod = period;
         this.setActivePeriodButton(period);
         this.filterTasksForCurrentView();
         this.updateCurrentPeriodIndicator();
         this.renderChart();
         
-        // For day view, set initial scroll position after rendering
-        if (period === 'day') {
-            setTimeout(() => {
-                const scrollingColumn = this.container.querySelector('.gantt-scrolling-column');
-                if (scrollingColumn) {
-                    const cellWidth = this.calculateCellWidth();
-                    const initialScrollLeft = 7 * cellWidth; // Scroll to show hour 7
-                    scrollingColumn.scrollLeft = initialScrollLeft;
-                    console.log('Day view scroll position set after period change to:', initialScrollLeft);
-                }
-            }, 300);
-        }
+        // Note: Scroll position for day view is handled in renderChart() method
         
         if (this.options.onPeriodChange) {
             this.options.onPeriodChange(period, this.currentDate);
@@ -173,9 +183,16 @@ class GanttChart {
         }
         
         this.currentDate = date;
-        this.filterTasksForCurrentView();
         this.updateCurrentPeriodIndicator();
-        this.renderChart();
+        
+        // Show skeleton loading immediately
+        this.showSkeletonLoading();
+        
+        // Filter tasks and render chart after a brief delay to show skeleton
+        setTimeout(() => {
+            this.filterTasksForCurrentView();
+            this.renderChart();
+        }, 100);
         
         if (this.options.onPeriodChange) {
             this.options.onPeriodChange(this.currentPeriod, this.currentDate);
@@ -184,9 +201,16 @@ class GanttChart {
 
     goToToday() {
         this.currentDate = new Date();
-        this.filterTasksForCurrentView();
         this.updateCurrentPeriodIndicator();
-        this.renderChart();
+        
+        // Show skeleton loading immediately
+        this.showSkeletonLoading();
+        
+        // Filter tasks and render chart after a brief delay to show skeleton
+        setTimeout(() => {
+            this.filterTasksForCurrentView();
+            this.renderChart();
+        }, 100);
         
         if (this.options.onPeriodChange) {
             this.options.onPeriodChange(this.currentPeriod, this.currentDate);
@@ -280,6 +304,124 @@ class GanttChart {
         });
         
         console.log(`Filtered ${this.tasks.length} tasks for current view period`);
+    }
+
+    showSkeletonLoading() {
+        const chartContainer = this.container.querySelector('#gantt-chart');
+        if (!chartContainer) {
+            console.error('Chart container not found');
+            return;
+        }
+
+        // Generate skeleton loading based on current period
+        const skeletonHTML = this.generateSkeletonLoading();
+        
+        chartContainer.innerHTML = `
+            <div class="gantt-chart-container ${this.currentPeriod}-view">
+                <div class="gantt-fixed-column">
+                    <div class="gantt-header-label-cell">Görev</div>
+                    ${skeletonHTML.taskLabels}
+                </div>
+                <div class="gantt-scrolling-column">
+                    <div class="gantt-timeline-content">
+                        <div id="gantt-timeline-header" class="gantt-timeline-header">
+                            ${skeletonHTML.timelineHeader}
+                        </div>
+                        ${skeletonHTML.taskBars}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    generateSkeletonLoading() {
+        const cellWidth = this.calculateCellWidth();
+        const cellHeight = this.calculateCellHeight();
+        
+        // Generate skeleton timeline header
+        let timelineHeader = '';
+        let totalWidth = 0;
+        
+        switch (this.currentPeriod) {
+            case 'day':
+                totalWidth = 24 * cellWidth;
+                for (let i = 0; i < 24; i++) {
+                    timelineHeader += `
+                        <div class="gantt-header-cell skeleton-header-cell" style="min-width: ${cellWidth}px;">
+                            <div class="gantt-date skeleton-text"></div>
+                            <div class="gantt-month skeleton-text"></div>
+                        </div>
+                    `;
+                }
+                break;
+            case 'week':
+                totalWidth = 7 * cellWidth;
+                for (let i = 0; i < 7; i++) {
+                    timelineHeader += `
+                        <div class="gantt-header-cell skeleton-header-cell" style="min-width: ${cellWidth}px;">
+                            <div class="gantt-date skeleton-text"></div>
+                            <div class="gantt-month skeleton-text"></div>
+                        </div>
+                    `;
+                }
+                break;
+            case 'month':
+                const totalDaysInMonth = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth() + 1, 0).getDate();
+                totalWidth = totalDaysInMonth * cellWidth;
+                for (let i = 0; i < totalDaysInMonth; i++) {
+                    timelineHeader += `
+                        <div class="gantt-header-cell skeleton-header-cell" style="min-width: ${cellWidth}px;">
+                            <div class="gantt-date skeleton-text"></div>
+                            <div class="gantt-month skeleton-text"></div>
+                        </div>
+                    `;
+                }
+                break;
+            case 'year':
+                totalWidth = 12 * cellWidth;
+                for (let i = 0; i < 12; i++) {
+                    timelineHeader += `
+                        <div class="gantt-header-cell skeleton-header-cell" style="min-width: ${cellWidth}px;">
+                            <div class="gantt-date skeleton-text"></div>
+                            <div class="gantt-month skeleton-text"></div>
+                        </div>
+                    `;
+                }
+                break;
+        }
+
+        // Generate skeleton task labels (show 3-5 skeleton tasks)
+        const skeletonTaskCount = Math.min(5, Math.max(3, this.tasks.length || 3));
+        let taskLabels = '';
+        let taskBars = '';
+        
+        for (let i = 0; i < skeletonTaskCount; i++) {
+            taskLabels += `
+                <div class="gantt-task-label">
+                    <div class="gantt-task-ti-number skeleton-text"></div>
+                    <div class="gantt-task-name skeleton-text"></div>
+                </div>
+            `;
+            
+            // Generate skeleton task bars with random widths and positions
+            const randomLeft = Math.random() * (totalWidth * 0.6);
+            const randomWidth = Math.random() * (totalWidth * 0.3) + 50;
+            
+            taskBars += `
+                <div class="gantt-task-bar-container">
+                    <div class="gantt-task-bar skeleton-task-bar" 
+                         style="left: ${randomLeft}px; width: ${randomWidth}px;">
+                        <div class="gantt-task-content skeleton-text"></div>
+                    </div>
+                </div>
+            `;
+        }
+
+        return {
+            timelineHeader,
+            taskLabels,
+            taskBars
+        };
     }
 
     renderChart() {
@@ -401,14 +543,7 @@ class GanttChart {
             timelineContent.style.backgroundRepeat = 'repeat';
             timelineContent.style.width = `${totalWidth}px`;
             
-            // For day view, set initial scroll position to show hours 7-17
-            if (this.currentPeriod === 'day') {
-                const initialScrollLeft = 7 * cellWidth; // Scroll to show hour 7
-                // Use setTimeout to ensure the scroll happens after the DOM is fully rendered
-                setTimeout(() => {
-                    timelineContent.scrollLeft = initialScrollLeft;
-                }, 100);
-            }
+            // Note: Day view scroll position is set later in the method
         }
         
         // Debug: Log the generated HTML structure
@@ -427,9 +562,10 @@ class GanttChart {
         // Bind task events
         this.bindTaskEvents();
         
-        // For day view, ensure initial scroll position is set after everything is rendered
+        // For day view, set initial scroll position to show working hours (7-17)
         if (this.currentPeriod === 'day') {
-            setTimeout(() => {
+            // Use requestAnimationFrame to ensure DOM is fully rendered before scrolling
+            requestAnimationFrame(() => {
                 const scrollingColumn = this.container.querySelector('.gantt-scrolling-column');
                 if (scrollingColumn) {
                     const cellWidth = this.calculateCellWidth();
@@ -437,7 +573,7 @@ class GanttChart {
                     scrollingColumn.scrollLeft = initialScrollLeft;
                     console.log('Day view scroll position set to:', initialScrollLeft);
                 }
-            }, 200);
+            });
         }
         
         console.log('Chart rendered successfully');
@@ -470,14 +606,7 @@ class GanttChart {
     }
 
     calculateCellHeight() {
-        const headerElement = this.container.querySelector('#gantt-timeline-header');
-        if (headerElement) {
-            const headerHeight = headerElement.offsetHeight;
-            console.log('Timeline header height:', headerHeight);
-            return headerHeight;
-        }
-        // Fallback to default height if element not found
-        console.log('Timeline header not found, using default height: 60px');
+        // Use fixed height to ensure consistent alignment
         return 60;
     }
 
@@ -643,6 +772,11 @@ class GanttChart {
     }
 
     generateTaskBar(task) {
+        // Handle tasks with multiple segments (for "All Machines" view)
+        if (task.segments && Array.isArray(task.segments) && task.segments.length > 0) {
+            return this.generateMultiSegmentTaskBar(task);
+        }
+        
         // Handle tasks without dates
         if (!task.planned_start_ms || !task.planned_end_ms) {
             const taskTitle = task.title || task.name || `Görev ${task.id}`;
@@ -724,6 +858,46 @@ class GanttChart {
         `;
     }
     
+    generateMultiSegmentTaskBar(task) {
+        const taskTitle = task.title || task.name || `Görev ${task.id}`;
+        const tiNumber = task.ti_number || task.key || task.id;
+        
+        // Generate segments for each timer segment
+        const segments = task.segments.map(segment => {
+            const segmentStart = new Date(segment.planned_start_ms);
+            const segmentEnd = new Date(segment.planned_end_ms);
+            
+            const left = this.calculateSegmentPosition(segmentStart);
+            const width = this.calculateSegmentWidth(segmentStart, segmentEnd);
+            
+            if (left < -500) {
+                return ''; // Segment is outside current view
+            }
+            
+            const category = segment.category || 'work';
+            const categoryClass = `category-${category}`;
+            const segmentTitle = segment.title || segment.name || 'Bilinmeyen';
+            const segmentTiNumber = segment.ti_number || segment.key || segment.id;
+            
+            return `
+                <div class="gantt-task-bar unlocked ${categoryClass}" 
+                     style="left: ${left}px; width: ${width}px;"
+                     data-task-id="${segment.id}"
+                     data-category="${category}"
+                     data-timer-id="${segment.timer_id || ''}"
+                     title="${this.generateTaskTooltip(segment, segmentStart, segmentEnd)}">
+                    <div class="gantt-task-content">${segmentTiNumber}</div>
+                </div>
+            `;
+        }).filter(segment => segment !== '').join('');
+        
+        return `
+            <div class="gantt-task-bar-container">
+                ${segments}
+            </div>
+        `;
+    }
+
     generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, categoryClass, taskTitle, tiNumber) {
         const duration = taskEnd - taskStart;
         
@@ -1269,7 +1443,23 @@ class GanttChart {
         taskBars.forEach(bar => {
             bar.addEventListener('click', (e) => {
                 const taskId = e.currentTarget.dataset.taskId;
-                const task = this.tasks.find(t => t.id == taskId);
+                const timerId = e.currentTarget.dataset.timerId;
+                
+                // First try to find the task by ID
+                let task = this.tasks.find(t => t.id == taskId);
+                
+                // If not found and we have a timer_id, look for a segment within tasks
+                if (!task && timerId) {
+                    for (const t of this.tasks) {
+                        if (t.segments && Array.isArray(t.segments)) {
+                            const segment = t.segments.find(s => s.timer_id == timerId);
+                            if (segment) {
+                                task = segment; // Pass the segment as the task
+                                break;
+                            }
+                        }
+                    }
+                }
                 
                 if (this.options.onTaskClick) {
                     this.options.onTaskClick(task, e);
@@ -1297,6 +1487,10 @@ class GanttChart {
 
     getTasks() {
         return [...this.tasks];
+    }
+
+    getAvailableViews() {
+        return [...this.options.availableViews];
     }
 
     generateWorkingHoursBackground() {

@@ -1,0 +1,666 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Edit Modal Component Test</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Component CSS -->
+    <link rel="stylesheet" href="edit-modal.css">
+    <link rel="stylesheet" href="../dropdown.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 2rem 0;
+        }
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 1rem;
+        }
+        .test-card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+        .test-header {
+            background: linear-gradient(135deg, #8B0000, #DC143C);
+            color: white;
+            padding: 1.5rem;
+            text-align: center;
+        }
+        .test-body {
+            padding: 2rem;
+        }
+        .demo-button {
+            margin: 0.5rem;
+            min-width: 200px;
+        }
+        .demo-section {
+            margin-bottom: 2rem;
+            padding: 1.5rem;
+            background: #f8f9fa;
+            border-radius: 8px;
+            border-left: 4px solid #DC143C;
+        }
+        .demo-section h4 {
+            color: #2c3e50;
+            margin-bottom: 1rem;
+        }
+        .demo-section p {
+            color: #6c757d;
+            margin-bottom: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="test-card">
+            <div class="test-header">
+                <h1><i class="fas fa-edit me-2"></i>Edit Modal Component Test</h1>
+                <p class="mb-0">Test the reusable EditModal component with different field types and configurations</p>
+            </div>
+            <div class="test-body">
+                <!-- Basic Form Demo -->
+                <div class="demo-section">
+                    <h4><i class="fas fa-user me-2"></i>Basic Form Demo</h4>
+                    <p>Simple form with text, email, and number fields</p>
+                    <button class="btn btn-primary demo-button" onclick="showBasicForm()">
+                        <i class="fas fa-play me-2"></i>Show Basic Form
+                    </button>
+                </div>
+
+                <!-- Advanced Form Demo -->
+                <div class="demo-section">
+                    <h4><i class="fas fa-cogs me-2"></i>Advanced Form Demo</h4>
+                    <p>Complex form with multiple sections, dropdowns, dates, and validation</p>
+                    <button class="btn btn-success demo-button" onclick="showAdvancedForm()">
+                        <i class="fas fa-play me-2"></i>Show Advanced Form
+                    </button>
+                </div>
+
+                <!-- User Management Demo -->
+                <div class="demo-section">
+                    <h4><i class="fas fa-users me-2"></i>User Management Demo</h4>
+                    <p>User edit form similar to the original users page</p>
+                    <button class="btn btn-info demo-button" onclick="showUserForm()">
+                        <i class="fas fa-play me-2"></i>Show User Form
+                    </button>
+                </div>
+
+                <!-- Custom Field Types Demo -->
+                <div class="demo-section">
+                    <h4><i class="fas fa-magic me-2"></i>Custom Field Types Demo</h4>
+                    <p>Form with various field types: checkbox, radio, file, color, range</p>
+                    <button class="btn btn-warning demo-button" onclick="showCustomFieldsForm()">
+                        <i class="fas fa-play me-2"></i>Show Custom Fields
+                    </button>
+                </div>
+
+                <!-- Dynamic Form Demo -->
+                <div class="demo-section">
+                    <h4><i class="fas fa-sync me-2"></i>Dynamic Form Demo</h4>
+                    <p>Form that can be modified dynamically with different configurations</p>
+                    <button class="btn btn-secondary demo-button" onclick="showDynamicForm()">
+                        <i class="fas fa-play me-2"></i>Show Dynamic Form
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Edit Modal Container -->
+    <div id="edit-modal-container"></div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Component JS -->
+    <script type="module" src="edit-modal.js"></script>
+    <script type="module" src="../dropdown.js"></script>
+
+    <script type="module">
+        import { EditModal } from './edit-modal.js';
+
+        // Global modal instance
+        let currentModal = null;
+
+        // Initialize modal container
+        function initModal() {
+            if (!currentModal) {
+                try {
+                    currentModal = new EditModal('edit-modal-container', {
+                        title: 'Test Modal',
+                        icon: 'fas fa-edit',
+                        saveButtonText: 'Kaydet'
+                    });
+                } catch (error) {
+                    console.error('Error initializing modal:', error);
+                    return null;
+                }
+            }
+            return currentModal;
+        }
+
+        // Basic Form Demo
+        window.showBasicForm = function() {
+            const modal = initModal();
+            if (!modal) {
+                console.error('Failed to initialize modal');
+                alert('Modal başlatılamadı. Lütfen sayfayı yenileyin.');
+                return;
+            }
+            
+            modal
+                .setTitle('Temel Form')
+                .setIcon('fas fa-user')
+                .setSaveButtonText('Kaydet')
+                .clearForm();
+
+            // Clear existing sections
+            modal.sections = [];
+            
+            modal
+                .addSection({
+                    title: 'Kişisel Bilgiler',
+                    icon: 'fas fa-user',
+                    iconColor: 'text-primary',
+                    fields: [
+                        {
+                            id: 'first_name',
+                            name: 'first_name',
+                            label: 'Ad',
+                            type: 'text',
+                            placeholder: 'Adınızı girin',
+                            required: true,
+                            icon: 'fas fa-id-card',
+                            colSize: 6
+                        },
+                        {
+                            id: 'last_name',
+                            name: 'last_name',
+                            label: 'Soyad',
+                            type: 'text',
+                            placeholder: 'Soyadınızı girin',
+                            required: true,
+                            icon: 'fas fa-id-card',
+                            colSize: 6
+                        },
+                        {
+                            id: 'email',
+                            name: 'email',
+                            label: 'E-posta',
+                            type: 'email',
+                            placeholder: 'E-posta adresinizi girin',
+                            required: true,
+                            icon: 'fas fa-envelope',
+                            colSize: 12
+                        },
+                        {
+                            id: 'age',
+                            name: 'age',
+                            label: 'Yaş',
+                            type: 'number',
+                            placeholder: 'Yaşınızı girin',
+                            min: 0,
+                            max: 120,
+                            icon: 'fas fa-calendar',
+                            colSize: 6
+                        },
+                        {
+                            id: 'phone',
+                            name: 'phone',
+                            label: 'Telefon',
+                            type: 'text',
+                            placeholder: 'Telefon numaranızı girin',
+                            icon: 'fas fa-phone',
+                            colSize: 6
+                        }
+                    ]
+                })
+                .render()
+                .onSaveCallback(async (formData) => {
+                    console.log('Basic form data:', formData);
+                    alert('Form verileri konsola yazdırıldı!');
+                    modal.hide();
+                })
+                .onCancelCallback(() => {
+                    console.log('Basic form cancelled');
+                })
+                .show();
+        };
+
+        // Advanced Form Demo
+        window.showAdvancedForm = function() {
+            const modal = initModal();
+            if (!modal) {
+                console.error('Failed to initialize modal');
+                alert('Modal başlatılamadı. Lütfen sayfayı yenileyin.');
+                return;
+            }
+            
+            modal
+                .setTitle('Gelişmiş Form')
+                .setIcon('fas fa-cogs')
+                .setSaveButtonText('Güncelle')
+                .clearForm();
+
+            modal.sections = [];
+            
+            modal
+                .addSection({
+                    title: 'Temel Bilgiler',
+                    icon: 'fas fa-info-circle',
+                    iconColor: 'text-primary',
+                    fields: [
+                        {
+                            id: 'username',
+                            name: 'username',
+                            label: 'Kullanıcı Adı',
+                            type: 'text',
+                            placeholder: 'Kullanıcı adını girin',
+                            required: true,
+                            icon: 'fas fa-user',
+                            help: 'Benzersiz kullanıcı adı',
+                            colSize: 6
+                        },
+                        {
+                            id: 'email',
+                            name: 'email',
+                            label: 'E-posta',
+                            type: 'email',
+                            placeholder: 'E-posta adresi',
+                            required: true,
+                            icon: 'fas fa-envelope',
+                            help: 'İletişim için e-posta adresi',
+                            colSize: 6
+                        }
+                    ]
+                })
+                .addSection({
+                    title: 'İş Bilgileri',
+                    icon: 'fas fa-briefcase',
+                    iconColor: 'text-success',
+                    fields: [
+                        {
+                            id: 'team',
+                            name: 'team',
+                            label: 'Takım',
+                            type: 'dropdown',
+                            placeholder: 'Takım seçin...',
+                            required: true,
+                            icon: 'fas fa-users',
+                            help: 'Çalışanın bağlı olduğu takım',
+                            options: [
+                                { value: 'dev', label: 'Geliştirme' },
+                                { value: 'design', label: 'Tasarım' },
+                                { value: 'marketing', label: 'Pazarlama' },
+                                { value: 'sales', label: 'Satış' }
+                            ],
+                            colSize: 6
+                        },
+                        {
+                            id: 'work_location',
+                            name: 'work_location',
+                            label: 'Çalışma Yeri',
+                            type: 'dropdown',
+                            placeholder: 'Çalışma yeri seçin...',
+                            required: true,
+                            icon: 'fas fa-map-marker-alt',
+                            help: 'Çalışanın çalışma yeri',
+                            options: [
+                                { value: 'office', label: 'Ofis' },
+                                { value: 'workshop', label: 'Atölye' },
+                                { value: 'remote', label: 'Uzaktan' }
+                            ],
+                            colSize: 6
+                        },
+                        {
+                            id: 'start_date',
+                            name: 'start_date',
+                            label: 'İşe Başlama Tarihi',
+                            type: 'date',
+                            required: true,
+                            icon: 'fas fa-calendar',
+                            colSize: 6
+                        },
+                        {
+                            id: 'salary',
+                            name: 'salary',
+                            label: 'Maaş',
+                            type: 'number',
+                            placeholder: 'Maaş miktarı',
+                            min: 0,
+                            step: 100,
+                            icon: 'fas fa-money-bill',
+                            colSize: 6
+                        }
+                    ]
+                })
+                .render()
+                .onSaveCallback(async (formData) => {
+                    console.log('Advanced form data:', formData);
+                    alert('Gelişmiş form verileri konsola yazdırıldı!');
+                    modal.hide();
+                })
+                .show();
+        };
+
+        // User Management Demo
+        window.showUserForm = function() {
+            const modal = initModal();
+            
+            modal
+                .setTitle('Çalışan Düzenle')
+                .setIcon('fas fa-edit')
+                .setSaveButtonText('Değişiklikleri Kaydet')
+                .clearForm();
+
+            modal.sections = [];
+            
+            // Set some sample data
+            const sampleData = {
+                username: 'john.doe',
+                email: 'john.doe@company.com',
+                first_name: 'John',
+                last_name: 'Doe',
+                team: 'dev',
+                work_location: 'office'
+            };
+            
+            modal
+                .addSection({
+                    title: 'Temel Bilgiler',
+                    icon: 'fas fa-info-circle',
+                    iconColor: 'text-primary',
+                    fields: [
+                        {
+                            id: 'username',
+                            name: 'username',
+                            label: 'Kullanıcı Adı',
+                            type: 'text',
+                            placeholder: 'Kullanıcı adını girin',
+                            required: true,
+                            icon: 'fas fa-user',
+                            help: 'Benzersiz kullanıcı adı',
+                            value: sampleData.username,
+                            colSize: 6
+                        },
+                        {
+                            id: 'email',
+                            name: 'email',
+                            label: 'E-posta',
+                            type: 'email',
+                            placeholder: 'E-posta adresi',
+                            required: true,
+                            icon: 'fas fa-envelope',
+                            help: 'İletişim için e-posta adresi',
+                            value: sampleData.email,
+                            colSize: 6
+                        },
+                        {
+                            id: 'first_name',
+                            name: 'first_name',
+                            label: 'Ad',
+                            type: 'text',
+                            placeholder: 'Adını girin',
+                            required: true,
+                            icon: 'fas fa-id-card',
+                            value: sampleData.first_name,
+                            colSize: 6
+                        },
+                        {
+                            id: 'last_name',
+                            name: 'last_name',
+                            label: 'Soyad',
+                            type: 'text',
+                            placeholder: 'Soyadını girin',
+                            required: true,
+                            icon: 'fas fa-id-card',
+                            value: sampleData.last_name,
+                            colSize: 6
+                        }
+                    ]
+                })
+                .addSection({
+                    title: 'İş Bilgileri',
+                    icon: 'fas fa-briefcase',
+                    iconColor: 'text-success',
+                    fields: [
+                        {
+                            id: 'team',
+                            name: 'team',
+                            label: 'Takım',
+                            type: 'dropdown',
+                            placeholder: 'Takım seçin...',
+                            required: true,
+                            icon: 'fas fa-users',
+                            help: 'Çalışanın bağlı olduğu takım',
+                            value: sampleData.team,
+                            options: [
+                                { value: 'dev', label: 'Geliştirme' },
+                                { value: 'design', label: 'Tasarım' },
+                                { value: 'marketing', label: 'Pazarlama' },
+                                { value: 'sales', label: 'Satış' },
+                                { value: 'hr', label: 'İnsan Kaynakları' }
+                            ],
+                            colSize: 6
+                        },
+                        {
+                            id: 'work_location',
+                            name: 'work_location',
+                            label: 'Çalışma Yeri',
+                            type: 'dropdown',
+                            placeholder: 'Çalışma yeri seçin...',
+                            required: true,
+                            icon: 'fas fa-map-marker-alt',
+                            help: 'Çalışanın çalışma yeri',
+                            value: sampleData.work_location,
+                            options: [
+                                { value: 'office', label: 'Ofis' },
+                                { value: 'workshop', label: 'Atölye' },
+                                { value: 'remote', label: 'Uzaktan' }
+                            ],
+                            colSize: 6
+                        }
+                    ]
+                })
+                .render()
+                .onSaveCallback(async (formData) => {
+                    console.log('User form data:', formData);
+                    alert('Kullanıcı bilgileri güncellendi!');
+                    modal.hide();
+                })
+                .show();
+        };
+
+        // Custom Field Types Demo
+        window.showCustomFieldsForm = function() {
+            const modal = initModal();
+            
+            modal
+                .setTitle('Özel Alan Türleri')
+                .setIcon('fas fa-magic')
+                .setSaveButtonText('Kaydet')
+                .clearForm();
+
+            modal.sections = [];
+            
+            modal
+                .addSection({
+                    title: 'Seçim Alanları',
+                    icon: 'fas fa-check-square',
+                    iconColor: 'text-warning',
+                    fields: [
+                        {
+                            id: 'newsletter',
+                            name: 'newsletter',
+                            label: 'Bülten Aboneliği',
+                            type: 'checkbox',
+                            value: true,
+                            icon: 'fas fa-envelope',
+                            colSize: 6
+                        },
+                        {
+                            id: 'notifications',
+                            name: 'notifications',
+                            label: 'Bildirim Tercihi',
+                            type: 'radio',
+                            value: 'email',
+                            options: [
+                                { value: 'email', label: 'E-posta' },
+                                { value: 'sms', label: 'SMS' },
+                                { value: 'push', label: 'Push Bildirim' }
+                            ],
+                            colSize: 6
+                        }
+                    ]
+                })
+                .addSection({
+                    title: 'Medya ve Dosyalar',
+                    icon: 'fas fa-file',
+                    iconColor: 'text-info',
+                    fields: [
+                        {
+                            id: 'avatar',
+                            name: 'avatar',
+                            label: 'Profil Fotoğrafı',
+                            type: 'file',
+                            accept: 'image/*',
+                            icon: 'fas fa-image',
+                            colSize: 6
+                        },
+                        {
+                            id: 'theme_color',
+                            name: 'theme_color',
+                            label: 'Tema Rengi',
+                            type: 'color',
+                            value: '#DC143C',
+                            icon: 'fas fa-palette',
+                            colSize: 6
+                        }
+                    ]
+                })
+                .addSection({
+                    title: 'Sayısal Değerler',
+                    icon: 'fas fa-sliders-h',
+                    iconColor: 'text-danger',
+                    fields: [
+                        {
+                            id: 'volume',
+                            name: 'volume',
+                            label: 'Ses Seviyesi',
+                            type: 'range',
+                            min: 0,
+                            max: 100,
+                            value: 50,
+                            icon: 'fas fa-volume-up',
+                            colSize: 12
+                        },
+                        {
+                            id: 'description',
+                            name: 'description',
+                            label: 'Açıklama',
+                            type: 'textarea',
+                            placeholder: 'Detaylı açıklama girin...',
+                            rows: 4,
+                            icon: 'fas fa-align-left',
+                            colSize: 12
+                        }
+                    ]
+                })
+                .render()
+                .onSaveCallback(async (formData) => {
+                    console.log('Custom fields form data:', formData);
+                    alert('Özel alan form verileri konsola yazdırıldı!');
+                    modal.hide();
+                })
+                .show();
+        };
+
+        // Dynamic Form Demo
+        window.showDynamicForm = function() {
+            const modal = initModal();
+            
+            modal
+                .setTitle('Dinamik Form')
+                .setIcon('fas fa-sync')
+                .setSaveButtonText('Kaydet')
+                .clearForm();
+
+            modal.sections = [];
+            
+            // Add sections dynamically
+            setTimeout(() => {
+                modal
+                    .addSection({
+                        title: 'Dinamik Bölüm 1',
+                        icon: 'fas fa-plus',
+                        iconColor: 'text-primary',
+                        fields: [
+                            {
+                                id: 'dynamic_field_1',
+                                name: 'dynamic_field_1',
+                                label: 'Dinamik Alan 1',
+                                type: 'text',
+                                placeholder: 'Bu alan dinamik olarak eklendi',
+                                icon: 'fas fa-magic',
+                                colSize: 12
+                            }
+                        ]
+                    })
+                    .render();
+            }, 500);
+            
+            setTimeout(() => {
+                modal
+                    .addSection({
+                        title: 'Dinamik Bölüm 2',
+                        icon: 'fas fa-star',
+                        iconColor: 'text-success',
+                        fields: [
+                            {
+                                id: 'dynamic_field_2',
+                                name: 'dynamic_field_2',
+                                label: 'Dinamik Alan 2',
+                                type: 'dropdown',
+                                placeholder: 'Dinamik seçenekler',
+                                options: [
+                                    { value: 'option1', label: 'Seçenek 1' },
+                                    { value: 'option2', label: 'Seçenek 2' },
+                                    { value: 'option3', label: 'Seçenek 3' }
+                                ],
+                                icon: 'fas fa-list',
+                                colSize: 12
+                            }
+                        ]
+                    })
+                    .render();
+            }, 1000);
+            
+            modal
+                .onSaveCallback(async (formData) => {
+                    console.log('Dynamic form data:', formData);
+                    alert('Dinamik form verileri konsola yazdırıldı!');
+                    modal.hide();
+                })
+                .show();
+        };
+
+        // Initialize on page load
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('DOM loaded, initializing modal...');
+            const modal = initModal();
+            if (modal) {
+                console.log('Modal initialized successfully:', modal);
+            } else {
+                console.error('Failed to initialize modal');
+            }
+        });
+    </script>
+</body>
+</html>

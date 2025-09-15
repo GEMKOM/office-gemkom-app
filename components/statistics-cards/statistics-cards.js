@@ -76,6 +76,22 @@ export class StatisticsCards {
     }
 
     /**
+     * Update a specific card by ID
+     * @param {string} cardId - ID of card to update
+     * @param {Object} cardData - New card data
+     */
+    updateCardById(cardId, cardData) {
+        const cardIndex = this.options.cards.findIndex(card => card.id === cardId);
+        if (cardIndex !== -1) {
+            this.options.cards[cardIndex] = { ...this.options.cards[cardIndex], ...cardData };
+            this.render();
+            return true;
+        }
+        console.warn(`Card with ID '${cardId}' not found`);
+        return false;
+    }
+
+    /**
      * Update all card values
      * @param {Object} values - Object with card indices as keys and new values
      */
