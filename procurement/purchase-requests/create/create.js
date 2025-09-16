@@ -538,7 +538,7 @@ async function loadDraftData(draft) {
                 items.forEach((groupedItem, groupIndex) => {
                     if (groupedItem.allocations && Array.isArray(groupedItem.allocations)) {
                         // This is a grouped item, split it into separate items
-                        groupedItem.allocations.forEach(allocation => {
+                        groupedItem.allocations.forEach((allocation, allocationIndex) => {
                             const separateItem = {
                                 id: `item_${Date.now()}_${Math.random()}`,
                                 code: groupedItem.code,
@@ -546,96 +546,92 @@ async function loadDraftData(draft) {
                                 unit: groupedItem.unit,
                                 job_no: allocation.job_no,
                                 quantity: allocation.quantity,
-                                specs: groupedItem.specs || ''
+                                specs: groupedItem.specifications || '',
+                                originalGroupIndex: groupIndex,
+                                allocationIndex: allocationIndex
                             };
                             ungroupedItems.push(separateItem);
                         });
                     } else {
                         // This is already a separate item
-                        ungroupedItems.push(groupedItem);
+                        const separateItem = {
+                            ...groupedItem,
+                            originalGroupIndex: groupIndex,
+                            allocationIndex: 0
+                        };
+                        ungroupedItems.push(separateItem);
                     }
                 });
                 
                                              items = ungroupedItems;
                  console.log('Ungrouped items:', items);
                  
-                 // If we ungrouped items, we need to handle offers and recommendations
-                 // that were indexed by the grouped item indices
-                 if (draft.data.offers && Object.keys(draft.data.offers).length > 0) {
-                     console.log('Handling offers for ungrouped items...');
-                     const newOffers = {};
-                     
-                     Object.keys(draft.data.offers).forEach(supplierId => {
-                         newOffers[supplierId] = {};
-                         Object.keys(draft.data.offers[supplierId]).forEach(groupedIndex => {
-                             const groupedIndexNum = parseInt(groupedIndex);
-                             const originalGroupedItem = draft.data.items[groupedIndexNum];
-                             
-                             if (originalGroupedItem && originalGroupedItem.allocations) {
-                                 // Find the ungrouped items that came from this grouped item
-                                 const ungroupedIndices = [];
-                                 items.forEach((item, newIndex) => {
-                                     if (item.code === originalGroupedItem.code && 
-                                         item.name === originalGroupedItem.name && 
-                                         item.unit === originalGroupedItem.unit) {
-                                         ungroupedIndices.push(newIndex);
-                                     }
-                                 });
-                                 
-                                 // Copy the offer to all ungrouped items
-                                 ungroupedIndices.forEach(newIndex => {
-                                     newOffers[supplierId][newIndex] = draft.data.offers[supplierId][groupedIndex];
-                                 });
-                             } else {
-                                 // This was already a separate item, keep the same index
-                                 newOffers[supplierId][groupedIndex] = draft.data.offers[supplierId][groupedIndex];
-                             }
-                         });
-                     });
-                     
-                     requestData.offers = newOffers;
-                 } else {
-                     requestData.offers = draft.data.offers || {};
-                 }
+                // If we ungrouped items, we need to handle offers and recommendations
+                // that were indexed by the grouped item indices
+                if (draft.data.offers && Object.keys(draft.data.offers).length > 0) {
+                    console.log('Handling offers for ungrouped items...');
+                    const newOffers = {};
+                    
+                    Object.keys(draft.data.offers).forEach(supplierId => {
+                        newOffers[supplierId] = {};
+                        Object.keys(draft.data.offers[supplierId]).forEach(groupedIndex => {
+                            const groupedIndexNum = parseInt(groupedIndex);
+                            const originalGroupedItem = draft.data.items[groupedIndexNum];
+                            
+                            if (originalGroupedItem && originalGroupedItem.allocations) {
+                                // Find the ungrouped items that came from this specific grouped item
+                                // Use the originalGroupIndex to match exactly
+                                items.forEach((item, newIndex) => {
+                                    if (item.originalGroupIndex === groupedIndexNum) {
+                                        newOffers[supplierId][newIndex] = draft.data.offers[supplierId][groupedIndex];
+                                    }
+                                });
+                            } else {
+                                // This was already a separate item, keep the same index
+                                newOffers[supplierId][groupedIndex] = draft.data.offers[supplierId][groupedIndex];
+                            }
+                        });
+                    });
+                    
+                    requestData.offers = newOffers;
+                } else {
+                    requestData.offers = draft.data.offers || {};
+                }
                  
-                 // Handle recommendations similarly
-                 if (draft.data.recommendations && Object.keys(draft.data.recommendations).length > 0) {
-                     console.log('Handling recommendations for ungrouped items...');
-                     const newRecommendations = {};
-                     
-                     Object.keys(draft.data.recommendations).forEach(groupedIndex => {
-                         const groupedIndexNum = parseInt(groupedIndex);
-                         const originalGroupedItem = draft.data.items[groupedIndexNum];
-                         
-                         if (originalGroupedItem && originalGroupedItem.allocations) {
-                             // Find the ungrouped items that came from this grouped item
-                             const ungroupedIndices = [];
-                             items.forEach((item, newIndex) => {
-                                 if (item.code === originalGroupedItem.code && 
-                                     item.name === originalGroupedItem.name && 
-                                     item.unit === originalGroupedItem.unit) {
-                                     ungroupedIndices.push(newIndex);
-                                 }
-                             });
-                             
-                             // Copy the recommendation to all ungrouped items
-                             ungroupedIndices.forEach(newIndex => {
-                                 newRecommendations[newIndex] = draft.data.recommendations[groupedIndex];
-                             });
-                         } else {
-                             // This was already a separate item, keep the same index
-                             newRecommendations[groupedIndex] = draft.data.recommendations[groupedIndex];
-                         }
-                     });
-                     
-                     requestData.recommendations = newRecommendations;
-                 } else {
-                     requestData.recommendations = draft.data.recommendations || {};
-                 }
+                // Handle recommendations similarly
+                if (draft.data.recommendations && Object.keys(draft.data.recommendations).length > 0) {
+                    console.log('Handling recommendations for ungrouped items...');
+                    const newRecommendations = {};
+                    
+                    Object.keys(draft.data.recommendations).forEach(groupedIndex => {
+                        const groupedIndexNum = parseInt(groupedIndex);
+                        const originalGroupedItem = draft.data.items[groupedIndexNum];
+                        
+                        if (originalGroupedItem && originalGroupedItem.allocations) {
+                            // Find the ungrouped items that came from this specific grouped item
+                            // Use the originalGroupIndex to match exactly
+                            items.forEach((item, newIndex) => {
+                                if (item.originalGroupIndex === groupedIndexNum) {
+                                    newRecommendations[newIndex] = draft.data.recommendations[groupedIndex];
+                                }
+                            });
+                        } else {
+                            // This was already a separate item, keep the same index
+                            newRecommendations[groupedIndex] = draft.data.recommendations[groupedIndex];
+                        }
+                    });
+                    
+                    requestData.recommendations = newRecommendations;
+                } else {
+                    requestData.recommendations = draft.data.recommendations || {};
+                }
                  
-                 // Assign the ungrouped items to requestData.items
-                 requestData.items = items;
-                 requestData.suppliers = draft.data.suppliers || [];
+                // Clean up temporary properties and assign the ungrouped items to requestData.items
+                requestData.items = items.map(item => {
+                    const { originalGroupIndex, allocationIndex, ...cleanItem } = item;
+                    return cleanItem;
+                });
+                requestData.suppliers = draft.data.suppliers || [];
              } else {
                  // No ungrouping needed, load items and data as is
                  requestData.items = items;
