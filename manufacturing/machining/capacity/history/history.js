@@ -1005,6 +1005,16 @@ function displayTimerData(timer) {
     const finishTime = timer.finish_time ? formatDateTime(timer.finish_time) : '-';
     const duration = timer.duration ? formatDuration(timer.duration) : '-';
     
+    // Calculate actual time from start and end times
+    let actualTime = '-';
+    if (timer.start_time && timer.finish_time) {
+        const start = new Date(timer.start_time);
+        const end = new Date(timer.finish_time);
+        const diffMs = end - start;
+        const diffSeconds = Math.floor(diffMs / 1000);
+        actualTime = formatDuration(diffSeconds);
+    }
+    
     // Determine status badge
     let statusBadge = '';
     if (timer.finish_time) {
@@ -1106,9 +1116,17 @@ function displayTimerData(timer) {
                         <div class="col-12">
                             <div class="mb-2">
                                 <label class="form-label compact">
-                                    <i class="fas fa-clock me-1"></i>Süre
+                                    <i class="fas fa-clock me-1"></i>Gerçek Süre
                                 </label>
-                                <div class="form-control-plaintext"><span class="timer-duration">${duration}</span></div>
+                                <div class="form-control-plaintext"><span class="timer-duration">${actualTime}</span></div>
+                            </div>
+                        </div>
+                        <div class="col-12">
+                            <div class="mb-2">
+                                <label class="form-label compact">
+                                    <i class="fas fa-hourglass-half me-1"></i>Tahmini Süre
+                                </label>
+                                <div class="form-control-plaintext">${timer.estimated_hours ? `${timer.estimated_hours} saat` : '-'}</div>
                             </div>
                         </div>
                         <div class="col-12">

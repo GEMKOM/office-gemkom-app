@@ -147,7 +147,7 @@ class GanttChart {
         this.updateCurrentPeriodIndicator();
         this.renderChart();
         
-        // Note: Scroll position for day view is handled in renderChart() method
+        // Note: Scroll position for day view is now handled in setTasks() when data is loaded
         
         if (this.options.onPeriodChange) {
             this.options.onPeriodChange(period, this.currentDate);
@@ -269,7 +269,21 @@ class GanttChart {
     setTasks(tasks) {
         this.allTasks = tasks || [];
         this.filterTasksForCurrentView();
+        
         this.renderChart();
+        
+        // For day view, scroll to show working hours (7-17) when data is loaded
+        if (this.currentPeriod === 'day') {
+            // Use requestAnimationFrame to ensure DOM is fully rendered before scrolling
+            requestAnimationFrame(() => {
+                const scrollingColumn = this.container.querySelector('.gantt-scrolling-column');
+                if (scrollingColumn) {
+                    const cellWidth = this.calculateCellWidth();
+                    const initialScrollLeft = 7 * cellWidth; // Scroll to show hour 7
+                    scrollingColumn.scrollLeft = initialScrollLeft;
+                }
+            });
+        }
     }
     
     setMachineCalendar(calendar) {
@@ -562,19 +576,7 @@ class GanttChart {
         // Bind task events
         this.bindTaskEvents();
         
-        // For day view, set initial scroll position to show working hours (7-17)
-        if (this.currentPeriod === 'day') {
-            // Use requestAnimationFrame to ensure DOM is fully rendered before scrolling
-            requestAnimationFrame(() => {
-                const scrollingColumn = this.container.querySelector('.gantt-scrolling-column');
-                if (scrollingColumn) {
-                    const cellWidth = this.calculateCellWidth();
-                    const initialScrollLeft = 7 * cellWidth; // Scroll to show hour 7
-                    scrollingColumn.scrollLeft = initialScrollLeft;
-                    console.log('Day view scroll position set to:', initialScrollLeft);
-                }
-            });
-        }
+        // Note: Scroll position for day view is now handled in setTasks() when data is loaded
         
         console.log('Chart rendered successfully');
     }
