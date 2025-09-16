@@ -117,6 +117,35 @@ export class DisplayModal {
         return this;
     }
     
+    // Add custom HTML content to the last section
+    addCustomContent(htmlContent) {
+        if (this.sections.length === 0) {
+            this.addSection({ title: 'Genel Bilgiler' });
+        }
+        
+        const lastSection = this.sections[this.sections.length - 1];
+        if (!lastSection.customContent) {
+            lastSection.customContent = '';
+        }
+        lastSection.customContent += htmlContent;
+        return this;
+    }
+    
+    // Add a section with custom content only
+    addCustomSection(sectionConfig) {
+        const section = {
+            id: sectionConfig.id || `section-${Date.now()}`,
+            title: sectionConfig.title || null,
+            icon: sectionConfig.icon || 'fas fa-info-circle',
+            iconColor: sectionConfig.iconColor || 'text-primary',
+            customContent: sectionConfig.customContent || '',
+            ...sectionConfig
+        };
+        
+        this.sections.push(section);
+        return this;
+    }
+    
     // Render the modal with all sections and fields
     render() {
         this.content.innerHTML = '';
@@ -134,20 +163,34 @@ export class DisplayModal {
         sectionDiv.className = 'display-section compact mb-3';
         sectionDiv.dataset.sectionId = section.id;
         
-        const title = document.createElement('h6');
-        title.className = `section-subtitle compact ${section.iconColor}`;
-        title.innerHTML = `<i class="${section.icon} me-2"></i>${section.title}`;
+        // Add title if provided
+        if (section.title) {
+            const title = document.createElement('h6');
+            title.className = `section-subtitle compact ${section.iconColor}`;
+            title.innerHTML = `<i class="${section.icon} me-2"></i>${section.title}`;
+            sectionDiv.appendChild(title);
+        }
         
-        const fieldsContainer = document.createElement('div');
-        fieldsContainer.className = 'row g-2';
+        // Handle custom content
+        if (section.customContent) {
+            const customContainer = document.createElement('div');
+            customContainer.className = 'custom-content';
+            customContainer.innerHTML = section.customContent;
+            sectionDiv.appendChild(customContainer);
+        }
         
-        section.fields.forEach(field => {
-            const fieldElement = this.createFieldElement(field);
-            fieldsContainer.appendChild(fieldElement);
-        });
-        
-        sectionDiv.appendChild(title);
-        sectionDiv.appendChild(fieldsContainer);
+        // Handle regular fields
+        if (section.fields && section.fields.length > 0) {
+            const fieldsContainer = document.createElement('div');
+            fieldsContainer.className = 'row g-2';
+            
+            section.fields.forEach(field => {
+                const fieldElement = this.createFieldElement(field);
+                fieldsContainer.appendChild(fieldElement);
+            });
+            
+            sectionDiv.appendChild(fieldsContainer);
+        }
         
         return sectionDiv;
     }

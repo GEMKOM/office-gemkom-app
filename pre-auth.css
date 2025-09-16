@@ -1,8 +1,0 @@
-body.pre-auth {
-    /* Remove the display:none rule to make the page visible */
-}
-
-/* Additional styling for pre-auth state if needed */
-body.pre-auth .module-card {
-    /* Any specific styling for pre-auth state can go here */
-}

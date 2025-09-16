@@ -18,6 +18,7 @@
     <link rel="stylesheet" href="../../../components/header/header.css">
     <link rel="stylesheet" href="../../../components/table/table.css">
     <link rel="stylesheet" href="../../../components/comparison-table/comparison-table.css">
+    <link rel="stylesheet" href="../../../components/display-modal/display-modal.css">
 </head>
 <body class="pre-auth">
     <!-- Navigation -->
@@ -45,41 +46,8 @@
         </div>
     </section>
 
-    <!-- Request Details Modal -->
-    <div class="modal fade" id="requestDetailsModal" tabindex="-1" aria-labelledby="requestDetailsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="requestDetailsModalLabel">
-                        <i class="fas fa-file-invoice me-2"></i>
-                        Talep Detayları
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="request-details-container"></div>
-                    
-                    <!-- Comparison Table Section -->
-                    <div id="comparison-table-section" style="display: none;">
-                        <hr class="my-4">
-                        <h6 class="fw-bold mb-3">
-                            <i class="fas fa-chart-bar me-2"></i>
-                            Teklif Karşılaştırma Tablosu
-                        </h6>
-                        <div id="comparison-table-container"></div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-danger" id="reject-request" style="min-width: 120px; height: 38px;">
-                        <i class="fas fa-times me-1"></i>Reddet
-                    </button>
-                    <button type="button" class="btn btn-success" id="approve-request" style="min-width: 120px; height: 38px;">
-                        <i class="fas fa-check me-1"></i>Onayla
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Display Modal Container -->
+    <div id="display-modal-container"></div>
 
     <!-- Rejection Comment Modal -->
     <div class="modal fade" id="rejectRequestModal" tabindex="-1" aria-labelledby="rejectRequestModalLabel" aria-hidden="true">

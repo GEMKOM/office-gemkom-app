@@ -134,14 +134,86 @@ function initializeComponents() {
     tableComponent = new TableComponent('table-container', {
         title: 'Arıza Talepleri',
         columns: [
-            { key: 'id', label: 'ID', sortable: true },
-            { key: 'machine_name', label: 'Ekipman', sortable: true },
-            { key: 'description', label: 'Açıklama', sortable: false },
-            { key: 'priority', label: 'Öncelik', sortable: true },
-            { key: 'status', label: 'Durum', sortable: true },
-            { key: 'reported_by_username', label: 'Bildiren', sortable: true },
-            { key: 'reported_at', label: 'Tarih', sortable: true },
-            { key: 'actions', label: 'İşlemler', sortable: false }
+            { 
+                field: 'id', 
+                label: 'ID', 
+                sortable: true,
+                formatter: (value) => `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value || '-'}</span>`
+            },
+            { 
+                field: 'machine_name', 
+                label: 'Ekipman', 
+                sortable: true,
+                formatter: (value) => `<span style="font-weight: 500; color: #495057;">${value || '-'}</span>`
+            },
+            { 
+                field: 'description', 
+                label: 'Açıklama', 
+                sortable: false,
+                formatter: (value, row) => {
+                    if (!value || value.trim() === '') return '-';
+                    const truncated = value.length > 100 ? value.substring(0, 100) + '...' : value;
+                    return `
+                        <span title="${value.replace(/"/g, '&quot;')}">${truncated}</span>
+                        ${value.length > 100 ? '<button class="btn btn-link btn-sm p-0 ms-1" onclick="showFullDescription(' + row.id + ')" title="Tam açıklamayı göster"><i class="fas fa-expand-alt"></i></button>' : ''}
+                    `;
+                }
+            },
+            { 
+                field: 'priority', 
+                label: 'Öncelik', 
+                sortable: true,
+                formatter: (value, row) => getPriorityBadge(row)
+            },
+            { 
+                field: 'status', 
+                label: 'Durum', 
+                sortable: true,
+                formatter: (value, row) => getStatusBadge(row)
+            },
+            { 
+                field: 'reported_by_username', 
+                label: 'Bildiren', 
+                sortable: true,
+                formatter: (value) => `
+                    <div style="font-weight: 500; color: #495057;">
+                        <i class="fas fa-user-circle me-2 text-muted"></i>
+                        ${value || 'Bilinmiyor'}
+                    </div>
+                `
+            },
+            { 
+                field: 'reported_at', 
+                label: 'Bildirilme Tarihi', 
+                sortable: true,
+                type: 'date'
+            },
+            { 
+                field: 'resolved_by_username', 
+                label: 'Çözen', 
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            { 
+                field: 'resolved_at', 
+                label: 'Çözüm Tarihi', 
+                sortable: true,
+                type: 'date',
+                formatter: (value) => value ? null : '-' // Let the table component handle date formatting
+            },
+            { 
+                field: 'resolution_description', 
+                label: 'Çözüm Açıklaması', 
+                sortable: false,
+                formatter: (value, row) => {
+                    if (!value || value.trim() === '') return '-';
+                    const truncated = value.length > 80 ? value.substring(0, 80) + '...' : value;
+                    return `
+                        <span title="${value.replace(/"/g, '&quot;')}">${truncated}</span>
+                        ${value.length > 80 ? '<button class="btn btn-link btn-sm p-0 ms-1" onclick="showFullResolution(' + row.id + ')" title="Tam çözümü göster"><i class="fas fa-expand-alt"></i></button>' : ''}
+                    `;
+                }
+            }
         ],
         pagination: true,
         itemsPerPage: 10,
@@ -197,14 +269,10 @@ function updateStatistics() {
 }
 
 function updateTableData() {
+    // The table component will now handle formatting through column formatters
+    // We just need to pass the raw data
     const tableData = filteredFaults.map(fault => ({
-        id: `#${fault.id}`,
-        machine_name: fault.machine_name || 'Bilinmeyen Ekipman',
-        description: fault.description || 'Açıklama yok',
-        priority: getPriorityBadge(fault),
-        status: getStatusBadge(fault),
-        reported_by_username: fault.reported_by_username || 'Bilinmeyen',
-        reported_at: formatDate(fault.reported_at),
+        ...fault,
         actions: getActionButtons(fault)
     }));
     
@@ -221,27 +289,7 @@ function getStatus(fault) {
     return 'pending';
 }
 
-function getPriorityBadge(fault) {
-    // Determine priority based on is_breaking and other factors
-    if (fault.is_breaking) {
-        return '<span class="badge bg-danger">Kritik</span>';
-    }
-    if (fault.is_maintenance) {
-        return '<span class="badge bg-warning">Orta</span>';
-    }
-    return '<span class="badge bg-secondary">Düşük</span>';
-}
-
-function getStatusBadge(fault) {
-    const status = getStatus(fault);
-    const statusMap = {
-        'pending': '<span class="badge bg-warning">Bekleyen</span>',
-        'in_progress': '<span class="badge bg-info">İşlemde</span>',
-        'resolved': '<span class="badge bg-success">Çözüldü</span>',
-        'closed': '<span class="badge bg-secondary">Kapatıldı</span>'
-    };
-    return statusMap[status] || '<span class="badge bg-secondary">Bilinmeyen</span>';
-}
+// Removed getPriorityBadge and getStatusBadge functions - now handled by table component formatters
 
 function getActionButtons(fault) {
     const buttons = [];
@@ -266,17 +314,7 @@ function getActionButtons(fault) {
     return `<div class="btn-group btn-group-sm" role="group">${buttons.join('')}</div>`;
 }
 
-function formatDate(dateString) {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('tr-TR', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
+// Removed formatDate function - now handled by table component date formatting
 
 function loadMachinesForFilter() {
     const machines = [...new Set(allFaults.map(fault => fault.machine_name).filter(Boolean))];
@@ -449,8 +487,46 @@ function showAlert(message, type = 'info') {
     }, 5000);
 }
 
+// Badge utility functions (similar to pending requests)
+function getStatusBadge(fault) {
+    if (fault.resolved_at) {
+        return '<span class="table-status-badge completed">Çözüldü</span>';
+    }
+    if (fault.is_breaking) {
+        return '<span class="table-status-badge pending">Makine Duruşta</span>';
+    }
+    return '<span class="table-status-badge worked-on">Bekleyen</span>';
+}
+
+function getPriorityBadge(fault) {
+    if (fault.is_breaking) {
+        return '<span class="table-status-badge pending">Kritik</span>';
+    }
+    if (fault.is_maintenance) {
+        return '<span class="table-status-badge worked-on">Orta</span>';
+    }
+    return '<span class="table-status-badge completed">Düşük</span>';
+}
+
+// Functions for showing full descriptions and resolutions
+function showFullDescription(faultId) {
+    const fault = allFaults.find(f => f.id === faultId);
+    if (fault && fault.description) {
+        showAlert(fault.description, 'info');
+    }
+}
+
+function showFullResolution(faultId) {
+    const fault = allFaults.find(f => f.id === faultId);
+    if (fault && fault.resolution_description) {
+        showAlert(fault.resolution_description, 'info');
+    }
+}
+
 // Make functions globally available for onclick handlers
 window.resolveFault = resolveFault;
 window.viewFault = viewFault;
 window.editFault = editFault;
 window.submitResolution = submitResolution;
+window.showFullDescription = showFullDescription;
+window.showFullResolution = showFullResolution;

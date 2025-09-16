@@ -68,6 +68,65 @@ modal
         console.log('Modal closed');
     })
     .show();
+
+// Custom Content Example
+modal
+    .addCustomSection({
+        title: 'Financial Summary',
+        icon: 'fas fa-calculator',
+        iconColor: 'text-info',
+        customContent: `
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card border-primary">
+                        <div class="card-body">
+                            <h5 class="card-title">Total Amount</h5>
+                            <h3 class="text-primary">€1,234.56</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `
+    })
+    .render()
+    .show();
+```
+
+## Custom Content
+
+The DisplayModal component supports custom HTML content for maximum flexibility:
+
+### addCustomSection()
+Add a section with completely custom HTML content:
+
+```javascript
+modal.addCustomSection({
+    title: 'Custom Section',
+    icon: 'fas fa-star',
+    iconColor: 'text-warning',
+    customContent: '<div class="alert alert-info">Custom HTML content here</div>'
+});
+```
+
+### addCustomContent()
+Add custom HTML to the last section:
+
+```javascript
+modal.addSection({ title: 'My Section' });
+modal.addCustomContent('<div class="custom-widget">Custom content</div>');
+```
+
+### Mixed Content
+You can combine regular fields with custom content:
+
+```javascript
+modal.addSection({
+    title: 'Mixed Section',
+    fields: [
+        { id: 'name', label: 'Name', value: 'John Doe' }
+    ],
+    customContent: '<div class="alert alert-success">Custom message</div>'
+});
 ```
 
 ## Field Types

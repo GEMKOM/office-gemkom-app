@@ -3,6 +3,7 @@ import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { ComparisonTable } from '../../../components/comparison-table/comparison-table.js';
 import { TableComponent } from '../../../components/table/table.js';
+import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { 
@@ -34,6 +35,8 @@ let currencySymbols = {
     'GBP': '£'
 };
 let comparisonTable = null; // Comparison table component instance
+let displayModal = null; // DisplayModal component instance
+let isModalLoading = false; // Prevent multiple modal openings
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -57,6 +60,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         autoSave: null, // No auto-save needed for registry page
         onRecommendationChange: null, // No recommendation changes needed for registry page
         onSupplierRecommendAll: null // No bulk recommendations needed for registry page
+    });
+    
+    // Initialize DisplayModal component
+    displayModal = new DisplayModal('display-modal-container', {
+        title: 'Talep Detayları',
+        icon: 'fas fa-file-invoice',
+        size: 'xl',
+        showEditButton: false
     });
     
     // Initialize requests table component
@@ -485,7 +496,14 @@ function setupEventListeners() {
 
 
 async function viewRequestDetails(requestId) {
+    // Prevent multiple clicks while loading
+    if (isModalLoading) {
+        return;
+    }
+    
     try {
+        isModalLoading = true;
+        
         currentRequest = await getPurchaseRequest(requestId);
         
         await showRequestDetailsModal();
@@ -494,9 +512,12 @@ async function viewRequestDetails(requestId) {
         const url = new URL(window.location);
         url.searchParams.set('talep', currentRequest.request_number);
         window.history.pushState({}, '', url);
+        
     } catch (error) {
         console.error('Error loading request details:', error);
         showNotification('Talep detayları açılırken hata oluştu: ' + error.message, 'error');
+    } finally {
+        isModalLoading = false;
     }
 }
 
@@ -521,9 +542,8 @@ async function handleCancelRequest() {
         showNotification('Talep başarıyla iptal edildi', 'success');
         
         // Close the modal
-        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('requestDetailsModal'));
-        if (modal) {
-            modal.hide();
+        if (displayModal) {
+            displayModal.hide();
         }
         
         // Refresh the requests list to update the status
@@ -537,7 +557,30 @@ async function handleCancelRequest() {
 }
 
 async function showRequestDetailsModal() {
-    const container = document.getElementById('request-details-container');
+    // Completely reset the modal by destroying and recreating it
+    displayModal.destroy();
+    
+    // Recreate the modal with fresh state
+    displayModal = new DisplayModal('display-modal-container', {
+        title: 'Talep Detayları',
+        icon: 'fas fa-file-invoice',
+        size: 'xl',
+        showEditButton: false
+    });
+    
+    // Re-setup the close callback
+    displayModal.onCloseCallback(() => {
+        // Remove the talep parameter from URL when modal is closed
+        const url = new URL(window.location);
+        url.searchParams.delete('talep');
+        window.history.pushState({}, '', url);
+    });
+    
+    // Set the modal title dynamically
+    displayModal.setTitle(`Talep Detayları - ${currentRequest.request_number || 'Bilinmiyor'}`);
+    
+    // Show loading state in the modal
+    displayModal.setLoading(true);
     
     // Calculate total amount for recommended items
     let totalRecommendedAmountEUR = 0;
@@ -626,150 +669,173 @@ async function showRequestDetailsModal() {
     const hasLowerPrices = totalCheapestAmountEUR > 0 && totalCheapestAmountEUR < totalRecommendedAmountEUR;
     const savingsAmount = totalRecommendedAmountEUR - totalCheapestAmountEUR;
     
-    // Build the cards HTML
-    let cardsHTML = '';
-    
-    if (hasLowerPrices) {
-        // Show both cards when there are lower prices
-        cardsHTML = `
-            <div class="row g-3 mb-3">
-                <div class="col-md-6">
-                    <div class="card h-100 border-secondary border-1 shadow-sm bg-light">
-                        <div class="card-body p-3">
-                            <div class="d-flex align-items-center justify-content-between mb-2">
-                                <div class="d-flex align-items-center">
-                                    <div class="bg-secondary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px;">
-                                        <i class="fas fa-info-circle text-secondary" style="font-size: 14px;"></i>
+    // Add financial summary section with custom eye-catching design
+    if (currentRequest.offers && currentRequest.offers.length > 0) {
+        // Create the eye-catching financial summary card HTML
+        let financialCardHTML = '';
+        
+        if (hasLowerPrices) {
+            // Show both recommended and cheapest options
+            financialCardHTML = `
+                <div class="row g-3 mb-3">
+                    <div class="col-md-6">
+                        <div class="card h-100 border-secondary border-1 shadow-sm bg-light">
+                            <div class="card-body p-3">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <div class="d-flex align-items-center">
+                                        <div class="bg-secondary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px;">
+                                            <i class="fas fa-info-circle text-secondary" style="font-size: 14px;"></i>
+                                        </div>
+                                        <span class="fw-normal text-secondary" style="font-size: 13px;">Daha Düşük Fiyatlar Mevcut</span>
                                     </div>
-                                    <span class="fw-normal text-secondary" style="font-size: 13px;">Daha Düşük Fiyatlar Mevcut</span>
-                                </div>
-                                <div class="text-end">
-                                    <div class="fw-normal text-secondary" style="font-size: 16px; line-height: 1;">${formatCurrencyDisplay(totalCheapestAmountEUR, 'EUR')}</div>
-                                    <div class="text-muted" style="font-size: 10px;">En Düşük Toplam</div>
-                                </div>
-                            </div>
-                            <div class="border-top pt-2">
-                                <small class="text-muted" style="font-size: 15px;">
-                                    <i class="fas fa-arrow-down text-success me-1"></i>
-                                    ${formatCurrencyDisplay(savingsAmount, 'EUR')} tasarruf potansiyeli
-                                </small>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-6">
-                    <div class="card h-100 border-primary border-2 shadow">
-                        <div class="card-body p-3">
-                            <div class="d-flex align-items-center justify-content-between mb-2">
-                                <div class="d-flex align-items-center">
-                                    <div class="bg-secondary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px;">
-                                        <i class="fas fa-star text-primary" style="font-size: 16px; line-height: 1;"></i>
+                                    <div class="text-end">
+                                        <div class="fw-normal text-secondary" style="font-size: 16px; line-height: 1;">${formatCurrencyDisplay(totalCheapestAmountEUR, 'EUR')}</div>
+                                        <div class="text-muted" style="font-size: 10px;">En Düşük Toplam</div>
                                     </div>
-                                    <span class="fw-bold text-primary" style="font-size: 15px;">Önerilen Teklifler</span>
                                 </div>
-                                <div class="text-end">
-                                    <div class="fw-bold text-primary" style="font-size: 20px; line-height: 1;">${formatCurrencyDisplay(totalRecommendedAmountEUR, 'EUR')}</div>
-                                    <div class="text-muted" style="font-size: 11px;">Euro Karşılığı</div>
-                                </div>
-                            </div>
-                            ${recommendedCurrencyDisplay ? `<div class="border-top pt-2"><small class="text-muted" style="font-size: 15px;">${recommendedCurrencyDisplay}</small></div>` : ''}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    } else {
-        // Show only the recommended offers card when there are no lower prices
-        cardsHTML = `
-            <div class="row g-3 mb-3">
-                <div class="col-md-12">
-                    <div class="card h-100 border-primary border-2 shadow">
-                        <div class="card-body p-3">
-                            <div class="d-flex align-items-center justify-content-between mb-2">
-                                <div class="d-flex align-items-center">
-                                    <div class="bg-secondary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px;">
-                                        <i class="fas fa-star text-primary" style="font-size: 16px; line-height: 1;"></i>
-                                    </div>
-                                    <span class="fw-bold text-primary" style="font-size: 15px;">Önerilen Teklifler</span>
-                                </div>
-                                <div class="text-end">
-                                    <div class="fw-bold text-primary" style="font-size: 20px; line-height: 1;">${formatCurrencyDisplay(totalRecommendedAmountEUR, 'EUR')}</div>
-                                    <div class="text-muted" style="font-size: 11px;">Euro Karşılığı</div>
-                                </div>
-                            </div>
-                            ${recommendedCurrencyDisplay ? `<div class="border-top pt-2"><small class="text-muted" style="font-size: 15px;">${recommendedCurrencyDisplay}</small></div>` : ''}
-                        </div>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-    
-    // Get rejection comments
-    const rejectionComments = getRejectionComments(currentRequest);
-    
-    // Add rejection comments section if there are any
-    if (rejectionComments.length > 0) {
-        const rejectionSection = `
-            <div class="row mt-4">
-                <div class="col-12">
-                    <h6 class="text-danger">
-                        <i class="fas fa-times-circle me-2"></i>
-                        Reddetme Gerekçeleri
-                    </h6>
-                    <div class="alert alert-danger">
-                        ${rejectionComments.map(comment => `
-                            <div class="mb-3 p-3 border border-danger rounded" style="background-color: rgba(220, 53, 69, 0.1);">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div>
-                                        <strong class="text-danger">
-                                            <i class="fas fa-user-times me-1"></i>
-                                            ${comment.approver}
-                                        </strong>
-                                        <span class="badge bg-danger ms-2">${comment.stage}</span>
-                                    </div>
-                                    <small class="text-muted">
-                                        <i class="fas fa-clock me-1"></i>
-                                        ${comment.date ? formatDateTime(comment.date) : '-'}
+                                <div class="border-top pt-2">
+                                    <small class="text-muted" style="font-size: 15px;">
+                                        <i class="fas fa-arrow-down text-success me-1"></i>
+                                        ${formatCurrencyDisplay(savingsAmount, 'EUR')} tasarruf potansiyeli
                                     </small>
                                 </div>
-                                <div class="text-dark" style="line-height: 1.4;">
-                                    <i class="fas fa-comment-alt me-1 text-muted"></i>
-                                    ${comment.comment}
-                                </div>
                             </div>
-                        `).join('')}
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card h-100 border-primary border-2 shadow">
+                            <div class="card-body p-3">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <div class="d-flex align-items-center">
+                                        <div class="bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px;">
+                                            <i class="fas fa-star text-primary" style="font-size: 16px; line-height: 1;"></i>
+                                        </div>
+                                        <span class="fw-bold text-primary" style="font-size: 15px;">Önerilen Teklifler</span>
+                                    </div>
+                                    <div class="text-end">
+                                        <div class="fw-bold text-primary" style="font-size: 20px; line-height: 1;">${formatCurrencyDisplay(totalRecommendedAmountEUR, 'EUR')}</div>
+                                        <div class="text-muted" style="font-size: 11px;">Euro Karşılığı</div>
+                                    </div>
+                                </div>
+                                ${recommendedCurrencyDisplay ? `<div class="border-top pt-2"><small class="text-muted" style="font-size: 15px;">${recommendedCurrencyDisplay}</small></div>` : ''}
+                            </div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        `;
-        cardsHTML += rejectionSection;
+            `;
+        } else {
+            // Show only the recommended offers card
+            financialCardHTML = `
+                <div class="row g-3 mb-3">
+                    <div class="col-md-12">
+                        <div class="card h-100 border-primary border-2 shadow">
+                            <div class="card-body p-3">
+                                <div class="d-flex align-items-center justify-content-between mb-2">
+                                    <div class="d-flex align-items-center">
+                                        <div class="bg-primary bg-opacity-10 rounded-circle d-flex align-items-center justify-content-center me-3" style="width: 32px; height: 32px;">
+                                            <i class="fas fa-star text-primary" style="font-size: 16px; line-height: 1;"></i>
+                                        </div>
+                                        <span class="fw-bold text-primary" style="font-size: 15px;">Önerilen Teklifler</span>
+                                    </div>
+                                    <div class="text-end">
+                                        <div class="fw-bold text-primary" style="font-size: 20px; line-height: 1;">${formatCurrencyDisplay(totalRecommendedAmountEUR, 'EUR')}</div>
+                                        <div class="text-muted" style="font-size: 11px;">Euro Karşılığı</div>
+                                    </div>
+                                </div>
+                                ${recommendedCurrencyDisplay ? `<div class="border-top pt-2"><small class="text-muted" style="font-size: 15px;">${recommendedCurrencyDisplay}</small></div>` : ''}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        // Add the custom financial summary section
+        displayModal.addCustomSection({
+            id: 'financial-summary',
+            title: 'Mali Özet',
+            icon: 'fas fa-calculator',
+            iconColor: 'text-info',
+            customContent: financialCardHTML
+        });
     }
     
-    container.innerHTML = cardsHTML;
-
-    // Show comparison table if there are offers
-    if (currentRequest.offers && currentRequest.offers.length > 0) {
-        updateComparisonTableRates(); // Update currency rates first
-        renderComparisonTable();
-        document.getElementById('comparison-table-section').style.display = 'block';
-    } else {
-        document.getElementById('comparison-table-section').style.display = 'none';
+    // Add rejection comments section if there are any
+    const rejectionComments = getRejectionComments(currentRequest);
+    if (rejectionComments.length > 0) {
+        displayModal.addSection({
+            id: 'rejection-comments',
+            title: 'Reddetme Gerekçeleri',
+            icon: 'fas fa-times-circle',
+            iconColor: 'text-danger',
+            fields: rejectionComments.map((comment, index) => ({
+                id: `rejection_${index}`,
+                label: `${comment.approver} - ${comment.stage}`,
+                type: 'text',
+                value: comment.comment,
+                icon: 'fas fa-comment-alt',
+                colSize: 12
+            }))
+        });
     }
-
-    // Show/hide cancel button based on request status
-    const cancelBtn = document.getElementById('cancel-request-btn');
-    if (cancelBtn) {
-        // Show cancel button only for draft and submitted requests
-        if (currentRequest.status === 'draft' || currentRequest.status === 'submitted') {
-            cancelBtn.style.display = 'inline-block';
-        } else {
-            cancelBtn.style.display = 'none';
+    
+    // Add comparison table if there are offers
+    if (currentRequest.offers && currentRequest.offers.length > 0) {
+        // Add comparison table section using custom content
+        displayModal.addCustomSection({
+            id: 'comparison-table-section',
+            title: 'Teklif Karşılaştırma Tablosu',
+            icon: 'fas fa-chart-bar',
+            iconColor: 'text-primary',
+            customContent: '<div id="modal-comparison-table-container"></div>'
+        });
+    }
+    
+    // Render the modal
+    displayModal.render();
+    
+    // Initialize comparison table after rendering if there are offers
+    if (currentRequest.offers && currentRequest.offers.length > 0) {
+        // Clean up the existing comparison table instance
+        if (comparisonTable) {
+            comparisonTable = null;
+        }
+        
+        // Create a new comparison table instance for the modal
+        comparisonTable = new ComparisonTable('modal-comparison-table-container', {
+            currencyRates: currencyRates,
+            currencySymbols: currencySymbols,
+            showRecommendations: false,
+            showSummary: false,
+            showSummaryRow: true,
+            showEuroTotal: false,
+            columnOrder: ['unitPrice', 'originalTotal', 'deliveryDays'],
+            autoSave: null,
+            onRecommendationChange: null,
+            onSupplierRecommendAll: null
+        });
+        
+        // Render the comparison table with the current request data
+        renderComparisonTableForModal(comparisonTable);
+    }
+    
+    // Add action buttons to modal footer
+    const shouldShowCancelButton = currentRequest.status === 'draft' || currentRequest.status === 'submitted';
+    if (shouldShowCancelButton) {
+        const modalFooter = displayModal.container.querySelector('.modal-footer');
+        if (modalFooter) {
+            const cancelButton = document.createElement('button');
+            cancelButton.type = 'button';
+            cancelButton.className = 'btn btn-danger me-2';
+            cancelButton.innerHTML = '<i class="fas fa-times me-1"></i>İptal Et';
+            cancelButton.onclick = handleCancelRequest;
+            modalFooter.insertBefore(cancelButton, modalFooter.firstChild);
         }
     }
-
-    const modal = new bootstrap.Modal(document.getElementById('requestDetailsModal'));
-    modal.show();
+    
+    // Hide loading state and show the modal
+    displayModal.setLoading(false);
+    displayModal.show();
 }
 
 async function openModalFromTalepNo(talepNo) {
@@ -871,6 +937,72 @@ function renderComparisonTable() {
     // "Birim" (Unit) and "Teslim" (Delivery Days) columns should be minimized by default
     comparisonTable.setColumnMinimization('unit', true); // Minimize Unit column
     comparisonTable.setColumnMinimization('deliveryDays', true); // Minimize Delivery Days column
+}
+
+function renderComparisonTableForModal(comparisonTableInstance) {
+    if (!currentRequest.offers || currentRequest.offers.length === 0 || !currentRequest.request_items || currentRequest.request_items.length === 0) {
+        return;
+    }
+
+    // Transform the data to match the component's expected format
+    const items = currentRequest.request_items.map(item => ({
+        id: item.id,
+        name: item.item.name,
+        code: item.item.code,
+        quantity: item.quantity,
+        unit: item.item.unit,
+        specifications: item.specifications || '',
+        job_no: item.allocations && item.allocations.length > 0 
+            ? item.allocations.map(allocation => allocation.job_no).join(', ')
+            : '-'
+    }));
+
+    const suppliers = currentRequest.offers.map(offer => ({
+        id: offer.supplier.id,
+        name: offer.supplier.name,
+        default_currency: offer.currency
+    }));
+
+    // Transform offers to match component format
+    const offers = {};
+    const itemRecommendations = {};
+
+    currentRequest.offers.forEach(offer => {
+        offers[offer.supplier.id] = {};
+        
+        currentRequest.request_items.forEach((requestItem, itemIndex) => {
+            const itemOffer = offer.item_offers.find(io => io.purchase_request_item === requestItem.id);
+            
+            if (itemOffer && itemOffer.unit_price && parseFloat(itemOffer.unit_price) > 0) {
+                offers[offer.supplier.id][itemIndex] = {
+                    unitPrice: parseFloat(itemOffer.unit_price),
+                    totalPrice: parseFloat(itemOffer.unit_price) * requestItem.quantity,
+                    deliveryDays: itemOffer.delivery_days || null,
+                    notes: itemOffer.notes || null
+                };
+
+                // Track recommendations
+                if (itemOffer.is_recommended) {
+                    itemRecommendations[itemIndex] = offer.supplier.id;
+                }
+            }
+        });
+    });
+
+    // Update the comparison table with the transformed data
+    comparisonTableInstance.setData({
+        items: items,
+        suppliers: suppliers,
+        offers: offers,
+        itemRecommendations: itemRecommendations
+    });
+    
+    // Make the comparison table instance globally accessible for clickable headers
+    window.comparisonTableInstance = comparisonTableInstance;
+    
+    // Set default column minimization for registry page AFTER data is loaded
+    comparisonTableInstance.setColumnMinimization('unit', true);
+    comparisonTableInstance.setColumnMinimization('deliveryDays', true);
 }
 
 // Update comparison table currency rates when they change
@@ -996,6 +1128,12 @@ function formatDate(dateString) {
         hour: '2-digit',
         minute: '2-digit'
     });
+}
+
+function formatDateTime(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleString('tr-TR');
 }
 
 function formatCurrency(amount, currency) {
