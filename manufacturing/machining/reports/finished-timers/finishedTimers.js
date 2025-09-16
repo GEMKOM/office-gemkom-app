@@ -86,7 +86,8 @@ function initializeEditModal() {
                     type: 'text',
                     placeholder: 'İş numarasını girin',
                     icon: 'fas fa-hashtag',
-                    colSize: 6
+                    colSize: 6,
+                    readonly: true
                 },
                 {
                     id: 'image_no',
@@ -95,7 +96,8 @@ function initializeEditModal() {
                     type: 'text',
                     placeholder: 'Resim numarasını girin',
                     icon: 'fas fa-image',
-                    colSize: 6
+                    colSize: 6,
+                    readonly: true
                 },
                 {
                     id: 'position_no',
@@ -104,7 +106,8 @@ function initializeEditModal() {
                     type: 'text',
                     placeholder: 'Pozisyon numarasını girin',
                     icon: 'fas fa-map-marker-alt',
-                    colSize: 6
+                    colSize: 6,
+                    readonly: true
                 },
                 {
                     id: 'quantity',
@@ -114,7 +117,18 @@ function initializeEditModal() {
                     placeholder: 'Adet girin',
                     min: 1,
                     icon: 'fas fa-cubes',
-                    colSize: 6
+                    colSize: 6,
+                    readonly: true
+                },
+                {
+                    id: 'username',
+                    name: 'username',
+                    label: 'Kullanıcı',
+                    type: 'text',
+                    placeholder: 'Kullanıcı adı',
+                    icon: 'fas fa-user',
+                    colSize: 6,
+                    readonly: true
                 }
             ]
         })
@@ -124,14 +138,32 @@ function initializeEditModal() {
             iconColor: 'text-success',
             fields: [
                 {
+                    id: 'start_time',
+                    name: 'start_time',
+                    label: 'Başlangıç Zamanı',
+                    type: 'text',
+                    icon: 'fas fa-calendar-check',
+                    colSize: 6,
+                    readonly: true
+                },
+                {
+                    id: 'calculated_duration',
+                    name: 'calculated_duration',
+                    label: 'Hesaplanan Süre',
+                    type: 'text',
+                    icon: 'fas fa-hourglass-half',
+                    colSize: 6,
+                    readonly: true
+                },
+                {
                     id: 'machine',
                     name: 'machine',
                     label: 'Makine',
-                    type: 'dropdown',
-                    placeholder: 'Makine seçin...',
+                    type: 'text',
+                    placeholder: 'Makine adı',
                     icon: 'fas fa-cogs',
-                    options: [], // Will be populated with machines
-                    colSize: 6
+                    colSize: 6,
+                    readonly: true
                 },
                 {
                     id: 'finish_time',
@@ -373,15 +405,7 @@ async function loadMachines() {
             timerFilters.updateFilterOptions('machine-filter', machineOptions);
         }
         
-        // Update EditModal machine dropdown options
-        if (editTimerModal && editTimerModal.dropdowns && editTimerModal.dropdowns.has('machine')) {
-            const machineDropdown = editTimerModal.dropdowns.get('machine');
-            const machineItems = [
-                { value: '', text: 'Makine seçin...' },
-                ...machines.map(machine => ({ value: machine.id.toString(), text: machine.name }))
-            ];
-            machineDropdown.setItems(machineItems);
-        }
+        // Machine field is now readonly text field, no need to populate dropdown options
     } catch (error) {
         console.error('Error loading machines:', error);
         machines = [];
@@ -729,8 +753,19 @@ function showEditTimerModal(timer) {
         return;
     }
     
-    // Store the timer ID for saving
+    // Store the timer ID and start time for saving
     editTimerModal.timerId = timer.id;
+    editTimerModal.startTime = timer.start_time;
+    
+    // Calculate duration from start and finish times
+    let calculatedDuration = '-';
+    if (timer.start_time && timer.finish_time) {
+        const start = new Date(timer.start_time);
+        const end = new Date(timer.finish_time);
+        const diffMs = end - start;
+        const diffSeconds = Math.floor(diffMs / 1000);
+        calculatedDuration = formatDuration(diffSeconds);
+    }
     
     // Populate modal fields with timer data
     const formData = {
@@ -738,12 +773,15 @@ function showEditTimerModal(timer) {
         image_no: timer.image_no || '',
         position_no: timer.position_no || '',
         quantity: timer.quantity || '',
+        username: timer.username || '',
+        start_time: timer.start_time ? formatDateTime(timer.start_time) : '-',
+        calculated_duration: calculatedDuration,
         comment: timer.comment || '',
         manual_entry: !!timer.manual_entry
     };
     
-    // Set machine value
-    formData.machine = timer.machine_fk || '';
+    // Set machine value (display machine name, not ID)
+    formData.machine = timer.machine_name || '';
     
     // Set finish time
     formData.finish_time = timer.finish_time ? 
@@ -752,9 +790,61 @@ function showEditTimerModal(timer) {
     // Set form data
     editTimerModal.setFormData(formData);
     
+    // Add event listener for finish time changes to update calculated duration
+    setTimeout(() => {
+        const finishTimeInput = editTimerModal.container.querySelector('input[name="finish_time"]');
+        if (finishTimeInput) {
+            finishTimeInput.addEventListener('change', updateCalculatedDuration);
+        }
+    }, 100);
+    
     // Show modal
     editTimerModal.show();
 }
+
+// Function to update calculated duration when finish time changes
+function updateCalculatedDuration() {
+    if (!editTimerModal || !editTimerModal.startTime) {
+        return;
+    }
+    
+    const finishTimeInput = editTimerModal.container.querySelector('input[name="finish_time"]');
+    const durationField = editTimerModal.container.querySelector('input[name="calculated_duration"]');
+    
+    if (!finishTimeInput || !durationField) {
+        return;
+    }
+    
+    const finishTimeValue = finishTimeInput.value;
+    if (!finishTimeValue) {
+        durationField.value = '-';
+        return;
+    }
+    
+    try {
+        const start = new Date(editTimerModal.startTime);
+        const end = new Date(finishTimeValue);
+        const diffMs = end - start;
+        const diffSeconds = Math.floor(diffMs / 1000);
+        durationField.value = formatDuration(diffSeconds);
+    } catch (error) {
+        console.error('Error calculating duration:', error);
+        durationField.value = '-';
+    }
+}
+
+// Format duration from seconds to human readable format
+function formatDuration(seconds) {
+    if (!seconds || seconds === 0) {
+        return '0m';
+    }
+    
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    
+    return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m`;
+}
+
 
 async function saveEditTimer(formData) {
     if (!editTimerModal || !editTimerModal.timerId) {

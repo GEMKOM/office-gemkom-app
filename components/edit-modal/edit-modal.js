@@ -230,6 +230,10 @@ export class EditModal {
                 input.placeholder = field.placeholder;
                 input.value = field.value;
                 if (field.required) input.required = true;
+                if (field.readonly) {
+                    input.readOnly = true;
+                    input.classList.add('readonly-field');
+                }
                 break;
                 
             case 'number':
@@ -242,6 +246,10 @@ export class EditModal {
                 if (field.max !== null) input.max = field.max;
                 if (field.step !== null) input.step = field.step;
                 if (field.required) input.required = true;
+                if (field.readonly) {
+                    input.readOnly = true;
+                    input.classList.add('readonly-field');
+                }
                 break;
                 
             case 'date':
@@ -250,6 +258,10 @@ export class EditModal {
                 input.className = 'form-control field-input date-field';
                 input.value = field.value;
                 if (field.required) input.required = true;
+                if (field.readonly) {
+                    input.readOnly = true;
+                    input.classList.add('readonly-field');
+                }
                 break;
                 
             case 'datetime-local':
@@ -258,6 +270,10 @@ export class EditModal {
                 input.className = 'form-control field-input date-field';
                 input.value = field.value;
                 if (field.required) input.required = true;
+                if (field.readonly) {
+                    input.readOnly = true;
+                    input.classList.add('readonly-field');
+                }
                 break;
                 
             case 'time':
@@ -266,6 +282,10 @@ export class EditModal {
                 input.className = 'form-control field-input date-field';
                 input.value = field.value;
                 if (field.required) input.required = true;
+                if (field.readonly) {
+                    input.readOnly = true;
+                    input.classList.add('readonly-field');
+                }
                 break;
                 
             case 'textarea':
@@ -275,6 +295,10 @@ export class EditModal {
                 input.value = field.value;
                 input.rows = field.rows || 3;
                 if (field.required) input.required = true;
+                if (field.readonly) {
+                    input.readOnly = true;
+                    input.classList.add('readonly-field');
+                }
                 break;
                 
             case 'select':

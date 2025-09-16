@@ -381,3 +381,18 @@
     margin-top: 0.25rem;
     text-align: center;
 }
+
+/* Readonly Field Styling */
+.edit-modal-container .readonly-field {
+    background-color: #f8f9fa !important;
+    color: #6c757d !important;
+    cursor: not-allowed !important;
+    border-color: #e9ecef !important;
+}
+
+.edit-modal-container .readonly-field:focus {
+    background-color: #f8f9fa !important;
+    color: #6c757d !important;
+    border-color: #e9ecef !important;
+    box-shadow: none !important;
+}
