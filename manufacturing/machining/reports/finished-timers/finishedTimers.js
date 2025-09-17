@@ -753,9 +753,10 @@ function showEditTimerModal(timer) {
         return;
     }
     
-    // Store the timer ID and start time for saving
+    // Store the timer ID, start time, and machine ID for saving
     editTimerModal.timerId = timer.id;
     editTimerModal.startTime = timer.start_time;
+    editTimerModal.machineId = timer.machine_fk;
     
     // Calculate duration from start and finish times
     let calculatedDuration = '-';
@@ -860,7 +861,7 @@ async function saveEditTimer(formData) {
         quantity: parseInt(formData.quantity) || null,
         comment: formData.comment,
         manual_entry: formData.manual_entry,
-        machine_fk: formData.machine,
+        machine_fk: editTimerModal.machineId,
         finish_time: formData.finish_time ? 
             new Date(formData.finish_time).getTime() : null,
     };

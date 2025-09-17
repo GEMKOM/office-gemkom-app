@@ -142,6 +142,12 @@
     font-weight: 500;
 }
 
+.weeks-display {
+    font-weight: 500;
+    color: #495057;
+    font-size: 0.9rem;
+}
+
 
 /* Timer Display */
 .timer-display {

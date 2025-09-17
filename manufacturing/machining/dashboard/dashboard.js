@@ -101,6 +101,16 @@ function formatDuration(milliseconds) {
     return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 }
 
+// Format total estimated hours to weeks (45 hours = 1 week)
+function formatWeeksFromHours(totalEstimatedHours) {
+    if (!totalEstimatedHours || totalEstimatedHours === 0) {
+        return '-';
+    }
+    
+    const weeks = (totalEstimatedHours / 45).toFixed(1);
+    return `${weeks} hafta`;
+}
+
 // Setup event listeners
 function setupEventListeners() {
     // Add timer button
@@ -329,6 +339,7 @@ function updateMachinesStatus() {
                 <th>Makine</th>
                 <th>Tip</th>
                 <th class="text-center">Durum</th>
+                <th class="text-center">Hafta</th>
             </tr>
         </thead>
         <tbody id="machines-table-body">
@@ -371,6 +382,9 @@ function updateMachinesStatus() {
             </td>
             <td class="text-center">
                 <span class="status-badge ${statusClass}">${statusText}</span>
+            </td>
+            <td class="text-center">
+                <span class="weeks-display">${formatWeeksFromHours(machine.total_estimated_hours)}</span>
             </td>
         `;
         

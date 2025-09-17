@@ -36,6 +36,11 @@ const NAVIGATION_STRUCTURE = {
                         label: 'Kayıt Defteri',
                         icon: 'fas fa-archive',
                         children: {}
+                    },
+                    '/general/overtime/users': {
+                        label: 'Mesai Kullanıcıları',
+                        icon: 'fas fa-users',
+                        children: {}
                     }
                 }
             }

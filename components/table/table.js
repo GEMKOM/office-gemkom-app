@@ -100,9 +100,15 @@ export class TableComponent {
                             </button>
                         ` : ''}
                         ${this.options.exportable ? `
-                            <button class="btn btn-sm btn-outline-secondary" id="${this.containerId}-export">
-                                <i class="fas fa-download me-1"></i>Dışa Aktar
-                            </button>
+                            <div class="btn-group" role="group">
+                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="${this.containerId}-export-dropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                    <i class="fas fa-download me-1"></i>Dışa Aktar
+                                </button>
+                                <ul class="dropdown-menu" aria-labelledby="${this.containerId}-export-dropdown">
+                                    <li><a class="dropdown-item" href="#" data-format="csv"><i class="fas fa-file-csv me-2"></i>CSV</a></li>
+                                    <li><a class="dropdown-item" href="#" data-format="excel"><i class="fas fa-file-excel me-2"></i>Excel</a></li>
+                                </ul>
+                            </div>
                         ` : ''}
                     </div>
                 </div>
@@ -426,14 +432,19 @@ export class TableComponent {
             }
         }
         
-        // Export button
+        // Export dropdown
         if (this.options.exportable) {
-            const exportBtn = this.container.querySelector(`#${this.containerId}-export`);
-            if (exportBtn) {
-                exportBtn.addEventListener('click', () => {
-                    if (this.options.onExport) {
-                        this.options.onExport();
-                    }
+            const exportDropdown = this.container.querySelector(`#${this.containerId}-export-dropdown`);
+            if (exportDropdown) {
+                const dropdownItems = this.container.querySelectorAll(`[data-format]`);
+                dropdownItems.forEach(item => {
+                    item.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const format = e.target.closest('[data-format]').getAttribute('data-format');
+                        if (this.options.onExport) {
+                            this.options.onExport(format);
+                        }
+                    });
                 });
             }
         }
