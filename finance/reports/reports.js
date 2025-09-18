@@ -13,6 +13,13 @@ document.addEventListener('DOMContentLoaded', async function() {
         subtitle: 'Finansal analizler, maliyet raporları ve performans metrikleri',
         cards: [
             {
+                title: 'Yönetici Özeti',
+                description: 'Finansal durumun genel görünümü, temel performans göstergeleri ve trend analizleri.',
+                icon: 'fas fa-chart-pie',
+                iconColor: 'primary',
+                link: '/finance/reports/executive-overview'
+            },
+            {
                 title: 'Proje Raporu',
                 description: 'Proje bazlı satın alma analizleri, maliyet metrikleri ve performans takibi.',
                 icon: 'fas fa-chart-line',

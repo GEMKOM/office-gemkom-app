@@ -13,7 +13,7 @@ import { backendBase } from '../../base.js';
 
 // Global variables
 let currentPurchaseOrders = [];
-let currentFilters = {};
+let currentFilters = { status: 'awaiting_payment' };
 let currentPage = 1;
 let itemsPerPage = 20;
 let selectedPurchaseOrder = null;
@@ -151,14 +151,14 @@ document.addEventListener('DOMContentLoaded', async function() {
                 trend: null
             },
             {
-                title: 'Proforma Bekleyen',
+                title: 'Ödeme Bekleyen',
                 value: '0',
-                icon: 'file-invoice-dollar',
+                icon: 'clock',
                 color: 'warning',
                 trend: null
             },
             {
-                title: 'Tamamlanan',
+                title: 'Ödenen',
                 value: '0',
                 icon: 'check-circle',
                 color: 'success',
@@ -176,20 +176,19 @@ document.addEventListener('DOMContentLoaded', async function() {
             loadPurchaseOrders();
         },
         onClear: () => {
-            currentFilters = {};
+            currentFilters = { status: 'awaiting_payment' };
             currentPage = 1;
             loadPurchaseOrders();
         }
     }).addSelectFilter({
-        id: 'status-filter',
+        id: 'status',
         label: 'Durum',
+        value: 'awaiting_payment',
         options: [
             { value: '', label: 'Tümü' },
-            { value: 'awaiting_invoice', label: 'Proforma Bekliyor' },
-            { value: 'completed', label: 'Tamamlandı' },
-            { value: 'cancelled', label: 'İptal Edildi' },
-            { value: 'pending', label: 'Beklemede' },
-            { value: 'approved', label: 'Onaylandı' }
+            { value: 'awaiting_payment', label: 'Ödeme Bekliyor' },
+            { value: 'paid', label: 'Ödendi' },
+            { value: 'cancelled', label: 'İptal Edildi' }
         ],
         colSize: 2
     }).addSelectFilter({
@@ -321,8 +320,8 @@ function handleRowClick(row) {
 function renderStatistics() {
     const totalOrders = currentPurchaseOrders.length;
     const totalAmount = currentPurchaseOrders.reduce((sum, order) => sum + parseFloat(order.total_amount || 0), 0);
-    const awaitingInvoices = currentPurchaseOrders.filter(order => order.status === 'awaiting_invoice').length;
-    const completedOrders = currentPurchaseOrders.filter(order => order.status === 'completed').length;
+    const awaitingPayment = currentPurchaseOrders.filter(order => order.status === 'awaiting_payment').length;
+    const paidOrders = currentPurchaseOrders.filter(order => order.status === 'paid').length;
     
     // Update statistics cards
     const statsComponent = window.purchaseOrdersStats;
@@ -330,8 +329,8 @@ function renderStatistics() {
         statsComponent.updateValues({
             0: totalOrders.toString(),
             1: formatCurrency(totalAmount, 'TRY'),
-            2: awaitingInvoices.toString(),
-            3: completedOrders.toString()
+            2: awaitingPayment.toString(),
+            3: paidOrders.toString()
         });
     }
 }
@@ -669,7 +668,6 @@ async function exportPurchaseOrdersData() {
 // Utility functions
 function getStatusBadgeClass(status) {
     const statusClasses = {
-        'awaiting_invoice': 'status-draft',
         'awaiting_payment': 'status-submitted',
         'paid': 'status-approved',
         'cancelled': 'status-cancelled'
@@ -679,11 +677,9 @@ function getStatusBadgeClass(status) {
 
 function getStatusText(status) {
     const statusTexts = {
-        'awaiting_invoice': 'Proforma Bekliyor',
-        'completed': 'Tamamlandı',
-        'cancelled': 'İptal Edildi',
-        'pending': 'Beklemede',
-        'approved': 'Onaylandı'
+        'awaiting_payment': 'Ödeme Bekliyor',
+        'paid': 'Ödendi',
+        'cancelled': 'İptal Edildi'
     };
     return statusTexts[status] || status;
 }
