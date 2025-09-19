@@ -126,6 +126,7 @@ function initializeTableComponent() {
         data: [],
         sortable: true,
         pagination: true,
+        serverSidePagination: true,
         itemsPerPage: 20,
         refreshable: true,
         exportable: true,

@@ -150,8 +150,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             { 
                 field: 'active_suppliers', 
-                label: 'Aktif Tedarikçiler', 
-                sortable: true, 
+                label: 'Aktif Tedarikçiler',
+                sortable: true,
                 type: 'number',
                 formatter: (value) => `<span class="badge bg-success text-white">${value || 0}</span>`
             }

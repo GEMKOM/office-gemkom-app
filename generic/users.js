@@ -43,7 +43,13 @@ export async function authFetchUsers(page = 1, pageSize = 20, filters = {}) {
     const resp = await authedFetch(url);
     if (!resp.ok) return { results: [], count: 0, total_pages: 0 };
     const data = await resp.json();
-    return extractResultsFromResponse(data);
+    
+    // Return the full response object for pagination support
+    return {
+        results: extractResultsFromResponse(data),
+        count: data.count || data.total || 0,
+        total_pages: data.total_pages || Math.ceil((data.count || data.total || 0) / pageSize)
+    };
 }
 
 export async function fetchTeams() {
