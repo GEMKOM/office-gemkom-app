@@ -1,6 +1,7 @@
 import { guardRoute } from '../../authService.js';
 import { initNavbar } from '../../components/navbar.js';
 import { fetchMachines, fetchMachineTypes, fetchMachineUsedIn, createMachine as apiCreateMachine, updateMachine as apiUpdateMachine, deleteMachine as apiDeleteMachine } from '../../generic/machines.js';
+import { fetchUsers } from '../../generic/users.js';
 import { authedFetch } from '../../authService.js';
 import { backendBase } from '../../base.js';
 import { HeaderComponent } from '../../components/header/header.js';
@@ -24,6 +25,7 @@ let machinesTable = null;
 let machines = [];
 let machineTypes = [];
 let machineUsedInOptions = [];
+let users = []; // Store users for assigned_users dropdown
 let currentPage = 1;
 let isLoading = false;
 let totalMachines = 0; // Added for pagination validation
@@ -118,6 +120,12 @@ function initializeTableComponent() {
                 formatter: (value) => `<strong>${value || '-'}</strong>`
             },
             {
+                field: 'code',
+                label: 'Kod',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
                 field: 'used_in_label',
                 label: 'Kullanım Alanı',
                 sortable: true,
@@ -128,6 +136,21 @@ function initializeTableComponent() {
                 label: 'Makine Tipi',
                 sortable: true,
                 formatter: (value) => (value || '-')
+            },
+            {
+                field: 'assigned_users',
+                label: 'Atanan Kullanıcılar',
+                sortable: false,
+                formatter: (value, row) => {
+                    if (!value || value.length === 0) return '-';
+                    const count = value.length;
+                    const btnId = `users-btn-${row.id}`;
+                    return `
+                        <button id="${btnId}" class="btn btn-sm btn-outline-primary" type="button" onclick="window.showAssignedUsers(${row.id})">
+                            <i class="fas fa-users me-1"></i>Kullanıcılar (${count})
+                        </button>
+                    `;
+                }
             },
             {
                 field: 'is_active',
@@ -235,6 +258,13 @@ function initializeFiltersComponent() {
         colSize: 3
     });
 
+    machineFilters.addTextFilter({
+        id: 'code-filter',
+        label: 'Makine Kodu',
+        placeholder: 'Makine kodu',
+        colSize: 3
+    });
+
     // Add dropdown filters
     machineFilters.addDropdownFilter({
         id: 'type-filter',
@@ -276,18 +306,21 @@ function initializeFiltersComponent() {
 // Load machine metadata that rarely changes (types and used_in) only on full page load
 async function loadMetadata() {
     try {
-        const [typesResponse, usedInResponse] = await Promise.all([
+        const [typesResponse, usedInResponse, usersResponse] = await Promise.all([
             fetchMachineTypes(),
-            fetchMachineUsedIn()
+            fetchMachineUsedIn(),
+            fetchUsers()
         ]);
 
         machineTypes = typesResponse.results || typesResponse || [];
         machineUsedInOptions = usedInResponse.results || usedInResponse || [];
+        users = usersResponse || [];
 
         // Populate filters and dropdowns
         updateFilterOptions();
         populateMachineTypeDropdowns();
         populateMachineUsedInDropdowns();
+        populateAssignedUsersDropdowns();
     } catch (error) {
         // Error loading machine metadata
     }
@@ -573,9 +606,22 @@ window.editMachine = function(machineId) {
     
     // Populate the edit form
     document.getElementById('edit-machine-name').value = machine.name || '';
+    document.getElementById('edit-machine-code').value = machine.code || '';
     document.getElementById('edit-machine-type').value = machine.machine_type || machine.type_id || '';
     document.getElementById('edit-machine-used-in').value = machine.used_in || '';
     document.getElementById('edit-machine-status').value = machine.is_active ? 'active' : 'inactive';
+    
+    // Populate assigned users
+    const assignedUsersSelect = document.getElementById('edit-machine-assigned-users');
+    if (assignedUsersSelect && machine.assigned_users) {
+        // Clear previous selections
+        Array.from(assignedUsersSelect.options).forEach(option => option.selected = false);
+        // Select assigned users
+        machine.assigned_users.forEach(userId => {
+            const option = assignedUsersSelect.querySelector(`option[value="${userId}"]`);
+            if (option) option.selected = true;
+        });
+    }
     
     // Populate properties in edit modal
     const editList = document.getElementById('edit-properties-list');
@@ -640,15 +686,56 @@ window.showMachineProperties = function(machineId) {
     modal.show();
 };
 
+window.showAssignedUsers = function(machineId) {
+    const machine = machines.find(m => String(m.id) === String(machineId));
+    const container = document.getElementById('assigned-users-content');
+    if (!container) return;
+    
+    const assignedUsers = machine && machine.assigned_users ? machine.assigned_users : [];
+    
+    if (assignedUsers.length === 0) {
+        container.innerHTML = '<div class="text-muted">Atanmış kullanıcı bulunamadı.</div>';
+    } else {
+        const userItems = assignedUsers.map(userId => {
+            const user = users.find(u => u.id === userId);
+            const userName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username : `Kullanıcı ID: ${userId}`;
+            return `
+                <div class="col-md-6 mb-2">
+                    <div class="d-flex justify-content-between align-items-center p-2 border rounded">
+                        <div class="fw-semibold me-2">
+                            <i class="fas fa-user me-2"></i>${userName}
+                        </div>
+                        <div class="text-end text-muted small">ID: ${userId}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        container.innerHTML = `
+            <div class="mb-2"><strong>${machine?.name || 'Makine'}</strong> - Atanan Kullanıcılar (${assignedUsers.length})</div>
+            <div class="row g-2">${userItems}</div>
+        `;
+    }
+    
+    const el = document.getElementById('viewAssignedUsersModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(el);
+    modal.show();
+};
+
 async function saveMachine() {
     const form = document.getElementById('create-machine-form');
     
     const statusValue = document.getElementById('machine-status').value;
+    const assignedUsersSelect = document.getElementById('machine-assigned-users');
+    const assignedUsers = Array.from(assignedUsersSelect.selectedOptions).map(option => parseInt(option.value));
+    
     const machineData = {
         name: document.getElementById('machine-name').value,
+        code: document.getElementById('machine-code').value || null,
         machine_type: document.getElementById('machine-type').value,
         used_in: document.getElementById('machine-used-in').value,
         is_active: statusValue === 'active',
+        assigned_users: assignedUsers,
         // Removed Ek Bilgiler fields
         properties: collectPropertiesFromForm()
     };
@@ -681,11 +768,16 @@ async function updateMachine() {
     }
     
     const editStatusValue = document.getElementById('edit-machine-status').value;
+    const assignedUsersSelect = document.getElementById('edit-machine-assigned-users');
+    const assignedUsers = Array.from(assignedUsersSelect.selectedOptions).map(option => parseInt(option.value));
+    
     const machineData = {
         name: document.getElementById('edit-machine-name').value,
+        code: document.getElementById('edit-machine-code').value || null,
         machine_type: document.getElementById('edit-machine-type').value,
         used_in: document.getElementById('edit-machine-used-in').value,
         is_active: editStatusValue === 'active',
+        assigned_users: assignedUsers,
         // Include edited properties
         properties: collectPropertiesFromForm('edit')
     };
@@ -745,6 +837,26 @@ function populateMachineUsedInDropdowns() {
                 optionElement.value = option.value;
                 optionElement.textContent = option.label;
                 select.appendChild(optionElement);
+            });
+        }
+    });
+}
+
+function populateAssignedUsersDropdowns() {
+    // Populate assigned users dropdowns with already loaded users
+    const userSelects = [
+        document.getElementById('machine-assigned-users'),
+        document.getElementById('edit-machine-assigned-users')
+    ];
+    
+    userSelects.forEach(select => {
+        if (select) {
+            select.innerHTML = ''; // Clear existing options
+            users.forEach(user => {
+                const option = document.createElement('option');
+                option.value = user.id;
+                option.textContent = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+                select.appendChild(option);
             });
         }
     });
@@ -819,6 +931,10 @@ function collectFilterValues() {
     // Map filter IDs to backend field names
     if (filterValues['name-filter']) {
         filters.name = filterValues['name-filter'];
+    }
+    
+    if (filterValues['code-filter']) {
+        filters.code = filterValues['code-filter'];
     }
     
     if (filterValues['type-filter']) {

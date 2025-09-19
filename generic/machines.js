@@ -21,6 +21,10 @@ export async function fetchMachines(page = 1, pageSize = 10, filters = {}) {
             params.append('name', filters.name);
         }
         
+        if (filters.code) {
+            params.append('code', filters.code);
+        }
+        
         if (filters.machine_type) {
             params.append('machine_type', filters.machine_type);
         }
