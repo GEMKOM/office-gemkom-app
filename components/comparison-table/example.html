@@ -9,6 +9,8 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <!-- Component CSS -->
     <link rel="stylesheet" href="comparison-table.css">
 </head>
@@ -20,7 +22,7 @@
             <div class="col-12">
                 <div class="card">
                     <div class="card-header">
-                        <h5 class="mb-0">Configuration Options</h5>
+                        <h5 class="mb-0">Yapılandırma Seçenekleri</h5>
                     </div>
                     <div class="card-body">
                         <div class="row">
@@ -28,7 +30,7 @@
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="showSummary" checked>
                                     <label class="form-check-label" for="showSummary">
-                                        Show Summary
+                                        Özeti Göster
                                     </label>
                                 </div>
                             </div>
@@ -36,7 +38,7 @@
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="showRecommendations" checked>
                                     <label class="form-check-label" for="showRecommendations">
-                                        Show Recommendations
+                                        Önerileri Göster
                                     </label>
                                 </div>
                             </div>
@@ -44,7 +46,7 @@
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="showDeliveryDays" checked>
                                     <label class="form-check-label" for="showDeliveryDays">
-                                        Show Delivery Days
+                                        Teslim Süresini Göster
                                     </label>
                                 </div>
                             </div>
@@ -52,21 +54,51 @@
                                 <div class="form-check">
                                     <input class="form-check-input" type="checkbox" id="showNotes" checked>
                                     <label class="form-check-label" for="showNotes">
-                                        Show Notes
+                                        Notları Göster
                                     </label>
                                 </div>
                             </div>
                         </div>
                         <div class="row mt-3">
+                            <div class="col-md-6">
+                                <h6>Dışa Aktarma Seçenekleri</h6>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="showExportButton" checked>
+                                    <label class="form-check-label" for="showExportButton">
+                                        Dışa Aktarma Butonunu Göster
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enableCSVExport" checked>
+                                    <label class="form-check-label" for="enableCSVExport">
+                                        CSV Dışa Aktarmayı Etkinleştir
+                                    </label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="enableExcelExport" checked>
+                                    <label class="form-check-label" for="enableExcelExport">
+                                        Excel Dışa Aktarmayı Etkinleştir
+                                    </label>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>Dışa Aktarma Dosya Adı</h6>
+                                <input type="text" class="form-control" id="exportFilename" value="karşılaştırma-tablosu" placeholder="Dışa aktarma dosya adı">
+                            </div>
+                        </div>
+                        <div class="row mt-3">
                             <div class="col-12">
                                 <button class="btn btn-primary" onclick="updateOptions()">
-                                    <i class="fas fa-refresh me-2"></i>Update Options
+                                    <i class="fas fa-refresh me-2"></i>Seçenekleri Güncelle
                                 </button>
                                 <button class="btn btn-success" onclick="addSampleData()">
-                                    <i class="fas fa-plus me-2"></i>Add Sample Data
+                                    <i class="fas fa-plus me-2"></i>Örnek Veri Ekle
                                 </button>
                                 <button class="btn btn-info" onclick="clearData()">
-                                    <i class="fas fa-trash me-2"></i>Clear Data
+                                    <i class="fas fa-trash me-2"></i>Verileri Temizle
+                                </button>
+                                <button class="btn btn-warning" onclick="testExport()">
+                                    <i class="fas fa-download me-2"></i>Dışa Aktarmayı Test Et
                                 </button>
                             </div>
                         </div>
@@ -198,43 +230,69 @@
             showRecommendations: true,
             showDeliveryDays: true,
             showNotes: true,
+            showExportButton: true,
+            exportFormats: ['csv', 'excel'],
+            exportFilename: 'karşılaştırma-tablosu',
             autoSave: () => {
-                logEvent('Auto-save triggered');
+                logEvent('Otomatik kaydetme tetiklendi');
             },
             onRecommendationChange: (itemIndex, supplierId, recommendations) => {
-                logEvent(`Recommendation changed: Item ${itemIndex} -> Supplier ${supplierId || 'None'}`);
-                logEvent(`All recommendations: ${JSON.stringify(recommendations)}`);
+                logEvent(`Öneri değişti: Malzeme ${itemIndex} -> Tedarikçi ${supplierId || 'Yok'}`);
+                logEvent(`Tüm öneriler: ${JSON.stringify(recommendations)}`);
             },
             onSupplierRecommendAll: (supplierId, recommendations) => {
-                logEvent(`Recommend all for supplier ${supplierId}`);
-                logEvent(`All recommendations: ${JSON.stringify(recommendations)}`);
+                logEvent(`Tedarikçi ${supplierId} için tümünü öner`);
+                logEvent(`Tüm öneriler: ${JSON.stringify(recommendations)}`);
+            },
+            onExport: (format, filename) => {
+                logEvent(`Dışa aktarma tetiklendi: ${format} -> ${filename}`);
             }
         });
+        
+        // Make it globally available for export buttons
+        window.comparisonTableInstance = comparisonTable;
         
         // Load sample data
         comparisonTable.setData(sampleData);
         
         // Global functions for the example
         window.updateOptions = function() {
+            // Build export formats array based on checkboxes
+            const exportFormats = [];
+            if (document.getElementById('enableCSVExport').checked) {
+                exportFormats.push('csv');
+            }
+            if (document.getElementById('enableExcelExport').checked) {
+                exportFormats.push('excel');
+            }
+
             const options = {
                 showSummary: document.getElementById('showSummary').checked,
                 showRecommendations: document.getElementById('showRecommendations').checked,
                 showDeliveryDays: document.getElementById('showDeliveryDays').checked,
                 showNotes: document.getElementById('showNotes').checked,
+                showExportButton: document.getElementById('showExportButton').checked,
+                exportFormats: exportFormats,
+                exportFilename: document.getElementById('exportFilename').value || 'karşılaştırma-tablosu',
                 currencyRates: currencyRates,
-                autoSave: () => logEvent('Auto-save triggered'),
+                autoSave: () => logEvent('Otomatik kaydetme tetiklendi'),
                 onRecommendationChange: (itemIndex, supplierId, recommendations) => {
-                    logEvent(`Recommendation changed: Item ${itemIndex} -> Supplier ${supplierId || 'None'}`);
+                    logEvent(`Öneri değişti: Malzeme ${itemIndex} -> Tedarikçi ${supplierId || 'Yok'}`);
                 },
                 onSupplierRecommendAll: (supplierId, recommendations) => {
-                    logEvent(`Recommend all for supplier ${supplierId}`);
+                    logEvent(`Tedarikçi ${supplierId} için tümünü öner`);
+                },
+                onExport: (format, filename) => {
+                    logEvent(`Dışa aktarma tetiklendi: ${format} -> ${filename}`);
                 }
             };
             
             // Recreate the component with new options
             comparisonTable = new ComparisonTable('comparison-table-container', options);
             comparisonTable.setData(sampleData);
-            logEvent('Options updated');
+            // Make it globally available for export buttons
+            window.comparisonTableInstance = comparisonTable;
+            logEvent('Seçenekler güncellendi');
         };
         
         window.addSampleData = function() {
@@ -273,7 +331,7 @@
             };
             
             comparisonTable.setData(sampleData);
-            logEvent(`Added new item: ${newItem.name}`);
+            logEvent(`Yeni malzeme eklendi: ${newItem.name}`);
         };
         
         window.clearData = function() {
@@ -283,7 +341,26 @@
                 offers: {},
                 itemRecommendations: {}
             });
-            logEvent('Data cleared');
+            logEvent('Veriler temizlendi');
+        };
+
+        window.testExport = function() {
+            if (!comparisonTable || !comparisonTable.data.items.length) {
+                alert('Dışa aktarma işlevini test etmeden önce lütfen önce bazı veriler ekleyin.');
+                return;
+            }
+            
+            // Test CSV export
+            if (document.getElementById('enableCSVExport').checked) {
+                comparisonTable.exportToCSV('test-export.csv');
+            }
+            
+            // Test Excel export
+            if (document.getElementById('enableExcelExport').checked) {
+                comparisonTable.exportToExcel('test-export.xlsx');
+            }
+            
+            logEvent('Test dışa aktarma tamamlandı');
         };
         
         function logEvent(message) {

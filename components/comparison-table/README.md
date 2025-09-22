@@ -1,42 +1,48 @@
-# Comparison Table Component
+# Karşılaştırma Tablosu Bileşeni
 
-A reusable comparison table component for displaying supplier offers and recommendations in procurement applications.
+Tedarikçi tekliflerini ve önerilerini tedarik uygulamalarında görüntülemek için yeniden kullanılabilir karşılaştırma tablosu bileşeni.
 
-## Features
+## Özellikler
 
-- **Dynamic Table Generation**: Automatically generates comparison tables based on items and suppliers
-- **Recommendation System**: Interactive star buttons for recommending suppliers for specific items
-- **Currency Conversion**: Supports multiple currencies with automatic conversion to EUR
-- **Responsive Design**: Works on desktop, tablet, and mobile devices
-- **Summary Section**: Displays totals and statistics
-- **Customizable Options**: Configurable display options and callbacks
+- **Dinamik Tablo Oluşturma**: Malzemeler ve tedarikçilere göre karşılaştırma tablolarını otomatik olarak oluşturur
+- **Öneri Sistemi**: Belirli malzemeler için tedarikçi önermek için etkileşimli yıldız butonları
+- **Para Birimi Dönüştürme**: EUR'ye otomatik dönüştürme ile çoklu para birimlerini destekler
+- **Dışa Aktarma İşlevi**: Özelleştirilebilir seçeneklerle verileri CSV ve Excel formatlarında dışa aktarır
+- **Duyarlı Tasarım**: Masaüstü, tablet ve mobil cihazlarda çalışır
+- **Özet Bölümü**: Toplamları ve istatistikleri görüntüler
+- **Özelleştirilebilir Seçenekler**: Yapılandırılabilir görüntüleme seçenekleri ve geri çağırımlar
 
-## Installation
+## Kurulum
 
-1. Include the CSS file in your HTML:
+1. HTML dosyanıza CSS dosyasını ekleyin:
 ```html
 <link rel="stylesheet" href="components/comparison-table/comparison-table.css">
 ```
 
-2. Import the component in your JavaScript:
+2. Excel dışa aktarma için SheetJS kütüphanesini ekleyin (isteğe bağlı, sadece Excel dışa aktarma için gerekli):
+```html
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+```
+
+3. JavaScript dosyanızda bileşeni içe aktarın:
 ```javascript
 import { ComparisonTable } from './components/comparison-table/comparison-table.js';
 ```
 
-## Usage
+## Kullanım
 
-### Basic Usage
+### Temel Kullanım
 
 ```javascript
-// Create a container element in your HTML
+// HTML dosyanızda bir konteyner elementi oluşturun
 <div id="comparison-table-container"></div>
 
-// Initialize the component
+// Bileşeni başlatın
 const comparisonTable = new ComparisonTable('comparison-table-container', {
     currencyRates: currencyRates,
     autoSave: () => saveData(),
     onRecommendationChange: (itemIndex, supplierId, recommendations) => {
-        console.log('Recommendation changed:', itemIndex, supplierId, recommendations);
+        console.log('Öneri değişti:', itemIndex, supplierId, recommendations);
     }
 });
 
@@ -77,6 +83,12 @@ const options = {
     showCurrencyConversion: true,         // Enable currency conversion
     showDeliveryDays: true,               // Show delivery days column
     showNotes: true,                      // Show offer notes
+    
+    // Export options
+    showExportButton: true,               // Show export button in header
+    exportFormats: ['csv', 'excel'],      // Available export formats
+    exportFilename: 'comparison-table',   // Default filename (without extension)
+    onExport: (format, filename) => {},   // Export callback function
     
     // Callbacks
     autoSave: () => {},                   // Auto-save function
@@ -137,6 +149,62 @@ const options = {
 }
 ```
 
+## Export Functionality
+
+The comparison table component includes built-in export functionality to save data in various formats.
+
+### Export Formats
+
+- **CSV Export**: Exports data as a comma-separated values file
+- **Excel Export**: Exports data as an Excel workbook with multiple sheets (requires SheetJS library)
+
+### Export Methods
+
+```javascript
+// Export to CSV
+comparisonTable.exportToCSV('my-comparison.csv');
+
+// Export to Excel
+comparisonTable.exportToExcel('my-comparison.xlsx');
+```
+
+### Export Configuration
+
+```javascript
+const comparisonTable = new ComparisonTable('container', {
+    // Show/hide export button
+    showExportButton: true,
+    
+    // Available export formats
+    exportFormats: ['csv', 'excel'],
+    
+    // Default filename (without extension)
+    exportFilename: 'comparison-table',
+    
+    // Export callback
+    onExport: (format, filename) => {
+        console.log(`Exported ${format} file: ${filename}`);
+    }
+});
+```
+
+### Export Data Structure
+
+The exported data includes:
+- **Main Sheet**: All comparison data with headers, item details, supplier offers, and summary row
+- **Summary Sheet** (Excel only): Detailed summary information including:
+  - Items summary
+  - Suppliers summary with totals and averages
+  - Recommendations summary
+
+### Requirements
+
+- **CSV Export**: No additional dependencies required
+- **Excel Export**: Requires SheetJS library to be included in your HTML:
+  ```html
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+  ```
+
 ## API Methods
 
 ### setData(data)
@@ -157,6 +225,15 @@ Updates specific parts of the data.
 ### render()
 Manually triggers a re-render of the table.
 
+### exportToCSV(filename)
+Exports the comparison table data to a CSV file.
+- `filename` (optional): Custom filename for the export
+
+### exportToExcel(filename)
+Exports the comparison table data to an Excel file.
+- `filename` (optional): Custom filename for the export
+- Requires SheetJS library to be loaded
+
 ## Events
 
 ### onRecommendationChange
@@ -175,6 +252,15 @@ Called when "Recommend All" button is clicked.
 onSupplierRecommendAll: (supplierId, allRecommendations) => {
     // supplierId: ID of the supplier
     // allRecommendations: Complete recommendations object
+}
+```
+
+### onExport
+Called when an export operation is completed.
+```javascript
+onExport: (format, filename) => {
+    // format: Export format ('csv' or 'excel')
+    // filename: Name of the exported file
 }
 ```
 

@@ -26,6 +26,11 @@ export class ComparisonTable {
                 EUR: '€',
                 GBP: '£'
             },
+            // Export options
+            showExportButton: true,
+            exportFormats: ['csv', 'excel'], // Available export formats
+            exportFilename: 'comparison-table', // Default filename (without extension)
+            onExport: null, // Callback function when export is triggered
             ...options
         };
         
@@ -122,8 +127,9 @@ export class ComparisonTable {
 
         return `
             <div class="card">
-                <div class="card-header">
+                <div class="card-header d-flex justify-content-between align-items-center">
                     <h5 class="mb-0"><i class="fas fa-table me-2"></i>Karşılaştırma Tablosu</h5>
+                    ${this.options.showExportButton ? this.generateExportButton() : ''}
                 </div>
                 <div class="card-body">
                     <div class="table-responsive">
@@ -152,8 +158,47 @@ export class ComparisonTable {
             ${this.options.showSummary ? this.generateSummarySection() : ''}
         `;
     }
-    
 
+    generateExportButton() {
+        if (!this.options.exportFormats || this.options.exportFormats.length === 0) {
+            return '';
+        }
+
+        const exportOptions = this.options.exportFormats.map(format => {
+            const formatInfo = this.getFormatInfo(format);
+            return `<a class="dropdown-item" href="#" onclick="event.preventDefault(); window.comparisonTableInstance.exportTo${formatInfo.method}(); return false;">
+                <i class="${formatInfo.icon} me-2"></i>${formatInfo.label}
+            </a>`;
+        }).join('');
+
+        return `
+            <div class="dropdown">
+                <button class="btn btn-outline-primary btn-sm dropdown-toggle" type="button" 
+                        id="exportDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                    <i class="fas fa-download me-1"></i>Dışa Aktar
+                </button>
+                <ul class="dropdown-menu" aria-labelledby="exportDropdown">
+                    ${exportOptions}
+                </ul>
+            </div>
+        `;
+    }
+
+    getFormatInfo(format) {
+        const formatMap = {
+            'csv': {
+                method: 'CSV',
+                label: 'CSV',
+                icon: 'fas fa-file-csv'
+            },
+            'excel': {
+                method: 'Excel',
+                label: 'Excel',
+                icon: 'fas fa-file-excel'
+            }
+        };
+        return formatMap[format] || { method: 'CSV', label: 'Dışa Aktar', icon: 'fas fa-download' };
+    }
 
 
 
@@ -1023,5 +1068,679 @@ export class ComparisonTable {
     // Get current column order
     getColumnOrder() {
         return [...this.options.columnOrder];
+    }
+
+    // Export functionality
+    exportToCSV(filename = null) {
+        const exportFilename = filename || `${this.options.exportFilename}.csv`;
+        const csvData = this.generateCSVData();
+        this.downloadFile(csvData, exportFilename, 'text/csv');
+        
+        if (this.options.onExport) {
+            this.options.onExport('csv', exportFilename);
+        }
+    }
+
+    exportToExcel(filename = null) {
+        const exportFilename = filename || `${this.options.exportFilename}.xlsx`;
+        console.log('Excel export başlatılıyor:', exportFilename);
+        
+        // Check if SheetJS is available
+        if (typeof XLSX === 'undefined') {
+            console.log('SheetJS kütüphanesi bulunamadı, yükleniyor...');
+            this.loadSheetJS().then(() => {
+                console.log('SheetJS kütüphanesi yüklendi, export tekrar deneniyor...');
+                this.exportToExcel(filename);
+            }).catch((error) => {
+                console.error('SheetJS kütüphanesi yüklenemedi:', error);
+                alert('Excel dışa aktarma için SheetJS kütüphanesi yüklenemedi. Lütfen internet bağlantınızı kontrol edin.');
+            });
+            return;
+        }
+
+        console.log('SheetJS kütüphanesi bulundu');
+        console.log('Mevcut veri:', this.data);
+        console.log('Malzeme sayısı:', this.data.items.length);
+        console.log('Tedarikçi sayısı:', this.data.suppliers.length);
+        
+        const workbook = XLSX.utils.book_new();
+        
+        // Main comparison data with enhanced formatting
+        const comparisonData = this.generateEnhancedExcelData();
+        console.log('Gelişmiş karşılaştırma verisi oluşturuldu:', comparisonData.length, 'satır');
+        const comparisonSheet = XLSX.utils.aoa_to_sheet(comparisonData);
+        
+        // Apply formatting to the comparison sheet
+        this.applyExcelFormatting(comparisonSheet, comparisonData);
+        XLSX.utils.book_append_sheet(workbook, comparisonSheet, 'Karşılaştırma');
+
+        // Summary data
+        if (this.options.showSummary) {
+            const summaryData = this.generateEnhancedSummaryExcelData();
+            console.log('Gelişmiş özet verisi oluşturuldu:', summaryData.length, 'satır');
+            const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+            this.applySummaryExcelFormatting(summarySheet, summaryData);
+            XLSX.utils.book_append_sheet(workbook, summarySheet, 'Özet');
+        }
+
+        console.log('Excel dosyası yazılıyor...');
+        XLSX.writeFile(workbook, exportFilename);
+        console.log('Excel dosyası başarıyla oluşturuldu:', exportFilename);
+        
+        if (this.options.onExport) {
+            this.options.onExport('excel', exportFilename);
+        }
+    }
+
+    generateCSVData() {
+        const data = [];
+        
+        // Add headers
+        const headers = this.generateCSVHeaders();
+        data.push(headers);
+        
+        // Add data rows
+        this.data.items.forEach((item, itemIndex) => {
+            const row = this.generateCSVRow(item, itemIndex);
+            data.push(row);
+        });
+        
+        // Add summary row if enabled
+        if (this.options.showSummary && this.options.showSummaryRow) {
+            const summaryRow = this.generateCSVSummaryRow();
+            data.push(summaryRow);
+        }
+        
+        return data.map(row => row.map(cell => this.escapeCSV(cell)).join(',')).join('\n');
+    }
+
+    generateCSVHeaders() {
+        const headers = ['Malzeme', 'İş No', 'Miktar', 'Birim'];
+        
+        if (!this.options.specifications) {
+            headers.push('Teknik Özellikler');
+        }
+        
+        this.data.suppliers.forEach(supplier => {
+            if (this.options.showUnitPrice) headers.push(`${supplier.name} - Birim Fiyat`);
+            if (this.options.showDeliveryDays) headers.push(`${supplier.name} - Teslim Süresi`);
+            if (this.options.showOriginalTotal) headers.push(`${supplier.name} - Toplam`);
+            if (this.options.showEuroTotal) headers.push(`${supplier.name} - Euro Toplam`);
+            if (this.options.showRecommendations) headers.push(`${supplier.name} - Öneri`);
+        });
+        
+        return headers;
+    }
+
+    generateCSVRow(item, itemIndex) {
+        const row = [
+            item.name || '',
+            item.job_no || '',
+            item.quantity || '',
+            item.unit || ''
+        ];
+        
+        if (!this.options.specifications) {
+            row.push(item.specifications || '');
+        }
+        
+        this.data.suppliers.forEach(supplier => {
+            const offer = this.data.offers[supplier.id] && this.data.offers[supplier.id][itemIndex];
+            const isRecommended = this.data.itemRecommendations && 
+                this.data.itemRecommendations[itemIndex] === supplier.id;
+            
+            if (this.options.showUnitPrice) {
+                row.push(offer && offer.unitPrice ? 
+                    `${offer.unitPrice} ${supplier.default_currency || ''}` : '');
+            }
+            
+            if (this.options.showDeliveryDays) {
+                row.push(offer && offer.deliveryDays ? offer.deliveryDays.toString() : '');
+            }
+            
+            if (this.options.showOriginalTotal) {
+                row.push(offer && offer.totalPrice ? 
+                    `${offer.totalPrice} ${supplier.default_currency || ''}` : '');
+            }
+            
+            if (this.options.showEuroTotal) {
+                if (offer && offer.totalPrice && supplier.default_currency) {
+                    const euroAmount = this.convertCurrency(offer.totalPrice, supplier.default_currency, 'EUR');
+                    row.push(euroAmount ? `€${euroAmount.toFixed(2)}` : '');
+                } else {
+                    row.push('');
+                }
+            }
+            
+            if (this.options.showRecommendations) {
+                row.push(isRecommended ? 'Önerilen' : '');
+            }
+        });
+        
+        return row;
+    }
+
+    generateCSVSummaryRow() {
+        const row = ['TOPLAM', '', '', ''];
+        
+        if (!this.options.specifications) {
+            row.push('');
+        }
+        
+        this.data.suppliers.forEach(supplier => {
+            const totals = this.calculateSupplierTotals(supplier.id);
+            
+            if (this.options.showUnitPrice) {
+                row.push(''); // No total for unit prices
+            }
+            
+            if (this.options.showDeliveryDays) {
+                row.push(totals.avgDeliveryDays ? totals.avgDeliveryDays.toFixed(1) : '');
+            }
+            
+            if (this.options.showOriginalTotal) {
+                row.push(totals.totalPrice ? 
+                    `${totals.totalPrice} ${supplier.default_currency || ''}` : '');
+            }
+            
+            if (this.options.showEuroTotal) {
+                if (totals.totalPrice && supplier.default_currency) {
+                    const euroAmount = this.convertCurrency(totals.totalPrice, supplier.default_currency, 'EUR');
+                    row.push(euroAmount ? `€${euroAmount.toFixed(2)}` : '');
+                } else {
+                    row.push('');
+                }
+            }
+            
+            if (this.options.showRecommendations) {
+                row.push(''); // No total for recommendations
+            }
+        });
+        
+        return row;
+    }
+
+    generateExcelData() {
+        const data = [];
+        
+        // Add headers
+        const headers = this.generateCSVHeaders();
+        data.push(headers);
+        
+        // Add data rows
+        this.data.items.forEach((item, itemIndex) => {
+            const row = this.generateCSVRow(item, itemIndex);
+            data.push(row);
+        });
+        
+        // Add summary row if enabled
+        if (this.options.showSummary && this.options.showSummaryRow) {
+            const summaryRow = this.generateCSVSummaryRow();
+            data.push(summaryRow);
+        }
+        
+        return data;
+    }
+
+    generateEnhancedExcelData() {
+        const data = [];
+        
+        // Add title row
+        data.push(['KARŞILAŞTIRMA TABLOSU']);
+        data.push([]); // Empty row
+        
+        // Add main header row
+        const mainHeaders = ['Malzeme', 'İş No', 'Miktar', 'Birim'];
+        if (!this.options.specifications) {
+            mainHeaders.push('Teknik Özellikler');
+        }
+        
+        // Add supplier headers
+        this.data.suppliers.forEach(supplier => {
+            if (this.options.showUnitPrice) mainHeaders.push(`${supplier.name} - Birim Fiyat`);
+            if (this.options.showDeliveryDays) mainHeaders.push(`${supplier.name} - Teslim Süresi`);
+            if (this.options.showOriginalTotal) mainHeaders.push(`${supplier.name} - Toplam`);
+            if (this.options.showEuroTotal) mainHeaders.push(`${supplier.name} - Euro Toplam`);
+            if (this.options.showRecommendations) mainHeaders.push(`${supplier.name} - Öneri`);
+        });
+        
+        data.push(mainHeaders);
+        
+        // Add sub-header row for supplier details
+        const subHeaders = ['', '', '', ''];
+        if (!this.options.specifications) {
+            subHeaders.push('');
+        }
+        
+        this.data.suppliers.forEach(supplier => {
+            const supplierColumns = [];
+            if (this.options.showUnitPrice) supplierColumns.push('Birim Fiyat');
+            if (this.options.showDeliveryDays) supplierColumns.push('Teslim (Gün)');
+            if (this.options.showOriginalTotal) supplierColumns.push('Toplam Fiyat');
+            if (this.options.showEuroTotal) supplierColumns.push('Euro Toplam');
+            if (this.options.showRecommendations) supplierColumns.push('Önerilen');
+            
+            subHeaders.push(...supplierColumns);
+        });
+        
+        data.push(subHeaders);
+        data.push([]); // Empty row for spacing
+        
+        // Add data rows with enhanced formatting
+        this.data.items.forEach((item, itemIndex) => {
+            const row = [
+                item.name || '',
+                item.job_no || '',
+                item.quantity || '',
+                item.unit || ''
+            ];
+            
+            if (!this.options.specifications) {
+                row.push(item.specifications || '');
+            }
+            
+            this.data.suppliers.forEach(supplier => {
+                const offer = this.data.offers[supplier.id] && this.data.offers[supplier.id][itemIndex];
+                const isRecommended = this.data.itemRecommendations && 
+                    this.data.itemRecommendations[itemIndex] === supplier.id;
+                
+                // Debug logging
+                if (itemIndex === 0) { // Only log for first item to avoid spam
+                    console.log(`Supplier ${supplier.name} (${supplier.id}) for item ${itemIndex}:`, offer);
+                }
+                
+                if (this.options.showUnitPrice) {
+                    if (offer && offer.unitPrice) {
+                        row.push(`${offer.unitPrice} ${supplier.default_currency || ''}`);
+                    } else {
+                        row.push('-');
+                    }
+                }
+                
+                if (this.options.showDeliveryDays) {
+                    if (offer && offer.deliveryDays) {
+                        row.push(`${offer.deliveryDays} gün`);
+                    } else {
+                        row.push('-');
+                    }
+                }
+                
+                if (this.options.showOriginalTotal) {
+                    if (offer && offer.totalPrice) {
+                        row.push(`${offer.totalPrice} ${supplier.default_currency || ''}`);
+                    } else {
+                        row.push('-');
+                    }
+                }
+                
+                if (this.options.showEuroTotal) {
+                    if (offer && offer.totalPrice && supplier.default_currency) {
+                        const euroAmount = this.convertCurrency(offer.totalPrice, supplier.default_currency, 'EUR');
+                        row.push(euroAmount ? `€${euroAmount.toFixed(2)}` : '-');
+                    } else {
+                        row.push('-');
+                    }
+                }
+                
+                if (this.options.showRecommendations) {
+                    row.push(isRecommended ? '★ ÖNERİLEN' : '');
+                }
+            });
+            
+            data.push(row);
+        });
+        
+        // Add summary row if enabled
+        if (this.options.showSummary && this.options.showSummaryRow) {
+            data.push([]); // Empty row for spacing
+            const summaryRow = ['TOPLAM', '', '', ''];
+            
+            if (!this.options.specifications) {
+                summaryRow.push('');
+            }
+            
+            this.data.suppliers.forEach(supplier => {
+                const totals = this.calculateSupplierTotals(supplier.id);
+                
+                if (this.options.showUnitPrice) {
+                    summaryRow.push(''); // No total for unit prices
+                }
+                
+                if (this.options.showDeliveryDays) {
+                    summaryRow.push(totals.avgDeliveryDays ? `${totals.avgDeliveryDays.toFixed(1)} gün` : '-');
+                }
+                
+                if (this.options.showOriginalTotal) {
+                    summaryRow.push(totals.totalPrice ? `${totals.totalPrice} ${supplier.default_currency || ''}` : '-');
+                }
+                
+                if (this.options.showEuroTotal) {
+                    if (totals.totalPrice && supplier.default_currency) {
+                        const euroAmount = this.convertCurrency(totals.totalPrice, supplier.default_currency, 'EUR');
+                        summaryRow.push(euroAmount ? `€${euroAmount.toFixed(2)}` : '-');
+                    } else {
+                        summaryRow.push('-');
+                    }
+                }
+                
+                if (this.options.showRecommendations) {
+                    summaryRow.push(''); // No total for recommendations
+                }
+            });
+            
+            data.push(summaryRow);
+        }
+        
+        return data;
+    }
+
+    generateSummaryExcelData() {
+        const data = [];
+        
+        // Summary headers
+        data.push(['Özet Bilgileri']);
+        data.push(['']);
+        
+        // Items summary
+        data.push(['Malzeme Özeti']);
+        data.push(['Toplam Malzeme', this.data.items.length]);
+        data.push(['']);
+        
+        // Suppliers summary
+        data.push(['Tedarikçi Özeti']);
+        this.data.suppliers.forEach(supplier => {
+            const totals = this.calculateSupplierTotals(supplier.id);
+            data.push([supplier.name]);
+            data.push(['Toplam Fiyat', totals.totalPrice ? 
+                `${totals.totalPrice} ${supplier.default_currency || ''}` : 'N/A']);
+            data.push(['Ortalama Teslim Süresi', totals.avgDeliveryDays ? 
+                totals.avgDeliveryDays.toFixed(1) : 'N/A']);
+            data.push(['']);
+        });
+        
+        // Recommendations summary
+        if (this.data.itemRecommendations) {
+            data.push(['Öneri Özeti']);
+            const recommendationCounts = {};
+            Object.values(this.data.itemRecommendations).forEach(supplierId => {
+                if (supplierId) {
+                    const supplier = this.data.suppliers.find(s => s.id === supplierId);
+                    const supplierName = supplier ? supplier.name : supplierId;
+                    recommendationCounts[supplierName] = (recommendationCounts[supplierName] || 0) + 1;
+                }
+            });
+            
+            Object.entries(recommendationCounts).forEach(([supplierName, count]) => {
+                data.push([supplierName, count]);
+            });
+        }
+        
+        return data;
+    }
+
+    escapeCSV(cell) {
+        if (cell === null || cell === undefined) return '';
+        const str = String(cell);
+        if (str.includes(',') || str.includes('"') || str.includes('\n')) {
+            return `"${str.replace(/"/g, '""')}"`;
+        }
+        return str;
+    }
+
+    downloadFile(content, filename, mimeType) {
+        const blob = new Blob([content], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
+    }
+
+    applyExcelFormatting(worksheet, data) {
+        // Set column widths
+        const colWidths = [];
+        const maxCols = Math.max(...data.map(row => row.length));
+        
+        for (let i = 0; i < maxCols; i++) {
+            if (i < 4) { // First 4 columns (Malzeme, İş No, Miktar, Birim)
+                colWidths.push({ wch: 15 });
+            } else if (i === 4 && !this.options.specifications) { // Specifications column
+                colWidths.push({ wch: 25 });
+            } else { // Supplier columns
+                colWidths.push({ wch: 18 });
+            }
+        }
+        
+        worksheet['!cols'] = colWidths;
+        
+        // Set row heights
+        const rowHeights = [];
+        for (let i = 0; i < data.length; i++) {
+            if (i === 0) { // Title row
+                rowHeights.push({ hpt: 25 });
+            } else if (i === 2 || i === 3) { // Header rows
+                rowHeights.push({ hpt: 20 });
+            } else {
+                rowHeights.push({ hpt: 18 });
+            }
+        }
+        worksheet['!rows'] = rowHeights;
+        
+        // Apply cell formatting
+        const range = XLSX.utils.decode_range(worksheet['!ref']);
+        
+        for (let row = range.s.r; row <= range.e.r; row++) {
+            for (let col = range.s.c; col <= range.e.c; col++) {
+                const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+                const cell = worksheet[cellAddress];
+                
+                if (cell) {
+                    // Title row formatting
+                    if (row === 0) {
+                        cell.s = {
+                            font: { bold: true, size: 16, color: { rgb: "FFFFFF" } },
+                            fill: { fgColor: { rgb: "4472C4" } },
+                            alignment: { horizontal: "center", vertical: "center" }
+                        };
+                    }
+                    // Main header row formatting
+                    else if (row === 2) {
+                        cell.s = {
+                            font: { bold: true, size: 12, color: { rgb: "FFFFFF" } },
+                            fill: { fgColor: { rgb: "5B9BD5" } },
+                            alignment: { horizontal: "center", vertical: "center" },
+                            border: {
+                                top: { style: "thin", color: { rgb: "000000" } },
+                                bottom: { style: "thin", color: { rgb: "000000" } },
+                                left: { style: "thin", color: { rgb: "000000" } },
+                                right: { style: "thin", color: { rgb: "000000" } }
+                            }
+                        };
+                    }
+                    // Sub-header row formatting
+                    else if (row === 3) {
+                        cell.s = {
+                            font: { bold: true, size: 10, color: { rgb: "000000" } },
+                            fill: { fgColor: { rgb: "D9E2F3" } },
+                            alignment: { horizontal: "center", vertical: "center" },
+                            border: {
+                                top: { style: "thin", color: { rgb: "000000" } },
+                                bottom: { style: "thin", color: { rgb: "000000" } },
+                                left: { style: "thin", color: { rgb: "000000" } },
+                                right: { style: "thin", color: { rgb: "000000" } }
+                            }
+                        };
+                    }
+                    // Data rows formatting
+                    else if (row > 4) {
+                        const isSummaryRow = data[row] && data[row][0] === 'TOPLAM';
+                        
+                        if (isSummaryRow) {
+                            cell.s = {
+                                font: { bold: true, size: 11, color: { rgb: "000000" } },
+                                fill: { fgColor: { rgb: "E2EFDA" } },
+                                alignment: { horizontal: "center", vertical: "center" },
+                                border: {
+                                    top: { style: "medium", color: { rgb: "000000" } },
+                                    bottom: { style: "medium", color: { rgb: "000000" } },
+                                    left: { style: "thin", color: { rgb: "000000" } },
+                                    right: { style: "thin", color: { rgb: "000000" } }
+                                }
+                            };
+                        } else {
+                            cell.s = {
+                                font: { size: 10 },
+                                alignment: { horizontal: "center", vertical: "center" },
+                                border: {
+                                    top: { style: "thin", color: { rgb: "CCCCCC" } },
+                                    bottom: { style: "thin", color: { rgb: "CCCCCC" } },
+                                    left: { style: "thin", color: { rgb: "CCCCCC" } },
+                                    right: { style: "thin", color: { rgb: "CCCCCC" } }
+                                }
+                            };
+                            
+                            // Highlight recommended cells
+                            if (cell.v && cell.v.includes('★ ÖNERİLEN')) {
+                                cell.s.fill = { fgColor: { rgb: "FFF2CC" } };
+                                cell.s.font = { size: 10, bold: true, color: { rgb: "B8860B" } };
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    applySummaryExcelFormatting(worksheet, data) {
+        // Set column widths
+        worksheet['!cols'] = [{ wch: 25 }, { wch: 20 }];
+        
+        // Apply cell formatting
+        const range = XLSX.utils.decode_range(worksheet['!ref']);
+        
+        for (let row = range.s.r; row <= range.e.r; row++) {
+            for (let col = range.s.c; col <= range.e.c; col++) {
+                const cellAddress = XLSX.utils.encode_cell({ r: row, c: col });
+                const cell = worksheet[cellAddress];
+                
+                if (cell) {
+                    // Title formatting
+                    if (data[row] && data[row][0] && data[row][0].includes('Özet')) {
+                        cell.s = {
+                            font: { bold: true, size: 14, color: { rgb: "FFFFFF" } },
+                            fill: { fgColor: { rgb: "4472C4" } },
+                            alignment: { horizontal: "center", vertical: "center" }
+                        };
+                    }
+                    // Section headers
+                    else if (data[row] && data[row][0] && (
+                        data[row][0].includes('Malzeme') || 
+                        data[row][0].includes('Tedarikçi') || 
+                        data[row][0].includes('Öneri')
+                    )) {
+                        cell.s = {
+                            font: { bold: true, size: 12, color: { rgb: "000000" } },
+                            fill: { fgColor: { rgb: "D9E2F3" } },
+                            alignment: { horizontal: "left", vertical: "center" }
+                        };
+                    }
+                    // Data rows
+                    else if (data[row] && data[row][0]) {
+                        cell.s = {
+                            font: { size: 10 },
+                            alignment: { horizontal: "left", vertical: "center" }
+                        };
+                    }
+                }
+            }
+        }
+    }
+
+    generateEnhancedSummaryExcelData() {
+        const data = [];
+        
+        // Title
+        data.push(['ÖZET BİLGİLERİ']);
+        data.push([]);
+        
+        // Items summary
+        data.push(['Malzeme Özeti']);
+        data.push(['Toplam Malzeme', this.data.items.length]);
+        data.push(['']);
+        
+        // Suppliers summary
+        data.push(['Tedarikçi Özeti']);
+        this.data.suppliers.forEach(supplier => {
+            const totals = this.calculateSupplierTotals(supplier.id);
+            data.push([supplier.name, '']);
+            data.push(['Toplam Fiyat', totals.totalPrice ? 
+                `${totals.totalPrice} ${supplier.default_currency || ''}` : 'N/A']);
+            data.push(['Ortalama Teslim Süresi', totals.avgDeliveryDays ? 
+                `${totals.avgDeliveryDays.toFixed(1)} gün` : 'N/A']);
+            data.push(['']);
+        });
+        
+        // Recommendations summary
+        if (this.data.itemRecommendations) {
+            data.push(['Öneri Özeti']);
+            const recommendationCounts = {};
+            Object.values(this.data.itemRecommendations).forEach(supplierId => {
+                if (supplierId) {
+                    const supplier = this.data.suppliers.find(s => s.id === supplierId);
+                    const supplierName = supplier ? supplier.name : supplierId;
+                    recommendationCounts[supplierName] = (recommendationCounts[supplierName] || 0) + 1;
+                }
+            });
+            
+            Object.entries(recommendationCounts).forEach(([supplierName, count]) => {
+                data.push([supplierName, `${count} malzeme`]);
+            });
+        }
+        
+        return data;
+    }
+
+    loadSheetJS() {
+        return new Promise((resolve, reject) => {
+            // Check if already loaded
+            if (typeof XLSX !== 'undefined') {
+                resolve();
+                return;
+            }
+
+            // Check if script is already being loaded
+            if (document.querySelector('script[src*="xlsx"]')) {
+                // Wait for it to load
+                const checkLoaded = setInterval(() => {
+                    if (typeof XLSX !== 'undefined') {
+                        clearInterval(checkLoaded);
+                        resolve();
+                    }
+                }, 100);
+                
+                // Timeout after 10 seconds
+                setTimeout(() => {
+                    clearInterval(checkLoaded);
+                    reject(new Error('SheetJS yükleme zaman aşımı'));
+                }, 10000);
+                return;
+            }
+
+            // Load the script
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            script.onload = () => {
+                console.log('SheetJS kütüphanesi başarıyla yüklendi');
+                resolve();
+            };
+            script.onerror = () => {
+                console.error('SheetJS kütüphanesi yüklenemedi');
+                reject(new Error('SheetJS kütüphanesi yüklenemedi'));
+            };
+            document.head.appendChild(script);
+        });
     }
 }

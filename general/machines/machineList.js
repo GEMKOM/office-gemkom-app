@@ -29,6 +29,8 @@ let users = []; // Store users for assigned_users dropdown
 let currentPage = 1;
 let isLoading = false;
 let totalMachines = 0; // Added for pagination validation
+let currentSortField = null;
+let currentSortDirection = 'asc';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
@@ -200,6 +202,9 @@ function initializeTableComponent() {
             exportMachines(format);
         },
         onSort: async (field, direction) => {
+            // Store current sort state
+            currentSortField = field;
+            currentSortDirection = direction;
             // Reset to first page when sorting
             currentPage = 1;
             await loadMachineData();
@@ -346,9 +351,15 @@ async function loadMachineData() {
         // Collect filter values
         const filters = collectFilterValues();
 
+        // Build ordering parameter
+        let ordering = null;
+        if (currentSortField) {
+            ordering = currentSortDirection === 'desc' ? `-${currentSortField}` : currentSortField;
+        }
+
         // Load machines with current page and page size
         const pageSize = machinesTable ? machinesTable.options.itemsPerPage : 20;
-        const machinesResponse = await fetchMachines(currentPage, pageSize, filters);
+        const machinesResponse = await fetchMachines(currentPage, pageSize, filters, ordering);
         
         // Extract machines and total count from response
         machines = machinesResponse.results || machinesResponse || [];
@@ -446,8 +457,14 @@ async function exportMachines(format) {
         // Collect filter values
         const filters = collectFilterValues();
         
+        // Build ordering parameter for export
+        let ordering = null;
+        if (currentSortField) {
+            ordering = currentSortDirection === 'desc' ? `-${currentSortField}` : currentSortField;
+        }
+        
         // Fetch all machines for export (use a large page size)
-        const machinesResponse = await fetchMachines(1, 10000, filters);
+        const machinesResponse = await fetchMachines(1, 10000, filters, ordering);
         const allMachines = machinesResponse.results || machinesResponse || [];
         
         if (allMachines.length === 0) {

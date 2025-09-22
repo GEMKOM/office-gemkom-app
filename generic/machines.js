@@ -2,7 +2,7 @@ import { authedFetch } from '../authService.js';
 import { backendBase } from '../base.js';
 import { extractResultsFromResponse } from './paginationHelper.js';
 
-export async function fetchMachines(page = 1, pageSize = 10, filters = {}) {
+export async function fetchMachines(page = 1, pageSize = 10, filters = {}, ordering = null) {
     try {
         let url = `${backendBase}/machines/`;
         
@@ -35,6 +35,11 @@ export async function fetchMachines(page = 1, pageSize = 10, filters = {}) {
         
         if (filters.is_active !== undefined && filters.is_active !== '') {
             params.append('is_active', filters.is_active);
+        }
+        
+        // Add ordering parameter
+        if (ordering) {
+            params.append('ordering', ordering);
         }
         
         // Add query parameters to URL if any exist
