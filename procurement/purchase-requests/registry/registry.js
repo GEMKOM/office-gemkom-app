@@ -234,7 +234,8 @@ async function initializeFiltersComponent() {
     let users = [];
     try {
         const { authFetchUsers } = await import('../../../generic/users.js');
-        users = await authFetchUsers(1, 1000);
+        const usersResponse = await authFetchUsers(1, 1000);
+        users = usersResponse.results || [];
         console.log(users);
     } catch (error) {
         console.error('Error fetching users:', error);
