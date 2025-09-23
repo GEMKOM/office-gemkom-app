@@ -1,9 +1,16 @@
 import { guardRoute, isAdmin, getUser, navigateByTeamIfFreshLogin } from './authService.js';
 import { initNavbar } from './components/navbar.js';
 import { MenuComponent } from './components/menu/menu.js';
+import { initRouteProtection, withRouteProtection } from './generic/routeProtection.js';
+import { hasRouteAccess } from './generic/accessControl.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
+        return;
+    }
+
+    // Initialize route protection
+    if (!initRouteProtection()) {
         return;
     }
 
@@ -19,11 +26,8 @@ async function handleLandingPage() {
     try {
         const user = JSON.parse(localStorage.getItem('user'));
 
-        // Initialize menu component
-        const menuComponent = new MenuComponent('menu-container', {
-            title: 'Çalışma Alanları',
-            subtitle: 'Takımınıza göre ilgili alanı seçin ve verimliliğinizi artırın',
-            cards: [
+        // Filter menu cards based on user access
+        const allCards = [
                 {
                     title: 'Genel',
                     description: 'Çalışanlar, makineler ve mesai yönetimi ile genel iş süreçlerini yönetin.',
@@ -114,7 +118,31 @@ async function handleLandingPage() {
                         }
                     ]
                 }
-            ]
+            ];
+
+        // Filter cards and their features based on user access
+        const filteredCards = allCards.map(card => {
+            // Check if user has access to the main card route
+            if (!hasRouteAccess(card.link)) {
+                return null; // Skip this card entirely
+            }
+            
+            // Filter features within the card
+            const filteredFeatures = card.features ? card.features.filter(feature => 
+                hasRouteAccess(feature.link)
+            ) : [];
+            
+            return {
+                ...card,
+                features: filteredFeatures
+            };
+        }).filter(card => card !== null); // Remove null cards
+
+        // Initialize menu component with filtered cards
+        const menuComponent = new MenuComponent('menu-container', {
+            title: 'Çalışma Alanları',
+            subtitle: 'Takımınıza göre ilgili alanı seçin ve verimliliğinizi artırın',
+            cards: filteredCards
         });
 
         // Render the menu

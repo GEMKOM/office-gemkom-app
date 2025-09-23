@@ -1,6 +1,7 @@
 import { logout, isAdmin, isLoggedIn, getUser, navigateTo, ROUTES } from '../authService.js';
 import { backendBase } from '../base.js';
 import { authedFetch } from '../authService.js';
+import { filterNavigationByAccess, hasRouteAccess } from '../generic/accessControl.js';
 
 // Navigation structure configuration
 const NAVIGATION_STRUCTURE = {
@@ -459,7 +460,11 @@ export function initNavbar() {
         `${user.first_name} ${user.last_name}` : username;
       
       const currentPath = window.location.pathname;
-      const navigationItems = renderNavigationItems(NAVIGATION_STRUCTURE, currentPath);
+      
+      // Filter navigation based on user team access
+      const userTeam = user.team || 'other';
+      const filteredNavigation = filterNavigationByAccess(NAVIGATION_STRUCTURE, userTeam);
+      const navigationItems = renderNavigationItems(filteredNavigation, currentPath);
       
       const navHTML = `
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -773,6 +778,12 @@ export function initNavbar() {
                             return;
                         }
                         
+                        // Check if user has access to this route
+                        if (!hasRouteAccess(path)) {
+                            alert('Bu sayfaya erişim yetkiniz bulunmamaktadır.');
+                            return;
+                        }
+                        
                         
 
                         
@@ -827,10 +838,13 @@ export function initNavbar() {
                     return;
                 }
                 
+                // Check if user has access to this route
+                if (!hasRouteAccess(path)) {
+                    alert('Bu sayfaya erişim yetkiniz bulunmamaktadır.');
+                    return;
+                }
                 
-
-                
-                                if (path.startsWith('/manufacturing/maintenance/')) {
+                if (path.startsWith('/manufacturing/maintenance/')) {
                     // Allow navigation to maintenance pages
                     navigateTo(path);
                     return;

@@ -135,6 +135,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                 type: 'date'
             },
             {
+                field: 'purchase_orders',
+                label: 'Satın Alma Emirleri',
+                sortable: false,
+                formatter: (value, row) => {
+                    if (!value || !Array.isArray(value) || value.length === 0) {
+                        return '<span class="text-muted">-</span>';
+                    }
+                    
+                    const orderLinks = value.map(orderId => 
+                        `<a href="/finance/purchase-orders/?order=${orderId}" target="_blank" class="btn btn-outline-primary btn-sm me-1 mb-1" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+                            <i class="fas fa-file-invoice me-1"></i>${orderId}
+                        </a>`
+                    ).join('');
+                    
+                    return `<div style="min-width: 150px;">${orderLinks}</div>`;
+                }
+            },
+            {
                 field: 'approval',
                 label: 'Onay Durumu',
                 sortable: false,

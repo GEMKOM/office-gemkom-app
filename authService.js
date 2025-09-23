@@ -184,6 +184,12 @@ export function navigateByTeam() {
             navigateTo(ROUTES.MAINTENANCE);
         } else if (user.team === 'manufacturing') {
             navigateTo(ROUTES.MANUFACTURING);
+        } else if (user.team === 'planning') {
+            navigateTo('/manufacturing/machining/capacity/planning');
+        } else if (user.team === 'procurement') {
+            navigateTo('/procurement/purchase-requests');
+        } else if (user.team === 'finance') {
+            navigateTo('/finance/purchase-orders');
         } else {
             // Fallback: redirect all other teams to home page
             navigateTo(ROUTES.HOME);

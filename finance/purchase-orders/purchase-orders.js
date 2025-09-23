@@ -129,8 +129,8 @@ document.addEventListener('DOMContentLoaded', async function() {
     const orderId = urlParams.get('order');
     
     if (orderId) {
-        // Store the order ID to show modal after data loads
-        window.pendingOrderId = orderId;
+        // Load the specific order directly instead of all orders
+        await loadSpecificPurchaseOrder(orderId);
     }
     
     // Initialize statistics cards component
@@ -223,8 +223,10 @@ document.addEventListener('DOMContentLoaded', async function() {
     
 
     
-    // Load initial data
-    loadPurchaseOrders();
+    // Load initial data only if no specific order is requested
+    if (!orderId) {
+        loadPurchaseOrders();
+    }
     
     // Add event listeners
     addEventListeners();
@@ -269,32 +271,45 @@ async function loadPurchaseOrders() {
         
         renderStatistics();
         
-        // Check if there's a pending order ID to show modal
-        if (window.pendingOrderId) {
-            const orderId = parseInt(window.pendingOrderId);
-            const order = currentPurchaseOrders.find(o => o.id === orderId);
-            
-            if (order) {
-                // Show the modal for the specified order
-                await viewPurchaseOrderDetails(orderId);
-                // Clear the pending order ID
-                window.pendingOrderId = null;
-            } else {
-                // Order not found in current data, try to fetch it directly
-                try {
-                    await viewPurchaseOrderDetails(orderId);
-                    window.pendingOrderId = null;
-                } catch (error) {
-                    console.error('Order not found:', orderId);
-                    showErrorMessage('Belirtilen sipariş bulunamadı.');
-                    window.pendingOrderId = null;
-                }
-            }
-        }
-        
     } catch (error) {
         console.error('Error loading purchase orders:', error);
         showErrorMessage('Satın alma siparişleri yüklenirken hata oluştu.');
+        
+        // Update table with empty data on error
+        if (window.purchaseOrdersTable) {
+            window.purchaseOrdersTable.setLoading(false);
+            window.purchaseOrdersTable.updateData([]);
+        }
+    }
+}
+
+// Load specific purchase order directly
+async function loadSpecificPurchaseOrder(orderId) {
+    try {
+        // Set loading state on table
+        if (window.purchaseOrdersTable) {
+            window.purchaseOrdersTable.setLoading(true);
+        }
+        
+        // Fetch the specific order
+        const order = await getPurchaseOrderById(orderId);
+        
+        // Update table with just this order
+        if (window.purchaseOrdersTable) {
+            window.purchaseOrdersTable.setLoading(false);
+            window.purchaseOrdersTable.updateData([order]);
+        }
+        
+        // Update statistics with just this order
+        currentPurchaseOrders = [order];
+        renderStatistics();
+        
+        // Show the modal for the specific order
+        await viewPurchaseOrderDetails(orderId);
+        
+    } catch (error) {
+        console.error('Error loading specific purchase order:', error);
+        showErrorMessage('Belirtilen sipariş bulunamadı.');
         
         // Update table with empty data on error
         if (window.purchaseOrdersTable) {
