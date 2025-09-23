@@ -235,6 +235,11 @@ const NAVIGATION_STRUCTURE = {
                 label: 'Raporlar',
                 icon: 'fas fa-chart-bar',
                 children: {
+                    '/finance/reports/executive-overview': {
+                        label: 'Yönetici Özeti',
+                        icon: 'fas fa-chart-pie',
+                        children: {}
+                    },
                     '/finance/reports/projects': {
                         label: 'Proje Raporu',
                         icon: 'fas fa-chart-line',
