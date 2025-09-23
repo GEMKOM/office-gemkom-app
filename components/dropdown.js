@@ -1,4 +1,9 @@
 // components/dropdown.js
+
+// Global z-index management for dropdowns
+let globalDropdownZIndex = 1000000;
+let allDropdowns = []; // Track all dropdown instances
+
 export class ModernDropdown {
     constructor(container, options = {}) {
         this.container = container;
@@ -15,8 +20,12 @@ export class ModernDropdown {
         this.selectedValue = null;
         this.selectedValues = [];
         this.items = [];
+        this.currentZIndex = 1; // Start with low z-index
         
         this.init();
+        
+        // Register this dropdown instance
+        allDropdowns.push(this);
     }
     
     init() {
@@ -64,6 +73,11 @@ export class ModernDropdown {
         this.dropdown.appendChild(this.selectedDisplay);
         this.dropdown.appendChild(this.menu);
         this.container.appendChild(this.dropdown);
+        
+        // Initialize with low z-index
+        this.container.style.zIndex = '1';
+        this.dropdown.style.zIndex = '1';
+        this.menu.style.zIndex = '1';
     }
     
     bindEvents() {
@@ -139,6 +153,13 @@ export class ModernDropdown {
     }
     
     open() {
+        // Close all other dropdowns first
+        this.closeAllOtherDropdowns();
+        
+        // Get the next highest z-index for this dropdown
+        globalDropdownZIndex += 1;
+        this.currentZIndex = globalDropdownZIndex;
+        
         this.isOpen = true;
         this.dropdown.classList.add('open');
         this.selectedDisplay.querySelector('.dropdown-arrow').className = 'fas fa-chevron-up dropdown-arrow';
@@ -150,8 +171,8 @@ export class ModernDropdown {
         this.menu.style.transform = 'translateY(0)';
         this.menu.style.maxHeight = '400px';
         
-        // Force high z-index to ensure dropdown appears above everything
-        this.menu.style.zIndex = '99999999';
+        // Apply dynamic z-index to ensure this dropdown appears above all others
+        this.menu.style.zIndex = this.currentZIndex;
         this.menu.style.position = 'absolute';
         this.menu.style.top = '100%';
         this.menu.style.left = '0';
@@ -159,10 +180,10 @@ export class ModernDropdown {
         this.menu.style.overflow = 'visible';
         this.menu.style.pointerEvents = 'auto';
         
-        // Ensure the dropdown container has proper stacking context
-        this.container.style.zIndex = '10001';
+        // Ensure the dropdown container has proper stacking context with dynamic z-index
+        this.container.style.zIndex = this.currentZIndex - 1;
         this.container.style.position = 'relative';
-        this.dropdown.style.zIndex = '10002';
+        this.dropdown.style.zIndex = this.currentZIndex;
         this.dropdown.style.position = 'relative';
         
         // Focus search input if available
@@ -172,6 +193,15 @@ export class ModernDropdown {
         
         // Trigger custom event
         this.container.dispatchEvent(new CustomEvent('dropdown:open'));
+    }
+    
+    closeAllOtherDropdowns() {
+        // Close all other dropdown instances
+        allDropdowns.forEach(dropdown => {
+            if (dropdown !== this && dropdown.isOpen) {
+                dropdown.close();
+            }
+        });
     }
     
     close() {
@@ -185,6 +215,11 @@ export class ModernDropdown {
         this.menu.style.visibility = 'hidden';
         this.menu.style.transform = 'translateY(-10px)';
         this.menu.style.maxHeight = '0';
+        
+        // Reset z-index to very low values when closed to ensure open dropdowns appear above
+        this.container.style.zIndex = '1';
+        this.dropdown.style.zIndex = '1';
+        this.menu.style.zIndex = '1';
         
         // Clear search if available
         if (this.options.searchable && this.searchInput) {

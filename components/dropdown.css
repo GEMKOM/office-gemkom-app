@@ -78,7 +78,7 @@
     border-top: none;
     border-radius: 0 0 8px 8px;
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
-    z-index: 999999;
+    /* z-index will be set dynamically by JavaScript */
     opacity: 0;
     visibility: hidden;
     transform: translateY(-10px);
@@ -92,7 +92,7 @@
     visibility: visible;
     transform: translateY(0);
     max-height: 400px;
-    z-index: 999999;
+    /* z-index will be set dynamically by JavaScript */
 }
 
 .modern-dropdown.open .dropdown-selected {
@@ -403,17 +403,17 @@
 }
 
 .modern-dropdown-container {
-    z-index: 10001 !important;
     position: relative;
+    /* z-index will be set dynamically by JavaScript */
 }
 
 .modern-dropdown {
-    z-index: 10002 !important;
     position: relative;
+    /* z-index will be set dynamically by JavaScript */
 }
 
 .modern-dropdown.open {
-    z-index: 10003 !important;
+    /* z-index will be set dynamically by JavaScript */
 }
 
 /* Style modern dropdown to match form-control-sm */
@@ -460,15 +460,15 @@
 
 /* Ensure dropdown appears above everything */
 .modern-dropdown .dropdown-menu {
-    z-index: 999999 !important;
     position: absolute !important;
     overflow: visible !important;
+    /* z-index will be set dynamically by JavaScript */
 }
 
 /* Additional z-index for dropdown containers */
 .modern-dropdown-container {
-    z-index: 1000;
     position: relative;
+    /* z-index will be set dynamically by JavaScript */
 }
 
 /* Ensure the card itself doesn't clip dropdowns */
@@ -484,11 +484,11 @@
 /* Ensure dropdowns are always on top */
 .modern-dropdown {
     position: relative;
-    z-index: 1000;
+    /* z-index will be set dynamically by JavaScript */
 }
 
 .modern-dropdown.open {
-    z-index: 1001;
+    /* z-index will be set dynamically by JavaScript */
 }
 
 /* Ensure dropdown menu is positioned correctly relative to its container */
@@ -498,7 +498,7 @@
     left: 0 !important;
     right: 0 !important;
     transform: translateY(0) !important;
-    z-index: 999999 !important;
+    /* z-index will be set dynamically by JavaScript */
     overflow: visible !important;
 }
 
@@ -532,7 +532,7 @@
     transform: translateY(0) !important;
     max-height: 400px !important;
     overflow: visible !important;
-    z-index: 999999 !important;
+    /* z-index will be set dynamically by JavaScript */
     position: absolute !important;
     top: 100% !important;
     left: 0 !important;
@@ -542,7 +542,7 @@
 
 /* Override Bootstrap dropdown styles that might interfere */
 .dropdown-menu {
-    z-index: 999999 !important;
+    /* z-index will be set dynamically by JavaScript */
 }
 
 /* Fix dropdown text color issues */

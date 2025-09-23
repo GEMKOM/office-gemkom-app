@@ -190,6 +190,7 @@ function initializeTableComponent() {
         data: [],
         sortable: true,
         pagination: true,
+        serverSidePagination: true,
         itemsPerPage: 20,
         refreshable: true,
         exportable: true,
@@ -343,6 +344,8 @@ function validateCurrentPage() {
 
 async function loadMachineData() {
     try {
+        if (isLoading) return;
+        
         isLoading = true;
         if (machinesTable) {
             machinesTable.setLoading(true);
@@ -364,9 +367,6 @@ async function loadMachineData() {
         // Extract machines and total count from response
         machines = machinesResponse.results || machinesResponse || [];
         totalMachines = machinesResponse.count || machinesResponse.total || machines.length;
-        
-        // Validate current page after getting total count
-        validateCurrentPage();
         
         // Update table data with pagination info
         if (machinesTable) {

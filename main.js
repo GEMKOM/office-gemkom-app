@@ -120,28 +120,16 @@ async function handleLandingPage() {
                 },
                 {
                     title: 'Bilgi İşlem',
-                    description: 'IT sistemlerini yönetin, teknik destek sağlayın ve güvenlik süreçlerini takip edin.',
+                    description: 'IT cihazlarını yönetin, envanter takibi yapın ve donanım durumunu izleyin.',
                     icon: 'fas fa-laptop-code',
                     iconColor: 'dark',
                     link: '/it',
                     features: [
                         {
-                            label: 'Sistem Yönetimi',
-                            icon: 'fas fa-server',
+                            label: 'Envanter',
+                            icon: 'fas fa-desktop',
                             iconColor: 'rgba(139, 0, 0, 1)',
-                            link: '/it/systems'
-                        },
-                        {
-                            label: 'Teknik Destek',
-                            icon: 'fas fa-headset',
-                            iconColor: 'rgba(139, 0, 0, 1)',
-                            link: '/it/support'
-                        },
-                        {
-                            label: 'Güvenlik',
-                            icon: 'fas fa-shield-alt',
-                            iconColor: 'rgba(139, 0, 0, 1)',
-                            link: '/it/security'
+                            link: '/it/inventory'
                         }
                     ]
                 }

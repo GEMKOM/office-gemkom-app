@@ -27,110 +27,35 @@ async function handleITPage() {
         // IT department menu cards
         const itCards = [
             {
-                title: 'Sistem Yönetimi',
-                description: 'Sunucu ve sistem altyapısını yönetin, performansı izleyin ve sistem durumunu takip edin.',
-                icon: 'fas fa-server',
+                title: 'Envanter',
+                description: 'IT cihazlarını yönetin, donanım envanterini takip edin ve cihaz durumlarını izleyin.',
+                icon: 'fas fa-desktop',
                 iconColor: 'primary',
-                link: '/it/systems',
+                link: '/it/inventory',
                 features: [
                     {
-                        label: 'Sunucu Durumu',
-                        icon: 'fas fa-server',
+                        label: 'Bilgisayarlar',
+                        icon: 'fas fa-desktop',
                         iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/systems'
+                        link: '/it/inventory'
                     },
                     {
-                        label: 'Sistem Performansı',
-                        icon: 'fas fa-chart-line',
+                        label: 'Laptoplar',
+                        icon: 'fas fa-laptop',
                         iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/systems'
+                        link: '/it/inventory'
                     },
                     {
-                        label: 'Yedekleme Durumu',
-                        icon: 'fas fa-database',
+                        label: 'Yazıcılar',
+                        icon: 'fas fa-print',
                         iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/systems'
-                    }
-                ]
-            },
-            {
-                title: 'Teknik Destek',
-                description: 'Kullanıcı destek taleplerini yönetin, teknik sorunları çözün ve destek süreçlerini takip edin.',
-                icon: 'fas fa-headset',
-                iconColor: 'success',
-                link: '/it/support',
-                features: [
-                    {
-                        label: 'Destek Talepleri',
-                        icon: 'fas fa-ticket-alt',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/support'
+                        link: '/it/inventory'
                     },
                     {
-                        label: 'Kullanıcı Yardımı',
-                        icon: 'fas fa-user-cog',
+                        label: 'Ağ Cihazları',
+                        icon: 'fas fa-network-wired',
                         iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/support'
-                    },
-                    {
-                        label: 'Teknik Dokümantasyon',
-                        icon: 'fas fa-book',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/support'
-                    }
-                ]
-            },
-            {
-                title: 'Güvenlik',
-                description: 'Sistem güvenliğini yönetin, güvenlik olaylarını izleyin ve güvenlik politikalarını uygulayın.',
-                icon: 'fas fa-shield-alt',
-                iconColor: 'warning',
-                link: '/it/security',
-                features: [
-                    {
-                        label: 'Güvenlik Olayları',
-                        icon: 'fas fa-exclamation-triangle',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/security'
-                    },
-                    {
-                        label: 'Erişim Kontrolü',
-                        icon: 'fas fa-key',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/security'
-                    },
-                    {
-                        label: 'Güvenlik Raporları',
-                        icon: 'fas fa-shield-alt',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/security'
-                    }
-                ]
-            },
-            {
-                title: 'Raporlar',
-                description: 'IT departmanı performans raporlarını görüntüleyin ve sistem istatistiklerini analiz edin.',
-                icon: 'fas fa-chart-bar',
-                iconColor: 'info',
-                link: '/it/reports',
-                features: [
-                    {
-                        label: 'Sistem Raporları',
-                        icon: 'fas fa-chart-pie',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/reports'
-                    },
-                    {
-                        label: 'Performans Analizi',
-                        icon: 'fas fa-chart-line',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/reports'
-                    },
-                    {
-                        label: 'Kullanım İstatistikleri',
-                        icon: 'fas fa-users',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/it/reports'
+                        link: '/it/inventory'
                     }
                 ]
             }
