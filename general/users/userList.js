@@ -81,6 +81,12 @@ function initializeTableComponent() {
         title: 'Çalışan Listesi',
         columns: [
             {
+                field: 'id',
+                label: 'ID',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
                 field: 'username',
                 label: 'Kullanıcı Adı',
                 sortable: true,
@@ -555,7 +561,6 @@ async function saveUser() {
         const response = await createUserAPI(userData);
         
         if (response.ok) {
-            showNotification('Çalışan başarıyla oluşturuldu', 'success');
             
             // Hide modal
             bootstrap.Modal.getOrCreateInstance(document.getElementById('createUserModal')).hide();

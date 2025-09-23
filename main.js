@@ -117,6 +117,33 @@ async function handleLandingPage() {
                             link: '/finance/purchase-orders'
                         }
                     ]
+                },
+                {
+                    title: 'Bilgi İşlem',
+                    description: 'IT sistemlerini yönetin, teknik destek sağlayın ve güvenlik süreçlerini takip edin.',
+                    icon: 'fas fa-laptop-code',
+                    iconColor: 'dark',
+                    link: '/it',
+                    features: [
+                        {
+                            label: 'Sistem Yönetimi',
+                            icon: 'fas fa-server',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/it/systems'
+                        },
+                        {
+                            label: 'Teknik Destek',
+                            icon: 'fas fa-headset',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/it/support'
+                        },
+                        {
+                            label: 'Güvenlik',
+                            icon: 'fas fa-shield-alt',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/it/security'
+                        }
+                    ]
                 }
             ];
 

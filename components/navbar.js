@@ -243,6 +243,32 @@ const NAVIGATION_STRUCTURE = {
                 }
             }
         }
+    },
+    '/it': {
+        label: 'Bilgi İşlem',
+        icon: 'fas fa-laptop-code',
+        children: {
+            '/it/systems': {
+                label: 'Sistem Yönetimi',
+                icon: 'fas fa-server',
+                children: {}
+            },
+            '/it/support': {
+                label: 'Teknik Destek',
+                icon: 'fas fa-headset',
+                children: {}
+            },
+            '/it/security': {
+                label: 'Güvenlik',
+                icon: 'fas fa-shield-alt',
+                children: {}
+            },
+            '/it/reports': {
+                label: 'Raporlar',
+                icon: 'fas fa-chart-bar',
+                children: {}
+            }
+        }
     }
 };
 
@@ -811,6 +837,12 @@ export function initNavbar() {
                     return;
                 }
                 
+                if (path.startsWith('/it/')) {
+                    // Allow navigation to IT pages
+                    navigateTo(path);
+                    return;
+                }
+                
                 
                 
                 navigateTo(path);
@@ -864,6 +896,12 @@ export function initNavbar() {
                 
                 if (path.startsWith('/finance/')) {
                     // Allow navigation to finance pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                if (path.startsWith('/it/')) {
+                    // Allow navigation to IT pages
                     navigateTo(path);
                     return;
                 }

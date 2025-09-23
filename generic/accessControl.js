@@ -200,6 +200,22 @@ export const TEAM_ACCESS_CONFIG = {
         allowedSections: ['finance', 'procurement_reports', 'general_overtime']
     },
     
+    // IT team - access to IT systems and support
+    it: {
+        allowedRoutes: [
+            '/',
+            '/it',
+            '/it/systems',
+            '/it/support',
+            '/it/security',
+            '/it/reports',
+            '/general/overtime',
+            '/general/overtime/pending',
+            '/general/overtime/registry'
+        ],
+        allowedSections: ['it', 'general_overtime']
+    },
+    
     // Default/other teams - minimal access
     other: {
         allowedRoutes: [

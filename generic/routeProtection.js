@@ -154,7 +154,7 @@ export function initRouteProtection(expectedRoute = null) {
     
     // Skip protection for home and login pages
     if (route === '/' || route === '/login') {
-        return;
+        return true;
     }
     
     // Protect the route
