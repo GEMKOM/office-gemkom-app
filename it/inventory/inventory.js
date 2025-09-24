@@ -223,6 +223,11 @@ function initializeTableComponent() {
             currentPage = page;
             await loadDeviceData();
         },
+        onPageSizeChange: async (newPageSize) => {
+            itemsPerPage = newPageSize;
+            currentPage = 1;
+            await loadDeviceData();
+        },
         emptyMessage: 'IT cihazı bulunamadı',
         emptyIcon: 'fas fa-desktop'
     });

@@ -36,18 +36,43 @@ export async function resolveMaintenanceRequest(requestId, resolutionData) {
     return extractResultsFromResponse(data);
 }
 
-export async function fetchMachineFaults() {
-    const response = await authedFetch(`${backendBase}/machines/faults/`, {
-        method: 'GET',
-        headers: {
-            'Content-Type': 'application/json'
+export async function fetchMachineFaults(filters = {}) {
+    try {
+        const queryParams = new URLSearchParams();
+        
+        // Add pagination parameters
+        if (filters.page) {
+            queryParams.append('page', filters.page);
         }
-    });
-    
-    if (!response.ok) {
-        throw new Error('Failed to fetch machine faults');
+        if (filters.page_size) {
+            queryParams.append('page_size', filters.page_size);
+        }
+        
+        // Add other filters
+        Object.keys(filters).forEach(key => {
+            if (filters[key] !== null && filters[key] !== undefined && filters[key] !== '' && 
+                key !== 'page' && key !== 'page_size') {
+                queryParams.append(key, filters[key]);
+            }
+        });
+
+        const url = `${backendBase}/machines/faults/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        
+        const response = await authedFetch(url, {
+            method: 'GET',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch machine faults');
+        }
+        
+        const data = await response.json();
+        return data; // Return the full response for pagination info
+    } catch (error) {
+        console.error('Error fetching machine faults:', error);
+        throw error;
     }
-    
-    const data = await response.json();
-    return extractResultsFromResponse(data);
 }

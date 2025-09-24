@@ -40,6 +40,7 @@ export class TableComponent {
             onRowClick: null,
             onSort: null,
             onPageChange: null,
+            onPageSizeChange: null,
             
             // Empty state
             emptyMessage: 'Veri bulunamadı',
@@ -327,52 +328,153 @@ export class TableComponent {
     
     renderPagination() {
         const totalPages = Math.ceil(this.options.totalItems / this.options.itemsPerPage);
-        if (totalPages <= 1) return '';
+        // Always show pagination, even for single page or when all data fits
+        // if (totalPages <= 1) return '';
         
         const startItem = (this.options.currentPage - 1) * this.options.itemsPerPage + 1;
         const endItem = Math.min(this.options.currentPage * this.options.itemsPerPage, this.options.totalItems);
         
-        let html = '<div class="card-footer">';
+        let html = '<div class="card-footer pagination-transition">';
         
-        // Page info
-        html += `<div class="text-center mb-2 text-muted small">`;
-        html += `Sayfa ${this.options.currentPage} / ${totalPages} (${startItem}-${endItem} / ${this.options.totalItems} kayıt)`;
+        // Enhanced page info with better styling
+        html += `<div class="pagination-info">`;
+        html += `<i class="fas fa-list-alt me-2"></i>`;
+        html += `Sayfa <span class="text-primary">${this.options.currentPage}</span> / <span class="text-primary">${totalPages}</span> `;
+        html += `(<span class="text-primary">${startItem}-${endItem}</span> / <span class="text-primary">${this.options.totalItems}</span> kayıt)`;
         html += '</div>';
         
-        // Pagination controls
-        html += '<nav><ul class="pagination justify-content-center">';
+        // Enhanced pagination controls - all in one row
+        html += '<div class="pagination-controls">';
         
-        // Previous button
+        // Page size selector
         html += `
-            <li class="page-item ${this.options.currentPage === 1 ? 'disabled' : ''}">
-                <a class="page-link" href="javascript:void(0)" data-page="${this.options.currentPage - 1}">
-                    <i class="fas fa-chevron-left"></i>
-                </a>
-            </li>
+            <div class="page-size-selector">
+                <label for="${this.containerId}-page-size">Sayfa başına:</label>
+                <select id="${this.containerId}-page-size" class="form-select form-select-sm">
+                    <option value="10" ${this.options.itemsPerPage === 10 ? 'selected' : ''}>10</option>
+                    <option value="20" ${this.options.itemsPerPage === 20 ? 'selected' : ''}>20</option>
+                    <option value="50" ${this.options.itemsPerPage === 50 ? 'selected' : ''}>50</option>
+                    <option value="100" ${this.options.itemsPerPage === 100 ? 'selected' : ''}>100</option>
+                </select>
+            </div>
         `;
         
-        // Page numbers
-        const startPage = Math.max(1, this.options.currentPage - 2);
-        const endPage = Math.min(totalPages, this.options.currentPage + 2);
+        // Pagination navigation in the middle
+        html += '<nav class="pagination-nav"><ul class="pagination pagination-compact">';
         
-        for (let i = startPage; i <= endPage; i++) {
+        // Handle single page scenario
+        if (totalPages === 1) {
+            // Show just the current page as active
             html += `
-                <li class="page-item ${i === this.options.currentPage ? 'active' : ''}">
-                    <a class="page-link" href="javascript:void(0)" data-page="${i}">${i}</a>
+                <li class="page-item active">
+                    <span class="page-link">1</span>
                 </li>
+            `;
+        } else {
+            // First page button (only show if there are more than 3 pages and not on first few pages)
+            if (this.options.currentPage > 3 && totalPages > 3) {
+                html += `
+                    <li class="page-item">
+                        <a class="page-link" href="javascript:void(0)" data-page="1" title="İlk sayfa">
+                            <i class="fas fa-angle-double-left"></i>
+                        </a>
+                    </li>
+                `;
+            }
+            
+            // Previous button
+            html += `
+                <li class="page-item ${this.options.currentPage === 1 ? 'disabled' : ''}">
+                    <a class="page-link" href="javascript:void(0)" data-page="${this.options.currentPage - 1}" title="Önceki sayfa">
+                        <i class="fas fa-chevron-left"></i>
+                    </a>
+                </li>
+            `;
+            
+            // Page numbers with smart ellipsis
+            const startPage = Math.max(1, this.options.currentPage - 2);
+            const endPage = Math.min(totalPages, this.options.currentPage + 2);
+            
+            if (startPage > 1) {
+                html += `
+                    <li class="page-item">
+                        <a class="page-link" href="javascript:void(0)" data-page="1">1</a>
+                    </li>
+                `;
+                if (startPage > 2) {
+                    html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                }
+            }
+            
+            for (let i = startPage; i <= endPage; i++) {
+                html += `
+                    <li class="page-item ${i === this.options.currentPage ? 'active' : ''}">
+                        <a class="page-link" href="javascript:void(0)" data-page="${i}">${i}</a>
+                    </li>
+                `;
+            }
+            
+            if (endPage < totalPages) {
+                if (endPage < totalPages - 1) {
+                    html += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+                }
+                html += `
+                    <li class="page-item">
+                        <a class="page-link" href="javascript:void(0)" data-page="${totalPages}">${totalPages}</a>
+                    </li>
+                `;
+            }
+            
+            // Next button
+            html += `
+                <li class="page-item ${this.options.currentPage === totalPages ? 'disabled' : ''}">
+                    <a class="page-link" href="javascript:void(0)" data-page="${this.options.currentPage + 1}" title="Sonraki sayfa">
+                        <i class="fas fa-chevron-right"></i>
+                    </a>
+                </li>
+            `;
+            
+            // Last page button (only show if there are more than 3 pages and not on last few pages)
+            if (this.options.currentPage < totalPages - 2 && totalPages > 3) {
+                html += `
+                    <li class="page-item">
+                        <a class="page-link" href="javascript:void(0)" data-page="${totalPages}" title="Son sayfa">
+                            <i class="fas fa-angle-double-right"></i>
+                        </a>
+                    </li>
+                `;
+            }
+        }
+        
+        html += '</ul></nav>';
+        
+        // Quick jump controls (only show if more than 1 page)
+        if (totalPages > 1) {
+            html += `
+                <div class="pagination-jump">
+                    <label for="${this.containerId}-jump-page">Sayfaya git:</label>
+                    <input type="number" id="${this.containerId}-jump-page" 
+                           min="1" max="${totalPages}" 
+                           value="${this.options.currentPage}" 
+                           class="form-control form-control-sm">
+                    <button type="button" id="${this.containerId}-jump-btn" class="btn btn-sm btn-primary">
+                        <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            `;
+        } else {
+            // Show a simple indicator for single page
+            html += `
+                <div class="pagination-jump">
+                    <span class="text-muted">
+                        <i class="fas fa-info-circle me-1"></i>
+                        Tüm veriler tek sayfada görüntüleniyor
+                    </span>
+                </div>
             `;
         }
         
-        // Next button
-        html += `
-            <li class="page-item ${this.options.currentPage === totalPages ? 'disabled' : ''}">
-                <a class="page-link" href="javascript:void(0)" data-page="${this.options.currentPage + 1}">
-                    <i class="fas fa-chevron-right"></i>
-                </a>
-            </li>
-        `;
-        
-        html += '</ul></nav></div>';
+        html += '</div></div>';
         return html;
     }
     
@@ -401,7 +503,7 @@ export class TableComponent {
             });
         }
         
-        // Pagination
+        // Enhanced Pagination
         if (this.options.pagination) {
             const paginationLinks = this.container.querySelectorAll('.page-link[data-page]');
             paginationLinks.forEach(link => {
@@ -418,6 +520,43 @@ export class TableComponent {
                     }
                 });
             });
+            
+            // Page size selector
+            const pageSizeSelect = this.container.querySelector(`#${this.containerId}-page-size`);
+            if (pageSizeSelect) {
+                pageSizeSelect.addEventListener('change', (e) => {
+                    const newPageSize = parseInt(e.target.value);
+                    this.changePageSize(newPageSize);
+                    
+                    // Call the callback if provided
+                    if (this.options.onPageSizeChange) {
+                        this.options.onPageSizeChange(newPageSize);
+                    }
+                });
+            }
+            
+            // Quick jump controls (only if they exist)
+            const jumpInput = this.container.querySelector(`#${this.containerId}-jump-page`);
+            const jumpButton = this.container.querySelector(`#${this.containerId}-jump-btn`);
+            
+            if (jumpInput && jumpButton) {
+                const handleJump = () => {
+                    const targetPage = parseInt(jumpInput.value);
+                    const totalPages = Math.ceil(this.options.totalItems / this.options.itemsPerPage);
+                    
+                    if (targetPage >= 1 && targetPage <= totalPages && targetPage !== this.options.currentPage) {
+                        this.changePage(targetPage);
+                    }
+                };
+                
+                jumpButton.addEventListener('click', handleJump);
+                jumpInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleJump();
+                    }
+                });
+            }
         }
         
         // Refresh button
@@ -679,6 +818,10 @@ export class TableComponent {
     
     changePage(page) {
         console.log('Changing page from', this.options.currentPage, 'to', page);
+        
+        // Add loading state to pagination
+        this.addPaginationLoading();
+        
         this.options.currentPage = page;
         if (this.options.onPageChange) {
             console.log('Calling onPageChange callback with page:', page);
@@ -690,6 +833,37 @@ export class TableComponent {
         this.render();
     }
     
+    changePageSize(newPageSize) {
+        console.log('Changing page size from', this.options.itemsPerPage, 'to', newPageSize);
+        
+        // Add loading state to pagination
+        this.addPaginationLoading();
+        
+        this.options.itemsPerPage = newPageSize;
+        this.options.currentPage = 1; // Reset to first page when changing page size
+        
+        if (this.options.onPageChange) {
+            this.options.onPageChange(1);
+        }
+        
+        // Re-render the table to update pagination state
+        this.render();
+    }
+    
+    addPaginationLoading() {
+        const paginationContainer = this.container.querySelector('.pagination');
+        if (paginationContainer) {
+            paginationContainer.classList.add('pagination-loading');
+        }
+    }
+    
+    removePaginationLoading() {
+        const paginationContainer = this.container.querySelector('.pagination');
+        if (paginationContainer) {
+            paginationContainer.classList.remove('pagination-loading');
+        }
+    }
+    
     // Public methods for updating the table
     updateData(data, totalItems = null, currentPage = null) {
         this.options.data = data;
@@ -699,6 +873,10 @@ export class TableComponent {
         if (currentPage !== null) {
             this.options.currentPage = currentPage;
         }
+        
+        // Remove pagination loading state
+        this.removePaginationLoading();
+        
         this.render();
     }
     

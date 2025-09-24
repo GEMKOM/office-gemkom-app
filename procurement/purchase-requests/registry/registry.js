@@ -16,6 +16,7 @@ import { fetchCurrencyRates } from '../../../generic/formatters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 // State management
 let currentPage = 1;
+let itemsPerPage = 20;
 let currentFilter = 'all';
 let currentOrdering = 'request_number';
 let currentSortField = 'request_number';
@@ -173,7 +174,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         ],
         pagination: true,
+        serverSidePagination: true,
         itemsPerPage: 20,
+        currentPage: 1,
+        totalItems: 0,
         refreshable: true,
         exportable: true,
         onRefresh: loadRequests,
@@ -186,6 +190,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         },
         onPageChange: (page) => {
             currentPage = page;
+            loadRequests();
+        },
+        onPageSizeChange: (newPageSize) => {
+            itemsPerPage = newPageSize;
+            currentPage = 1;
             loadRequests();
         },
         emptyMessage: 'Satın alma talebi bulunamadı.',
@@ -416,7 +425,6 @@ async function loadRequests() {
         }
         
         // Add pagination parameters
-        const itemsPerPage = 20;
         apiFilters.page = currentPage;
         apiFilters.page_size = itemsPerPage;
         

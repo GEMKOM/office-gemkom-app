@@ -239,7 +239,10 @@ function initializeTableComponent() {
         data: [],
         sortable: true,
         pagination: true,
+        serverSidePagination: true,
         itemsPerPage: 20,
+        currentPage: 1,
+        totalItems: 0,
         refreshable: true,
         exportable: true,
         onRefresh: async () => {
@@ -255,6 +258,11 @@ function initializeTableComponent() {
         },
         onPageChange: async (page) => {
             currentPage = page;
+            await loadOvertimeRequests();
+        },
+        onPageSizeChange: async (newPageSize) => {
+            itemsPerPage = newPageSize;
+            currentPage = 1;
             await loadOvertimeRequests();
         },
         actions: [

@@ -157,6 +157,31 @@ export const TEAM_ACCESS_CONFIG = {
         ],
         allowedSections: ['procurement', 'finance_purchase_orders', 'general_overtime']
     },
+
+    // Procurement team - access to procurement and related areas
+    external_workshops: {
+        allowedRoutes: [
+            '/',
+            '/procurement',
+            '/procurement/purchase-requests',
+            '/procurement/purchase-requests/create',
+            '/procurement/purchase-requests/pending',
+            '/procurement/purchase-requests/registry',
+            '/procurement/suppliers',
+            '/procurement/suppliers/list',
+            '/procurement/suppliers/payment-terms',
+            '/procurement/items',
+            '/procurement/reports',
+            '/procurement/reports/items',
+            '/procurement/reports/staff',
+            '/procurement/reports/suppliers',
+            '/finance/purchase-orders',
+            '/general/overtime',
+            '/general/overtime/pending',
+            '/general/overtime/registry'
+        ],
+        allowedSections: ['procurement', 'finance_purchase_orders', 'general_overtime']
+    },
     
     // Planning team - access to planning and related areas
     planning: {

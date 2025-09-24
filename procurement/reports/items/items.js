@@ -16,6 +16,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     let currentSortField = 'total_spent_eur';
     let currentSortDirection = 'desc';
     
+    // Pagination state
+    let currentPage = 1;
+    let itemsPerPage = 20;
+    
     // Initialize header component
     const headerComponent = new HeaderComponent({
         containerId: 'header-placeholder',
@@ -137,13 +141,25 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         ],
         pagination: true,
+        serverSidePagination: true,
         itemsPerPage: 20,
+        currentPage: 1,
+        totalItems: 0,
         exportable: true,
         refreshable: true,
         skeleton: true,
         onExport: handleExport,
         onRefresh: loadItemReport,
         onSort: handleSort,
+        onPageChange: (page) => {
+            currentPage = page;
+            loadItemReport();
+        },
+        onPageSizeChange: (newPageSize) => {
+            itemsPerPage = newPageSize;
+            currentPage = 1;
+            loadItemReport();
+        },
         // Add current sort state
         currentSortField: currentSortField,
         currentSortDirection: currentSortDirection

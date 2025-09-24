@@ -344,6 +344,11 @@ function initializeTable() {
             currentPage = page;
             loadTimers(page);
         },
+        onPageSizeChange: (newPageSize) => {
+            pageSize = newPageSize;
+            currentPage = 1;
+            loadTimers(1);
+        },
         onRowClick: (row) => {
             // Optional: Add row click functionality if needed
         }

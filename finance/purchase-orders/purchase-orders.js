@@ -37,12 +37,19 @@ document.addEventListener('DOMContentLoaded', async function() {
         onRefreshClick: loadPurchaseOrders
     });
 
-    // Initializ++++e table component
+    // Initialize table component
     window.purchaseOrdersTable = new TableComponent('purchase-orders-table-container', {
         title: 'Satın Alma Siparişleri',
         icon: 'shopping-cart',
         iconColor: 'text-primary',
         loading: true, // Show loading state initially
+        pagination: true,
+        itemsPerPage: 20,
+        currentPage: 1,
+        totalItems: 0,
+        serverSidePagination: true,
+        onPageChange: handlePageChange,
+        onPageSizeChange: handlePageSizeChange,
         columns: [
             { 
                 field: 'id', 
@@ -173,11 +180,19 @@ document.addEventListener('DOMContentLoaded', async function() {
         onApply: (filters) => {
             currentFilters = filters;
             currentPage = 1;
+            // Update table current page
+            if (window.purchaseOrdersTable) {
+                window.purchaseOrdersTable.options.currentPage = 1;
+            }
             loadPurchaseOrders();
         },
         onClear: () => {
             currentFilters = { status: 'awaiting_payment' };
             currentPage = 1;
+            // Update table current page
+            if (window.purchaseOrdersTable) {
+                window.purchaseOrdersTable.options.currentPage = 1;
+            }
             loadPurchaseOrders();
         }
     }).addSelectFilter({
@@ -260,13 +275,35 @@ async function loadPurchaseOrders() {
             window.purchaseOrdersTable.setLoading(true);
         }
         
-        const data = await getPurchaseOrders(currentFilters);
-        currentPurchaseOrders = data.results || data;
+        // Add pagination parameters to filters
+        const filtersWithPagination = {
+            ...currentFilters,
+            page: currentPage,
+            page_size: itemsPerPage
+        };
         
-        // Update table with new data
-        if (window.purchaseOrdersTable) {
-            window.purchaseOrdersTable.setLoading(false);
-            window.purchaseOrdersTable.updateData(currentPurchaseOrders);
+        const data = await getPurchaseOrders(filtersWithPagination);
+        
+        // Handle both paginated and non-paginated responses
+        if (data.results) {
+            // Paginated response
+            currentPurchaseOrders = data.results;
+            const totalItems = data.count || data.total || data.results.length;
+            
+            // Update table with paginated data
+            if (window.purchaseOrdersTable) {
+                window.purchaseOrdersTable.setLoading(false);
+                window.purchaseOrdersTable.updateData(currentPurchaseOrders, totalItems, currentPage);
+            }
+        } else {
+            // Non-paginated response (fallback)
+            currentPurchaseOrders = data;
+            
+            // Update table with all data
+            if (window.purchaseOrdersTable) {
+                window.purchaseOrdersTable.setLoading(false);
+                window.purchaseOrdersTable.updateData(currentPurchaseOrders, currentPurchaseOrders.length, currentPage);
+            }
         }
         
         renderStatistics();
@@ -329,6 +366,19 @@ function handleSort(field, direction) {
 function handleRowClick(row) {
     // Handle row click if needed
     console.log('Row clicked:', row);
+}
+
+function handlePageChange(page) {
+    console.log('Page changed to:', page);
+    currentPage = page;
+    loadPurchaseOrders();
+}
+
+function handlePageSizeChange(newPageSize) {
+    console.log('Page size changed to:', newPageSize);
+    itemsPerPage = newPageSize;
+    currentPage = 1; // Reset to first page when changing page size
+    loadPurchaseOrders();
 }
 
 // Render statistics

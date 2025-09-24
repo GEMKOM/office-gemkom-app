@@ -9,6 +9,10 @@ import { TableComponent } from '../../../../components/table/table.js';
 let allFaults = [];
 let filteredFaults = [];
 let headerComponent, statisticsCards, filtersComponent, tableComponent;
+let currentPage = 1;
+let itemsPerPage = 20;
+let totalItems = 0;
+let currentFilters = {};
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
@@ -215,15 +219,55 @@ function initializeComponents() {
                 }
             }
         ],
+        actions: [
+            {
+                key: 'view',
+                label: 'Görüntüle',
+                icon: 'fas fa-eye',
+                class: 'btn-outline-primary',
+                onClick: (row) => viewFault(row.id)
+            },
+            {
+                key: 'resolve',
+                label: 'Çöz',
+                icon: 'fas fa-tools',
+                class: 'btn-outline-success',
+                onClick: (row) => resolveFault(row.id),
+                visible: (row) => getStatus(row) === 'pending' || getStatus(row) === 'in_progress'
+            },
+            {
+                key: 'edit',
+                label: 'Düzenle',
+                icon: 'fas fa-edit',
+                class: 'btn-outline-secondary',
+                onClick: (row) => editFault(row.id)
+            }
+        ],
         pagination: true,
-        itemsPerPage: 10,
+        serverSidePagination: true,
+        itemsPerPage: 20,
+        currentPage: 1,
+        totalItems: 0,
         refreshable: true,
         exportable: true,
         onRefresh: loadFaultRequests,
         onExport: exportToExcel,
+        onPageChange: (page) => {
+            currentPage = page;
+            loadFaultRequests();
+        },
+        onPageSizeChange: (newPageSize) => {
+            itemsPerPage = newPageSize;
+            currentPage = 1;
+            loadFaultRequests();
+        },
         onRowClick: (row) => {
             // Handle row click if needed
-        }
+        },
+        emptyMessage: 'Arıza talebi bulunamadı',
+        emptyIcon: 'fas fa-exclamation-triangle',
+        skeleton: true,
+        loading: true
     });
 }
 
@@ -231,24 +275,47 @@ async function loadFaultRequests() {
     try {
         tableComponent.setLoading(true);
         
-        // Fetch fault requests from API
-        const faults = await fetchMachineFaults();
+        // Prepare API filters with pagination
+        const apiFilters = {
+            page: currentPage,
+            page_size: itemsPerPage,
+            ...currentFilters
+        };
         
-        allFaults = faults;
+        // Fetch fault requests from API with pagination
+        const response = await fetchMachineFaults(apiFilters);
+        
+        // Handle paginated response
+        if (response.results) {
+            allFaults = response.results;
+            totalItems = response.count || response.results.length;
+        } else if (Array.isArray(response)) {
+            allFaults = response;
+            totalItems = response.length;
+        } else {
+            allFaults = [];
+            totalItems = 0;
+        }
+        
         filteredFaults = [...allFaults];
         
         // Update statistics
         updateStatistics();
         
-        // Update table data
+        // Update table data with pagination info
         updateTableData();
         
-        // Load machines for filter
-        loadMachinesForFilter();
+        // Load machines for filter (only on first load)
+        if (currentPage === 1) {
+            loadMachinesForFilter();
+        }
         
     } catch (error) {
         console.error('Error loading fault requests:', error);
         showAlert('Arıza talepleri yüklenirken hata oluştu.', 'danger');
+        allFaults = [];
+        totalItems = 0;
+        updateTableData();
     } finally {
         tableComponent.setLoading(false);
     }
@@ -271,12 +338,10 @@ function updateStatistics() {
 function updateTableData() {
     // The table component will now handle formatting through column formatters
     // We just need to pass the raw data
-    const tableData = filteredFaults.map(fault => ({
-        ...fault,
-        actions: getActionButtons(fault)
-    }));
+    const tableData = filteredFaults;
     
-    tableComponent.updateData(tableData);
+    // Update table with pagination info
+    tableComponent.updateData(tableData, totalItems, currentPage);
 }
 
 function getStatus(fault) {
@@ -291,28 +356,7 @@ function getStatus(fault) {
 
 // Removed getPriorityBadge and getStatusBadge functions - now handled by table component formatters
 
-function getActionButtons(fault) {
-    const buttons = [];
-    
-    // View button
-    buttons.push(`<button type="button" class="btn btn-outline-primary" onclick="viewFault(${fault.id})" title="Görüntüle">
-        <i class="fas fa-eye"></i>
-    </button>`);
-    
-    // Resolve button (only for pending/in_progress)
-    if (getStatus(fault) === 'pending' || getStatus(fault) === 'in_progress') {
-        buttons.push(`<button type="button" class="btn btn-outline-success" onclick="resolveFault(${fault.id})" title="Çöz">
-            <i class="fas fa-tools"></i>
-        </button>`);
-    }
-    
-    // Edit button
-    buttons.push(`<button type="button" class="btn btn-outline-secondary" onclick="editFault(${fault.id})" title="Düzenle">
-        <i class="fas fa-edit"></i>
-    </button>`);
-    
-    return `<div class="btn-group btn-group-sm" role="group">${buttons.join('')}</div>`;
-}
+// Action buttons are now handled by the table component's actions configuration
 
 // Removed formatDate function - now handled by table component date formatting
 
@@ -329,66 +373,55 @@ function loadMachinesForFilter() {
 
 function applyFilters() {
     const filterValues = filtersComponent.getFilterValues();
-    const statusFilter = filterValues.statusFilter;
-    const priorityFilter = filterValues.priorityFilter;
-    const machineFilter = filterValues.machineFilter;
-    const dateFilter = filterValues.dateFilter;
     
-    filteredFaults = allFaults.filter(fault => {
-        // Status filter
-        if (statusFilter && getStatus(fault) !== statusFilter) {
-            return false;
-        }
-        
-        // Priority filter
-        if (priorityFilter) {
-            const faultPriority = fault.is_breaking ? 'critical' : (fault.is_maintenance ? 'medium' : 'low');
-            if (faultPriority !== priorityFilter) {
-                return false;
-            }
-        }
-        
-        // Machine filter
-        if (machineFilter && fault.machine_name !== machineFilter) {
-            return false;
-        }
-        
-        // Date filter
-        if (dateFilter) {
-            const faultDate = new Date(fault.reported_at);
-            const today = new Date();
-            
-            switch (dateFilter) {
-                case 'today':
-                    if (faultDate.toDateString() !== today.toDateString()) {
-                        return false;
-                    }
-                    break;
-                case 'week':
-                    const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-                    if (faultDate < weekAgo) {
-                        return false;
-                    }
-                    break;
-                case 'month':
-                    const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
-                    if (faultDate < monthAgo) {
-                        return false;
-                    }
-                    break;
-            }
-        }
-        
-        return true;
-    });
+    // Build server-side filters
+    currentFilters = {};
     
-    updateTableData();
+    // Status filter
+    if (filterValues.statusFilter) {
+        currentFilters.status = filterValues.statusFilter;
+    }
+    
+    // Priority filter
+    if (filterValues.priorityFilter) {
+        currentFilters.priority = filterValues.priorityFilter;
+    }
+    
+    // Machine filter
+    if (filterValues.machineFilter) {
+        currentFilters.machine_name = filterValues.machineFilter;
+    }
+    
+    // Date filter
+    if (filterValues.dateFilter) {
+        const today = new Date();
+        switch (filterValues.dateFilter) {
+            case 'today':
+                currentFilters.reported_at__date = today.toISOString().split('T')[0];
+                break;
+            case 'week':
+                const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
+                currentFilters.reported_at__gte = weekAgo.toISOString().split('T')[0];
+                break;
+            case 'month':
+                const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
+                currentFilters.reported_at__gte = monthAgo.toISOString().split('T')[0];
+                break;
+        }
+    }
+    
+    // Reset to first page when applying filters
+    currentPage = 1;
+    
+    // Reload data with new filters
+    loadFaultRequests();
 }
 
 function clearFilters() {
     filtersComponent.clearFilters();
-    filteredFaults = [...allFaults];
-    updateTableData();
+    currentFilters = {};
+    currentPage = 1;
+    loadFaultRequests();
 }
 
 function exportToExcel() {

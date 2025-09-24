@@ -109,6 +109,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: 'chart-bar',
         iconColor: 'text-info',
         loading: true,
+        pagination: true,
+        serverSidePagination: false, // Client-side pagination for small dataset
+        itemsPerPage: 12, // Show 12 months by default
+        currentPage: 1,
+        totalItems: 0,
         refreshable: false,
         exportable: true,
         onExport: handleExport,
