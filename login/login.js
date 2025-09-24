@@ -1,5 +1,6 @@
 // login/login.js
 import { login, navigateTo, ROUTES, shouldBeOnLoginPage, navigateByTeamIfFreshLogin } from '../authService.js';
+import { forgotPassword } from '../generic/users.js';
 
 // Enhanced error handling and display
 function showError(message) {
@@ -105,6 +106,173 @@ function setLoadingState(isLoading, buttonId = 'login-button') {
     }
 }
 
+// Forgot password functionality
+function showForgotPasswordError(message) {
+    const errorElement = document.getElementById('forgot-password-error');
+    const errorText = document.getElementById('forgot-password-error-text');
+    const successElement = document.getElementById('forgot-password-success');
+    
+    if (errorElement && errorText) {
+        // Hide success message if visible
+        if (successElement) {
+            successElement.style.display = 'none';
+        }
+        
+        errorText.textContent = message;
+        errorElement.style.display = 'flex';
+        errorElement.classList.remove('fade');
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            hideForgotPasswordError();
+        }, 5000);
+    }
+}
+
+function hideForgotPasswordError() {
+    const errorElement = document.getElementById('forgot-password-error');
+    if (errorElement) {
+        errorElement.classList.add('fade');
+        setTimeout(() => {
+            errorElement.style.display = 'none';
+        }, 300);
+    }
+}
+
+function showForgotPasswordSuccess(message) {
+    const successElement = document.getElementById('forgot-password-success');
+    const successText = document.getElementById('forgot-password-success-text');
+    const errorElement = document.getElementById('forgot-password-error');
+    
+    if (successElement && successText) {
+        // Hide error message if visible
+        if (errorElement) {
+            errorElement.style.display = 'none';
+        }
+        
+        successText.textContent = message;
+        successElement.style.display = 'flex';
+        successElement.classList.remove('fade');
+        
+        // Auto-hide after 5 seconds
+        setTimeout(() => {
+            hideForgotPasswordSuccess();
+        }, 5000);
+    }
+}
+
+function hideForgotPasswordSuccess() {
+    const successElement = document.getElementById('forgot-password-success');
+    if (successElement) {
+        successElement.classList.add('fade');
+        setTimeout(() => {
+            successElement.style.display = 'none';
+        }, 300);
+    }
+}
+
+function setForgotPasswordLoadingState(isLoading) {
+    const submitButton = document.getElementById('forgot-password-submit');
+    const btnText = submitButton?.querySelector('.btn-text');
+    const btnLoading = submitButton?.querySelector('.btn-loading');
+    
+    if (submitButton && btnText && btnLoading) {
+        if (isLoading) {
+            submitButton.disabled = true;
+            btnText.style.display = 'none';
+            btnLoading.style.display = 'flex';
+        } else {
+            submitButton.disabled = false;
+            btnText.style.display = 'flex';
+            btnLoading.style.display = 'none';
+        }
+    }
+}
+
+async function handleForgotPassword(username) {
+    try {
+        const response = await forgotPassword(username);
+        
+        if (response.ok) {
+            showForgotPasswordSuccess('Şifre sıfırlama isteğiniz yöneticinize iletildi.');
+            // Clear the form
+            document.getElementById('forgot-username').value = '';
+            // Close modal after a delay
+            setTimeout(() => {
+                const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('forgotPasswordModal'));
+                modal.hide();
+            }, 2000);
+        } else {
+            showForgotPasswordSuccess('Şifre sıfırlama isteğiniz yöneticinize iletildi.');
+        }
+    } catch (error) {
+        console.error('Forgot password error:', error);
+        showForgotPasswordError('Bağlantı hatası. Lütfen tekrar deneyin.');
+    } finally {
+        setForgotPasswordLoadingState(false);
+    }
+}
+
+function setupForgotPasswordModal() {
+    const forgotPasswordLink = document.getElementById('forgot-password-link');
+    const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+    const forgotPasswordForm = document.getElementById('forgot-password-form');
+    const forgotPasswordSubmit = document.getElementById('forgot-password-submit');
+    
+    // Open modal when link is clicked
+    if (forgotPasswordLink && forgotPasswordModal) {
+        forgotPasswordLink.addEventListener('click', (e) => {
+            e.preventDefault();
+            const modal = bootstrap.Modal.getOrCreateInstance(forgotPasswordModal);
+            modal.show();
+        });
+    }
+    
+    // Handle form submission
+    if (forgotPasswordForm && forgotPasswordSubmit) {
+        forgotPasswordForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            handleForgotPasswordSubmit();
+        });
+        
+        forgotPasswordSubmit.addEventListener('click', (e) => {
+            e.preventDefault();
+            handleForgotPasswordSubmit();
+        });
+    }
+    
+    // Clear form when modal is hidden
+    if (forgotPasswordModal) {
+        forgotPasswordModal.addEventListener('hidden.bs.modal', () => {
+            forgotPasswordForm.reset();
+            hideForgotPasswordError();
+            hideForgotPasswordSuccess();
+        });
+    }
+}
+
+function handleForgotPasswordSubmit() {
+    const usernameInput = document.getElementById('forgot-username');
+    const username = usernameInput.value.trim();
+    
+    // Hide any existing messages
+    hideForgotPasswordError();
+    hideForgotPasswordSuccess();
+    
+    // Validate input
+    if (!username) {
+        showForgotPasswordError('Lütfen kullanıcı adınızı girin.');
+        usernameInput.focus();
+        return;
+    }
+    
+    // Set loading state
+    setForgotPasswordLoadingState(true);
+    
+    // Submit request
+    handleForgotPassword(username);
+}
+
 // Password toggle functionality
 function setupPasswordToggle() {
     const toggleButton = document.getElementById('toggle-password');
@@ -179,6 +347,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize password toggle
     setupPasswordToggle();
+
+    // Initialize forgot password modal
+    setupForgotPasswordModal();
 
     // Form submission handler
     const loginForm = document.getElementById('login-form');

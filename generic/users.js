@@ -90,3 +90,38 @@ export async function updateUser(userId, userData) {
     });
     return resp;
 }
+
+export async function forgotPassword(username) {
+    const resp = await fetch(`${backendBase}/users/forgot-password/request/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+    });
+    return resp;
+}
+
+export async function listPasswordResetRequests() {
+    const resp = await authedFetch(`${backendBase}/users/forgot-password/list/`);
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return extractResultsFromResponse(data);
+}
+
+export async function adminResetUserPassword(userId) {
+    const resp = await authedFetch(`${backendBase}/users/forgot-password/${userId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    return resp;
+}
+
+export async function resetPassword(newPassword) {
+    const resp = await authedFetch(`${backendBase}/users/reset-password/`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ new_password: newPassword })
+    });
+    return resp;
+}

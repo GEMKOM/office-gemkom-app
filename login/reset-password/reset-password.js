@@ -1,5 +1,5 @@
-import { authedFetch, navigateTo, ROUTES, shouldBeOnResetPasswordPage, getUser } from '../../authService.js';
-import { backendBase } from '../../base.js';
+import { navigateTo, ROUTES, shouldBeOnResetPasswordPage, getUser } from '../../authService.js';
+import { resetPassword } from '../../generic/users.js';
 
 document.addEventListener('DOMContentLoaded', function() {
     // Check if user should be on this page
@@ -32,13 +32,7 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         try {
-            const res = await authedFetch(`${backendBase}/users/reset-password/`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify({ new_password: newPassword })
-            });
+            const res = await resetPassword(newPassword);
             if (res.ok) {
                 // Update the user data in localStorage to reflect the password reset
                 try {

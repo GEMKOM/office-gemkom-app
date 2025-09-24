@@ -259,6 +259,17 @@ const NAVIGATION_STRUCTURE = {
                 children: {}
             }
         }
+    },
+    '/admin': {
+        label: 'Admin',
+        icon: 'fas fa-cogs',
+        children: {
+            '/admin/password-resets': {
+                label: 'Şifre Sıfırlama Talepleri',
+                icon: 'fas fa-key',
+                children: {}
+            }
+        }
     }
 };
 
