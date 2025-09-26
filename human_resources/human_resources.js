@@ -1,0 +1,36 @@
+/**
+ * Human Resources module
+ * Handles HR-related functionality
+ */
+
+import { guardRoute } from '../authService.js';
+import { initNavbar } from '../components/navbar.js';
+import { MenuComponent } from '../components/menu/menu.js';
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!guardRoute()) {
+        return;
+    }
+
+    await initNavbar();
+    
+    // Initialize menu component
+    const menuComponent = new MenuComponent('menu-container', {
+        title: 'İnsan Kaynakları Modülü',
+        subtitle: 'İnsan kaynakları süreçlerinizi yönetin ve çalışan bilgilerini takip edin',
+        cards: [
+            {
+                title: 'Maaşlar',
+                description: 'Çalışan maaş bilgileri, ücret hesaplamaları ve maaş yönetimi.',
+                icon: 'fas fa-money-bill-wave',
+                iconColor: 'success',
+                link: '/human_resources/wages'
+            }
+        ]
+    });
+    
+    // Render the menu
+    menuComponent.render();
+    
+    console.log('Human Resources module initialized');
+});

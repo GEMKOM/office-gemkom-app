@@ -132,6 +132,21 @@ async function handleLandingPage() {
                             link: '/it/inventory'
                         }
                     ]
+                },
+                {
+                    title: 'İnsan Kaynakları',
+                    description: 'Çalışan yönetimi, maaş süreçleri ve insan kaynakları işlemlerini yönetin.',
+                    icon: 'fas fa-users-cog',
+                    iconColor: 'info',
+                    link: '/human_resources',
+                    features: [
+                        {
+                            label: 'Maaşlar',
+                            icon: 'fas fa-money-bill-wave',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/human_resources/wages'
+                        }
+                    ]
                 }
             ];
 

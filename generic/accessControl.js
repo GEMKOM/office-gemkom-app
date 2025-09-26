@@ -209,6 +209,15 @@ export const TEAM_ACCESS_CONFIG = {
         allowedSections: ['it', 'general', 'general_overtime']
     },
     
+    // Human Resources team - access to HR and related areas
+    human_resources: {
+        allowedRoutes: mergeWithBaseRoutes([
+            '/human_resources',
+            '/human_resources/wages'
+        ]),
+        allowedSections: ['human_resources', 'general', 'general_overtime']
+    },
+    
     // Default/other teams - minimal access
     other: {
         allowedRoutes: mergeWithBaseRoutes([]),

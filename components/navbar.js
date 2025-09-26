@@ -260,6 +260,17 @@ const NAVIGATION_STRUCTURE = {
             }
         }
     },
+    '/human_resources': {
+        label: 'İnsan Kaynakları',
+        icon: 'fas fa-users-cog',
+        children: {
+            '/human_resources/wages': {
+                label: 'Maaşlar',
+                icon: 'fas fa-money-bill-wave',
+                children: {}
+            }
+        }
+    },
     '/admin': {
         label: 'Admin',
         icon: 'fas fa-cogs',
@@ -844,6 +855,12 @@ export function initNavbar() {
                     return;
                 }
                 
+                if (path.startsWith('/human_resources/')) {
+                    // Allow navigation to HR pages
+                    navigateTo(path);
+                    return;
+                }
+                
                 
                 
                 navigateTo(path);
@@ -903,6 +920,12 @@ export function initNavbar() {
                 
                 if (path.startsWith('/it/')) {
                     // Allow navigation to IT pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                if (path.startsWith('/human_resources/')) {
+                    // Allow navigation to HR pages
                     navigateTo(path);
                     return;
                 }
