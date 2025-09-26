@@ -4,6 +4,23 @@ import { getUserTeam, isAdmin } from '../authService.js';
  * Team-based access control configuration
  * Defines which routes/sections each team can access
  */
+// Base routes that all logged-in users should have access to
+const BASE_GENERAL_ROUTES = [
+    '/',
+    '/general',
+    '/general/users',
+    '/general/machines',
+    '/general/overtime',
+    '/general/overtime/pending',
+    '/general/overtime/registry',
+    '/general/overtime/users'
+];
+
+// Helper function to merge base routes with team-specific routes
+const mergeWithBaseRoutes = (teamRoutes) => {
+    return [...BASE_GENERAL_ROUTES, ...teamRoutes.filter(route => !BASE_GENERAL_ROUTES.includes(route))];
+};
+
 export const TEAM_ACCESS_CONFIG = {
     // Admin users have access to everything
     admin: {
@@ -13,15 +30,7 @@ export const TEAM_ACCESS_CONFIG = {
     
     // Management team - has access to most sections
     management: {
-        allowedRoutes: [
-            '/',
-            '/general',
-            '/general/users',
-            '/general/machines', 
-            '/general/overtime',
-            '/general/overtime/pending',
-            '/general/overtime/registry',
-            '/general/overtime/users',
+        allowedRoutes: mergeWithBaseRoutes([
             '/manufacturing',
             '/manufacturing/machining',
             '/manufacturing/machining/dashboard',
@@ -55,14 +64,13 @@ export const TEAM_ACCESS_CONFIG = {
             '/finance/reports',
             '/finance/reports/executive-overview',
             '/finance/reports/projects'
-        ],
+        ]),
         allowedSections: ['general', 'manufacturing', 'procurement', 'finance']
     },
     
     // Manufacturing team - access to manufacturing and related areas
     manufacturing: {
-        allowedRoutes: [
-            '/',
+        allowedRoutes: mergeWithBaseRoutes([
             '/manufacturing',
             '/manufacturing/machining',
             '/manufacturing/machining/dashboard',
@@ -77,19 +85,14 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/maintenance/fault-requests',
             '/manufacturing/maintenance/fault-requests/create',
             '/manufacturing/maintenance/fault-requests/list',
-            '/manufacturing/welding',
-            '/general/overtime',
-            '/general/overtime/pending',
-            '/general/overtime/registry',
-            '/general/overtime/users'
-        ],
-        allowedSections: ['manufacturing', 'general_overtime']
+            '/manufacturing/welding'
+        ]),
+        allowedSections: ['manufacturing', 'general', 'general_overtime']
     },
     
     // Machining team - specific to machining operations
     machining: {
-        allowedRoutes: [
-            '/',
+        allowedRoutes: mergeWithBaseRoutes([
             '/manufacturing/machining',
             '/manufacturing/machining/dashboard',
             '/manufacturing/machining/capacity',
@@ -98,45 +101,33 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/machining/tasks',
             '/manufacturing/machining/reports',
             '/manufacturing/machining/reports/sum-report',
-            '/manufacturing/machining/reports/finished-timers',
-            '/general/overtime',
-            '/general/overtime/pending',
-            '/general/overtime/registry'
-        ],
-        allowedSections: ['manufacturing_machining', 'general_overtime']
+            '/manufacturing/machining/reports/finished-timers'
+        ]),
+        allowedSections: ['manufacturing_machining', 'general', 'general_overtime']
     },
     
     // Maintenance team - access to maintenance and fault management
     maintenance: {
-        allowedRoutes: [
-            '/',
+        allowedRoutes: mergeWithBaseRoutes([
             '/manufacturing/maintenance',
             '/manufacturing/maintenance/fault-requests',
             '/manufacturing/maintenance/fault-requests/create',
-            '/manufacturing/maintenance/fault-requests/list',
-            '/general/overtime',
-            '/general/overtime/pending',
-            '/general/overtime/registry'
-        ],
-        allowedSections: ['manufacturing_maintenance', 'general_overtime']
+            '/manufacturing/maintenance/fault-requests/list'
+        ]),
+        allowedSections: ['manufacturing_maintenance', 'general', 'general_overtime']
     },
     
     // Welding team - access to welding operations
     welding: {
-        allowedRoutes: [
-            '/',
-            '/manufacturing/welding',
-            '/general/overtime',
-            '/general/overtime/pending',
-            '/general/overtime/registry'
-        ],
-        allowedSections: ['manufacturing_welding', 'general_overtime']
+        allowedRoutes: mergeWithBaseRoutes([
+            '/manufacturing/welding'
+        ]),
+        allowedSections: ['manufacturing_welding', 'general', 'general_overtime']
     },
     
     // Procurement team - access to procurement and related areas
     procurement: {
-        allowedRoutes: [
-            '/',
+        allowedRoutes: mergeWithBaseRoutes([
             '/procurement',
             '/procurement/purchase-requests',
             '/procurement/purchase-requests/create',
@@ -150,18 +141,14 @@ export const TEAM_ACCESS_CONFIG = {
             '/procurement/reports/items',
             '/procurement/reports/staff',
             '/procurement/reports/suppliers',
-            '/finance/purchase-orders',
-            '/general/overtime',
-            '/general/overtime/pending',
-            '/general/overtime/registry'
-        ],
-        allowedSections: ['procurement', 'finance_purchase_orders', 'general_overtime']
+            '/finance/purchase-orders'
+        ]),
+        allowedSections: ['procurement', 'finance_purchase_orders', 'general', 'general_overtime']
     },
 
-    // Procurement team - access to procurement and related areas
+    // External workshops team - access to procurement and related areas
     external_workshops: {
-        allowedRoutes: [
-            '/',
+        allowedRoutes: mergeWithBaseRoutes([
             '/procurement',
             '/procurement/purchase-requests',
             '/procurement/purchase-requests/create',
@@ -175,22 +162,14 @@ export const TEAM_ACCESS_CONFIG = {
             '/procurement/reports/items',
             '/procurement/reports/staff',
             '/procurement/reports/suppliers',
-            '/finance/purchase-orders',
-            '/general/overtime',
-            '/general/overtime/pending',
-            '/general/overtime/registry'
-        ],
-        allowedSections: ['procurement', 'finance_purchase_orders', 'general_overtime']
+            '/finance/purchase-orders'
+        ]),
+        allowedSections: ['procurement', 'finance_purchase_orders', 'general', 'general_overtime']
     },
     
     // Planning team - access to planning and related areas
     planning: {
-        allowedRoutes: [
-            '/',
-            '/general',
-            '/general/overtime',
-            '/general/overtime/pending',
-            '/general/overtime/registry',
+        allowedRoutes: mergeWithBaseRoutes([
             '/manufacturing',
             '/manufacturing/machining',
             '/manufacturing/machining/capacity',
@@ -201,14 +180,13 @@ export const TEAM_ACCESS_CONFIG = {
             '/procurement/purchase-requests/create',
             '/procurement/purchase-requests/pending',
             '/procurement/purchase-requests/registry'
-        ],
-        allowedSections: ['manufacturing_planning', 'procurement', 'general_overtime']
+        ]),
+        allowedSections: ['manufacturing_planning', 'procurement', 'general', 'general_overtime']
     },
     
     // Finance team - access to financial areas
     finance: {
-        allowedRoutes: [
-            '/',
+        allowedRoutes: mergeWithBaseRoutes([
             '/finance',
             '/finance/purchase-orders',
             '/finance/reports',
@@ -217,36 +195,24 @@ export const TEAM_ACCESS_CONFIG = {
             '/procurement/reports',
             '/procurement/reports/items',
             '/procurement/reports/staff',
-            '/procurement/reports/suppliers',
-            '/general/overtime',
-            '/general/overtime/pending',
-            '/general/overtime/registry'
-        ],
-        allowedSections: ['finance', 'procurement_reports', 'general_overtime']
+            '/procurement/reports/suppliers'
+        ]),
+        allowedSections: ['finance', 'procurement_reports', 'general', 'general_overtime']
     },
     
     // IT team - access to IT systems and inventory
     it: {
-        allowedRoutes: [
-            '/',
+        allowedRoutes: mergeWithBaseRoutes([
             '/it',
-            '/it/inventory',
-            '/general/overtime',
-            '/general/overtime/pending',
-            '/general/overtime/registry'
-        ],
-        allowedSections: ['it', 'general_overtime']
+            '/it/inventory'
+        ]),
+        allowedSections: ['it', 'general', 'general_overtime']
     },
     
     // Default/other teams - minimal access
     other: {
-        allowedRoutes: [
-            '/',
-            '/general/overtime',
-            '/general/overtime/pending',
-            '/general/overtime/registry'
-        ],
-        allowedSections: ['general_overtime']
+        allowedRoutes: mergeWithBaseRoutes([]),
+        allowedSections: ['general', 'general_overtime']
     }
 };
 
