@@ -48,8 +48,7 @@ export function extractResultsFromResponse(responseData) {
         console.warn('Unexpected response format:', responseData);
         res = [];
     }
-    
-    console.log('Extracted results:', res);
+
     return res;
 }
 

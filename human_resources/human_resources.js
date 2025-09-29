@@ -20,8 +20,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         subtitle: 'İnsan kaynakları süreçlerinizi yönetin ve çalışan bilgilerini takip edin',
         cards: [
             {
-                title: 'Maaşlar',
-                description: 'Çalışan maaş bilgileri, ücret hesaplamaları ve maaş yönetimi.',
+                title: 'Maaş Yönetimi',
+                description: 'Çalışan ücret oranlarını görüntüleyin ve yönetin',
                 icon: 'fas fa-money-bill-wave',
                 iconColor: 'success',
                 link: '/human_resources/wages'
