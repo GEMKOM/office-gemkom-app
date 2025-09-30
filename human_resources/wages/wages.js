@@ -15,6 +15,7 @@ import {
     fetchWageRates,
     fetchWageRatesForUser,
     createWageRate,
+    deleteWageRate,
     formatCurrency,
     getCurrencyInfo
 } from '../../generic/hr.js';
@@ -346,24 +347,7 @@ class WagesManager {
                     step: 0.01,
                     min: 0,
                     colSize: 6
-                },
-                {
-                    id: 'current_wage_date',
-                    name: 'current_wage_date',
-                    label: 'Geçerlilik Tarihi',
-                    type: 'text',
-                    readonly: true,
-                    colSize: 6
-                },
-                {
-                    id: 'current_wage_amount',
-                    name: 'current_wage_amount',
-                    label: 'Ücret',
-                    type: 'text',
-                    readonly: true,
-                    colSize: 6
-                },
-                
+                }
             ]
         });
 
@@ -373,6 +357,88 @@ class WagesManager {
 
         // Render the modal
         this.editModalComponent.render();
+    }
+
+
+    addWageHistoryFields(wageHistory) {
+        // Add wage history section if there are wages
+        if (wageHistory && wageHistory.length > 0) {
+            // Add a section for wage history
+            this.editModalComponent.addSection({
+                id: 'wage-history',
+                title: 'Geçmiş Ücretler',
+                icon: 'fas fa-history',
+                iconColor: 'text-info',
+                fields: []
+            });
+
+            // Add fields for each wage entry (latest first)
+            wageHistory.forEach((wage, index) => {
+                const currency = wage.currency || 'TRY';
+                const amount = parseFloat(wage.base_monthly) || 0;
+                const date = wage.effective_from ? 
+                    new Date(wage.effective_from).toLocaleDateString('tr-TR') : '-';
+                
+                // Add amount field
+                this.editModalComponent.addField({
+                    id: `wage_${index}_amount`,
+                    name: `wage_${index}_amount`,
+                    label: '',
+                    type: 'text',
+                    readonly: true,
+                    value: formatCurrency(amount, currency),
+                    colSize: 4
+                });
+
+                // Add date field
+                this.editModalComponent.addField({
+                    id: `wage_${index}_date`,
+                    name: `wage_${index}_date`,
+                    label: '',
+                    type: 'text',
+                    readonly: true,
+                    value: date,
+                    colSize: 4
+                });
+
+                // Add delete button field (will be implemented after rendering)
+                this.editModalComponent.addField({
+                    id: `wage_${index}_delete`,
+                    name: `wage_${index}_delete`,
+                    label: '',
+                    type: 'text',
+                    readonly: true,
+                    value: 'Sil',
+                    colSize: 4
+                });
+            });
+
+            // Re-render the modal with new fields
+            this.editModalComponent.render();
+            
+            // Replace text fields with actual buttons
+            this.addDeleteButtons(wageHistory);
+        }
+    }
+
+    addDeleteButtons(wageHistory) {
+        wageHistory.forEach((wage, index) => {
+            const deleteField = this.editModalComponent.container.querySelector(`[data-field-id="wage_${index}_delete"]`);
+            if (deleteField) {
+                const input = deleteField.querySelector('.field-input');
+                if (input) {
+                    // Replace the input with a button
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'btn btn-sm btn-outline-danger';
+                    button.innerHTML = '<i class="fas fa-trash"></i> Sil';
+                    button.onclick = () => this.deleteWageEntry(wage.id, index);
+                    
+                    // Replace the input with the button
+                    input.parentNode.replaceChild(button, input);
+                }
+            }
+        });
     }
 
     setupEventListeners() {
@@ -583,10 +649,9 @@ class WagesManager {
             const userDisplay = `${row.user_info.first_name} ${row.user_info.last_name} (${row.user_info.username})`;
             
             // Fetch user's wage history
-            let currentWageAmount = 'Ücret tanımlanmamış';
-            let currentWageDate = '-';
             let effectiveFrom = new Date().toISOString().split('T')[0];
             let baseMonthly = '';
+            let wageHistoryData = {};
             
             try {
                 console.log('Fetching wage history for user ID:', row.user_info.id);
@@ -596,18 +661,12 @@ class WagesManager {
                 if (wageHistoryResponse && wageHistoryResponse.results && wageHistoryResponse.results.length > 0) {
                     const wageHistory = wageHistoryResponse.results;
                     
-                    // Get the most recent wage (first in the list)
+                    // Add wage history fields to modal
+                    this.addWageHistoryFields(wageHistory);
+                    
+                    // Pre-fill form with most recent values (first in the list)
                     const mostRecentWage = wageHistory[0];
                     if (mostRecentWage) {
-                        const currency = mostRecentWage.currency || 'TRY';
-                        const amount = parseFloat(mostRecentWage.base_monthly) || 0;
-                        const date = mostRecentWage.effective_from ? 
-                            new Date(mostRecentWage.effective_from).toLocaleDateString('tr-TR') : '-';
-                        
-                        currentWageAmount = formatCurrency(amount, currency);
-                        currentWageDate = date;
-                        
-                        // Pre-fill form with most recent values
                         effectiveFrom = mostRecentWage.effective_from || effectiveFrom;
                         baseMonthly = mostRecentWage.base_monthly || '';
                     }
@@ -620,8 +679,6 @@ class WagesManager {
             // Prepare form data
             const modalData = {
                 user_display: userDisplay,
-                current_wage_amount: currentWageAmount,
-                current_wage_date: currentWageDate,
                 effective_from: effectiveFrom,
                 base_monthly: baseMonthly,
                 user_id: row.user_info.id  // Use user ID from user_info
@@ -688,7 +745,10 @@ class WagesManager {
 
             // Show success message
             this.showNotification('Ücret oranı başarıyla kaydedildi', 'success');
+            
+            // Hide modal and destroy/recreate for next use
             this.editModalComponent.hide();
+            this.destroyAndRecreateModal();
             
             // Refresh data
             await this.loadWageRates();
@@ -715,7 +775,83 @@ class WagesManager {
     }
 
     cancelEdit() {
+        // Hide the modal first
         this.editModalComponent.hide();
+        
+        // Destroy and recreate the modal for next use
+        this.destroyAndRecreateModal();
+    }
+
+    destroyAndRecreateModal() {
+        // Destroy the current modal
+        if (this.editModalComponent) {
+            this.editModalComponent.destroy();
+        }
+        
+        // Recreate the modal with fresh state
+        this.initializeEditModal();
+    }
+
+    async deleteWageEntry(wageRateId, index) {
+        try {
+            // Confirm deletion
+            if (!confirm('Bu ücret kaydını silmek istediğinizden emin misiniz?')) {
+                return;
+            }
+
+            // Show loading state
+            this.editModalComponent.setLoading(true);
+
+            // Delete the wage rate
+            await deleteWageRate(wageRateId);
+
+            // Show success message
+            this.showNotification('Ücret kaydı başarıyla silindi', 'success');
+
+            // Refresh the wage history
+            const currentUserId = this.currentUserId;
+            if (currentUserId) {
+                const wageHistoryResponse = await fetchWageRatesForUser(currentUserId);
+                if (wageHistoryResponse && wageHistoryResponse.results) {
+                    // Clear existing wage history section first
+                    const existingSection = this.editModalComponent.container.querySelector('[data-section-id="wage-history"]');
+                    if (existingSection) {
+                        existingSection.remove();
+                    }
+                    
+                    // Add the updated wage history
+                    this.addWageHistoryFields(wageHistoryResponse.results);
+                } else {
+                    // If no wage history, remove the section
+                    const existingSection = this.editModalComponent.container.querySelector('[data-section-id="wage-history"]');
+                    if (existingSection) {
+                        existingSection.remove();
+                    }
+                }
+            }
+
+            // Refresh main data
+            await this.loadWageRates();
+            await this.calculateStatistics();
+
+        } catch (error) {
+            console.error('Error deleting wage rate:', error);
+            
+            // Extract error message from API response
+            let errorMessage = 'Ücret kaydı silinirken hata oluştu';
+            if (error.response && error.response.detail) {
+                errorMessage = Array.isArray(error.response.detail) 
+                    ? error.response.detail.join(', ') 
+                    : error.response.detail;
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            
+            this.showNotification(errorMessage, 'error');
+        } finally {
+            // Clear loading state
+            this.editModalComponent.setLoading(false);
+        }
     }
 
     getDemoWageRates() {
@@ -808,5 +944,7 @@ class WagesManager {
 
 // Initialize the wages manager when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {
-    new WagesManager();
+    const wagesManager = new WagesManager();
+    // Make wagesManager globally accessible for delete buttons
+    window.wagesManager = wagesManager;
 });

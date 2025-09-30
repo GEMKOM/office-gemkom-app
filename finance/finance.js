@@ -1,9 +1,20 @@
 // Finance Module JavaScript
 import { initNavbar } from '../components/navbar.js';
 import { MenuComponent } from '../components/menu/menu.js';
+import { initRouteProtection } from '../generic/routeProtection.js';
 
 // Initialize the finance module
 document.addEventListener('DOMContentLoaded', async function() {
+    console.log('Finance module: Starting route protection check...');
+    
+    // Initialize route protection
+    if (!initRouteProtection()) {
+        console.log('Finance module: Route protection denied access');
+        return;
+    }
+    
+    console.log('Finance module: Route protection passed, continuing...');
+
     // Initialize navbar
     await initNavbar();
     

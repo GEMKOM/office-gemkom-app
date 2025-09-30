@@ -6,10 +6,11 @@ This document explains how to use the team-based access control system implement
 
 The access control system restricts user access to pages and features based on their team assignment (`user.team`). It provides:
 
-1. **Route Protection**: Prevents users from accessing unauthorized pages
+1. **Route Protection**: Prevents users from accessing unauthorized pages by redirecting them
 2. **Navigation Filtering**: Hides menu items that users cannot access
 3. **Feature Access Control**: Controls access to specific features/actions
 4. **Team-Based Configuration**: Centralized configuration for different teams
+5. **Direct URL Protection**: Prevents users from bypassing restrictions by typing URLs directly
 
 ## Files Created/Modified
 
@@ -17,11 +18,21 @@ The access control system restricts user access to pages and features based on t
 - `generic/accessControl.js` - Core access control configuration and functions
 - `generic/routeProtection.js` - Route protection middleware
 - `test-access-control.html` - Test page for access control system
+- `test-route-protection.html` - Test page for route protection
 - `ACCESS_CONTROL_GUIDE.md` - This documentation
 
 ### Modified Files
 - `components/navbar.js` - Updated to use access control for navigation
 - `main.js` - Updated to use route protection and filter menu items
+- `general/users/userList.js` - Added route protection
+- `general/machines/machineList.js` - Added route protection
+- `general/overtime/overtime.js` - Added route protection
+- `procurement/procurement.js` - Added route protection
+- `procurement/purchase-requests/purchase-requests.js` - Added route protection
+- `manufacturing/manufacturing.js` - Added route protection
+- `finance/finance.js` - Added route protection
+- `human_resources/human_resources.js` - Added route protection
+- `it/it.js` - Already had route protection
 
 ## Team Configuration
 
@@ -83,6 +94,24 @@ if (!initRouteProtection()) {
 
 // Your page initialization code here...
 ```
+
+**Important**: Route protection has been added to all major pages in the application. This prevents users from accessing URLs directly that they don't have permission for. When a user tries to access a restricted URL, they will be redirected to an appropriate page based on their team.
+
+#### How Route Protection Works
+
+1. **Check Authentication**: First checks if user is logged in
+2. **Check Team Access**: Verifies if user's team has access to the current route
+3. **Redirect if Denied**: If access is denied, user is redirected to an appropriate page
+4. **Show Message**: User sees a message explaining why access was denied
+
+#### Testing Route Protection
+
+Use the test page `test-route-protection.html` to verify that route protection is working correctly:
+
+1. Log in with different user accounts from different teams
+2. Try accessing URLs directly that should be restricted
+3. Verify that users are redirected appropriately
+4. Check that the access denied message is shown
 
 ### 2. Feature Access Control
 

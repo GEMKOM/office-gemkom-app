@@ -36,21 +36,28 @@ export function checkRouteAccess(route = null) {
  */
 export function protectRoute(route = null, redirectRoute = null) {
     const currentRoute = route || window.location.pathname;
+    console.log(`Route protection: Checking access to ${currentRoute}`);
     
     // Allow home page and login page without authentication
     if (currentRoute === '/' || currentRoute === '/login') {
+        console.log('Route protection: Allowing home/login page');
         return true;
     }
     
     // Check if user is logged in
     if (!isLoggedIn()) {
+        console.log('Route protection: User not logged in, redirecting to login');
         const redirect = redirectRoute || ROUTES.LOGIN;
         navigateTo(redirect);
         return false;
     }
     
     // Check team-based access
-    if (!hasRouteAccess(currentRoute)) {
+    const hasAccess = hasRouteAccess(currentRoute);
+    console.log(`Route protection: Has access to ${currentRoute}: ${hasAccess}`);
+    
+    if (!hasAccess) {
+        console.log(`Route protection: Access denied to ${currentRoute}, redirecting...`);
         // Show access denied message
         showAccessDeniedMessage(currentRoute);
         
@@ -60,6 +67,7 @@ export function protectRoute(route = null, redirectRoute = null) {
         return false;
     }
     
+    console.log(`Route protection: Access granted to ${currentRoute}`);
     return true;
 }
 

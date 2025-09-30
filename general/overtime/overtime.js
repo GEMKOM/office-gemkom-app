@@ -1,9 +1,15 @@
 import { guardRoute } from '../../authService.js';
 import { initNavbar } from '../../components/navbar.js';
 import { MenuComponent } from '../../components/menu/menu.js';
+import { initRouteProtection } from '../../generic/routeProtection.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
+        return;
+    }
+
+    // Initialize route protection
+    if (!initRouteProtection()) {
         return;
     }
 

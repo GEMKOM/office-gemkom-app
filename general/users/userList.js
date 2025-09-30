@@ -6,6 +6,7 @@ import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../components/table/table.js';
+import { initRouteProtection } from '../../generic/routeProtection.js';
 
 // State management
 let currentPage = 1;
@@ -24,6 +25,11 @@ let usersTable = null; // Table component instance
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
+    // Initialize route protection
+    if (!initRouteProtection()) {
+        return;
+    }
+
     await initNavbar();
     
     // Initialize header component

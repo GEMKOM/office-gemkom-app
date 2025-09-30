@@ -8,6 +8,7 @@ import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../components/table/table.js';
+import { initRouteProtection } from '../../generic/routeProtection.js';
 
 // Header component instance
 let headerComponent;
@@ -34,6 +35,11 @@ let currentSortDirection = 'asc';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
+        return;
+    }
+
+    // Initialize route protection
+    if (!initRouteProtection()) {
         return;
     }
 
