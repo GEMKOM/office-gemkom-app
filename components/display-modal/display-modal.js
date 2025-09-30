@@ -530,9 +530,58 @@ export class DisplayModal {
     
     // Clear all data
     clearData() {
-        this.fields.forEach((field, fieldId) => {
-            this.setFieldValue(fieldId, '');
-        });
+        // Clear fields
+        this.fields.clear();
+        
+        // Clear sections
+        this.sections = [];
+        
+        // Clear content
+        if (this.content) {
+            this.content.innerHTML = '';
+        }
+        
+        // Reset modal state
+        this.isLoading = false;
+        this.onEdit = null;
+        this.onClose = null;
+    }
+    
+    // Reset modal to initial state
+    reset() {
+        // Clear all data
+        this.clearData();
+        
+        // Reset title and icon to defaults
+        this.setTitle(this.options.title);
+        this.setIcon(this.options.icon);
+        this.setShowEditButton(this.options.showEditButton);
+        this.setEditButtonText(this.options.editButtonText);
+        
+        // Reset footer to default
+        const modalFooter = this.container.querySelector('.modal-footer');
+        if (modalFooter) {
+            modalFooter.innerHTML = `
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Kapat
+                </button>
+                <button type="button" class="btn btn-sm btn-primary" id="edit-btn" style="display: ${this.options.showEditButton ? 'inline-block' : 'none'};">
+                    <i class="fas fa-edit me-1"></i>
+                    <span class="edit-btn-text">${this.options.editButtonText}</span>
+                </button>
+            `;
+            
+            // Re-bind edit button event
+            const editBtn = modalFooter.querySelector('#edit-btn');
+            if (editBtn) {
+                editBtn.addEventListener('click', () => {
+                    this.handleEdit();
+                });
+            }
+        }
+        
+        // Reset loading state
+        this.setLoading(false);
     }
     
     // Destroy modal
