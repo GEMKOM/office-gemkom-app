@@ -218,6 +218,15 @@ export const TEAM_ACCESS_CONFIG = {
         allowedSections: ['human_resources', 'general', 'general_overtime']
     },
     
+    // Handle misspelled team name (human_resouces instead of human_resources)
+    human_resouces: {
+        allowedRoutes: mergeWithBaseRoutes([
+            '/human_resources',
+            '/human_resources/wages'
+        ]),
+        allowedSections: ['human_resources', 'general', 'general_overtime']
+    },
+    
     // Default/other teams - minimal access
     other: {
         allowedRoutes: mergeWithBaseRoutes([]),
@@ -239,37 +248,28 @@ export function hasRouteAccess(route, userTeam = null) {
             userTeam = user.team || 'other';
         }
         
-        console.log(`hasRouteAccess: Checking route ${route} for team ${userTeam}`);
-        
         // Admin users have access to everything
         if (isAdmin() || userTeam === null) {
-            console.log('hasRouteAccess: Admin user, granting access');
             return true;
         }
         
         // Get team configuration
         const teamConfig = TEAM_ACCESS_CONFIG[userTeam] || TEAM_ACCESS_CONFIG.other;
-        console.log(`hasRouteAccess: Team config for ${userTeam}:`, teamConfig.allowedRoutes);
         
         // Check if route is explicitly allowed
         if (teamConfig.allowedRoutes.includes('*')) {
-            console.log('hasRouteAccess: Wildcard access granted');
             return true; // Wildcard access
         }
         
         // Check exact route match
         if (teamConfig.allowedRoutes.includes(route)) {
-            console.log(`hasRouteAccess: Exact route match found for ${route}`);
             return true;
         }
         
         // Check if route starts with any allowed route (for sub-routes)
-        const hasSubRouteAccess = teamConfig.allowedRoutes.some(allowedRoute => 
+        return teamConfig.allowedRoutes.some(allowedRoute => 
             route.startsWith(allowedRoute + '/') || route.startsWith(allowedRoute + '?')
         );
-        
-        console.log(`hasRouteAccess: Sub-route access for ${route}: ${hasSubRouteAccess}`);
-        return hasSubRouteAccess;
         
     } catch (error) {
         console.error('Error checking route access:', error);

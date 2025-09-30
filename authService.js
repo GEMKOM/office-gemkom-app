@@ -32,7 +32,6 @@ export async function getUser() {
     if (cachedUser) {
         try {
             const userData = JSON.parse(cachedUser);
-            console.log('User data loaded from localStorage');
             return userData;
         } catch (error) {
             console.warn('Failed to parse cached user data, falling back to API');
@@ -47,7 +46,6 @@ export async function getUser() {
         
         // Store in localStorage for future use
         localStorage.setItem('user', JSON.stringify(userData));
-        console.log('User data fetched from API and cached');
         
         return userData;
     } catch (error) {
@@ -174,6 +172,7 @@ export function navigateTo(path, options = {}) {
 export function navigateByTeam() {
     try {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
+        
         if (isAdmin() || user.team === null){
             navigateTo(ROUTES.HOME);
             return;
@@ -190,6 +189,10 @@ export function navigateByTeam() {
             navigateTo('/procurement/purchase-requests');
         } else if (user.team === 'finance') {
             navigateTo('/finance/purchase-orders');
+        } else if (user.team === 'human_resources') {
+            navigateTo('/human_resources/wages');
+        } else if (user.team === 'human_resouces') {
+            navigateTo('/human_resources/wages');
         } else {
             // Fallback: redirect all other teams to home page
             navigateTo(ROUTES.HOME);
