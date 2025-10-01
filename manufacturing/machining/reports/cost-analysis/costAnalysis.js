@@ -3,7 +3,8 @@ import { TableComponent } from '../../../../components/table/table.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
-import { fetchJobHoursReport } from '../../../../generic/machiningReports.js';
+import { fetchJobHoursReport } from '../../../../apis/machiningReports.js';
+import { fetchJobCostReport } from '../../../../apis/machining/costAnalysis.js';
 
 // State management
 let currentPage = 1;
@@ -230,6 +231,9 @@ async function loadJobHoursData() {
             page: currentPage,
             page_size: pageSize,
             ordering: currentSortField ? `${currentSortDirection === 'desc' ? '-' : ''}${currentSortField}` : undefined
+        });
+        await fetchJobCostReport({
+            job_no: filters.job_no
         });
         
         // Process the data for display

@@ -1,7 +1,7 @@
 import { logout, isAdmin, isLoggedIn, getUser, navigateTo, ROUTES } from '../authService.js';
 import { backendBase } from '../base.js';
 import { authedFetch } from '../authService.js';
-import { filterNavigationByAccess, hasRouteAccess } from '../generic/accessControl.js';
+import { filterNavigationByAccess, hasRouteAccess } from '../apis/accessControl.js';
 
 // Navigation structure configuration
 const NAVIGATION_STRUCTURE = {
@@ -271,6 +271,27 @@ const NAVIGATION_STRUCTURE = {
             '/human_resources/wages': {
                 label: 'Maaşlar',
                 icon: 'fas fa-money-bill-wave',
+                children: {}
+            }
+        }
+    },
+    '/management': {
+        label: 'Yönetim',
+        icon: 'fas fa-chart-line',
+        children: {
+            '/management/dashboard': {
+                label: 'Dashboard',
+                icon: 'fas fa-tachometer-alt',
+                children: {}
+            },
+            '/management/reports': {
+                label: 'Raporlar',
+                icon: 'fas fa-chart-bar',
+                children: {}
+            },
+            '/management/analytics': {
+                label: 'Analitik',
+                icon: 'fas fa-chart-pie',
                 children: {}
             }
         }
@@ -865,6 +886,12 @@ export function initNavbar() {
                     return;
                 }
                 
+                if (path.startsWith('/management/')) {
+                    // Allow navigation to management pages
+                    navigateTo(path);
+                    return;
+                }
+                
                 
                 
                 navigateTo(path);
@@ -930,6 +957,12 @@ export function initNavbar() {
                 
                 if (path.startsWith('/human_resources/')) {
                     // Allow navigation to HR pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                if (path.startsWith('/management/')) {
+                    // Allow navigation to management pages
                     navigateTo(path);
                     return;
                 }
