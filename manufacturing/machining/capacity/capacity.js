@@ -12,11 +12,6 @@ function navigateToCapacity(section) {
             console.log('Navigating to capacity planning...');
             window.location.href = '/manufacturing/machining/capacity/planning/';
             break;
-        case 'history':
-            // Navigate to machine work history
-            console.log('Navigating to machine work history...');
-            window.location.href = '/manufacturing/machining/capacity/history/';
-            break;
         default:
             console.log('Unknown capacity section:', section);
             showNotification('Bilinmeyen kapasite bölümü!', 'error');
@@ -94,14 +89,6 @@ function initCapacityModule() {
                 icon: 'fas fa-calendar-alt',
                 iconColor: 'primary',
                 link: '/manufacturing/machining/capacity/planning',
-                features: []
-            },
-            {
-                title: 'Makine Çalışma Geçmişi',
-                description: 'Makinelerin geçmiş çalışma verilerini görüntüleyin, performans analizi yapın ve trendleri takip edin.',
-                icon: 'fas fa-history',
-                iconColor: 'info',
-                link: '/manufacturing/machining/capacity/history',
                 features: []
             }
         ]
