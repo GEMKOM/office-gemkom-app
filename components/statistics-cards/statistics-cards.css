@@ -1,5 +1,16 @@
 /* Statistics Cards Component Styles */
 
+/* Custom items per row layout */
+.statistics-cards-custom-layout .row {
+    display: flex;
+    flex-wrap: nowrap;
+}
+
+.statistics-cards-custom-layout .col {
+    flex: 1;
+    min-width: 0;
+}
+
 /* Base card styles */
 .stat-card {
     background: rgba(255, 255, 255, 0.95);
@@ -9,6 +20,9 @@
     transition: all 0.3s ease;
     overflow: hidden;
     position: relative;
+    height: 100%; /* Ensure all cards take full height of their container */
+    display: flex;
+    flex-direction: column;
 }
 
 .stat-card::before {
@@ -38,6 +52,8 @@
     display: flex;
     align-items: center;
     gap: 1rem;
+    flex: 1; /* Take up remaining space in the card */
+    min-height: 0; /* Allow content to shrink if needed */
 }
 
 /* Compact variant */
@@ -90,6 +106,9 @@
 .stat-content {
     flex: 1;
     min-width: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
 }
 
 .stat-number {
@@ -98,6 +117,7 @@
     margin: 0 0 0.25rem 0;
     color: #343a40;
     line-height: 1.2;
+    flex-shrink: 0; /* Prevent number from shrinking */
 }
 
 .stat-label {
@@ -107,6 +127,9 @@
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+    flex-shrink: 0; /* Prevent label from shrinking */
+    word-wrap: break-word; /* Handle long text */
+    hyphens: auto; /* Add hyphenation for better text flow */
 }
 
 .stat-card.compact .stat-number {

@@ -13,6 +13,7 @@ export class StatisticsCards {
             responsive: true,
             compact: true,
             animation: true,
+            itemsPerRow: null, // Custom number of items per row (overrides responsive)
             ...options
         };
         
@@ -116,10 +117,23 @@ export class StatisticsCards {
         }).join('');
 
         const layoutClass = this.options.layout === 'flex' ? 'd-flex flex-wrap' : 'row g-3';
-        const responsiveClass = this.options.responsive ? 'col-lg-3 col-md-6' : 'col';
+        
+        // Determine responsive class based on itemsPerRow option
+        let responsiveClass;
+        if (this.options.itemsPerRow) {
+            // For custom items per row, use flex-based approach for better width utilization
+            responsiveClass = 'col';
+        } else {
+            responsiveClass = this.options.responsive ? 'col-lg-3 col-md-6' : 'col';
+        }
+        
+        // Add custom layout class if itemsPerRow is specified
+        const containerClass = this.options.itemsPerRow ? 
+            `${layoutClass} mb-3 statistics-cards-custom-layout` : 
+            `${layoutClass} mb-3`;
         
         this.container.innerHTML = `
-            <div class="${layoutClass} mb-3">
+            <div class="${containerClass}">
                 ${this.options.layout === 'grid' 
                     ? this.options.cards.map((card, index) => `
                         <div class="${responsiveClass}">

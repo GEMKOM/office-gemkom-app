@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gantt Chart Progress Test</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="gantt.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .demo-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .demo-section {
+            background: white;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+            overflow: hidden;
+        }
+        .demo-header {
+            background: linear-gradient(135deg, #8b0000 0%, #660000 100%);
+            color: white;
+            padding: 20px;
+            margin: 0;
+        }
+        .demo-content {
+            padding: 20px;
+        }
+        .progress-info {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        .progress-legend {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-top: 15px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+        .legend-completed { background: linear-gradient(135deg, rgba(40, 167, 69, 0.8) 0%, rgba(30, 126, 52, 0.8) 100%); }
+        .legend-in-progress { background: linear-gradient(135deg, rgba(13, 110, 253, 0.8) 0%, rgba(0, 86, 179, 0.8) 100%); }
+        .legend-delayed { background: linear-gradient(135deg, rgba(220, 53, 69, 0.8) 0%, rgba(189, 33, 48, 0.8) 100%); }
+        .legend-on-hold { background: linear-gradient(135deg, rgba(255, 193, 7, 0.8) 0%, rgba(224, 168, 0, 0.8) 100%); }
+    </style>
+</head>
+<body>
+    <div class="demo-container">
+        <div class="demo-section">
+            <h2 class="demo-header">
+                <i class="fas fa-chart-gantt me-2"></i>
+                Gantt Chart Progress Visualization Test
+            </h2>
+            <div class="demo-content">
+                <div class="progress-info">
+                    <h5><i class="fas fa-info-circle me-2"></i>Progress Visualization Features</h5>
+                    <p class="mb-0">This demo shows the new progress functionality in the Gantt chart component. Tasks now display progress bars with color-coded status indicators.</p>
+                    <p class="mb-0"><strong>Proportional Progress:</strong> When tasks are split into multiple segments (due to working hours), progress is distributed proportionally across all segments. For example, if a task is 100% complete, ALL segments will show 100% progress. If a task is 60% complete, segments will show proportional fill based on their duration and position in the timeline.</p>
+                    <p class="mb-0"><strong>Working Days Filtering:</strong> Tasks that span non-working days (weekends, holidays) are automatically filtered out and won't be displayed in the calendar. This ensures only tasks that can actually be worked on are shown.</p>
+                    
+                    <div class="progress-legend">
+                        <div class="legend-item">
+                            <div class="legend-color legend-completed"></div>
+                            <span>Completed (100%)</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color legend-in-progress"></div>
+                            <span>In Progress</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color legend-delayed"></div>
+                            <span>Delayed/Overdue</span>
+                        </div>
+                        <div class="legend-item">
+                            <div class="legend-color legend-on-hold"></div>
+                            <span>On Hold/Paused</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mt-3">
+                        <h6><i class="fas fa-palette me-2"></i>Color Customization Demo</h6>
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-outline-primary btn-sm" onclick="changeToPurpleTheme()">
+                                <i class="fas fa-palette me-1"></i>Purple Theme
+                            </button>
+                            <button type="button" class="btn btn-outline-success btn-sm" onclick="changeToGreenTheme()">
+                                <i class="fas fa-leaf me-1"></i>Green Theme
+                            </button>
+                            <button type="button" class="btn btn-outline-warning btn-sm" onclick="changeToOrangeTheme()">
+                                <i class="fas fa-sun me-1"></i>Orange Theme
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetColors()">
+                                <i class="fas fa-undo me-1"></i>Reset Colors
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <div id="gantt-chart-progress"></div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GanttChart } from './gantt.js';
+
+        // Initialize the Gantt chart
+        const ganttChart = new GanttChart('gantt-chart-progress', {
+            title: 'Progress Visualization Demo',
+            defaultPeriod: 'week',
+            showCurrentTime: true,
+            useCustomProgressColors: true,
+            progressColors: {
+                completed: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',
+                inProgress: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+                delayed: 'linear-gradient(135deg, #dc3545 0%, #bd2130 100%)',
+                onHold: 'linear-gradient(135deg, #ffc107 0%, #e0a800 100%)'
+            },
+            onTaskClick: (task) => {
+                console.log('Task clicked:', task);
+                alert(`Task: ${task.title || task.name}\nProgress: ${task.progress_percentage || 0}%\nStatus: ${task.status || 'Unknown'}`);
+            }
+        });
+
+        // Sample data with progress information
+        const now = new Date();
+        const tasks = [
+            {
+                id: 1,
+                title: 'Project Planning',
+                ti_number: 'PLAN-001',
+                planned_start_ms: now.getTime(),
+                planned_end_ms: now.getTime() + (3 * 24 * 60 * 60 * 1000),
+                plan_order: 1,
+                plan_locked: false,
+                in_plan: true,
+                category: 'work',
+                progress_percentage: 100,
+                completed_hours: 24,
+                total_hours: 24,
+                status: 'completed',
+                remaining_hours: 0,
+                estimated_hours: 24
+            },
+            {
+                id: 2,
+                title: 'Requirements Analysis',
+                ti_number: 'REQ-001',
+                planned_start_ms: now.getTime() + (1 * 24 * 60 * 60 * 1000),
+                planned_end_ms: now.getTime() + (5 * 24 * 60 * 60 * 1000),
+                plan_order: 2,
+                plan_locked: false,
+                in_plan: true,
+                category: 'work',
+                progress_percentage: 75,
+                completed_hours: 18,
+                total_hours: 24,
+                status: 'in-progress',
+                remaining_hours: 6,
+                estimated_hours: 24
+            },
+            {
+                id: 3,
+                title: 'System Design',
+                ti_number: 'DES-001',
+                planned_start_ms: now.getTime() + (3 * 24 * 60 * 60 * 1000),
+                planned_end_ms: now.getTime() + (7 * 24 * 60 * 60 * 1000),
+                plan_order: 3,
+                plan_locked: false,
+                in_plan: true,
+                category: 'work',
+                progress_percentage: 50,
+                completed_hours: 12,
+                total_hours: 24,
+                status: 'in-progress',
+                remaining_hours: 12,
+                estimated_hours: 24
+            },
+            {
+                id: 4,
+                title: 'Development Phase 1',
+                ti_number: 'DEV-001',
+                planned_start_ms: now.getTime() + (5 * 24 * 60 * 60 * 1000),
+                planned_end_ms: now.getTime() + (12 * 24 * 60 * 60 * 1000),
+                plan_order: 4,
+                plan_locked: false,
+                in_plan: true,
+                category: 'work',
+                progress_percentage: 100, // 100% progress - should show 100% in all segments
+                completed_hours: 88, // More hours worked than planned
+                total_hours: 30, // Original planned hours
+                status: 'completed',
+                remaining_hours: 0,
+                estimated_hours: 30
+            },
+            {
+                id: 5,
+                title: 'Code Review',
+                ti_number: 'REV-001',
+                planned_start_ms: now.getTime() + (8 * 24 * 60 * 60 * 1000),
+                planned_end_ms: now.getTime() + (10 * 24 * 60 * 60 * 1000),
+                plan_order: 5,
+                plan_locked: false,
+                in_plan: true,
+                category: 'work',
+                progress_percentage: 60, // 60% progress - should show proportional fill in segments
+                completed_hours: 9.6,
+                total_hours: 16,
+                status: 'in-progress',
+                remaining_hours: 6.4,
+                estimated_hours: 16
+            },
+            {
+                id: 6,
+                title: 'Testing Phase',
+                ti_number: 'TEST-001',
+                planned_start_ms: now.getTime() + (10 * 24 * 60 * 60 * 1000),
+                planned_end_ms: now.getTime() + (14 * 24 * 60 * 60 * 1000),
+                plan_order: 6,
+                plan_locked: false,
+                in_plan: true,
+                category: 'work',
+                progress_percentage: 0,
+                completed_hours: 0,
+                total_hours: 32,
+                status: 'in-progress',
+                remaining_hours: 32,
+                estimated_hours: 32
+            },
+            {
+                id: 7,
+                title: 'Weekend Task (Should be Hidden)',
+                ti_number: 'WEEKEND-001',
+                planned_start_ms: now.getTime() + (2 * 24 * 60 * 60 * 1000), // Saturday
+                planned_end_ms: now.getTime() + (3 * 24 * 60 * 60 * 1000), // Sunday
+                plan_order: 7,
+                plan_locked: false,
+                in_plan: true,
+                category: 'work',
+                progress_percentage: 50,
+                completed_hours: 4,
+                total_hours: 8,
+                status: 'in-progress',
+                remaining_hours: 4,
+                estimated_hours: 8
+            }
+        ];
+
+        // Set the tasks data
+        ganttChart.setTasks(tasks);
+
+        // Add some interaction
+        console.log('Gantt Chart with Progress loaded successfully!');
+        console.log('Click on any task bar to see progress information.');
+        
+        // Color customization functions
+        window.changeToPurpleTheme = function() {
+            ganttChart.setProgressColors({
+                completed: 'linear-gradient(135deg, #6f42c1 0%, #5a2d91 100%)',
+                inProgress: 'linear-gradient(135deg, #e83e8c 0%, #d63384 100%)',
+                delayed: 'linear-gradient(135deg, #fd7e14 0%, #e55100 100%)',
+                onHold: 'linear-gradient(135deg, #6c757d 0%, #545b62 100%)'
+            });
+        };
+        
+        window.changeToGreenTheme = function() {
+            ganttChart.setProgressColors({
+                completed: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',
+                inProgress: 'linear-gradient(135deg, #20c997 0%, #1aa179 100%)',
+                delayed: 'linear-gradient(135deg, #dc3545 0%, #bd2130 100%)',
+                onHold: 'linear-gradient(135deg, #ffc107 0%, #e0a800 100%)'
+            });
+        };
+        
+        window.changeToOrangeTheme = function() {
+            ganttChart.setProgressColors({
+                completed: 'linear-gradient(135deg, #fd7e14 0%, #e55100 100%)',
+                inProgress: 'linear-gradient(135deg, #ffc107 0%, #e0a800 100%)',
+                delayed: 'linear-gradient(135deg, #dc3545 0%, #bd2130 100%)',
+                onHold: 'linear-gradient(135deg, #6c757d 0%, #545b62 100%)'
+            });
+        };
+        
+        window.resetColors = function() {
+            ganttChart.resetProgressColors();
+        };
+    </script>
+</body>
+</html>

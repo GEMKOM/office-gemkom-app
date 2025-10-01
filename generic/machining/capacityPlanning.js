@@ -91,3 +91,40 @@ export async function getMachineTimeline(machine_id, start_after = null, start_b
         throw error;
     }
 }
+
+
+export async function getProductionPlanOverview() {
+    try {
+        const url = `${backendBase}/machining/planning/overview/`;
+
+        const response = await authedFetch(url);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Error fetching production plan:', error);
+        throw error;
+    }
+}
+
+
+export async function getMachineProductionPlan(machine_id) {
+    try {
+        const queryParams = new URLSearchParams();
+        if (machine_id) {
+            queryParams.append('machine_fk', machine_id);
+        } else {
+            throw new Error('Machine ID is required');
+        }
+        const url = `${backendBase}/machining/reports/production-plan/?${queryParams.toString()}`;
+        const response = await authedFetch(url);
+        return response.json();
+    } catch (error) {
+        console.error('Error fetching machine production plan:', error);
+        throw error;
+    }
+}

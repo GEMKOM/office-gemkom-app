@@ -20,6 +20,15 @@ class GanttChart {
             onPeriodChange: null,
             onTaskClick: null,
             onTaskDrag: null,
+            showIssueKeysInBars: true, // Show issue keys in task bars
+            // Progress customization options
+            progressColors: {
+                completed: null,    // Will use CSS custom properties
+                inProgress: null,   // Will use CSS custom properties
+                delayed: null,      // Will use CSS custom properties
+                onHold: null        // Will use CSS custom properties
+            },
+            useCustomProgressColors: false,
             ...options
         };
 
@@ -314,7 +323,19 @@ class GanttChart {
             const taskEnd = new Date(task.planned_end_ms);
             
             // Check if task overlaps with current view period
-            return taskStart <= this.viewEnd && taskEnd >= this.viewStart;
+            const overlapsView = taskStart <= this.viewEnd && taskEnd >= this.viewStart;
+            
+            if (!overlapsView) {
+                return false;
+            }
+            
+            // If machine calendar is available, check if task has any working days
+            if (this.machineCalendar) {
+                return this.hasWorkingDaysInRange(taskStart, taskEnd);
+            }
+            
+            // If no machine calendar, use basic weekend filtering
+            return this.hasWorkingDaysBasic(taskStart, taskEnd);
         });
         
         console.log(`Filtered ${this.tasks.length} tasks for current view period`);
@@ -770,7 +791,160 @@ class GanttChart {
         const endDateStr = endTime.toLocaleDateString('tr-TR');
         const endTimeStr = endTime.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
         
-        return `${hours} saat\n${startDateStr} ${startTimeStr} - ${endDateStr} ${endTimeStr}`;
+        // Add progress information to tooltip
+        let progressInfo = '';
+        if (task.progress_percentage !== undefined) {
+            progressInfo = `\nİlerleme: %${task.progress_percentage}`;
+        }
+        if (task.completed_hours !== undefined && task.total_hours !== undefined) {
+            progressInfo += `\nTamamlanan: ${task.completed_hours}/${task.total_hours} saat`;
+        }
+        
+        return `${hours} saat\n${startDateStr} ${startTimeStr} - ${endDateStr} ${endTimeStr}${progressInfo}`;
+    }
+
+    generateProgressBar(task, segmentInfo = null) {
+        // Check if task has progress information
+        if (task.progress_percentage === undefined && task.completed_hours === undefined) {
+            return '';
+        }
+        
+        const progressPercentage = task.progress_percentage || 
+            (task.completed_hours && task.total_hours ? 
+                Math.round((task.completed_hours / task.total_hours) * 100) : 0);
+        
+        // For segment-based progress, we need to determine if this segment should show progress
+        let segmentProgressPercentage = progressPercentage;
+        if (segmentInfo && segmentInfo.totalDuration && segmentInfo.segmentDuration) {
+            // Calculate the ratio of this segment's duration to total task duration
+            const segmentRatio = segmentInfo.segmentDuration / segmentInfo.totalDuration;
+            
+            // Calculate cumulative progress up to this segment
+            const cumulativeProgress = segmentInfo.cumulativeProgress || 0;
+            
+            // Calculate the progress range for this segment
+            const segmentStartProgress = cumulativeProgress;
+            const segmentEndProgress = cumulativeProgress + (segmentRatio * 100);
+            
+            // Determine how much progress to show in this segment
+            if (progressPercentage >= segmentEndProgress) {
+                // Task is fully complete up to this segment - show 100%
+                segmentProgressPercentage = 100;
+            } else if (progressPercentage <= segmentStartProgress) {
+                // Task hasn't reached this segment yet - show 0%
+                segmentProgressPercentage = 0;
+            } else {
+                // Task is partially complete in this segment
+                // Calculate what percentage of this segment should be filled
+                const segmentProgress = ((progressPercentage - segmentStartProgress) / (segmentEndProgress - segmentStartProgress)) * 100;
+                segmentProgressPercentage = Math.min(100, Math.max(0, segmentProgress));
+            }
+        }
+        
+        // Determine progress status class
+        let progressClass = 'in-progress';
+        if (task.status === 'completed') {
+            progressClass = 'completed';
+        } else if (task.status === 'ready-for-completion') {
+            progressClass = 'readyForCompletion';
+        } else if (task.status === 'delayed' || task.status === 'overdue') {
+            progressClass = 'delayed';
+        } else if (task.status === 'on-hold' || task.status === 'paused') {
+            progressClass = 'on-hold';
+        } else if (progressPercentage >= 100) {
+            progressClass = 'completed';
+        }
+        
+        // Add custom prefix if using custom colors
+        if (this.options.useCustomProgressColors) {
+            progressClass = `custom-${progressClass}`;
+        }
+        
+        // Get custom color if available
+        let customStyle = '';
+        if (this.options.useCustomProgressColors && this.options.progressColors) {
+            const colorKey = progressClass.replace('custom-', '');
+            const customColor = this.options.progressColors[colorKey];
+            if (customColor) {
+                customStyle = `background: ${customColor};`;
+            }
+        }
+        
+        return `
+            <div class="gantt-task-progress ${progressClass}" style="width: ${Math.min(segmentProgressPercentage, 100)}%; ${customStyle}">
+                ${segmentProgressPercentage > 20 ? `<div class="gantt-task-progress-label">%${Math.round(segmentProgressPercentage)}</div>` : ''}
+            </div>
+        `;
+    }
+
+    calculateSegmentInfo(task, segmentStart, segmentEnd, allSegments) {
+        if (!allSegments || allSegments.length === 0) {
+            return null;
+        }
+        
+        // Calculate total duration of all segments
+        const totalDuration = allSegments.reduce((total, seg) => {
+            return total + (seg.end - seg.start);
+        }, 0);
+        
+        // Calculate duration of current segment
+        const segmentDuration = segmentEnd - segmentStart;
+        
+        // Calculate cumulative progress up to this segment
+        let cumulativeProgress = 0;
+        for (let i = 0; i < allSegments.length; i++) {
+            if (allSegments[i].start === segmentStart && allSegments[i].end === segmentEnd) {
+                break;
+            }
+            cumulativeProgress += (allSegments[i].end - allSegments[i].start);
+        }
+        
+        return {
+            totalDuration,
+            segmentDuration,
+            cumulativeProgress: (cumulativeProgress / totalDuration) * 100
+        };
+    }
+
+
+    hasWorkingDaysInRange(taskStart, taskEnd) {
+        // Check if there are any working days in the task range
+        const currentDate = new Date(taskStart);
+        const endDate = new Date(taskEnd);
+        
+        while (currentDate <= endDate) {
+            const workingHours = this.getWorkingHoursForDate(currentDate);
+            if (workingHours.length > 0) {
+                return true; // Found at least one working day
+            }
+            currentDate.setDate(currentDate.getDate() + 1);
+        }
+        
+        return false; // No working days found
+    }
+
+    hasWorkingDaysBasic(taskStart, taskEnd) {
+        // Basic weekend filtering when no machine calendar is available
+        const startDate = new Date(taskStart);
+        const endDate = new Date(taskEnd);
+        
+        // Check if task starts or ends on a weekend
+        const startDay = startDate.getDay(); // 0 = Sunday, 6 = Saturday
+        const endDay = endDate.getDay();
+        
+        // If task starts or ends on weekend, hide it
+        if (startDay === 0 || startDay === 6 || endDay === 0 || endDay === 6) {
+            return false;
+        }
+        
+        // Check if task spans across weekends
+        const daysDiff = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24));
+        if (daysDiff >= 7) {
+            // Task spans more than a week, likely includes weekend
+            return false;
+        }
+        
+        return true;
     }
 
     generateTaskBar(task) {
@@ -795,7 +969,8 @@ class GanttChart {
                          data-task-id="${task.id}"
                          data-category="${category}"
                          title="${this.generateTaskTooltip(task, null, null)}">
-                        <div class="gantt-task-content">${tiNumber}</div>
+                        ${this.generateProgressBar(task)}
+                        <div class="gantt-task-content">${this.options.showIssueKeysInBars ? tiNumber : ''}</div>
                     </div>
                 </div>
             `;
@@ -819,22 +994,16 @@ class GanttChart {
         const workingSegments = this.calculateWorkingHoursSegments(taskStart, taskEnd);
         
         if (workingSegments.length === 0) {
-            // Task has no working hours overlap
+            // Task has no working hours overlap - don't display on non-working days
             return `
                 <div class="gantt-task-bar-container">
-                    <div class="gantt-task-bar ${taskClass} ${categoryClass} no-working-hours" 
-                         style="left: 0px; width: 100px; opacity: 0.3;"
-                         data-task-id="${task.id}"
-                         data-category="${category}"
-                         title="${this.generateTaskTooltip(task, taskStart, taskEnd)} - Çalışma saatleri dışında">
-                        <div class="gantt-task-content">${tiNumber}</div>
-                    </div>
+                    <!-- Task hidden - no working hours for this day -->
                 </div>
             `;
         }
         
         // Generate multiple segments for working hours
-        const segments = workingSegments.map(segment => {
+        const segments = workingSegments.map((segment, index) => {
             const left = this.calculateSegmentPosition(segment.start);
             const width = this.calculateSegmentWidth(segment.start, segment.end);
             
@@ -842,13 +1011,17 @@ class GanttChart {
                 return ''; // Segment is outside current view
             }
             
+            // Calculate segment info for proportional progress
+            const segmentInfo = this.calculateSegmentInfo(task, segment.start, segment.end, workingSegments);
+            
             return `
                 <div class="gantt-task-bar ${taskClass} ${categoryClass}" 
                      style="left: ${left}px; width: ${width}px;"
                      data-task-id="${task.id}"
                      data-category="${category}"
                      title="${this.generateTaskTooltip(task, segment.start, segment.end)}">
-                    <div class="gantt-task-content">${tiNumber}</div>
+                    ${this.generateProgressBar(task, segmentInfo)}
+                    <div class="gantt-task-content">${this.options.showIssueKeysInBars ? tiNumber : ''}</div>
                 </div>
             `;
         }).filter(segment => segment !== '').join('');
@@ -865,7 +1038,7 @@ class GanttChart {
         const tiNumber = task.ti_number || task.key || task.id;
         
         // Generate segments for each timer segment
-        const segments = task.segments.map(segment => {
+        const segments = task.segments.map((segment, index) => {
             const segmentStart = new Date(segment.planned_start_ms);
             const segmentEnd = new Date(segment.planned_end_ms);
             
@@ -881,6 +1054,13 @@ class GanttChart {
             const segmentTitle = segment.title || segment.name || 'Bilinmeyen';
             const segmentTiNumber = segment.ti_number || segment.key || segment.id;
             
+            // Calculate segment info for proportional progress
+            const allSegments = task.segments.map(s => ({
+                start: new Date(s.planned_start_ms),
+                end: new Date(s.planned_end_ms)
+            }));
+            const segmentInfo = this.calculateSegmentInfo(segment, segmentStart, segmentEnd, allSegments);
+            
             return `
                 <div class="gantt-task-bar unlocked ${categoryClass}" 
                      style="left: ${left}px; width: ${width}px;"
@@ -888,6 +1068,7 @@ class GanttChart {
                      data-category="${category}"
                      data-timer-id="${segment.timer_id || ''}"
                      title="${this.generateTaskTooltip(segment, segmentStart, segmentEnd)}">
+                    ${this.generateProgressBar(segment, segmentInfo)}
                     <div class="gantt-task-content">${segmentTiNumber}</div>
                 </div>
             `;
@@ -981,7 +1162,8 @@ class GanttChart {
                      data-task-id="${task.id}"
                      data-category="${task.category || 'work'}"
                      title="${this.generateTaskTooltip(task, taskStart, taskEnd)}">
-                    <div class="gantt-task-content">${tiNumber}</div>
+                    ${this.generateProgressBar(task)}
+                    <div class="gantt-task-content">${this.options.showIssueKeysInBars ? tiNumber : ''}</div>
                 </div>
             </div>
         `;
@@ -1004,32 +1186,36 @@ class GanttChart {
             if (taskStart <= dayEnd && taskEnd >= dayStart) {
                 const workingHours = this.getWorkingHoursForDate(currentDay);
                 
-                if (workingHours.length > 0) {
-                    // For each working hour window on this day
-                    workingHours.forEach(window => {
-                        const windowStart = new Date(currentDay);
-                        const windowEnd = new Date(currentDay);
-                        
-                        // Parse time strings (e.g., "07:30" -> 7:30 AM)
-                        const [startHour, startMinute] = window.start.split(':').map(Number);
-                        const [endHour, endMinute] = window.end.split(':').map(Number);
-                        
-                        windowStart.setHours(startHour, startMinute, 0, 0);
-                        windowEnd.setHours(endHour, endMinute, 0, 0);
-                        
-                        // Find intersection with task duration
-                        const segmentStart = new Date(Math.max(taskStart.getTime(), windowStart.getTime()));
-                        const segmentEnd = new Date(Math.min(taskEnd.getTime(), windowEnd.getTime()));
-                        
-                        // Only add segment if there's an actual intersection
-                        if (segmentStart < segmentEnd) {
-                            segments.push({
-                                start: segmentStart,
-                                end: segmentEnd
-                            });
-                        }
-                    });
+                // If there are no working hours for this day, return empty segments
+                // This will prevent the task from being displayed on non-working days
+                if (workingHours.length === 0) {
+                    return [];
                 }
+                
+                // For each working hour window on this day
+                workingHours.forEach(window => {
+                    const windowStart = new Date(currentDay);
+                    const windowEnd = new Date(currentDay);
+                    
+                    // Parse time strings (e.g., "07:30" -> 7:30 AM)
+                    const [startHour, startMinute] = window.start.split(':').map(Number);
+                    const [endHour, endMinute] = window.end.split(':').map(Number);
+                    
+                    windowStart.setHours(startHour, startMinute, 0, 0);
+                    windowEnd.setHours(endHour, endMinute, 0, 0);
+                    
+                    // Find intersection with task duration
+                    const segmentStart = new Date(Math.max(taskStart.getTime(), windowStart.getTime()));
+                    const segmentEnd = new Date(Math.min(taskEnd.getTime(), windowEnd.getTime()));
+                    
+                    // Only add segment if there's an actual intersection
+                    if (segmentStart < segmentEnd) {
+                        segments.push({
+                            start: segmentStart,
+                            end: segmentEnd
+                        });
+                    }
+                });
             }
         } else if (this.currentPeriod === 'week') {
             // For week view, merge consecutive working days into single bars
@@ -1338,7 +1524,8 @@ class GanttChart {
         }
         
         const jsDayOfWeek = date.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
-        const calendarDayOfWeek = jsDayOfWeek === 0 ? 6 : jsDayOfWeek - 1; // Convert to 0=Monday, 1=Tuesday, ..., 6=Sunday
+        // Convert JavaScript day to calendar format: 0=Monday, 1=Tuesday, ..., 6=Sunday
+        const calendarDayOfWeek = jsDayOfWeek === 0 ? 6 : jsDayOfWeek - 1;
         const workingDay = this.machineCalendar.week_template[calendarDayOfWeek.toString()];
         
         return workingDay || [];
@@ -1493,6 +1680,31 @@ class GanttChart {
 
     getAvailableViews() {
         return [...this.options.availableViews];
+    }
+
+    // Progress color customization methods
+    setProgressColors(colors) {
+        this.options.progressColors = { ...this.options.progressColors, ...colors };
+        this.options.useCustomProgressColors = true;
+        this.renderChart(); // Re-render to apply new colors
+    }
+
+    setProgressColor(status, color) {
+        if (!this.options.progressColors) {
+            this.options.progressColors = {};
+        }
+        this.options.progressColors[status] = color;
+        this.options.useCustomProgressColors = true;
+        this.renderChart(); // Re-render to apply new color
+    }
+
+    resetProgressColors() {
+        this.options.useCustomProgressColors = false;
+        this.renderChart(); // Re-render to use default colors
+    }
+
+    getProgressColors() {
+        return { ...this.options.progressColors };
     }
 
     generateWorkingHoursBackground() {

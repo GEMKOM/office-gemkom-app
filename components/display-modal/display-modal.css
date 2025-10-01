@@ -3,6 +3,36 @@
     /* Let Bootstrap handle the positioning */
 }
 
+/* Fullscreen modal styles */
+.display-modal-container .modal-dialog.modal-fullscreen {
+    max-width: 95vw;
+    width: 95vw;
+    height: 95vh;
+    margin: 2.5vh auto;
+}
+
+.display-modal-container .modal-dialog.modal-fullscreen .modal-content {
+    height: 95vh;
+    display: flex;
+    flex-direction: column;
+}
+
+.display-modal-container .modal-dialog.modal-fullscreen .modal-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.display-modal-container .modal-dialog.modal-fullscreen .modal-header {
+    flex-shrink: 0;
+    padding: 1rem;
+}
+
+.display-modal-container .modal-dialog.modal-fullscreen .modal-footer {
+    flex-shrink: 0;
+    padding: 1rem;
+}
+
 /* Modal Content Styling - Only custom styling, let Bootstrap handle structure */
 .display-modal-container .modal-content.compact {
     border-radius: 12px;

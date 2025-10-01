@@ -12,6 +12,7 @@ export class DisplayModal {
             showEditButton: false,
             editButtonText: 'Düzenle',
             size: 'lg', // sm, lg, xl
+            fullscreen: false, // Enable fullscreen mode
             ...options
         };
         
@@ -33,9 +34,10 @@ export class DisplayModal {
     
     createModal() {
         // Create modal HTML
+        const modalSizeClass = this.options.fullscreen ? 'modal-fullscreen' : `modal-${this.options.size}`;
         const modalHtml = `
             <div class="modal fade display-modal-container" id="displayModal" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog modal-${this.options.size}">
+                <div class="modal-dialog ${modalSizeClass}">
                     <div class="modal-content compact">
                         <div class="modal-header compact">
                             <h6 class="modal-title">

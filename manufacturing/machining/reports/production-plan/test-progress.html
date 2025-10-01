@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Production Plan Progress Test</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../../style.css">
+    <link rel="stylesheet" href="../../../../components/gantt/gantt.css">
+    <link rel="stylesheet" href="production-plan.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+            padding: 20px;
+        }
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+        .test-title {
+            color: #2c3e50;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        .test-description {
+            color: #6c757d;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1 class="text-center mb-4">Production Plan Progress Test</h1>
+        
+        <!-- Progress Test Section -->
+        <div class="test-section">
+            <h3 class="test-title">Production Plan Gantt with Progress</h3>
+            <p class="test-description">
+                This test demonstrates the production plan Gantt chart with red task bars and green progress indicators.
+                Progress is calculated based on total_hours_spent vs estimated_hours.
+            </p>
+            <div id="production-gantt"></div>
+        </div>
+        
+        <!-- Progress Legend -->
+        <div class="test-section">
+            <h3 class="test-title">Progress Legend</h3>
+            <div class="row">
+                <div class="col-md-6">
+                    <h6>Task Bar Colors:</h6>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="me-3" style="width: 30px; height: 20px; background: linear-gradient(135deg, #dc3545 0%, #bd2130 100%); border-radius: 4px;"></div>
+                        <span>Red - All task bars (work, hold, idle)</span>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <h6>Progress Colors:</h6>
+                    <div class="d-flex align-items-center mb-2">
+                        <div class="me-3" style="width: 30px; height: 20px; background: linear-gradient(135deg, rgba(40, 167, 69, 0.9) 0%, rgba(30, 126, 52, 0.9) 100%); border-radius: 4px;"></div>
+                        <span>Green - Progress indicators</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { GanttChart } from '../../../../components/gantt/gantt.js';
+        
+        // Test data with progress information
+        const testTasks = [
+            {
+                id: 1,
+                title: 'Task 1 - 75% Complete',
+                ti_number: 'T001',
+                planned_start_ms: new Date(2024, 1, 1, 8, 0).getTime(),
+                planned_end_ms: new Date(2024, 1, 5, 17, 0).getTime(),
+                plan_order: 1,
+                plan_locked: false,
+                category: 'work',
+                total_hours_spent: 30,
+                estimated_hours: 40,
+                status: 'in-progress'
+            },
+            {
+                id: 2,
+                title: 'Task 2 - 100% Complete',
+                ti_number: 'T002',
+                planned_start_ms: new Date(2024, 1, 3, 8, 0).getTime(),
+                planned_end_ms: new Date(2024, 1, 7, 17, 0).getTime(),
+                plan_order: 2,
+                plan_locked: false,
+                category: 'work',
+                total_hours_spent: 50,
+                estimated_hours: 50,
+                status: 'completed'
+            },
+            {
+                id: 3,
+                title: 'Task 3 - 25% Complete',
+                ti_number: 'T003',
+                planned_start_ms: new Date(2024, 1, 6, 8, 0).getTime(),
+                planned_end_ms: new Date(2024, 1, 10, 17, 0).getTime(),
+                plan_order: 3,
+                plan_locked: false,
+                category: 'work',
+                total_hours_spent: 10,
+                estimated_hours: 40,
+                status: 'in-progress'
+            },
+            {
+                id: 4,
+                title: 'Task 4 - On Hold',
+                ti_number: 'T004',
+                planned_start_ms: new Date(2024, 1, 8, 8, 0).getTime(),
+                planned_end_ms: new Date(2024, 1, 12, 17, 0).getTime(),
+                plan_order: 4,
+                plan_locked: false,
+                category: 'hold',
+                total_hours_spent: 5,
+                estimated_hours: 30,
+                status: 'on-hold'
+            },
+            {
+                id: 5,
+                title: 'Task 5 - Delayed',
+                ti_number: 'T005',
+                planned_start_ms: new Date(2024, 0, 25, 8, 0).getTime(), // Past date
+                planned_end_ms: new Date(2024, 0, 30, 17, 0).getTime(), // Past date
+                plan_order: 5,
+                plan_locked: false,
+                category: 'work',
+                total_hours_spent: 15,
+                estimated_hours: 25,
+                status: 'delayed'
+            },
+            {
+                id: 6,
+                title: 'Task 6 - No Progress Data',
+                ti_number: 'T006',
+                planned_start_ms: new Date(2024, 1, 15, 8, 0).getTime(),
+                planned_end_ms: new Date(2024, 1, 19, 17, 0).getTime(),
+                plan_order: 6,
+                plan_locked: false,
+                category: 'work',
+                status: 'in-progress'
+            }
+        ];
+
+        // Initialize Gantt chart with progress functionality
+        const productionGantt = new GanttChart('production-gantt', {
+            title: 'Production Plan with Progress',
+            defaultPeriod: 'month',
+            availableViews: ['day', 'week', 'month'],
+            showCurrentTime: true,
+            // Configure progress colors - red bars with green progress
+            progressColors: {
+                completed: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',    // Green for completed
+                inProgress: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',    // Green for in-progress
+                delayed: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',       // Green for delayed
+                onHold: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)'         // Green for on-hold
+            },
+            useCustomProgressColors: true,
+            onTaskClick: (task, event) => {
+                if (task) {
+                    const progressInfo = task.progress_percentage !== undefined ? 
+                        `\nProgress: ${task.progress_percentage}%` : 
+                        '\nNo progress data';
+                    const hoursInfo = task.completed_hours && task.total_hours ? 
+                        `\nHours: ${task.completed_hours}/${task.total_hours}` : 
+                        '';
+                    
+                    alert(`Task: ${task.title}${progressInfo}${hoursInfo}\nStatus: ${task.status || 'Unknown'}`);
+                }
+            }
+        });
+
+        // Set current date to February 2024
+        productionGantt.currentDate = new Date(2024, 1, 10);
+        
+        // Process tasks to include progress information
+        const processedTasks = testTasks.map(task => {
+            const processedTask = { ...task };
+            
+            // Calculate progress percentage based on total_hours_spent and estimated_hours
+            if (task.total_hours_spent !== undefined && task.estimated_hours !== undefined) {
+                const progressPercentage = Math.min(100, Math.round((task.total_hours_spent / task.estimated_hours) * 100));
+                processedTask.progress_percentage = progressPercentage;
+                processedTask.completed_hours = task.total_hours_spent;
+                processedTask.total_hours = task.estimated_hours;
+            } else if (task.total_hours_spent !== undefined) {
+                processedTask.completed_hours = task.total_hours_spent;
+                processedTask.progress_percentage = 50;
+            } else {
+                processedTask.progress_percentage = 0;
+            }
+            
+            return processedTask;
+        });
+        
+        // Load tasks into Gantt chart
+        productionGantt.setTasks(processedTasks);
+    </script>
+</body>
+</html>

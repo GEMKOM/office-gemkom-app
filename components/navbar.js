@@ -69,20 +69,29 @@ const NAVIGATION_STRUCTURE = {
                         label: 'Raporlar',
                         icon: 'fas fa-chart-pie',
                         children: {
-
-                            '/manufacturing/machining/reports/production': {
-                                label: 'Üretim Raporları',
-                                icon: 'fas fa-industry',
+                            '/manufacturing/machining/reports/finished-timers': {
+                                label: 'Biten Zamanlayıcılar',
+                                icon: 'fas fa-clock',
                                 children: {}
                             },
-                            '/manufacturing/machining/reports/performance': {
-                                label: 'Performans Raporları',
-                                icon: 'fas fa-tachometer-alt',
+                            '/manufacturing/machining/reports/sum-report': {
+                                label: 'Toplam Raporu',
+                                icon: 'fas fa-chart-pie',
                                 children: {}
                             },
-                            '/manufacturing/machining/reports/quality': {
-                                label: 'Kalite Raporları',
-                                icon: 'fas fa-award',
+                            '/manufacturing/machining/reports/cost-analysis': {
+                                label: 'Maliyet Analizi',
+                                icon: 'fas fa-calculator',
+                                children: {}
+                            },
+                            '/manufacturing/machining/reports/history': {
+                                label: 'Makine Çalışma Geçmişi',
+                                icon: 'fas fa-history',
+                                children: {}
+                            },
+                            '/manufacturing/machining/reports/production-plan': {
+                                label: 'Üretim Planı',
+                                icon: 'fas fa-calendar-alt',
                                 children: {}
                             }
                         }
@@ -94,11 +103,6 @@ const NAVIGATION_STRUCTURE = {
                             '/manufacturing/machining/capacity/planning': {
                                 label: 'Kapasite Planlayıcı',
                                 icon: 'fas fa-calendar-alt',
-                                children: {}
-                            },
-                            '/manufacturing/machining/capacity/history': {
-                                label: 'Makine Çalışma Geçmişi',
-                                icon: 'fas fa-history',
                                 children: {}
                             }
                         }

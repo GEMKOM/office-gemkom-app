@@ -53,7 +53,15 @@ const options = {
     },
     onTaskDrag: (task, newDate) => {    // Callback when task is dragged
         console.log('Task moved:', task, newDate);
-    }
+    },
+    // Progress color customization
+    progressColors: {
+        completed: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',
+        inProgress: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+        delayed: 'linear-gradient(135deg, #dc3545 0%, #bd2130 100%)',
+        onHold: 'linear-gradient(135deg, #ffc107 0%, #e0a800 100%)'
+    },
+    useCustomProgressColors: false      // Enable custom progress colors
 };
 ```
 
@@ -70,9 +78,84 @@ const tasks = [
         planned_end_ms: 1704153600000,    // End time in milliseconds
         plan_order: 1,                    // Display order
         plan_locked: false,               // Locked state (affects color)
-        in_plan: true                     // Whether task is in plan
+        in_plan: true,                    // Whether task is in plan
+        
+        // Progress fields (optional)
+        progress_percentage: 75,          // Progress percentage (0-100)
+        completed_hours: 30,              // Completed hours
+        total_hours: 40,                  // Total estimated hours
+        status: 'in-progress',            // Task status: 'in-progress', 'completed', 'delayed', 'on-hold'
+        remaining_hours: 10,              // Remaining hours
+        estimated_hours: 40               // Total estimated hours (alternative to total_hours)
     }
 ];
+```
+
+#### Progress Visualization
+
+The Gantt chart now supports progress visualization with the following features:
+
+- **Progress Bars**: Visual progress indicators overlaid on task bars
+- **Color Coding**: Different colors for different progress states:
+  - Green: Completed tasks (100% progress)
+  - Blue: In-progress tasks
+  - Red: Delayed/overdue tasks
+  - Yellow: On-hold/paused tasks
+- **Progress Labels**: Percentage labels shown on larger task bars
+- **Enhanced Tooltips**: Progress information included in hover tooltips
+
+#### Progress Data Fields
+
+| Field | Type | Description | Required |
+|-------|------|-------------|----------|
+| `progress_percentage` | number | Progress percentage (0-100) | Optional |
+| `completed_hours` | number | Hours completed | Optional |
+| `total_hours` | number | Total estimated hours | Optional |
+| `status` | string | Task status | Optional |
+| `remaining_hours` | number | Hours remaining | Optional |
+| `estimated_hours` | number | Total estimated hours | Optional |
+
+**Note**: If `progress_percentage` is not provided, it will be calculated from `completed_hours` and `total_hours` if available.
+
+#### Progress Color Customization
+
+The Gantt chart supports full customization of progress bar colors through multiple methods:
+
+**Method 1: CSS Custom Properties**
+```css
+:root {
+    --progress-completed-color: linear-gradient(135deg, #28a745 0%, #1e7e34 100%);
+    --progress-in-progress-color: linear-gradient(135deg, #007bff 0%, #0056b3 100%);
+    --progress-delayed-color: linear-gradient(135deg, #dc3545 0%, #bd2130 100%);
+    --progress-on-hold-color: linear-gradient(135deg, #ffc107 0%, #e0a800 100%);
+}
+```
+
+**Method 2: JavaScript API**
+```javascript
+// Set all progress colors at once
+ganttChart.setProgressColors({
+    completed: 'linear-gradient(135deg, #6f42c1 0%, #5a2d91 100%)',
+    inProgress: 'linear-gradient(135deg, #17a2b8 0%, #138496 100%)',
+    delayed: 'linear-gradient(135deg, #fd7e14 0%, #e55100 100%)',
+    onHold: 'linear-gradient(135deg, #6c757d 0%, #545b62 100%)'
+});
+
+// Set individual colors
+ganttChart.setProgressColor('completed', 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)');
+```
+
+**Method 3: Configuration Options**
+```javascript
+const ganttChart = new GanttChart('container', {
+    progressColors: {
+        completed: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',
+        inProgress: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+        delayed: 'linear-gradient(135deg, #dc3545 0%, #bd2130 100%)',
+        onHold: 'linear-gradient(135deg, #ffc107 0%, #e0a800 100%)'
+    },
+    useCustomProgressColors: true
+});
 ```
 
 ### Public API Methods
@@ -95,6 +178,23 @@ const tasks = ganttChart.getTasks();
 
 // Get available views
 const availableViews = ganttChart.getAvailableViews();
+
+// Progress color customization
+ganttChart.setProgressColors({
+    completed: 'linear-gradient(135deg, #28a745 0%, #1e7e34 100%)',
+    inProgress: 'linear-gradient(135deg, #007bff 0%, #0056b3 100%)',
+    delayed: 'linear-gradient(135deg, #dc3545 0%, #bd2130 100%)',
+    onHold: 'linear-gradient(135deg, #ffc107 0%, #e0a800 100%)'
+});
+
+// Set individual progress color
+ganttChart.setProgressColor('completed', 'linear-gradient(135deg, #6f42c1 0%, #5a2d91 100%)');
+
+// Reset to default colors
+ganttChart.resetProgressColors();
+
+// Get current progress colors
+const colors = ganttChart.getProgressColors();
 
 // Destroy the component
 ganttChart.destroy();
@@ -143,6 +243,58 @@ const tasks = [
         plan_order: 1,
         plan_locked: false,
         in_plan: true
+    }
+];
+
+gantt.setTasks(tasks);
+```
+
+### Progress Implementation Example
+
+```javascript
+// Gantt chart with progress visualization
+const gantt = new GanttChart('gantt-container');
+
+// Load tasks with progress information
+const tasks = [
+    {
+        id: 1,
+        title: 'Project Planning',
+        planned_start_ms: Date.now(),
+        planned_end_ms: Date.now() + (7 * 24 * 60 * 60 * 1000),
+        plan_order: 1,
+        plan_locked: false,
+        in_plan: true,
+        progress_percentage: 75,
+        completed_hours: 30,
+        total_hours: 40,
+        status: 'in-progress'
+    },
+    {
+        id: 2,
+        title: 'Development',
+        planned_start_ms: Date.now() + (3 * 24 * 60 * 60 * 1000),
+        planned_end_ms: Date.now() + (14 * 24 * 60 * 60 * 1000),
+        plan_order: 2,
+        plan_locked: false,
+        in_plan: true,
+        progress_percentage: 100,
+        completed_hours: 80,
+        total_hours: 80,
+        status: 'completed'
+    },
+    {
+        id: 3,
+        title: 'Testing',
+        planned_start_ms: Date.now() + (10 * 24 * 60 * 60 * 1000),
+        planned_end_ms: Date.now() + (17 * 24 * 60 * 60 * 1000),
+        plan_order: 3,
+        plan_locked: false,
+        in_plan: true,
+        progress_percentage: 25,
+        completed_hours: 5,
+        total_hours: 20,
+        status: 'delayed'
     }
 ];
 

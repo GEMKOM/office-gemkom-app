@@ -5,6 +5,7 @@ import { fetchTasks, deleteTask as deleteTaskAPI, updateTask as updateTaskAPI, f
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
+import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 
 // State management
 let currentPage = 1;
@@ -382,7 +383,7 @@ function renderTasksTable() {
                 <span class="hours-spent">${task.total_hours_spent || 0} saat</span>
             </td>
             <td class="editable-cell" data-field="finish_time" data-task-key="${task.key}">
-                ${task.finish_time ? new Date(task.finish_time).toLocaleDateString('tr-TR') : 'Belirtilmemiş'}
+                ${task.planned_end_ms ? new Date(task.planned_end_ms).toLocaleDateString('tr-TR') : 'Belirtilmemiş'}
             </td>
             <td class="editable-cell" data-field="status" data-task-key="${task.key}">
                 ${getStatusBadge(task)}
@@ -1053,12 +1054,13 @@ function showCompletionDataModal(task) {
         }
         
         // Calculate date difference
-        if (finishTime) {
+        if (task.planned_end_ms) {
             // Set both dates to midnight to get only day difference
             const nowOnly = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-            const finishTimeOnly = new Date(finishTime.getFullYear(), finishTime.getMonth(), finishTime.getDate());
+            const plannedEndOnly = new Date(task.planned_end_ms);
+            const plannedEndDateOnly = new Date(plannedEndOnly.getFullYear(), plannedEndOnly.getMonth(), plannedEndOnly.getDate());
             
-            const diffTime = finishTimeOnly.getTime() - nowOnly.getTime();
+            const diffTime = plannedEndDateOnly.getTime() - nowOnly.getTime();
             const diffDays = diffTime / (1000 * 60 * 60 * 24);
             
             if (diffDays > 0) {
@@ -1086,8 +1088,9 @@ function showCompletionDataModal(task) {
         }
         
         // Calculate time remaining
-        if (finishTime) {
-            const timeDiff = finishTime.getTime() - now.getTime();
+        if (task.planned_end_ms) {
+            const plannedEnd = new Date(task.planned_end_ms);
+            const timeDiff = plannedEnd.getTime() - now.getTime();
             const daysRemaining = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
             
             if (daysRemaining > 0) {
@@ -1102,199 +1105,285 @@ function showCompletionDataModal(task) {
         }
     }
     
-    // Create modal HTML
-    const modalHtml = `
-        <div class="modal fade" id="completionDataModal" tabindex="-1" aria-labelledby="completionDataModalLabel" aria-hidden="true">
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title" id="completionDataModalLabel">
-                            <i class="fas fa-chart-line ${isCompleted ? 'text-success' : 'text-primary'}"></i> 
-                            ${isCompleted ? 'Tamamlanma Verileri' : 'Görev Durumu'} - ${task.key}
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <h6 class="text-primary">Görev Bilgileri</h6>
-                                <table class="table table-sm">
-                                    <tr>
-                                        <td><strong>TI No:</strong></td>
-                                        <td>${task.key}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Görev Adı:</strong></td>
-                                        <td>${task.name}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>İş No:</strong></td>
-                                        <td>${task.job_no}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Resim No:</strong></td>
-                                        <td>${task.image_no}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Pozisyon No:</strong></td>
-                                        <td>${task.position_no}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Adet:</strong></td>
-                                        <td>${task.quantity}</td>
-                                    </tr>
-                                </table>
-                            </div>
-                            <div class="col-md-6">
-                                <h6 class="${isCompleted ? 'text-success' : 'text-primary'}">${isCompleted ? 'Tamamlanma Bilgileri' : 'Görev Durumu'}</h6>
-                                <table class="table table-sm">
-                                    ${isCompleted ? `
-                                        <tr>
-                                            <td><strong>Tamamlayan:</strong></td>
-                                            <td>${task.completed_by_username || 'N/A'}</td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Tamamlanma Tarihi:</strong></td>
-                                            <td>${task.completion_date ? new Date(task.completion_date).toLocaleDateString('tr-TR') : 'N/A'}</td>
-                                        </tr>
-                                    ` : `
-                                        <tr>
-                                            <td><strong>Durum:</strong></td>
-                                            <td><span class="badge bg-warning">Devam Ediyor</span></td>
-                                        </tr>
-                                        <tr>
-                                            <td><strong>Başlangıç:</strong></td>
-                                            <td>${task.created_at ? new Date(task.created_at).toLocaleDateString('tr-TR') : 'N/A'}</td>
-                                        </tr>
-                                    `}
-                                    <tr>
-                                        <td><strong>Bitmesi Planlanan Tarih:</strong></td>
-                                        <td>${task.finish_time ? new Date(task.finish_time).toLocaleDateString('tr-TR') : 'N/A'}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Makine:</strong></td>
-                                        <td>${task.machine_name || 'N/A'}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Tahmini Saat:</strong></td>
-                                        <td>${task.estimated_hours || 'N/A'}</td>
-                                    </tr>
-                                    <tr>
-                                        <td><strong>Harcanan Saat:</strong></td>
-                                        <td>${task.total_hours_spent || '0'}</td>
-                                    </tr>
-                                </table>
-                            </div>
+    // Create display modal instance
+    const displayModal = new DisplayModal('display-modal-container', {
+        title: `${isCompleted ? 'Tamamlanma Verileri' : 'Görev Durumu'} - ${task.key}`,
+        icon: `fas fa-chart-line ${isCompleted ? 'text-success' : 'text-primary'}`,
+        size: 'lg',
+        showEditButton: false
+    });
+    
+    // Add task information section
+    displayModal.addSection({
+        title: 'Görev Bilgileri',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'task-key',
+                label: 'TI No',
+                value: task.key,
+                type: 'text',
+                colSize: 6,
+                copyable: true
+            },
+            {
+                id: 'task-name',
+                label: 'Görev Adı',
+                value: task.name,
+                type: 'text',
+                colSize: 6
+            },
+            {
+                id: 'job-no',
+                label: 'İş No',
+                value: task.job_no,
+                type: 'text',
+                colSize: 6
+            },
+            {
+                id: 'image-no',
+                label: 'Resim No',
+                value: task.image_no,
+                type: 'text',
+                colSize: 6
+            },
+            {
+                id: 'position-no',
+                label: 'Pozisyon No',
+                value: task.position_no,
+                type: 'text',
+                colSize: 6
+            },
+            {
+                id: 'quantity',
+                label: 'Adet',
+                value: task.quantity,
+                type: 'number',
+                colSize: 6
+            }
+        ]
+    });
+    
+    // Add status/completion information section
+    if (isCompleted) {
+        displayModal.addSection({
+            title: 'Tamamlanma Bilgileri',
+            icon: 'fas fa-check-circle',
+            iconColor: 'text-success',
+            fields: [
+                {
+                    id: 'completed-by',
+                    label: 'Tamamlayan',
+                    value: task.completed_by_username || '-',
+                    type: 'text',
+                    colSize: 6
+                },
+                {
+                    id: 'completion-date',
+                    label: 'Tamamlanma Tarihi',
+                    value: task.completion_date ? new Date(task.completion_date).toLocaleDateString('tr-TR') : '-',
+                    type: 'date',
+                    colSize: 6
+                },
+                {
+                    id: 'finish-time',
+                    label: 'Bitmesi Planlanan Tarih',
+                    value: task.planned_end_ms ? new Date(task.planned_end_ms).toLocaleDateString('tr-TR') : '-',
+                    type: 'date',
+                    colSize: 6
+                },
+                {
+                    id: 'machine',
+                    label: 'Makine',
+                    value: task.machine_name || '-',
+                    type: 'text',
+                    colSize: 6
+                },
+                {
+                    id: 'estimated-hours',
+                    label: 'Tahmini Saat',
+                    value: task.estimated_hours || '-',
+                    type: 'number',
+                    colSize: 6
+                },
+                {
+                    id: 'hours-spent',
+                    label: 'Harcanan Saat',
+                    value: task.total_hours_spent || '0',
+                    type: 'number',
+                    colSize: 6
+                }
+            ]
+        });
+    } else {
+        // Add status section with custom HTML for ongoing tasks
+        const statusHtml = `
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="field-display mb-2">
+                        <label class="field-label">Durum</label>
+                        <div class="field-value">
+                            ${getStatusBadge(task)}
                         </div>
-                        
-                        ${isCompleted ? `
-                            <div class="row mt-3">
-                                <div class="col-12">
-                                    <h6 class="text-primary">Performans Analizi</h6>
-                                    <div class="alert alert-info">
-                                        <div class="row">
-                                            <div class="col-md-3">
-                                                <strong>Verimlilik:</strong><br>
-                                                ${task.estimated_hours ? 
-                                                    `${((task.estimated_hours / task.total_hours_spent) * 100).toFixed(1)}%` : 
-                                                    'N/A'
-                                                }
-                                            </div>
-                                            <div class="col-md-3">
-                                                <strong>Saat Farkı:</strong><br>
-                                                ${task.estimated_hours ? 
-                                                    `${(task.estimated_hours - task.total_hours_spent).toFixed(2)} saat` : 
-                                                    'N/A'
-                                                }
-                                            </div>
-                                            <div class="col-md-3">
-                                                <strong>Tarih Farkı:</strong><br>
-                                                ${task.completion_date && task.finish_time ? 
-                                                    (() => {
-                                                        const completionDate = new Date(task.completion_date);
-                                                        const finishTime = new Date(task.finish_time);
-                                                        
-                                                        // Set both dates to midnight to get only day difference
-                                                        const completionDateOnly = new Date(completionDate.getFullYear(), completionDate.getMonth(), completionDate.getDate());
-                                                        const finishTimeOnly = new Date(finishTime.getFullYear(), finishTime.getMonth(), finishTime.getDate());
-                                                        
-                                                        const diffTime = completionDateOnly.getTime() - finishTimeOnly.getTime();
-                                                        const diffDays = diffTime / (1000 * 60 * 60 * 24);
-                                                        return diffDays > 0 ? 
-                                                            `<span class="text-danger">+${diffDays} gün gecikme</span>` :
-                                                            diffDays < 0 ? 
-                                                            `<span class="text-success">${Math.abs(diffDays)} gün erken</span>` :
-                                                            '<span class="text-success">Tam zamanında</span>';
-                                                    })() : 
-                                                    'N/A'
-                                                }
-                                            </div>
-                                            <div class="col-md-3">
-                                                <strong>Durum:</strong><br>
-                                                <span class="badge bg-success">Tamamlandı</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        ` : `
-                            <div class="row mt-3">
-                                <div class="col-12">
-                                    <h6 class="text-primary">Performans Analizi</h6>
-                                    <div class="alert alert-info">
-                                        <div class="row">
-                                            <div class="col-md-3">
-                                                <strong>Verimlilik:</strong><br>
-                                                ${efficiency}
-                                            </div>
-                                            <div class="col-md-3">
-                                                <strong>Saat Farkı:</strong><br>
-                                                ${hourDifference}
-                                            </div>
-                                            <div class="col-md-3">
-                                                <strong>Tarih Farkı:</strong><br>
-                                                ${dateDifference}
-                                            </div>
-                                            <div class="col-md-3">
-                                                <strong>Durum:</strong><br>
-                                                <span class="badge bg-warning">Devam Ediyor</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        `}
                     </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
-                        ${isCompleted ? `
-                            <button type="button" class="btn btn-primary" onclick="exportCompletionData('${task.key}')">
-                                <i class="fas fa-download"></i> Dışa Aktar
-                            </button>
-                        ` : ''}
+                </div>
+                <div class="col-md-6">
+                    <div class="field-display mb-2">
+                        <label class="field-label">Başlangıç</label>
+                        <div class="field-value">
+                            ${task.planned_start_ms ? new Date(task.planned_start_ms).toLocaleDateString('tr-TR') : '-'}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="field-display mb-2">
+                        <label class="field-label">Bitmesi Planlanan Tarih</label>
+                        <div class="field-value">
+                            ${task.planned_end_ms ? new Date(task.planned_end_ms).toLocaleDateString('tr-TR') : '-'}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="field-display mb-2">
+                        <label class="field-label">Makine</label>
+                        <div class="field-value">
+                            ${task.machine_name || '-'}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="field-display mb-2">
+                        <label class="field-label">Tahmini Saat</label>
+                        <div class="field-value">
+                            ${task.estimated_hours || '-'}
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="field-display mb-2">
+                        <label class="field-label">Harcanan Saat</label>
+                        <div class="field-value">
+                            ${task.total_hours_spent || '0'}
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
-    `;
-    
-    // Remove existing modal if any
-    const existingModal = document.getElementById('completionDataModal');
-    if (existingModal) {
-        existingModal.remove();
+        `;
+        
+        displayModal.addCustomSection({
+            title: 'Görev Durumu',
+            icon: 'fas fa-clock',
+            iconColor: 'text-primary',
+            customContent: statusHtml
+        });
     }
     
-    // Add modal to body
-    document.body.insertAdjacentHTML('beforeend', modalHtml);
+    // Add performance analysis section with custom HTML
+    if (isCompleted) {
+        // Calculate completed task performance metrics
+        const efficiency = task.estimated_hours ? 
+            `${((task.estimated_hours / task.total_hours_spent) * 100).toFixed(1)}%` : 
+            'N/A';
+        const hourDiff = task.estimated_hours ? 
+            `${(task.estimated_hours - task.total_hours_spent).toFixed(2)} saat` : 
+            'N/A';
+        
+        // Calculate date difference for completed tasks
+        let dateDiff = 'N/A';
+        if (task.completion_date && task.planned_end_ms) {
+            const completionDate = new Date(task.completion_date);
+            const plannedEnd = new Date(task.planned_end_ms);
+            
+            // Set both dates to midnight to get only day difference
+            const completionDateOnly = new Date(completionDate.getFullYear(), completionDate.getMonth(), completionDate.getDate());
+            const plannedEndOnly = new Date(plannedEnd.getFullYear(), plannedEnd.getMonth(), plannedEnd.getDate());
+            
+            const diffTime = completionDateOnly.getTime() - plannedEndOnly.getTime();
+            const diffDays = diffTime / (1000 * 60 * 60 * 24);
+            
+            if (diffDays > 0) {
+                dateDiff = `+${diffDays} gün gecikme`;
+            } else if (diffDays < 0) {
+                dateDiff = `${Math.abs(diffDays)} gün erken`;
+            } else {
+                dateDiff = 'Tam zamanında';
+            }
+        }
+        
+        // Create simple performance analysis HTML
+        const performanceHtml = `
+            <div class="simple-performance">
+                <div class="performance-row">
+                    <div class="metric-item">
+                        <span class="metric-label">Verimlilik:</span>
+                        <span class="metric-value">${efficiency}</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Saat Farkı:</span>
+                        <span class="metric-value">${hourDiff}</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Tarih Farkı:</span>
+                        <span class="metric-value">${dateDiff}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        displayModal.addCustomSection({
+            title: 'Performans Analizi',
+            icon: 'fas fa-chart-bar',
+            iconColor: 'text-primary',
+            customContent: performanceHtml
+        });
+    } else {
+        // Create simple performance analysis HTML for ongoing tasks
+        const performanceHtml = `
+            <div class="simple-performance">
+                <div class="performance-row">
+                    <div class="metric-item">
+                        <span class="metric-label">Verimlilik:</span>
+                        <span class="metric-value">${efficiency}</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Saat Farkı:</span>
+                        <span class="metric-value">${hourDifference}</span>
+                    </div>
+                    <div class="metric-item">
+                        <span class="metric-label">Tarih Farkı:</span>
+                        <span class="metric-value">${dateDifference}</span>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        displayModal.addCustomSection({
+            title: 'Performans Analizi',
+            icon: 'fas fa-chart-bar',
+            iconColor: 'text-primary',
+            customContent: performanceHtml
+        });
+    }
     
-    // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('completionDataModal'));
-    modal.show();
+    // Add export button to footer if task is completed
+    if (isCompleted) {
+        // Create custom footer with export button
+        const modalFooter = displayModal.container.querySelector('.modal-footer');
+        if (modalFooter) {
+            modalFooter.innerHTML = `
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Kapat
+                </button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="exportCompletionData('${task.key}')">
+                    <i class="fas fa-download me-1"></i>Dışa Aktar
+                </button>
+            `;
+        }
+    }
     
-    // Clean up modal when hidden
-    document.getElementById('completionDataModal').addEventListener('hidden.bs.modal', function() {
-        this.remove();
-    });
+    // Render and show modal
+    displayModal.render().show();
 }
 
 window.exportCompletionData = function(taskKey) {
@@ -1328,10 +1417,10 @@ window.exportCompletionData = function(taskKey) {
             
             // Calculate date difference
             let dateDifference = 'N/A';
-            if (task.completion_date && task.finish_time) {
+            if (task.completion_date && task.planned_end_ms) {
                 const completionDate = new Date(task.completion_date);
-                const finishTime = new Date(task.finish_time);
-                const diffTime = completionDate.getTime() - finishTime.getTime();
+                const plannedEnd = new Date(task.planned_end_ms);
+                const diffTime = completionDate.getTime() - plannedEnd.getTime();
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 if (diffDays > 0) {
                     dateDifference = `+${diffDays} gün gecikme`;
@@ -1353,7 +1442,7 @@ window.exportCompletionData = function(taskKey) {
                     task.quantity,
                     task.completed_by_username,
                     task.completion_date ? new Date(task.completion_date).toLocaleDateString('tr-TR') : 'N/A',
-                    task.finish_time ? new Date(task.finish_time).toLocaleDateString('tr-TR') : 'N/A',
+                    task.planned_end_ms ? new Date(task.planned_end_ms).toLocaleDateString('tr-TR') : 'N/A',
                     task.machine_name,
                     task.estimated_hours || 'N/A',
                     task.total_hours_spent,

@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="../../../components/navbar.css">
     <link rel="stylesheet" href="../../../components/dropdown.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
+    <link rel="stylesheet" href="../../../components/menu/menu.css">
     <link rel="stylesheet" href="../../../pre-auth.css">
 </head>
 <body class="pre-auth">
@@ -23,96 +24,8 @@
     <div class="floating-element"></div>
     <div class="floating-element"></div>
 
-    <!-- Header Section -->
-    <section class="modules-section py-5">
-        <div class="container">
-            <div class="row">
-                <div class="col-12 text-center mb-5">
-                    <h2 class="section-title">Raporlar</h2>
-                    <p class="section-subtitle">Üretim süreçlerinizi analiz etmek ve performansınızı takip etmek için kapsamlı raporlar</p>
-                </div>
-            </div>
-            
-            <div class="row g-4">
-                                    <!-- Biten Zamanlayıcılar Raporu -->
-                    <div class="col-md-6 col-lg-4">
-                        <div class="functionality-card" onclick="window.location.href='finished-timers/'">
-                            <div class="card-body position-relative">
-                                <div class="card-icon text-primary">
-                                    <i class="fas fa-clock"></i>
-                                </div>
-                                <h5 class="card-title">Biten Zamanlayıcılar</h5>
-                                <p class="card-text">Tamamlanan zamanlayıcıların detaylı analizi. Kullanıcı performansları, süre dağılımları ve verimlilik metriklerini görüntüleyin.</p>
-                                <ul class="feature-list">
-                                    <li><i class="fas fa-users"></i>Kullanıcı Performansları</li>
-                                    <li><i class="fas fa-chart-line"></i>Süre Analizi</li>
-                                    <li><i class="fas fa-download"></i>Dışa Aktarma</li>
-                                    <li><i class="fas fa-filter"></i>Gelişmiş Filtreleme</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Toplam Raporu -->
-                    <div class="col-md-6 col-lg-4">
-                        <div class="functionality-card" onclick="window.location.href='sum-report/'">
-                            <div class="card-body position-relative">
-                                <div class="card-icon text-success">
-                                    <i class="fas fa-chart-pie"></i>
-                                </div>
-                                <h5 class="card-title">Toplam Raporu</h5>
-                                <p class="card-text">Talaşlı imalat süreçlerinin gruplandırılmış analizi. Kullanıcı, makine, iş no ve TI numarasına göre toplam süreleri görüntüleyin.</p>
-                                <ul class="feature-list">
-                                    <li><i class="fas fa-users"></i>Kullanıcı Gruplaması</li>
-                                    <li><i class="fas fa-cogs"></i>Makine Gruplaması</li>
-                                    <li><i class="fas fa-tasks"></i>İş No Gruplaması</li>
-                                    <li><i class="fas fa-chart-bar"></i>Toplam Saat Analizi</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Maliyet Analizi Raporu -->
-                    <div class="col-md-6 col-lg-4">
-                        <div class="functionality-card" onclick="window.location.href='cost-analysis/'">
-                            <div class="card-body position-relative">
-                                <div class="card-icon text-warning">
-                                    <i class="fas fa-calculator"></i>
-                                </div>
-                                <h5 class="card-title">Maliyet Analizi</h5>
-                                <p class="card-text">İş numarasına göre çalışma saatleri analizi ve maliyet hesaplamaları. Hafta içi, mesai ve pazar çalışma saatlerini detaylı olarak görüntüleyin.</p>
-                                <ul class="feature-list">
-                                    <li><i class="fas fa-briefcase"></i>İş Bazlı Analiz</li>
-                                    <li><i class="fas fa-clock"></i>Saat Dağılımı</li>
-                                    <li><i class="fas fa-users"></i>Kullanıcı Performansı</li>
-                                    <li><i class="fas fa-chart-line"></i>Maliyet Hesaplama</li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-
-                <!-- Üretim Raporları -->
-                <div class="col-md-6 col-lg-4">
-                    <div class="functionality-card development-notice-card">
-                        <div class="card-body position-relative">
-                            <div class="card-icon text-success">
-                                <i class="fas fa-industry"></i>
-                            </div>
-                            <h5 class="card-title">Üretim Raporları</h5>
-                            <p class="card-text">Üretim süreçlerinin detaylı analizi, verimlilik metrikleri ve performans göstergeleri.</p>
-                            <ul class="feature-list">
-                                <li><i class="fas fa-chart-bar"></i>Verimlilik Analizi</li>
-                                <li><i class="fas fa-tachometer-alt"></i>Performans Metrikleri</li>
-                                <li><i class="fas fa-calendar-alt"></i>Zaman Bazlı Raporlar</li>
-                                <li><i class="fas fa-cogs"></i>Makine Performansı</li>
-                            </ul>
-                            <div class="development-badge">
-                                <span class="badge bg-warning">Yakında</span>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-    </section>
+    <!-- Menu Container -->
+    <div id="menu-container"></div>
 
     <!-- Footer -->
     <footer class="footer-section">
@@ -134,15 +47,62 @@
     <!-- Custom Scripts -->
     <script src="../../../components/navbar.js"></script>
     <script src="../../../components/dropdown.js"></script>
+    <script src="../../../components/menu/menu.js"></script>
     <script src="../../../authService.js"></script>
     <script src="../../../base.js"></script>
     
-    <!-- Initialize Navbar -->
+    <!-- Initialize Navbar and Menu -->
     <script type="module">
         import { initNavbar } from '../../../components/navbar.js';
+        import { MenuComponent } from '../../../components/menu/menu.js';
         
         document.addEventListener('DOMContentLoaded', async () => {
             await initNavbar();
+            
+            // Initialize menu component
+            const menu = new MenuComponent('menu-container', {
+                title: 'Raporlar',
+                subtitle: 'Üretim süreçlerinizi analiz etmek ve performansınızı takip etmek için kapsamlı raporlar',
+                cards: [
+                    {
+                        title: 'Biten Zamanlayıcılar',
+                        description: 'Tamamlanan zamanlayıcıların detaylı analizi. Kullanıcı performansları, süre dağılımları ve verimlilik metriklerini görüntüleyin.',
+                        icon: 'fas fa-clock',
+                        iconColor: 'primary',
+                        link: 'finished-timers/'
+                    },
+                    {
+                        title: 'Toplam Raporu',
+                        description: 'Talaşlı imalat süreçlerinin gruplandırılmış analizi. Kullanıcı, makine, iş no ve TI numarasına göre toplam süreleri görüntüleyin.',
+                        icon: 'fas fa-chart-pie',
+                        iconColor: 'success',
+                        link: 'sum-report/'
+                    },
+                    {
+                        title: 'Maliyet Analizi',
+                        description: 'İş numarasına göre çalışma saatleri analizi ve maliyet hesaplamaları. Hafta içi, mesai ve pazar çalışma saatlerini detaylı olarak görüntüleyin.',
+                        icon: 'fas fa-calculator',
+                        iconColor: 'warning',
+                        link: 'cost-analysis/'
+                    },
+                    {
+                        title: 'Makine Çalışma Geçmişi',
+                        description: 'Makine kapasite geçmişini görüntüleyin ve analiz edin. Gantt çizelgeleri ile zaman çizelgesi analizi yapın.',
+                        icon: 'fas fa-history',
+                        iconColor: 'info',
+                        link: 'history/'
+                    },
+                    {
+                        title: 'Üretim Planı',
+                        description: 'Üretim planını görüntüleyin ve analiz edin. Gantt çizelgeleri ile zaman çizelgesi analizi yapın.',
+                        icon: 'fas fa-calendar-alt',
+                        iconColor: 'info',
+                        link: 'production-plan/'
+                    }
+                ]
+            });
+            
+            menu.render();
         });
     </script>
 </body>

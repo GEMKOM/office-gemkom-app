@@ -1,0 +1,178 @@
+/* Production Plan Page Styles */
+
+/* Custom Gantt Chart Styles for Production Plan */
+/* Override task bar colors to be red with green progress */
+.gantt-task-bar.unlocked {
+    background: linear-gradient(135deg, #dc3545 0%, #bd2130 100%) !important;
+    border: 1px solid #a71e2a !important;
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3) !important;
+}
+
+.gantt-task-bar.unlocked:hover {
+    box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4) !important;
+}
+
+.gantt-task-bar.locked {
+    background: linear-gradient(135deg, #dc3545 0%, #bd2130 100%) !important;
+    border: 1px solid #a71e2a !important;
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3) !important;
+}
+
+.gantt-task-bar.locked:hover {
+    box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4) !important;
+}
+
+/* Category-based styling - override to red for production plan */
+.gantt-task-bar.category-work {
+    background: linear-gradient(135deg, #dc3545 0%, #bd2130 100%) !important;
+    border: 1px solid #a71e2a !important;
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3) !important;
+}
+
+.gantt-task-bar.category-work:hover {
+    box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4) !important;
+}
+
+.gantt-task-bar.category-hold {
+    background: linear-gradient(135deg, #dc3545 0%, #bd2130 100%) !important;
+    border: 1px solid #a71e2a !important;
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3) !important;
+}
+
+.gantt-task-bar.category-hold:hover {
+    box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4) !important;
+}
+
+.gantt-task-bar.category-idle {
+    background: linear-gradient(135deg, #dc3545 0%, #bd2130 100%) !important;
+    border: 1px solid #a71e2a !important;
+    box-shadow: 0 2px 8px rgba(220, 53, 69, 0.3) !important;
+}
+
+.gantt-task-bar.category-idle:hover {
+    box-shadow: 0 6px 20px rgba(220, 53, 69, 0.4) !important;
+}
+
+/* Progress bars should be green */
+.gantt-task-progress.completed {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.9) 0%, rgba(30, 126, 52, 0.9) 100%) !important;
+}
+
+.gantt-task-progress.in-progress {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.9) 0%, rgba(30, 126, 52, 0.9) 100%) !important;
+}
+
+.gantt-task-progress.delayed {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.9) 0%, rgba(30, 126, 52, 0.9) 100%) !important;
+}
+
+.gantt-task-progress.on-hold {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.9) 0%, rgba(30, 126, 52, 0.9) 100%) !important;
+}
+
+/* Custom progress colors for production plan */
+.gantt-task-progress.custom-completed {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.9) 0%, rgba(30, 126, 52, 0.9) 100%) !important;
+}
+
+.gantt-task-progress.custom-in-progress {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.9) 0%, rgba(30, 126, 52, 0.9) 100%) !important;
+}
+
+.gantt-task-progress.custom-delayed {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.9) 0%, rgba(30, 126, 52, 0.9) 100%) !important;
+}
+
+.gantt-task-progress.custom-on-hold {
+    background: linear-gradient(135deg, rgba(40, 167, 69, 0.9) 0%, rgba(30, 126, 52, 0.9) 100%) !important;
+}
+
+/* Simple Performance Analysis Styles */
+.simple-performance {
+    background: #e3f2fd;
+    border-radius: 8px;
+    padding: 1rem;
+    border: 1px solid #bbdefb;
+    margin: 1rem 0;
+}
+
+.performance-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.metric-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+    min-width: 200px;
+}
+
+.metric-label {
+    font-weight: 600;
+    color: #1976d2;
+    font-size: 0.9rem;
+}
+
+.metric-value {
+    font-weight: 500;
+    color: #424242;
+    font-size: 0.9rem;
+}
+
+/* Status Badge Styles */
+.status-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.status-badge.completed {
+    background: rgba(40, 167, 69, 0.2);
+    color: #28a745;
+    border: 1px solid rgba(40, 167, 69, 0.3);
+}
+
+.status-badge.worked-on {
+    background: #e3f2fd;
+    color: #1976d2;
+    border: 1px solid #bbdefb;
+}
+
+.status-badge.pending {
+    background: #fff3e0;
+    color: #f57c00;
+    border: 1px solid #ffcc02;
+}
+
+.status-badge.hold {
+    background: #ffebee;
+    color: #d32f2f;
+    border: 1px solid #ffcdd2;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .performance-row {
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+    
+    .metric-item {
+        min-width: auto;
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .simple-performance {
+        padding: 0.75rem;
+    }
+}
