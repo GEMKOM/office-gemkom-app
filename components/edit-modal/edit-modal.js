@@ -716,6 +716,28 @@ export class EditModal {
         return this; // Return this for method chaining
     }
     
+    // Clear all form data and structure
+    clearAll() {
+        // Clear dropdowns
+        this.dropdowns.forEach(dropdown => {
+            dropdown.destroy();
+        });
+        this.dropdowns.clear();
+        
+        // Clear fields
+        this.fields.clear();
+        
+        // Clear sections
+        this.sections = [];
+        
+        // Clear form HTML
+        if (this.form) {
+            this.form.innerHTML = '';
+        }
+        
+        return this; // Return this for method chaining
+    }
+    
     // Reset form
     resetForm() {
         this.fields.forEach((field, fieldId) => {

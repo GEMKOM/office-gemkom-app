@@ -8,6 +8,8 @@ import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../components/table/table.js';
+import { DisplayModal } from '../../components/display-modal/display-modal.js';
+import { EditModal } from '../../components/edit-modal/edit-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 
 // Header component instance
@@ -21,6 +23,12 @@ let machineFilters = null;
 
 // Table component instance
 let machinesTable = null;
+
+// Modal component instances
+let createMachineModal = null;
+let editMachineModal = null;
+let displayMachineModal = null;
+let displayUsersModal = null;
 
 // State management
 let machines = [];
@@ -59,6 +67,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         animation: true
     });
     
+    // Initialize modal components
+    initializeModalComponents();
+    
     await initializeMachineList();
 });
 
@@ -75,9 +86,7 @@ function initHeaderComponent() {
         refreshButtonText: 'Yenile',
         onBackClick: () => window.location.href = '/general/',
         onCreateClick: () => {
-            const el = document.getElementById('createMachineModal');
-            const modal = bootstrap.Modal.getOrCreateInstance(el);
-            modal.show();
+            showCreateMachineModal();
         },
         onRefreshClick: async () => {
             // Reset to first page when refreshing
@@ -85,6 +94,496 @@ function initHeaderComponent() {
             await loadMachineData();
         }
     });
+}
+
+// Initialize modal components
+function initializeModalComponents() {
+    // Create Machine Modal
+    createMachineModal = new EditModal('create-machine-modal-container', {
+        title: 'Yeni Makine Oluştur',
+        icon: 'fas fa-plus-circle',
+        saveButtonText: 'Makine Oluştur',
+        size: 'lg'
+    });
+
+    // Edit Machine Modal
+    editMachineModal = new EditModal('edit-machine-modal-container', {
+        title: 'Makine Düzenle',
+        icon: 'fas fa-edit',
+        saveButtonText: 'Değişiklikleri Kaydet',
+        size: 'lg'
+    });
+
+    // Display Machine Modal
+    displayMachineModal = new DisplayModal('display-machine-modal-container', {
+        title: 'Makine Özellikleri',
+        icon: 'fas fa-list',
+        showEditButton: true,
+        editButtonText: 'Düzenle',
+        size: 'lg'
+    });
+
+    // Display Users Modal
+    displayUsersModal = new DisplayModal('display-users-modal-container', {
+        title: 'Atanan Kullanıcılar',
+        icon: 'fas fa-users',
+        size: 'lg'
+    });
+
+    // Set up modal callbacks
+    setupModalCallbacks();
+}
+
+// Set up modal callbacks
+function setupModalCallbacks() {
+    // Create machine modal callbacks
+    createMachineModal.onSaveCallback(async (formData) => {
+        await saveMachine(formData);
+    });
+
+    // Edit machine modal callbacks
+    editMachineModal.onSaveCallback(async (formData) => {
+        await updateMachine(formData);
+    });
+
+    // Display machine modal callbacks
+    displayMachineModal.onEditCallback((data) => {
+        displayMachineModal.hide();
+        const machineId = window.currentDisplayedMachineId;
+        if (machineId) {
+            window.editMachine(machineId);
+        }
+    });
+}
+
+// Show create machine modal
+function showCreateMachineModal() {
+    // Clear and configure the create modal - ensure complete reset
+    createMachineModal.clearAll();
+    
+    // Add basic information section
+    createMachineModal.addSection({
+        title: 'Temel Bilgiler',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary'
+    });
+
+    // Add fields
+    createMachineModal.addField({
+        id: 'machine-name',
+        name: 'name',
+        label: 'Makine Adı',
+        type: 'text',
+        placeholder: 'Makine adını girin',
+        required: true,
+        icon: 'fas fa-cogs',
+        colSize: 6,
+        help: 'Makinenin tanımlayıcı adı'
+    });
+
+    createMachineModal.addField({
+        id: 'machine-code',
+        name: 'code',
+        label: 'Makine Kodu',
+        type: 'text',
+        placeholder: 'Makine kodunu girin',
+        icon: 'fas fa-barcode',
+        colSize: 6,
+        help: 'Opsiyonel, benzersiz makine kodu'
+    });
+
+    createMachineModal.addField({
+        id: 'machine-type',
+        name: 'machine_type',
+        label: 'Makine Tipi',
+        type: 'select',
+        placeholder: 'Makine tipi seçin...',
+        required: true,
+        icon: 'fas fa-tags',
+        colSize: 6,
+        help: 'Makinenin kategorisi',
+        options: machineTypes.map(type => ({ value: type.value, label: type.label }))
+    });
+
+    createMachineModal.addField({
+        id: 'machine-assigned-users',
+        name: 'assigned_users',
+        label: 'Atanan Kullanıcılar',
+        type: 'select',
+        placeholder: 'Kullanıcı seçin...',
+        icon: 'fas fa-users',
+        colSize: 6,
+        help: 'Bu makineden sorumlu kullanıcılar',
+        multiple: true,
+        options: users.map(user => ({ 
+            value: user.id, 
+            label: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username 
+        }))
+    });
+
+    createMachineModal.addField({
+        id: 'machine-used-in',
+        name: 'used_in',
+        label: 'Kullanım Alanı',
+        type: 'select',
+        placeholder: 'Kullanım alanı seçin...',
+        required: true,
+        icon: 'fas fa-building',
+        colSize: 6,
+        help: 'Makinenin kullanıldığı alan',
+        options: machineUsedInOptions.map(option => ({ value: option.value, label: option.label }))
+    });
+
+    createMachineModal.addField({
+        id: 'machine-status',
+        name: 'is_active',
+        label: 'Durum',
+        type: 'select',
+        icon: 'fas fa-info-circle',
+        colSize: 6,
+        help: 'Makinenin mevcut durumu',
+        options: [
+            { value: 'true', label: 'Aktif' },
+            { value: 'false', label: 'Pasif' }
+        ],
+        value: 'true'
+    });
+
+    // Add properties section
+    createMachineModal.addSection({
+        title: 'Özellikler',
+        icon: 'fas fa-list',
+        iconColor: 'text-info'
+    });
+
+    createMachineModal.addField({
+        id: 'properties',
+        name: 'properties',
+        label: 'Makine Özellikleri',
+        type: 'textarea',
+        placeholder: 'Özellikleri JSON formatında girin (örn: {"kapasite": "1000", "güç": "5kW"})',
+        icon: 'fas fa-list',
+        colSize: 12,
+        help: 'Makine özelliklerini JSON formatında girin',
+        rows: 4
+    });
+
+    // Render and show modal
+    createMachineModal.render();
+    createMachineModal.show();
+}
+
+// Show edit machine modal
+function showEditMachineModal(machineId) {
+    const machine = machines.find(m => String(m.id) === String(machineId));
+    if (!machine) {
+        alert('Makine bulunamadı');
+        return;
+    }
+
+    // Store the machine ID for update
+    window.editingMachineId = machineId;
+
+    // Clear and configure the edit modal - ensure complete reset
+    editMachineModal.clearAll();
+    
+    // Add basic information section
+    editMachineModal.addSection({
+        title: 'Temel Bilgiler',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary'
+    });
+
+    // Add fields with current values
+    editMachineModal.addField({
+        id: 'edit-machine-name',
+        name: 'name',
+        label: 'Makine Adı',
+        type: 'text',
+        placeholder: 'Makine adını girin',
+        required: true,
+        icon: 'fas fa-cogs',
+        colSize: 6,
+        help: 'Makinenin tanımlayıcı adı',
+        value: machine.name || ''
+    });
+
+    editMachineModal.addField({
+        id: 'edit-machine-code',
+        name: 'code',
+        label: 'Makine Kodu',
+        type: 'text',
+        placeholder: 'Makine kodunu girin',
+        icon: 'fas fa-barcode',
+        colSize: 6,
+        help: 'Opsiyonel, benzersiz makine kodu',
+        value: machine.code || ''
+    });
+
+    editMachineModal.addField({
+        id: 'edit-machine-type',
+        name: 'machine_type',
+        label: 'Makine Tipi',
+        type: 'select',
+        placeholder: 'Makine tipi seçin...',
+        required: true,
+        icon: 'fas fa-tags',
+        colSize: 6,
+        help: 'Makinenin kategorisi',
+        options: machineTypes.map(type => ({ value: type.value, label: type.label })),
+        value: machine.machine_type || machine.type_id || ''
+    });
+
+    editMachineModal.addField({
+        id: 'edit-machine-assigned-users',
+        name: 'assigned_users',
+        label: 'Atanan Kullanıcılar',
+        type: 'select',
+        placeholder: 'Kullanıcı seçin...',
+        icon: 'fas fa-users',
+        colSize: 6,
+        help: 'Bu makineden sorumlu kullanıcılar',
+        multiple: true,
+        options: users.map(user => ({ 
+            value: user.id, 
+            label: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username 
+        })),
+        value: machine.assigned_users ? machine.assigned_users.map(user => 
+            typeof user === 'object' ? user.id : user
+        ) : []
+    });
+
+    editMachineModal.addField({
+        id: 'edit-machine-used-in',
+        name: 'used_in',
+        label: 'Kullanım Alanı',
+        type: 'select',
+        placeholder: 'Kullanım alanı seçin...',
+        required: true,
+        icon: 'fas fa-building',
+        colSize: 6,
+        help: 'Makinenin kullanıldığı alan',
+        options: machineUsedInOptions.map(option => ({ value: option.value, label: option.label })),
+        value: machine.used_in || ''
+    });
+
+    editMachineModal.addField({
+        id: 'edit-machine-status',
+        name: 'is_active',
+        label: 'Durum',
+        type: 'select',
+        icon: 'fas fa-info-circle',
+        colSize: 6,
+        help: 'Makinenin mevcut durumu',
+        options: [
+            { value: 'true', label: 'Aktif' },
+            { value: 'false', label: 'Pasif' }
+        ],
+        value: machine.is_active ? 'true' : 'false'
+    });
+
+    // Add properties section
+    editMachineModal.addSection({
+        title: 'Özellikler',
+        icon: 'fas fa-list',
+        iconColor: 'text-info'
+    });
+
+    const propertiesJson = machine.properties && typeof machine.properties === 'object' 
+        ? JSON.stringify(machine.properties, null, 2) 
+        : '';
+
+    editMachineModal.addField({
+        id: 'edit-properties',
+        name: 'properties',
+        label: 'Makine Özellikleri',
+        type: 'textarea',
+        placeholder: 'Özellikleri JSON formatında girin (örn: {"kapasite": "1000", "güç": "5kW"})',
+        icon: 'fas fa-list',
+        colSize: 12,
+        help: 'Makine özelliklerini JSON formatında girin',
+        rows: 4,
+        value: propertiesJson
+    });
+
+    // Render and show modal
+    editMachineModal.render();
+    editMachineModal.show();
+}
+
+// Show machine properties modal
+function showMachinePropertiesModal(machineId) {
+    const machine = machines.find(m => String(m.id) === String(machineId));
+    if (!machine) {
+        alert('Makine bulunamadı');
+        return;
+    }
+
+    // Store the machine ID for edit functionality
+    window.currentDisplayedMachineId = machineId;
+
+    // Clear and configure the display modal - ensure complete reset
+    displayMachineModal.clearData();
+    
+    // Add basic information section
+    displayMachineModal.addSection({
+        title: 'Temel Bilgiler',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary'
+    });
+
+    // Add fields
+    displayMachineModal.addField({
+        id: 'display-name',
+        name: 'name',
+        label: 'Makine Adı',
+        type: 'text',
+        value: machine.name || '-',
+        icon: 'fas fa-cogs',
+        colSize: 6
+    });
+
+    displayMachineModal.addField({
+        id: 'display-code',
+        name: 'code',
+        label: 'Makine Kodu',
+        type: 'text',
+        value: machine.code || '-',
+        icon: 'fas fa-barcode',
+        colSize: 6
+    });
+
+    displayMachineModal.addField({
+        id: 'display-type',
+        name: 'machine_type',
+        label: 'Makine Tipi',
+        type: 'text',
+        value: machine.machine_type_label || '-',
+        icon: 'fas fa-tags',
+        colSize: 6
+    });
+
+    displayMachineModal.addField({
+        id: 'display-used-in',
+        name: 'used_in',
+        label: 'Kullanım Alanı',
+        type: 'text',
+        value: machine.used_in_label || '-',
+        icon: 'fas fa-building',
+        colSize: 6
+    });
+
+    displayMachineModal.addField({
+        id: 'display-status',
+        name: 'is_active',
+        label: 'Durum',
+        type: 'boolean',
+        value: machine.is_active,
+        icon: 'fas fa-info-circle',
+        colSize: 6
+    });
+
+    displayMachineModal.addField({
+        id: 'display-maintenance',
+        name: 'is_under_maintenance',
+        label: 'Bakımda',
+        type: 'boolean',
+        value: machine.is_under_maintenance,
+        icon: 'fas fa-wrench',
+        colSize: 6
+    });
+
+    // Add properties section if they exist
+    const props = machine.properties && typeof machine.properties === 'object' ? machine.properties : {};
+    const propEntries = Object.entries(props);
+    
+    if (propEntries.length > 0) {
+        displayMachineModal.addSection({
+            title: 'Özellikler',
+            icon: 'fas fa-list',
+            iconColor: 'text-info'
+        });
+
+        propEntries.forEach(([key, value]) => {
+            displayMachineModal.addField({
+                id: `prop-${key}`,
+                name: key,
+                label: key,
+                type: 'text',
+                value: value,
+                icon: 'fas fa-tag',
+                colSize: 6
+            });
+        });
+    }
+
+    // Render and show modal
+    displayMachineModal.render();
+    displayMachineModal.show();
+}
+
+// Show assigned users modal
+function showAssignedUsersModal(machineId) {
+    const machine = machines.find(m => String(m.id) === String(machineId));
+    if (!machine) {
+        alert('Makine bulunamadı');
+        return;
+    }
+
+    // Clear and configure the display modal - ensure complete reset
+    displayUsersModal.clearData();
+    
+    // Add assigned users section
+    displayUsersModal.addSection({
+        title: 'Atanan Kullanıcılar',
+        icon: 'fas fa-users',
+        iconColor: 'text-primary'
+    });
+
+    const assignedUsers = machine.assigned_users || [];
+    
+    if (assignedUsers.length === 0) {
+        displayUsersModal.addField({
+            id: 'no-users',
+            name: 'message',
+            label: 'Bilgi',
+            type: 'text',
+            value: 'Atanmış kullanıcı bulunamadı',
+            icon: 'fas fa-info-circle',
+            colSize: 12
+        });
+    } else {
+        assignedUsers.forEach((user, index) => {
+            // Check if user is an object (new format) or just an ID (old format)
+            let userName;
+            let userId;
+            
+            if (typeof user === 'object' && user !== null) {
+                // New format: user object with id, username, first_name, last_name
+                userId = user.id;
+                userName = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
+            } else {
+                // Old format: just user ID
+                userId = user;
+                const userObj = users.find(u => u.id === userId);
+                userName = userObj ? `${userObj.first_name || ''} ${userObj.last_name || ''}`.trim() || userObj.username : `Kullanıcı ID: ${userId}`;
+            }
+            
+            displayUsersModal.addField({
+                id: `user-${userId}`,
+                name: `user_${userId}`,
+                label: `Kullanıcı ${index + 1}`,
+                type: 'text',
+                value: userName,
+                icon: 'fas fa-user',
+                colSize: 6
+            });
+        });
+    }
+
+    // Render and show modal
+    displayUsersModal.render();
+    displayUsersModal.show();
 }
 
 async function initializeMachineList() {
@@ -328,11 +827,8 @@ async function loadMetadata() {
         machineUsedInOptions = usedInResponse.results || usedInResponse || [];
         users = usersResponse || [];
 
-        // Populate filters and dropdowns
+        // Populate filters
         updateFilterOptions();
-        populateMachineTypeDropdowns();
-        populateMachineUsedInDropdowns();
-        populateAssignedUsersDropdowns();
     } catch (error) {
         // Error loading machine metadata
     }
@@ -386,12 +882,6 @@ async function loadMachineData() {
         
         // Update filter options
         updateFilterOptions();
-        
-        // Populate machine type dropdowns with loaded data
-        populateMachineTypeDropdowns();
-        
-        // Populate used_in dropdowns with loaded data
-        populateMachineUsedInDropdowns();
         
         // Update statistics
         updateMachineCounts();
@@ -542,16 +1032,6 @@ function exportToExcel(data, filename) {
 }
 
 function setupEventListeners() {
-    // Save machine button
-    document.getElementById('save-machine-btn')?.addEventListener('click', () => {
-        saveMachine();
-    });
-    
-    // Update machine button
-    document.getElementById('update-machine-btn')?.addEventListener('click', () => {
-        updateMachine();
-    });
-    
     // Confirm delete button
     document.getElementById('confirm-delete-machine-btn')?.addEventListener('click', async () => {
         const machineId = window.pendingDeleteMachineId;
@@ -574,96 +1054,11 @@ function setupEventListeners() {
             alert('Makine silinirken hata oluştu');
         }
     });
-
-    // Add property row
-    document.getElementById('add-property-btn')?.addEventListener('click', () => {
-        addPropertyRow('', '', 'create');
-    });
-    document.getElementById('edit-add-property-btn')?.addEventListener('click', () => {
-        addPropertyRow('', '', 'edit');
-    });
-    
-    // Reset properties on modal open
-    const createModalEl = document.getElementById('createMachineModal');
-    if (createModalEl) {
-        createModalEl.addEventListener('shown.bs.modal', () => {
-            // If empty, add one starter row
-            const list = document.getElementById('properties-list');
-            if (list && list.children.length === 0) {
-                addPropertyRow('', '', 'create');
-            }
-        });
-        createModalEl.addEventListener('hidden.bs.modal', () => {
-            // Clear rows when closed
-            const list = document.getElementById('properties-list');
-            if (list) list.innerHTML = '';
-        });
-    }
-
-    const editModalEl = document.getElementById('editMachineModal');
-    if (editModalEl) {
-        editModalEl.addEventListener('hidden.bs.modal', () => {
-            const list = document.getElementById('edit-properties-list');
-            if (list) list.innerHTML = '';
-        });
-    }
 }
 
 // Global functions for actions
 window.editMachine = function(machineId) {
-    // Check if machineId is valid
-    if (!machineId) {
-        alert('Geçersiz makine ID');
-        return;
-    }
-    
-    // Find the machine data
-    const machine = machines.find(m => String(m.id) === String(machineId));
-    if (!machine) {
-        alert('Makine bulunamadı');
-        return;
-    }
-    
-    // Store the machine ID for update
-    window.editingMachineId = machineId;
-    
-    // Populate the edit form
-    document.getElementById('edit-machine-name').value = machine.name || '';
-    document.getElementById('edit-machine-code').value = machine.code || '';
-    document.getElementById('edit-machine-type').value = machine.machine_type || machine.type_id || '';
-    document.getElementById('edit-machine-used-in').value = machine.used_in || '';
-    document.getElementById('edit-machine-status').value = machine.is_active ? 'active' : 'inactive';
-    
-    // Populate assigned users
-    const assignedUsersSelect = document.getElementById('edit-machine-assigned-users');
-    if (assignedUsersSelect && machine.assigned_users) {
-        // Clear previous selections
-        Array.from(assignedUsersSelect.options).forEach(option => option.selected = false);
-        // Select assigned users
-        machine.assigned_users.forEach(userId => {
-            const option = assignedUsersSelect.querySelector(`option[value="${userId}"]`);
-            if (option) option.selected = true;
-        });
-    }
-    
-    // Populate properties in edit modal
-    const editList = document.getElementById('edit-properties-list');
-    if (editList) {
-        editList.innerHTML = '';
-        const props = machine.properties && typeof machine.properties === 'object' ? machine.properties : {};
-        const entries = Object.entries(props);
-        if (entries.length === 0) {
-            addPropertyRow('', '', 'edit');
-        } else {
-            entries.forEach(([k, v]) => addPropertyRow(k, String(v), 'edit'));
-        }
-    }
-    // Removed Ek Bilgiler fields
-    
-    // Show the edit modal
-    const el = document.getElementById('editMachineModal');
-    const modal = bootstrap.Modal.getOrCreateInstance(el);
-    modal.show();
+    showEditMachineModal(machineId);
 };
 
 window.deleteMachine = function(machineId, machineName) {
@@ -676,103 +1071,42 @@ window.deleteMachine = function(machineId, machineName) {
 
 // Show machine properties in a modal without overcrowding the table
 window.showMachineProperties = function(machineId) {
-    const machine = machines.find(m => String(m.id) === String(machineId));
-    const container = document.getElementById('machine-properties-content');
-    if (!container) return;
-    
-    const props = machine && machine.properties && typeof machine.properties === 'object' ? machine.properties : {};
-    const entries = Object.entries(props);
-    
-    if (entries.length === 0) {
-        container.innerHTML = '<div class="text-muted">Özellik bulunamadı.</div>';
-    } else {
-        // Render as two-column responsive list
-        const items = entries.map(([key, val]) => {
-            const valueDisplay = typeof val === 'boolean' ? (val ? '<span class="bool-indicator bool-yes">✓</span>' : '<span class="bool-indicator bool-no">✗</span>') : (val ?? '-');
-            return `
-                <div class="col-md-6 mb-2">
-                    <div class="d-flex justify-content-between align-items-center p-2 border rounded">
-                        <div class="fw-semibold me-2">${key}</div>
-                        <div class="text-end">${valueDisplay}</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        container.innerHTML = `
-            <div class="mb-2"><strong>${machine?.name || 'Makine'}</strong> - Özellikler (${entries.length})</div>
-            <div class="row g-2">${items}</div>
-        `;
-    }
-    
-    const el = document.getElementById('viewMachinePropertiesModal');
-    const modal = bootstrap.Modal.getOrCreateInstance(el);
-    modal.show();
+    showMachinePropertiesModal(machineId);
 };
 
 window.showAssignedUsers = function(machineId) {
-    const machine = machines.find(m => String(m.id) === String(machineId));
-    const container = document.getElementById('assigned-users-content');
-    if (!container) return;
-    
-    const assignedUsers = machine && machine.assigned_users ? machine.assigned_users : [];
-    
-    if (assignedUsers.length === 0) {
-        container.innerHTML = '<div class="text-muted">Atanmış kullanıcı bulunamadı.</div>';
-    } else {
-        const userItems = assignedUsers.map(userId => {
-            const user = users.find(u => u.id === userId);
-            const userName = user ? `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username : `Kullanıcı ID: ${userId}`;
-            return `
-                <div class="col-md-6 mb-2">
-                    <div class="d-flex justify-content-between align-items-center p-2 border rounded">
-                        <div class="fw-semibold me-2">
-                            <i class="fas fa-user me-2"></i>${userName}
-                        </div>
-                        <div class="text-end text-muted small">ID: ${userId}</div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-        
-        container.innerHTML = `
-            <div class="mb-2"><strong>${machine?.name || 'Makine'}</strong> - Atanan Kullanıcılar (${assignedUsers.length})</div>
-            <div class="row g-2">${userItems}</div>
-        `;
-    }
-    
-    const el = document.getElementById('viewAssignedUsersModal');
-    const modal = bootstrap.Modal.getOrCreateInstance(el);
-    modal.show();
+    showAssignedUsersModal(machineId);
 };
 
-async function saveMachine() {
-    const form = document.getElementById('create-machine-form');
-    
-    const statusValue = document.getElementById('machine-status').value;
-    const assignedUsersSelect = document.getElementById('machine-assigned-users');
-    const assignedUsers = Array.from(assignedUsersSelect.selectedOptions).map(option => parseInt(option.value));
-    
-    const machineData = {
-        name: document.getElementById('machine-name').value,
-        code: document.getElementById('machine-code').value || null,
-        machine_type: document.getElementById('machine-type').value,
-        used_in: document.getElementById('machine-used-in').value,
-        is_active: statusValue === 'active',
-        assigned_users: assignedUsers,
-        // Removed Ek Bilgiler fields
-        properties: collectPropertiesFromForm()
-    };
-    
+async function saveMachine(formData) {
     try {
+        // Parse properties if provided as JSON string
+        let properties = {};
+        if (formData.properties && typeof formData.properties === 'string') {
+            try {
+                properties = JSON.parse(formData.properties);
+            } catch (e) {
+                alert('Özellikler JSON formatında değil. Lütfen doğru formatta girin.');
+                return;
+            }
+        }
+
+        const machineData = {
+            name: formData.name,
+            code: formData.code || null,
+            machine_type: formData.machine_type,
+            used_in: formData.used_in,
+            is_active: formData.is_active === 'true',
+            assigned_users: Array.isArray(formData.assigned_users) ? formData.assigned_users : [],
+            properties: properties
+        };
+        
         const created = await apiCreateMachine(machineData);
         if (created) {
             alert('Makine başarıyla oluşturuldu');
             
             // Hide modal
-            bootstrap.Modal.getInstance(document.getElementById('createMachineModal')).hide();
-            
-            // Reset form
-            form.reset();
+            createMachineModal.hide();
             
             // Reload machines
             await loadMachineData();
@@ -783,35 +1117,41 @@ async function saveMachine() {
     }
 }
 
-async function updateMachine() {
+async function updateMachine(formData) {
     const machineId = window.editingMachineId;
     if (!machineId) {
         alert('Düzenlenecek makine bulunamadı');
         return;
     }
     
-    const editStatusValue = document.getElementById('edit-machine-status').value;
-    const assignedUsersSelect = document.getElementById('edit-machine-assigned-users');
-    const assignedUsers = Array.from(assignedUsersSelect.selectedOptions).map(option => parseInt(option.value));
-    
-    const machineData = {
-        name: document.getElementById('edit-machine-name').value,
-        code: document.getElementById('edit-machine-code').value || null,
-        machine_type: document.getElementById('edit-machine-type').value,
-        used_in: document.getElementById('edit-machine-used-in').value,
-        is_active: editStatusValue === 'active',
-        assigned_users: assignedUsers,
-        // Include edited properties
-        properties: collectPropertiesFromForm('edit')
-    };
-    
     try {
+        // Parse properties if provided as JSON string
+        let properties = {};
+        if (formData.properties && typeof formData.properties === 'string') {
+            try {
+                properties = JSON.parse(formData.properties);
+            } catch (e) {
+                alert('Özellikler JSON formatında değil. Lütfen doğru formatta girin.');
+                return;
+            }
+        }
+
+        const machineData = {
+            name: formData.name,
+            code: formData.code || null,
+            machine_type: formData.machine_type,
+            used_in: formData.used_in,
+            is_active: formData.is_active === 'true',
+            assigned_users: Array.isArray(formData.assigned_users) ? formData.assigned_users : [],
+            properties: properties
+        };
+        
         const updated = await apiUpdateMachine(machineId, machineData);
         if (updated) {
             alert('Makine başarıyla güncellendi');
             
             // Hide modal
-            bootstrap.Modal.getInstance(document.getElementById('editMachineModal')).hide();
+            editMachineModal.hide();
             
             // Clear the editing machine ID
             window.editingMachineId = null;
@@ -825,65 +1165,6 @@ async function updateMachine() {
     }
 }
 
-function populateMachineTypeDropdowns() {
-    // Populate machine type dropdowns with already loaded machineTypes
-    const typeSelects = [
-        document.getElementById('machine-type'),
-        document.getElementById('edit-machine-type')
-    ];
-    
-    typeSelects.forEach(select => {
-        if (select) {
-            select.innerHTML = '<option value="">Makine tipi seçin...</option>';
-            machineTypes.forEach(type => {
-                const option = document.createElement('option');
-                option.value = type.value;
-                option.textContent = type.label;
-                select.appendChild(option);
-            });
-        }
-    });
-}
-
-function populateMachineUsedInDropdowns() {
-    // Populate used_in dropdowns with already loaded machineUsedInOptions
-    const usedInSelects = [
-        document.getElementById('machine-used-in'),
-        document.getElementById('edit-machine-used-in')
-    ];
-    
-    usedInSelects.forEach(select => {
-        if (select) {
-            select.innerHTML = '<option value="">Kullanım alanı seçin...</option>';
-            machineUsedInOptions.forEach(option => {
-                const optionElement = document.createElement('option');
-                optionElement.value = option.value;
-                optionElement.textContent = option.label;
-                select.appendChild(optionElement);
-            });
-        }
-    });
-}
-
-function populateAssignedUsersDropdowns() {
-    // Populate assigned users dropdowns with already loaded users
-    const userSelects = [
-        document.getElementById('machine-assigned-users'),
-        document.getElementById('edit-machine-assigned-users')
-    ];
-    
-    userSelects.forEach(select => {
-        if (select) {
-            select.innerHTML = ''; // Clear existing options
-            users.forEach(user => {
-                const option = document.createElement('option');
-                option.value = user.id;
-                option.textContent = `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username;
-                select.appendChild(option);
-            });
-        }
-    });
-}
 
 // Helper function for notifications
 function showNotification(message, type = 'info') {
@@ -893,56 +1174,6 @@ function showNotification(message, type = 'info') {
     alert(`${type.toUpperCase()}: ${message}`);
 } 
 
-// Dynamically add/remove/read properties in the create modal
-function addPropertyRow(key = '', value = '', target = 'create') {
-    const list = document.getElementById(target === 'edit' ? 'edit-properties-list' : 'properties-list');
-    if (!list) return;
-    
-    const row = document.createElement('div');
-    row.className = 'col-12';
-    row.innerHTML = `
-        <div class="row g-2 align-items-center">
-            <div class="col-md-5">
-                <input type="text" class="form-control form-control-sm prop-key" placeholder="Özellik adı" value="${key}">
-            </div>
-            <div class="col-md-5">
-                <input type="text" class="form-control form-control-sm prop-value" placeholder="Değer" value="${value}">
-            </div>
-            <div class="col-md-2 d-grid">
-                <button type="button" class="btn btn-sm btn-outline-danger remove-prop-btn">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        </div>
-    `;
-    list.appendChild(row);
-    
-    row.querySelector('.remove-prop-btn')?.addEventListener('click', () => {
-        row.remove();
-    });
-}
-
-function collectPropertiesFromForm(target = 'create') {
-    const list = document.getElementById(target === 'edit' ? 'edit-properties-list' : 'properties-list');
-    if (!list) return {};
-    const props = {};
-    const rows = list.querySelectorAll('.row');
-    rows.forEach(r => {
-        const keyInput = r.querySelector('.prop-key');
-        const valueInput = r.querySelector('.prop-value');
-        const key = keyInput?.value?.trim();
-        const value = valueInput?.value?.trim();
-        if (key) {
-            // Try to coerce booleans and numbers for simple UX
-            let parsed = value;
-            if (value === 'true') parsed = true;
-            else if (value === 'false') parsed = false;
-            else if (!isNaN(value) && value !== '') parsed = Number(value);
-            props[key] = parsed ?? '';
-        }
-    });
-    return props;
-}
 
 // Collect current filter values
 function collectFilterValues() {

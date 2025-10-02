@@ -234,6 +234,9 @@ export class ModernDropdown {
     setItems(items) {
         this.items = items;
         this.renderItems();
+        if (this.options.multiple) {
+            this.updateCheckboxes();
+        }
     }
     
     renderItems() {
@@ -289,15 +292,18 @@ export class ModernDropdown {
     selectItem(item, element) {
         if (this.options.multiple) {
             const checkbox = element.querySelector('input[type="checkbox"]');
-            const isChecked = checkbox.checked;
+            const isCurrentlySelected = this.selectedValues.includes(item.value);
             
-            if (isChecked) {
+            if (isCurrentlySelected) {
+                // Remove from selection
                 this.selectedValues = this.selectedValues.filter(v => v !== item.value);
+                checkbox.checked = false;
             } else {
+                // Add to selection
                 this.selectedValues.push(item.value);
+                checkbox.checked = true;
             }
             
-            checkbox.checked = !isChecked;
             this.updateMultipleDisplay();
         } else {
             this.selectedValue = item.value;
@@ -344,6 +350,16 @@ export class ModernDropdown {
         }
     }
     
+    updateCheckboxes() {
+        if (!this.options.multiple) return;
+        
+        const checkboxes = this.itemsContainer.querySelectorAll('input[type="checkbox"]');
+        checkboxes.forEach(checkbox => {
+            const itemValue = checkbox.getAttribute('data-value');
+            checkbox.checked = this.selectedValues.includes(itemValue);
+        });
+    }
+    
     filterItems(searchTerm) {
         const items = this.itemsContainer.querySelectorAll('.dropdown-item');
         const term = searchTerm.toLowerCase();
@@ -364,8 +380,9 @@ export class ModernDropdown {
     
     setValue(value) {
         if (this.options.multiple) {
-            this.selectedValues = Array.isArray(value) ? value : [value];
+            this.selectedValues = Array.isArray(value) ? value : (value ? [value] : []);
             this.updateMultipleDisplay();
+            this.updateCheckboxes();
         } else {
             this.selectedValue = value;
             const item = this.items.find(i => i.value === value);

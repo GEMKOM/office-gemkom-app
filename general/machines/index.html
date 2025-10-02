@@ -14,6 +14,8 @@
     <link rel="stylesheet" href="../../components/statistics-cards/statistics-cards.css">
     <link rel="stylesheet" href="../../components/filters/filters.css">
     <link rel="stylesheet" href="../../components/table/table.css">
+    <link rel="stylesheet" href="../../components/display-modal/display-modal.css">
+    <link rel="stylesheet" href="../../components/edit-modal/edit-modal.css">
     <link rel="icon" type="image/png" href="../../images/gemkom.png">
     <link rel="stylesheet" href="../../pre-auth.css">
     <link rel="stylesheet" href="machineList.css">
@@ -45,247 +47,13 @@
         </div>
     </section>
 
-    <!-- Create Machine Modal -->
-    <div class="modal fade" id="createMachineModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content compact">
-                <div class="modal-header compact">
-                    <h6 class="modal-title">
-                        <i class="fas fa-plus-circle me-2"></i>Yeni Makine Oluştur
-                    </h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body compact">
-                    <form id="create-machine-form">
-                        <!-- Basic Information Section -->
-                        <div class="form-section compact mb-3">
-                            <h6 class="section-subtitle compact">
-                                <i class="fas fa-info-circle me-2 text-primary"></i>Temel Bilgiler
-                            </h6>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-cogs me-1"></i>Makine Adı *
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="machine-name" placeholder="Makine adını girin" required>
-                                        <div class="form-text compact">Makinenin tanımlayıcı adı</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-barcode me-1"></i>Makine Kodu
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="machine-code" placeholder="Makine kodunu girin">
-                                        <div class="form-text compact">Opsiyonel, benzersiz makine kodu</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-tags me-1"></i>Makine Tipi *
-                                        </label>
-                                        <select class="form-control form-control-sm" id="machine-type" required>
-                                            <option value="">Makine tipi seçin...</option>
-                                        </select>
-                                        <div class="form-text compact">Makinenin kategorisi</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-users me-1"></i>Atanan Kullanıcılar
-                                        </label>
-                                        <select class="form-control form-control-sm" id="machine-assigned-users" multiple>
-                                            <!-- Options will be populated dynamically -->
-                                        </select>
-                                        <div class="form-text compact">Bu makineden sorumlu kullanıcılar</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-building me-1"></i>Kullanım Alanı *
-                                        </label>
-                                        <select class="form-control form-control-sm" id="machine-used-in" required>
-                                            <option value="">Kullanım alanı seçin...</option>
-                                            <option value="machining">Talaşlı İmalat</option>
-                                            <option value="welding">Kaynak</option>
-                                            <option value="assembly">Montaj</option>
-                                            <option value="other">Diğer</option>
-                                        </select>
-                                        <div class="form-text compact">Makinenin kullanıldığı alan</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-info-circle me-1"></i>Durum
-                                        </label>
-                                        <select class="form-control form-control-sm" id="machine-status">
-                                            <option value="active">Aktif</option>
-                                            <option value="inactive">Pasif</option>
-                                        </select>
-                                        <div class="form-text compact">Makinenin mevcut durumu</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
+    <!-- Modal Component Containers -->
+    <div id="create-machine-modal-container"></div>
+    <div id="edit-machine-modal-container"></div>
+    <div id="display-machine-modal-container"></div>
+    <div id="display-users-modal-container"></div>
 
-
-
-                        <!-- Properties Section -->
-                        <div class="form-section compact mb-3">
-                            <h6 class="section-subtitle compact">
-                                <i class="fas fa-list me-2 text-info"></i>Özellikler
-                                <button type="button" class="btn btn-sm btn-outline-success ms-2" id="add-property-btn">
-                                    <i class="fas fa-plus me-1"></i>Özellik Ekle
-                                </button>
-                            </h6>
-                            <div class="row g-2" id="properties-list">
-                                <!-- Properties will be added here dynamically -->
-                            </div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer compact">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-1"></i>İptal
-                    </button>
-                    <button type="button" class="btn btn-sm btn-primary" id="save-machine-btn">
-                        <i class="fas fa-save me-1"></i>Makine Oluştur
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Edit Machine Modal -->
-    <div class="modal fade" id="editMachineModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content compact">
-                <div class="modal-header compact">
-                    <h6 class="modal-title">
-                        <i class="fas fa-edit me-2"></i>Makine Düzenle
-                    </h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body compact">
-                    <form id="edit-machine-form">
-                        <!-- Basic Information Section -->
-                        <div class="form-section compact mb-3">
-                            <h6 class="section-subtitle compact">
-                                <i class="fas fa-info-circle me-2 text-primary"></i>Temel Bilgiler
-                            </h6>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-cogs me-1"></i>Makine Adı *
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="edit-machine-name" placeholder="Makine adını girin" required>
-                                        <div class="form-text compact">Makinenin tanımlayıcı adı</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-barcode me-1"></i>Makine Kodu
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="edit-machine-code" placeholder="Makine kodunu girin">
-                                        <div class="form-text compact">Opsiyonel, benzersiz makine kodu</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-tags me-1"></i>Makine Tipi *
-                                        </label>
-                                        <select class="form-control form-control-sm" id="edit-machine-type" required>
-                                            <option value="">Makine tipi seçin...</option>
-                                        </select>
-                                        <div class="form-text compact">Makinenin kategorisi</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-users me-1"></i>Atanan Kullanıcılar
-                                        </label>
-                                        <select class="form-control form-control-sm" id="edit-machine-assigned-users" multiple>
-                                            <!-- Options will be populated dynamically -->
-                                        </select>
-                                        <div class="form-text compact">Bu makineden sorumlu kullanıcılar</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-building me-1"></i>Kullanım Alanı *
-                                        </label>
-                                        <select class="form-control form-control-sm" id="edit-machine-used-in" required>
-                                            <option value="">Kullanım alanı seçin...</option>
-                                            <option value="machining">Talaşlı İmalat</option>
-                                            <option value="welding">Kaynak</option>
-                                            <option value="assembly">Montaj</option>
-                                            <option value="other">Diğer</option>
-                                        </select>
-                                        <div class="form-text compact">Makinenin kullanıldığı alan</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-info-circle me-1"></i>Durum
-                                        </label>
-                                        <select class="form-control form-control-sm" id="edit-machine-status">
-                                            <option value="active">Aktif</option>
-                                            <option value="inactive">Pasif</option>
-                                        </select>
-                                        <div class="form-text compact">Makinenin mevcut durumu</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-
-
-                        <!-- Properties Section -->
-                        <div class="form-section compact mb-3">
-                            <h6 class="section-subtitle compact">
-                                <i class="fas fa-list me-2 text-info"></i>Özellikler
-                                <button type="button" class="btn btn-sm btn-outline-success ms-2" id="edit-add-property-btn">
-                                    <i class="fas fa-plus me-1"></i>Özellik Ekle
-                                </button>
-                            </h6>
-                            <div class="row g-2" id="edit-properties-list">
-                                <!-- Properties will be added here dynamically -->
-                            </div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer compact">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-1"></i>İptal
-                    </button>
-                    <button type="button" class="btn btn-sm btn-primary" id="update-machine-btn">
-                        <i class="fas fa-save me-1"></i>Değişiklikleri Kaydet
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Delete Confirmation Modal -->
+    <!-- Delete Confirmation Modal (keeping this as it's simple) -->
     <div class="modal fade" id="deleteMachineConfirmModal" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -317,54 +85,6 @@
         </div>
     </div>
 
-    <!-- View Machine Properties Modal -->
-    <div class="modal fade" id="viewMachinePropertiesModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="fas fa-list me-2"></i>Makine Özellikleri
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="machine-properties-content">
-                        <!-- Properties will be loaded here -->
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-2"></i>Kapat
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- View Assigned Users Modal -->
-    <div class="modal fade" id="viewAssignedUsersModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="fas fa-users me-2"></i>Atanan Kullanıcılar
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="assigned-users-content">
-                        <!-- Assigned users will be loaded here -->
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-2"></i>Kapat
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
     <!-- Footer -->
     <footer class="footer-section">
         <div class="container">
@@ -387,6 +107,9 @@
     <script src="../../components/statistics-cards/statistics-cards.js"></script>
     <!-- Table Component -->
     <script src="../../components/table/table.js"></script>
+    <!-- Modal Components -->
+    <script type="module" src="../../components/display-modal/display-modal.js"></script>
+    <script type="module" src="../../components/edit-modal/edit-modal.js"></script>
     <script type="module" src="machineList.js"></script>
 </body>
 </html> 
