@@ -55,6 +55,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     await initializeTasks();
     setupEventListeners();
+    setupUrlHandlers();
 });
 
 async function initializeTasks() {
@@ -166,10 +167,18 @@ function initializeFiltersComponent() {
     });
 }
 
-// Handle URL parameters for filtering
+// Handle URL parameters for filtering and task modal
 function handleUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
     const filterParam = urlParams.get('filter');
+    const taskParam = urlParams.get('task');
+    
+    // Handle task parameter to open modal
+    if (taskParam) {
+        // Open the task details modal with the specified task key
+        showCompletionData(taskParam);
+        return true; // Indicate that a parameter was handled
+    }
     
     if (filterParam && taskFilters) {
         // Set the key filter with the provided value
@@ -182,7 +191,7 @@ function handleUrlParameters() {
         return true; // Indicate that a filter was applied
     }
     
-    return false; // No filter was applied
+    return false; // No parameter was applied
 }
 
 function populateModalMachineDropdowns() {
@@ -529,6 +538,31 @@ function setupEventListeners() {
     // Export created tasks button
     document.getElementById('export-created-tasks-btn')?.addEventListener('click', () => {
         exportCreatedTasks();
+    });
+}
+
+function setupUrlHandlers() {
+    // Handle browser back/forward navigation
+    window.addEventListener('popstate', (event) => {
+        const urlParams = new URLSearchParams(window.location.search);
+        const taskParam = urlParams.get('task');
+        
+        if (taskParam) {
+            // Open modal if task parameter is present
+            showCompletionData(taskParam);
+        } else {
+            // Close any open modals if no task parameter
+            const displayModalContainer = document.getElementById('display-modal-container');
+            if (displayModalContainer) {
+                const existingModal = displayModalContainer.querySelector('.modal');
+                if (existingModal) {
+                    const modalInstance = bootstrap.Modal.getInstance(existingModal);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                }
+            }
+        }
     });
 }
 
@@ -996,10 +1030,15 @@ window.editTask = function(taskKey) {
     showNotification('Hücreye tıklayarak düzenleme yapabilirsiniz', 'info');
 };
 
-window.showCompletionData = function(taskKey) {
+window.showCompletionData = async function(taskKey) {
     try {
-        // Find the task in the global tasks array
-        const task = tasks.find(t => t.key === taskKey);
+        // Update URL to include task key parameter
+        const url = new URL(window.location);
+        url.searchParams.set('task', taskKey);
+        window.history.pushState({ task: taskKey }, '', url);
+        
+        // Fetch task data from API instead of using list data
+        const task = await fetchTaskById(taskKey);
         
         if (task) {
             showCompletionDataModal(task);
@@ -1384,6 +1423,19 @@ function showCompletionDataModal(task) {
     
     // Render and show modal
     displayModal.render().show();
+    
+    // Add event listener to clean up URL when modal is closed
+    const modalElement = displayModal.container.querySelector('.modal');
+    if (modalElement) {
+        modalElement.addEventListener('hidden.bs.modal', () => {
+            // Remove task parameter from URL when modal is closed
+            const url = new URL(window.location);
+            if (url.searchParams.has('task')) {
+                url.searchParams.delete('task');
+                window.history.pushState({}, '', url);
+            }
+        });
+    }
 }
 
 window.exportCompletionData = function(taskKey) {

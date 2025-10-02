@@ -3,8 +3,8 @@ import { TableComponent } from '../../../../components/table/table.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
-import { fetchJobHoursReport } from '../../../../apis/machiningReports.js';
-import { fetchJobCostReport } from '../../../../apis/machining/costAnalysis.js';
+import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
+import { fetchJobCostReport, fetchJobCostDetailsReportByJobNo } from '../../../../apis/machining/costAnalysis.js';
 
 // State management
 let currentPage = 1;
@@ -35,10 +35,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize Statistics Cards component
     costAnalysisStats = new StatisticsCards('cost-analysis-statistics', {
         cards: [
-            { title: 'Hafta İçi Saat', value: '0', icon: 'fas fa-calendar-day', color: 'primary', id: 'weekday-hours' },
-            { title: 'Mesai Saat', value: '0', icon: 'fas fa-clock', color: 'warning', id: 'after-hours' },
-            { title: 'Pazar Saat', value: '0', icon: 'fas fa-calendar', color: 'danger', id: 'sunday-hours' },
-            { title: 'Toplam Saat', value: '0', icon: 'fas fa-chart-pie', color: 'success', id: 'total-hours' }
+            { title: 'En Pahalı İş', value: '-', icon: 'fas fa-euro-sign', color: 'danger', id: 'most-expensive-job' },
+            { title: 'En Pahalı Saat Başı', value: '-', icon: 'fas fa-clock', color: 'warning', id: 'most-expensive-per-hour' },
+            { title: 'En Çok Mesai Maliyeti', value: '-', icon: 'fas fa-calendar', color: 'info', id: 'most-overtime-cost' },
+            { title: 'En Çok Çalışılan İş', value: '-', icon: 'fas fa-chart-bar', color: 'success', id: 'most-hours-job' }
         ],
         compact: true,
         animation: true
@@ -52,9 +52,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Initialize Header Component
 function initHeaderComponent() {
-    headerComponent = new HeaderComponent('header-placeholder', {
+    headerComponent = new HeaderComponent({
         title: 'Maliyet Analizi Raporu',
-        subtitle: 'İş numarasına göre çalışma saatleri analizi ve maliyet hesaplamaları. Lütfen bir iş numarası girin.',
+        subtitle: 'İş numaralarına göre detaylı maliyet analizi, saat başı maliyet hesaplamaları ve kullanıcı bazlı detaylar. Tüm iş numaraları görüntülenir, belirli bir iş numarası için filtreleme yapabilirsiniz.',
         icon: 'fas fa-calculator',
         iconColor: 'text-success',
         showBackButton: true,
@@ -91,69 +91,95 @@ function initializeFilters() {
         }
     });
 
-    // Add text filter for job number (required)
+    // Add text filter for job number (optional)
     filtersComponent.addTextFilter({
         id: 'job_no',
-        label: 'İş No *',
-        placeholder: 'İş numarası girin (zorunlu)',
-        colSize: 4
-    });
-
-    // Add date filters
-    filtersComponent.addDateFilter({
-        id: 'start_after',
-        label: 'Başlangıç Tarihi (Sonrası)',
-        colSize: 4
-    });
-
-    filtersComponent.addDateFilter({
-        id: 'start_before',
-        label: 'Başlangıç Tarihi (Öncesi)',
-        colSize: 4
+        label: 'İş No',
+        placeholder: 'İş numarası girin (isteğe bağlı)',
+        colSize: 8
     });
 }
 
 // Initialize Table Component
 function initializeTable() {
     jobHoursTable = new TableComponent('job-hours-table-container', {
-        title: 'İş Saatleri Analizi',
-        icon: 'fas fa-chart-bar',
-        iconColor: 'text-primary',
+        title: 'Maliyet Analizi Raporu',
+        icon: 'fas fa-calculator',
+        iconColor: 'text-success',
         columns: [
             {
-                field: 'user',
-                label: 'Kullanıcı',
+                field: 'job_no',
+                label: 'İş No',
                 sortable: true,
                 type: 'text',
                 formatter: (value) => `<span class="fw-bold text-primary">${value}</span>`
             },
             {
-                field: 'weekday_work',
-                label: 'Hafta İçi',
+                field: 'weekday_work_hours',
+                label: 'Hafta İçi Saat',
                 sortable: true,
                 type: 'number',
                 formatter: (value) => `<span class="text-primary">${value.toFixed(1)}</span>`
             },
             {
-                field: 'after_hours',
-                label: 'Mesai',
+                field: 'after_hours_hours',
+                label: 'Mesai Saat',
                 sortable: true,
                 type: 'number',
                 formatter: (value) => `<span class="text-warning">${value.toFixed(1)}</span>`
             },
             {
-                field: 'sunday',
-                label: 'Pazar',
+                field: 'sunday_hours',
+                label: 'Pazar Saat',
                 sortable: true,
                 type: 'number',
                 formatter: (value) => `<span class="text-danger">${value.toFixed(1)}</span>`
             },
             {
-                field: 'total',
-                label: 'Toplam',
+                field: 'weekday_work_cost',
+                label: 'Hafta İçi Maliyet',
                 sortable: true,
                 type: 'number',
-                formatter: (value) => `<span class="fw-bold text-success">${value.toFixed(1)}</span>`
+                formatter: (value) => `<span class="text-primary">€${value.toFixed(2)}</span>`
+            },
+            {
+                field: 'after_hours_cost',
+                label: 'Mesai Maliyet',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => `<span class="text-warning">€${value.toFixed(2)}</span>`
+            },
+            {
+                field: 'sunday_cost',
+                label: 'Pazar Maliyet',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => `<span class="text-danger">€${value.toFixed(2)}</span>`
+            },
+            {
+                field: 'total_cost',
+                label: 'Toplam Maliyet',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => `<span class="fw-bold text-success">€${value.toFixed(2)}</span>`
+            },
+            {
+                field: 'cost_per_hour',
+                label: 'Saat Başı Maliyet',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => `<span class="fw-bold">€${value.toFixed(2)}</span>`
+            },
+            {
+                field: 'actions',
+                label: 'İşlemler',
+                sortable: false,
+                type: 'text',
+                formatter: (value, rowData) => `
+                    <button class="btn btn-sm btn-outline-primary" onclick="showUserDetails('${rowData.job_no}')" title="Kullanıcı Detaylarını Görüntüle">
+                        <i class="fas fa-users me-1"></i>Detaylar
+                    </button>
+                `
             }
         ],
         onRowClick: handleRowClick,
@@ -175,8 +201,8 @@ function setupEventListeners() {
 
 // Handle row click
 function handleRowClick(rowData) {
-    // Show details for user rows
-    showJobDetails(rowData);
+    // Show user details modal
+    showUserDetails(rowData.job_no);
 }
 
 // Handle sort
@@ -192,59 +218,27 @@ function handlePageChange(page) {
     loadJobHoursData();
 }
 
-// Load job hours data
+// Load job cost data
 async function loadJobHoursData() {
     if (isLoading) return;
-    
-    // Get current filters
-    const filters = filtersComponent ? filtersComponent.getFilterValues() : {};
-    
-    // Check if job number is provided (required parameter)
-    if (!filters.job_no || filters.job_no.trim() === '') {
-        // Clear the table and show message
-        if (jobHoursTable) {
-            jobHoursTable.updateData([], {
-                totalItems: 0,
-                currentPage: 1,
-                pageSize: pageSize,
-                emptyMessage: 'Lütfen bir iş numarası girin ve filtrele butonuna tıklayın.'
-            });
-        }
-        
-        // Update statistics to show zeros
-        updateStatistics({ results: [] });
-        
-        // Clear job numbers display
-        updateJobNumbersDisplay({ job_nos: [] });
-        
-        return;
-    }
     
     isLoading = true;
     
     try {
-        // Use the apis API function
-        const data = await fetchJobHoursReport({
-            q: filters.job_no,
-            start_after: filters.start_after ? Math.floor(new Date(filters.start_after).getTime() / 1000) : undefined,
-            start_before: filters.start_before ? Math.floor(new Date(filters.start_before).getTime() / 1000) : undefined,
-            page: currentPage,
-            page_size: pageSize,
-            ordering: currentSortField ? `${currentSortDirection === 'desc' ? '-' : ''}${currentSortField}` : undefined
-        });
-        await fetchJobCostReport({
-            job_no: filters.job_no
+        // Get current filters
+        const filters = filtersComponent ? filtersComponent.getFilterValues() : {};
+        
+        // Use the new cost analysis API
+        const data = await fetchJobCostReport({
+            job_no: filters.job_no || undefined
         });
         
         // Process the data for display
-        jobHoursData = processJobHoursData(data.results || []);
+        jobHoursData = processJobCostData(data.results || []);
         totalJobs = data.count || jobHoursData.length;
         
         // Update statistics
         updateStatistics(data);
-        
-        // Update job numbers display
-        updateJobNumbersDisplay(data);
         
         // Update table
         if (jobHoursTable) {
@@ -256,34 +250,34 @@ async function loadJobHoursData() {
         }
         
     } catch (error) {
-        console.error('Error loading job hours data:', error);
+        console.error('Error loading job cost data:', error);
         showError('Veri yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin.');
     } finally {
         isLoading = false;
     }
 }
 
-// Process job hours data for display
-function processJobHoursData(results) {
-    const flattenedData = [];
-    
-    results.forEach(job => {
-        const users = job.users || [];
+// Process job cost data for display
+function processJobCostData(results) {
+    return results.map(job => {
+        const totalHours = (job.hours.weekday_work || 0) + (job.hours.after_hours || 0) + (job.hours.sunday || 0);
+        const costPerHour = totalHours > 0 ? (job.total_cost || 0) / totalHours : 0;
         
-        // Add each user as a separate row
-        users.forEach(user => {
-            flattenedData.push({
-                user: user.user,
-                weekday_work: user.weekday_work || 0,
-                after_hours: user.after_hours || 0,
-                sunday: user.sunday || 0,
-                total: user.total || 0,
-                raw_data: job
-            });
-        });
+        return {
+            job_no: job.job_no,
+            weekday_work_hours: job.hours.weekday_work || 0,
+            after_hours_hours: job.hours.after_hours || 0,
+            sunday_hours: job.hours.sunday || 0,
+            weekday_work_cost: job.costs.weekday_work || 0,
+            after_hours_cost: job.costs.after_hours || 0,
+            sunday_cost: job.costs.sunday || 0,
+            total_cost: job.total_cost || 0,
+            cost_per_hour: costPerHour,
+            currency: job.currency || 'EUR',
+            updated_at: job.updated_at,
+            raw_data: job
+        };
     });
-    
-    return flattenedData;
 }
 
 // Update statistics
@@ -291,80 +285,71 @@ function updateStatistics(data) {
     if (!costAnalysisStats) return;
     
     const results = data.results || [];
-    const totalJobs = results.length;
     
-    // Calculate totals from the response data
-    const totals = results.reduce((acc, job) => {
-        const jobTotals = job.totals || {};
-        return {
-            weekday_work: acc.weekday_work + (jobTotals.weekday_work || 0),
-            after_hours: acc.after_hours + (jobTotals.after_hours || 0),
-            sunday: acc.sunday + (jobTotals.sunday || 0),
-            total: acc.total + (jobTotals.total || 0)
-        };
-    }, { weekday_work: 0, after_hours: 0, sunday: 0, total: 0 });
-    
-    const uniqueUsers = new Set();
-    results.forEach(job => {
-        if (job.users) {
-            job.users.forEach(user => uniqueUsers.add(user.user));
-        }
-    });
-    
-    costAnalysisStats.updateValues({
-        0: totals.weekday_work.toFixed(1),
-        1: totals.after_hours.toFixed(1),
-        2: totals.sunday.toFixed(1),
-        3: totals.total.toFixed(1)
-    });
-}
-
-// Update job numbers display
-function updateJobNumbersDisplay(data) {
-    const container = document.getElementById('job-numbers-found');
-    if (!container) return;
-    
-    const jobNos = data.job_nos || [];
-    const query = data.query || '';
-    
-    if (jobNos.length === 0) {
-        container.innerHTML = '';
+    if (results.length === 0) {
+        costAnalysisStats.updateValues({
+            0: '-',
+            1: '-',
+            2: '-',
+            3: '-'
+        });
         return;
     }
     
-    const jobNumbersHtml = jobNos.map(jobNo => 
-        `<span class="badge bg-primary me-2 mb-2" style="font-size: 0.9rem; padding: 0.5rem 0.75rem;">${jobNo}</span>`
-    ).join('');
+    // Find most expensive job (highest total cost)
+    const mostExpensiveJob = results.reduce((max, job) => 
+        (job.total_cost || 0) > (max.total_cost || 0) ? job : max
+    );
     
-    container.innerHTML = `
-        <div class="row mb-4">
-            <div class="col-12">
-                <div class="card">
-                    <div class="card-body">
-                        <h6 class="card-title mb-3">
-                            <i class="fas fa-search text-primary me-2"></i>
-                            Bulunan İş Numaraları
-                            ${query ? `<small class="text-muted">(Arama: "${query}")</small>` : ''}
-                        </h6>
-                        <div class="job-numbers-container">
-                            ${jobNumbersHtml}
-                        </div>
-                        <small class="text-muted">
-                            <i class="fas fa-info-circle me-1"></i>
-                            Toplam ${jobNos.length} iş numarası bulundu
-                        </small>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
+    // Find most expensive per hour job
+    const mostExpensivePerHourJob = results.reduce((max, job) => {
+        const totalHours = (job.hours.weekday_work || 0) + (job.hours.after_hours || 0) + (job.hours.sunday || 0);
+        const maxHours = (max.hours.weekday_work || 0) + (max.hours.after_hours || 0) + (max.hours.sunday || 0);
+        const jobCostPerHour = totalHours > 0 ? (job.total_cost || 0) / totalHours : 0;
+        const maxCostPerHour = maxHours > 0 ? (max.total_cost || 0) / maxHours : 0;
+        return jobCostPerHour > maxCostPerHour ? job : max;
+    });
+    
+    // Find job with most overtime cost (after hours + sunday)
+    const mostOvertimeCostJob = results.reduce((max, job) => {
+        const jobOvertimeCost = (job.costs.after_hours || 0) + (job.costs.sunday || 0);
+        const maxOvertimeCost = (max.costs.after_hours || 0) + (max.costs.sunday || 0);
+        return jobOvertimeCost > maxOvertimeCost ? job : max;
+    });
+    
+    // Find job with most total hours
+    const mostHoursJob = results.reduce((max, job) => {
+        const jobTotalHours = (job.hours.weekday_work || 0) + (job.hours.after_hours || 0) + (job.hours.sunday || 0);
+        const maxTotalHours = (max.hours.weekday_work || 0) + (max.hours.after_hours || 0) + (max.hours.sunday || 0);
+        return jobTotalHours > maxTotalHours ? job : max;
+    });
+    
+    // Calculate values for display
+    const mostExpensivePerHourValue = (() => {
+        const totalHours = (mostExpensivePerHourJob.hours.weekday_work || 0) + (mostExpensivePerHourJob.hours.after_hours || 0) + (mostExpensivePerHourJob.hours.sunday || 0);
+        return totalHours > 0 ? (mostExpensivePerHourJob.total_cost || 0) / totalHours : 0;
+    })();
+    
+    const mostOvertimeCostValue = (mostOvertimeCostJob.costs.after_hours || 0) + (mostOvertimeCostJob.costs.sunday || 0);
+    
+    const mostHoursValue = (mostHoursJob.hours.weekday_work || 0) + (mostHoursJob.hours.after_hours || 0) + (mostHoursJob.hours.sunday || 0);
+    
+    costAnalysisStats.updateValues({
+        0: `${mostExpensiveJob.job_no}<br><small>€${(mostExpensiveJob.total_cost || 0).toFixed(2)}</small>`,
+        1: `${mostExpensivePerHourJob.job_no}<br><small>€${mostExpensivePerHourValue.toFixed(2)}/saat</small>`,
+        2: `${mostOvertimeCostJob.job_no}<br><small>€${mostOvertimeCostValue.toFixed(2)}</small>`,
+        3: `${mostHoursJob.job_no}<br><small>${mostHoursValue.toFixed(1)} saat</small>`
+    });
 }
+
 
 // Show job details modal
 function showJobDetails(jobData) {
     const rawData = jobData.raw_data;
-    const users = rawData.users || [];
-    const totals = rawData.totals || {};
+    const hours = rawData.hours || {};
+    const costs = rawData.costs || {};
+    const totalCost = rawData.total_cost || 0;
+    const currency = rawData.currency || 'EUR';
     
     const modalHtml = `
         <div class="modal fade" id="jobDetailsModal" tabindex="-1" aria-hidden="true">
@@ -372,60 +357,58 @@ function showJobDetails(jobData) {
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title">
-                            <i class="fas fa-briefcase text-primary me-2"></i>
-                            ${jobData.job_no} - Detaylı Analiz
+                            <i class="fas fa-calculator text-success me-2"></i>
+                            ${jobData.job_no} - Maliyet Detayları
                         </h5>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="job-hours-summary">
-                            <h5>İş Özeti</h5>
+                        <div class="job-cost-summary">
+                            <h5>Maliyet Özeti</h5>
                             <div class="summary-stats">
                                 <div class="stat-item">
-                                    <div class="stat-value">${totals.total.toFixed(1)}</div>
+                                    <div class="stat-value">${totalCost.toFixed(2)} ${currency}</div>
+                                    <div class="stat-label">Toplam Maliyet</div>
+                                </div>
+                                <div class="stat-item">
+                                    <div class="stat-value">${(hours.weekday_work + hours.after_hours + hours.sunday).toFixed(1)}</div>
                                     <div class="stat-label">Toplam Saat</div>
                                 </div>
                                 <div class="stat-item">
-                                    <div class="stat-value">${users.length}</div>
-                                    <div class="stat-label">Kullanıcı</div>
-                                </div>
-                                <div class="stat-item">
-                                    <div class="stat-value">${users.length > 0 ? (totals.total / users.length).toFixed(1) : '0.0'}</div>
-                                    <div class="stat-label">Ort. Saat/Kullanıcı</div>
+                                    <div class="stat-value">${hours.weekday_work + hours.after_hours + hours.sunday > 0 ? (totalCost / (hours.weekday_work + hours.after_hours + hours.sunday)).toFixed(2) : '0.00'}</div>
+                                    <div class="stat-label">Saat Başı Maliyet</div>
                                 </div>
                             </div>
                         </div>
                         
-                        <div class="user-hours-breakdown">
-                            <h6>Kullanıcı Bazlı Dağılım</h6>
-                            ${users.map(user => `
-                                <div class="user-hours-item">
-                                    <div class="user-name">${user.user}</div>
-                                    <div class="hours-breakdown">
-                                        <div class="hours-item">
-                                            <div class="hours-value">${user.weekday_work.toFixed(1)}</div>
-                                            <div class="hours-label">Hafta İçi</div>
-                                        </div>
-                                        <div class="hours-item">
-                                            <div class="hours-value">${user.after_hours.toFixed(1)}</div>
-                                            <div class="hours-label">Mesai</div>
-                                        </div>
-                                        <div class="hours-item">
-                                            <div class="hours-value">${user.sunday.toFixed(1)}</div>
-                                            <div class="hours-label">Pazar</div>
-                                        </div>
-                                        <div class="hours-item">
-                                            <div class="hours-value fw-bold">${user.total.toFixed(1)}</div>
-                                            <div class="hours-label">Toplam</div>
-                                        </div>
-                                    </div>
+                        <div class="cost-breakdown">
+                            <h6>Maliyet Dağılımı</h6>
+                            <div class="cost-item">
+                                <div class="cost-label">Hafta İçi Çalışma</div>
+                                <div class="cost-details">
+                                    <span class="hours">${hours.weekday_work.toFixed(1)} saat</span>
+                                    <span class="cost">${costs.weekday_work.toFixed(2)} ${currency}</span>
                                 </div>
-                            `).join('')}
+                            </div>
+                            <div class="cost-item">
+                                <div class="cost-label">Mesai Saatleri</div>
+                                <div class="cost-details">
+                                    <span class="hours">${hours.after_hours.toFixed(1)} saat</span>
+                                    <span class="cost">${costs.after_hours.toFixed(2)} ${currency}</span>
+                                </div>
+                            </div>
+                            <div class="cost-item">
+                                <div class="cost-label">Pazar Çalışması</div>
+                                <div class="cost-details">
+                                    <span class="hours">${hours.sunday.toFixed(1)} saat</span>
+                                    <span class="cost">${costs.sunday.toFixed(2)} ${currency}</span>
+                                </div>
+                            </div>
                         </div>
                         
-                        <div class="total-hours-highlight">
-                            <i class="fas fa-calculator me-2"></i>
-                            Toplam Çalışma Süresi: ${totals.total.toFixed(1)} Saat
+                        <div class="total-cost-highlight">
+                            <i class="fas fa-euro-sign me-2"></i>
+                            Toplam Maliyet: ${totalCost.toFixed(2)} ${currency}
                         </div>
                     </div>
                     <div class="modal-footer">
@@ -446,7 +429,7 @@ function showJobDetails(jobData) {
     document.body.insertAdjacentHTML('beforeend', modalHtml);
     
     // Show modal
-    const modal = new bootstrap.Modal(document.getElementById('jobDetailsModal'));
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('jobDetailsModal'));
     modal.show();
 }
 
@@ -457,8 +440,275 @@ function showError(message) {
     alert(message);
 }
 
+// Show user details modal
+async function showUserDetails(jobNo) {
+    try {
+        // Fetch user details for the job
+        const data = await fetchJobCostDetailsReportByJobNo({ job_no: jobNo });
+        const users = data.results || [];
+        
+        // Create display modal
+        const modal = new DisplayModal('user-details-modal-container', {
+            title: `${jobNo} - Kullanıcı Detayları`,
+            icon: 'fas fa-users',
+            size: 'xl',
+            showEditButton: false
+        });
+        
+        // Calculate totals
+        const totalCost = users.reduce((sum, user) => sum + (user.total_cost || 0), 0);
+        const totalWeekdayHours = users.reduce((sum, user) => sum + (user.hours.weekday_work || 0), 0);
+        const totalAfterHours = users.reduce((sum, user) => sum + (user.hours.after_hours || 0), 0);
+        const totalSundayHours = users.reduce((sum, user) => sum + (user.hours.sunday || 0), 0);
+        const totalHours = totalWeekdayHours + totalAfterHours + totalSundayHours;
+        const costPerHour = totalHours > 0 ? totalCost / totalHours : 0;
+        const totalAfterHoursCost = users.reduce((sum, user) => sum + (user.costs.after_hours || 0), 0);
+        const totalSundayCost = users.reduce((sum, user) => sum + (user.costs.sunday || 0), 0);
+        const overtimeCost = totalAfterHoursCost + totalSundayCost;
+
+        // Add summary section
+        modal.addSection({
+            title: 'Özet',
+            icon: 'fas fa-chart-pie',
+            iconColor: 'text-primary',
+            fields: [
+                {
+                    id: 'total_users',
+                    label: 'Toplam Kullanıcı',
+                    value: users.length,
+                    type: 'number',
+                    icon: 'fas fa-users',
+                    colSize: 3
+                },
+                {
+                    id: 'total_cost',
+                    label: 'Toplam Maliyet',
+                    value: totalCost,
+                    type: 'currency',
+                    icon: 'fas fa-euro-sign',
+                    format: (value) => `€${value.toFixed(2)}`,
+                    colSize: 3
+                },
+                {
+                    id: 'overtime_cost',
+                    label: 'Mesai Maliyeti',
+                    value: overtimeCost,
+                    type: 'currency',
+                    icon: 'fas fa-clock',
+                    format: (value) => `€${value.toFixed(2)}`,
+                    colSize: 3
+                },
+                {
+                    id: 'cost_per_hour',
+                    label: 'Saat Başı Maliyet',
+                    value: costPerHour,
+                    type: 'currency',
+                    icon: 'fas fa-calculator',
+                    format: (value) => `€${value.toFixed(2)}`,
+                    colSize: 3
+                },
+                
+                {
+                    id: 'total_weekday_hours',
+                    label: 'Hafta İçi Saat',
+                    value: totalWeekdayHours,
+                    type: 'number',
+                    icon: 'fas fa-calendar-day',
+                    format: (value) => `${value.toFixed(1)} saat`,
+                    colSize: 3
+                },
+                {
+                    id: 'total_after_hours',
+                    label: 'Mesai Saat',
+                    value: totalAfterHours,
+                    type: 'number',
+                    icon: 'fas fa-clock',
+                    format: (value) => `${value.toFixed(1)} saat`,
+                    colSize: 3
+                },
+                {
+                    id: 'total_sunday_hours',
+                    label: 'Pazar Saat',
+                    value: totalSundayHours,
+                    type: 'number',
+                    icon: 'fas fa-calendar',
+                    format: (value) => `${value.toFixed(1)} saat`,
+                    colSize: 3
+                },
+                {
+                    id: 'total_hours',
+                    label: 'Toplam Saat',
+                    value: totalHours,
+                    type: 'number',
+                    icon: 'fas fa-clock',
+                    format: (value) => `${value.toFixed(1)} saat`,
+                    colSize: 3
+                },
+            ]
+        });
+        
+        // Add users table using TableComponent
+        if (users.length > 0) {
+            // Process user data for table display
+            const userTableData = users.map(user => ({
+                user: user.user,
+                user_id: user.user_id,
+                issue_count: user.issue_count,
+                issue_keys: user.issue_keys,
+                weekday_work_hours: user.hours.weekday_work || 0,
+                after_hours_hours: user.hours.after_hours || 0,
+                sunday_hours: user.hours.sunday || 0,
+                total_hours: (user.hours.weekday_work || 0) + (user.hours.after_hours || 0) + (user.hours.sunday || 0),
+                weekday_work_cost: user.costs.weekday_work || 0,
+                after_hours_cost: user.costs.after_hours || 0,
+                sunday_cost: user.costs.sunday || 0,
+                total_cost: user.total_cost || 0,
+                currency: user.currency || 'EUR',
+                updated_at: user.updated_at,
+                raw_data: user
+            }));
+
+            const tableHtml = `
+                <div id="user-details-table-container"></div>
+            `;
+            
+            modal.addCustomSection({
+                title: null,
+                customContent: tableHtml
+            });
+
+            // Render and show modal first
+            modal.render().show();
+
+            // Initialize table component after modal is shown
+            setTimeout(() => {
+                const userDetailsTable = new TableComponent('user-details-table-container', {
+                    title: 'Kullanıcı Detayları',
+                    icon: 'fas fa-users',
+                    iconColor: 'text-primary',
+                    columns: [
+                        {
+                            field: 'user',
+                            label: 'Kullanıcı',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value, rowData) => `
+                                <span class="fw-bold text-primary">${value}</span>
+                            `
+                        },
+                        {
+                            field: 'weekday_work_hours',
+                            label: 'Hafta İçi Saat',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `${value.toFixed(1)}`
+                        },
+                        {
+                            field: 'after_hours_hours',
+                            label: 'Mesai Saat',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `${value.toFixed(1)}`
+                        },
+                        {
+                            field: 'sunday_hours',
+                            label: 'Pazar Saat',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `${value.toFixed(1)}`
+                        },
+                        {
+                            field: 'total_hours',
+                            label: 'Toplam Saat',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `<span class="fw-bold">${value.toFixed(1)}</span>`
+                        },
+                        {
+                            field: 'weekday_work_cost',
+                            label: 'Hafta İçi Maliyet',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `€${value.toFixed(2)}`
+                        },
+                        {
+                            field: 'after_hours_cost',
+                            label: 'Mesai Maliyet',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `€${value.toFixed(2)}`
+                        },
+                        {
+                            field: 'sunday_cost',
+                            label: 'Pazar Maliyet',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `€${value.toFixed(2)}`
+                        },
+            {
+                field: 'total_cost',
+                label: 'Toplam Maliyet',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => `<span class="fw-bold">€${value.toFixed(2)}</span>`
+            },
+            {
+                field: 'cost_per_hour',
+                label: 'Saat Başı Maliyet',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => `<span class="fw-bold">€${value.toFixed(2)}</span>`
+            },
+                        {
+                            field: 'issue_keys',
+                            label: 'Issue Anahtarları',
+                            sortable: false,
+                            type: 'text',
+                            formatter: (value, rowData) => {
+                                const keys = rowData.issue_keys || [];
+                                return keys.map(key => 
+                                    `<a href="/manufacturing/machining/tasks/?task=${key}" target="_blank" class="badge task-key-link me-1 mb-1">${key}</a>`
+                                ).join('');
+                            }
+                        }
+                    ],
+                    onRowClick: null,
+                    onSort: null,
+                    onPageChange: null,
+                    showPagination: false,
+                    showSearch: false,
+                    showExport: false,
+                    skeletonLoading: false
+                });
+
+                // Update table with data
+                userDetailsTable.updateData(userTableData, {
+                    totalItems: userTableData.length,
+                    currentPage: 1,
+                    pageSize: userTableData.length
+                });
+            }, 100);
+        } else {
+            modal.addCustomSection({
+                title: 'Kullanıcı Detayları',
+                icon: 'fas fa-table',
+                iconColor: 'text-success',
+                customContent: '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Bu iş için kullanıcı detayı bulunamadı.</div>'
+            });
+        }
+        
+    } catch (error) {
+        console.error('Error loading user details:', error);
+        showError('Kullanıcı detayları yüklenirken bir hata oluştu.');
+    }
+}
+
+// Make showUserDetails globally accessible for button onclick
+window.showUserDetails = showUserDetails;
+
 // Export functions for external use
 window.costAnalysis = {
     loadJobHoursData,
-    showJobDetails
+    showJobDetails,
+    showUserDetails
 };

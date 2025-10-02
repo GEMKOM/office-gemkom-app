@@ -1,0 +1,17 @@
+/* Task Key Link Styles */
+.task-key-link {
+    background-color: #f8f9fa !important;
+    color: #212529 !important;
+    text-decoration: none !important;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid #dee2e6;
+}
+
+.task-key-link:hover {
+    background-color: #007bff !important;
+    color: white !important;
+    text-decoration: none !important;
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+}
