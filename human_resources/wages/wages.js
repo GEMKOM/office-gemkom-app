@@ -18,8 +18,8 @@ import {
     deleteWageRate,
     formatCurrency,
     getCurrencyInfo
-} from '../../generic/hr.js';
-import { authFetchUsers, fetchTeams } from '../../generic/users.js';
+} from '../../apis/hr.js';
+import { authFetchUsers, fetchTeams } from '../../apis/users.js';
 
 class WagesManager {
     constructor() {

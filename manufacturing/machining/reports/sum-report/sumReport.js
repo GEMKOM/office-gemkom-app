@@ -1,7 +1,7 @@
 import { initNavbar } from '../../../../components/navbar.js';
 import { ModernDropdown } from '../../../../components/dropdown.js';
-import { fetchMachines } from '../../../../generic/machines.js';
-import { fetchUsers } from '../../../../generic/users.js';
+import { fetchMachines } from '../../../../apis/machines.js';
+import { fetchUsers } from '../../../../apis/users.js';
 import { backendBase } from '../../../../base.js';
 import { authedFetch } from '../../../../authService.js';
 import { HeaderComponent } from '../../../../components/header/header.js';

@@ -1,12 +1,12 @@
 import { initNavbar } from '../../components/navbar.js';
 import { ModernDropdown } from '../../components/dropdown.js';
-import { authFetchUsers, deleteUser as deleteUserAPI, createUser as createUserAPI, updateUser as updateUserAPI, fetchTeams, fetchOccupations } from '../../generic/users.js';
-import { fetchUsersSummary } from '../../generic/summaries.js';
+import { authFetchUsers, deleteUser as deleteUserAPI, createUser as createUserAPI, updateUser as updateUserAPI, fetchTeams, fetchOccupations } from '../../apis/users.js';
+import { fetchUsersSummary } from '../../apis/summaries.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../components/table/table.js';
-import { initRouteProtection } from '../../generic/routeProtection.js';
+import { initRouteProtection } from '../../apis/routeProtection.js';
 
 // State management
 let currentPage = 1;

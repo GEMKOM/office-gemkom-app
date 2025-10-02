@@ -1,4 +1,4 @@
-# Generic Services
+# apis Services
 
 This folder contains reusable service modules that provide API functionality and utility functions for the application.
 
@@ -30,8 +30,8 @@ import {
     fetchOvertimeRequests, 
     createOvertimeRequest, 
     validateOvertimeRequest 
-} from '../generic/overtime.js';
-import { authFetchUsers } from '../generic/users.js';
+} from '../apis/overtime.js';
+import { authFetchUsers } from '../apis/users.js';
 
 // Fetch overtime requests with filters
 const requests = await fetchOvertimeRequests({

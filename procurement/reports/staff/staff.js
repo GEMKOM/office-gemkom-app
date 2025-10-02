@@ -3,8 +3,8 @@ import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { TableComponent } from '../../../components/table/table.js';
-import { getStaffReport } from '../../../generic/procurement/reports.js';
-import { authFetchUsers } from '../../../generic/users.js';
+import { getStaffReport } from '../../../apis/procurement/reports.js';
+import { authFetchUsers } from '../../../apis/users.js';
 
 // Global variables
 let currentSortField = 'total_spent_eur';

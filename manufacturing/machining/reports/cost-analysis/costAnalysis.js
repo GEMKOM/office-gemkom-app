@@ -223,7 +223,7 @@ async function loadJobHoursData() {
     isLoading = true;
     
     try {
-        // Use the generic API function
+        // Use the apis API function
         const data = await fetchJobHoursReport({
             q: filters.job_no,
             start_after: filters.start_after ? Math.floor(new Date(filters.start_after).getTime() / 1000) : undefined,

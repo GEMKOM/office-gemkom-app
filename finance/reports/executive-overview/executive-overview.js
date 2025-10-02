@@ -4,7 +4,7 @@ import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../../components/table/table.js';
-import { getExecutiveReport } from '../../../generic/procurement/reports.js';
+import { getExecutiveReport } from '../../../apis/procurement/reports.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {

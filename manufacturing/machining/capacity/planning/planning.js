@@ -6,9 +6,9 @@ import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { TableComponent } from '../../../../components/table/table.js';
 import { GanttChart } from '../../../../components/gantt/gantt.js';
-import { fetchMachines, getMachineCalendar } from '../../../../generic/machines.js';
-import { getCapacityPlanning, updateCapacityPlanning } from '../../../../generic/machining/capacityPlanning.js';
-import { formatDateTime } from '../../../../generic/formatters.js';
+import { fetchMachines, getMachineCalendar } from '../../../../apis/machines.js';
+import { getCapacityPlanning, updateCapacityPlanning } from '../../../../apis/machining/capacityPlanning.js';
+import { formatDateTime } from '../../../../apis/formatters.js';
 
 // Global state
 let currentMachineId = null;

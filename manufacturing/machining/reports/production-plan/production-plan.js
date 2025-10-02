@@ -10,10 +10,10 @@ import { StatisticsCards } from '../../../../components/statistics-cards/statist
 import { TableComponent } from '../../../../components/table/table.js';
 import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
 import { GanttChart } from '../../../../components/gantt/gantt.js';
-import { getProductionPlanOverview } from '../../../../generic/machining/capacityPlanning.js';
-import { getMachineProductionPlan } from '../../../../generic/machining/capacityPlanning.js';
-import { getMachineCalendar } from '../../../../generic/machines.js';
-import { fetchTaskById } from '../../../../generic/tasks.js';
+import { getProductionPlanOverview } from '../../../../apis/machining/capacityPlanning.js';
+import { getMachineProductionPlan } from '../../../../apis/machining/capacityPlanning.js';
+import { getMachineCalendar } from '../../../../apis/machines.js';
+import { fetchTaskById } from '../../../../apis/tasks.js';
 
 // Global state
 let currentProductionData = null;

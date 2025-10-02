@@ -2,8 +2,8 @@ import { guardRoute } from '/authService.js';
 import { initNavbar } from '/components/navbar.js';
 import { HeaderComponent } from '/components/header/header.js';
 import { ModernDropdown } from '/components/dropdown.js';
-import { createMaintenanceRequest } from '/generic/maintenance.js';
-import { fetchMachines } from '/generic/machines.js';
+import { createMaintenanceRequest } from '/apis/maintenance.js';
+import { fetchMachines } from '/apis/machines.js';
 
 // Global state
 let headerComponent;

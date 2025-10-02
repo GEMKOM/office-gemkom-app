@@ -1,4 +1,4 @@
-import { getSuppliers, getPaymentTerms } from '../../../generic/procurement.js';
+import { getSuppliers, getPaymentTerms } from '../../../apis/procurement.js';
 import { ModernDropdown } from '../../../components/dropdown.js';
 
 // Suppliers Manager Module

@@ -13,8 +13,8 @@ import {
     getPurchaseRequest, 
     approvePurchaseRequest, 
     rejectPurchaseRequest
-} from '../../../generic/procurement.js';
-import { fetchCurrencyRates } from '../../../generic/formatters.js';
+} from '../../../apis/procurement.js';
+import { fetchCurrencyRates } from '../../../apis/formatters.js';
 
 // State management
 // Pending requests state

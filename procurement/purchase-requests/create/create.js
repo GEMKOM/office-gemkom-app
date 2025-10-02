@@ -6,8 +6,8 @@ import { SuppliersManager } from './suppliersManager.js';
 import { ComparisonTable } from '../../../components/comparison-table/comparison-table.js';
 import { DataManager } from './dataManager.js';
 import { ValidationManager } from './validationManager.js';
-import { fetchCurrencyRates } from '../../../generic/formatters.js';
-import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft } from '../../../generic/procurement.js';
+import { fetchCurrencyRates } from '../../../apis/formatters.js';
+import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft } from '../../../apis/procurement.js';
 
 // Global state
 let headerComponent;
@@ -1026,7 +1026,7 @@ async function submitRequest() {
             is_rolling_mill: isRollingMill
         };
         
-        // Create purchase request using generic function
+        // Create purchase request using apis function
         const result = await createPurchaseRequest(submitData);
         
         // Submit the request (change status from draft to submitted)

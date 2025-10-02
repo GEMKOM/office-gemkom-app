@@ -10,8 +10,8 @@ import {
     formatOvertimeDuration,
     getPendingOvertimeApprovalRequests,
     getOvertimeApprovedByMeRequests
-} from '../../../generic/overtime.js';
-import { formatDate, formatDateTime } from '../../../generic/formatters.js';
+} from '../../../apis/overtime.js';
+import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 
 // State management
 let currentPage = 1;

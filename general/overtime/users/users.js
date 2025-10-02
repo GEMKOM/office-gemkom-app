@@ -4,12 +4,12 @@ import { MenuComponent } from '../../../components/menu/menu.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { TableComponent } from '../../../components/table/table.js';
-import { getOvertimeUsersForDate } from '../../../generic/overtime.js';
+import { getOvertimeUsersForDate } from '../../../apis/overtime.js';
 import { 
     formatTeam, 
     formatJobNumber, 
     formatDescription 
-} from '../../../generic/formatters.js';
+} from '../../../apis/formatters.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {

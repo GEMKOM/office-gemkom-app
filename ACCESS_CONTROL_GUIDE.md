@@ -15,8 +15,8 @@ The access control system restricts user access to pages and features based on t
 ## Files Created/Modified
 
 ### New Files
-- `generic/accessControl.js` - Core access control configuration and functions
-- `generic/routeProtection.js` - Route protection middleware
+- `apis/accessControl.js` - Core access control configuration and functions
+- `apis/routeProtection.js` - Route protection middleware
 - `test-access-control.html` - Test page for access control system
 - `test-route-protection.html` - Test page for route protection
 - `ACCESS_CONTROL_GUIDE.md` - This documentation
@@ -85,7 +85,7 @@ The system supports the following teams with their respective access levels:
 To protect a page, add route protection at the beginning of your page's JavaScript:
 
 ```javascript
-import { initRouteProtection } from '../generic/routeProtection.js';
+import { initRouteProtection } from '../apis/routeProtection.js';
 
 // At the start of your page initialization
 if (!initRouteProtection()) {
@@ -118,7 +118,7 @@ Use the test page `test-route-protection.html` to verify that route protection i
 Check if a user can access a specific feature:
 
 ```javascript
-import { canAccessFeature } from '../generic/routeProtection.js';
+import { canAccessFeature } from '../apis/routeProtection.js';
 
 // Check if user can create users
 if (canAccessFeature('create_user')) {
@@ -135,7 +135,7 @@ if (canAccessFeature('create_user')) {
 Check if a user has access to a specific route:
 
 ```javascript
-import { hasRouteAccess } from '../generic/accessControl.js';
+import { hasRouteAccess } from '../apis/accessControl.js';
 
 // Check if user can access a route
 if (hasRouteAccess('/manufacturing/machining/dashboard')) {
@@ -185,7 +185,7 @@ Use the test page `test-access-control.html` to:
 
 ### Adding New Teams
 
-To add a new team, update the `TEAM_ACCESS_CONFIG` in `generic/accessControl.js`:
+To add a new team, update the `TEAM_ACCESS_CONFIG` in `apis/accessControl.js`:
 
 ```javascript
 'new_team': {
@@ -204,7 +204,7 @@ Add new routes to the appropriate team configurations in `TEAM_ACCESS_CONFIG`.
 
 ### Adding New Features
 
-Add new features to the `featureAccess` object in `canAccessFeature()` function in `generic/routeProtection.js`.
+Add new features to the `featureAccess` object in `canAccessFeature()` function in `apis/routeProtection.js`.
 
 ## Security Notes
 

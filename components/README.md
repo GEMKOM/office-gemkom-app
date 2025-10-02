@@ -1,4 +1,4 @@
-# Generic Report Component
+# apis Report Component
 
 A reusable, configurable report component that can be used across different parts of the application to display tabular data with optional filtering, editing, and deletion capabilities.
 
@@ -18,9 +18,9 @@ A reusable, configurable report component that can be used across different part
 ### Basic Setup
 
 ```javascript
-import { GenericReport } from './components/genericReport.js';
+import { apisReport } from './components/apisReport.js';
 
-const report = new GenericReport({
+const report = new apisReport({
     title: 'My Report',
     containerId: 'my-report-container',
     apiEndpoint: '/api/data/',
@@ -36,7 +36,7 @@ const report = new GenericReport({
 ### Advanced Configuration
 
 ```javascript
-const report = new GenericReport({
+const report = new apisReport({
     title: 'Advanced Report',
     containerId: 'advanced-report-container',
     apiEndpoint: '/api/advanced-data/',
@@ -168,7 +168,7 @@ The component expects the API endpoint to:
 
 The component uses the following CSS classes for styling:
 
-- `.generic-report-container`: Main container
+- `.apis-report-container`: Main container
 - `.table-responsive`: Table wrapper
 - `.resizable-table`: Table with resizable columns
 - `.resize-handle`: Column resize handle
@@ -186,7 +186,7 @@ report.refresh();
 
 ## Examples
 
-See `genericReportExample.js` for complete usage examples including:
+See `apisReportExample.js` for complete usage examples including:
 
 1. Simple report without filters
 2. Report with filters but no actions
@@ -196,7 +196,7 @@ See `genericReportExample.js` for complete usage examples including:
 
 ## Integration with Existing Code
 
-The component has been integrated with the existing `finishedTimers.js` file, demonstrating how to migrate existing report functionality to use the generic component.
+The component has been integrated with the existing `finishedTimers.js` file, demonstrating how to migrate existing report functionality to use the apis component.
 
 ## Browser Support
 

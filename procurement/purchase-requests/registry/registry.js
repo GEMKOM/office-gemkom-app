@@ -11,8 +11,8 @@ import {
     getPurchaseRequest, 
     getStatusChoices,
     cancelPurchaseRequest
-} from '../../../generic/procurement.js';
-import { fetchCurrencyRates } from '../../../generic/formatters.js';
+} from '../../../apis/procurement.js';
+import { fetchCurrencyRates } from '../../../apis/formatters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 // State management
 let currentPage = 1;
@@ -260,7 +260,7 @@ async function initializeFiltersComponent() {
     // Fetch users for requestor filter
     let users = [];
     try {
-        const { authFetchUsers } = await import('../../../generic/users.js');
+        const { authFetchUsers } = await import('../../../apis/users.js');
         const usersResponse = await authFetchUsers(1, 1000);
         users = usersResponse.results || [];
         console.log(users);

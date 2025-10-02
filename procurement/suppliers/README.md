@@ -31,7 +31,7 @@ Bu sayfa, GEMKOM uygulamasının satın alma modülünde tedarikçi yönetimi i�
 
 ## API Entegrasyonu
 
-Sayfa, `generic/procurement.js` dosyasındaki aşağıdaki API fonksiyonlarını kullanır:
+Sayfa, `apis/procurement.js` dosyasındaki aşağıdaki API fonksiyonlarını kullanır:
 
 - `getSuppliers(filters)` - Tedarikçi listesini getirme
 - `getSupplier(id)` - Tek tedarikçi detayını getirme

@@ -8,7 +8,7 @@ import {
     deletePaymentTerm,
     togglePaymentTermStatus,
     getBasisChoices
-} from '../../../generic/procurement.js';
+} from '../../../apis/procurement.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 
 // State management

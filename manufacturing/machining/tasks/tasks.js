@@ -1,7 +1,7 @@
 import { initNavbar } from '../../../components/navbar.js';
 import { ModernDropdown } from '../../../components/dropdown.js';
-import { fetchMachines } from '../../../generic/machines.js';
-import { fetchTasks, deleteTask as deleteTaskAPI, updateTask as updateTaskAPI, fetchTaskById, createTask as createTaskAPI, bulkCreateTasks, markTaskCompleted, unmarkTaskCompleted } from '../../../generic/tasks.js';
+import { fetchMachines } from '../../../apis/machines.js';
+import { fetchTasks, deleteTask as deleteTaskAPI, updateTask as updateTaskAPI, fetchTaskById, createTask as createTaskAPI, bulkCreateTasks, markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';

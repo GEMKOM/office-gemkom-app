@@ -1,6 +1,6 @@
 // login/login.js
 import { login, navigateTo, ROUTES, shouldBeOnLoginPage, navigateByTeamIfFreshLogin } from '../authService.js';
-import { forgotPassword } from '../generic/users.js';
+import { forgotPassword } from '../apis/users.js';
 
 // Enhanced error handling and display
 function showError(message) {

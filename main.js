@@ -1,8 +1,8 @@
 import { guardRoute, isAdmin, getUser, navigateByTeamIfFreshLogin } from './authService.js';
 import { initNavbar } from './components/navbar.js';
 import { MenuComponent } from './components/menu/menu.js';
-import { initRouteProtection, withRouteProtection } from './generic/routeProtection.js';
-import { hasRouteAccess } from './generic/accessControl.js';
+import { initRouteProtection, withRouteProtection } from './apis/routeProtection.js';
+import { hasRouteAccess } from './apis/accessControl.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {

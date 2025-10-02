@@ -1,5 +1,5 @@
 import { navigateTo, ROUTES, shouldBeOnResetPasswordPage, getUser } from '../../authService.js';
-import { resetPassword } from '../../generic/users.js';
+import { resetPassword } from '../../apis/users.js';
 
 document.addEventListener('DOMContentLoaded', function() {
     // Check if user should be on this page

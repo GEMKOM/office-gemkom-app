@@ -1,7 +1,7 @@
 // Finance Module JavaScript
 import { initNavbar } from '../components/navbar.js';
 import { MenuComponent } from '../components/menu/menu.js';
-import { initRouteProtection } from '../generic/routeProtection.js';
+import { initRouteProtection } from '../apis/routeProtection.js';
 
 // Initialize the finance module
 document.addEventListener('DOMContentLoaded', async function() {

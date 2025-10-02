@@ -105,8 +105,8 @@
     </div>
 
     <script type="module">
-        import { hasRouteAccess, getAccessibleRoutes } from './generic/accessControl.js';
-        import { initRouteProtection, checkRouteAccess } from './generic/routeProtection.js';
+        import { hasRouteAccess, getAccessibleRoutes } from './apis/accessControl.js';
+        import { initRouteProtection, checkRouteAccess } from './apis/routeProtection.js';
         import { getUser } from './authService.js';
 
         window.checkUserAccess = function() {

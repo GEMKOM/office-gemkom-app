@@ -4,7 +4,7 @@ import {
     getPurchaseOrderById, 
     exportPurchaseOrders,
     markSchedulePaid
-} from '../../generic/purchaseOrders.js';
+} from '../../apis/purchaseOrders.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../components/filters/filters.js';

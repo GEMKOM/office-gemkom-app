@@ -1,12 +1,12 @@
 // Dashboard Module JavaScript
 import { initNavbar } from '../../../components/navbar.js';
-import { fetchTimers } from '../../../generic/timers.js';
-import { fetchMachines } from '../../../generic/machines.js';
-import { fetchTaskById } from '../../../generic/tasks.js';
-import { getSyncedNow } from '../../../generic/timeService.js';
+import { fetchTimers } from '../../../apis/timers.js';
+import { fetchMachines } from '../../../apis/machines.js';
+import { fetchTaskById } from '../../../apis/tasks.js';
+import { getSyncedNow } from '../../../apis/timeService.js';
 import { navigateTo } from '../machining.js';
 import { HeaderComponent } from '../../../components/header/header.js';
-import { stopTimer } from '../../../generic/timers.js';
+import { stopTimer } from '../../../apis/timers.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 //import { stopTimerShared } from '../../../machining/machiningService.js';
 

@@ -1,14 +1,14 @@
 import { guardRoute } from '../../authService.js';
 import { initNavbar } from '../../components/navbar.js';
-import { fetchMachines, fetchMachineTypes, fetchMachineUsedIn, createMachine as apiCreateMachine, updateMachine as apiUpdateMachine, deleteMachine as apiDeleteMachine } from '../../generic/machines.js';
-import { fetchUsers } from '../../generic/users.js';
+import { fetchMachines, fetchMachineTypes, fetchMachineUsedIn, createMachine as apiCreateMachine, updateMachine as apiUpdateMachine, deleteMachine as apiDeleteMachine } from '../../apis/machines.js';
+import { fetchUsers } from '../../apis/users.js';
 import { authedFetch } from '../../authService.js';
 import { backendBase } from '../../base.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../components/table/table.js';
-import { initRouteProtection } from '../../generic/routeProtection.js';
+import { initRouteProtection } from '../../apis/routeProtection.js';
 
 // Header component instance
 let headerComponent;

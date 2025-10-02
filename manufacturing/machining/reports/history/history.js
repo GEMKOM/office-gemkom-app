@@ -5,9 +5,9 @@ import { initNavbar } from '../../../../components/navbar.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
 import { GanttChart } from '../../../../components/gantt/gantt.js';
-import { fetchMachines, getMachineCalendar } from '../../../../generic/machines.js';
-import { getMachineTimeline } from '../../../../generic/machining/capacityPlanning.js';
-import { fetchTimerById } from '../../../../generic/timers.js';
+import { fetchMachines, getMachineCalendar } from '../../../../apis/machines.js';
+import { getMachineTimeline } from '../../../../apis/machining/capacityPlanning.js';
+import { fetchTimerById } from '../../../../apis/timers.js';
 import { TableComponent } from '../../../../components/table/table.js'
 
 // Global state

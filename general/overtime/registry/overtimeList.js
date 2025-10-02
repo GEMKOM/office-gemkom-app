@@ -10,10 +10,10 @@ import {
     canCancelOvertime,
     canEditOvertime,
     validateOvertimeRequest
-} from '../../../generic/overtime.js';
-import { fetchUsers, fetchTeams, authFetchUsers } from '../../../generic/users.js';
-import { getAllowedTeams } from '../../../generic/teams.js';
-import { formatDate, formatDateTime } from '../../../generic/formatters.js';
+} from '../../../apis/overtime.js';
+import { fetchUsers, fetchTeams, authFetchUsers } from '../../../apis/users.js';
+import { getAllowedTeams } from '../../../apis/teams.js';
+import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';

@@ -1,6 +1,6 @@
 import { guardRoute } from '../../../../authService.js';
 import { initNavbar } from '../../../../components/navbar.js';
-import { fetchMachineFaults, resolveMaintenanceRequest } from '../../../../generic/maintenance.js';
+import { fetchMachineFaults, resolveMaintenanceRequest } from '../../../../apis/maintenance.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';

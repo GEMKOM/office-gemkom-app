@@ -1,7 +1,7 @@
 import { guardRoute } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
-import { fetchMachines, fetchMachineTypes, fetchMachineUsedIn, updateMachine as apiUpdateMachine } from '../../../generic/machines.js';
-import { authFetchUsers } from '../../../generic/users.js';
+import { fetchMachines, fetchMachineTypes, fetchMachineUsedIn, updateMachine as apiUpdateMachine } from '../../../apis/machines.js';
+import { authFetchUsers } from '../../../apis/users.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';

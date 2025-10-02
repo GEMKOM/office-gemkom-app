@@ -4,7 +4,7 @@ import { isAdmin } from '../../../authService.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
-import { listPasswordResetRequests, adminResetUserPassword } from '../../../generic/users.js';
+import { listPasswordResetRequests, adminResetUserPassword } from '../../../apis/users.js';
 
 // Initialize password resets page
 document.addEventListener('DOMContentLoaded', async () => {
