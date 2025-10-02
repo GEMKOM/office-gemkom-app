@@ -601,74 +601,96 @@ async function showUserDetails(jobNo) {
                             label: 'Hafta İçi Saat',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `${value.toFixed(1)}`
+                            formatter: (value) => `${(value || 0).toFixed(1)}`
                         },
                         {
                             field: 'after_hours_hours',
                             label: 'Mesai Saat',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `${value.toFixed(1)}`
+                            formatter: (value) => `${(value || 0).toFixed(1)}`
                         },
                         {
                             field: 'sunday_hours',
                             label: 'Pazar Saat',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `${value.toFixed(1)}`
+                            formatter: (value) => `${(value || 0).toFixed(1)}`
                         },
                         {
                             field: 'total_hours',
                             label: 'Toplam Saat',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `<span class="fw-bold">${value.toFixed(1)}</span>`
+                            formatter: (value) => `<span class="fw-bold">${(value || 0).toFixed(1)}</span>`
                         },
                         {
                             field: 'weekday_work_cost',
                             label: 'Hafta İçi Maliyet',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `€${value.toFixed(2)}`
+                            formatter: (value) => `€${(value || 0).toFixed(2)}`
                         },
                         {
                             field: 'after_hours_cost',
                             label: 'Mesai Maliyet',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `€${value.toFixed(2)}`
+                            formatter: (value) => `€${(value || 0).toFixed(2)}`
                         },
                         {
                             field: 'sunday_cost',
                             label: 'Pazar Maliyet',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `€${value.toFixed(2)}`
+                            formatter: (value) => `€${(value || 0).toFixed(2)}`
                         },
-            {
-                field: 'total_cost',
-                label: 'Toplam Maliyet',
-                sortable: true,
-                type: 'number',
-                formatter: (value) => `<span class="fw-bold">€${value.toFixed(2)}</span>`
-            },
-            {
-                field: 'cost_per_hour',
-                label: 'Saat Başı Maliyet',
-                sortable: true,
-                type: 'number',
-                formatter: (value) => `<span class="fw-bold">€${value.toFixed(2)}</span>`
-            },
                         {
-                            field: 'issue_keys',
-                            label: 'Issue Anahtarları',
+                            field: 'total_cost',
+                            label: 'Toplam Maliyet',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `<span class="fw-bold">€${(value || 0).toFixed(2)}</span>`
+                        },
+                        {
+                            field: 'cost_per_hour',
+                            label: 'Saat Başı Maliyet',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `<span class="fw-bold">€${(value || 0).toFixed(2)}</span>`
+                        },
+                        {
+                            field: 'issues',
+                            label: 'İş Anahtarları',
                             sortable: false,
                             type: 'text',
                             formatter: (value, rowData) => {
-                                const keys = rowData.issue_keys || [];
-                                return keys.map(key => 
-                                    `<a href="/manufacturing/machining/tasks/?task=${key}" target="_blank" class="badge task-key-link me-1 mb-1">${key}</a>`
-                                ).join('');
+                                const keys = rowData.raw_data?.issues || [];
+                                
+                                if (!keys || keys.length === 0) {
+                                    return '-';
+                                }
+                                
+                                return keys.map(key => {
+                                    let badgeClass = 'badge task-key-link me-1 mb-1';
+                                    
+                                    // Set background color based on status
+                                    switch(key.status) {
+                                        case 'completed':
+                                            badgeClass += ' bg-success';
+                                            break;
+                                        case 'in_progress':
+                                            badgeClass += ' bg-primary';
+                                            break;
+                                        case 'waiting':
+                                            badgeClass += ' bg-danger';
+                                            break;
+                                        default:
+                                            badgeClass += ' bg-secondary';
+                                    }
+                                    
+                                    return `<a href="/manufacturing/machining/tasks/?task=${key.key}" target="_blank" class="${badgeClass}">${key.key}</a>`;
+                                }).join('');
                             }
                         }
                     ],

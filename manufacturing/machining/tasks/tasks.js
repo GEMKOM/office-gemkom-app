@@ -2,10 +2,12 @@ import { initNavbar } from '../../../components/navbar.js';
 import { ModernDropdown } from '../../../components/dropdown.js';
 import { fetchMachines } from '../../../apis/machines.js';
 import { fetchTasks, deleteTask as deleteTaskAPI, updateTask as updateTaskAPI, fetchTaskById, createTask as createTaskAPI, bulkCreateTasks, markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
+import { fetchTimers } from '../../../apis/timers.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
+import { TableComponent } from '../../../components/table/table.js';
 
 // State management
 let currentPage = 1;
@@ -1051,7 +1053,182 @@ window.showCompletionData = async function(taskKey) {
     }
 };
 
-function showCompletionDataModal(task) {
+async function addTimersTable(displayModal, task) {
+    try {
+        // Fetch timers for this task
+        const response = await fetchTimers(null, null, task.key);
+        
+        // Handle different response structures
+        let timers = [];
+        console.log('Timers response:', response); // Debug log
+        
+        if (Array.isArray(response)) {
+            timers = response;
+        } else if (response && Array.isArray(response.results)) {
+            timers = response.results;
+        } else if (response && response.data && Array.isArray(response.data)) {
+            timers = response.data;
+        } else {
+            console.warn('Unexpected timers response structure:', response);
+        }
+        
+        // Convert Unix timestamps to Date objects for easier handling
+        timers = timers.map(timer => ({
+            ...timer,
+            start_time: timer.start_time ? new Date(timer.start_time) : null,
+            finish_time: timer.finish_time ? new Date(timer.finish_time) : null
+        }));
+        
+        // Create a container for the table
+        const tableContainerId = `timers-table-${task.key.replace(/[^a-zA-Z0-9]/g, '')}`;
+        const tableContainerHtml = `<div id="${tableContainerId}"></div>`;
+        
+        displayModal.addCustomSection({
+            customContent: tableContainerHtml
+        });
+        
+        // Wait for DOM to be updated before initializing the table component
+        setTimeout(() => {
+            // Initialize the table component
+            const timersTable = new TableComponent(tableContainerId, {
+            title: 'Zamanlayıcı Kayıtları',
+            icon: 'fas fa-clock',
+            iconColor: 'text-primary',
+            columns: [
+                {
+                    field: 'username',
+                    label: 'Kullanıcı',
+                    sortable: true,
+                    width: '12%'
+                },
+                {
+                    field: 'start_time',
+                    label: 'Başlangıç',
+                    sortable: true,
+                    width: '25%',
+                    formatter: (value) => {
+                        if (!value) return '-';
+                        const date = value.toLocaleDateString('tr-TR');
+                        const time = value.toLocaleTimeString('tr-TR');
+                        return `${date}<br><small class="text-muted">${time}</small>`;
+                    }
+                },
+                {
+                    field: 'finish_time',
+                    label: 'Bitiş',
+                    sortable: true,
+                    width: '25%',
+                    formatter: (value) => {
+                        if (!value) return '-';
+                        const date = value.toLocaleDateString('tr-TR');
+                        const time = value.toLocaleTimeString('tr-TR');
+                        return `${date}<br><small class="text-muted">${time}</small>`;
+                    }
+                },
+                {
+                    field: 'machine_name',
+                    label: 'Makine',
+                    sortable: true,
+                    width: '13%'
+                },
+                {
+                    field: 'duration',
+                    label: 'Süre',
+                    sortable: true,
+                    width: '10%',
+                    formatter: (value, row) => {
+                        if (!row || !row.start_time) return '-';
+                        
+                        const startTime = row.start_time; // Already converted to Date object
+                        const finishTime = row.finish_time; // Already converted to Date object or null
+                        const isRunning = !finishTime;
+                        
+                        if (isRunning) {
+                            const now = new Date();
+                            const diffMs = now.getTime() - startTime.getTime();
+                            const diffHours = (diffMs / (1000 * 60 * 60)).toFixed(2);
+                            return `${diffHours} saat`;
+                        } else {
+                            const diffMs = finishTime.getTime() - startTime.getTime();
+                            const diffHours = (diffMs / (1000 * 60 * 60)).toFixed(2);
+                            return `${diffHours} saat`;
+                        }
+                    }
+                }
+            ],
+            data: timers.filter(timer => timer && timer.start_time), // Filter out null/undefined timers
+            sortable: true,
+            small: true,
+            striped: true,
+                emptyMessage: 'Henüz zamanlayıcı kaydı bulunmamaktadır.',
+                emptyIcon: 'fas fa-clock'
+            });
+            
+            // If there are running timers, set up real-time updates
+            const runningTimers = timers.filter(timer => !timer.finish_time);
+            if (runningTimers.length > 0) {
+                setupRealTimeTimerUpdates(runningTimers, timersTable);
+            }
+        }, 100); // Small delay to ensure DOM is updated
+        
+    } catch (error) {
+        console.error('Error loading timers:', error);
+        
+        // Add error state section
+        const errorStateHtml = `
+            <div class="text-center py-4">
+                <i class="fas fa-exclamation-triangle fa-3x text-danger mb-3"></i>
+                <h5 class="text-danger">Zamanlayıcı Kayıtları Yüklenemedi</h5>
+                <p class="text-muted">Zamanlayıcı kayıtları yüklenirken bir hata oluştu.</p>
+            </div>
+        `;
+        
+        displayModal.addCustomSection({
+            title: 'Zamanlayıcı Kayıtları',
+            icon: 'fas fa-clock',
+            iconColor: 'text-primary',
+            customContent: errorStateHtml
+        });
+    }
+}
+
+function setupRealTimeTimerUpdates(runningTimers, timersTable) {
+    // Update running timers every 30 seconds
+    const updateInterval = setInterval(() => {
+        const now = new Date();
+        
+        // Update the data for running timers
+        const updatedData = timersTable.options.data.map(timer => {
+            if (!timer.finish_time) {
+                // This is a running timer, update its duration
+                const startTime = timer.start_time; // Already converted to Date object
+                const diffMs = now.getTime() - startTime.getTime();
+                const diffHours = (diffMs / (1000 * 60 * 60)).toFixed(2);
+                
+                // Create a new timer object with updated duration
+                return {
+                    ...timer,
+                    _updatedDuration: `${diffHours} saat`
+                };
+            }
+            return timer;
+        });
+        
+        // Update the table with new data
+        timersTable.updateData(updatedData);
+        
+    }, 30000); // Update every 30 seconds
+    
+    // Clean up interval when modal is closed
+    const modalElement = document.querySelector('#display-modal-container .modal');
+    if (modalElement) {
+        modalElement.addEventListener('hidden.bs.modal', () => {
+            clearInterval(updateInterval);
+        });
+    }
+}
+
+async function showCompletionDataModal(task) {
     // Determine if task is completed
     const isCompleted = task.completion_date;
     
@@ -1163,7 +1340,7 @@ function showCompletionDataModal(task) {
                 label: 'TI No',
                 value: task.key,
                 type: 'text',
-                colSize: 6,
+                colSize: 4,
                 copyable: true
             },
             {
@@ -1171,35 +1348,35 @@ function showCompletionDataModal(task) {
                 label: 'Görev Adı',
                 value: task.name,
                 type: 'text',
-                colSize: 6
+                colSize: 4
             },
             {
                 id: 'job-no',
                 label: 'İş No',
                 value: task.job_no,
                 type: 'text',
-                colSize: 6
+                colSize: 4
             },
             {
                 id: 'image-no',
                 label: 'Resim No',
                 value: task.image_no,
                 type: 'text',
-                colSize: 6
+                colSize: 4
             },
             {
                 id: 'position-no',
                 label: 'Pozisyon No',
                 value: task.position_no,
                 type: 'text',
-                colSize: 6
+                colSize: 4
             },
             {
                 id: 'quantity',
                 label: 'Adet',
                 value: task.quantity,
                 type: 'number',
-                colSize: 6
+                colSize: 4
             }
         ]
     });
@@ -1216,42 +1393,42 @@ function showCompletionDataModal(task) {
                     label: 'Tamamlayan',
                     value: task.completed_by_username || '-',
                     type: 'text',
-                    colSize: 6
+                    colSize: 4
                 },
                 {
                     id: 'completion-date',
                     label: 'Tamamlanma Tarihi',
                     value: task.completion_date ? new Date(task.completion_date).toLocaleDateString('tr-TR') : '-',
                     type: 'date',
-                    colSize: 6
+                    colSize: 4
                 },
                 {
                     id: 'finish-time',
                     label: 'Bitmesi Planlanan Tarih',
                     value: task.planned_end_ms ? new Date(task.planned_end_ms).toLocaleDateString('tr-TR') : '-',
                     type: 'date',
-                    colSize: 6
+                    colSize: 4
                 },
                 {
                     id: 'machine',
                     label: 'Makine',
                     value: task.machine_name || '-',
                     type: 'text',
-                    colSize: 6
+                    colSize: 4
                 },
                 {
                     id: 'estimated-hours',
                     label: 'Tahmini Saat',
                     value: task.estimated_hours || '-',
                     type: 'number',
-                    colSize: 6
+                    colSize: 4
                 },
                 {
                     id: 'hours-spent',
                     label: 'Harcanan Saat',
                     value: task.total_hours_spent || '0',
                     type: 'number',
-                    colSize: 6
+                    colSize: 4
                 }
             ]
         });
@@ -1259,7 +1436,7 @@ function showCompletionDataModal(task) {
         // Add status section with custom HTML for ongoing tasks
         const statusHtml = `
             <div class="row g-3">
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="field-display mb-2">
                         <label class="field-label">Durum</label>
                         <div class="field-value">
@@ -1267,7 +1444,7 @@ function showCompletionDataModal(task) {
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="field-display mb-2">
                         <label class="field-label">Başlangıç</label>
                         <div class="field-value">
@@ -1275,7 +1452,7 @@ function showCompletionDataModal(task) {
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="field-display mb-2">
                         <label class="field-label">Bitmesi Planlanan Tarih</label>
                         <div class="field-value">
@@ -1283,7 +1460,7 @@ function showCompletionDataModal(task) {
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="field-display mb-2">
                         <label class="field-label">Makine</label>
                         <div class="field-value">
@@ -1291,7 +1468,7 @@ function showCompletionDataModal(task) {
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="field-display mb-2">
                         <label class="field-label">Tahmini Saat</label>
                         <div class="field-value">
@@ -1299,7 +1476,7 @@ function showCompletionDataModal(task) {
                         </div>
                     </div>
                 </div>
-                <div class="col-md-6">
+                <div class="col-md-4">
                     <div class="field-display mb-2">
                         <label class="field-label">Harcanan Saat</label>
                         <div class="field-value">
@@ -1404,6 +1581,9 @@ function showCompletionDataModal(task) {
             customContent: performanceHtml
         });
     }
+    
+    // Add timers table section
+    await addTimersTable(displayModal, task);
     
     // Add export button to footer if task is completed
     if (isCompleted) {

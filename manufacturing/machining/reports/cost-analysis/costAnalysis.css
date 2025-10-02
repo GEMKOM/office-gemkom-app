@@ -1,17 +1,41 @@
 /* Task Key Link Styles */
 .task-key-link {
-    background-color: #f8f9fa !important;
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    text-decoration: none;
     color: #212529 !important;
-    text-decoration: none !important;
-    cursor: pointer;
     transition: all 0.2s ease;
-    border: 1px solid #dee2e6;
+    margin: 0.125rem;
+    border: 1px solid transparent;
 }
 
 .task-key-link:hover {
-    background-color: #007bff !important;
-    color: white !important;
-    text-decoration: none !important;
+    color: #212529 !important;
+    text-decoration: none;
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0, 123, 255, 0.3);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* Status-based background colors - lighter versions */
+.task-key-link.bg-success {
+    background-color: #d1e7dd !important;
+    border-color: #a3d9a4 !important;
+}
+
+.task-key-link.bg-primary {
+    background-color: #cfe2ff !important;
+    border-color: #9ec5fe !important;
+}
+
+.task-key-link.bg-danger {
+    background-color: #f8d7da !important;
+    border-color: #f1aeb5 !important;
+}
+
+.task-key-link.bg-secondary {
+    background-color: #e9ecef !important;
+    border-color: #ced4da !important;
 }
