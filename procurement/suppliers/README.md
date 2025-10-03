@@ -69,7 +69,7 @@ Tedarikçi objesi aşağıdaki alanları içerir:
 ## Stil Dosyaları
 
 - `suppliers.css`: Sayfa özel stilleri
-- `procurement-badges.css`: Durum rozetleri
+- `components/badges/badges.css`: Durum rozetleri
 - `components/table/table.css`: Tablo stilleri
 - `components/filters/filters.css`: Filtre stilleri
 

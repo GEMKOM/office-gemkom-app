@@ -17,10 +17,8 @@
     <link rel="stylesheet" href="../../components/display-modal/display-modal.css">
     <link rel="stylesheet" href="../../components/edit-modal/edit-modal.css">
     <link rel="icon" type="image/png" href="../../images/gemkom.png">
-    <link rel="stylesheet" href="../../pre-auth.css">
-    <link rel="stylesheet" href="machineList.css">
 </head>
-<body class="pre-auth">
+<body>
     <!-- Navigation -->
     <div id="navbar-container"></div>
 
@@ -52,38 +50,7 @@
     <div id="edit-machine-modal-container"></div>
     <div id="display-machine-modal-container"></div>
     <div id="display-users-modal-container"></div>
-
-    <!-- Delete Confirmation Modal (keeping this as it's simple) -->
-    <div class="modal fade" id="deleteMachineConfirmModal" tabindex="-1">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header bg-danger text-white">
-                    <h5 class="modal-title">
-                        <i class="fas fa-exclamation-triangle me-2"></i>Makine Silme Onayı
-                    </h5>
-                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="text-center">
-                        <i class="fas fa-trash-alt fa-3x text-danger mb-3"></i>
-                        <h5>Bu makineyi silmek istediğinize emin misiniz?</h5>
-                        <p class="text-muted">Bu işlem geri alınamaz ve makine kalıcı olarak silinecektir.</p>
-                        <div class="alert alert-warning">
-                            <strong>Makine:</strong> <span id="delete-machine-name">-</span>
-                        </div>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-2"></i>İptal
-                    </button>
-                    <button type="button" class="btn btn-danger" id="confirm-delete-machine-btn">
-                        <i class="fas fa-trash me-2"></i>Evet, Sil
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="delete-machine-modal-container"></div>
 
     <!-- Footer -->
     <footer class="footer-section">

@@ -1,4 +1,4 @@
-import { ModernDropdown } from '../dropdown.js';
+import { ModernDropdown } from '../dropdown/dropdown.js';
 
 /**
  * Reusable Filters Component

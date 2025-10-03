@@ -36,7 +36,7 @@ export class DisplayModal {
         // Create modal HTML
         const modalSizeClass = this.options.fullscreen ? 'modal-fullscreen' : `modal-${this.options.size}`;
         const modalHtml = `
-            <div class="modal fade display-modal-container" id="displayModal" tabindex="-1" aria-hidden="true">
+            <div class="modal fade display-modal-container" id="displayModal" tabindex="-1">
                 <div class="modal-dialog ${modalSizeClass}">
                     <div class="modal-content compact">
                         <div class="modal-header compact">
@@ -71,6 +71,9 @@ export class DisplayModal {
         this.container.innerHTML = modalHtml;
         this.modal = this.container.querySelector('#displayModal');
         this.content = this.container.querySelector('#display-modal-content');
+        
+        // Set initial inert state (better than aria-hidden for focus management)
+        this.modal.setAttribute('inert', '');
     }
     
     bindEvents() {
@@ -84,6 +87,24 @@ export class DisplayModal {
         this.modal.addEventListener('hidden.bs.modal', () => {
             this.handleClose();
         });
+        
+        // Handle Bootstrap modal events to prevent aria-hidden conflicts
+        this.modal.addEventListener('show.bs.modal', () => {
+            this.modal.removeAttribute('aria-hidden');
+        });
+        
+        this.modal.addEventListener('shown.bs.modal', () => {
+            this.modal.removeAttribute('aria-hidden');
+        });
+        
+        this.modal.addEventListener('hide.bs.modal', () => {
+            this.modal.setAttribute('inert', '');
+        });
+        
+        this.modal.addEventListener('hidden.bs.modal', () => {
+            this.modal.setAttribute('inert', '');
+        });
+        
         
         // Copy to clipboard functionality
         this.content.addEventListener('click', (e) => {
@@ -208,6 +229,7 @@ export class DisplayModal {
             colSize: fieldConfig.colSize || 12,
             copyable: fieldConfig.copyable || false,
             format: fieldConfig.format || null,
+            layout: fieldConfig.layout || 'vertical', // 'vertical' or 'horizontal'
             ...fieldConfig
         };
         
@@ -221,20 +243,36 @@ export class DisplayModal {
         fieldDisplay.className = 'field-display mb-2';
         fieldDisplay.dataset.fieldId = field.id;
         
-        // Create label
-        const label = document.createElement('label');
-        label.className = 'field-label';
-        if (field.icon) {
-            label.innerHTML = `<i class="${field.icon} me-1"></i>${field.label}`;
-        } else {
-            label.textContent = field.label;
-        }
-        
         // Create value display
         const valueDisplay = this.createValueElement(field);
         
-        fieldDisplay.appendChild(label);
-        fieldDisplay.appendChild(valueDisplay);
+        if (field.layout === 'horizontal') {
+            // Horizontal layout: label and value side by side
+            fieldDisplay.className = 'field-display mb-2 d-flex align-items-center';
+            
+            const label = document.createElement('label');
+            label.className = 'field-label me-2 mb-0 flex-shrink-0';
+            if (field.icon) {
+                label.innerHTML = `<i class="${field.icon} me-1"></i>${field.label}:`;
+            } else {
+                label.textContent = `${field.label}:`;
+            }
+            
+            fieldDisplay.appendChild(label);
+            fieldDisplay.appendChild(valueDisplay);
+        } else {
+            // Vertical layout: label above value (default)
+            const label = document.createElement('label');
+            label.className = 'field-label';
+            if (field.icon) {
+                label.innerHTML = `<i class="${field.icon} me-1"></i>${field.label}`;
+            } else {
+                label.textContent = field.label;
+            }
+            
+            fieldDisplay.appendChild(label);
+            fieldDisplay.appendChild(valueDisplay);
+        }
         
         colDiv.appendChild(fieldDisplay);
         return colDiv;
@@ -422,12 +460,16 @@ export class DisplayModal {
     // Show modal
     show() {
         const modalInstance = bootstrap.Modal.getOrCreateInstance(this.modal);
+        // Remove inert when showing the modal
+        this.modal.removeAttribute('inert');
         modalInstance.show();
     }
     
     // Hide modal
     hide() {
         const modalInstance = bootstrap.Modal.getOrCreateInstance(this.modal);
+        // Use inert instead of aria-hidden to prevent focus issues
+        this.modal.setAttribute('inert', '');
         modalInstance.hide();
     }
     

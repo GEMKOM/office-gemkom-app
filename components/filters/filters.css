@@ -1,5 +1,5 @@
 /* Filters Component Styles */
-@import '../dropdown.css';
+@import '../dropdown/dropdown.css';
 
 .filters-component {
     margin-bottom: 1rem;

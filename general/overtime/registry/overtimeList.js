@@ -3,22 +3,27 @@ import {
     fetchOvertimeRequests,
     fetchOvertimeRequest,
     createOvertimeRequest,
-    updateOvertimeRequest,
     cancelOvertimeRequest,
-    getOvertimeStatusInfo,
     formatOvertimeDuration,
     canCancelOvertime,
-    canEditOvertime,
     validateOvertimeRequest
 } from '../../../apis/overtime.js';
-import { fetchUsers, fetchTeams, authFetchUsers } from '../../../apis/users.js';
+import { fetchTeams, authFetchUsers } from '../../../apis/users.js';
 import { getAllowedTeams } from '../../../apis/teams.js';
-import { formatDate, formatDateTime } from '../../../apis/formatters.js';
+import { formatDateTime } from '../../../apis/formatters.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { TableComponent } from '../../../components/table/table.js';
-import { ModernDropdown } from '../../../components/dropdown.js';
+import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
+import { DisplayModal } from '../../../components/display-modal/display-modal.js';
+import { EditModal } from '../../../components/edit-modal/edit-modal.js';
+import { 
+    initializeModalComponents, 
+    showOvertimeDetailsModal, 
+    setupModalEventListeners,
+    setGlobalVariables 
+} from '../pending/modals.js';
 
 // Global variables
 let currentOvertimeRequests = [];
@@ -30,6 +35,8 @@ let currentUser = null;
 let allUsers = [];
 let allTeams = [];
 let overtimeTable = null; // TableComponent instance
+let cancelOvertimeModal = null; // DisplayModal instance for cancel
+let createOvertimeModal = null; // EditModal instance for create
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', function() {
@@ -48,15 +55,11 @@ document.addEventListener('DOMContentLoaded', function() {
         icon: 'clock',
         showBackButton: 'block',
         showCreateButton: 'block',
-        showExportButton: 'block',
-        showRefreshButton: 'block',
+        showExportButton: 'none',
+        showRefreshButton: 'none',
         createButtonText: 'Yeni Mesai Talebi',
-        exportButtonText: 'Dışa Aktar',
-        refreshButtonText: 'Yenile',
         onBackClick: () => window.location.href = '/general/overtime',
-        onCreateClick: showCreateOvertimeModal,
-        onExportClick: exportOvertimeRequests,
-        onRefreshClick: loadOvertimeRequests
+        onCreateClick: showCreateOvertimeModal
     });
     
     // Check for request ID in URL parameters
@@ -67,6 +70,24 @@ document.addEventListener('DOMContentLoaded', function() {
         // Store the request ID to show modal after data loads
         window.pendingRequestId = requestId;
     }
+    
+    // Initialize modal components
+    initializeModalComponents();
+    setupModalEventListeners();
+    
+    // Set global variables for modals
+    setGlobalVariables({
+        currentRequest: null,
+        requests: currentOvertimeRequests,
+        loadRequests: loadOvertimeRequests,
+        loadApprovedRequests: () => {}, // Not needed for registry
+    });
+    
+    // Initialize cancel overtime modal
+    initializeCancelModal();
+    
+    // Initialize create overtime modal
+    initializeCreateModal();
     
     // Initialize statistics cards component
     window.overtimeStats = new StatisticsCards('overtime-statistics', {
@@ -161,6 +182,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Initialize TableComponent
 function initializeTableComponent() {
+    console.log('Initializing TableComponent...');
     overtimeTable = new TableComponent('overtime-table-container', {
         title: 'Mesai Talepleri',
         columns: [
@@ -174,20 +196,35 @@ function initializeTableComponent() {
                 field: 'requester_username',
                 label: 'Talep Eden',
                 sortable: true,
-                formatter: (value) => `
-                    <div style="font-weight: 500; color: #495057;">
-                        <i class="fas fa-user-circle me-2 text-muted"></i>
-                        ${value || 'Bilinmiyor'}
-                    </div>
-                `
+                formatter: (value, row) => {
+                    if (typeof value === 'undefined' || value === null) {
+                        return 'Bilinmiyor';
+                    }
+                    // For export, return clean text; for display, return HTML
+                    if (window.isExporting) {
+                        return value;
+                    }
+                    return `
+                        <div style="font-weight: 500; color: #495057;">
+                            <i class="fas fa-user-circle me-2 text-muted"></i>
+                            ${value}
+                        </div>
+                    `;
+                }
             },
             {
                 field: 'team_label',
                 label: 'Departman',
                 sortable: true,
-                formatter: (value) => `
-                    <div style="color: #495057; font-weight: 500;">${value || '-'}</div>
-                `
+                formatter: (value, row) => {
+                    // For export, return clean text; for display, return HTML
+                    if (window.isExporting) {
+                        return value || '-';
+                    }
+                    return `
+                        <div style="color: #495057; font-weight: 500;">${value || '-'}</div>
+                    `;
+                }
             },
             {
                 field: 'start_at',
@@ -205,9 +242,15 @@ function initializeTableComponent() {
                 field: 'duration_hours',
                 label: 'Süre',
                 sortable: true,
-                formatter: (value) => `
-                    <div style="color: #495057; font-weight: 500;">${formatOvertimeDuration(value)}</div>
-                `
+                formatter: (value, row) => {
+                    // For export, return clean text; for display, return HTML
+                    if (window.isExporting) {
+                        return formatOvertimeDuration(value);
+                    }
+                    return `
+                        <div style="color: #495057; font-weight: 500;">${formatOvertimeDuration(value)}</div>
+                    `;
+                }
             },
             {
                 field: 'total_users',
@@ -227,7 +270,13 @@ function initializeTableComponent() {
                 field: 'status',
                 label: 'Durum',
                 sortable: true,
-                formatter: (value, row) => renderStatusBadge(value, row.status_label)
+                formatter: (value, row) => {
+                    // For export, return clean text; for display, return HTML
+                    if (window.isExporting) {
+                        return row.status_label || value || '-';
+                    }
+                    return renderStatusBadge(value, row.status_label);
+                }
             },
             {
                 field: 'created_at',
@@ -248,9 +297,6 @@ function initializeTableComponent() {
         onRefresh: async () => {
             currentPage = 1;
             await loadOvertimeRequests();
-        },
-        onExport: (format) => {
-            exportOvertimeRequests(format);
         },
         onSort: async (field, direction) => {
             currentPage = 1;
@@ -306,7 +352,6 @@ async function loadInitialData() {
         await loadOvertimeRequests();
         
     } catch (error) {
-        console.error('Error loading initial data:', error);
         showErrorMessage('Veriler yüklenirken hata oluştu.');
     }
 }
@@ -331,24 +376,282 @@ function updateTeamFilterOptions() {
 
 // Add event listeners
 function addEventListeners() {
-    // Create overtime modal events
-    setupCreateOvertimeModalEvents();
-    
-    // Cancel modal events
-    setupCancelModalEvents();
     
     
-    // Handle modal close to clean up URL
-    const overtimeDetailsModal = document.getElementById('overtimeDetailsModal');
-    if (overtimeDetailsModal) {
-        overtimeDetailsModal.addEventListener('hidden.bs.modal', function () {
-            // Remove request parameter from URL when modal is closed
-            const url = new URL(window.location);
-            url.searchParams.delete('request');
-            window.history.pushState({}, '', url);
-        });
-    }
+    
+    // Modal close handling is now managed by the DisplayModal component
 }
+
+// Initialize cancel overtime modal
+function initializeCancelModal() {
+    cancelOvertimeModal = new DisplayModal('cancel-overtime-modal-container', {
+        title: 'Mesai Talebini İptal Et',
+        icon: 'fas fa-ban',
+        size: 'md',
+        showEditButton: false
+    });
+    
+    // Set up modal close callback
+    cancelOvertimeModal.onCloseCallback(() => {
+        window.pendingCancelRequestId = null;
+    });
+}
+
+// Show cancel overtime modal using DisplayModal
+function showCancelOvertimeModal(requestId) {
+    const request = currentOvertimeRequests.find(r => r.id === requestId) || selectedOvertimeRequest;
+    if (!request) return;
+    
+    window.pendingCancelRequestId = requestId;
+    
+    // Clear previous data
+    cancelOvertimeModal.clearData();
+    
+    // Add warning section
+    cancelOvertimeModal.addSection({
+        title: 'İptal Onayı',
+        icon: 'fas fa-exclamation-triangle',
+        iconColor: 'text-warning'
+    });
+    
+    // Add warning message
+    cancelOvertimeModal.addField({
+        id: 'cancel-warning',
+        name: 'warning',
+        label: 'Uyarı',
+        type: 'text',
+        value: 'Bu mesai talebini iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.',
+        icon: 'fas fa-exclamation-triangle',
+        colSize: 12
+    });
+    
+    // Add request details section
+    cancelOvertimeModal.addSection({
+        title: 'Talep Detayları',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-info'
+    });
+    
+    cancelOvertimeModal.addField({
+        id: 'cancel-request-id',
+        name: 'request_id',
+        label: 'Talep No',
+        type: 'text',
+        value: `#${request.id}`,
+        icon: 'fas fa-hashtag',
+        colSize: 6,
+        layout: 'horizontal'
+    });
+    
+    cancelOvertimeModal.addField({
+        id: 'cancel-start-time',
+        name: 'start_time',
+        label: 'Başlangıç',
+        type: 'text',
+        value: formatDateTime(request.start_at),
+        icon: 'fas fa-play',
+        colSize: 6,
+        layout: 'horizontal'
+    });
+    
+    cancelOvertimeModal.addField({
+        id: 'cancel-end-time',
+        name: 'end_time',
+        label: 'Bitiş',
+        type: 'text',
+        value: formatDateTime(request.end_at),
+        icon: 'fas fa-stop',
+        colSize: 6,
+        layout: 'horizontal'
+    });
+    
+    cancelOvertimeModal.addField({
+        id: 'cancel-duration',
+        name: 'duration',
+        label: 'Süre',
+        type: 'text',
+        value: formatOvertimeDuration(parseFloat(request.duration_hours)),
+        icon: 'fas fa-hourglass-half',
+        colSize: 6,
+        layout: 'horizontal'
+    });
+    
+    // Render modal
+    cancelOvertimeModal.render();
+    
+    // Add custom footer with action buttons
+    const modalFooter = cancelOvertimeModal.container.querySelector('.modal-footer');
+    if (modalFooter) {
+        modalFooter.innerHTML = `
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Vazgeç
+                </button>
+                <button type="button" class="btn btn-danger" id="confirm-cancel-overtime-btn">
+                    <i class="fas fa-ban me-1"></i>İptal Et
+                </button>
+            </div>
+        `;
+    }
+    
+    // Add event listener for confirm button
+    const confirmBtn = cancelOvertimeModal.container.querySelector('#confirm-cancel-overtime-btn');
+    if (confirmBtn) {
+        confirmBtn.addEventListener('click', confirmCancelOvertime);
+    }
+    
+    cancelOvertimeModal.show();
+}
+
+// Initialize create overtime modal
+function initializeCreateModal() {
+    createOvertimeModal = new EditModal('create-overtime-modal-container', {
+        title: 'Yeni Mesai Talebi',
+        icon: 'fas fa-plus',
+        size: 'lg',
+        showEditButton: false
+    });
+    
+    // Set up save callback
+    createOvertimeModal.onSaveCallback(async (formData) => {
+        await submitOvertimeRequest(formData);
+    });
+}
+
+// Show create overtime modal using EditModal
+async function showCreateOvertimeModal() {
+    if (!createOvertimeModal) {
+        console.error('Create overtime modal not initialized');
+        return;
+    }
+    
+    // Clear previous data
+    createOvertimeModal.clearAll();
+    
+    // Add basic information section
+    createOvertimeModal.addSection({
+        title: 'Temel Bilgiler',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary'
+    });
+    
+    // Add reason field
+    createOvertimeModal.addField({
+        id: 'reason',
+        name: 'reason',
+        label: 'Mesai Nedeni',
+        type: 'textarea',
+        placeholder: 'Mesai talebinin nedenini açıklayın...',
+        required: true,
+        icon: 'fas fa-comment',
+        colSize: 12,
+        helpText: 'Mesai talebinin nedenini detaylı olarak açıklayın'
+    });
+    
+    // Add date and time section
+    createOvertimeModal.addSection({
+        title: 'Tarih ve Saat',
+        icon: 'fas fa-calendar',
+        iconColor: 'text-info'
+    });
+    
+    // Add start date field
+    createOvertimeModal.addField({
+        id: 'start_date',
+        name: 'start_date',
+        label: 'Başlangıç Tarihi',
+        type: 'date',
+        required: true,
+        icon: 'fas fa-calendar-day',
+        colSize: 6
+    });
+    
+    // Add start time field
+    createOvertimeModal.addField({
+        id: 'start_time',
+        name: 'start_time',
+        label: 'Başlangıç Saati',
+        type: 'time',
+        required: true,
+        icon: 'fas fa-clock',
+        colSize: 6
+    });
+    
+    // Add end date field
+    createOvertimeModal.addField({
+        id: 'end_date',
+        name: 'end_date',
+        label: 'Bitiş Tarihi',
+        type: 'date',
+        required: true,
+        icon: 'fas fa-calendar-day',
+        colSize: 6
+    });
+    
+    // Add end time field
+    createOvertimeModal.addField({
+        id: 'end_time',
+        name: 'end_time',
+        label: 'Bitiş Saati',
+        type: 'time',
+        required: true,
+        icon: 'fas fa-clock',
+        colSize: 6
+    });
+    
+    // Add participants section
+    createOvertimeModal.addSection({
+        title: 'Katılımcılar',
+        icon: 'fas fa-users',
+        iconColor: 'text-success'
+    });
+    
+    // Render modal first
+    createOvertimeModal.render();
+    
+    // Add participants table inside the Katılımcılar section
+    const participantsHtml = `
+        <div class="d-flex justify-content-between align-items-center mb-2">
+            <h6 class="mb-0">Katılımcı Listesi</h6>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="add-participant-btn">
+                <i class="fas fa-plus me-1"></i>Katılımcı Ekle
+            </button>
+        </div>
+        <div id="participants-container">
+            <!-- Participants will be added here -->
+        </div>
+    `;
+    
+    // Find the Katılımcılar section and add the participants table inside it
+    const katilimcilarSection = createOvertimeModal.container.querySelector('[data-section-id*="section"]:last-of-type');
+    if (katilimcilarSection) {
+        const fieldsContainer = katilimcilarSection.querySelector('.row.g-2');
+        if (fieldsContainer) {
+            fieldsContainer.insertAdjacentHTML('beforeend', participantsHtml);
+        }
+    }
+    
+    // Add event listener for add participant button
+    const addParticipantBtn = createOvertimeModal.container.querySelector('#add-participant-btn');
+    if (addParticipantBtn) {
+        addParticipantBtn.addEventListener('click', addParticipant);
+    }
+    
+    // Load users for dropdowns
+    try {
+        await loadUsersForModal();
+        // Add initial participant
+        setTimeout(() => {
+            addParticipant();
+        }, 100);
+    } catch (error) {
+        showErrorMessage('Kullanıcılar yüklenirken hata oluştu.');
+    }
+    
+    createOvertimeModal.show();
+}
+
+
 
 // Load overtime requests
 async function loadOvertimeRequests() {
@@ -413,7 +716,6 @@ async function loadOvertimeRequests() {
                     await viewOvertimeDetails(requestId);
                     window.pendingRequestId = null;
                 } catch (error) {
-                    console.error('Request not found:', requestId);
                     showErrorMessage('Belirtilen mesai talebi bulunamadı.');
                     window.pendingRequestId = null;
                 }
@@ -421,7 +723,6 @@ async function loadOvertimeRequests() {
         }
         
     } catch (error) {
-        console.error('Error loading overtime requests:', error);
         showErrorMessage('Mesai talepleri yüklenirken hata oluştu.');
         if (overtimeTable) {
             overtimeTable.updateData([], 0, currentPage);
@@ -589,65 +890,12 @@ function showModalLoading(show) {
     }
 }
 
-// Show create overtime modal
-async function showCreateOvertimeModal() {
-    // Reset form
-    const form = document.getElementById('create-overtime-form');
-    if (form) {
-        form.reset();
-    }
-    
-    // Clear participants
-    const participantsContainer = document.getElementById('participants-container');
-    if (participantsContainer) {
-        participantsContainer.innerHTML = '';
-    }
-    
-    // Show modal with loading state
-    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('createOvertimeModal'));
-    modal.show();
-    
-    // Show loading state
-    showModalLoading(true);
-    
-    try {
-        // Fetch users based on current user's allowed teams
-        await loadUsersForModal();
-        
-    } catch (error) {
-        console.error('Error loading users for modal:', error);
-        showErrorMessage('Kullanıcılar yüklenirken hata oluştu.');
-    } finally {
-        // Hide loading state
-        showModalLoading(false);
-        
-        // Add initial participant after UI is restored
-        setTimeout(() => {
-            addParticipant();
-        }, 100);
-    }
-}
 
-// Setup create overtime modal events
-function setupCreateOvertimeModalEvents() {
-    // Add participant button
-    const addParticipantBtn = document.getElementById('add-participant');
-    if (addParticipantBtn) {
-        addParticipantBtn.addEventListener('click', addParticipant);
-    }
-    
-    // Submit button
-    const submitBtn = document.getElementById('submit-overtime-request');
-    if (submitBtn) {
-        submitBtn.addEventListener('click', submitOvertimeRequest);
-    }
-}
 
 // Add participant to form
 function addParticipant() {
     const container = document.getElementById('participants-container');
     if (!container) {
-        console.error('Participants container not found');
         return;
     }
     const participantIndex = container.children.length;
@@ -706,7 +954,6 @@ function addParticipant() {
 function initializeUserDropdown(index) {
     const container = document.getElementById(`user-dropdown-${index}`);
     if (!container) {
-        console.error('Container not found for dropdown index:', index);
         return;
     }
     
@@ -744,82 +991,30 @@ function removeParticipant(index) {
 }
 
 // Submit overtime request
-async function submitOvertimeRequest() {
-    const submitBtn = document.getElementById('submit-overtime-request');
-    const addParticipantBtn = document.getElementById('add-participant');
-    
-    // Prevent multiple submissions
-    if (submitBtn.disabled) {
-        return;
-    }
-    
-    // Show loading state
-    showSubmitLoading(true);
-    
+async function submitOvertimeRequest(formData) {
     try {
-        const startAt = document.getElementById('overtime-start-at').value;
-        const endAt = document.getElementById('overtime-end-at').value;
-        const reason = document.getElementById('overtime-reason').value;
+        // Extract form data
+        const reason = formData.reason;
+        const startDate = formData.start_date;
+        const startTime = formData.start_time;
+        const endDate = formData.end_date;
+        const endTime = formData.end_time;
         
-        // Collect participants
+        // Collect participants from the modal
         const participants = [];
         const participantRows = document.querySelectorAll('.participant-row');
         
         for (const row of participantRows) {
-            // Try multiple selectors to find the dropdown container
-            let userDropdownContainer = row.querySelector('.user-dropdown-container');
-            if (!userDropdownContainer) {
-                // Try finding by ID pattern
-                const rowIndex = row.getAttribute('data-index');
-                userDropdownContainer = document.getElementById(`user-dropdown-${rowIndex}`);
-            }
-            
+            const userDropdownContainer = row.querySelector('.user-dropdown-container');
             const jobNoInput = row.querySelector('input[name="job_no"]');
             const descriptionInput = row.querySelector('input[name="description"]');
             
-            // Check if dropdown is properly initialized
-            if (userDropdownContainer && !userDropdownContainer.dropdown) {
-                const rowIndex = row.getAttribute('data-index');
-                initializeUserDropdown(parseInt(rowIndex));
-            }
-            
-            // Try multiple ways to get the selected value
-            let userId = userDropdownContainer?.dropdown?.getValue();
-            
-            // Fallback: try to get value from the dropdown's selectedValue property
-            if (!userId && userDropdownContainer?.dropdown?.selectedValue) {
-                userId = userDropdownContainer.dropdown.selectedValue;
-            }
-            
-            // Another fallback: try to get value from the selected display text
-            if (!userId && userDropdownContainer) {
-                const selectedText = userDropdownContainer.querySelector('.selected-text');
-                if (selectedText && selectedText.textContent !== 'Çalışan seçiniz...') {
-                    // Find the user by display text
-                    const user = allUsers.find(u => {
-                        const displayName = (u.first_name && u.last_name) ? 
-                            `${u.first_name} ${u.last_name}` : 
-                            u.username;
-                        return displayName === selectedText.textContent;
-                    });
-                    if (user) {
-                        // Try ID first, fallback to username
-                        userId = user.id || user.username;
-                    }
-                }
-            }
+            const userId = userDropdownContainer?.dropdown?.getValue();
             const jobNo = jobNoInput?.value?.trim();
             const description = descriptionInput?.value?.trim() || '';
             
-            // Check if user is selected
-            if (!userId || userId === null || userId === undefined) {
-                showErrorMessage('Lütfen tüm katılımcılar için çalışan seçimi yapın.');
-                return;
-            }
-            
-            // Check if job number is provided
-            if (!jobNo) {
-                showErrorMessage('Lütfen tüm katılımcılar için iş emri numarası girin.');
+            if (!userId || !jobNo) {
+                showErrorMessage('Lütfen tüm katılımcılar için gerekli bilgileri doldurun.');
                 return;
             }
             
@@ -830,13 +1025,16 @@ async function submitOvertimeRequest() {
             });
         }
         
-        // Check if we have at least one participant
         if (participants.length === 0) {
             showErrorMessage('En az 1 katılımcı eklemelisiniz.');
             return;
         }
         
-        // Convert local datetime to UTC ISO string
+        // Combine date and time
+        const startAt = `${startDate}T${startTime}`;
+        const endAt = `${endDate}T${endTime}`;
+        
+        // Convert to UTC ISO string
         const startAtUTC = new Date(startAt).toISOString();
         const endAtUTC = new Date(endAt).toISOString();
         
@@ -862,16 +1060,12 @@ async function submitOvertimeRequest() {
         showSuccessMessage('Mesai talebi başarıyla oluşturuldu.');
         
         // Close modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('createOvertimeModal'));
-        modal.hide();
+        createOvertimeModal.hide();
         
         // Refresh data
         loadOvertimeRequests();
         
     } catch (error) {
-        console.error('Error creating overtime request:', error);
-        console.error('Error message:', error.message);
-        console.error('Error response:', error.response);
         
         // Extract error message from API response
         let errorMessage = 'Mesai talebi oluşturulurken hata oluştu.';
@@ -906,347 +1100,37 @@ async function viewOvertimeDetails(requestId) {
         url.searchParams.set('request', requestId);
         window.history.pushState({}, '', url);
         
-        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('overtimeDetailsModal'));
-        const content = document.getElementById('overtime-details-content');
-        
-        // Get rejection comments
-        const rejectionComments = getRejectionComments(request);
-        
-        content.innerHTML = `
-            <div class="row">
-                <div class="col-md-6">
-                    <h6 class="text-primary">Genel Bilgiler</h6>
-                    <table class="table table-sm">
-                        <tr><td><strong class="text-dark">Talep No:</strong></td><td>#${request.id}</td></tr>
-                        <tr><td><strong class="text-dark">Talep Eden:</strong></td><td>${request.requester_username}</td></tr>
-                        <tr><td><strong class="text-dark">Departman:</strong></td><td>${request.team_label || request.team || '-'}</td></tr>
-                        <tr><td><strong class="text-dark">Durum:</strong></td><td>${renderStatusBadge(request.status, request.status_label)}</td></tr>
-                        <tr><td><strong class="text-dark">Oluşturulma:</strong></td><td>${formatDateTime(request.created_at)}</td></tr>
-                        <tr><td><strong class="text-dark">Son Güncelleme:</strong></td><td>${formatDateTime(request.updated_at)}</td></tr>
-                    </table>
-                </div>
-                <div class="col-md-6">
-                    <h6 class="text-primary">Mesai Bilgileri</h6>
-                    <table class="table table-sm">
-                        <tr><td><strong class="text-dark">Başlangıç:</strong></td><td>${formatDateTime(request.start_at)}</td></tr>
-                        <tr><td><strong class="text-dark">Bitiş:</strong></td><td>${formatDateTime(request.end_at)}</td></tr>
-                        <tr><td><strong class="text-dark">Süre:</strong></td><td><strong>${formatOvertimeDuration(parseFloat(request.duration_hours))}</strong></td></tr>
-                        <tr><td><strong class="text-dark">Katılımcı Sayısı:</strong></td><td>${request.entries?.length || 0} kişi</td></tr>
-                        <tr><td><strong class="text-dark">Neden:</strong></td><td>${request.reason || 'Belirtilmemiş'}</td></tr>
-                    </table>
-                </div>
-            </div>
-            ${rejectionComments.length > 0 ? `
-            <div class="row mt-4">
-                <div class="col-12">
-                    <h6 class="text-danger">
-                        <i class="fas fa-times-circle me-2"></i>
-                        Reddetme Gerekçeleri
-                    </h6>
-                    <div class="alert alert-danger">
-                        ${rejectionComments.map(comment => `
-                            <div class="mb-3 p-3 border border-danger rounded" style="background-color: rgba(220, 53, 69, 0.1);">
-                                <div class="d-flex justify-content-between align-items-start mb-2">
-                                    <div>
-                                        <strong class="text-danger">
-                                            <i class="fas fa-user-times me-1"></i>
-                                            ${comment.approver}
-                                        </strong>
-                                        <span class="badge bg-danger ms-2">${comment.stage}</span>
-                                    </div>
-                                    <small class="text-muted">
-                                        <i class="fas fa-clock me-1"></i>
-                                        ${comment.date ? formatDateTime(comment.date) : '-'}
-                                    </small>
-                                </div>
-                                <div class="text-dark" style="line-height: 1.4;">
-                                    <i class="fas fa-comment-alt me-1 text-muted"></i>
-                                    ${comment.comment}
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                </div>
-            </div>
-            ` : ''}
-            <div class="row mt-4">
-                <div class="col-12">
-                    <div id="participants-table-container" style="display: none;">
-                        <!-- Participants table will be rendered here using TableComponent -->
-                    </div>
-                </div>
-            </div>
-        `;
-        
-        // Render participants table using TableComponent if there are entries
-        if (request.entries && request.entries.length > 0) {
-            renderParticipantsTable(request.entries);
-        }
-        
-        // Update action buttons
-        updateDetailsModalActions(request);
-        
-        modal.show();
+        // Use the modal from modals.js
+        showOvertimeDetailsModal(request);
         
     } catch (error) {
-        console.error('Error loading overtime details:', error);
         showErrorMessage('Mesai talebi detayları yüklenirken hata oluştu.');
     }
 }
 
-// Render participants table using TableComponent
-function renderParticipantsTable(entries) {
-    const container = document.getElementById('participants-table-container');
-    if (!container) return;
-    
-    // Clear any existing table
-    container.innerHTML = '';
-    container.style.display = 'block';
-    
-    // Create TableComponent for participants
-    const participantsTable = new TableComponent('participants-table-container', {
-        title: 'Katılımcılar',
-        columns: [
-            {
-                field: 'user_name',
-                label: 'Çalışan',
-                sortable: true,
-                formatter: (value) => value || '-'
-            },
-            {
-                field: 'job_no',
-                label: 'İş Emri No',
-                sortable: true,
-                formatter: (value) => `<code>${value || '-'}</code>`
-            },
-            {
-                field: 'description',
-                label: 'Açıklama',
-                sortable: true,
-                formatter: (value) => value || '-'
-            },
-            {
-                field: 'approved_hours',
-                label: 'Onaylanan Saat',
-                sortable: true,
-                formatter: (value) => value ? formatOvertimeDuration(parseFloat(value)) : '-'
-            }
-        ],
-        data: entries.map(entry => ({
-            ...entry,
-            user_name: (entry.user_first_name && entry.user_last_name) ? 
-                `${entry.user_first_name} ${entry.user_last_name}` : 
-                entry.user_username
-        })),
-        sortable: true,
-        pagination: false,
-        responsive: true,
-        striped: true,
-        small: true,
-        tableClass: 'table table-sm table-striped',
-        emptyMessage: 'Katılımcı bulunamadı',
-        emptyIcon: 'fas fa-users',
-        skeleton: false
-    });
-}
-
-// Update details modal actions
-function updateDetailsModalActions(request) {
-    const actionsContainer = document.getElementById('overtime-actions');
-    let actionsHtml = '';
-    
-    if (canCancelOvertime(request, currentUser?.id)) {
-        actionsHtml += `
-            <button type="button" class="btn btn-sm btn-danger me-2" onclick="showCancelOvertimeModal(${request.id})">
-                <i class="fas fa-ban me-1"></i>İptal Et
-            </button>
-        `;
-    }
-    
-    actionsContainer.innerHTML = actionsHtml;
-}
-
-// Setup details modal events
-function setupDetailsModalEvents() {
-    // Events are handled via onclick attributes in the HTML
-}
 
 // Show cancel overtime modal
-function showCancelOvertimeModal(requestId) {
-    const request = currentOvertimeRequests.find(r => r.id === requestId) || selectedOvertimeRequest;
-    if (!request) return;
-    
-    // Populate info
-    const infoContainer = document.getElementById('cancel-overtime-info');
-    infoContainer.innerHTML = `
-        <table class="table table-sm">
-            <tr><td><strong>Talep No:</strong></td><td>#${request.id}</td></tr>
-            <tr><td><strong>Başlangıç:</strong></td><td>${formatDateTime(request.start_at)}</td></tr>
-            <tr><td><strong>Bitiş:</strong></td><td>${formatDateTime(request.end_at)}</td></tr>
-            <tr><td><strong>Süre:</strong></td><td>${formatOvertimeDuration(parseFloat(request.duration_hours))}</td></tr>
-        </table>
-    `;
-    
-    // Store request ID for submission
-    document.getElementById('confirm-cancel-overtime').dataset.requestId = requestId;
-    
-    const modal = new bootstrap.Modal(document.getElementById('cancelOvertimeModal'));
-    modal.show();
-}
-
-// Setup cancel modal events
-function setupCancelModalEvents() {
-    const confirmBtn = document.getElementById('confirm-cancel-overtime');
-    if (confirmBtn) {
-        confirmBtn.addEventListener('click', confirmCancelOvertime);
-    }
-}
 
 // Confirm cancel overtime
 async function confirmCancelOvertime() {
     try {
-        const requestId = document.getElementById('confirm-cancel-overtime').dataset.requestId;
+        const requestId = window.pendingCancelRequestId;
+        if (!requestId) return;
         
         await cancelOvertimeRequest(requestId);
         
         showSuccessMessage('Mesai talebi başarıyla iptal edildi.');
         
         // Close modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('cancelOvertimeModal'));
-        modal.hide();
+        cancelOvertimeModal.hide();
+        window.pendingCancelRequestId = null;
         
         // Refresh data
         loadOvertimeRequests();
         
-        // Close details modal if open
-        const detailsModal = bootstrap.Modal.getInstance(document.getElementById('overtimeDetailsModal'));
-        if (detailsModal) {
-            detailsModal.hide();
-        }
-        
     } catch (error) {
-        console.error('Error cancelling overtime request:', error);
         showErrorMessage(error.message || 'Mesai talebi iptal edilirken hata oluştu.');
     }
-}
-
-// Export overtime requests
-async function exportOvertimeRequests(format = 'csv') {
-    try {
-        // Show loading message
-        const exportBtn = document.querySelector('#overtime-table-container-export');
-        if (exportBtn) {
-            exportBtn.disabled = true;
-            exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Dışa Aktarılıyor...';
-        }
-        
-        // Get filter values
-        const filterValues = currentFilters || {};
-        
-        // Prepare filters for API call
-        const apiFilters = {
-            ...filterValues,
-            page: 1,
-            page_size: 10000 // Get all records for export
-        };
-        
-        // Convert filter names to API format
-        if (apiFilters['status-filter']) {
-            apiFilters.status = apiFilters['status-filter'];
-            delete apiFilters['status-filter'];
-        }
-        if (apiFilters['team-filter']) {
-            apiFilters.team = apiFilters['team-filter'];
-            delete apiFilters['team-filter'];
-        }
-        if (apiFilters['start-date-filter']) {
-            apiFilters.start_date = apiFilters['start-date-filter'];
-            delete apiFilters['start-date-filter'];
-        }
-        if (apiFilters['end-date-filter']) {
-            apiFilters.end_date = apiFilters['end-date-filter'];
-            delete apiFilters['end-date-filter'];
-        }
-        if (apiFilters['search-filter']) {
-            apiFilters.search = apiFilters['search-filter'];
-            delete apiFilters['search-filter'];
-        }
-        
-        const data = await fetchOvertimeRequests(apiFilters);
-        const allRequests = data.results || data;
-        
-        if (allRequests.length === 0) {
-            alert('Dışa aktarılacak mesai talebi bulunamadı');
-            return;
-        }
-        
-        // Prepare data for export
-        const headers = [
-            'Talep No',
-            'Talep Eden',
-            'Departman',
-            'Başlangıç',
-            'Bitiş',
-            'Süre (Saat)',
-            'Katılımcı Sayısı',
-            'Durum',
-            'Neden',
-            'Oluşturulma'
-        ];
-        
-        const exportData = [
-            headers,
-            ...allRequests.map(request => [
-                request.id,
-                request.requester_username || '',
-                request.team_label || request.team || '',
-                formatDateTime(request.start_at),
-                formatDateTime(request.end_at),
-                request.duration_hours || '0',
-                request.total_users || 0,
-                request.status_label || '',
-                request.reason || '',
-                formatDateTime(request.created_at)
-            ])
-        ];
-        
-        // Export based on format
-        if (format === 'csv') {
-            exportToCSV(exportData, 'mesai-talepleri');
-        } else if (format === 'excel') {
-            exportToExcel(exportData, 'mesai-talepleri');
-        }
-        
-    } catch (error) {
-        console.error('Error exporting overtime requests:', error);
-        showErrorMessage('Dışa aktarma sırasında hata oluştu.');
-    } finally {
-        // Reset export button
-        const exportBtn = document.querySelector('#overtime-table-container-export');
-        if (exportBtn) {
-            exportBtn.disabled = false;
-            exportBtn.innerHTML = '<i class="fas fa-download me-1"></i>Dışa Aktar';
-        }
-    }
-}
-
-// Export helper functions
-function exportToCSV(data, filename) {
-    const csvContent = data.map(row => 
-        row.map(cell => `"${cell}"`).join(',')
-    ).join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-}
-
-function exportToExcel(data, filename) {
-    // For Excel export, you would need a library like SheetJS
-    // For now, we'll just show a message
-    alert('Excel export özelliği yakında eklenecek');
 }
 
 // Loading state is now handled by TableComponent

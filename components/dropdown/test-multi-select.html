@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dropdown Multi-Select Test</title>
+    <link rel="stylesheet" href="dropdown.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+        
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 2.5rem;
+            font-weight: 300;
+        }
+        
+        .test-section {
+            margin-bottom: 40px;
+            padding: 25px;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        
+        .test-section h2 {
+            color: #495057;
+            margin-bottom: 20px;
+            font-size: 1.5rem;
+            border-bottom: 2px solid #DC143C;
+            padding-bottom: 10px;
+        }
+        
+        .dropdown-container {
+            margin-bottom: 20px;
+        }
+        
+        .dropdown-container label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        .controls {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .btn {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #8B0000, #DC143C);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #DC143C, #FF4D4D);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(220, 20, 60, 0.3);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-secondary:hover {
+            background: #5a6268;
+            transform: translateY(-2px);
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+            transform: translateY(-2px);
+        }
+        
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+        
+        .btn-warning:hover {
+            background: #e0a800;
+            transform: translateY(-2px);
+        }
+        
+        .result-display {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+            border-left: 4px solid #DC143C;
+        }
+        
+        .result-display h4 {
+            margin: 0 0 10px 0;
+            color: #495057;
+        }
+        
+        .result-display pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+        }
+        
+        .status-indicator {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-left: 10px;
+        }
+        
+        .status-active {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-inactive {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            .controls {
+                flex-direction: column;
+            }
+            
+            .btn {
+                width: 100%;
+                text-align: center;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1><i class="fas fa-list-check"></i> Dropdown Multi-Select Test Suite</h1>
+        
+        <!-- Basic Multi-Select Test -->
+        <div class="test-section">
+            <h2><i class="fas fa-check-square"></i> Basic Multi-Select Dropdown</h2>
+            <div class="dropdown-container">
+                <label for="basic-multi">Select Multiple Countries:</label>
+                <div id="basic-multi"></div>
+            </div>
+            
+            <div class="controls">
+                <button class="btn btn-primary" onclick="getBasicMultiValues()">Get Selected Values</button>
+                <button class="btn btn-secondary" onclick="clearBasicMulti()">Clear Selection</button>
+                <button class="btn btn-success" onclick="selectAllBasic()">Select All</button>
+                <button class="btn btn-warning" onclick="selectSomeBasic()">Select Some</button>
+            </div>
+            
+            <div class="result-display">
+                <h4>Selected Values:</h4>
+                <pre id="basic-result">No selections yet</pre>
+            </div>
+        </div>
+        
+        <!-- Searchable Multi-Select Test -->
+        <div class="test-section">
+            <h2><i class="fas fa-search"></i> Searchable Multi-Select Dropdown</h2>
+            <div class="dropdown-container">
+                <label for="searchable-multi">Search and Select Multiple Technologies:</label>
+                <div id="searchable-multi"></div>
+            </div>
+            
+            <div class="controls">
+                <button class="btn btn-primary" onclick="getSearchableValues()">Get Selected Values</button>
+                <button class="btn btn-secondary" onclick="clearSearchable()">Clear Selection</button>
+                <button class="btn btn-success" onclick="selectAllSearchable()">Select All</button>
+                <button class="btn btn-warning" onclick="selectSomeSearchable()">Select Some</button>
+            </div>
+            
+            <div class="result-display">
+                <h4>Selected Values:</h4>
+                <pre id="searchable-result">No selections yet</pre>
+            </div>
+        </div>
+        
+        <!-- Single vs Multi Comparison -->
+        <div class="test-section">
+            <h2><i class="fas fa-balance-scale"></i> Single vs Multi-Select Comparison</h2>
+            <div class="grid">
+                <div>
+                    <h3>Single Select</h3>
+                    <div class="dropdown-container">
+                        <label for="single-select">Choose One Priority:</label>
+                        <div id="single-select"></div>
+                    </div>
+                    <div class="controls">
+                        <button class="btn btn-primary" onclick="getSingleValue()">Get Value</button>
+                        <button class="btn btn-secondary" onclick="clearSingle()">Clear</button>
+                    </div>
+                    <div class="result-display">
+                        <h4>Selected Value:</h4>
+                        <pre id="single-result">No selection</pre>
+                    </div>
+                </div>
+                
+                <div>
+                    <h3>Multi Select</h3>
+                    <div class="dropdown-container">
+                        <label for="multi-select">Choose Multiple Priorities:</label>
+                        <div id="multi-select"></div>
+                    </div>
+                    <div class="controls">
+                        <button class="btn btn-primary" onclick="getMultiValue()">Get Values</button>
+                        <button class="btn btn-secondary" onclick="clearMulti()">Clear</button>
+                    </div>
+                    <div class="result-display">
+                        <h4>Selected Values:</h4>
+                        <pre id="multi-result">No selections</pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Advanced Multi-Select with Disabled Items -->
+        <div class="test-section">
+            <h2><i class="fas fa-ban"></i> Multi-Select with Disabled Items</h2>
+            <div class="dropdown-container">
+                <label for="disabled-multi">Select Available Features (Some are disabled):</label>
+                <div id="disabled-multi"></div>
+            </div>
+            
+            <div class="controls">
+                <button class="btn btn-primary" onclick="getDisabledValues()">Get Selected Values</button>
+                <button class="btn btn-secondary" onclick="clearDisabled()">Clear Selection</button>
+                <button class="btn btn-success" onclick="selectAllDisabled()">Select All Available</button>
+            </div>
+            
+            <div class="result-display">
+                <h4>Selected Values:</h4>
+                <pre id="disabled-result">No selections yet</pre>
+            </div>
+        </div>
+        
+        <!-- Event Testing -->
+        <div class="test-section">
+            <h2><i class="fas fa-bell"></i> Event Testing</h2>
+            <div class="dropdown-container">
+                <label for="event-multi">Multi-Select with Event Logging:</label>
+                <div id="event-multi"></div>
+            </div>
+            
+            <div class="controls">
+                <button class="btn btn-primary" onclick="getEventValues()">Get Selected Values</button>
+                <button class="btn btn-secondary" onclick="clearEvent()">Clear Selection</button>
+                <button class="btn btn-warning" onclick="clearEventLog()">Clear Event Log</button>
+            </div>
+            
+            <div class="result-display">
+                <h4>Event Log:</h4>
+                <pre id="event-log">Events will appear here...</pre>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { ModernDropdown } from './dropdown.js';
+        
+        // Sample data
+        const countries = [
+            { value: 'us', text: 'United States' },
+            { value: 'uk', text: 'United Kingdom' },
+            { value: 'ca', text: 'Canada' },
+            { value: 'au', text: 'Australia' },
+            { value: 'de', text: 'Germany' },
+            { value: 'fr', text: 'France' },
+            { value: 'jp', text: 'Japan' },
+            { value: 'cn', text: 'China' },
+            { value: 'in', text: 'India' },
+            { value: 'br', text: 'Brazil' }
+        ];
+        
+        const technologies = [
+            { value: 'js', text: 'JavaScript' },
+            { value: 'ts', text: 'TypeScript' },
+            { value: 'react', text: 'React' },
+            { value: 'vue', text: 'Vue.js' },
+            { value: 'angular', text: 'Angular' },
+            { value: 'node', text: 'Node.js' },
+            { value: 'python', text: 'Python' },
+            { value: 'java', text: 'Java' },
+            { value: 'csharp', text: 'C#' },
+            { value: 'go', text: 'Go' },
+            { value: 'rust', text: 'Rust' },
+            { value: 'php', text: 'PHP' }
+        ];
+        
+        const priorities = [
+            { value: 'high', text: 'High Priority' },
+            { value: 'medium', text: 'Medium Priority' },
+            { value: 'low', text: 'Low Priority' },
+            { value: 'urgent', text: 'Urgent' }
+        ];
+        
+        const features = [
+            { value: 'auth', text: 'Authentication', disabled: false },
+            { value: 'payments', text: 'Payment Processing', disabled: false },
+            { value: 'analytics', text: 'Analytics Dashboard', disabled: true },
+            { value: 'notifications', text: 'Push Notifications', disabled: false },
+            { value: 'reports', text: 'Advanced Reports', disabled: true },
+            { value: 'api', text: 'API Integration', disabled: false },
+            { value: 'security', text: 'Enhanced Security', disabled: false },
+            { value: 'backup', text: 'Automated Backup', disabled: true }
+        ];
+        
+        const departments = [
+            { value: 'hr', text: 'Human Resources' },
+            { value: 'it', text: 'Information Technology' },
+            { value: 'finance', text: 'Finance' },
+            { value: 'marketing', text: 'Marketing' },
+            { value: 'sales', text: 'Sales' },
+            { value: 'operations', text: 'Operations' }
+        ];
+        
+        // Initialize dropdowns
+        let basicMultiDropdown, searchableMultiDropdown, singleDropdown, multiDropdown, disabledDropdown, eventDropdown;
+        
+        // Basic Multi-Select
+        basicMultiDropdown = new ModernDropdown(document.getElementById('basic-multi'), {
+            placeholder: 'Select countries...',
+            multiple: true,
+            searchable: false
+        });
+        basicMultiDropdown.setItems(countries);
+        
+        // Searchable Multi-Select
+        searchableMultiDropdown = new ModernDropdown(document.getElementById('searchable-multi'), {
+            placeholder: 'Search and select technologies...',
+            multiple: true,
+            searchable: true
+        });
+        searchableMultiDropdown.setItems(technologies);
+        
+        // Single Select
+        singleDropdown = new ModernDropdown(document.getElementById('single-select'), {
+            placeholder: 'Choose one priority...',
+            multiple: false,
+            searchable: false
+        });
+        singleDropdown.setItems(priorities);
+        
+        // Multi Select
+        multiDropdown = new ModernDropdown(document.getElementById('multi-select'), {
+            placeholder: 'Choose multiple priorities...',
+            multiple: true,
+            searchable: false
+        });
+        multiDropdown.setItems(priorities);
+        
+        // Disabled Items Multi-Select
+        disabledDropdown = new ModernDropdown(document.getElementById('disabled-multi'), {
+            placeholder: 'Select available features...',
+            multiple: true,
+            searchable: false
+        });
+        disabledDropdown.setItems(features);
+        
+        // Event Testing Multi-Select
+        eventDropdown = new ModernDropdown(document.getElementById('event-multi'), {
+            placeholder: 'Select departments...',
+            multiple: true,
+            searchable: false
+        });
+        eventDropdown.setItems(departments);
+        
+        // Event listeners for event testing
+        eventDropdown.container.addEventListener('dropdown:open', () => {
+            logEvent('Dropdown opened');
+        });
+        
+        eventDropdown.container.addEventListener('dropdown:close', () => {
+            logEvent('Dropdown closed');
+        });
+        
+        eventDropdown.container.addEventListener('dropdown:select', (e) => {
+            logEvent(`Selection changed: ${JSON.stringify(e.detail.value)}`);
+        });
+        
+        // Global functions for testing
+        window.getBasicMultiValues = function() {
+            const values = basicMultiDropdown.getValue();
+            document.getElementById('basic-result').textContent = JSON.stringify(values, null, 2);
+        };
+        
+        window.clearBasicMulti = function() {
+            basicMultiDropdown.setValue([]);
+            document.getElementById('basic-result').textContent = 'Selection cleared';
+        };
+        
+        window.selectAllBasic = function() {
+            const allValues = countries.map(c => c.value);
+            basicMultiDropdown.setValue(allValues);
+            getBasicMultiValues();
+        };
+        
+        window.selectSomeBasic = function() {
+            basicMultiDropdown.setValue(['us', 'uk', 'ca', 'de']);
+            getBasicMultiValues();
+        };
+        
+        window.getSearchableValues = function() {
+            const values = searchableMultiDropdown.getValue();
+            document.getElementById('searchable-result').textContent = JSON.stringify(values, null, 2);
+        };
+        
+        window.clearSearchable = function() {
+            searchableMultiDropdown.setValue([]);
+            document.getElementById('searchable-result').textContent = 'Selection cleared';
+        };
+        
+        window.selectAllSearchable = function() {
+            const allValues = technologies.map(t => t.value);
+            searchableMultiDropdown.setValue(allValues);
+            getSearchableValues();
+        };
+        
+        window.selectSomeSearchable = function() {
+            searchableMultiDropdown.setValue(['js', 'react', 'node', 'python']);
+            getSearchableValues();
+        };
+        
+        window.getSingleValue = function() {
+            const value = singleDropdown.getValue();
+            document.getElementById('single-result').textContent = JSON.stringify(value, null, 2);
+        };
+        
+        window.clearSingle = function() {
+            singleDropdown.setValue(null);
+            document.getElementById('single-result').textContent = 'No selection';
+        };
+        
+        window.getMultiValue = function() {
+            const values = multiDropdown.getValue();
+            document.getElementById('multi-result').textContent = JSON.stringify(values, null, 2);
+        };
+        
+        window.clearMulti = function() {
+            multiDropdown.setValue([]);
+            document.getElementById('multi-result').textContent = 'No selections';
+        };
+        
+        window.getDisabledValues = function() {
+            const values = disabledDropdown.getValue();
+            document.getElementById('disabled-result').textContent = JSON.stringify(values, null, 2);
+        };
+        
+        window.clearDisabled = function() {
+            disabledDropdown.setValue([]);
+            document.getElementById('disabled-result').textContent = 'Selection cleared';
+        };
+        
+        window.selectAllDisabled = function() {
+            const availableValues = features.filter(f => !f.disabled).map(f => f.value);
+            disabledDropdown.setValue(availableValues);
+            getDisabledValues();
+        };
+        
+        window.getEventValues = function() {
+            const values = eventDropdown.getValue();
+            logEvent(`Current values: ${JSON.stringify(values)}`);
+        };
+        
+        window.clearEvent = function() {
+            eventDropdown.setValue([]);
+            logEvent('Selection cleared');
+        };
+        
+        window.clearEventLog = function() {
+            document.getElementById('event-log').textContent = 'Events will appear here...';
+        };
+        
+        function logEvent(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const log = document.getElementById('event-log');
+            const currentLog = log.textContent;
+            const newLog = `[${timestamp}] ${message}\n${currentLog}`;
+            log.textContent = newLog;
+        }
+        
+        // Add click testing instructions
+        document.addEventListener('DOMContentLoaded', function() {
+            const instructions = document.createElement('div');
+            instructions.innerHTML = `
+                <div style="background: #e8f5e8; padding: 15px; margin: 20px 0; border-radius: 8px; border-left: 4px solid #4caf50;">
+                    <h4 style="margin: 0 0 10px 0; color: #2e7d32;">✅ Fixed Click Issues - Test Instructions</h4>
+                    <p style="margin: 0; color: #424242;">
+                        <strong>Test the clicking consistency (should now work properly):</strong><br>
+                        • Click on checkboxes directly - should toggle consistently<br>
+                        • Click on text areas - should toggle the checkbox<br>
+                        • Click rapidly on different options - should work reliably<br>
+                        • Test both single and multi-select dropdowns<br>
+                        • Try clicking the same option multiple times quickly<br>
+                        • All clicks should register and update the selection properly
+                    </p>
+                </div>
+            `;
+            document.querySelector('.container').insertBefore(instructions, document.querySelector('.container').firstChild);
+        });
+        
+        // Initialize with some default selections for demonstration
+        setTimeout(() => {
+            basicMultiDropdown.setValue(['us', 'uk']);
+            searchableMultiDropdown.setValue(['js', 'react']);
+            singleDropdown.setValue('high');
+            multiDropdown.setValue(['high', 'urgent']);
+            disabledDropdown.setValue(['auth', 'payments']);
+            eventDropdown.setValue(['hr', 'it']);
+            
+            // Update displays
+            getBasicMultiValues();
+            getSearchableValues();
+            getSingleValue();
+            getMultiValue();
+            getDisabledValues();
+            getEventValues();
+        }, 100);
+    </script>
+</body>
+</html>

@@ -1,4 +1,4 @@
-// components/dropdown.js
+// components/dropdown/dropdown.js
 
 // Global z-index management for dropdowns
 let globalDropdownZIndex = 1000000;
@@ -271,19 +271,41 @@ export class ModernDropdown {
                         <span class="item-text">${item.text}</span>
                     </label>
                 `;
+                
+                // Handle checkbox change event for multi-select
+                const checkbox = itemElement.querySelector('input[type="checkbox"]');
+                checkbox.addEventListener('change', (e) => {
+                    e.stopPropagation();
+                    if (!item.disabled) {
+                        this.selectItem(item, itemElement);
+                    }
+                });
+                
+                // Handle clicks on the entire item area (outside the label)
+                itemElement.addEventListener('click', (e) => {
+                    // Only handle clicks outside the label/checkbox area
+                    if (!e.target.closest('.checkbox-container')) {
+                        e.stopPropagation();
+                        if (!item.disabled) {
+                            const checkbox = itemElement.querySelector('input[type="checkbox"]');
+                            checkbox.checked = !checkbox.checked;
+                            this.selectItem(item, itemElement);
+                        }
+                    }
+                });
             } else {
                 itemElement.innerHTML = `
                     <span class="item-text">${item.text}</span>
                     ${this.selectedValue === item.value ? '<i class="fas fa-check selected-icon"></i>' : ''}
                 `;
+                
+                itemElement.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    if (!item.disabled) {
+                        this.selectItem(item, itemElement);
+                    }
+                });
             }
-            
-            itemElement.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (!item.disabled) {
-                    this.selectItem(item, itemElement);
-                }
-            });
             
             this.itemsContainer.appendChild(itemElement);
         });
@@ -292,16 +314,16 @@ export class ModernDropdown {
     selectItem(item, element) {
         if (this.options.multiple) {
             const checkbox = element.querySelector('input[type="checkbox"]');
-            const isCurrentlySelected = this.selectedValues.includes(item.value);
             
-            if (isCurrentlySelected) {
+            // Use the checkbox state as the source of truth
+            if (checkbox.checked) {
+                // Add to selection if not already selected
+                if (!this.selectedValues.includes(item.value)) {
+                    this.selectedValues.push(item.value);
+                }
+            } else {
                 // Remove from selection
                 this.selectedValues = this.selectedValues.filter(v => v !== item.value);
-                checkbox.checked = false;
-            } else {
-                // Add to selection
-                this.selectedValues.push(item.value);
-                checkbox.checked = true;
             }
             
             this.updateMultipleDisplay();
@@ -355,8 +377,12 @@ export class ModernDropdown {
         
         const checkboxes = this.itemsContainer.querySelectorAll('input[type="checkbox"]');
         checkboxes.forEach(checkbox => {
-            const itemValue = checkbox.getAttribute('data-value');
-            checkbox.checked = this.selectedValues.includes(itemValue);
+            // Find the parent dropdown item to get the value
+            const dropdownItem = checkbox.closest('.dropdown-item');
+            if (dropdownItem) {
+                const itemValue = dropdownItem.dataset.value;
+                checkbox.checked = this.selectedValues.includes(itemValue);
+            }
         });
     }
     
@@ -394,4 +420,4 @@ export class ModernDropdown {
         this.container.innerHTML = '';
         this.container.className = '';
     }
-} 
+}

@@ -101,15 +101,9 @@ export class TableComponent {
                             </button>
                         ` : ''}
                         ${this.options.exportable ? `
-                            <div class="btn-group" role="group">
-                                <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" id="${this.containerId}-export-dropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                                    <i class="fas fa-download me-1"></i>Dışa Aktar
-                                </button>
-                                <ul class="dropdown-menu" aria-labelledby="${this.containerId}-export-dropdown">
-                                    <li><a class="dropdown-item" href="#" data-format="csv"><i class="fas fa-file-csv me-2"></i>CSV</a></li>
-                                    <li><a class="dropdown-item" href="#" data-format="excel"><i class="fas fa-file-excel me-2"></i>Excel</a></li>
-                                </ul>
-                            </div>
+                            <button class="btn btn-sm btn-outline-secondary" type="button" id="${this.containerId}-export-btn">
+                                <i class="fas fa-download me-1"></i>Dışa Aktar
+                            </button>
                         ` : ''}
                     </div>
                 </div>
@@ -571,19 +565,12 @@ export class TableComponent {
             }
         }
         
-        // Export dropdown
+        // Export button
         if (this.options.exportable) {
-            const exportDropdown = this.container.querySelector(`#${this.containerId}-export-dropdown`);
-            if (exportDropdown) {
-                const dropdownItems = this.container.querySelectorAll(`[data-format]`);
-                dropdownItems.forEach(item => {
-                    item.addEventListener('click', (e) => {
-                        e.preventDefault();
-                        const format = e.target.closest('[data-format]').getAttribute('data-format');
-                        if (this.options.onExport) {
-                            this.options.onExport(format);
-                        }
-                    });
+            const exportBtn = this.container.querySelector(`#${this.containerId}-export-btn`);
+            if (exportBtn) {
+                exportBtn.addEventListener('click', () => {
+                    this.exportData('excel');
                 });
             }
         }
@@ -599,13 +586,10 @@ export class TableComponent {
         
         // Action click events
         this.container.addEventListener('actionClick', (e) => {
-            console.log('actionClick event received:', e.detail);
             const action = this.options.actions.find(a => a.key === e.detail.action);
-            console.log('Found action:', action);
             if (action && action.onClick) {
                 const index = e.detail.index;
                 const row = this.options.data[index];
-                console.log('Calling action onClick with row:', row, 'index:', index);
                 action.onClick(row, index);
             }
         });
@@ -901,6 +885,142 @@ export class TableComponent {
     removeAction(actionKey) {
         this.options.actions = this.options.actions.filter(action => action.key !== actionKey);
         this.render();
+    }
+    
+    // Export functionality
+    exportData(format) {
+        try {
+            // Set export flag for formatters
+            window.isExporting = true;
+            
+            // Show loading state
+            this.setExportLoading(true);
+            
+            // Prepare data for export
+            const exportData = this.prepareExportData();
+            
+            if (exportData.length === 0) {
+                alert('Dışa aktarılacak veri bulunamadı');
+                return;
+            }
+            
+            // Export as Excel
+            this.exportToExcel(exportData);
+            
+        } catch (error) {
+            console.error('Export error:', error);
+            alert('Dışa aktarma sırasında hata oluştu');
+        } finally {
+            // Clear export flag
+            window.isExporting = false;
+            this.setExportLoading(false);
+        }
+    }
+    
+    prepareExportData() {
+        const headers = this.options.columns
+            .filter(col => col.field !== 'actions' && !col.hidden)
+            .map(col => col.label || col.field);
+        
+        const rows = this.options.data.map(row => {
+            return this.options.columns
+                .filter(col => col.field !== 'actions' && !col.hidden)
+                .map(col => {
+                    const value = row[col.field];
+                    
+                    // Handle different data types
+                    if (col.type === 'boolean') {
+                        return value ? 'Evet' : 'Hayır';
+                    } else if (col.formatter && typeof col.formatter === 'function') {
+                        // Use formatter but strip HTML tags
+                        const formatted = col.formatter(value, row);
+                        return this.stripHtmlTags(formatted);
+                    } else {
+                        return value ?? '';
+                    }
+                });
+        });
+        
+        return [headers, ...rows];
+    }
+    
+    stripHtmlTags(html) {
+        const temp = document.createElement('div');
+        temp.innerHTML = html;
+        return temp.textContent || temp.innerText || '';
+    }
+    
+    exportToExcel(data) {
+        // Check if XLSX library is available
+        if (typeof XLSX === 'undefined') {
+            // Load XLSX library dynamically
+            this.loadXLSXLibrary().then(() => {
+                this.exportToExcel(data);
+            });
+            return;
+        }
+        
+        try {
+            // Create workbook
+            const wb = XLSX.utils.book_new();
+            
+            // Convert data to worksheet
+            const ws = XLSX.utils.aoa_to_sheet(data);
+            
+            // Add worksheet to workbook
+            XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+            
+            // Generate Excel file
+            const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+            
+            // Create blob and download
+            const blob = new Blob([excelBuffer], { 
+                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+            });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `${this.containerId}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            link.click();
+            
+            // Clean up
+            setTimeout(() => URL.revokeObjectURL(link.href), 100);
+            
+        } catch (error) {
+            console.error('Excel export error:', error);
+            alert('Excel dosyası oluşturulurken hata oluştu');
+        }
+    }
+    
+    loadXLSXLibrary() {
+        return new Promise((resolve, reject) => {
+            // Check if already loaded
+            if (typeof XLSX !== 'undefined') {
+                resolve();
+                return;
+            }
+            
+            // Create script element
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+            script.onload = () => resolve();
+            script.onerror = () => reject(new Error('XLSX library failed to load'));
+            
+            // Add to document
+            document.head.appendChild(script);
+        });
+    }
+    
+    setExportLoading(loading) {
+        const exportBtn = this.container.querySelector(`#${this.containerId}-export-btn`);
+        if (exportBtn) {
+            if (loading) {
+                exportBtn.disabled = true;
+                exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Dışa Aktarılıyor...';
+            } else {
+                exportBtn.disabled = false;
+                exportBtn.innerHTML = '<i class="fas fa-download me-1"></i>Dışa Aktar';
+            }
+        }
     }
     
     destroy() {

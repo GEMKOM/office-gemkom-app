@@ -3,25 +3,29 @@ import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { 
-    fetchOvertimeRequests,
     fetchOvertimeRequest,
-    approveOvertimeRequest,
-    rejectOvertimeRequest,
     formatOvertimeDuration,
     getPendingOvertimeApprovalRequests,
     getOvertimeApprovedByMeRequests
 } from '../../../apis/overtime.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
+import {
+    initializeModalComponents,
+    showOvertimeDetailsModal,
+    approveOvertime,
+    rejectOvertime,
+    setupModalEventListeners,
+    setGlobalVariables
+} from './modals.js';
 
 // State management
 let currentPage = 1;
-let currentSortField = 'id';
-let currentSortDirection = 'desc';
 let requests = [];
 let totalRequests = 0;
 let isLoading = false;
 let currentRequest = null;
 let pendingTable = null;
+
 
 // Approved requests state
 let approvedCurrentPage = 1;
@@ -273,23 +277,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     await initializeRequests();
+    
+    // Set global variables for modals
+    setGlobalVariables({
+        currentRequest,
+        requests,
+        loadRequests,
+        loadApprovedRequests
+    });
+    
+    initializeModalComponents();
     setupEventListeners();
+    setupModalEventListeners();
+    
+    // Check if there's a request parameter in the URL to open modal (after modal is initialized)
+    const urlParams = new URLSearchParams(window.location.search);
+    const requestId = urlParams.get('request');
+    if (requestId) {
+        await openModalFromRequestId(requestId);
+    }
 });
 
 async function initializeRequests() {
     try {
         await loadRequests();
         await loadApprovedRequests();
-        
-        // Check if there's a request parameter in the URL to open modal
-        const urlParams = new URLSearchParams(window.location.search);
-        const requestId = urlParams.get('request');
-        if (requestId) {
-            await openModalFromRequestId(requestId);
-        }
     } catch (error) {
-        console.error('Error initializing requests:', error);
-        showNotification('Talepler yüklenirken hata oluştu', 'error');
     }
 }
 
@@ -309,14 +322,11 @@ async function loadRequests() {
         // Handle response - this endpoint returns an array directly
 
         
-        console.log('Processed requests:', requests);
         
         // Update the table component
         pendingTable.updateData(requests, totalRequests, currentPage);
         
     } catch (error) {
-        console.error('Error loading requests:', error);
-        showNotification('Onay bekleyen mesai talepleri yüklenirken hata oluştu: ' + error.message, 'error');
         requests = [];
         totalRequests = 0;
         pendingTable.updateData([], 0, 1);
@@ -336,7 +346,6 @@ async function loadApprovedRequests() {
         // Use the approved by me API endpoint
         const response = await getOvertimeApprovedByMeRequests();
         
-        console.log('Approved Overtime API Response:', response);
         
         // Handle response - this endpoint returns paginated data
         if (response && response.results) {
@@ -350,14 +359,11 @@ async function loadApprovedRequests() {
             totalApprovedRequests = 0;
         }
         
-        console.log('Processed approved requests:', approvedRequests);
         
         // Update the table component
         approvedTable.updateData(approvedRequests, totalApprovedRequests, approvedCurrentPage);
         
     } catch (error) {
-        console.error('Error loading approved requests:', error);
-        showNotification('Onayladığınız mesai talepleri yüklenirken hata oluştu: ' + error.message, 'error');
         approvedRequests = [];
         totalApprovedRequests = 0;
         approvedTable.updateData([], 0, 1);
@@ -367,37 +373,10 @@ async function loadApprovedRequests() {
     }
 }
 
+
 function setupEventListeners() {
-    
-    // Modal approve and reject buttons
-    const approveBtn = document.getElementById('approve-overtime');
-    if (approveBtn) {
-        approveBtn.addEventListener('click', () => {
-            if (currentRequest) {
-                approveOvertime(currentRequest.id);
-            }
-        });
-    }
-    
-    const rejectBtn = document.getElementById('reject-overtime');
-    if (rejectBtn) {
-        rejectBtn.addEventListener('click', () => {
-            if (currentRequest) {
-                rejectOvertime(currentRequest.id);
-            }
-        });
-    }
-    
-    // Add event listeners for modal close to clean up URL
-    const modal = document.getElementById('overtimeDetailsModal');
-    if (modal) {
-        modal.addEventListener('hidden.bs.modal', () => {
-            // Remove the request parameter from URL when modal is closed
-            const url = new URL(window.location);
-            url.searchParams.delete('request');
-            window.history.pushState({}, '', url);
-        });
-    }
+    // Event listeners for non-modal functionality
+    // Modal event listeners are handled in modals.js
     
     // Rejection modal event listeners
     const rejectModal = document.getElementById('rejectOvertimeModal');
@@ -430,7 +409,6 @@ function setupEventListeners() {
                 const requestId = window.currentRejectRequestId;
                 
                 if (!requestId) {
-                    showNotification('Hata: Talep ID bulunamadı', 'error');
                     return;
                 }
                 
@@ -440,7 +418,6 @@ function setupEventListeners() {
                     confirmRejectBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reddediliyor...';
                     
                     await rejectOvertimeRequest(requestId, comment);
-                    showNotification('Mesai talebi başarıyla reddedildi', 'success');
                     
                     // Close both modals
                     const rejectModalInstance = bootstrap.Modal.getOrCreateInstance(rejectModal);
@@ -461,8 +438,6 @@ function setupEventListeners() {
                     await loadApprovedRequests();
                     
                 } catch (error) {
-                    console.error('Error rejecting overtime request:', error);
-                    showNotification('Mesai talebi reddedilirken hata oluştu: ' + error.message, 'error');
                 } finally {
                     // Re-enable button
                     confirmRejectBtn.disabled = false;
@@ -493,145 +468,16 @@ function setupEventListeners() {
 async function viewOvertimeDetails(requestId) {
     try {
         currentRequest = await fetchOvertimeRequest(requestId);
-        await showOvertimeDetailsModal();
+        await showOvertimeDetailsModal(currentRequest);
         
         // Update URL to include the request ID
         const url = new URL(window.location);
         url.searchParams.set('request', requestId);
         window.history.pushState({}, '', url);
     } catch (error) {
-        console.error('Error loading overtime details:', error);
-        showNotification('Mesai talebi detayları yüklenirken hata oluştu: ' + error.message, 'error');
     }
 }
 
-async function showOvertimeDetailsModal() {
-    const container = document.getElementById('overtime-details-container');
-    
-    // Hide approve/reject buttons if request is not in submitted status
-    const approveBtn = document.getElementById('approve-overtime');
-    const rejectBtn = document.getElementById('reject-overtime');
-    
-    if (approveBtn && rejectBtn) {
-        const shouldShowButtons = currentRequest.status === 'submitted';
-        approveBtn.style.display = shouldShowButtons ? 'inline-block' : 'none';
-        rejectBtn.style.display = shouldShowButtons ? 'inline-block' : 'none';
-    }
-    
-    // Get rejection comments
-    const rejectionComments = getRejectionComments(currentRequest);
-    
-    container.innerHTML = `
-        <div class="row">
-            <div class="col-md-6">
-                <h6 class="text-primary">Genel Bilgiler</h6>
-                <table class="table table-sm">
-                    <tr><td><strong class="text-dark">Talep No:</strong></td><td>#${currentRequest.id}</td></tr>
-                    <tr><td><strong class="text-dark">Talep Eden:</strong></td><td>${currentRequest.requester_username}</td></tr>
-                    <tr><td><strong class="text-dark">Departman:</strong></td><td>${currentRequest.team_label || currentRequest.team || '-'}</td></tr>
-                    <tr><td><strong class="text-dark">Durum:</strong></td><td>${getStatusBadge(currentRequest.status, currentRequest.status_label)}</td></tr>
-                    <tr><td><strong class="text-dark">Oluşturulma:</strong></td><td>${formatDateTime(currentRequest.created_at)}</td></tr>
-                    <tr><td><strong class="text-dark">Son Güncelleme:</strong></td><td>${formatDateTime(currentRequest.updated_at)}</td></tr>
-                </table>
-            </div>
-            <div class="col-md-6">
-                <h6 class="text-primary">Mesai Bilgileri</h6>
-                <table class="table table-sm">
-                    <tr><td><strong class="text-dark">Başlangıç:</strong></td><td>${formatDateTime(currentRequest.start_at)}</td></tr>
-                    <tr><td><strong class="text-dark">Bitiş:</strong></td><td>${formatDateTime(currentRequest.end_at)}</td></tr>
-                    <tr><td><strong class="text-dark">Süre:</strong></td><td><strong>${formatOvertimeDuration(parseFloat(currentRequest.duration_hours))}</strong></td></tr>
-                    <tr><td><strong class="text-dark">Katılımcı Sayısı:</strong></td><td>${currentRequest.entries?.length || 0} kişi</td></tr>
-                    <tr><td><strong class="text-dark">Neden:</strong></td><td>${currentRequest.reason || 'Belirtilmemiş'}</td></tr>
-                </table>
-            </div>
-        </div>
-        ${rejectionComments.length > 0 ? `
-        <div class="row mt-4">
-            <div class="col-12">
-                <h6 class="text-danger">
-                    <i class="fas fa-times-circle me-2"></i>
-                    Reddetme Gerekçeleri
-                </h6>
-                <div class="alert alert-danger">
-                    ${rejectionComments.map(comment => `
-                        <div class="mb-3 p-3 border border-danger rounded" style="background-color: rgba(220, 53, 69, 0.1);">
-                            <div class="d-flex justify-content-between align-items-start mb-2">
-                                <div>
-                                    <strong class="text-danger">
-                                        <i class="fas fa-user-times me-1"></i>
-                                        ${comment.approver}
-                                    </strong>
-                                    <span class="badge bg-danger ms-2">${comment.stage}</span>
-                                </div>
-                                <small class="text-muted">
-                                    <i class="fas fa-clock me-1"></i>
-                                    ${comment.date ? formatDateTime(comment.date) : '-'}
-                                </small>
-                            </div>
-                            <div class="text-dark" style="line-height: 1.4;">
-                                <i class="fas fa-comment-alt me-1 text-muted"></i>
-                                ${comment.comment}
-                            </div>
-                        </div>
-                    `).join('')}
-                </div>
-            </div>
-        </div>
-        ` : ''}
-        <div class="row mt-4">
-            <div class="col-12">
-                <div id="participants-table-container" style="display: none;">
-                    <!-- Participants table will be rendered here -->
-                </div>
-            </div>
-        </div>
-    `;
-    
-    // Render participants table if there are entries
-    if (currentRequest.entries && currentRequest.entries.length > 0) {
-        renderParticipantsTable(currentRequest.entries);
-    }
-
-    const modal = new bootstrap.Modal(document.getElementById('overtimeDetailsModal'));
-    modal.show();
-}
-
-function renderParticipantsTable(entries) {
-    const container = document.getElementById('participants-table-container');
-    if (!container) return;
-    
-    container.style.display = 'block';
-    
-    const tableHtml = `
-        <h6 class="text-primary mb-3">Katılımcılar</h6>
-        <div class="table-responsive">
-            <table class="table table-sm table-striped">
-                <thead>
-                    <tr>
-                        <th>Çalışan</th>
-                        <th>İş Emri No</th>
-                        <th>Açıklama</th>
-                        <th>Onaylanan Saat</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    ${entries.map(entry => `
-                        <tr>
-                            <td>${(entry.user_first_name && entry.user_last_name) ? 
-                                `${entry.user_first_name} ${entry.user_last_name}` : 
-                                entry.user_username}</td>
-                            <td><code>${entry.job_no || '-'}</code></td>
-                            <td>${entry.description || '-'}</td>
-                            <td>${entry.approved_hours ? formatOvertimeDuration(parseFloat(entry.approved_hours)) : '-'}</td>
-                        </tr>
-                    `).join('')}
-                </tbody>
-            </table>
-        </div>
-    `;
-    
-    container.innerHTML = tableHtml;
-}
 
 async function openModalFromRequestId(requestId) {
     try {
@@ -644,81 +490,10 @@ async function openModalFromRequestId(requestId) {
             try {
                 await viewOvertimeDetails(parseInt(requestId));
             } catch (error) {
-                console.error('Request not found:', error);
-                showNotification(`Mesai talebi ${requestId} bulunamadı`, 'error');
             }
         }
     } catch (error) {
-        console.error('Error opening modal from request ID:', error);
-        showNotification('Mesai talebi detayları açılırken hata oluştu', 'error');
     }
-}
-
-// Action functions
-async function approveOvertime(requestId) {
-    if (!confirm('Bu mesai talebini onaylamak istediğinizden emin misiniz?')) {
-        return;
-    }
-
-    try {
-        await approveOvertimeRequest(requestId);
-        showNotification('Mesai talebi başarıyla onaylandı', 'success');
-        
-        // Close the modal
-        const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('overtimeDetailsModal'));
-        if (modal) {
-            modal.hide();
-        }
-        
-        await loadRequests();
-        await loadApprovedRequests();
-    } catch (error) {
-        console.error('Error approving overtime request:', error);
-        showNotification('Mesai talebi onaylanırken hata oluştu: ' + error.message, 'error');
-    }
-}
-
-async function rejectOvertime(requestId) {
-    // Store the request ID for the modal
-    window.currentRejectRequestId = requestId;
-    
-    // Show the rejection modal
-    const rejectModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectOvertimeModal'));
-    rejectModal.show();
-}
-
-// Utility functions
-function getStatusBadge(status, statusLabel) {
-    const displayText = statusLabel || status;
-    
-    const statusMap = {
-        'submitted': 'status-submitted',
-        'approved': 'status-completed',
-        'rejected': 'status-cancelled',
-        'cancelled': 'status-cancelled'
-    };
-
-    const statusClass = statusMap[status] || 'status-submitted';
-    return `<span class="status-badge ${statusClass}">${displayText}</span>`;
-}
-
-
-function showNotification(message, type = 'info') {
-    const notification = document.createElement('div');
-    notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    notification.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.remove();
-        }
-    }, 5000);
 }
 
 function renderStatusBadge(status, statusLabel) {
@@ -769,31 +544,6 @@ function getApprovalInfo(request) {
             ` : ''}
         </div>
     `;
-}
-
-function getRejectionComments(request) {
-    if (!request.approval || !request.approval.stage_instances) {
-        return [];
-    }
-
-    const rejectionComments = [];
-    
-    request.approval.stage_instances.forEach(stage => {
-        if (stage.decisions) {
-            stage.decisions.forEach(decision => {
-                if (decision.decision === "reject" && decision.comment) {
-                    rejectionComments.push({
-                        stage: stage.name,
-                        approver: decision.approver_detail?.full_name || decision.approver_detail?.username || 'Bilinmeyen',
-                        comment: decision.comment,
-                        date: decision.decided_at
-                    });
-                }
-            });
-        }
-    });
-    
-    return rejectionComments;
 }
 
 // Make functions globally available for onclick handlers

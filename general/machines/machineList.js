@@ -2,8 +2,6 @@ import { guardRoute } from '../../authService.js';
 import { initNavbar } from '../../components/navbar.js';
 import { fetchMachines, fetchMachineTypes, fetchMachineUsedIn, createMachine as apiCreateMachine, updateMachine as apiUpdateMachine, deleteMachine as apiDeleteMachine } from '../../apis/machines.js';
 import { fetchUsers } from '../../apis/users.js';
-import { authedFetch } from '../../authService.js';
-import { backendBase } from '../../base.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
@@ -29,6 +27,7 @@ let createMachineModal = null;
 let editMachineModal = null;
 let displayMachineModal = null;
 let displayUsersModal = null;
+let deleteMachineModal = null;
 
 // State management
 let machines = [];
@@ -130,6 +129,14 @@ function initializeModalComponents() {
         size: 'lg'
     });
 
+    // Delete Machine Modal
+    deleteMachineModal = new DisplayModal('delete-machine-modal-container', {
+        title: 'Makine Silme Onayı',
+        icon: 'fas fa-exclamation-triangle',
+        size: 'md',
+        showEditButton: false
+    });
+
     // Set up modal callbacks
     setupModalCallbacks();
 }
@@ -153,6 +160,12 @@ function setupModalCallbacks() {
         if (machineId) {
             window.editMachine(machineId);
         }
+    });
+
+    // Delete machine modal callbacks
+    deleteMachineModal.onCloseCallback(() => {
+        // Clear any pending delete data when modal is closed
+        window.pendingDeleteMachineId = null;
     });
 }
 
@@ -586,6 +599,76 @@ function showAssignedUsersModal(machineId) {
     displayUsersModal.show();
 }
 
+// Show delete machine confirmation modal
+function showDeleteMachineModal(machineId, machineName) {
+    // Store the machine ID for deletion
+    window.pendingDeleteMachineId = machineId;
+
+    // Clear and configure the delete modal
+    deleteMachineModal.clearData();
+    
+    // Add warning section
+    deleteMachineModal.addSection({
+        title: 'Silme Onayı',
+        icon: 'fas fa-exclamation-triangle',
+        iconColor: 'text-danger'
+    });
+
+    // Add warning message
+    deleteMachineModal.addField({
+        id: 'delete-warning',
+        name: 'warning',
+        label: 'Uyarı',
+        type: 'text',
+        value: 'Bu makineyi silmek istediğinize emin misiniz?',
+        icon: 'fas fa-exclamation-triangle',
+        colSize: 12
+    });
+
+    // Add machine name
+    deleteMachineModal.addField({
+        id: 'delete-machine-name',
+        name: 'machine_name',
+        label: 'Makine Adı',
+        type: 'text',
+        value: machineName,
+        icon: 'fas fa-cogs',
+        colSize: 12
+    });
+
+    // Add warning about permanent deletion
+    deleteMachineModal.addField({
+        id: 'delete-warning-permanent',
+        name: 'permanent_warning',
+        label: 'Dikkat',
+        type: 'text',
+        value: 'Bu işlem geri alınamaz ve makine kalıcı olarak silinecektir.',
+        icon: 'fas fa-trash',
+        colSize: 12
+    });
+
+    // Render the modal first
+    deleteMachineModal.render();
+    
+    // Add custom buttons after rendering
+    const modalFooter = deleteMachineModal.container.querySelector('.modal-footer');
+    if (modalFooter) {
+        modalFooter.innerHTML = `
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>İptal
+                </button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-machine-btn">
+                    <i class="fas fa-trash me-1"></i>Evet, Sil
+                </button>
+            </div>
+        `;
+    }
+
+    // Show the modal
+    deleteMachineModal.show();
+}
+
 async function initializeMachineList() {
     try {
         // Initialize filters component
@@ -703,9 +786,6 @@ function initializeTableComponent() {
             // Reset to first page when refreshing
             currentPage = 1;
             await loadMachineData();
-        },
-        onExport: (format) => {
-            exportMachines(format);
         },
         onSort: async (field, direction) => {
             // Store current sort state
@@ -941,117 +1021,29 @@ function updateMachineCounts() {
     }
 }
 
-async function exportMachines(format) {
-    try {
-        // Show loading message
-        const exportBtn = document.querySelector('#machines-table-container-export');
-        if (exportBtn) {
-            exportBtn.disabled = true;
-            exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Dışa Aktarılıyor...';
-        }
-        
-        // Collect filter values
-        const filters = collectFilterValues();
-        
-        // Build ordering parameter for export
-        let ordering = null;
-        if (currentSortField) {
-            ordering = currentSortDirection === 'desc' ? `-${currentSortField}` : currentSortField;
-        }
-        
-        // Fetch all machines for export (use a large page size)
-        const machinesResponse = await fetchMachines(1, 10000, filters, ordering);
-        const allMachines = machinesResponse.results || machinesResponse || [];
-        
-        if (allMachines.length === 0) {
-            alert('Dışa aktarılacak makine bulunamadı');
-            return;
-        }
-        
-        // Prepare data for export (match visible columns)
-        const headers = [
-            'ID',
-            'Makine Adı',
-            'Makine Tipi',
-            'Kullanım Alanı',
-            'Aktif',
-            'Bakımda',
-            'Özellik Sayısı'
-        ];
-        
-        const exportData = [
-            headers,
-            ...allMachines.map(machine => [
-                machine.id ?? '',
-                machine.name || '',
-                machine.machine_type_label || '',
-                machine.used_in_label || '',
-                machine.is_active ? 'Evet' : 'Hayır',
-                machine.is_under_maintenance ? 'Evet' : 'Hayır',
-                machine.properties && typeof machine.properties === 'object' ? Object.keys(machine.properties).length : 0
-            ])
-        ];
-        
-        // Export based on format
-        if (format === 'csv') {
-            exportToCSV(exportData, 'makineler');
-        } else if (format === 'excel') {
-            exportToExcel(exportData, 'makineler');
-        }
-        
-    } catch (error) {
-        // Error exporting machines
-        alert('Dışa aktarma sırasında hata oluştu');
-        console.error('Export error:', error);
-    } finally {
-        // Reset export button
-        const exportBtn = document.querySelector('#machines-table-container-export');
-        if (exportBtn) {
-            exportBtn.disabled = false;
-            exportBtn.innerHTML = '<i class="fas fa-download me-1"></i>Dışa Aktar';
-        }
-    }
-}
-
-function exportToCSV(data, filename) {
-    const csvContent = data.map(row => 
-        row.map(cell => `"${cell}"`).join(',')
-    ).join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-}
-
-function exportToExcel(data, filename) {
-    // For Excel export, you would need a library like SheetJS
-    // For now, we'll just show a message
-    alert('Excel export özelliği yakında eklenecek');
-}
-
 function setupEventListeners() {
-    // Confirm delete button
-    document.getElementById('confirm-delete-machine-btn')?.addEventListener('click', async () => {
-        const machineId = window.pendingDeleteMachineId;
-        if (!machineId) return;
-        
-        try {
-            const result = await apiDeleteMachine(machineId);
+    // Confirm delete button - using event delegation for dynamically added buttons
+    document.addEventListener('click', async (e) => {
+        if (e.target && e.target.id === 'confirm-delete-machine-btn') {
+            const machineId = window.pendingDeleteMachineId;
+            if (!machineId) return;
             
-            if (result) {
-                alert('Makine silindi');
-                // Hide the modal
-                bootstrap.Modal.getInstance(document.getElementById('deleteMachineConfirmModal')).hide();
-                // Clear the pending delete key
-                window.pendingDeleteMachineId = null;
-                // Reload machines
-                await loadMachineData();
+            try {
+                const result = await apiDeleteMachine(machineId);
+                
+                if (result) {
+                    alert('Makine silindi');
+                    // Hide the modal
+                    deleteMachineModal.hide();
+                    // Clear the pending delete key
+                    window.pendingDeleteMachineId = null;
+                    // Reload machines
+                    await loadMachineData();
+                }
+            } catch (error) {
+                // Error deleting machine
+                alert('Makine silinirken hata oluştu');
             }
-        } catch (error) {
-            // Error deleting machine
-            alert('Makine silinirken hata oluştu');
         }
     });
 }
@@ -1062,11 +1054,7 @@ window.editMachine = function(machineId) {
 };
 
 window.deleteMachine = function(machineId, machineName) {
-    window.pendingDeleteMachineId = machineId;
-    document.getElementById('delete-machine-name').textContent = machineName;
-    
-    const modal = new bootstrap.Modal(document.getElementById('deleteMachineConfirmModal'));
-    modal.show();
+    showDeleteMachineModal(machineId, machineName);
 };
 
 // Show machine properties in a modal without overcrowding the table
@@ -1164,15 +1152,6 @@ async function updateMachine(formData) {
         alert(error.message || 'Makine güncellenirken hata oluştu');
     }
 }
-
-
-// Helper function for notifications
-function showNotification(message, type = 'info') {
-    // You can implement your own notification system here
-    
-    // Simple alert for now
-    alert(`${type.toUpperCase()}: ${message}`);
-} 
 
 
 // Collect current filter values

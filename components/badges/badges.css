@@ -1,5 +1,5 @@
-/* Unified Procurement Badges CSS */
-/* This file provides consistent status and priority badge styling across all procurement pages */
+/* Unified Badges CSS */
+/* This file provides consistent status and priority badge styling across all pages */
 
 /* ===== STATUS BADGES ===== */
 .status-badge {
@@ -246,4 +246,3 @@ tr[data-request-id] td .status-cancelled::before {
         display: none !important;
     }
 }
-

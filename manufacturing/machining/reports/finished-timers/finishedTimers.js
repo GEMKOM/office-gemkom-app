@@ -1,5 +1,5 @@
 import { initNavbar } from '../../../../components/navbar.js';
-import { ModernDropdown } from '../../../../components/dropdown.js';
+import { ModernDropdown } from '../../../../components/dropdown/dropdown.js';
 import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
 import { TableComponent } from '../../../../components/table/table.js';
 import { fetchMachines } from '../../../../apis/machines.js';

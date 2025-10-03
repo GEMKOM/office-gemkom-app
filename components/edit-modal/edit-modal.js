@@ -1,5 +1,5 @@
 // Edit Modal Component
-import { ModernDropdown } from '../dropdown.js';
+import { ModernDropdown } from '../dropdown/dropdown.js';
 
 export class EditModal {
     constructor(containerId, options = {}) {
@@ -36,7 +36,7 @@ export class EditModal {
     createModal() {
         // Create modal HTML
         const modalHtml = `
-            <div class="modal fade edit-modal-container" id="editModal" tabindex="-1" aria-hidden="true">
+            <div class="modal fade edit-modal-container" id="editModal" tabindex="-1">
                 <div class="modal-dialog modal-${this.options.size}">
                     <div class="modal-content compact">
                         <div class="modal-header compact">
@@ -71,6 +71,9 @@ export class EditModal {
         this.container.innerHTML = modalHtml;
         this.modal = this.container.querySelector('#editModal');
         this.form = this.container.querySelector('#edit-modal-form');
+        
+        // Set initial inert state (better than aria-hidden for focus management)
+        this.modal.setAttribute('inert', '');
     }
     
     bindEvents() {
@@ -84,6 +87,24 @@ export class EditModal {
         this.modal.addEventListener('hidden.bs.modal', () => {
             this.handleCancel();
         });
+        
+        // Handle Bootstrap modal events to prevent aria-hidden conflicts
+        this.modal.addEventListener('show.bs.modal', () => {
+            this.modal.removeAttribute('aria-hidden');
+        });
+        
+        this.modal.addEventListener('shown.bs.modal', () => {
+            this.modal.removeAttribute('aria-hidden');
+        });
+        
+        this.modal.addEventListener('hide.bs.modal', () => {
+            this.modal.setAttribute('inert', '');
+        });
+        
+        this.modal.addEventListener('hidden.bs.modal', () => {
+            this.modal.setAttribute('inert', '');
+        });
+        
         
         // Form validation events
         this.form.addEventListener('input', (e) => {
@@ -361,11 +382,22 @@ export class EditModal {
                 multiple: field.multiple || false
             });
             
-            const items = field.options.map(option => ({
-                value: option.value || option.id,
-                text: option.label || option.text || option.name,
-                disabled: option.disabled || false
-            }));
+            const items = field.options.map((option, index) => {
+                // Handle different option formats
+                let value = option.value !== undefined ? option.value : option.id;
+                
+                // If value is still undefined, use index as fallback
+                if (value === undefined) {
+                    value = index;
+                }
+                
+                const text = option.label || option.text || option.name;
+                return {
+                    value: value,
+                    text: text,
+                    disabled: option.disabled || false
+                };
+            });
             
             dropdown.setItems(items);
             dropdown.setValue(field.value);
@@ -607,12 +639,16 @@ export class EditModal {
     // Show modal
     show() {
         const modalInstance = bootstrap.Modal.getOrCreateInstance(this.modal);
+        // Remove inert when showing the modal
+        this.modal.removeAttribute('inert');
         modalInstance.show();
     }
     
     // Hide modal
     hide() {
         const modalInstance = bootstrap.Modal.getOrCreateInstance(this.modal);
+        // Use inert instead of aria-hidden to prevent focus issues
+        this.modal.setAttribute('inert', '');
         modalInstance.hide();
     }
     

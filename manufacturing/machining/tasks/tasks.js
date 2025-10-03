@@ -1,5 +1,5 @@
 import { initNavbar } from '../../../components/navbar.js';
-import { ModernDropdown } from '../../../components/dropdown.js';
+import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { fetchMachines } from '../../../apis/machines.js';
 import { fetchTasks, deleteTask as deleteTaskAPI, updateTask as updateTaskAPI, fetchTaskById, createTask as createTaskAPI, bulkCreateTasks, markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
 import { fetchTimers } from '../../../apis/timers.js';

@@ -18,7 +18,7 @@ A reusable, configurable modal component for creating dynamic forms with various
 1. Include the component files in your project:
    ```html
    <link rel="stylesheet" href="components/edit-modal/edit-modal.css">
-   <link rel="stylesheet" href="components/dropdown.css">
+   <link rel="stylesheet" href="components/dropdown/dropdown.css">
    <script type="module" src="components/edit-modal/edit-modal.js"></script>
    <script type="module" src="components/dropdown.js"></script>
    ```

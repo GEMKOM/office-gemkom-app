@@ -10,15 +10,15 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../../style.css">
     <link rel="stylesheet" href="../../../components/navbar.css">
-    <link rel="stylesheet" href="../../../components/dropdown.css">
+    <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
-    <link rel="stylesheet" href="../../../pre-auth.css">
-    <link rel="stylesheet" href="pending.css">
     <link rel="stylesheet" href="../../../components/header/header.css">
     <link rel="stylesheet" href="../../../components/table/table.css">
-    <link rel="stylesheet" href="../../../procurement/procurement-badges.css">
+    <link rel="stylesheet" href="../../../components/badges/badges.css">
+    <!-- Modal Components -->
+    <link rel="stylesheet" href="../../../components/display-modal/display-modal.css">
 </head>
-<body class="pre-auth">
+<body>
     <!-- Navigation -->
     <div id="navbar-container"></div>
 
@@ -44,31 +44,10 @@
         </div>
     </section>
 
-    <!-- Overtime Request Details Modal -->
-    <div class="modal fade" id="overtimeDetailsModal" tabindex="-1" aria-labelledby="overtimeDetailsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="overtimeDetailsModalLabel">
-                        <i class="fas fa-clock me-2"></i>
-                        Mesai Talebi Detayları
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="overtime-details-container"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-danger" id="reject-overtime" style="min-width: 120px; height: 38px;">
-                        <i class="fas fa-times me-1"></i>Reddet
-                    </button>
-                    <button type="button" class="btn btn-success" id="approve-overtime" style="min-width: 120px; height: 38px;">
-                        <i class="fas fa-check me-1"></i>Onayla
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Modal Component Container -->
+    <div id="overtime-details-modal-container"></div>
+    <div id="approve-overtime-modal-container"></div>
+    <div id="reject-overtime-modal-container"></div>
 
     <!-- Rejection Comment Modal -->
     <div class="modal fade" id="rejectOvertimeModal" tabindex="-1" aria-labelledby="rejectOvertimeModalLabel" aria-hidden="true">
@@ -123,6 +102,8 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Modal Components -->
+    <script type="module" src="../../../components/display-modal/display-modal.js"></script>
     <script type="module" src="pending.js"></script>
 </body>
 </html>

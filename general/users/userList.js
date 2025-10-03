@@ -1,11 +1,13 @@
 import { initNavbar } from '../../components/navbar.js';
-import { ModernDropdown } from '../../components/dropdown.js';
+import { ModernDropdown } from '../../components/dropdown/dropdown.js';
 import { authFetchUsers, deleteUser as deleteUserAPI, createUser as createUserAPI, updateUser as updateUserAPI, fetchTeams, fetchOccupations } from '../../apis/users.js';
 import { fetchUsersSummary } from '../../apis/summaries.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../components/table/table.js';
+import { DisplayModal } from '../../components/display-modal/display-modal.js';
+import { EditModal } from '../../components/edit-modal/edit-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 
 // State management
@@ -23,6 +25,11 @@ let teams = []; // Store teams data for filters
 let occupations = []; // Store occupations data for filters
 let usersTable = null; // Table component instance
 
+// Modal component instances
+let createUserModal = null;
+let editUserModal = null;
+let deleteUserModal = null;
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
     // Initialize route protection
@@ -39,12 +46,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: 'users',
         showBackButton: 'block',
         showCreateButton: 'block',
-        showBulkCreateButton: 'block',
+        showBulkCreateButton: 'none',
         createButtonText: '      Yeni Çalışan',
-        bulkCreateButtonText: 'Toplu Oluştur',
         onBackClick: () => window.location.href = '/general/',
-        onCreateClick: () => showCreateUserModal(),
-        onBulkCreateClick: () => showBulkCreateUserModal()
+        onCreateClick: () => showCreateUserModal()
     });
     
     // Initialize Statistics Cards component
@@ -67,6 +72,7 @@ async function initializeUsers() {
     try {
         initializeFiltersComponent();
         initializeTableComponent();
+        initializeModalComponents();
         
         await loadTeams();
         await loadOccupations();
@@ -188,30 +194,6 @@ async function loadTeams() {
     try {
         const teamsData = await fetchTeams();
         teams = teamsData; // Store teams globally
-        
-        // Populate team dropdown in create user modal
-        const teamSelect = document.getElementById('user-team');
-        if (teamSelect) {
-            teamSelect.innerHTML = '<option value="">Takım seçin...</option>';
-            teams.forEach(team => {
-                const option = document.createElement('option');
-                option.value = team.value || team.id;
-                option.textContent = team.label || team.name;
-                teamSelect.appendChild(option);
-            });
-        }
-        
-        // Also populate team dropdown in edit user modal
-        const editTeamSelect = document.getElementById('edit-user-team');
-        if (editTeamSelect) {
-            editTeamSelect.innerHTML = '<option value="">Takım seçin...</option>';
-            teams.forEach(team => {
-                const option = document.createElement('option');
-                option.value = team.value || team.id;
-                option.textContent = team.label || team.name;
-                editTeamSelect.appendChild(option);
-            });
-        }
     } catch (error) {
         console.error('Error loading teams:', error);
     }
@@ -266,7 +248,6 @@ function initializeFiltersComponent() {
         },
         onFilterChange: (filterId, value) => {
             // Optional: Handle individual filter changes
-            console.log(`Filter ${filterId} changed to:`, value);
         }
     });
 
@@ -312,21 +293,66 @@ function initializeFiltersComponent() {
     });
 }
 
+// Initialize modal components
+function initializeModalComponents() {
+    // Create User Modal
+    createUserModal = new EditModal('create-user-modal-container', {
+        title: 'Yeni Çalışan Oluştur',
+        icon: 'fas fa-plus-circle',
+        size: 'lg',
+        showEditButton: false
+    });
+
+    // Edit User Modal
+    editUserModal = new EditModal('edit-user-modal-container', {
+        title: 'Çalışan Düzenle',
+        icon: 'fas fa-edit',
+        size: 'lg',
+        showEditButton: false
+    });
+
+    // Delete User Modal
+    deleteUserModal = new DisplayModal('delete-user-modal-container', {
+        title: 'Çalışan Silme Onayı',
+        icon: 'fas fa-exclamation-triangle',
+        size: 'md',
+        showEditButton: false
+    });
+
+    // Set up modal callbacks
+    setupModalCallbacks();
+}
+
+// Set up modal callbacks
+function setupModalCallbacks() {
+    // Create user modal callbacks
+    createUserModal.onSaveCallback(async (formData) => {
+        await createUser(formData);
+    });
+
+    // Edit user modal callbacks
+    editUserModal.onSaveCallback(async (formData) => {
+        await updateUser(formData);
+    });
+
+    // Delete user modal callbacks
+    deleteUserModal.onCloseCallback(() => {
+        // Clear any pending delete data when modal is closed
+        window.pendingDeleteUserId = null;
+    });
+}
+
 async function loadUsers() {
-    console.log('loadUsers called, currentPage:', currentPage);
-    
     try {
         if (isLoading) return;
         
         isLoading = true;
         if (usersTable) {
-            console.log('Setting table loading state to true');
             usersTable.setLoading(true);
         }
         
         // Get filter values
         const filterValues = userFilters ? userFilters.getFilterValues() : {};
-        console.log('Filter values:', filterValues);
         
         // Build query parameters
         const params = new URLSearchParams();
@@ -351,13 +377,7 @@ async function loadUsers() {
         const orderingParam = currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`;
         params.append('ordering', orderingParam);
         
-        console.log('Calling authFetchUsers with params:', {
-            page: currentPage,
-            pageSize: 20,
-            filters: filterValues,
-            ordering: orderingParam
-        });
-        
+        // Call API with parameters
         const usersResponse = await authFetchUsers(currentPage, 20, {
             username: filterValues['username-filter'] || '',
             team: filterValues['team-filter'] || '',
@@ -366,17 +386,12 @@ async function loadUsers() {
             ordering: orderingParam
         });
         
-        console.log('API response:', usersResponse);
-        
         // Extract users and total count from response
         users = usersResponse.results || usersResponse || [];
         totalUsers = usersResponse.count || usersResponse.total || users.length;
         
-        console.log('Extracted data:', { users: users.length, totalUsers });
-        
         // Update table data with pagination info
         if (usersTable) {
-            console.log('Updating table with data:', { users: users.length, totalUsers, currentPage });
             usersTable.updateData(users, totalUsers, currentPage);
         } else {
             console.warn('usersTable is null, cannot update data');
@@ -398,7 +413,6 @@ async function loadUsers() {
     } finally {
         isLoading = false;
         if (usersTable) {
-            console.log('Setting table loading state to false');
             usersTable.setLoading(false);
         }
     }
@@ -464,38 +478,30 @@ function updateTeamFilterOptions() {
 // Sorting is now handled by TableComponent
 
 function setupEventListeners() {
-    // Save user button
-    document.getElementById('save-user-btn')?.addEventListener('click', () => {
-        saveUser();
-    });
-     
-     // Update user button
-     document.getElementById('update-user-btn')?.addEventListener('click', () => {
-         updateUser();
-     });
-    
-    // Confirm delete button
-    document.getElementById('confirm-delete-user-btn')?.addEventListener('click', async () => {
-        const userId = window.pendingDeleteUserId;
-        if (!userId) return;
-        
-        try {
-            const response = await deleteUserAPI(userId);
+    // Use event delegation for dynamically added buttons
+    document.addEventListener('click', async (e) => {
+        if (e.target && e.target.id === 'confirm-delete-user-btn') {
+            const userId = window.pendingDeleteUserId;
+            if (!userId) return;
             
-            if (response.ok) {
-                showNotification('Çalışan silindi', 'success');
-                // Hide the modal
-                bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteUserConfirmModal')).hide();
-                // Clear the pending delete key
-                window.pendingDeleteUserId = null;
-                // Reload users
-                loadUsers();
-            } else {
-                throw new Error('Failed to delete user');
+            try {
+                const response = await deleteUserAPI(userId);
+                
+                if (response.ok) {
+                    showNotification('Çalışan silindi', 'success');
+                    // Hide the modal
+                    deleteUserModal.hide();
+                    // Clear the pending delete key
+                    window.pendingDeleteUserId = null;
+                    // Reload users
+                    await loadUsers();
+                } else {
+                    throw new Error('Failed to delete user');
+                }
+            } catch (error) {
+                console.error('Error deleting user:', error);
+                showNotification('Çalışan silinirken hata oluştu', 'error');
             }
-        } catch (error) {
-            console.error('Error deleting user:', error);
-            showNotification('Çalışan silinirken hata oluştu', 'error');
         }
     });
 }
@@ -509,6 +515,12 @@ function setupEventListeners() {
          return;
      }
      
+     // Ensure teams are loaded
+     if (!teams || teams.length === 0) {
+         showNotification('Takım verileri yükleniyor, lütfen bekleyin...', 'warning');
+         return;
+     }
+     
      // Find the user data - convert userId to string for comparison
      const user = users.find(u => String(u.id) === String(userId));
      if (!user) {
@@ -519,104 +531,345 @@ function setupEventListeners() {
      // Store the user ID for update
      window.editingUserId = userId;
      
-     // Populate the edit form
-     document.getElementById('edit-user-username').value = user.username || '';
-     document.getElementById('edit-user-email').value = user.email || '';
-     document.getElementById('edit-user-first-name').value = user.first_name || '';
-     document.getElementById('edit-user-last-name').value = user.last_name || '';
-     document.getElementById('edit-user-team').value = user.team || '';
-     document.getElementById('edit-user-work-location').value = user.work_location || '';
+    // Clear and configure the edit modal
+    editUserModal.clearAll();
      
-     // Show the edit modal
-     const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('editUserModal'));
-     modal.show();
+     // Add Basic Information section
+     editUserModal.addSection({
+         title: 'Temel Bilgiler',
+         icon: 'fas fa-info-circle',
+         iconColor: 'text-primary'
+     });
+
+     // Add form fields with user data
+     editUserModal.addField({
+         id: 'username',
+         name: 'username',
+         label: 'Kullanıcı Adı',
+         type: 'text',
+         value: user.username || '',
+         required: true,
+         icon: 'fas fa-user',
+         colSize: 6,
+         helpText: 'Benzersiz kullanıcı adı'
+     });
+
+     editUserModal.addField({
+         id: 'email',
+         name: 'email',
+         label: 'E-posta',
+         type: 'email',
+         value: user.email || '',
+         icon: 'fas fa-envelope',
+         colSize: 6,
+         helpText: 'İletişim için e-posta adresi'
+     });
+
+     editUserModal.addField({
+         id: 'first_name',
+         name: 'first_name',
+         label: 'Ad',
+         type: 'text',
+         value: user.first_name || '',
+         required: true,
+         icon: 'fas fa-id-card',
+         colSize: 6,
+         helpText: 'Çalışanın adı'
+     });
+
+     editUserModal.addField({
+         id: 'last_name',
+         name: 'last_name',
+         label: 'Soyad',
+         type: 'text',
+         value: user.last_name || '',
+         required: true,
+         icon: 'fas fa-id-card',
+         colSize: 6,
+         helpText: 'Çalışanın soyadı'
+     });
+
+     // Add Work Information section
+     editUserModal.addSection({
+         title: 'İş Bilgileri',
+         icon: 'fas fa-briefcase',
+         iconColor: 'text-success'
+     });
+
+     
+     // Add team dropdown
+     editUserModal.addField({
+         id: 'team',
+         name: 'team',
+         label: 'Takım',
+         type: 'dropdown',
+         value: user.team || '',
+         required: true,
+         icon: 'fas fa-users',
+         colSize: 6,
+         helpText: 'Çalışanın bağlı olduğu takım',
+         options: teams.map(team => ({
+             value: team.value || team.id,
+             label: team.label || team.name
+         }))
+     });
+
+     // Add work location dropdown
+     editUserModal.addField({
+         id: 'work_location',
+         name: 'work_location',
+         label: 'Çalışma Yeri',
+         type: 'dropdown',
+         value: user.work_location || '',
+         required: true,
+         icon: 'fas fa-map-marker-alt',
+         colSize: 6,
+         helpText: 'Çalışanın çalışma yeri',
+         options: [
+             { value: 'office', label: 'Ofis' },
+             { value: 'workshop', label: 'Atölye' }
+         ]
+     });
+
+     // Render and show modal
+     editUserModal.render();
+     editUserModal.show();
  };
 
 window.deleteUser = function(userId, username) {
-    window.pendingDeleteUserId = userId;
-    document.getElementById('delete-user-name').textContent = username;
-    
-    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteUserConfirmModal'));
-    modal.show();
+    showDeleteUserModal(userId, username);
 };
 
-function showCreateUserModal() {
-    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('createUserModal'));
-    modal.show();
-}
+// Show delete user confirmation modal
+function showDeleteUserModal(userId, username) {
+    // Store the user ID for deletion
+    window.pendingDeleteUserId = userId;
 
-function showBulkCreateUserModal() {
-    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('bulkCreateUserModal'));
-    modal.show();
-}
-
-async function saveUser() {
-    const form = document.getElementById('create-user-form');
-    const formData = new FormData(form);
+    // Clear and configure the delete modal
+    deleteUserModal.clearData();
     
-    const userData = {
-        username: document.getElementById('user-username').value,
-        email: document.getElementById('user-email').value,
-        first_name: document.getElementById('user-first-name').value,
-        last_name: document.getElementById('user-last-name').value,
-        team: document.getElementById('user-team').value,
-        work_location: document.getElementById('user-work-location').value
-    };
+    // Add warning section
+    deleteUserModal.addSection({
+        title: 'Silme Onayı',
+        icon: 'fas fa-exclamation-triangle',
+        iconColor: 'text-danger'
+    });
+
+    // Add warning message
+    deleteUserModal.addField({
+        id: 'delete-warning',
+        name: 'warning',
+        label: 'Uyarı',
+        type: 'text',
+        value: 'Bu çalışanı silmek istediğinize emin misiniz?',
+        icon: 'fas fa-exclamation-triangle',
+        colSize: 12
+    });
+
+    // Add user name
+    deleteUserModal.addField({
+        id: 'delete-user-name',
+        name: 'user_name',
+        label: 'Çalışan Adı',
+        type: 'text',
+        value: username,
+        icon: 'fas fa-user',
+        colSize: 12
+    });
+
+    // Add warning about permanent deletion
+    deleteUserModal.addField({
+        id: 'delete-warning-permanent',
+        name: 'permanent_warning',
+        label: 'Dikkat',
+        type: 'text',
+        value: 'Bu işlem geri alınamaz ve çalışan kalıcı olarak silinecektir.',
+        icon: 'fas fa-trash',
+        colSize: 12
+    });
+
+    // Render the modal first
+    deleteUserModal.render();
+    
+    // Add custom buttons after rendering
+    const modalFooter = deleteUserModal.container.querySelector('.modal-footer');
+    if (modalFooter) {
+        modalFooter.innerHTML = `
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>İptal
+                </button>
+                <button type="button" class="btn btn-danger" id="confirm-delete-user-btn">
+                    <i class="fas fa-trash me-1"></i>Evet, Sil
+                </button>
+            </div>
+        `;
+    }
+
+    // Show the modal
+    deleteUserModal.show();
+}
+
+function showCreateUserModal() {
+    // Ensure teams are loaded
+    if (!teams || teams.length === 0) {
+        showNotification('Takım verileri yükleniyor, lütfen bekleyin...', 'warning');
+        return;
+    }
+
+    // Clear and configure the create modal
+    createUserModal.clearAll();
+    
+    // Add Basic Information section
+    createUserModal.addSection({
+        title: 'Temel Bilgiler',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary'
+    });
+
+    // Add form fields
+    createUserModal.addField({
+        id: 'username',
+        name: 'username',
+        label: 'Kullanıcı Adı',
+        type: 'text',
+        placeholder: 'Kullanıcı adını girin',
+        required: true,
+        icon: 'fas fa-user',
+        colSize: 6,
+        helpText: 'Benzersiz kullanıcı adı'
+    });
+
+    createUserModal.addField({
+        id: 'email',
+        name: 'email',
+        label: 'E-posta',
+        type: 'email',
+        placeholder: 'E-posta adresi',
+        icon: 'fas fa-envelope',
+        colSize: 6,
+        helpText: 'İletişim için e-posta adresi'
+    });
+
+    createUserModal.addField({
+        id: 'first_name',
+        name: 'first_name',
+        label: 'Ad',
+        type: 'text',
+        placeholder: 'Adını girin',
+        required: true,
+        icon: 'fas fa-id-card',
+        colSize: 6,
+        helpText: 'Çalışanın adı'
+    });
+
+    createUserModal.addField({
+        id: 'last_name',
+        name: 'last_name',
+        label: 'Soyad',
+        type: 'text',
+        placeholder: 'Soyadını girin',
+        required: true,
+        icon: 'fas fa-id-card',
+        colSize: 6,
+        helpText: 'Çalışanın soyadı'
+    });
+
+    // Add Work Information section
+    createUserModal.addSection({
+        title: 'İş Bilgileri',
+        icon: 'fas fa-briefcase',
+        iconColor: 'text-success'
+    });
+
+    
+    // Add team dropdown
+    createUserModal.addField({
+        id: 'team',
+        name: 'team',
+        label: 'Takım',
+        type: 'dropdown',
+        placeholder: 'Takım seçin...',
+        required: true,
+        icon: 'fas fa-users',
+        colSize: 6,
+        helpText: 'Çalışanın bağlı olduğu takım',
+        options: teams.map(team => ({
+            value: team.value || team.id,
+            label: team.label || team.name
+        }))
+    });
+
+    // Add work location dropdown
+    createUserModal.addField({
+        id: 'work_location',
+        name: 'work_location',
+        label: 'Çalışma Yeri',
+        type: 'dropdown',
+        placeholder: 'Çalışma yeri seçin...',
+        required: true,
+        icon: 'fas fa-map-marker-alt',
+        colSize: 6,
+        helpText: 'Çalışanın çalışma yeri',
+        options: [
+            { value: 'office', label: 'Ofis' },
+            { value: 'workshop', label: 'Atölye' }
+        ]
+    });
+
+    // Render and show modal
+    createUserModal.render();
+    createUserModal.show();
+}
+
+
+async function createUser(formData) {
+    // This function is called by the modal's onSaveCallback
+    // formData is already provided by the modal component
     
     try {
-        const response = await createUserAPI(userData);
+        const response = await createUserAPI(formData);
         
         if (response.ok) {
+            showNotification('Çalışan başarıyla oluşturuldu', 'success');
             
             // Hide modal
-            bootstrap.Modal.getOrCreateInstance(document.getElementById('createUserModal')).hide();
+            createUserModal.hide();
             
-            // Reset form
-            form.reset();
-            
-                         // Reload users
-             currentPage = 1;
-             loadUsers();
+            // Reload users
+            currentPage = 1;
+            await loadUsers();
         } else {
             const errorData = await response.json();
             throw new Error(errorData.message || 'Çalışan oluşturulamadı');
         }
-         } catch (error) {
-         console.error('Error creating user:', error);
-         showNotification(error.message || 'Çalışan oluşturulurken hata oluştu', 'error');
-     }
- }
+    } catch (error) {
+        console.error('Error creating user:', error);
+        showNotification(error.message || 'Çalışan oluşturulurken hata oluştu', 'error');
+    }
+}
  
- async function updateUser() {
+ async function updateUser(formData) {
      const userId = window.editingUserId;
      if (!userId) {
          showNotification('Düzenlenecek çalışan bulunamadı', 'error');
          return;
      }
      
-     const userData = {
-         username: document.getElementById('edit-user-username').value,
-         email: document.getElementById('edit-user-email').value,
-         first_name: document.getElementById('edit-user-first-name').value,
-         last_name: document.getElementById('edit-user-last-name').value,
-         team: document.getElementById('edit-user-team').value,
-         work_location: document.getElementById('edit-user-work-location').value
-     };
-     
      try {
-         const response = await updateUserAPI(userId, userData);
+         const response = await updateUserAPI(userId, formData);
          
          if (response.ok) {
              showNotification('Çalışan başarıyla güncellendi', 'success');
              
              // Hide modal
-             bootstrap.Modal.getOrCreateInstance(document.getElementById('editUserModal')).hide();
+             editUserModal.hide();
              
              // Clear the editing user ID
              window.editingUserId = null;
              
              // Reload users
-             loadUsers();
+             await loadUsers();
          } else {
              const errorData = await response.json();
              throw new Error(errorData.message || 'Çalışan güncellenemedi');
@@ -723,7 +976,6 @@ function exportToExcel(data, filename) {
 // Helper function for notifications
 function showNotification(message, type = 'info') {
     // You can implement your own notification system here
-    console.log(`${type.toUpperCase()}: ${message}`);
     
     // Simple alert for now
     alert(`${type.toUpperCase()}: ${message}`);

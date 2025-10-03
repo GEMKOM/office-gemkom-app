@@ -10,17 +10,17 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../../style.css">
     <link rel="stylesheet" href="../../../components/navbar.css">
-    <link rel="stylesheet" href="../../../components/dropdown.css">
+    <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
-    <link rel="stylesheet" href="../../../pre-auth.css">
-    <link rel="stylesheet" href="overtimeList.css">
     <link rel="stylesheet" href="../../../components/header/header.css">
     <link rel="stylesheet" href="../../../components/statistics-cards/statistics-cards.css">
     <link rel="stylesheet" href="../../../components/filters/filters.css">
     <link rel="stylesheet" href="../../../components/table/table.css">
-    <link rel="stylesheet" href="../../../procurement/procurement-badges.css">
+    <link rel="stylesheet" href="../../../components/badges/badges.css">
+    <link rel="stylesheet" href="../../../components/display-modal/display-modal.css">
+    <link rel="stylesheet" href="../../../components/edit-modal/edit-modal.css">
 </head>
-<body class="pre-auth">
+<body>
     <!-- Navigation -->
     <div id="navbar-container"></div>
 
@@ -47,138 +47,14 @@
         </div>
     </section>
 
-    <!-- Create Overtime Request Modal -->
-    <div class="modal fade" id="createOvertimeModal" tabindex="-1" aria-labelledby="createOvertimeModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content compact">
-                <div class="modal-header compact">
-                    <h6 class="modal-title" id="createOvertimeModalLabel">
-                        <i class="fas fa-plus-circle me-2"></i>Yeni Mesai Talebi Oluştur
-                    </h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body compact">
-                    <form id="create-overtime-form">
-                        <!-- Basic Information Section -->
-                        <div class="form-section compact mb-3">
-                            <h6 class="section-subtitle compact">
-                                <i class="fas fa-info-circle me-2 text-primary"></i>Temel Bilgiler
-                            </h6>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-calendar me-1"></i>Başlangıç Tarihi ve Saati *
-                                        </label>
-                                        <input type="datetime-local" class="form-control form-control-sm" id="overtime-start-at" required>
-                                        <div class="form-text compact">Mesai talebinin başlangıç zamanı</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-calendar-check me-1"></i>Bitiş Tarihi ve Saati *
-                                        </label>
-                                        <input type="datetime-local" class="form-control form-control-sm" id="overtime-end-at" required>
-                                        <div class="form-text compact">Mesai talebinin bitiş zamanı</div>
-                                    </div>
-                                </div>
-                                <div class="col-12">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-comment me-1"></i>Mesai Nedeni
-                                        </label>
-                                        <textarea class="form-control form-control-sm" id="overtime-reason" rows="3" placeholder="Mesai talebinin nedenini açıklayın..."></textarea>
-                                        <div class="form-text compact">Mesai talebinin nedenini belirtin (opsiyonel)</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
 
-                        <!-- Participants Section -->
-                        <div class="form-section compact mb-3">
-                            <h6 class="section-subtitle compact">
-                                <i class="fas fa-users me-2 text-success"></i>Katılımcılar
-                            </h6>
-                            <div class="d-flex justify-content-between align-items-center mb-3">
-                                <div class="form-text compact">Mesai talebine katılacak çalışanları ekleyin</div>
-                                <button type="button" class="btn btn-sm btn-outline-primary" id="add-participant">
-                                    <i class="fas fa-plus me-1"></i>Katılımcı Ekle
-                                </button>
-                            </div>
-                            <div id="participants-container">
-                                <!-- Participants will be added here -->
-                            </div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer compact">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-1"></i>İptal
-                    </button>
-                    <button type="button" class="btn btn-sm btn-primary" id="submit-overtime-request">
-                        <i class="fas fa-save me-1"></i>Mesai Talebi Oluştur
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Modal Containers -->
+    <div id="overtime-details-modal-container"></div>
+    <div id="approve-overtime-modal-container"></div>
+    <div id="reject-overtime-modal-container"></div>
+    <div id="cancel-overtime-modal-container"></div>
+    <div id="create-overtime-modal-container"></div>
 
-    <!-- Overtime Request Details Modal -->
-    <div class="modal fade" id="overtimeDetailsModal" tabindex="-1" aria-labelledby="overtimeDetailsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content compact">
-                <div class="modal-header compact">
-                    <h6 class="modal-title" id="overtimeDetailsModalLabel">
-                        <i class="fas fa-clock me-2"></i>Mesai Talebi Detayları
-                    </h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body compact" id="overtime-details-content">
-                    <!-- Overtime details will be loaded here -->
-                </div>
-                <div class="modal-footer compact">
-                    <div id="overtime-actions">
-                        <!-- Action buttons will be added here based on status and permissions -->
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-1"></i>Kapat
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Cancel Overtime Request Modal -->
-    <div class="modal fade" id="cancelOvertimeModal" tabindex="-1" aria-labelledby="cancelOvertimeModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content compact">
-                <div class="modal-header compact">
-                    <h6 class="modal-title" id="cancelOvertimeModalLabel">
-                        <i class="fas fa-ban me-2 text-danger"></i>Mesai Talebini İptal Et
-                    </h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body compact">
-                    <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Bu mesai talebini iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.
-                    </div>
-                    <div id="cancel-overtime-info">
-                        <!-- Overtime info will be displayed here -->
-                    </div>
-                </div>
-                <div class="modal-footer compact">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-1"></i>Vazgeç
-                    </button>
-                    <button type="button" class="btn btn-sm btn-danger" id="confirm-cancel-overtime">
-                        <i class="fas fa-ban me-1"></i>İptal Et
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
 
     <!-- Edit Overtime Request Modal -->
     <div class="modal fade" id="editOvertimeModal" tabindex="-1" aria-labelledby="editOvertimeModalLabel" aria-hidden="true">

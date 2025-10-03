@@ -1,7 +1,7 @@
 import { guardRoute } from '/authService.js';
 import { initNavbar } from '/components/navbar.js';
 import { HeaderComponent } from '/components/header/header.js';
-import { ModernDropdown } from '/components/dropdown.js';
+import { ModernDropdown } from '/components/dropdown/dropdown.js';
 import { createMaintenanceRequest } from '/apis/maintenance.js';
 import { fetchMachines } from '/apis/machines.js';
 
