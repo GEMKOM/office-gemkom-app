@@ -194,7 +194,7 @@
 
 /* Procurement badge integration */
 .table tbody td .status-badge,
-.table tbody td .priority-badge {
+.table tbody td .status-badge {
     display: inline-block;
     margin: 0 auto;
 }

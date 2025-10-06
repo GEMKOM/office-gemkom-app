@@ -43,7 +43,6 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/machining/reports/finished-timers',
             '/manufacturing/maintenance',
             '/manufacturing/maintenance/fault-requests',
-            '/manufacturing/maintenance/fault-requests/create',
             '/manufacturing/maintenance/fault-requests/list',
             '/manufacturing/welding',
             '/procurement',
@@ -83,7 +82,6 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/machining/reports/finished-timers',
             '/manufacturing/maintenance',
             '/manufacturing/maintenance/fault-requests',
-            '/manufacturing/maintenance/fault-requests/create',
             '/manufacturing/maintenance/fault-requests/list',
             '/manufacturing/welding'
         ]),
@@ -111,7 +109,6 @@ export const TEAM_ACCESS_CONFIG = {
         allowedRoutes: mergeWithBaseRoutes([
             '/manufacturing/maintenance',
             '/manufacturing/maintenance/fault-requests',
-            '/manufacturing/maintenance/fault-requests/create',
             '/manufacturing/maintenance/fault-requests/list'
         ]),
         allowedSections: ['manufacturing_maintenance', 'general', 'general_overtime']

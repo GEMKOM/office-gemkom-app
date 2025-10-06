@@ -1,6 +1,5 @@
 import { authedFetch } from '../authService.js';
 import { backendBase } from '../base.js';
-import { extractResultsFromResponse } from './paginationHelper.js';
 
 export async function fetchMachines(page = 1, pageSize = 10, filters = {}, ordering = null) {
     try {
@@ -35,6 +34,10 @@ export async function fetchMachines(page = 1, pageSize = 10, filters = {}, order
         
         if (filters.is_active !== undefined && filters.is_active !== '') {
             params.append('is_active', filters.is_active);
+        }
+        
+        if (filters.compact) {
+            params.append('compact', filters.compact);
         }
         
         // Add ordering parameter

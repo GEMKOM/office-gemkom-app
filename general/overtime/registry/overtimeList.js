@@ -143,7 +143,6 @@ document.addEventListener('DOMContentLoaded', function() {
             { value: '', label: 'Tümü' },
             { value: 'submitted', label: 'Bekliyor' },
             { value: 'approved', label: 'Onaylandı' },
-            { value: 'rejected', label: 'Reddedildi' },
             { value: 'cancelled', label: 'İptal Edildi' }
         ],
         colSize: 2

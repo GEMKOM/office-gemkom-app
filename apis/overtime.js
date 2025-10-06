@@ -18,7 +18,7 @@ import { authedFetch } from "../authService.js";
 /**
  * Fetch all overtime requests with optional filtering
  * @param {Object} filters - Filter parameters
- * @param {string} filters.status - Filter by status (submitted, approved, rejected, cancelled)
+ * @param {string} filters.status - Filter by status (submitted, approved, cancelled)
  * @param {string} filters.team - Filter by team
  * @param {string} filters.search - Search in reason, job_no, description
  * @param {string} filters.start_date - Filter by start date (YYYY-MM-DD)
@@ -178,25 +178,19 @@ export function getOvertimeStatusInfo(status) {
     const statusMap = {
         'submitted': {
             label: 'Bekliyor',
-            class: 'status-submitted',
+            class: 'status-yellow',
             icon: 'fas fa-clock',
             color: 'warning'
         },
         'approved': {
             label: 'Onaylandı',
-            class: 'status-approved',
+            class: 'status-green',
             icon: 'fas fa-check-circle',
             color: 'success'
         },
-        'rejected': {
-            label: 'Reddedildi',
-            class: 'status-rejected',
-            icon: 'fas fa-times-circle',
-            color: 'danger'
-        },
         'cancelled': {
             label: 'İptal Edildi',
-            class: 'status-cancelled',
+            class: 'status-red',
             icon: 'fas fa-ban',
             color: 'secondary'
         }

@@ -15,14 +15,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         subtitle: 'Arıza taleplerini yönetin ve takip edin',
         cards: [
             {
-                title: 'Yeni Arıza Talebi',
-                description: 'Yeni arıza talebi oluşturun ve sisteme kaydedin.',
-                icon: 'fas fa-plus-circle',
-                iconColor: 'success',
-                link: '/manufacturing/maintenance/fault-requests/create',
-                features: []
-            },
-            {
                 title: 'Arıza Listesi',
                 description: 'Tüm arıza taleplerini görüntüleyin, filtreleyin ve yönetin.',
                 icon: 'fas fa-list',

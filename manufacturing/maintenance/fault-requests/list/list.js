@@ -1,14 +1,16 @@
 import { guardRoute } from '../../../../authService.js';
 import { initNavbar } from '../../../../components/navbar.js';
-import { fetchMachineFaults, resolveMaintenanceRequest } from '../../../../apis/maintenance.js';
+import { fetchMachineFaults, createMaintenanceRequest } from '../../../../apis/maintenance.js';
+import { fetchMachines } from '../../../../apis/machines.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { TableComponent } from '../../../../components/table/table.js';
+import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
 
 let allFaults = [];
 let filteredFaults = [];
-let headerComponent, statisticsCards, filtersComponent, tableComponent;
+let headerComponent, statisticsCards, filtersComponent, tableComponent, createFaultModal;
 let currentPage = 1;
 let itemsPerPage = 20;
 let totalItems = 0;
@@ -26,9 +28,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Load initial data
     await loadFaultRequests();
-    
-    // Set current user for resolution form
-    setCurrentUser();
 });
 
 function initializeComponents() {
@@ -42,7 +41,7 @@ function initializeComponents() {
         createButtonText: 'Yeni Arıza Talebi',
         backUrl: '/manufacturing/maintenance',
         onCreateClick: () => {
-            window.location.href = '/manufacturing/maintenance/fault-requests/create';
+            createFaultModal.show();
         }
     });
 
@@ -219,30 +218,6 @@ function initializeComponents() {
                 }
             }
         ],
-        actions: [
-            {
-                key: 'view',
-                label: 'Görüntüle',
-                icon: 'fas fa-eye',
-                class: 'btn-outline-primary',
-                onClick: (row) => viewFault(row.id)
-            },
-            {
-                key: 'resolve',
-                label: 'Çöz',
-                icon: 'fas fa-tools',
-                class: 'btn-outline-success',
-                onClick: (row) => resolveFault(row.id),
-                visible: (row) => getStatus(row) === 'pending' || getStatus(row) === 'in_progress'
-            },
-            {
-                key: 'edit',
-                label: 'Düzenle',
-                icon: 'fas fa-edit',
-                class: 'btn-outline-secondary',
-                onClick: (row) => editFault(row.id)
-            }
-        ],
         pagination: true,
         serverSidePagination: true,
         itemsPerPage: 20,
@@ -251,7 +226,6 @@ function initializeComponents() {
         refreshable: true,
         exportable: true,
         onRefresh: loadFaultRequests,
-        onExport: exportToExcel,
         onPageChange: (page) => {
             currentPage = page;
             loadFaultRequests();
@@ -269,6 +243,205 @@ function initializeComponents() {
         skeleton: true,
         loading: true
     });
+
+    // Initialize Create Fault Request Modal
+    initializeCreateFaultModal();
+}
+
+function initializeCreateFaultModal() {
+    createFaultModal = new EditModal('create-fault-modal-container', {
+        title: 'Yeni Arıza Talebi',
+        icon: 'fas fa-exclamation-triangle',
+        saveButtonText: 'Gönder',
+        size: 'lg'
+    });
+
+    // Add form sections and fields
+    createFaultModal
+        .addSection({
+            title: 'Arıza Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary',
+            fields: [
+                {
+                    id: 'machine',
+                    name: 'machine',
+                    label: 'Ekipman',
+                    type: 'dropdown',
+                    placeholder: 'Ekipman seçin...',
+                    required: true,
+                    icon: 'fas fa-cog',
+                    colSize: 12,
+                    searchable: true,
+                    options: []
+                },
+                {
+                    id: 'description',
+                    name: 'description',
+                    label: 'Açıklama',
+                    type: 'textarea',
+                    placeholder: 'Arıza veya bakım detaylarını açıklayın',
+                    required: true,
+                    icon: 'fas fa-align-left',
+                    colSize: 12,
+                    rows: 4
+                },
+                {
+                    id: 'type',
+                    name: 'type',
+                    label: 'Tür',
+                    type: 'dropdown',
+                    placeholder: 'Tür seçin...',
+                    required: true,
+                    icon: 'fas fa-tools',
+                    colSize: 6,
+                    searchable: false,
+                    options: [
+                        { value: 'fault', label: 'Arıza' },
+                        { value: 'maintenance', label: 'Bakım' }
+                    ]
+                },
+                {
+                    id: 'status',
+                    name: 'status',
+                    label: 'Durum',
+                    type: 'dropdown',
+                    placeholder: 'Durum seçin...',
+                    required: true,
+                    icon: 'fas fa-exclamation-triangle',
+                    colSize: 6,
+                    searchable: false,
+                    options: [
+                        { value: 'false', label: 'Çalışıyor' },
+                        { value: 'true', label: 'Durdu' }
+                    ]
+                }
+            ]
+        })
+        .render();
+
+    // Set up event handlers
+    createFaultModal
+        .onSaveCallback(handleCreateFaultSubmit)
+        .onCancelCallback(handleCreateFaultCancel);
+
+    // Load machines for dropdown
+    loadMachinesForModal();
+
+    // Set up type/status dropdown interaction
+    setupTypeStatusInteraction();
+}
+
+async function loadMachinesForModal() {
+    try {
+        const response = await fetchMachines(1, 1000, {"compact": true});
+        const machines = response.results || response;
+        
+        const machineOptions = machines.map(machine => ({
+            value: machine.id.toString(),
+            text: machine.name
+        }));
+        
+        // Wait a bit for dropdowns to be fully initialized
+        setTimeout(() => {
+            const machineDropdown = createFaultModal.dropdowns.get('machine');
+            if (machineDropdown) {
+                machineDropdown.setItems(machineOptions);
+            }
+        }, 300);
+    } catch (error) {
+        console.error('Error loading machines for modal:', error);
+        showAlert('Ekipman listesi yüklenirken hata oluştu', 'danger');
+    }
+}
+
+async function handleCreateFaultSubmit(formData) {
+    try {
+        // Validate required fields
+        if (!formData.machine) {
+            showAlert('Ekipman seçimi zorunludur', 'warning');
+            return;
+        }
+        
+        if (!formData.description || formData.description.trim() === '') {
+            showAlert('Açıklama zorunludur', 'warning');
+            return;
+        }
+        
+        if (!formData.type) {
+            showAlert('Tür seçimi zorunludur', 'warning');
+            return;
+        }
+        
+        if (!formData.status) {
+            showAlert('Durum seçimi zorunludur', 'warning');
+            return;
+        }
+
+        // Prepare submission data
+        const submitData = {
+            machine: parseInt(formData.machine),
+            description: formData.description.trim(),
+            is_maintenance: formData.type === 'maintenance',
+            is_breaking: formData.status === 'true'
+        };
+
+        // Submit the fault request
+        await createMaintenanceRequest(submitData);
+        
+        // Show success message
+        showAlert('Arıza talebi başarıyla oluşturuldu!', 'success');
+        
+        // Hide modal
+        createFaultModal.hide();
+        
+        // Reload the fault requests list
+        await loadFaultRequests();
+        
+    } catch (error) {
+        console.error('Error creating fault request:', error);
+        showAlert('Arıza talebi oluşturulurken hata oluştu: ' + error.message, 'danger');
+    }
+}
+
+function handleCreateFaultCancel() {
+    // Clear form when modal is cancelled
+    createFaultModal.clearForm();
+}
+
+function setupTypeStatusInteraction() {
+    // Wait for dropdowns to be initialized
+    setTimeout(() => {
+        const typeDropdown = createFaultModal.dropdowns.get('type');
+        const statusDropdown = createFaultModal.dropdowns.get('status');
+        
+        if (typeDropdown && statusDropdown) {
+            // Listen for type changes
+            const typeContainer = document.querySelector('#dropdown-type');
+            if (typeContainer) {
+                typeContainer.addEventListener('dropdown:select', (e) => {
+                    const selectedType = e.detail.value;
+                    updateStatusDropdown(selectedType, statusDropdown);
+                });
+            }
+        }
+    }, 500);
+}
+
+function updateStatusDropdown(selectedType, statusDropdown) {
+    if (selectedType === 'maintenance') {
+        // If maintenance is selected, machine cannot be breaking
+        statusDropdown.setItems([
+            { value: 'false', label: 'Çalışıyor' }
+        ]);
+        statusDropdown.setValue('false');
+    } else {
+        // If fault is selected, machine can be either working or stopped
+        statusDropdown.setItems([
+            { value: 'false', label: 'Çalışıyor' },
+            { value: 'true', label: 'Durdu' }
+        ]);
+    }
 }
 
 async function loadFaultRequests() {
@@ -424,81 +597,8 @@ function clearFilters() {
     loadFaultRequests();
 }
 
-function exportToExcel() {
-    // Implementation for Excel export
-    // You can implement the actual export logic here
-}
 
-function viewFault(faultId) {
-    // Implementation for viewing fault details
-    // You can implement a modal or navigation to detail page
-}
 
-function resolveFault(faultId) {
-    document.getElementById('faultId').value = faultId;
-    
-    // Set current date and time
-    const now = new Date();
-    const dateTimeLocal = now.toISOString().slice(0, 16);
-    document.getElementById('resolutionDate').value = dateTimeLocal;
-    
-    // Clear previous form data
-    document.getElementById('resolutionDescription').value = '';
-    
-    const modal = new bootstrap.Modal(document.getElementById('resolutionModal'));
-    modal.show();
-}
-
-function editFault(faultId) {
-    // Implementation for editing fault
-    // You can implement navigation to edit page
-}
-
-async function submitResolution() {
-    const faultId = document.getElementById('faultId').value;
-    const description = document.getElementById('resolutionDescription').value;
-    const date = document.getElementById('resolutionDate').value;
-    const resolvedBy = document.getElementById('resolvedBy').value;
-    
-    if (!description || !date || !resolvedBy) {
-        showAlert('Lütfen tüm alanları doldurun.', 'warning');
-        return;
-    }
-    
-    try {
-        await resolveMaintenanceRequest(faultId, {
-            resolution_description: description,
-            resolved_at: date,
-            resolved_by: resolvedBy
-        });
-        
-        // Close modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('resolutionModal'));
-        modal.hide();
-        
-        // Reload data
-        await loadFaultRequests();
-        
-        showAlert('Arıza çözümü başarıyla kaydedildi.', 'success');
-        
-    } catch (error) {
-        console.error('Error submitting resolution:', error);
-        showAlert('Arıza çözümü kaydedilirken hata oluştu.', 'danger');
-    }
-}
-
-function setCurrentUser() {
-    // Set current user for resolution form
-    const currentUser = localStorage.getItem('currentUser');
-    if (currentUser) {
-        try {
-            const user = JSON.parse(currentUser);
-            document.getElementById('resolvedBy').value = user.username || '';
-        } catch (error) {
-            console.error('Error parsing current user:', error);
-        }
-    }
-}
 
 function showAlert(message, type = 'info') {
     // Create and show alert
@@ -523,22 +623,22 @@ function showAlert(message, type = 'info') {
 // Badge utility functions (similar to pending requests)
 function getStatusBadge(fault) {
     if (fault.resolved_at) {
-        return '<span class="table-status-badge completed">Çözüldü</span>';
+        return '<span class="status-badge status-green">Çözüldü</span>';
     }
     if (fault.is_breaking) {
-        return '<span class="table-status-badge pending">Makine Duruşta</span>';
+        return '<span class="status-badge status-red">Makine Duruşta</span>';
     }
-    return '<span class="table-status-badge worked-on">Bekleyen</span>';
+    return '<span class="status-badge status-yellow">Bekleyen</span>';
 }
 
 function getPriorityBadge(fault) {
     if (fault.is_breaking) {
-        return '<span class="table-status-badge pending">Kritik</span>';
+        return '<span class="status-badge status-red">Kritik</span>';
     }
     if (fault.is_maintenance) {
-        return '<span class="table-status-badge worked-on">Orta</span>';
+        return '<span class="status-badge status-yellow">Orta</span>';
     }
-    return '<span class="table-status-badge completed">Düşük</span>';
+    return '<span class="status-badge status-grey">Düşük</span>';
 }
 
 // Functions for showing full descriptions and resolutions
@@ -557,9 +657,5 @@ function showFullResolution(faultId) {
 }
 
 // Make functions globally available for onclick handlers
-window.resolveFault = resolveFault;
-window.viewFault = viewFault;
-window.editFault = editFault;
-window.submitResolution = submitResolution;
 window.showFullDescription = showFullDescription;
 window.showFullResolution = showFullResolution;

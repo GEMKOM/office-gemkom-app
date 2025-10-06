@@ -111,11 +111,6 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Arıza Talepleri',
                         icon: 'fas fa-exclamation-triangle',
                         children: {
-                            '/manufacturing/maintenance/fault-requests/create': {
-                                label: 'Yeni Arıza Talebi',
-                                icon: 'fas fa-plus-circle',
-                                children: {}
-                            },
                             '/manufacturing/maintenance/fault-requests/list': {
                                 label: 'Arıza Listesi',
                                 icon: 'fas fa-list',

@@ -238,3 +238,72 @@ export function formatUsername(username) {
     
     return `<strong class="username">${username.trim()}</strong>`;
 }
+
+// ===== Dashboard Formatters =====
+
+/**
+ * Format duration from milliseconds to HH:MM:SS format
+ * @param {number} milliseconds - Duration in milliseconds
+ * @returns {string} Formatted duration string
+ */
+export function formatDurationFromMs(milliseconds) {
+    const totalSeconds = Math.floor(milliseconds / 1000);
+    const hours = Math.floor(totalSeconds / 3600);
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+    
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Format total estimated hours to weeks (45 hours = 1 week)
+ * @param {number} totalEstimatedHours - Total estimated hours
+ * @returns {string} Formatted weeks string
+ */
+export function formatWeeksFromHours(totalEstimatedHours) {
+    if (!totalEstimatedHours || totalEstimatedHours === 0) {
+        return '-';
+    }
+    
+    const weeks = (totalEstimatedHours / 45).toFixed(1);
+    return `${weeks} hafta`;
+}
+
+/**
+ * Format hours spent with current timer
+ * @param {number|string} baseHours - Base hours already spent
+ * @param {Date|string} currentTimerStartTime - Current timer start time
+ * @returns {string} Formatted hours spent string
+ */
+export function formatHoursSpent(baseHours, currentTimerStartTime) {
+    let totalHours = parseFloat(baseHours) || 0;
+    
+    if (currentTimerStartTime) {
+        const now = new Date();
+        const currentDuration = (now - currentTimerStartTime) / (1000 * 60 * 60); // Convert to hours
+        totalHours += currentDuration;
+    }
+    
+    return `${totalHours.toFixed(2)} saat`;
+}
+
+/**
+ * Format remaining hours
+ * @param {number|string} estimatedHours - Estimated total hours
+ * @param {number|string} baseHours - Base hours already spent
+ * @param {Date|string} currentTimerStartTime - Current timer start time
+ * @returns {string} Formatted remaining hours string
+ */
+export function formatRemainingHours(estimatedHours, baseHours, currentTimerStartTime) {
+    const estimated = parseFloat(estimatedHours) || 0;
+    let spent = parseFloat(baseHours) || 0;
+    
+    if (currentTimerStartTime) {
+        const now = new Date();
+        const currentDuration = (now - currentTimerStartTime) / (1000 * 60 * 60); // Convert to hours
+        spent += currentDuration;
+    }
+    
+    const remaining = Math.max(0, estimated - spent);
+    return `${remaining.toFixed(2)} saat`;
+}

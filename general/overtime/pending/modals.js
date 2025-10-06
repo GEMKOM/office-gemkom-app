@@ -588,9 +588,9 @@ function getStatusBadge(status, statusLabel) {
     const displayText = statusLabel || status;
     
     const statusMap = {
-        'submitted': 'status-submitted',
-        'approved': 'status-completed',
-        'rejected': 'status-cancelled'
+        'submitted': 'status-yellow',
+        'approved': 'status-green',
+        'cancelled': 'status-red'
     };
     
     const statusClass = statusMap[status] || 'status-pending';
@@ -608,7 +608,7 @@ function getRejectionComments(request) {
     request.approval.stage_instances.forEach(stage => {
         if (stage.decisions && stage.decisions.length > 0) {
             stage.decisions.forEach(decision => {
-                if (decision.decision === 'rejected' && decision.comment) {
+                if (decision.decision === 'cancelled' && decision.comment) {
                     rejectionComments.push({
                         approver: decision.approver_name || decision.approver_username || 'Bilinmeyen',
                         stage: stage.name,

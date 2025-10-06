@@ -1,8 +1,6 @@
 /* Shared Machining Styles - Common components for dashboard and tasks */
 
 /* Import base dashboard styles */
-@import url('./dashboard/dashboard.css');
-
 
 
 /* Professional Table Styling */
@@ -92,7 +90,7 @@
     border: 1px solid rgba(220, 53, 69, 0.3);
 }
 
-.status-completed {
+.status-green {
     background: rgba(40, 167, 69, 0.2);
     color: #28a745;
     border: 1px solid rgba(40, 167, 69, 0.3);

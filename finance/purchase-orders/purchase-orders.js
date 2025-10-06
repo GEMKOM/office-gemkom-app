@@ -95,7 +95,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 label: 'Öncelik', 
                 sortable: true, 
                 type: 'text',
-                formatter: (value) => `<span class="priority-badge ${getPriorityBadgeClass(value)}">${getPriorityText(value)}</span>`
+                formatter: (value) => `<span class="status-badge ${getPriorityBadgeClass(value)}">${getPriorityText(value)}</span>`
             },
             { 
                 field: 'created_at', 
@@ -596,7 +596,7 @@ async function viewPurchaseOrderDetails(orderId) {
                         <tr><td><strong>Sipariş No:</strong></td><td>${order.id}</td></tr>
                         <tr><td><strong>Tedarikçi:</strong></td><td>${order.supplier_name}</td></tr>
                         <tr><td><strong>Durum:</strong></td><td><span class="status-badge ${getStatusBadgeClass(order.status)}">${order.status_label || getStatusText(order.status)}</span></td></tr>
-                        <tr><td><strong>Öncelik:</strong></td><td><span class="priority-badge ${getPriorityBadgeClass(order.priority)}">${getPriorityText(order.priority)}</span></td></tr>
+                        <tr><td><strong>Öncelik:</strong></td><td><span class="status-badge ${getPriorityBadgeClass(order.priority)}">${getPriorityText(order.priority)}</span></td></tr>
                         <tr><td><strong>Oluşturulma Tarihi:</strong></td><td>${formatDate(order.created_at)}</td></tr>
                         <tr><td><strong>PR No:</strong></td><td><a href="${backendBase}procurement/purchase-requests/registry/?talep=${order.purchase_request_number}" target="_blank" class="text-primary">${order.purchase_request_number || 'N/A'}</a></td></tr>
                         <tr><td><strong>Kalem Sayısı:</strong></td><td>${(order.lines || []).length}</td></tr>
@@ -733,11 +733,11 @@ async function exportPurchaseOrdersData() {
 // Utility functions
 function getStatusBadgeClass(status) {
     const statusClasses = {
-        'awaiting_payment': 'status-submitted',
-        'paid': 'status-approved',
-        'cancelled': 'status-cancelled'
+        'awaiting_payment': 'status-yellow',
+        'paid': 'status-green',
+        'cancelled': 'status-red'
     };
-    return statusClasses[status] || 'status-draft';
+    return statusClasses[status] || 'status-grey';
 }
 
 function getStatusText(status) {
@@ -751,12 +751,12 @@ function getStatusText(status) {
 
 function getPriorityBadgeClass(priority) {
     const priorityClasses = {
-        'critical': 'priority-critical',
-        'high': 'priority-urgent',
-        'normal': 'priority-normal',
-        'low': 'priority-normal'
+        'critical': 'status-red',
+        'high': 'status-yellow',
+        'normal': 'status-grey',
+        'low': 'status-grey'
     };
-    return priorityClasses[priority] || 'priority-normal';
+    return priorityClasses[priority] || 'status-grey';
 }
 
 function getPriorityText(priority) {

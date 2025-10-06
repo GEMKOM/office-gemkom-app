@@ -45,7 +45,7 @@
     border: 1px solid #badbcc;
 }
 
-.status-cancelled {
+.status-red {
     background-color: #f8d7da;
     color: #721c24;
     border: 1px solid #f5c2c7;

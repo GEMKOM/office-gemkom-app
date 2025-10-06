@@ -1126,13 +1126,13 @@ function getStatusBadge(status, statusLabel) {
     
     // Keep the CSS class mapping for styling
     const statusMap = {
-        'draft': 'status-draft',
-        'submitted': 'status-submitted',
-        'approved': 'status-completed',
-        'rejected': 'status-cancelled'
+        'draft': 'status-grey',
+        'submitted': 'status-yellow',
+        'approved': 'status-green',
+        'cancelled': 'status-red'
     };
 
-    const statusClass = statusMap[status] || 'status-draft';
+    const statusClass = statusMap[status] || 'status-grey';
     return `<span class="status-badge ${statusClass}">${displayText}</span>`;
 }
 
@@ -1141,7 +1141,7 @@ function getStatusBadgeClass(status) {
         'draft': 'bg-secondary',
         'submitted': 'bg-warning',
         'approved': 'bg-success',
-        'rejected': 'bg-danger'
+        'cancelled': 'bg-danger'
     };
     return statusMap[status] || 'bg-secondary';
 }
@@ -1194,13 +1194,13 @@ function getApprovalStatusText(request) {
 
 function getPriorityBadge(priority) {
     const priorityMap = {
-        'normal': { text: 'Normal', class: 'priority-normal' },
-        'urgent': { text: 'Acil', class: 'priority-urgent' },
-        'critical': { text: 'Kritik', class: 'priority-critical' }
+        'normal': { text: 'Normal', class: 'status-grey' },
+        'urgent': { text: 'Acil', class: 'status-yellow' },
+        'critical': { text: 'Kritik', class: 'status-red' }
     };
 
-    const priorityInfo = priorityMap[priority] || { text: priority, class: 'priority-normal' };
-    return `<span class="priority-badge ${priorityInfo.class}">${priorityInfo.text}</span>`;
+    const priorityInfo = priorityMap[priority] || { text: priority, class: 'status-grey' };
+    return `<span class="status-badge ${priorityInfo.class}">${priorityInfo.text}</span>`;
 }
 
 function getApprovalInfo(request) {

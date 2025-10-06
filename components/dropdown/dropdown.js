@@ -224,7 +224,10 @@ export class ModernDropdown {
         // Clear search if available
         if (this.options.searchable && this.searchInput) {
             this.searchInput.value = '';
-            this.filterItems('');
+            // Only filter if items container exists and has items
+            if (this.itemsContainer && this.itemsContainer.querySelectorAll('.dropdown-item').length > 0) {
+                this.filterItems('');
+            }
         }
         
         // Trigger custom event
@@ -344,7 +347,9 @@ export class ModernDropdown {
     
     updateDisplay(text) {
         const selectedText = this.selectedDisplay.querySelector('.selected-text');
-        selectedText.textContent = text || this.options.placeholder;
+        if (selectedText) {
+            selectedText.textContent = text || this.options.placeholder;
+        }
         
         // Update selected state in items
         this.itemsContainer.querySelectorAll('.dropdown-item').forEach(item => {
@@ -362,13 +367,16 @@ export class ModernDropdown {
     }
     
     updateMultipleDisplay() {
+        const selectedTextElement = this.selectedDisplay.querySelector('.selected-text');
+        if (!selectedTextElement) return;
+        
         if (this.selectedValues.length === 0) {
-            this.selectedDisplay.querySelector('.selected-text').textContent = this.options.placeholder;
+            selectedTextElement.textContent = this.options.placeholder;
         } else if (this.selectedValues.length === 1) {
             const item = this.items.find(i => i.value === this.selectedValues[0]);
-            this.selectedDisplay.querySelector('.selected-text').textContent = item ? item.text : this.options.placeholder;
+            selectedTextElement.textContent = item ? item.text : this.options.placeholder;
         } else {
-            this.selectedDisplay.querySelector('.selected-text').textContent = `${this.selectedValues.length} seçenek`;
+            selectedTextElement.textContent = `${this.selectedValues.length} seçenek`;
         }
     }
     
@@ -387,14 +395,22 @@ export class ModernDropdown {
     }
     
     filterItems(searchTerm) {
+        if (!this.itemsContainer) return;
+        
         const items = this.itemsContainer.querySelectorAll('.dropdown-item');
         const term = searchTerm.toLowerCase();
         
         items.forEach(item => {
-            const text = item.querySelector('.item-text').textContent.toLowerCase();
-            if (text.includes(term)) {
-                item.style.display = 'block';
+            const textElement = item.querySelector('.item-text');
+            if (textElement && textElement.textContent) {
+                const text = textElement.textContent.toLowerCase();
+                if (text.includes(term)) {
+                    item.style.display = 'block';
+                } else {
+                    item.style.display = 'none';
+                }
             } else {
+                // If no text element found, hide the item
                 item.style.display = 'none';
             }
         });

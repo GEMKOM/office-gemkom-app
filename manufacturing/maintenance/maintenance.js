@@ -22,12 +22,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/manufacturing/maintenance/fault-requests',
                 features: [
                     {
-                        label: 'Yeni Arıza Talebi',
-                        icon: 'fas fa-plus-circle',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/fault-requests/create'
-                    },
-                    {
                         label: 'Arıza Listesi',
                         icon: 'fas fa-list',
                         iconColor: 'rgba(139, 0, 0, 1)',
