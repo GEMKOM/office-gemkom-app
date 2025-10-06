@@ -1,12 +1,10 @@
 import { guardRoute } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
-import { MenuComponent } from '../../../components/menu/menu.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { getOvertimeUsersForDate } from '../../../apis/overtime.js';
-import { 
-    formatTeam, 
+import {
     formatJobNumber, 
     formatDescription 
 } from '../../../apis/formatters.js';
@@ -66,35 +64,59 @@ document.addEventListener('DOMContentLoaded', async () => {
                 field: 'full_name',
                 label: 'Kullanıcı Adı',
                 sortable: true,
-                formatter: (value) => `
-                    <div style="font-weight: 500; color: #495057;">
-                        <i class="fas fa-user-circle me-2 text-muted"></i>
-                        ${value || '-'}
-                    </div>
-                `
+                formatter: (value) => {
+                    // For export, return clean text; for display, return HTML
+                    if (window.isExporting) {
+                        return value || '-';
+                    }
+                    return `
+                        <div style="font-weight: 500; color: #495057;">
+                            <i class="fas fa-user-circle me-2 text-muted"></i>
+                            ${value || '-'}
+                        </div>
+                    `;
+                }
             },
             {
                 field: 'team_label',
                 label: 'Takım',
                 sortable: true,
-                formatter: (value) => `
-                    <span class="badge bg-light text-dark border" style="font-weight: 500;">
-                        <i class="fas fa-users me-1"></i>
-                        ${value || '-'}
-                    </span>
-                `
+                formatter: (value) => {
+                    // For export, return clean text; for display, return HTML
+                    if (window.isExporting) {
+                        return value || '-';
+                    }
+                    return `
+                        <span class="badge bg-light text-dark border" style="font-weight: 500;">
+                            <i class="fas fa-users me-1"></i>
+                            ${value || '-'}
+                        </span>
+                    `;
+                }
             },
             {
                 field: 'job_no',
                 label: 'İş Numarası',
                 sortable: true,
-                formatter: (value) => formatJobNumber(value)
+                formatter: (value) => {
+                    // For export, return clean text; for display, return HTML
+                    if (window.isExporting) {
+                        return value || '-';
+                    }
+                    return formatJobNumber(value);
+                }
             },
             {
                 field: 'description',
                 label: 'Açıklama',
                 sortable: false,
-                formatter: (value) => formatDescription(value, 60)
+                formatter: (value) => {
+                    // For export, return clean text; for display, return HTML
+                    if (window.isExporting) {
+                        return value || '-';
+                    }
+                    return formatDescription(value, 60);
+                }
             },
             {
                 field: 'start_time',
@@ -103,13 +125,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 formatter: (value) => {
                     if (!value) return '-';
                     const date = new Date(value);
-                    return date.toLocaleString('tr-TR', {
+                    const formattedDate = date.toLocaleString('tr-TR', {
                         year: 'numeric',
                         month: '2-digit',
                         day: '2-digit',
                         hour: '2-digit',
                         minute: '2-digit'
                     });
+                    // For export, return clean text; for display, return HTML
+                    if (window.isExporting) {
+                        return formattedDate;
+                    }
+                    return formattedDate;
                 }
             },
             {
@@ -119,13 +146,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                 formatter: (value) => {
                     if (!value) return '-';
                     const date = new Date(value);
-                    return date.toLocaleString('tr-TR', {
+                    const formattedDate = date.toLocaleString('tr-TR', {
                         year: 'numeric',
                         month: '2-digit',
                         day: '2-digit',
                         hour: '2-digit',
                         minute: '2-digit'
                     });
+                    // For export, return clean text; for display, return HTML
+                    if (window.isExporting) {
+                        return formattedDate;
+                    }
+                    return formattedDate;
                 }
             },
             {
@@ -156,6 +188,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                         durationText += (hours > 0 ? ' ' : '') + `${minutes} dakika`;
                     }
                     
+                    // For export, return clean text; for display, return HTML
+                    if (window.isExporting) {
+                        return durationText;
+                    }
                     return durationText;
                 }
             }
@@ -168,9 +204,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         exportable: true,
         onRefresh: () => {
             loadOvertimeUsers();
-        },
-        onExport: (format) => {
-            exportOvertimeUsers(format);
         }
     });
 
@@ -195,7 +228,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else if (response && Array.isArray(response.data)) {
                 data = response.data;
             } else {
-                console.warn('Unexpected response structure:', response);
                 data = [];
             }
             
@@ -232,7 +264,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             tableComponent.updateData(transformedData);
             
         } catch (error) {
-            console.error('Error loading overtime users:', error);
             tableComponent.updateData([]);
             
             // Show error notification
@@ -243,185 +274,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
-    // Export overtime users data
-    function exportOvertimeUsers(format = 'csv') {
-        try {
-            const currentData = tableComponent.options.data;
-            if (!currentData || currentData.length === 0) {
-                showNotification('Dışa aktarılacak veri bulunamadı', 'warning');
-                return;
-            }
-
-            // Get the current date for filename
-            const today = new Date().toISOString().split('T')[0];
-            const filename = `mesai-kullanicilari-${today}`;
-
-            if (format === 'csv') {
-                exportToCSV(currentData, filename);
-            } else if (format === 'excel') {
-                exportToExcel(currentData, filename);
-            } else {
-                showNotification('Desteklenmeyen format: ' + format, 'error');
-            }
-        } catch (error) {
-            console.error('Export error:', error);
-            showNotification('Dışa aktarma sırasında hata oluştu: ' + error.message, 'error');
-        }
-    }
-
-    // Export to CSV
-    function exportToCSV(data, filename) {
-        const headers = [
-            'Kullanıcı Adı',
-            'Takım',
-            'İş Numarası',
-            'Açıklama',
-            'Başlangıç',
-            'Bitiş',
-            'Süre'
-        ];
-
-        const csvContent = [
-            headers.join(','),
-            ...data.map(row => [
-                `"${(row.full_name || '').replace(/"/g, '""')}"`,
-                `"${(row.team_label || '').replace(/"/g, '""')}"`,
-                `"${(row.job_no || '').replace(/"/g, '""')}"`,
-                `"${(row.description || '').replace(/"/g, '""')}"`,
-                `"${formatDateTimeForExport(row.start_time)}"`,
-                `"${formatDateTimeForExport(row.end_time)}"`,
-                `"${formatDurationForExport(row)}"`
-            ].join(','))
-        ].join('\n');
-
-        downloadFile(csvContent, filename + '.csv', 'text/csv;charset=utf-8;');
-        showNotification('CSV dosyası başarıyla dışa aktarıldı', 'success');
-    }
-
-    // Export to Excel
-    function exportToExcel(data, filename) {
-        try {
-            // Check if XLSX library is available
-            if (typeof XLSX === 'undefined') {
-                showNotification('Excel export için gerekli kütüphane yüklenemedi', 'error');
-                return;
-            }
-
-            // Prepare data for Excel
-            const excelData = data.map(row => ({
-                'Kullanıcı Adı': row.full_name || '',
-                'Takım': row.team_label || '',
-                'İş Numarası': row.job_no || '',
-                'Açıklama': row.description || '',
-                'Başlangıç': formatDateTimeForExport(row.start_time),
-                'Bitiş': formatDateTimeForExport(row.end_time),
-                'Süre': formatDurationForExport(row)
-            }));
-
-            // Create workbook and worksheet
-            const wb = XLSX.utils.book_new();
-            const ws = XLSX.utils.json_to_sheet(excelData);
-
-            // Set column widths
-            const colWidths = [
-                { wch: 20 }, // Kullanıcı Adı
-                { wch: 15 }, // Takım
-                { wch: 12 }, // İş Numarası
-                { wch: 30 }, // Açıklama
-                { wch: 18 }, // Başlangıç
-                { wch: 18 }, // Bitiş
-                { wch: 15 }  // Süre
-            ];
-            ws['!cols'] = colWidths;
-
-            // Add worksheet to workbook
-            XLSX.utils.book_append_sheet(wb, ws, 'Mesai Kullanıcıları');
-
-            // Generate Excel file
-            const excelBuffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-            
-            // Create blob and download
-            const blob = new Blob([excelBuffer], { 
-                type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
-            });
-            
-            downloadFile(blob, filename + '.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-            showNotification('Excel dosyası başarıyla dışa aktarıldı', 'success');
-            
-        } catch (error) {
-            console.error('Excel export error:', error);
-            showNotification('Excel dışa aktarma sırasında hata oluştu: ' + error.message, 'error');
-        }
-    }
-
-
-    // Format date/time for export
-    function formatDateTimeForExport(dateTime) {
-        if (!dateTime) return '';
-        try {
-            const date = new Date(dateTime);
-            return date.toLocaleString('tr-TR', {
-                year: 'numeric',
-                month: '2-digit',
-                day: '2-digit',
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-        } catch (error) {
-            return '';
-        }
-    }
-
-    // Format duration for export
-    function formatDurationForExport(row) {
-        if (!row.start_time || !row.end_time) {
-            return '';
-        }
-        
-        try {
-            const start = new Date(row.start_time);
-            const end = new Date(row.end_time);
-            const diffMs = end - start;
-            
-            if (diffMs <= 0) {
-                return '';
-            }
-            
-            const hours = Math.floor(diffMs / (1000 * 60 * 60));
-            const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
-            
-            let durationText = '';
-            if (hours > 0) {
-                durationText += `${hours} saat`;
-            }
-            if (minutes > 0) {
-                durationText += (hours > 0 ? ' ' : '') + `${minutes} dakika`;
-            }
-            
-            return durationText;
-        } catch (error) {
-            return '';
-        }
-    }
-
-    // Download file helper
-    function downloadFile(content, filename, mimeType) {
-        let blob;
-        if (content instanceof Blob) {
-            blob = content;
-        } else {
-            blob = new Blob([content], { type: mimeType });
-        }
-        
-        const url = window.URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = filename;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        window.URL.revokeObjectURL(url);
-    }
 
     // Helper function for notifications
     function showNotification(message, type = 'info') {
