@@ -228,7 +228,6 @@ class GanttChart {
 
     updateCurrentPeriodIndicator() {
         const periodElement = this.container.querySelector('#gantt-current-period');
-        console.log('Looking for period element:', periodElement);
         if (!periodElement) {
             console.log('Period element not found in container:', this.container);
             return;
@@ -269,7 +268,6 @@ class GanttChart {
         const periodLabelSpan = periodElement.querySelector('.period-label');
         if (periodLabelSpan) {
             periodLabelSpan.textContent = periodLabel;
-            console.log('Period indicator updated to:', periodLabel);
         } else {
             console.log('Period label span not found');
         }

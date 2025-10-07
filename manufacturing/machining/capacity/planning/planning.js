@@ -15,8 +15,6 @@ let currentMachineId = null;
 let currentMachineName = '';
 let machines = [];
 let currentTasks = [];
-let plannedTasks = [];
-let unplannedTasks = [];
 let hasUnsavedChanges = false;
 let machinesTable = null;
 let tasksTable = null;
@@ -30,9 +28,7 @@ let isInlineEditing = false; // Flag to prevent multiple simultaneous inline edi
 let originalTasks = []; // Store original state for comparison
 let changedTasks = new Set(); // Track which tasks have been modified
 
-// Gantt chart state (kept for compatibility with existing code)
-let ganttCurrentDate = new Date();
-let ganttPeriod = 'month'; // 'week', 'month', 'year'
+// Gantt chart state
 
 // Utility functions for date formatting
 function formatDateForInput(date) {
@@ -51,9 +47,6 @@ function markTaskAsChanged(taskKey) {
     hasUnsavedChanges = true;
 }
 
-function isTaskChanged(taskKey) {
-    return changedTasks.has(taskKey);
-}
 
 function resetChangeTracking() {
     changedTasks.clear();
@@ -65,9 +58,6 @@ function getChangedTasks() {
     const changed = [];
     const processedKeys = new Set(); // Track processed task keys to avoid duplicates
     
-    console.log('Checking for changes...');
-    console.log('Original tasks count:', originalTasks.length);
-    console.log('Current tasks count:', currentTasks.length);
     
     // Check for new tasks and existing task changes
     currentTasks.forEach(task => {
@@ -76,7 +66,6 @@ function getChangedTasks() {
         if (!original) {
             // New task that wasn't in original data
             if (task.in_plan) {
-                console.log('New task added to plan:', task.key);
                 changed.push(task);
                 processedKeys.add(task.key);
             }
@@ -90,13 +79,6 @@ function getChangedTasks() {
                 task.plan_locked !== original.plan_locked;
             
             if (hasChanges) {
-                console.log('Task changed:', task.key, {
-                    in_plan: { original: original.in_plan, current: task.in_plan },
-                    plan_order: { original: original.plan_order, current: task.plan_order },
-                    planned_start_ms: { original: original.planned_start_ms, current: task.planned_start_ms },
-                    planned_end_ms: { original: original.planned_end_ms, current: task.planned_end_ms },
-                    plan_locked: { original: original.plan_locked, current: task.plan_locked }
-                });
                 
                 // If task was removed from plan, create a minimal payload
                 if (original.in_plan && !task.in_plan) {
@@ -120,7 +102,6 @@ function getChangedTasks() {
             
             if (original.in_plan && (!current || !current.in_plan)) {
                 // Task was removed from plan and not already processed
-                console.log('Task removed from plan (not in current):', original.key);
                 changed.push({
                     key: original.key,
                     in_plan: false
@@ -129,7 +110,6 @@ function getChangedTasks() {
         }
     });
     
-    console.log('Total changed tasks:', changed.length);
     return changed;
 }
 
@@ -190,16 +170,12 @@ function getNextWorkingTime(startTime, calendar) {
     let attempts = 0;
     const maxAttempts = 365; // Allow up to 1 year to find working time
     
-    console.log(`Finding next working time starting from ${currentTime.toLocaleString('tr-TR')}`);
-    console.log('Machine calendar:', calendar);
     
     while (attempts < maxAttempts) {
         const jsDayOfWeek = currentTime.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
         const calendarDayOfWeek = (jsDayOfWeek + 6) % 7; // Convert to 0=Monday, 1=Tuesday, ..., 6=Sunday
         const workingDay = calendar.week_template[calendarDayOfWeek.toString()];
         
-        console.log(`JS Day ${jsDayOfWeek} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][jsDayOfWeek]}) -> Calendar Day ${calendarDayOfWeek}, working windows:`, workingDay);
-        console.log(`Current time: ${currentTime.toTimeString().slice(0, 5)}`);
         
         // Check if this day has work exceptions
         if (isDateInWorkExceptions(currentTime, calendar)) {
@@ -208,7 +184,6 @@ function getNextWorkingTime(startTime, calendar) {
                 // Use exception windows instead of regular schedule
                 const timeString = currentTime.toTimeString().slice(0, 5);
                 if (isTimeInWorkingHours(currentTime, timeString, { week_template: { [calendarDayOfWeek]: exception.windows } })) {
-                    console.log(`Found working time in exception: ${currentTime.toLocaleString('tr-TR')}`);
                     return currentTime;
                 }
                 // Find next working window in the exception
@@ -220,12 +195,10 @@ function getNextWorkingTime(startTime, calendar) {
                 if (nextWindow) {
                     const [hours, minutes] = nextWindow.start.split(':').map(Number);
                     currentTime.setHours(hours, minutes, 0, 0);
-                    console.log(`Found next working time in exception: ${currentTime.toLocaleString('tr-TR')}`);
                     return currentTime;
                 }
             }
             // If exception has no windows or day is closed, move to next day
-            console.log(`Exception day is closed, moving to next day`);
             currentTime.setDate(currentTime.getDate() + 1);
             currentTime.setHours(0, 0, 0, 0);
             attempts++;
@@ -236,7 +209,6 @@ function getNextWorkingTime(startTime, calendar) {
         if (workingDay && workingDay.length > 0) {
             const timeString = currentTime.toTimeString().slice(0, 5);
             if (isTimeInWorkingHours(currentTime, timeString, calendar)) {
-                console.log(`Found working time: ${currentTime.toLocaleString('tr-TR')}`);
                 return currentTime;
             }
             
@@ -250,11 +222,9 @@ function getNextWorkingTime(startTime, calendar) {
             if (nextWindow) {
                 const [hours, minutes] = nextWindow.start.split(':').map(Number);
                 currentTime.setHours(hours, minutes, 0, 0);
-                console.log(`Found next working window today: ${currentTime.toLocaleString('tr-TR')}`);
                 return currentTime;
             }
         } else {
-            console.log(`No working hours for day ${calendarDayOfWeek}, moving to next day`);
         }
         
         // Move to next day and start from beginning
@@ -263,7 +233,6 @@ function getNextWorkingTime(startTime, calendar) {
         attempts++;
     }
     
-    console.log(`Could not find working time after ${attempts} attempts, using fallback`);
     return startTime; // Fallback to original time if no working time found
 }
 
@@ -277,15 +246,12 @@ function getWorkingTimeEnd(startTime, durationMs, calendar) {
     let attempts = 0;
     const maxAttempts = 365; // Allow up to 1 year to find working time for long tasks
     
-    console.log(`Calculating working time end for ${durationMs / (1000 * 60)} minutes starting at ${currentTime.toLocaleString('tr-TR')}`);
-    console.log(`Total duration: ${durationMs / (1000 * 60 * 60)} hours`);
     
     while (remainingDuration > 0 && attempts < maxAttempts) {
         const jsDayOfWeek = currentTime.getDay(); // 0=Sunday, 1=Monday, ..., 6=Saturday
         const calendarDayOfWeek = (jsDayOfWeek + 6) % 7; // Convert to 0=Monday, 1=Tuesday, ..., 6=Sunday
         const workingDay = calendar.week_template[calendarDayOfWeek.toString()];
         
-        console.log(`JS Day ${jsDayOfWeek} (${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][jsDayOfWeek]}) -> Calendar Day ${calendarDayOfWeek}, working windows:`, workingDay);
         
         // Check if this day has work exceptions
         if (isDateInWorkExceptions(currentTime, calendar)) {
@@ -303,19 +269,16 @@ function getWorkingTimeEnd(startTime, durationMs, calendar) {
                         const availableTime = windowEnd - currentMinutes;
                         const remainingMinutes = remainingDuration / (1000 * 60);
                         
-                        console.log(`Exception window ${window.start}-${window.end}, current: ${timeString}, available: ${availableTime}min, remaining: ${remainingMinutes}min`);
                         
                         if (availableTime >= remainingMinutes) {
                             // Can complete within this window
                             const endMinutes = currentMinutes + remainingMinutes;
                             const [hours, mins] = minutesToTime(endMinutes).split(':').map(Number);
                             currentTime.setHours(hours, mins, 0, 0);
-                            console.log(`Task completed at ${currentTime.toLocaleString('tr-TR')}`);
                             return currentTime;
                         } else {
                             // Use remaining time in this window
                             remainingDuration -= availableTime * 60 * 1000;
-                            console.log(`Used ${availableTime}min in this window, ${remainingDuration / (1000 * 60)}min remaining`);
                             // Move to next day
                             currentTime.setDate(currentTime.getDate() + 1);
                             currentTime.setHours(0, 0, 0, 0);
@@ -325,7 +288,6 @@ function getWorkingTimeEnd(startTime, durationMs, calendar) {
                 }
             } else {
                 // Day is closed, move to next day
-                console.log(`Exception day is closed, moving to next day`);
                 currentTime.setDate(currentTime.getDate() + 1);
                 currentTime.setHours(0, 0, 0, 0);
             }
@@ -352,19 +314,16 @@ function getWorkingTimeEnd(startTime, durationMs, calendar) {
                 const availableTime = windowEnd - currentMinutes;
                 const remainingMinutes = remainingDuration / (1000 * 60);
                 
-                console.log(`Current window ${currentWindow.start}-${currentWindow.end}, current: ${timeString}, available: ${availableTime}min, remaining: ${remainingMinutes}min`);
                 
                 if (availableTime >= remainingMinutes) {
                     // Can complete within this window
                     const endMinutes = currentMinutes + remainingMinutes;
                     const [hours, mins] = minutesToTime(endMinutes).split(':').map(Number);
                     currentTime.setHours(hours, mins, 0, 0);
-                    console.log(`Task completed at ${currentTime.toLocaleString('tr-TR')}`);
                     return currentTime;
                 } else {
                     // Use remaining time in this window
                     remainingDuration -= availableTime * 60 * 1000;
-                    console.log(`Used ${availableTime}min in this window, ${remainingDuration / (1000 * 60)}min remaining`);
                     
                     // Check if there's another window today
                     const nextWindow = workingDay.find(window => {
@@ -378,12 +337,10 @@ function getWorkingTimeEnd(startTime, durationMs, calendar) {
                         // Move to next window today
                         const [hours, minutes] = nextWindow.start.split(':').map(Number);
                         currentTime.setHours(hours, minutes, 0, 0);
-                        console.log(`Moving to next window today: ${nextWindow.start}`);
                     } else {
                         // Move to next day
                         currentTime.setDate(currentTime.getDate() + 1);
                         currentTime.setHours(0, 0, 0, 0);
-                        console.log(`No more windows today, moving to next day`);
                     }
                 }
             } else {
@@ -397,17 +354,14 @@ function getWorkingTimeEnd(startTime, durationMs, calendar) {
                     // Move to next window today
                     const [hours, minutes] = nextWindow.start.split(':').map(Number);
                     currentTime.setHours(hours, minutes, 0, 0);
-                    console.log(`Not in working hours, moving to next window: ${nextWindow.start}`);
                 } else {
                     // Move to next day
                     currentTime.setDate(currentTime.getDate() + 1);
                     currentTime.setHours(0, 0, 0, 0);
-                    console.log(`No more windows today, moving to next day`);
                 }
             }
         } else {
             // No working hours for this day, move to next day
-            console.log(`No working hours for day ${calendarDayOfWeek}, moving to next day`);
             currentTime.setDate(currentTime.getDate() + 1);
             currentTime.setHours(0, 0, 0, 0);
         }
@@ -416,14 +370,11 @@ function getWorkingTimeEnd(startTime, durationMs, calendar) {
     }
     
     // Fallback: return start time + duration if we can't find working hours
-    console.log(`Could not find working time after ${attempts} attempts, using fallback`);
-    console.log(`Remaining duration: ${remainingDuration / (1000 * 60 * 60)} hours`);
     return new Date(startTime.getTime() + durationMs);
 }
 
 // Initialize capacity planning module
 function initCapacityPlanning() {
-    console.log('Capacity planning module initialized');
     
     // Initialize navbar
     initNavbar();
@@ -473,11 +424,9 @@ function initFilters() {
         showApplyButton: true,
         showClearButton: true,
         onApply: (values) => {
-            console.log('Filters applied:', values);
             applyFilters(values);
         },
         onClear: () => {
-            console.log('Filters cleared');
             if (currentMachineId) {
                 loadMachineTasks(currentMachineId);
             }
@@ -511,8 +460,6 @@ function initFilters() {
 
 // Initialize machines table component
 function initMachinesTable() {
-    console.log('Initializing machines table...');
-    console.log('Container element:', document.getElementById('machines-table-container'));
     
     try {
         machinesTable = new TableComponent('machines-table-container', {
@@ -535,37 +482,31 @@ function initMachinesTable() {
             sortable: true,
             refreshable: true,
             onRefresh: () => {
-                console.log('Table refresh requested');
                 loadMachines();
             },
             onRowClick: (row, index) => {
-                console.log('Machine row clicked:', row, 'index:', index);
                 if (row && row.id && row.name) {
                     selectMachine(row.id, row.name);
                 } else {
-                    console.error('Invalid row data:', row);
                 }
             },
             emptyMessage: 'Makine bulunamadı',
             emptyIcon: 'fas fa-industry'
         });
         
-        console.log('Machines table initialized successfully');
     } catch (error) {
-        console.error('Error initializing machines table:', error);
     }
 }
 
 // Initialize tasks table component
 function initTasksTable() {
-    console.log('Initializing tasks table...');
     
     try {
         tasksTable = new TableComponent('tasks-table-container', {
             title: 'Planlanmış Görevler',
             icon: 'tasks',
             iconColor: 'text-success',
-            rowAttributes: (row, rowIndex) => `data-task-key="${row.key}" draggable="true"`,
+            rowAttributes: (row, rowIndex) => `data-task-key="${row.key}"`,
             skeleton: true,
             skeletonRows: 5,
             columns: [
@@ -669,32 +610,29 @@ function initTasksTable() {
             ],
             sortable: true,
             refreshable: true,
+            draggable: true,
             onRefresh: () => {
-                console.log('Tasks table refresh requested');
                 if (currentMachineId) {
                     loadMachineTasks(currentMachineId);
                 } else {
                     showNotification('Önce bir makine seçin', 'warning');
                 }
             },
+            onReorder: (draggedTaskKey, targetTaskKey, insertPosition) => {
+                reorderTasks(draggedTaskKey, targetTaskKey, insertPosition);
+            },
             emptyMessage: 'Planlamak için bir makine seçin',
             emptyIcon: 'fas fa-mouse-pointer',
             onRowClick: (row, index) => {
                 // Handle row click if needed
-                console.log('Task row clicked:', row);
             }
         });
-        
-        console.log('Tasks table initialized successfully');
     } catch (error) {
-        console.error('Error initializing tasks table:', error);
     }
 }
 
 // Initialize Gantt chart component
 function initGanttChart() {
-    console.log('Initializing Gantt chart...');
-    
     try {
         ganttChart = new GanttChart('gantt-container', {
             title: 'Zaman Çizelgesi',
@@ -702,11 +640,6 @@ function initGanttChart() {
             showDateOverlay: true,
             showCurrentTime: true,
             onPeriodChange: (period, date) => {
-                console.log('Gantt period changed:', period, date);
-                // Update the global state to match the component
-                ganttPeriod = period;
-                ganttCurrentDate = new Date(date);
-                
                 // Re-render with current tasks if any
                 if (currentMachineId) {
                     const plannedTasks = currentTasks.filter(t => t.in_plan);
@@ -714,48 +647,31 @@ function initGanttChart() {
                 }
             },
             onTaskClick: (task, event) => {
-                console.log('Task clicked:', task);
                 if (task && task.key) {
                     editTask(task.key);
                 }
             }
         });
-        
-        console.log('Gantt chart initialized successfully');
     } catch (error) {
-        console.error('Error initializing Gantt chart:', error);
     }
 }
 
 // Load machines from API
 async function loadMachines() {
-    console.log('Loading machines...');
-    
     try {
         if (machinesTable) {
-            console.log('Setting loading state to true');
             machinesTable.setLoading(true);
         }
-        
-        console.log('Fetching machines from API...');
         const response = await fetchMachines(1, 100, { used_in: 'machining' });
-        console.log('Machines API response:', response);
-        console.log('Response type:', typeof response);
-        console.log('Response keys:', Object.keys(response || {}));
         
         machines = response.results || response;
-        console.log('Processed machines:', machines);
-        console.log('Machines length:', machines ? machines.length : 'undefined');
-        
         // Handle case where no machines are returned
         if (!machines || !Array.isArray(machines)) {
-            console.warn('No machines returned or invalid response format');
             machines = [];
         }
         
         // If no machines found, add some mock data for testing
         if (machines.length === 0) {
-            console.log('No machines found, adding mock data for testing');
             machines = [
                 { id: 1, name: 'CNC Tezgah 1', is_active: true },
                 { id: 2, name: 'CNC Tezgah 2', is_active: true },
@@ -769,8 +685,6 @@ async function loadMachines() {
         machines = machines.sort((a, b) => (b.tasks_count || 0) - (a.tasks_count || 0));
         
         if (machinesTable) {
-            console.log('Updating table with machines data');
-            console.log('Machines data to display:', machines);
             // Update the table's internal state first
             machinesTable.options.loading = false;
             machinesTable.options.data = machines;
@@ -780,24 +694,13 @@ async function loadMachines() {
             // Check if table was rendered properly
             setTimeout(() => {
                 const tableRows = machinesTable.container.querySelectorAll('tbody tr');
-                console.log('Table rows after render:', tableRows.length);
                 addManualRowClickListeners();
             }, 100);
         } else {
-            console.error('Machines table is null, cannot update');
         }
-        
-        console.log('Machines loaded successfully');
     } catch (error) {
-        console.error('Error loading machines:', error);
-        console.error('Error details:', {
-            message: error.message,
-            stack: error.stack,
-            name: error.name
-        });
         showNotification('Makineler yüklenirken hata oluştu', 'error');
         if (machinesTable) {
-            console.log('Setting loading state to false due to error');
             machinesTable.options.loading = false;
             machinesTable.options.data = [];
             machinesTable.render();
@@ -808,18 +711,14 @@ async function loadMachines() {
 
 // Select a machine and load its tasks
 async function selectMachine(machineId, machineName) {
-    console.log('selectMachine called with:', { machineId, machineName });
-    
     // Prevent multiple simultaneous requests
     if (isLoadingMachine) {
-        console.log('Machine loading already in progress, ignoring request');
         showNotification('Makine yükleniyor, lütfen bekleyin...', 'info', 1500);
         return;
     }
     
     // Check if same machine is already selected
     if (currentMachineId === machineId) {
-        console.log('Same machine already selected, ignoring request');
         return;
     }
     
@@ -840,19 +739,14 @@ async function selectMachine(machineId, machineName) {
         // Update table row selection
         if (machinesTable) {
             const tableRows = machinesTable.container.querySelectorAll('tbody tr');
-            console.log('Found table rows:', tableRows.length);
-            
             tableRows.forEach(row => {
                 row.classList.remove('selected');
             });
             
             // Find and select the clicked row
             const machineIndex = machines.findIndex(m => m.id === machineId);
-            console.log('Machine index:', machineIndex);
-            
             if (machineIndex !== -1 && tableRows[machineIndex]) {
                 tableRows[machineIndex].classList.add('selected');
-                console.log('Row selected');
             }
         }
         
@@ -878,8 +772,6 @@ async function selectMachine(machineId, machineName) {
         
         
     } catch (error) {
-        console.error('Error selecting machine:', error);
-        
         // Update UI with error state
         const selectedMachineElement = document.getElementById('selected-machine-name');
         
@@ -905,11 +797,8 @@ async function selectMachine(machineId, machineName) {
 // Load machine calendar
 async function loadMachineCalendar(machineId) {
     try {
-        console.log('Loading machine calendar for machine:', machineId);
         machineCalendar = await getMachineCalendar(machineId);
-        console.log('Machine calendar loaded:', machineCalendar);
     } catch (error) {
-        console.error('Error loading machine calendar:', error);
         machineCalendar = null;
         showNotification('Makine takvimi yüklenirken hata oluştu', 'warning');
     }
@@ -928,40 +817,31 @@ async function loadMachineTasks(machineId) {
         const planned = tasks.filter(task => task.in_plan);
         const unplanned = tasks.filter(task => !task.in_plan);
         
-        unplannedTasks = unplanned;
         
         renderTasksTable(planned);
         renderUnplannedTasksTable(unplanned);
         updateGanttChart(planned);
         
     } catch (error) {
-        console.error('Error loading machine tasks:', error);
         showNotification('Görevler yüklenirken hata oluştu', 'error');
     }
 }
 
 // Render tasks table
 function renderTasksTable(tasks) {
-    console.log('renderTasksTable called with tasks:', tasks.length, 'tasksTable:', tasksTable);
     if (!tasksTable) {
-        console.error('Tasks table not initialized in renderTasksTable');
         return;
     }
 
     // Turn off loading state
     tasksTable.setLoading(false);
-    console.log('Loading state disabled');
-
     // Sort tasks by plan_order
     const sortedTasks = [...tasks].sort((a, b) => (a.plan_order || 0) - (b.plan_order || 0));
 
     // Update the table with new data
     tasksTable.updateData(sortedTasks);
-    console.log('Table data updated with', sortedTasks.length, 'tasks');
-
-    // Setup drag and drop for task reordering after table is updated
+    // Setup inline editing after table is updated
     setTimeout(() => {
-        setupTaskRowDragAndDrop();
         setupInlineEditing();
     }, 100);
 }
@@ -1003,7 +883,6 @@ function renderUnplannedTasksTable(tasks) {
 // Update Gantt chart with tasks
 function updateGanttChart(tasks) {
     if (!ganttChart) {
-        console.warn('Gantt chart not initialized');
         return;
     }
 
@@ -1019,157 +898,12 @@ function updateGanttChart(tasks) {
         plan_order: task.plan_order,
         plan_locked: task.plan_locked
     }));
-
-    console.log('Updating Gantt chart with tasks:', transformedTasks);
-    
     // Pass machine calendar to Gantt chart for working hours display
     if (machineCalendar) {
         ganttChart.setMachineCalendar(machineCalendar);
     }
     
     ganttChart.setTasks(transformedTasks);
-}
-
-
-// Setup drag and drop for task table rows
-function setupTaskRowDragAndDrop() {
-    const tbody = document.querySelector('#tasks-table-container-tbody');
-    if (!tbody) return;
-    
-    // Add event listeners to the tbody instead of individual rows
-    tbody.addEventListener('dragstart', (e) => {
-        const row = e.target.closest('tr');
-        if (row && row.dataset.taskKey) {
-            e.dataTransfer.setData('text/plain', row.dataset.taskKey);
-            row.classList.add('dragging');
-            e.dataTransfer.effectAllowed = 'move';
-        }
-    });
-    
-    tbody.addEventListener('dragend', (e) => {
-        const row = e.target.closest('tr');
-        if (row && row.dataset.taskKey) {
-            row.classList.remove('dragging');
-            // Remove all drag-over classes
-            tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over'));
-        }
-    });
-    
-    tbody.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        e.dataTransfer.dropEffect = 'move';
-        
-        // Add visual feedback but don't move DOM elements yet
-        const afterElement = getDragAfterElement(tbody, e.clientY);
-        const dragging = tbody.querySelector('.dragging');
-        
-        if (dragging) {
-            // Remove drag-over class from all rows
-            tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom'));
-            
-            // Add appropriate drag-over class based on position
-            if (afterElement) {
-                const rect = afterElement.getBoundingClientRect();
-                const midPoint = rect.top + rect.height / 2;
-                
-                if (e.clientY < midPoint) {
-                    afterElement.classList.add('drag-over-top');
-                } else {
-                    afterElement.classList.add('drag-over-bottom');
-                }
-            } else {
-                // Check if we're at the very top or bottom
-                const allRows = tbody.querySelectorAll('tr[data-task-key]:not(.dragging)');
-                if (allRows.length > 0) {
-                    const firstRow = allRows[0];
-                    const lastRow = allRows[allRows.length - 1];
-                    const firstRect = firstRow.getBoundingClientRect();
-                    const lastRect = lastRow.getBoundingClientRect();
-                    
-                    if (e.clientY < firstRect.top + firstRect.height / 2) {
-                        firstRow.classList.add('drag-over-top');
-                    } else if (e.clientY > lastRect.bottom - lastRect.height / 2) {
-                        lastRow.classList.add('drag-over-bottom');
-                    }
-                }
-            }
-        }
-    });
-    
-    tbody.addEventListener('drop', (e) => {
-        e.preventDefault();
-        const draggedTaskKey = e.dataTransfer.getData('text/plain');
-        
-        if (!draggedTaskKey) return;
-        
-        // Remove drag-over classes
-        tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom'));
-        
-        // Find the target position based on mouse position
-        const afterElement = getDragAfterElement(tbody, e.clientY);
-        let targetTaskKey = null;
-        let insertPosition = 'after'; // 'before', 'after', 'top', 'bottom'
-        
-        if (afterElement) {
-            const rect = afterElement.getBoundingClientRect();
-            const midPoint = rect.top + rect.height / 2;
-            
-            if (e.clientY < midPoint) {
-                // Insert before this element
-                targetTaskKey = afterElement.dataset.taskKey;
-                insertPosition = 'before';
-            } else {
-                // Insert after this element
-                targetTaskKey = afterElement.dataset.taskKey;
-                insertPosition = 'after';
-            }
-        } else {
-            // Check if we're at the very top or bottom
-            const allRows = tbody.querySelectorAll('tr[data-task-key]:not(.dragging)');
-            if (allRows.length > 0) {
-                const firstRow = allRows[0];
-                const lastRow = allRows[allRows.length - 1];
-                const firstRect = firstRow.getBoundingClientRect();
-                const lastRect = lastRow.getBoundingClientRect();
-                
-                if (e.clientY < firstRect.top + firstRect.height / 2) {
-                    // Move to very top
-                    targetTaskKey = firstRow.dataset.taskKey;
-                    insertPosition = 'before';
-                } else if (e.clientY > lastRect.bottom - lastRect.height / 2) {
-                    // Move to very bottom
-                    targetTaskKey = lastRow.dataset.taskKey;
-                    insertPosition = 'after';
-                }
-            }
-        }
-        
-        // Only reorder if we have a valid target and it's different from dragged task
-        if (targetTaskKey && targetTaskKey !== draggedTaskKey) {
-            console.log('Drag and drop: Moving task', draggedTaskKey, 'to position', insertPosition, 'of', targetTaskKey);
-            reorderTasks(draggedTaskKey, targetTaskKey, insertPosition);
-        } else {
-            console.log('Drag and drop: No valid reorder - dragged:', draggedTaskKey, 'target:', targetTaskKey, 'position:', insertPosition);
-        }
-    });
-}
-
-// Get the element after which to insert the dragged element
-function getDragAfterElement(container, y) {
-    const draggableElements = [...container.querySelectorAll('tr[data-task-key]:not(.dragging)')];
-    
-    if (draggableElements.length === 0) return null;
-    
-    return draggableElements.reduce((closest, child) => {
-        const box = child.getBoundingClientRect();
-        const offset = y - box.top - box.height / 2;
-        
-        if (offset < 0 && offset > closest.offset) {
-            return { offset: offset, element: child };
-        } else {
-            return closest;
-        }
-    }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
 // Reorder tasks and update plan_order
@@ -1220,10 +954,12 @@ function reorderTasks(draggedTaskKey, targetTaskKey, insertPosition = 'after') {
     
     // Re-render the table and Gantt chart
     const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
-    console.log('Reordered tasks:', updatedPlannedTasks.map(t => ({ key: t.key, plan_order: t.plan_order, name: t.name })));
     renderTasksTable(updatedPlannedTasks);
     updateGanttChart(updatedPlannedTasks);
 }
+
+
+
 
 
 
@@ -1388,14 +1124,6 @@ async function confirmAutoschedule() {
         currentTime = getNextWorkingTime(currentTime, machineCalendar);
     }
     
-    console.log('Autoscheduling tasks:', {
-        originalStartDate: startDate.toLocaleString('tr-TR'),
-        actualStartDate: currentTime.toLocaleString('tr-TR'),
-        criteria: criteria,
-        taskCount: sortedTasks.length,
-        hasCalendar: !!machineCalendar,
-        taskOrder: sortedTasks.map(t => ({ key: t.key, plan_order: t.plan_order, name: t.name }))
-    });
     
     // Schedule tasks SEQUENTIALLY - each task starts where the previous one ends
     sortedTasks.forEach((task, index) => {
@@ -1427,27 +1155,6 @@ async function confirmAutoschedule() {
         
         // Mark task as changed
         markTaskAsChanged(task.key);
-        
-        console.log(`Task ${index + 1} (${task.key}):`, {
-            planOrder: task.plan_order,
-            remainingHours: remainingHours,
-            startTime: taskStartTime.toLocaleString('tr-TR', { 
-                year: 'numeric', 
-                month: '2-digit', 
-                day: '2-digit', 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            }),
-            endTime: taskEndTime.toLocaleString('tr-TR', { 
-                year: 'numeric', 
-                month: '2-digit', 
-                day: '2-digit', 
-                hour: '2-digit', 
-                minute: '2-digit' 
-            }),
-            duration: `${remainingHours}h`,
-            respectsCalendar: !!machineCalendar
-        });
     });
     
     // Close modal
@@ -1524,34 +1231,19 @@ async function savePlan() {
                 return payload;
             })
         };
-
-        console.log('Saving plan with changed data:', updateData);
-        console.log('Changed tasks count:', changedTasks.length);
-        console.log('Changed tasks details:', changedTasks.map(t => ({
-            key: t.key,
-            in_plan: t.in_plan,
-            plan_order: t.plan_order,
-            planned_start_ms: t.planned_start_ms,
-            planned_end_ms: t.planned_end_ms,
-            plan_locked: t.plan_locked
-        })));
         
         const result = await updateCapacityPlanning(updateData);
-        console.log('Save result:', result);
-        
         // Reset change tracking after successful save
         resetChangeTracking();
         showNotification('Plan başarıyla kaydedildi', 'success');
         
     } catch (error) {
-        console.error('Error saving plan:', error);
         showNotification(`Plan kaydedilirken hata oluştu: ${error.message}`, 'error');
     }
 }
 
 // Apply filters
 function applyFilters(values) {
-    console.log('Applying filters:', values);
     // Implementation would depend on specific filtering requirements
 }
 
@@ -1572,8 +1264,6 @@ function resetMachineSelection() {
     currentMachineId = null;
     currentMachineName = null;
     currentTasks = [];
-    plannedTasks = [];
-    unplannedTasks = [];
     machineCalendar = null;
     
     // Reset change tracking
@@ -1588,15 +1278,12 @@ function resetMachineSelection() {
 
 // Show skeleton loading in tasks table
 function showTasksTableSkeleton() {
-    console.log('showTasksTableSkeleton called, tasksTable:', tasksTable);
     if (!tasksTable) {
-        console.error('Tasks table not initialized');
         return;
     }
     
     // Set loading state to show skeleton
     tasksTable.setLoading(true);
-    console.log('Skeleton loading enabled');
 }
 
 // Show error message in tasks table
@@ -1628,8 +1315,6 @@ function addManualRowClickListeners() {
     if (!machinesTable) return;
     
     const tableRows = machinesTable.container.querySelectorAll('tbody tr');
-    console.log('Adding manual click listeners to', tableRows.length, 'rows');
-    
     tableRows.forEach((row, index) => {
         // Add new click listener
         row.addEventListener('click', (e) => {
@@ -1638,7 +1323,6 @@ function addManualRowClickListeners() {
             
             const machine = machines[index];
             if (machine) {
-                console.log('Manual row click - machine:', machine);
                 selectMachine(machine.id, machine.name);
             }
         });
@@ -1975,7 +1659,6 @@ async function finishInlineEdit(cell, taskKey, field, newValue, originalContent)
         }
         
     } catch (error) {
-        console.error('Error in finishInlineEdit:', error);
         showNotification('Güncelleme sırasında hata oluştu', 'error');
         
         // Restore original content on error

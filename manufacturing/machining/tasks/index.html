@@ -12,14 +12,16 @@
     <link rel="stylesheet" href="../../../components/navbar.css">
     <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
-    <link rel="stylesheet" href="../../../pre-auth.css">
     <link rel="stylesheet" href="tasks.css">
     <link rel="stylesheet" href="../../../components/header/header.css">
     <link rel="stylesheet" href="../../../components/statistics-cards/statistics-cards.css">
     <link rel="stylesheet" href="../../../components/filters/filters.css">
     <link rel="stylesheet" href="../../../components/display-modal/display-modal.css">
+    <link rel="stylesheet" href="../../../components/table/table.css">
+    <link rel="stylesheet" href="../../../components/badges/badges.css">
+    <link rel="stylesheet" href="../../../components/edit-modal/edit-modal.css">
 </head>
-<body class="pre-auth">
+<body>
     <!-- Navigation -->
     <div id="navbar-container"></div>
 
@@ -37,78 +39,7 @@
             <!-- Tasks Table Section -->
             <div class="row">
                 <div class="col-12">
-                    <div class="dashboard-card">
-                        <div class="card-header">
-                            <h5 class="card-title">
-                                <i class="fas fa-table me-2 text-primary"></i>
-                                Görev Listesi
-                            </h5>
-                            <div class="card-actions">
-                                <button class="btn btn-sm btn-outline-secondary" id="refresh-tasks">
-                                    <i class="fas fa-sync-alt me-1"></i>Yenile
-                                </button>
-                                <button class="btn btn-sm btn-outline-secondary" id="export-tasks">
-                                    <i class="fas fa-download me-1"></i>Dışa Aktar
-                                </button>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div class="table-responsive">
-                                <table class="table table-hover">
-                                    <thead>
-                                        <tr>
-                                            <th class="sortable" data-field="key">
-                                                TI No <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="name">
-                                                Ad <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="job_no">
-                                                İş No <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="image_no">
-                                                Resim No <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="position_no">
-                                                Poz No <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="quantity">
-                                                Adet <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="machine_name">
-                                                Makine <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="estimated_hours">
-                                                Tahmini Saat <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="total_hours_spent">
-                                                Harcanan Saat <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th class="sortable" data-field="finish_time">
-                                                Bitmesi Planlanan Tarih <i class="fas fa-sort sort-icon"></i>
-                                            </th>
-                                            <th>Durum</th>
-                                            <th>İşlemler</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody id="tasks-table-body">
-                                        <!-- Tasks will be loaded here -->
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Pagination -->
-            <div class="row mt-4">
-                <div class="col-12">
-                    <nav aria-label="Tasks pagination">
-                        <ul class="pagination justify-content-center" id="tasks-pagination">
-                            <!-- Pagination will be generated here -->
-                        </ul>
-                    </nav>
+                    <div id="tasks-table-container"></div>
                 </div>
             </div>
         </div>
@@ -390,24 +321,8 @@
         </div>
     </div>
 
-    <!-- Bulk Create Modal -->
-    <div class="modal fade" id="bulkCreateModal" tabindex="-1">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">
-                        <i class="fas fa-layer-group me-2"></i>Toplu Görev Oluştur
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="bulk-create-container">
-                        <!-- Bulk create content will be loaded here -->
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Bulk Create Modal Container -->
+    <div id="bulk-create-modal-container"></div>
 
     <!-- Created Tasks Keys Modal -->
     <div class="modal fade" id="createdTasksModal" tabindex="-1">

@@ -64,6 +64,10 @@ export class TableComponent {
             // Custom row attributes
             rowAttributes: null, // Function that returns attributes for each row
             
+            // Drag and drop configuration
+            draggable: false,
+            onReorder: null, // Callback function when rows are reordered
+            
             ...options
         };
         
@@ -235,7 +239,11 @@ export class TableComponent {
         const customAttributes = this.options.rowAttributes ? 
             this.options.rowAttributes(row, rowIndex) : '';
         
-        return `<tr ${customAttributes} ${rowClick}>${cells.join('')}</tr>`;
+        // Add draggable attributes if drag and drop is enabled
+        const draggableAttributes = this.options.draggable ? 
+            `draggable="true" data-row-key="${row.key || rowIndex}"` : '';
+        
+        return `<tr ${customAttributes} ${draggableAttributes} ${rowClick}>${cells.join('')}</tr>`;
     }
     
     renderActions(row, rowIndex) {
@@ -597,6 +605,11 @@ export class TableComponent {
         // Inline editing
         if (this.options.editable) {
             this.setupInlineEditing();
+        }
+        
+        // Drag and drop
+        if (this.options.draggable) {
+            this.setupDragAndDrop();
         }
     }
     
@@ -1021,6 +1034,132 @@ export class TableComponent {
                 exportBtn.innerHTML = '<i class="fas fa-download me-1"></i>Dışa Aktar';
             }
         }
+    }
+    
+    setupDragAndDrop() {
+        const tbody = this.container.querySelector(`#${this.containerId}-tbody`);
+        if (!tbody) return;
+        
+        // Add event listeners to the tbody
+        tbody.addEventListener('dragstart', (e) => {
+            const row = e.target.closest('tr');
+            if (row && row.dataset.rowKey) {
+                e.dataTransfer.setData('text/plain', row.dataset.rowKey);
+                row.classList.add('dragging');
+                e.dataTransfer.effectAllowed = 'move';
+            }
+        });
+        
+        tbody.addEventListener('dragend', (e) => {
+            const row = e.target.closest('tr');
+            if (row && row.dataset.rowKey) {
+                row.classList.remove('dragging');
+                // Remove all drag-over classes
+                tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom'));
+            }
+        });
+        
+        tbody.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            // Add visual feedback but don't move DOM elements yet
+            const afterElement = this.getDragAfterElement(tbody, e.clientY);
+            const dragging = tbody.querySelector('.dragging');
+            
+            if (dragging) {
+                // Remove drag-over class from all rows
+                tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom'));
+                
+                // Add appropriate drag-over class based on position
+                if (afterElement) {
+                    const rect = afterElement.getBoundingClientRect();
+                    const midPoint = rect.top + rect.height / 2;
+                    
+                    if (e.clientY < midPoint) {
+                        afterElement.classList.add('drag-over-top');
+                    } else {
+                        afterElement.classList.add('drag-over-bottom');
+                    }
+                } else {
+                    // Check if we're at the very top or bottom
+                    const allRows = tbody.querySelectorAll('tr[data-row-key]:not(.dragging)');
+                    if (allRows.length > 0) {
+                        const firstRow = allRows[0];
+                        const lastRow = allRows[allRows.length - 1];
+                        const firstRect = firstRow.getBoundingClientRect();
+                        const lastRect = lastRow.getBoundingClientRect();
+                        
+                        if (e.clientY < firstRect.top + firstRect.height / 2) {
+                            firstRow.classList.add('drag-over-top');
+                        } else if (e.clientY > lastRect.bottom - lastRect.height / 2) {
+                            lastRow.classList.add('drag-over-bottom');
+                        }
+                    }
+                }
+            }
+        });
+        
+        tbody.addEventListener('drop', (e) => {
+            e.preventDefault();
+            const draggedRowKey = e.dataTransfer.getData('text/plain');
+            
+            if (!draggedRowKey) return;
+            
+            // Remove drag-over classes
+            tbody.querySelectorAll('tr').forEach(r => r.classList.remove('drag-over', 'drag-over-top', 'drag-over-bottom'));
+            
+            // Find the target position based on mouse position
+            const afterElement = this.getDragAfterElement(tbody, e.clientY);
+            let targetRowKey = null;
+            let insertPosition = 'after';
+            
+            if (afterElement) {
+                targetRowKey = afterElement.dataset.rowKey;
+                const rect = afterElement.getBoundingClientRect();
+                const midPoint = rect.top + rect.height / 2;
+                insertPosition = e.clientY < midPoint ? 'before' : 'after';
+            } else {
+                // Check if we're at the very top or bottom
+                const allRows = tbody.querySelectorAll('tr[data-row-key]:not(.dragging)');
+                if (allRows.length > 0) {
+                    const firstRow = allRows[0];
+                    const lastRow = allRows[allRows.length - 1];
+                    const firstRect = firstRow.getBoundingClientRect();
+                    const lastRect = lastRow.getBoundingClientRect();
+                    
+                    if (e.clientY < firstRect.top + firstRect.height / 2) {
+                        targetRowKey = firstRow.dataset.rowKey;
+                        insertPosition = 'before';
+                    } else if (e.clientY > lastRect.bottom - lastRect.height / 2) {
+                        targetRowKey = lastRow.dataset.rowKey;
+                        insertPosition = 'after';
+                    }
+                }
+            }
+            
+            // Only reorder if we have a valid target and it's different from dragged row
+            if (targetRowKey && targetRowKey !== draggedRowKey && this.options.onReorder) {
+                this.options.onReorder(draggedRowKey, targetRowKey, insertPosition);
+            }
+        });
+    }
+    
+    getDragAfterElement(container, y) {
+        const draggableElements = [...container.querySelectorAll('tr[data-row-key]:not(.dragging)')];
+        
+        if (draggableElements.length === 0) return null;
+        
+        return draggableElements.reduce((closest, child) => {
+            const box = child.getBoundingClientRect();
+            const offset = y - box.top - box.height / 2;
+            
+            if (offset < 0 && offset > closest.offset) {
+                return { offset: offset, element: child };
+            } else {
+                return closest;
+            }
+        }, { offset: Number.NEGATIVE_INFINITY }).element;
     }
     
     destroy() {

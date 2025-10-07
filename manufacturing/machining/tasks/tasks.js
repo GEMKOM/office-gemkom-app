@@ -1,5 +1,4 @@
 import { initNavbar } from '../../../components/navbar.js';
-import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { fetchMachines } from '../../../apis/machines.js';
 import { fetchTasks, deleteTask as deleteTaskAPI, updateTask as updateTaskAPI, fetchTaskById, createTask as createTaskAPI, bulkCreateTasks, markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
 import { fetchTimers } from '../../../apis/timers.js';
@@ -8,6 +7,7 @@ import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { TableComponent } from '../../../components/table/table.js';
+import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 
 // State management
 let currentPage = 1;
@@ -23,6 +23,7 @@ let createdTasks = []; // Store created tasks for displaying keys
 let isInlineEditing = false; // Flag to prevent re-rendering during inline editing
 let tasksStats = null; // Statistics Cards component instance
 let taskFilters = null; // Filters component instance
+let tasksTable = null; // Table component instance
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -63,8 +64,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function initializeTasks() {
     try {
         initializeFiltersComponent();
+        initializeTableComponent();
         await loadMachines();
-        initializeSortableHeaders();
         
         await loadTasks();
         updateTaskCounts();
@@ -90,6 +91,9 @@ async function loadMachines() {
         
         // Populate modal machine dropdowns
         populateModalMachineDropdowns();
+        
+        // Update table component machine options
+        updateTableMachineOptions();
         
         // Set default status filter to 'active' if no URL parameters were applied
         const filterApplied = handleUrlParameters();
@@ -169,6 +173,261 @@ function initializeFiltersComponent() {
     });
 }
 
+function initializeTableComponent() {
+    // Initialize table component
+    tasksTable = new TableComponent('tasks-table-container', {
+        title: 'Görev Listesi',
+        icon: 'fas fa-table',
+        iconColor: 'text-primary',
+        columns: [
+            {
+                field: 'key',
+                label: 'TI No',
+                sortable: true,
+                width: '10%',
+                formatter: (value) => `<span class="task-key">${value || '-'}</span>`
+            },
+            {
+                field: 'name',
+                label: 'Ad',
+                sortable: true,
+                width: '15%',
+                formatter: (value, row) => {
+                    const description = row.description ? `<br><small class="text-muted">${row.description}</small>` : '';
+                    return `<div class="task-name"><strong>${value || '-'}</strong>${description}</div>`;
+                }
+            },
+            {
+                field: 'job_no',
+                label: 'İş No',
+                sortable: true,
+                width: '8%',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'image_no',
+                label: 'Resim No',
+                sortable: true,
+                width: '8%',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'position_no',
+                label: 'Poz No',
+                sortable: true,
+                width: '8%',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'quantity',
+                label: 'Adet',
+                sortable: true,
+                width: '6%',
+                type: 'number',
+                formatter: (value) => `<span class="quantity-badge">${value || 0}</span>`
+            },
+            {
+                field: 'machine_fk',
+                label: 'Makine',
+                sortable: true,
+                width: '10%',
+                type: 'select',
+                options: [], // Will be populated dynamically
+                formatter: (value, row) => {
+                    // Display machine name, not ID
+                    return `<span class="machine-name">${row.machine_name || '-'}</span>`;
+                }
+            },
+            {
+                field: 'estimated_hours',
+                label: 'Tahmini Saat',
+                sortable: true,
+                width: '10%',
+                type: 'number',
+                formatter: (value) => `<span class="estimated-hours">${value ? value + ' saat' : 'Belirtilmemiş'}</span>`
+            },
+            {
+                field: 'total_hours_spent',
+                label: 'Harcanan Saat',
+                sortable: true,
+                width: '10%',
+                formatter: (value) => `<span class="hours-spent">${value || 0} saat</span>`
+            },
+            {
+                field: 'finish_time',
+                label: 'Bitmesi Planlanan Tarih',
+                sortable: true,
+                width: '12%',
+                formatter: (value, row) => {
+                    if (row.planned_end_ms) {
+                        return new Date(row.planned_end_ms).toLocaleDateString('tr-TR');
+                    }
+                    return 'Belirtilmemiş';
+                }
+            },
+            {
+                field: 'status',
+                label: 'Durum',
+                sortable: false,
+                width: '8%',
+                type: 'select',
+                options: [
+                    { value: 'pending', label: 'Bekliyor' },
+                    { value: 'completed', label: 'Tamamlandı' }
+                ],
+                formatter: (value, row) => {
+                    if (row.completion_date) {
+                        return '<span class="status-badge status-green">Tamamlandı</span>';
+                    } else if (row.total_hours_spent > 0) {
+                        return '<span class="status-badge status-yellow">Çalışıldı</span>';
+                    } else {
+                        return '<span class="status-badge status-grey">Bekliyor</span>';
+                    }
+                }
+            }
+        ],
+        actions: [
+            {
+                key: 'view',
+                label: 'Görev Verileri',
+                icon: 'fas fa-chart-line',
+                class: 'btn-outline-success',
+                title: 'Görev Verileri',
+                onClick: (row) => showCompletionData(row.key)
+            },
+            {
+                key: 'delete',
+                label: 'Sil',
+                icon: 'fas fa-trash',
+                class: 'btn-outline-danger',
+                title: 'Sil',
+                onClick: (row) => deleteTask(row.key)
+            }
+        ],
+        data: [],
+        loading: true, // Show skeleton loading immediately when page loads
+        sortable: true,
+        pagination: true,
+        itemsPerPage: 20,
+        currentPage: 1,
+        totalItems: 0,
+        serverSidePagination: true,
+        onPageChange: (page) => {
+            loadTasks(page);
+        },
+        onSort: (field, direction) => {
+            currentSortField = field;
+            currentSortDirection = direction;
+            loadTasks(1);
+        },
+        exportable: true,
+        refreshable: true,
+        onRefresh: () => {
+            loadTasks(currentPage);
+        },
+        striped: false,
+        small: false,
+        emptyMessage: 'Görev bulunamadı',
+        emptyIcon: 'fas fa-tasks',
+        rowAttributes: (row) => `data-task-key="${row.key}" class="data-update"`,
+        // Enable cell editing
+        editable: true,
+        editableColumns: ['name', 'job_no', 'image_no', 'position_no', 'quantity', 'estimated_hours', 'machine_fk', 'status'],
+        onEdit: async (row, field, newValue, oldValue) => {
+            try {
+                // Check if value actually changed (with type normalization)
+                let normalizedOld = oldValue;
+                let normalizedNew = newValue;
+                
+                // For numeric fields, convert to numbers for comparison
+                if (field === 'quantity' || field === 'estimated_hours') {
+                    normalizedOld = parseFloat(oldValue) || 0;
+                    normalizedNew = parseFloat(newValue) || 0;
+                }
+                
+                // For machine field, compare IDs
+                if (field === 'machine_fk') {
+                    normalizedOld = row.machine_fk ? row.machine_fk.toString() : '';
+                    normalizedNew = newValue ? newValue.toString() : '';
+                }
+                
+                
+                if (normalizedOld === normalizedNew) {
+                    return true;
+                }
+                
+                // Prepare update data
+                const updateData = {};
+                
+                // Handle machine field specially
+                if (field === 'machine_fk') {
+                    updateData.machine_fk = newValue ? parseInt(newValue) : null;
+                } else if (field === 'status') {
+                    // Handle status updates using specific API functions
+                    let response;
+                    if (newValue === 'completed') {
+                        response = await markTaskCompleted(row.key);
+                    } else if (newValue === 'pending') {
+                        response = await unmarkTaskCompleted(row.key);
+                    } else {
+                        throw new Error('Invalid status value');
+                    }
+                    
+                    if (response.ok) {
+                        // Update local task data
+                        if (newValue === 'completed') {
+                            row.completion_date = new Date().toISOString();
+                        } else {
+                            row.completion_date = null;
+                        }
+                        
+                        // Update task counts to reflect the change
+                        updateTaskCounts();
+                        
+                        showNotification('Görev durumu başarıyla güncellendi', 'success');
+                        return true;
+                    } else {
+                        throw new Error('Failed to update status');
+                    }
+                } else {
+                    updateData[field] = newValue;
+                }
+                
+                // Call the updateTask API for non-status fields
+                if (field !== 'status') {
+                    const response = await updateTaskAPI(row.key, updateData);
+                    
+                    if (response.ok) {
+                        // Update local task data
+                        if (field === 'machine_fk') {
+                            row.machine_fk = newValue ? parseInt(newValue) : null;
+                            // Update machine_name for display
+                            const selectedMachine = machines.find(m => m.id == newValue);
+                            row.machine_name = selectedMachine ? selectedMachine.name : 'N/A';
+                        } else {
+                            row[field] = newValue;
+                        }
+                        
+                        // Refresh the table to show updated data
+                        if (tasksTable) {
+                            tasksTable.updateData(tasks, totalTasks, currentPage);
+                        }
+                        
+                        showNotification('Görev başarıyla güncellendi', 'success');
+                        return true;
+                    } else {
+                        throw new Error('Failed to update task');
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating task:', error);
+                showNotification('Görev güncellenirken hata oluştu', 'error');
+                return false;
+            }
+        }
+    });
+}
+
 // Handle URL parameters for filtering and task modal
 function handleUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
@@ -215,50 +474,18 @@ function populateModalMachineDropdowns() {
     }
 }
 
-function initializeSortableHeaders() {
-    const sortableHeaders = document.querySelectorAll('.sortable');
-    sortableHeaders.forEach(header => {
-        header.addEventListener('click', () => {
-            const field = header.getAttribute('data-field');
-            handleColumnSort(field);
-        });
-    });
-    
-    // Set initial sort indicator
-    const initialHeader = document.querySelector(`[data-field="${currentSortField}"]`);
-    if (initialHeader) {
-        initialHeader.classList.add(`sort-${currentSortDirection}`);
+function updateTableMachineOptions() {
+    if (tasksTable && machines.length > 0) {
+        const machineOptions = machines.map(machine => ({
+            value: machine.id.toString(),
+            label: machine.name
+        }));
+        
+        // Update the machine_fk column options
+        tasksTable.updateColumn('machine_fk', { options: machineOptions });
     }
 }
 
-function handleColumnSort(field) {
-    // Clear previous sort indicators
-    document.querySelectorAll('.sortable').forEach(header => {
-        header.classList.remove('sort-asc', 'sort-desc');
-    });
-    
-    // Determine sort direction
-    if (currentSortField === field) {
-        // Toggle direction if same field
-        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-        // New field, start with ascending
-        currentSortField = field;
-        currentSortDirection = 'asc';
-    }
-    
-    // Update current ordering
-    currentOrdering = currentSortDirection === 'asc' ? field : `-${field}`;
-    
-    // Update sort indicator
-    const header = document.querySelector(`[data-field="${field}"]`);
-    if (header) {
-        header.classList.add(`sort-${currentSortDirection}`);
-    }
-    
-    // Reload tasks with new sorting
-    loadTasks(1);
-}
 
 async function loadTasks(page = 1) {
     if (isLoading) return;
@@ -270,7 +497,11 @@ async function loadTasks(page = 1) {
     }
     
     isLoading = true;
-    showLoadingState();
+    
+    // Set loading state on table component for all loads
+    if (tasksTable) {
+        tasksTable.setLoading(true);
+    }
     
     try {
         const queryParams = buildTaskQuery(page);
@@ -282,8 +513,12 @@ async function loadTasks(page = 1) {
             totalTasks = data.count || 0;
             currentPage = page;
             
-            renderTasksTable();
-            renderPagination();
+            // Update table component with new data
+            if (tasksTable) {
+                tasksTable.setLoading(false);
+                tasksTable.updateData(tasks, totalTasks, currentPage);
+            }
+            
             updateTaskCounts();
         } else {
             throw new Error('Failed to load tasks');
@@ -293,9 +528,14 @@ async function loadTasks(page = 1) {
         showNotification('Görevler yüklenirken hata oluştu', 'error');
         tasks = [];
         totalTasks = 0;
+        
+        // Update table component with empty data
+        if (tasksTable) {
+            tasksTable.setLoading(false);
+            tasksTable.updateData([], 0, 1);
+        }
     } finally {
         isLoading = false;
-        hideLoadingState();
     }
 }
 
@@ -348,128 +588,8 @@ function buildTaskQuery(page = 1) {
     return `?${params.toString()}`;
 }
 
-function renderTasksTable() {
-    const tbody = document.getElementById('tasks-table-body');
-    if (!tbody) return;
-    
-    if (tasks.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="12" class="text-center" style="height: 200px; vertical-align: middle;">
-                    <div class="empty-state">
-                        <i class="fas fa-tasks"></i>
-                        <h5>Görev Bulunamadı</h5>
-                        <p>Filtrelerinizi değiştirmeyi deneyin veya yeni bir görev oluşturun.</p>
-                    </div>
-                </td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tbody.innerHTML = tasks.map(task => `
-        <tr class="data-update" data-task-key="${task.key}">
-            <td>
-                <span class="task-key">${task.key || 'N/A'}</span>
-            </td>
-            <td class="editable-cell" data-field="name" data-task-key="${task.key}">
-                <div class="task-name">
-                    <strong>${task.name || 'N/A'}</strong>
-                    ${task.description ? `<br><small class="text-muted">${task.description}</small>` : ''}
-                </div>
-            </td>
-            <td class="editable-cell" data-field="job_no" data-task-key="${task.key}">${task.job_no || 'N/A'}</td>
-            <td class="editable-cell" data-field="image_no" data-task-key="${task.key}">${task.image_no || 'N/A'}</td>
-            <td class="editable-cell" data-field="position_no" data-task-key="${task.key}">${task.position_no || 'N/A'}</td>
-            <td class="editable-cell" data-field="quantity" data-task-key="${task.key}">
-                <span class="quantity-badge">${task.quantity || 0}</span>
-            </td>
-            <td class="editable-cell" data-field="machine_name" data-task-key="${task.key}">
-                <span class="machine-name">${task.machine_name || 'N/A'}</span>
-            </td>
-            <td class="editable-cell" data-field="estimated_hours" data-task-key="${task.key}">
-                <span class="estimated-hours">${task.estimated_hours ? task.estimated_hours + ' saat' : 'Belirtilmemiş'}</span>
-            </td>
-            <td>
-                <span class="hours-spent">${task.total_hours_spent || 0} saat</span>
-            </td>
-            <td class="editable-cell" data-field="finish_time" data-task-key="${task.key}">
-                ${task.planned_end_ms ? new Date(task.planned_end_ms).toLocaleDateString('tr-TR') : 'Belirtilmemiş'}
-            </td>
-            <td class="editable-cell" data-field="status" data-task-key="${task.key}">
-                ${getStatusBadge(task)}
-            </td>
-            <td>
-                <div class="action-buttons">
-                    <button class="btn btn-sm btn-outline-success" onclick="showCompletionData('${task.key}')" title="Görev Verileri">
-                        <i class="fas fa-chart-line"></i>
-                    </button>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteTask('${task.key}')" title="Sil">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-            </td>
-        </tr>
-    `).join('');
-    
-    // Add click event listeners for inline editing
-    setupInlineEditing();
-}
 
-function getStatusBadge(task) {
-    if (task.completion_date) {
-        return '<span class="status-badge completed">Tamamlandı</span>';
-    } else if (task.total_hours_spent > 0) {
-        return '<span class="status-badge worked-on">Çalışıldı</span>';
-    } else {
-        return '<span class="status-badge pending">Bekliyor</span>';
-    }
-}
 
-function renderPagination() {
-    const pagination = document.getElementById('tasks-pagination');
-    if (!pagination) return;
-    
-    const totalPages = Math.ceil(totalTasks / 20);
-    if (totalPages <= 1) {
-        pagination.innerHTML = '';
-        return;
-    }
-    
-    let html = '';
-    
-    // Previous button
-    html += `
-        <li class="page-item ${currentPage === 1 ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changePage(${currentPage - 1})">
-                <i class="fas fa-chevron-left"></i>
-            </a>
-        </li>
-    `;
-    
-    // Page numbers
-    const startPage = Math.max(1, currentPage - 2);
-    const endPage = Math.min(totalPages, currentPage + 2);
-    
-    for (let i = startPage; i <= endPage; i++) {
-        html += `
-            <li class="page-item ${i === currentPage ? 'active' : ''}">
-                <a class="page-link" href="#" onclick="changePage(${i})">${i}</a>
-            </li>
-        `;
-    }
-    
-    // Next button
-    html += `
-        <li class="page-item ${currentPage === totalPages ? 'disabled' : ''}">
-            <a class="page-link" href="#" onclick="changePage(${currentPage + 1})">
-                <i class="fas fa-chevron-right"></i>
-            </a>
-        </li>
-    `;
-    
-    pagination.innerHTML = html;
-}
 
 function updateTaskCounts() {
     // Calculate counts from current data
@@ -492,16 +612,6 @@ function updateTaskCounts() {
 
 
 function setupEventListeners() {
-    // Refresh button
-    document.getElementById('refresh-tasks')?.addEventListener('click', () => {
-        loadTasks(currentPage);
-    });
-    
-    // Export button
-    document.getElementById('export-tasks')?.addEventListener('click', () => {
-        exportTasks();
-    });
-    
     // Save task button
     document.getElementById('save-task-btn')?.addEventListener('click', () => {
         saveTask();
@@ -676,19 +786,22 @@ function showCreateTaskModal() {
 }
 
 function showBulkCreateModal() {
-    const modalElement = document.getElementById('bulkCreateModal');
-    const modal = new bootstrap.Modal(modalElement, {
-        backdrop: 'static', // Prevents closing when clicking outside
-        keyboard: false     // Prevents closing with Escape key
+    // Create Edit Modal instance for bulk create
+    const bulkCreateModal = new EditModal('bulk-create-modal-container', {
+        title: 'Toplu Görev Oluştur',
+        icon: 'fas fa-layer-group',
+        saveButtonText: 'Görevleri Oluştur',
+        size: 'xl'
     });
-    loadBulkCreateContent();
-    modal.show();
+    
+    // Set up the bulk create form
+    setupBulkCreateForm(bulkCreateModal);
+    
+    // Show the modal
+    bulkCreateModal.show();
 }
 
-async function loadBulkCreateContent() {
-    const container = document.querySelector('.bulk-create-container');
-    if (!container) return;
-    
+function setupBulkCreateForm(bulkCreateModal) {
     // Define columns for bulk creation
     const columns = [
         { key: 'name', label: 'Ad', required: true },
@@ -716,19 +829,52 @@ async function loadBulkCreateContent() {
         hasUnsavedChanges = false;
     }
     
-    function renderBulkTable() {
+    // Function to show notifications within the modal
+    function showModalNotification(message, type = 'info') {
+        // Remove existing notifications
+        const existingNotifications = bulkCreateModal.container.querySelectorAll('.bulk-create-notification');
+        existingNotifications.forEach(n => n.remove());
+        
+        // Create notification element
+        const notification = document.createElement('div');
+        notification.className = `bulk-create-notification alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show`;
+        notification.innerHTML = `
+            ${message}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        `;
+        
+        // Insert notification at the bottom of the modal body
+        const modalBody = bulkCreateModal.container.querySelector('.modal-body');
+        if (modalBody) {
+            modalBody.appendChild(notification);
+        }
+        
+        // Auto remove after 5 seconds
+        setTimeout(() => {
+            if (notification.parentNode) {
+                notification.style.animation = 'slideOutRight 0.3s ease-out';
+                setTimeout(() => {
+                    if (notification.parentNode) {
+                        notification.remove();
+                    }
+                }, 300);
+            }
+        }, 5000);
+        
+        return notification;
+    }
+    
+    // Function to create the bulk create table HTML
+    function createBulkCreateTable() {
         let html = `
             <div class="bulk-create-header mb-4">
-                <h6 class="mb-2">
-                    <i class="fas fa-layer-group me-2"></i>Toplu Görev Oluşturma
-                </h6>
                 <p class="text-muted small">Birden fazla görev oluşturmak için aşağıdaki tabloyu kullanın.</p>
+                <small class="text-info">Toplam satır sayısı: ${rows.length}</small>
             </div>
-            <form id="bulk-task-form">
-                <div class="table-responsive">
-                    <table class="table table-bordered table-sm">
-                        <thead class="table-light">
-                            <tr>
+            <div class="table-responsive">
+                <table class="table table-bordered table-sm">
+                    <thead class="table-light">
+                        <tr>
         `;
         
         for (const col of columns) {
@@ -776,15 +922,30 @@ async function loadBulkCreateContent() {
             <button type="button" class="btn btn-outline-primary btn-sm" id="bulk-add-row">
                 <i class="fas fa-plus me-1"></i>Satır Ekle
             </button>
-            <button type="submit" class="btn btn-primary btn-sm ms-2">
-                <i class="fas fa-save me-1"></i>Görevleri Oluştur
-            </button>
-        </div>
-        </form>`;
+        </div>`;
         
-        container.innerHTML = html;
+        return html;
+    }
+    
+    // Function to re-render the table
+    function reRenderTable() {
+        const customContent = createBulkCreateTable();
         
-        // Add event listeners
+        // Find the section with the bulk-create-table ID
+        const sectionElement = bulkCreateModal.container.querySelector('[data-section-id="bulk-create-table"]');
+        if (sectionElement) {
+            // Find the custom-content div within the section
+            const customContentDiv = sectionElement.querySelector('.custom-content');
+            if (customContentDiv) {
+                customContentDiv.innerHTML = customContent;
+                setupBulkCreateEventListeners();
+            }
+        }
+    }
+    
+    // Function to set up event listeners
+    function setupBulkCreateEventListeners() {
+        // Add event listeners for bulk inputs
         document.querySelectorAll('.bulk-input').forEach(input => {
             input.addEventListener('input', (e) => {
                 const row = parseInt(input.getAttribute('data-row'));
@@ -803,139 +964,182 @@ async function loadBulkCreateContent() {
             });
         });
         
+        // Duplicate row functionality
         document.querySelectorAll('.bulk-duplicate').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 const rowIdx = parseInt(btn.getAttribute('data-row'));
                 const newRow = { ...rows[rowIdx] };
                 rows.splice(rowIdx + 1, 0, newRow);
                 checkForUnsavedChanges();
-                renderBulkTable();
+                reRenderTable();
             });
         });
         
+        // Remove row functionality
         document.querySelectorAll('.bulk-remove').forEach(btn => {
-            btn.addEventListener('click', () => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 const rowIdx = parseInt(btn.getAttribute('data-row'));
                 if (rows.length > 1) {
                     rows.splice(rowIdx, 1);
                     checkForUnsavedChanges();
-                    renderBulkTable();
+                    reRenderTable();
                 }
             });
         });
         
-        document.getElementById('bulk-add-row').onclick = () => {
-            rows.push(Object.fromEntries(columns.map(c => [c.key, ''])));
-            checkForUnsavedChanges();
-            renderBulkTable();
-        };
-        
-        document.getElementById('bulk-task-form').onsubmit = async (e) => {
-            e.preventDefault();
-            
-            // Validate required fields
-            const requiredFields = ['name', 'job_no', 'quantity', 'estimated_hours', 'machine_fk'];
-            const missingFields = [];
-            
-            rows.forEach((row, index) => {
-                requiredFields.forEach(field => {
-                    if (!row[field] || row[field].toString().trim() === '') {
-                        missingFields.push(`Satır ${index + 1}: ${columns.find(col => col.key === field)?.label}`);
-                    }
-                });
+        // Add row functionality
+        const addRowBtn = document.getElementById('bulk-add-row');
+        if (addRowBtn) {
+            addRowBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                rows.push(Object.fromEntries(columns.map(c => [c.key, ''])));
+                checkForUnsavedChanges();
+                reRenderTable();
             });
-            
-            if (missingFields.length > 0) {
-                showNotification('Lütfen aşağıdaki zorunlu alanları doldurun:\n' + missingFields.join('\n'), 'error');
-                return;
-            }
-            
-            // Validate numeric constraints
-            const validationErrors = [];
-            rows.forEach((row, index) => {
-                // Check estimated_hours constraints
-                if (row.estimated_hours) {
-                    const hours = parseFloat(row.estimated_hours);
-                    if (hours <= 0) {
-                        validationErrors.push(`Satır ${index + 1}: Tahmini Saat 0'dan büyük olmalıdır`);
-                    }
-                    if (hours.toString().includes('.') && hours.toString().split('.')[1].length > 2) {
-                        validationErrors.push(`Satır ${index + 1}: Tahmini Saat en fazla 2 ondalık basamak içerebilir`);
-                    }
-                }
-                
-                // Check quantity constraints
-                if (row.quantity) {
-                    const quantity = parseInt(row.quantity);
-                    if (quantity <= 0) {
-                        validationErrors.push(`Satır ${index + 1}: Adet 0'dan büyük olmalıdır`);
-                    }
-                }
-            });
-            
-            if (validationErrors.length > 0) {
-                showNotification('Lütfen aşağıdaki hataları düzeltin:\n' + validationErrors.join('\n'), 'error');
-                return;
-            }
-            
-            // Prepare payload
-            const payload = rows.map(row => ({
-                name: row.name,
-                job_no: row.job_no,
-                image_no: row.image_no,
-                position_no: row.position_no,
-                quantity: row.quantity ? parseInt(row.quantity) : null,
-                estimated_hours: row.estimated_hours ? parseFloat(row.estimated_hours) : null,
-                machine_fk: row.machine_fk ? parseInt(row.machine_fk) : null,
-                finish_time: row.finish_time || null
-            }));
-            
-            try {
-                const response = await bulkCreateTasks(payload);
-                
-                if (!response.ok) throw new Error('Toplu görev oluşturulamadı');
-                
-                const responseData = await response.json();
-                
-                // Check if the response contains created tasks data
-                if (responseData && Array.isArray(responseData)) {
-                    // Map the created tasks with machine names
-                    const createdTasksWithMachineNames = responseData.map(task => {
-                        const machine = machines.find(m => m.id == task.machine_fk);
-                        return {
-                            ...task,
-                            machine_name: machine ? machine.name : 'N/A'
-                        };
-                    });
-                    
-                    // Show the created tasks modal
-                    showCreatedTasksModal(createdTasksWithMachineNames);
-                } else {
-                    showNotification(`${payload.length} görev başarıyla oluşturuldu!`, 'success');
-                }
-                
-                rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
-                updateInitialState();
-                renderBulkTable();
-                
-                // Reload tasks list
-                loadTasks(currentPage);
-                
-                // Close the modal after successful creation
-                const modal = bootstrap.Modal.getInstance(document.getElementById('bulkCreateModal'));
-                if (modal) {
-                    modal.hide();
-                }
-                
-            } catch (err) {
-                console.error('Error creating bulk tasks:', err);
-                showNotification('Hata: ' + err.message, 'error');
-            }
-        };
+        }
     }
     
-    // Render the table
-    renderBulkTable();
+    // Add section for the bulk create table
+    bulkCreateModal.addSection({
+        id: 'bulk-create-table',
+        title: 'Toplu Görev Oluşturma',
+        icon: 'fas fa-layer-group',
+        iconColor: 'text-primary',
+        fields: [] // We'll add custom content instead
+    });
+    
+    // Set up save callback
+    bulkCreateModal.onSaveCallback(async (formData) => {
+        await handleBulkCreateSave(rows, columns, showModalNotification);
+    });
+    
+    // Set up cancel callback
+    bulkCreateModal.onCancelCallback(() => {
+        // Reset form if needed
+        rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
+        updateInitialState();
+    });
+    
+    // Render the modal
+    bulkCreateModal.render();
+    
+    // Add custom content after rendering
+    setTimeout(() => {
+        // Find the section and add custom content
+        const sectionElement = bulkCreateModal.container.querySelector('[data-section-id="bulk-create-table"]');
+        if (sectionElement) {
+            // Find the fields container and replace it with our custom content
+            const fieldsContainer = sectionElement.querySelector('.row.g-2');
+            if (fieldsContainer) {
+                fieldsContainer.outerHTML = `<div class="custom-content">${createBulkCreateTable()}</div>`;
+            }
+        }
+        
+        // Add event listeners
+        setupBulkCreateEventListeners();
+    }, 100);
+}
+
+async function handleBulkCreateSave(rows, columns, showModalNotification) {
+    // Validate required fields
+    const requiredFields = ['name', 'job_no', 'quantity', 'estimated_hours', 'machine_fk'];
+    const missingFields = [];
+    
+    rows.forEach((row, index) => {
+        requiredFields.forEach(field => {
+            if (!row[field] || row[field].toString().trim() === '') {
+                missingFields.push(`Satır ${index + 1}: ${columns.find(col => col.key === field)?.label}`);
+            }
+        });
+    });
+    
+    if (missingFields.length > 0) {
+        showModalNotification('Lütfen aşağıdaki zorunlu alanları doldurun:<br>' + missingFields.join('<br>'), 'error');
+        return;
+    }
+    
+    // Validate numeric constraints
+    const validationErrors = [];
+    rows.forEach((row, index) => {
+        // Check estimated_hours constraints
+        if (row.estimated_hours) {
+            const hours = parseFloat(row.estimated_hours);
+            if (hours <= 0) {
+                validationErrors.push(`Satır ${index + 1}: Tahmini Saat 0'dan büyük olmalıdır`);
+            }
+            if (hours.toString().includes('.') && hours.toString().split('.')[1].length > 2) {
+                validationErrors.push(`Satır ${index + 1}: Tahmini Saat en fazla 2 ondalık basamak içerebilir`);
+            }
+        }
+        
+        // Check quantity constraints
+        if (row.quantity) {
+            const quantity = parseInt(row.quantity);
+            if (quantity <= 0) {
+                validationErrors.push(`Satır ${index + 1}: Adet 0'dan büyük olmalıdır`);
+            }
+        }
+    });
+    
+    if (validationErrors.length > 0) {
+        showModalNotification('Lütfen aşağıdaki hataları düzeltin:<br>' + validationErrors.join('<br>'), 'error');
+        return;
+    }
+    
+    // Prepare payload
+    const payload = rows.map(row => ({
+        name: row.name,
+        job_no: row.job_no,
+        image_no: row.image_no,
+        position_no: row.position_no,
+        quantity: row.quantity ? parseInt(row.quantity) : null,
+        estimated_hours: row.estimated_hours ? parseFloat(row.estimated_hours) : null,
+        machine_fk: row.machine_fk ? parseInt(row.machine_fk) : null,
+        finish_time: row.finish_time || null
+    }));
+    
+    try {
+        const response = await bulkCreateTasks(payload);
+        
+        if (!response.ok) throw new Error('Toplu görev oluşturulamadı');
+        
+        const responseData = await response.json();
+        
+        // Check if the response contains created tasks data
+        if (responseData && Array.isArray(responseData)) {
+            // Map the created tasks with machine names
+            const createdTasksWithMachineNames = responseData.map(task => {
+                const machine = machines.find(m => m.id == task.machine_fk);
+                return {
+                    ...task,
+                    machine_name: machine ? machine.name : 'N/A'
+                };
+            });
+            
+            // Show the created tasks modal
+            showCreatedTasksModal(createdTasksWithMachineNames);
+        } else {
+            showModalNotification(`${payload.length} görev başarıyla oluşturuldu!`, 'success');
+        }
+        
+        // Reload tasks list
+        loadTasks(currentPage);
+        
+        // Close the modal after successful creation
+        const modalInstance = bootstrap.Modal.getOrCreateInstance(document.querySelector('#bulk-create-modal-container .modal'));
+        if (modalInstance) {
+            modalInstance.hide();
+        }
+        
+    } catch (err) {
+        console.error('Error creating bulk tasks:', err);
+        showModalNotification('Hata: ' + err.message, 'error');
+    }
 }
 
 async function saveTask() {
@@ -1440,7 +1644,12 @@ async function showCompletionDataModal(task) {
                     <div class="field-display mb-2">
                         <label class="field-label">Durum</label>
                         <div class="field-value">
-                            ${getStatusBadge(task)}
+                            ${task.completion_date 
+                                ? '<span class="status-badge status-green">Tamamlandı</span>'
+                                : task.total_hours_spent > 0 
+                                    ? '<span class="status-badge status-yellow">Çalışıldı</span>'
+                                    : '<span class="status-badge status-grey">Bekliyor</span>'
+                            }
                         </div>
                     </div>
                 </div>
@@ -1738,130 +1947,15 @@ window.deleteTask = function(taskKey) {
     deleteModal.show();
 };
 
-// Global function for pagination
-window.changePage = function(page) {
-    if (page >= 1) {
-        loadTasks(page);
-    }
-};
 
 
 
-function showLoadingState() {
-    const tableBody = document.getElementById('tasks-table-body');
-    if (tableBody) {
-        // Create loading rows that maintain table structure
-        const loadingRows = [];
-        for (let i = 0; i < 5; i++) { // Show 5 loading rows
-            loadingRows.push(`
-                <tr class="loading-row">
-                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 200px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 60px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 120px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 80px;"></div></td>
-                    <td><div class="loading-skeleton" style="width: 100px;"></div></td>
-                </tr>
-            `);
-        }
-        tableBody.innerHTML = loadingRows.join('');
-    }
-}
-
-function hideLoadingState() {
-    // Loading state is cleared when table is rendered
-}
 
 function exportTasks() {
-    if (tasks.length === 0) {
-        showNotification('Dışa aktarılacak görev bulunamadı', 'warning');
-        return;
-    }
-    
-    try {
-        // Prepare data for Excel
-        const headers = [
-            'TI No',
-            'Görev Adı',
-            'İş No',
-            'Resim No',
-            'Pozisyon No',
-            'Adet',
-            'Makine',
-            'Tahmini Saat',
-            'Harcanan Saat',
-            'Durum',
-            'Oluşturulma Tarihi',
-            'Tamamlanma Tarihi'
-        ];
-        
-        // Convert tasks to worksheet data
-        const worksheetData = [
-            headers,
-            ...tasks.map(task => [
-                task.key || '',
-                task.name || '',
-                task.job_no || '',
-                task.image_no || '',
-                task.position_no || '',
-                task.quantity || '',
-                task.machine_name || '',
-                task.estimated_hours || '',
-                task.total_hours_spent || '',
-                task.completion_date ? 'Tamamlanan' : (task.start_date ? 'Aktif' : 'Bekleyen'),
-                task.created_at ? new Date(task.created_at).toLocaleDateString('tr-TR') : '',
-                task.completion_date ? new Date(task.completion_date).toLocaleDateString('tr-TR') : ''
-            ])
-        ];
-        
-        // Create workbook and worksheet
-        const workbook = XLSX.utils.book_new();
-        const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-        
-        // Set column widths for better readability
-        const columnWidths = [
-            { wch: 12 }, // TI No
-            { wch: 30 }, // Görev Adı
-            { wch: 12 }, // İş No
-            { wch: 12 }, // Resim No
-            { wch: 12 }, // Pozisyon No
-            { wch: 8 },  // Adet
-            { wch: 15 }, // Makine
-            { wch: 12 }, // Tahmini Saat
-            { wch: 12 }, // Harcanan Saat
-            { wch: 10 }, // Durum
-            { wch: 15 }, // Oluşturulma Tarihi
-            { wch: 15 }  // Tamamlanma Tarihi
-        ];
-        worksheet['!cols'] = columnWidths;
-        
-        // Add worksheet to workbook
-        XLSX.utils.book_append_sheet(workbook, worksheet, 'Görevler');
-        
-        // Generate Excel file
-        const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-        const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        
-        // Create download link
-        const link = document.createElement('a');
-        const url = URL.createObjectURL(blob);
-        link.setAttribute('href', url);
-        link.setAttribute('download', `gorevler_${new Date().toISOString().split('T')[0]}.xlsx`);
-        link.style.visibility = 'hidden';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        
-        showNotification(`${tasks.length} görev başarıyla Excel dosyası olarak dışa aktarıldı`, 'success');
-    } catch (error) {
-        console.error('Error exporting tasks:', error);
-        showNotification('Dışa aktarma sırasında hata oluştu', 'error');
+    if (tasksTable) {
+        tasksTable.exportData('excel');
+    } else {
+        showNotification('Tablo bileşeni bulunamadı', 'error');
     }
 }
 
@@ -1895,585 +1989,4 @@ function showNotification(message, type = 'info') {
     return notification;
 } 
 
-function setupInlineEditing() {
-    const editableCells = document.querySelectorAll('.editable-cell');
-    
-    editableCells.forEach(cell => {
-        cell.addEventListener('click', function(e) {
-            // Don't trigger if clicking on action buttons
-            if (e.target.closest('.action-buttons')) {
-                return;
-            }
-            
-            // Skip if already editing globally
-            if (isInlineEditing) {
-                return;
-            }
-            
-            const taskKey = this.dataset.taskKey;
-            const field = this.dataset.field;
-            const currentValue = this.textContent.trim();
-            
-            // Skip if already editing this cell
-            if (this.querySelector('input')) {
-                return;
-            }
-            
-            startInlineEdit(this, taskKey, field, currentValue);
-        });
-    });
-}
 
-function startInlineEdit(cell, taskKey, field, currentValue) {
-    // Prevent multiple simultaneous inline edits
-    if (isInlineEditing) {
-        return;
-    }
-    
-    // Set inline editing flag
-    isInlineEditing = true;
-    
-    // Clear the flag after 30 seconds as a safety measure
-    setTimeout(() => {
-        isInlineEditing = false;
-    }, 30000);
-    
-    // Create input element based on field type
-    let input;
-    
-    // Set input type and attributes based on field
-    switch (field) {
-        case 'quantity':
-            input = document.createElement('input');
-            input.type = 'number';
-            input.min = '1';
-            input.className = 'form-control form-control-sm';
-            input.value = currentValue === 'N/A' || currentValue === '0' ? '' : currentValue;
-            break;
-        case 'estimated_hours':
-            input = document.createElement('input');
-            input.type = 'number';
-            input.step = '0.5';
-            input.min = '0';
-            input.className = 'form-control form-control-sm';
-            input.value = currentValue === 'N/A' || currentValue === 'Belirtilmemiş' ? '' : currentValue.replace(' saat', '');
-            break;
-        case 'machine_name':
-            // Create dropdown for machine selection
-            input = document.createElement('select');
-            input.className = 'form-control form-control-sm';
-            
-            // Add default option
-            const defaultOption = document.createElement('option');
-            defaultOption.value = '';
-            defaultOption.textContent = 'Makine seçin...';
-            input.appendChild(defaultOption);
-            
-            // Add machine options
-            machines.forEach(machine => {
-                const option = document.createElement('option');
-                option.value = machine.id;
-                option.textContent = machine.name;
-                
-                // Select current machine if it matches
-                if (machine.name === currentValue || machine.name === currentValue.replace('N/A', '').trim()) {
-                    option.selected = true;
-                }
-                
-                input.appendChild(option);
-            });
-            break;
-        case 'status':
-            // Create dropdown for status selection
-            input = document.createElement('select');
-            input.className = 'form-control form-control-sm';
-            
-            // Add status options
-            const statusOptions = [
-                { value: 'pending', text: 'Bekliyor' },
-                { value: 'completed', text: 'Tamamlandı' }
-            ];
-            
-            statusOptions.forEach(status => {
-                const option = document.createElement('option');
-                option.value = status.value;
-                option.textContent = status.text;
-                
-                // Select current status if it matches
-                const currentStatusText = currentValue.includes('Tamamlandı') ? 'Tamamlandı' : 
-                                        currentValue.includes('Çalışıldı') ? 'Çalışıldı' : 'Bekliyor';
-                if (status.text === currentStatusText) {
-                    option.selected = true;
-                }
-                
-                input.appendChild(option);
-            });
-            break;
-        case 'finish_time':
-            input = document.createElement('input');
-            input.type = 'date';
-            input.className = 'form-control form-control-sm';
-            
-            // Convert current value to YYYY-MM-DD format for date input
-            if (currentValue && currentValue !== 'Belirtilmemiş') {
-                try {
-                    // First try to parse as Turkish date format (DD.MM.YYYY)
-                    let date;
-                    if (currentValue.match(/^\d{1,2}\.\d{1,2}\.\d{4}$/)) {
-                        // Turkish date format: DD.MM.YYYY
-                        const parts = currentValue.split('.');
-                        const day = parseInt(parts[0]);
-                        const month = parseInt(parts[1]) - 1; // Month is 0-indexed
-                        const year = parseInt(parts[2]);
-                        date = new Date(year, month, day);
-                    } else {
-                        // Try parsing as regular date
-                        date = new Date(currentValue);
-                    }
-                    
-                    if (!isNaN(date.getTime())) {
-                        const year = date.getFullYear();
-                        const month = String(date.getMonth() + 1).padStart(2, '0');
-                        const day = String(date.getDate()).padStart(2, '0');
-                        input.value = `${year}-${month}-${day}`;
-                    } else {
-                        // If date parsing fails, leave input empty
-                        input.value = '';
-                    }
-                } catch (e) {
-                    // If date parsing fails, leave input empty
-                    input.value = '';
-                }
-            } else {
-                // If no current value or "Belirtilmemiş", leave input empty
-                input.value = '';
-            }
-            break;
-        default:
-            input = document.createElement('input');
-            input.type = 'text';
-            input.className = 'form-control form-control-sm';
-            input.value = currentValue === 'N/A' ? '' : currentValue;
-    }
-    
-    // Store original content
-    const originalContent = cell.innerHTML;
-    
-    // Replace cell content with input
-    cell.innerHTML = '';
-    cell.appendChild(input);
-    
-    // Focus on input
-    input.focus();
-    if (input.type !== 'select-one') {
-        input.select();
-    }
-    
-    // For select elements, ensure dropdown opens immediately
-    if (input.tagName === 'SELECT') {
-        // Trigger dropdown to open - use a more reliable method
-        setTimeout(() => {
-            input.focus();
-            
-            // Ensure the select element is properly sized and visible
-            input.style.width = '100%';
-            input.style.minWidth = '120px';
-            
-            // Try to open the dropdown using the native select method
-            try {
-                // Method 1: Use the native showPicker method if available (modern browsers)
-                if (input.showPicker) {
-                    input.showPicker();
-                } else {
-                    // Method 2: Create and dispatch a mousedown event
-                    const mousedownEvent = new MouseEvent('mousedown', {
-                        bubbles: true,
-                        cancelable: true,
-                        view: window,
-                        button: 0
-                    });
-                    input.dispatchEvent(mousedownEvent);
-                    
-                    // Method 3: Also try a click event as backup
-                    setTimeout(() => {
-                        const clickEvent = new MouseEvent('click', {
-                            bubbles: true,
-                            cancelable: true,
-                            view: window
-                        });
-                        input.dispatchEvent(clickEvent);
-                    }, 5);
-                }
-            } catch (e) {
-                console.log('Dropdown opening failed, trying alternative method');
-                // Fallback: just click the element
-                input.click();
-            }
-        }, 10);
-    }
-    
-    // Handle input events
-    input.addEventListener('blur', (e) => {
-        // For select elements, don't handle blur immediately
-        if (input.tagName === 'SELECT') {
-            return;
-        }
-        
-        // Check if input still exists in DOM before proceeding
-        if (!input.parentNode) {
-            return;
-        }
-        
-        // Add a small delay to prevent race conditions
-        setTimeout(() => {
-            // Check again if input still exists
-            if (input.parentNode) {
-                finishInlineEdit(cell, taskKey, field, input.value, originalContent);
-            }
-        }, 100);
-    });
-    
-    input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            finishInlineEdit(cell, taskKey, field, input.value, originalContent);
-        } else if (e.key === 'Escape') {
-            // Check if cell still exists before setting innerHTML
-            if (cell && cell.parentNode) {
-                cell.innerHTML = originalContent;
-            }
-        }
-    });
-    
-    // For select elements, handle change event only
-    if (input.tagName === 'SELECT') {
-        let editCompleted = false; // Flag to prevent multiple finishInlineEdit calls
-        
-        input.addEventListener('change', () => {
-            if (!editCompleted) {
-                editCompleted = true;
-                finishInlineEdit(cell, taskKey, field, input.value, originalContent);
-            }
-        });
-        
-        // Prevent blur when clicking on the select element
-        input.addEventListener('mousedown', (e) => {
-            e.stopPropagation();
-        });
-        
-        // Prevent blur when clicking on options
-        input.addEventListener('click', (e) => {
-            e.stopPropagation();
-        });
-        
-        // Add focus event to ensure dropdown opens
-        input.addEventListener('focus', () => {
-            // Small delay to ensure the element is fully focused
-            setTimeout(() => {
-                if (document.activeElement === input) {
-                    input.click();
-                }
-            }, 5);
-        });
-        
-        // Add document click listener to close dropdown when clicking outside
-        const handleDocumentClick = (e) => {
-            if (!input.contains(e.target) && !editCompleted) {
-                editCompleted = true;
-                finishInlineEdit(cell, taskKey, field, input.value, originalContent);
-                document.removeEventListener('click', handleDocumentClick);
-            }
-        };
-        
-        // Add the listener immediately but with a small delay to allow the dropdown to open first
-        setTimeout(() => {
-            document.addEventListener('click', handleDocumentClick);
-        }, 50);
-    }
-}
-
-async function finishInlineEdit(cell, taskKey, field, newValue, originalContent) {
-    try {
-        // Clear inline editing flag
-        isInlineEditing = false;
-        
-        // Check if this cell is already being processed
-        if (cell.dataset.processing === 'true') {
-            return;
-        }
-        
-        // Mark this cell as being processed
-        cell.dataset.processing = 'true';
-        
-        // Validate input based on field type
-        if (!validateFieldValue(field, newValue)) {
-            // Check if cell still exists before setting innerHTML
-            if (cell && cell.parentNode) {
-                cell.innerHTML = originalContent;
-            }
-            showNotification('Geçersiz değer', 'error');
-            return;
-        }
-        
-        // Find the task in our local array
-        const task = tasks.find(t => t.key === taskKey);
-        if (!task) {
-            // Check if cell still exists before setting innerHTML
-            if (cell && cell.parentNode) {
-                cell.innerHTML = originalContent;
-            }
-            return;
-        }
-        
-        // Don't update if value hasn't changed
-        const currentValue = getCurrentFieldValue(task, field);
-        
-        // Special handling for finish_time field to compare dates properly
-        if (field === 'finish_time') {
-            const currentDate = currentValue ? new Date(currentValue) : null;
-            const newDate = newValue ? new Date(newValue) : null;
-            
-            // Compare dates by converting both to YYYY-MM-DD format
-            const formatDate = (date) => {
-                if (!date || isNaN(date.getTime())) return '';
-                const year = date.getFullYear();
-                const month = String(date.getMonth() + 1).padStart(2, '0');
-                const day = String(date.getDate()).padStart(2, '0');
-                return `${year}-${month}-${day}`;
-            };
-            
-            const currentFormatted = formatDate(currentDate);
-            const newFormatted = formatDate(newDate);
-            
-            if (currentFormatted === newFormatted) {
-                // Check if cell still exists before setting innerHTML
-                if (cell && cell.parentNode) {
-                    cell.innerHTML = originalContent;
-                }
-                return;
-            }
-        } else if (currentValue === newValue) {
-            // Check if cell still exists before setting innerHTML
-            if (cell && cell.parentNode) {
-                cell.innerHTML = originalContent;
-            }
-            return;
-        }
-        
-        // Prepare update data
-        const updateData = {};
-        
-        // Handle machine field specially - send machine_fk instead of machine_name
-        if (field === 'machine_name') {
-            updateData.machine_fk = newValue ? parseInt(newValue) : null;
-        } else if (field === 'status') {
-            // Handle status updates using specific API functions
-            let response;
-            if (newValue === 'completed') {
-                response = await markTaskCompleted(taskKey);
-            } else if (newValue === 'pending') {
-                response = await unmarkTaskCompleted(taskKey);
-            } else {
-                // Check if cell still exists before setting innerHTML
-                if (cell && cell.parentNode) {
-                    cell.innerHTML = originalContent;
-                }
-                return;
-            }
-            
-            if (response.ok) {
-                // Update local task data
-                if (newValue === 'completed') {
-                    task.completion_date = new Date().toISOString();
-                } else {
-                    task.completion_date = null;
-                }
-                
-                // Update cell content
-                updateCellContent(cell, field, newValue);
-                
-                // Update task counts to reflect the change
-                updateTaskCounts();
-                
-                showNotification('Görev durumu başarıyla güncellendi', 'success');
-            } else {
-                // Revert on error
-                if (cell && cell.parentNode) {
-                    cell.innerHTML = originalContent;
-                }
-                showNotification('Görev durumu güncellenirken hata oluştu', 'error');
-            }
-            return;
-        } else {
-            updateData[field] = newValue;
-        }
-        
-        // Call the updateTask API
-        const response = await updateTaskAPI(taskKey, updateData);
-        
-        if (response.ok) {
-            // Update local task data
-            if (field === 'machine_name') {
-                task.machine_fk = newValue ? parseInt(newValue) : null;
-                // Update machine_name for display
-                const selectedMachine = machines.find(m => m.id == newValue);
-                task.machine_name = selectedMachine ? selectedMachine.name : 'N/A';
-            } else {
-                task[field] = newValue;
-            }
-            
-            // Update cell content
-            updateCellContent(cell, field, newValue);
-            
-            showNotification('Görev başarıyla güncellendi', 'success');
-        } else {
-            // Revert on error
-            if (cell && cell.parentNode) {
-                cell.innerHTML = originalContent;
-            }
-            showNotification('Görev güncellenirken hata oluştu', 'error');
-        }
-    } catch (error) {
-        console.error('Error updating task:', error);
-        isInlineEditing = false; // Clear flag on error
-        if (cell && cell.parentNode) {
-            cell.innerHTML = originalContent;
-        }
-        showNotification('Görev güncellenirken hata oluştu', 'error');
-    } finally {
-        // Clear the processing flag
-        if (cell) {
-            cell.dataset.processing = 'false';
-        }
-    }
-}
-
-function validateFieldValue(field, value) {
-    if (value === '') return true; // Allow empty values
-    
-    switch (field) {
-        case 'quantity':
-            const quantity = parseInt(value);
-            return !isNaN(quantity) && quantity >= 1;
-        case 'estimated_hours':
-            const hours = parseFloat(value);
-            return !isNaN(hours) && hours >= 0;
-        case 'machine_name':
-            // Validate that the machine ID exists in our machines list
-            const machineId = parseInt(value);
-            return !isNaN(machineId) && machines.some(m => m.id === machineId);
-        case 'status':
-            // Validate that the status is either 'pending' or 'completed'
-            return value === 'pending' || value === 'completed';
-        case 'finish_time':
-            // Validate date format (YYYY-MM-DD) or empty value
-            if (value === '') return true; // Allow empty values
-            const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-            if (!dateRegex.test(value)) return false;
-            const date = new Date(value);
-            return !isNaN(date.getTime());
-        case 'name':
-            return value.length <= 255; // Reasonable length limit
-        case 'job_no':
-        case 'image_no':
-        case 'position_no':
-            return value.length <= 100; // Reasonable length limit
-        default:
-            return true;
-    }
-}
-
-function getCurrentFieldValue(task, field) {
-    switch (field) {
-        case 'quantity':
-            return task.quantity ? task.quantity.toString() : '0';
-        case 'estimated_hours':
-            return task.estimated_hours ? task.estimated_hours.toString() : '';
-        case 'machine_name':
-            return task.machine_fk ? task.machine_fk.toString() : '';
-        case 'status':
-            return task.completion_date ? 'completed' : 'pending';
-        case 'finish_time':
-            return task.finish_time || '';
-        default:
-            return task[field] || '';
-    }
-}
-
-function updateCellContent(cell, field, newValue) {
-    // Check if cell still exists before updating
-    if (!cell || !cell.parentNode) {
-        return;
-    }
-    
-    // Add a small delay to ensure DOM has settled
-    setTimeout(() => {
-        // Check again if cell still exists
-        if (!cell || !cell.parentNode) {
-            return;
-        }
-        
-        const displayValue = newValue || 'N/A';
-    
-    switch (field) {
-        case 'name':
-            cell.innerHTML = `
-                <div class="task-name">
-                    <strong>${displayValue}</strong>
-                </div>
-            `;
-            break;
-        case 'quantity':
-            cell.innerHTML = `<span class="quantity-badge">${displayValue}</span>`;
-            break;
-        case 'machine_name':
-            // For machine field, newValue is the machine ID, so we need to find the machine name
-            const selectedMachine = machines.find(m => m.id == newValue);
-            const machineName = selectedMachine ? selectedMachine.name : 'N/A';
-            cell.innerHTML = `<span class="machine-name">${machineName}</span>`;
-            break;
-        case 'estimated_hours':
-            const hoursValue = newValue ? `${newValue} saat` : 'Belirtilmemiş';
-            cell.innerHTML = `<span class="estimated-hours">${hoursValue}</span>`;
-            break;
-        case 'finish_time':
-            if (newValue && newValue !== '') {
-                try {
-                    const date = new Date(newValue);
-                    if (!isNaN(date.getTime())) {
-                        cell.innerHTML = date.toLocaleDateString('tr-TR');
-                    } else {
-                        cell.innerHTML = 'Belirtilmemiş';
-                    }
-                } catch (e) {
-                    cell.innerHTML = 'Belirtilmemiş';
-                }
-            } else {
-                cell.innerHTML = 'Belirtilmemiş';
-            }
-            break;
-        case 'status':
-            // Use the same logic as getStatusBadge function
-            const task = tasks.find(t => t.key === cell.getAttribute('data-task-key'));
-            if (task) {
-                if (newValue === 'completed') {
-                    cell.innerHTML = '<span class="status-badge completed">Tamamlandı</span>';
-                } else {
-                    // For pending status, check if task has hours spent
-                    if (task.total_hours_spent > 0) {
-                        cell.innerHTML = '<span class="status-badge worked-on">Çalışıldı</span>';
-                    } else {
-                        cell.innerHTML = '<span class="status-badge pending">Bekliyor</span>';
-                    }
-                }
-            } else {
-                // Fallback if task not found
-                const statusText = newValue === 'completed' ? 'Tamamlandı' : 'Bekliyor';
-                const statusClass = newValue === 'completed' ? 'completed' : 'pending';
-                cell.innerHTML = `<span class="status-badge ${statusClass}">${statusText}</span>`;
-            }
-            break;
-        default:
-            cell.textContent = displayValue;
-    }
-    }, 50); // Small delay to ensure DOM has settled
-} 

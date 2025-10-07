@@ -4,7 +4,6 @@ import { fetchTimers } from '../../../apis/timers.js';
 import { fetchMachines } from '../../../apis/machines.js';
 import { fetchTaskById } from '../../../apis/tasks.js';
 import { getSyncedNow } from '../../../apis/timeService.js';
-import { navigateTo } from '../machining.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { stopTimer } from '../../../apis/timers.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
@@ -701,9 +700,6 @@ window.addEventListener('beforeunload', () => {
     stopAutoRefresh();
     stopTimerUpdates();
 });
-
-// Make navigation function globally available
-window.navigateTo = navigateTo;
 
 // Initialize dashboard when DOM is loaded
 document.addEventListener('DOMContentLoaded', initDashboard);

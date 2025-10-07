@@ -1,5 +1,36 @@
 /* Table Component Styles */
 
+/* Drag and Drop Styles */
+.dragging {
+    opacity: 0.5;
+    background-color: #f8f9fa !important;
+}
+
+.drag-over {
+    border-top: 2px solid #007bff !important;
+    background-color: #e3f2fd !important;
+}
+
+.drag-over-top {
+    border-top: 3px solid #28a745 !important;
+    background-color: #d4edda !important;
+    box-shadow: 0 -2px 8px rgba(40, 167, 69, 0.3) !important;
+}
+
+.drag-over-bottom {
+    border-bottom: 3px solid #28a745 !important;
+    background-color: #d4edda !important;
+    box-shadow: 0 2px 8px rgba(40, 167, 69, 0.3) !important;
+}
+
+tr[draggable="true"] {
+    cursor: move;
+}
+
+tr[draggable="true"]:hover {
+    background-color: #f8f9fa;
+}
+
 /* Dashboard Card Styling */
 .dashboard-card {
     background: rgba(255, 255, 255, 0.95);
