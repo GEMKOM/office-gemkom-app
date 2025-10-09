@@ -265,10 +265,11 @@ async function showOvertimeDetailsModal(request = null) {
         // Render the modal
         overtimeDetailsModal.render();
         
-        // Add custom footer with approve/reject buttons if status is submitted
-        if (requestToShow.status === 'submitted') {
-            const modalFooter = overtimeDetailsModal.container.querySelector('.modal-footer');
-            if (modalFooter) {
+        // Add custom footer with appropriate buttons based on status
+        const modalFooter = overtimeDetailsModal.container.querySelector('.modal-footer');
+        if (modalFooter) {
+            if (requestToShow.status === 'submitted') {
+                // Show approve/reject buttons for submitted requests
                 modalFooter.innerHTML = `
                     <div class="d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
@@ -279,6 +280,15 @@ async function showOvertimeDetailsModal(request = null) {
                         </button>
                         <button type="button" class="btn btn-success" id="approve-overtime-btn" style="min-width: 120px;">
                             <i class="fas fa-check me-1"></i>Onayla
+                        </button>
+                    </div>
+                `;
+            } else {
+                // Show only close button for approved/cancelled requests
+                modalFooter.innerHTML = `
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-1"></i>Kapat
                         </button>
                     </div>
                 `;
@@ -520,9 +530,14 @@ async function confirmApproveOvertime(requestId) {
         await approveOvertimeRequest(requestId);
         showNotification('Mesai talebi başarıyla onaylandı', 'success');
         
-        // Close the modal
+        // Close the approve modal
         if (approveOvertimeModal) {
             approveOvertimeModal.hide();
+        }
+        
+        // Close the details modal if it's open
+        if (overtimeDetailsModal) {
+            overtimeDetailsModal.hide();
         }
         
         await loadRequests();
@@ -559,9 +574,14 @@ async function confirmRejectOvertime(requestId) {
         await rejectOvertimeRequest(requestId, rejectionReason);
         showNotification('Mesai talebi başarıyla reddedildi', 'success');
         
-        // Close the modal
+        // Close the reject modal
         if (rejectOvertimeModal) {
             rejectOvertimeModal.hide();
+        }
+        
+        // Close the details modal if it's open
+        if (overtimeDetailsModal) {
+            overtimeDetailsModal.hide();
         }
         
         await loadRequests();
