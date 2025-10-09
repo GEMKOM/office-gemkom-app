@@ -6,7 +6,8 @@ import {
     fetchOvertimeRequest,
     formatOvertimeDuration,
     getPendingOvertimeApprovalRequests,
-    getOvertimeApprovedByMeRequests
+    getOvertimeApprovedByMeRequests,
+    rejectOvertimeRequest
 } from '../../../apis/overtime.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 import {
@@ -283,7 +284,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentRequest,
         requests,
         loadRequests,
-        loadApprovedRequests
+        loadApprovedRequests,
+        showNotification
     });
     
     initializeModalComponents();
@@ -419,6 +421,9 @@ function setupEventListeners() {
                     
                     await rejectOvertimeRequest(requestId, comment);
                     
+                    // Show success notification
+                    showNotification('Mesai talebi başarıyla reddedildi', 'success');
+                    
                     // Close both modals
                     const rejectModalInstance = bootstrap.Modal.getOrCreateInstance(rejectModal);
                     rejectModalInstance.hide();
@@ -438,6 +443,7 @@ function setupEventListeners() {
                     await loadApprovedRequests();
                     
                 } catch (error) {
+                    showNotification('Mesai talebi reddedilirken hata oluştu: ' + error.message, 'error');
                 } finally {
                     // Re-enable button
                     confirmRejectBtn.disabled = false;
@@ -468,6 +474,16 @@ function setupEventListeners() {
 async function viewOvertimeDetails(requestId) {
     try {
         currentRequest = await fetchOvertimeRequest(requestId);
+        
+        // Update global variables for modals
+        setGlobalVariables({
+            currentRequest,
+            requests,
+            loadRequests,
+            loadApprovedRequests,
+            showNotification
+        });
+        
         await showOvertimeDetailsModal(currentRequest);
         
         // Update URL to include the request ID
@@ -497,9 +513,26 @@ async function openModalFromRequestId(requestId) {
 }
 
 function renderStatusBadge(status, statusLabel) {
+    // Map status values to badge colors
+    let badgeClass = 'status-grey'; // default
+    
+    switch (status) {
+        case 'approved':
+            badgeClass = 'status-green';
+            break;
+        case 'submitted':
+            badgeClass = 'status-yellow';
+            break;
+        case 'cancelled':
+            badgeClass = 'status-red';
+            break;
+        default:
+            badgeClass = 'status-grey';
+    }
+    
     return `
-        <span class="status-badge status-${status}">
-            ${statusLabel}
+        <span class="status-badge ${badgeClass}">
+            ${statusLabel || status || 'Bilinmiyor'}
         </span>
     `;
 }
@@ -544,6 +577,59 @@ function getApprovalInfo(request) {
             ` : ''}
         </div>
     `;
+}
+
+// Show notification function
+function showNotification(message, type = 'info', timeout = 5000) {
+    // Remove existing notifications
+    const existingNotifications = document.querySelectorAll('.custom-notification');
+    existingNotifications.forEach(notification => notification.remove());
+    
+    // Create notification element
+    const notification = document.createElement('div');
+    notification.className = `custom-notification alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
+    notification.style.cssText = `
+        top: 20px;
+        right: 20px;
+        z-index: 9999;
+        min-width: 350px;
+        backdrop-filter: blur(15px);
+        border: 1px solid rgba(255, 255, 255, 0.3);
+        border-radius: 15px;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        animation: slideInRight 0.5s ease-out;
+    `;
+    
+    const iconClass = type === 'error' ? 'exclamation-triangle' : 
+                     type === 'success' ? 'check-circle' : 
+                     type === 'warning' ? 'exclamation-circle' : 'info-circle';
+    
+    notification.innerHTML = `
+        <div class="d-flex align-items-center">
+            <i class="fas fa-${iconClass} me-3" style="font-size: 1.2rem;"></i>
+            <div class="flex-grow-1">
+                <strong>${type === 'error' ? 'Hata' : type === 'success' ? 'Başarılı' : type === 'warning' ? 'Uyarı' : 'Bilgi'}</strong>
+                <br>
+                <span>${message}</span>
+            </div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+    `;
+    
+    // Add to page
+    document.body.appendChild(notification);
+    
+    // Auto remove after timeout
+    setTimeout(() => {
+        if (notification.parentNode) {
+            notification.style.animation = 'slideOutRight 0.3s ease-out';
+            setTimeout(() => {
+                if (notification.parentNode) {
+                    notification.remove();
+                }
+            }, 300);
+        }
+    }, timeout);
 }
 
 // Make functions globally available for onclick handlers

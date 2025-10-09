@@ -579,8 +579,15 @@ async function approveOvertime(requestId) {
 
 // Reject overtime function
 async function rejectOvertime(requestId) {
-    // Show reject confirmation modal instead of Bootstrap modal
-    showRejectOvertimeModal(requestId);
+    // Store the request ID for the modal
+    window.currentRejectRequestId = requestId;
+    
+    // Show the Bootstrap reject modal
+    const rejectModal = document.getElementById('rejectOvertimeModal');
+    if (rejectModal) {
+        const modalInstance = bootstrap.Modal.getOrCreateInstance(rejectModal);
+        modalInstance.show();
+    }
 }
 
 // Utility functions
