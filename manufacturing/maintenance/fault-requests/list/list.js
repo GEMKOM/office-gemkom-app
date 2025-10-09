@@ -147,7 +147,25 @@ function initializeComponents() {
                 field: 'machine_name', 
                 label: 'Ekipman', 
                 sortable: true,
-                formatter: (value) => `<span style="font-weight: 500; color: #495057;">${value || '-'}</span>`
+                formatter: (value, row) => {
+                    // If machine_name exists, show it
+                    if (value && value.trim() !== '') {
+                        return `<span style="font-weight: 500; color: #495057;">${value}</span>`;
+                    }
+                    
+                    // If no machine_name, show asset_name - location
+                    if (row.asset_name && row.location) {
+                        return `<span style="font-weight: 500; color: #495057;">${row.asset_name} - ${row.location}</span>`;
+                    }
+                    
+                    // If only asset_name exists, show just asset_name
+                    if (row.asset_name) {
+                        return `<span style="font-weight: 500; color: #495057;">${row.asset_name}</span>`;
+                    }
+                    
+                    // Fallback
+                    return `<span style="font-weight: 500; color: #495057;">-</span>`;
+                }
             },
             { 
                 field: 'description', 
@@ -259,14 +277,23 @@ function initializeCreateFaultModal() {
     // Add form sections and fields
     createFaultModal
         .addSection({
-            title: 'Arıza Bilgileri',
-            icon: 'fas fa-info-circle',
+            title: 'Ekipman Seçimi',
+            icon: 'fas fa-cog',
             iconColor: 'text-primary',
             fields: [
                 {
+                    id: 'use_custom_equipment',
+                    name: 'use_custom_equipment',
+                    label: 'Özel Ekipman Bilgisi Gir',
+                    type: 'checkbox',
+                    required: false,
+                    colSize: 12,
+                    helpText: 'Kayıtlı olmayan ekipman için özel bilgi girmek istiyorsanız işaretleyin'
+                },
+                {
                     id: 'machine',
                     name: 'machine',
-                    label: 'Ekipman',
+                    label: 'Kayıtlı Ekipman',
                     type: 'dropdown',
                     placeholder: 'Ekipman seçin...',
                     required: true,
@@ -275,6 +302,35 @@ function initializeCreateFaultModal() {
                     searchable: true,
                     options: []
                 },
+                {
+                    id: 'asset_name',
+                    name: 'asset_name',
+                    label: 'Ekipman Adı',
+                    type: 'text',
+                    placeholder: 'Ekipman adını girin...',
+                    required: false,
+                    icon: 'fas fa-tag',
+                    colSize: 6,
+                    style: 'display: none;'
+                },
+                {
+                    id: 'location',
+                    name: 'location',
+                    label: 'Konum',
+                    type: 'text',
+                    placeholder: 'Ekipman konumunu girin...',
+                    required: false,
+                    icon: 'fas fa-map-marker-alt',
+                    colSize: 6,
+                    style: 'display: none;'
+                }
+            ]
+        })
+        .addSection({
+            title: 'Arıza Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary',
+            fields: [
                 {
                     id: 'description',
                     name: 'description',
@@ -330,6 +386,9 @@ function initializeCreateFaultModal() {
 
     // Set up type/status dropdown interaction
     setupTypeStatusInteraction();
+    
+    // Set up equipment type checkbox interaction
+    setupEquipmentTypeInteraction();
 }
 
 async function loadMachinesForModal() {
@@ -358,11 +417,6 @@ async function loadMachinesForModal() {
 async function handleCreateFaultSubmit(formData) {
     try {
         // Validate required fields
-        if (!formData.machine) {
-            showAlert('Ekipman seçimi zorunludur', 'warning');
-            return;
-        }
-        
         if (!formData.description || formData.description.trim() === '') {
             showAlert('Açıklama zorunludur', 'warning');
             return;
@@ -378,13 +432,43 @@ async function handleCreateFaultSubmit(formData) {
             return;
         }
 
+        // Validate equipment selection
+        const useCustomEquipment = formData.use_custom_equipment === 'on' || formData.use_custom_equipment === true;
+        
+        if (!useCustomEquipment) {
+            // Default behavior: machine selection is required
+            if (!formData.machine) {
+                showAlert('Kayıtlı ekipman seçimi zorunludur', 'warning');
+                return;
+            }
+        } else {
+            // Custom equipment is checked: custom fields are required
+            if (!formData.asset_name || formData.asset_name.trim() === '') {
+                showAlert('Ekipman adı zorunludur', 'warning');
+                return;
+            }
+            if (!formData.location || formData.location.trim() === '') {
+                showAlert('Konum bilgisi zorunludur', 'warning');
+                return;
+            }
+        }
+
         // Prepare submission data
         const submitData = {
-            machine: parseInt(formData.machine),
             description: formData.description.trim(),
             is_maintenance: formData.type === 'maintenance',
             is_breaking: formData.status === 'true'
         };
+
+        // Add equipment data based on selection
+        if (useCustomEquipment) {
+            // Use custom equipment data
+            submitData.asset_name = formData.asset_name.trim();
+            submitData.location = formData.location.trim();
+        } else {
+            // Use registered machine
+            submitData.machine = parseInt(formData.machine);
+        }
 
         // Submit the fault request
         await createMaintenanceRequest(submitData);
@@ -394,6 +478,11 @@ async function handleCreateFaultSubmit(formData) {
         
         // Hide modal
         createFaultModal.hide();
+        
+        // Reset field visibility to default state
+        setTimeout(() => {
+            toggleCustomEquipmentFields(false);
+        }, 100);
         
         // Reload the fault requests list
         await loadFaultRequests();
@@ -407,6 +496,11 @@ async function handleCreateFaultSubmit(formData) {
 function handleCreateFaultCancel() {
     // Clear form when modal is cancelled
     createFaultModal.clearForm();
+    
+    // Reset field visibility to default state
+    setTimeout(() => {
+        toggleCustomEquipmentFields(false);
+    }, 100);
 }
 
 function setupTypeStatusInteraction() {
@@ -441,6 +535,80 @@ function updateStatusDropdown(selectedType, statusDropdown) {
             { value: 'false', label: 'Çalışıyor' },
             { value: 'true', label: 'Durdu' }
         ]);
+    }
+}
+
+function setupEquipmentTypeInteraction() {
+    // Wait for the modal to be fully rendered
+    setTimeout(() => {
+        const customEquipmentCheckbox = document.querySelector('input[name="use_custom_equipment"]');
+        
+        if (customEquipmentCheckbox) {
+            // Remove any existing event listeners to prevent duplicates
+            customEquipmentCheckbox.removeEventListener('change', handleCheckboxChange);
+            
+            // Add event listener
+            customEquipmentCheckbox.addEventListener('change', handleCheckboxChange);
+            
+            // Set initial state based on checkbox current state
+            toggleCustomEquipmentFields(customEquipmentCheckbox.checked);
+        }
+    }, 1000); // Increased timeout to ensure modal is fully rendered
+}
+
+function handleCheckboxChange(e) {
+    const isChecked = e.target.checked;
+    toggleCustomEquipmentFields(isChecked);
+}
+
+function toggleCustomEquipmentFields(showCustomFields) {
+    const machineField = document.querySelector('[data-field-id="machine"]');
+    const assetNameField = document.querySelector('[data-field-id="asset_name"]');
+    const locationField = document.querySelector('[data-field-id="location"]');
+    
+    if (showCustomFields) {
+        // Show custom fields, hide machine dropdown
+        if (machineField) {
+            machineField.style.display = 'none';
+            const machineInput = machineField.querySelector('input, select');
+            if (machineInput) {
+                machineInput.required = false;
+                machineInput.value = ''; // Clear the value when hiding
+            }
+        }
+        if (assetNameField) {
+            assetNameField.style.display = 'block';
+            const assetInput = assetNameField.querySelector('input');
+            if (assetInput) assetInput.required = true;
+        }
+        if (locationField) {
+            locationField.style.display = 'block';
+            const locationInput = locationField.querySelector('input');
+            if (locationInput) locationInput.required = true;
+        }
+    } else {
+        // Hide custom fields, show machine dropdown
+        if (machineField) {
+            machineField.style.display = 'block';
+            const machineInput = machineField.querySelector('input, select');
+            if (machineInput) machineInput.required = true;
+        }
+        if (assetNameField) {
+            assetNameField.style.display = 'none';
+            const assetInput = assetNameField.querySelector('input');
+            if (assetInput) {
+                assetInput.required = false;
+                assetInput.value = ''; // Clear the value when hiding
+            }
+        }
+        if (locationField) {
+            locationField.style.display = 'none';
+            const locationInput = locationField.querySelector('input');
+            if (locationInput) {
+                locationInput.required = false;
+                locationInput.value = ''; // Clear the value when hiding
+            }
+        }
     }
 }
 

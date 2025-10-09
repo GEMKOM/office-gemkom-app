@@ -206,18 +206,22 @@ export class EditModal {
         fieldGroup.className = 'field-group mb-2';
         fieldGroup.dataset.fieldId = field.id;
         
-        // Create label
-        const label = document.createElement('label');
-        label.className = 'field-label';
-        if (field.required) label.classList.add('required');
-        if (field.icon) {
-            label.innerHTML = `<i class="${field.icon} me-1"></i>${field.label}`;
-        } else {
-            label.textContent = field.label;
-        }
-        
         // Create input based on type
         const input = this.createInputElement(field);
+        
+        // For checkbox fields, don't create a separate label (checkbox handles its own label)
+        if (field.type !== 'checkbox') {
+            // Create label
+            const label = document.createElement('label');
+            label.className = 'field-label';
+            if (field.required) label.classList.add('required');
+            if (field.icon) {
+                label.innerHTML = `<i class="${field.icon} me-1"></i>${field.label}`;
+            } else {
+                label.textContent = field.label;
+            }
+            fieldGroup.appendChild(label);
+        }
         
         // Create help text
         const help = document.createElement('div');
@@ -229,7 +233,6 @@ export class EditModal {
         error.className = 'field-error';
         error.textContent = 'Bu alan gereklidir';
         
-        fieldGroup.appendChild(label);
         fieldGroup.appendChild(input);
         fieldGroup.appendChild(help);
         fieldGroup.appendChild(error);
@@ -416,18 +419,18 @@ export class EditModal {
     
     createCheckboxElement(field) {
         const container = document.createElement('div');
-        container.className = 'checkbox-field';
+        container.className = 'checkbox-field custom-checkbox';
         
         const input = document.createElement('input');
         input.type = 'checkbox';
-        input.className = 'form-check-input field-input';
+        input.className = 'field-input';
         input.id = field.id;
         input.name = field.name;
         input.checked = field.value === true || field.value === 'true';
         if (field.required) input.required = true;
         
         const label = document.createElement('label');
-        label.className = 'field-label';
+        label.className = 'field-label checkbox-label';
         label.htmlFor = field.id;
         if (field.icon) {
             label.innerHTML = `<i class="${field.icon} me-1"></i>${field.label}`;

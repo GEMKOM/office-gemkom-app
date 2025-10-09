@@ -245,14 +245,55 @@
 }
 
 .edit-modal-container .checkbox-field .field-input {
-    width: auto;
+    width: 18px;
+    height: 18px;
     margin-right: 0.5rem;
     margin-bottom: 0;
+    cursor: pointer;
+    accent-color: #8B0000;
 }
 
 .edit-modal-container .checkbox-field .field-label {
     margin-bottom: 0;
     font-weight: normal;
+    cursor: pointer;
+    user-select: none;
+}
+
+/* Custom checkbox styling for better visibility */
+.edit-modal-container .custom-checkbox .field-input {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid #ced4da;
+    border-radius: 3px;
+    background-color: #fff;
+    cursor: pointer;
+    position: relative;
+    transition: all 0.2s ease;
+}
+
+.edit-modal-container .custom-checkbox .field-input:checked {
+    background-color: #8B0000;
+    border-color: #8B0000;
+}
+
+.edit-modal-container .custom-checkbox .field-input:checked::after {
+    content: '✓';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    color: white;
+    font-size: 12px;
+    font-weight: bold;
+}
+
+.edit-modal-container .custom-checkbox .field-input:focus {
+    outline: none;
+    box-shadow: 0 0 0 0.25rem rgba(139, 0, 0, 0.25);
 }
 
 /* Radio Field Styling */
