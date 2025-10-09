@@ -250,6 +250,12 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Envanter',
                 icon: 'fas fa-desktop',
                 children: {}
+            },
+            '/it/password-resets': {
+                label: 'Şifre Sıfırlama Talepleri',
+                icon: 'fas fa-desktop',
+                children: {}
+
             }
         }
     },

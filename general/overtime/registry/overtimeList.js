@@ -35,6 +35,7 @@ let currentUser = null;
 let allUsers = [];
 let allTeams = [];
 let overtimeTable = null; // TableComponent instance
+let userDropdowns = new Map(); // Store dropdown references
 let cancelOvertimeModal = null; // DisplayModal instance for cancel
 let createOvertimeModal = null; // EditModal instance for create
 
@@ -181,7 +182,6 @@ document.addEventListener('DOMContentLoaded', function() {
 
 // Initialize TableComponent
 function initializeTableComponent() {
-    console.log('Initializing TableComponent...');
     overtimeTable = new TableComponent('overtime-table-container', {
         title: 'Mesai Talepleri',
         columns: [
@@ -520,7 +520,6 @@ function initializeCreateModal() {
 // Show create overtime modal using EditModal
 async function showCreateOvertimeModal() {
     if (!createOvertimeModal) {
-        console.error('Create overtime modal not initialized');
         return;
     }
     
@@ -737,9 +736,26 @@ async function loadOvertimeRequests() {
 
 // Render status badge
 function renderStatusBadge(status, statusLabel) {
+    // Map status values to badge colors
+    let badgeClass = 'status-grey'; // default
+    
+    switch (status) {
+        case 'approved':
+            badgeClass = 'status-green';
+            break;
+        case 'submitted':
+            badgeClass = 'status-yellow';
+            break;
+        case 'cancelled':
+            badgeClass = 'status-red';
+            break;
+        default:
+            badgeClass = 'status-grey';
+    }
+    
     return `
-        <span class="status-badge status-${status}">
-            ${statusLabel}
+        <span class="status-badge ${badgeClass}">
+            ${statusLabel || status || 'Bilinmiyor'}
         </span>
     `;
 }
@@ -838,59 +854,6 @@ function showSubmitLoading(show) {
     }
 }
 
-// Show/hide loading state in modal
-function showModalLoading(show) {
-    const participantsSection = document.querySelector('#createOvertimeModal .form-section:last-of-type');
-    const addParticipantBtn = document.getElementById('add-participant');
-    const submitBtn = document.getElementById('submit-overtime-request');
-    
-    if (show) {
-        // Show loading state
-        if (participantsSection) {
-            participantsSection.innerHTML = `
-                <div class="text-center py-4">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Yükleniyor...</span>
-                    </div>
-                    <div class="mt-2">Kullanıcılar yükleniyor...</div>
-                </div>
-            `;
-        }
-        
-        if (addParticipantBtn) addParticipantBtn.disabled = true;
-        if (submitBtn) submitBtn.disabled = true;
-    } else {
-        // Restore original content
-        if (participantsSection) {
-            participantsSection.innerHTML = `
-                <h6 class="section-subtitle compact">
-                    <i class="fas fa-users me-2 text-success"></i>Katılımcılar
-                </h6>
-                <div class="d-flex justify-content-between align-items-center mb-3">
-                    <div class="form-text compact">Mesai talebine katılacak çalışanları ekleyin</div>
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="add-participant">
-                        <i class="fas fa-plus me-1"></i>Katılımcı Ekle
-                    </button>
-                </div>
-                <div id="participants-container">
-                    <!-- Participants will be added here -->
-                </div>
-            `;
-            
-            // Re-attach event listener
-            const newAddParticipantBtn = document.getElementById('add-participant');
-            if (newAddParticipantBtn) {
-                newAddParticipantBtn.addEventListener('click', addParticipant);
-            }
-        }
-        
-        if (addParticipantBtn) addParticipantBtn.disabled = false;
-        if (submitBtn) submitBtn.disabled = false;
-    }
-}
-
-
-
 // Add participant to form
 function addParticipant() {
     const container = document.getElementById('participants-container');
@@ -971,8 +934,8 @@ function initializeUserDropdown(index) {
     
     dropdown.setItems(userItems);
     
-    // Store dropdown reference
-    container.dropdown = dropdown;
+    // Store dropdown reference in Map
+    userDropdowns.set(index, dropdown);
 }
 
 // Remove participant
@@ -982,6 +945,8 @@ function removeParticipant(index) {
         // Don't remove if it's the only participant
         const container = document.getElementById('participants-container');
         if (container.children.length > 1) {
+            // Clean up dropdown reference
+            userDropdowns.delete(index);
             participantRow.remove();
         } else {
             showErrorMessage('En az bir katılımcı olmalıdır.');
@@ -1004,14 +969,15 @@ async function submitOvertimeRequest(formData) {
         const participantRows = document.querySelectorAll('.participant-row');
         
         for (const row of participantRows) {
-            const userDropdownContainer = row.querySelector('.user-dropdown-container');
+            const participantIndex = row.dataset.index;
             const jobNoInput = row.querySelector('input[name="job_no"]');
             const descriptionInput = row.querySelector('input[name="description"]');
             
-            const userId = userDropdownContainer?.dropdown?.getValue();
+            // Get dropdown from Map
+            const dropdown = userDropdowns.get(parseInt(participantIndex));
+            const userId = dropdown?.getValue();
             const jobNo = jobNoInput?.value?.trim();
             const description = descriptionInput?.value?.trim() || '';
-            
             if (!userId || !jobNo) {
                 showErrorMessage('Lütfen tüm katılımcılar için gerekli bilgileri doldurun.');
                 return;
@@ -1193,31 +1159,6 @@ function getApprovalInfo(request) {
             ` : ''}
         </div>
     `;
-}
-
-function getRejectionComments(request) {
-    if (!request.approval || !request.approval.stage_instances) {
-        return [];
-    }
-
-    const rejectionComments = [];
-    
-    request.approval.stage_instances.forEach(stage => {
-        if (stage.decisions) {
-            stage.decisions.forEach(decision => {
-                if (decision.decision === "reject" && decision.comment) {
-                    rejectionComments.push({
-                        stage: stage.name,
-                        approver: decision.approver_detail?.full_name || decision.approver_detail?.username || 'Bilinmeyen',
-                        comment: decision.comment,
-                        date: decision.decided_at
-                    });
-                }
-            });
-        }
-    });
-    
-    return rejectionComments;
 }
 
 // Global functions for onclick handlers
