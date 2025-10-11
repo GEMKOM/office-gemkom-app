@@ -341,6 +341,7 @@ export class EditModal {
                 input.className = 'form-control field-input file-field';
                 input.accept = field.accept || '*/*';
                 if (field.required) input.required = true;
+                if (field.multiple) input.multiple = true;
                 break;
                 
             case 'color':

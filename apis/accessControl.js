@@ -44,6 +44,8 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/maintenance',
             '/manufacturing/maintenance/fault-requests',
             '/manufacturing/maintenance/fault-requests/list',
+            '/manufacturing/cnc-cutting',
+            '/manufacturing/cnc-cutting/cuts',
             '/manufacturing/welding',
             '/procurement',
             '/procurement/purchase-requests',
@@ -83,6 +85,8 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/maintenance',
             '/manufacturing/maintenance/fault-requests',
             '/manufacturing/maintenance/fault-requests/list',
+            '/manufacturing/cnc-cutting',
+            '/manufacturing/cnc-cutting/cuts',
             '/manufacturing/welding'
         ]),
         allowedSections: ['manufacturing', 'general', 'general_overtime']
@@ -99,7 +103,9 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/machining/tasks',
             '/manufacturing/machining/reports',
             '/manufacturing/machining/reports/sum-report',
-            '/manufacturing/machining/reports/finished-timers'
+            '/manufacturing/machining/reports/finished-timers',
+            '/manufacturing/cnc-cutting',
+            '/manufacturing/cnc-cutting/cuts'
         ]),
         allowedSections: ['manufacturing_machining', 'general', 'general_overtime']
     },

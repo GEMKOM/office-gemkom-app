@@ -54,6 +54,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ]
             },
             {
+                title: 'CNC Kesim',
+                description: 'CNC kesim operasyonları, nesting dosyaları ve kesim görevleri yönetimi.',
+                icon: 'fas fa-cut',
+                iconColor: 'primary',
+                link: '/manufacturing/cnc-cutting',
+                features: [
+                    {
+                        label: 'Kesimler',
+                        icon: 'fas fa-scissors',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/cnc-cutting/cuts'
+                    }
+                ]
+            },
+            {
                 title: 'Bakım',
                 description: 'Ekipman bakım planları, arıza takibi ve önleyici bakım yönetimi.',
                 icon: 'fas fa-wrench',

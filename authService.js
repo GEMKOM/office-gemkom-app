@@ -310,10 +310,14 @@ export async function authedFetch(url, options = {}) {
 
     options.headers = {
         ...options.headers,
-        'Content-Type': 'application/json',
         'Authorization': `Bearer ${accessToken}`,
         'X-Subdomain': "ofis.gemcore.com.tr"
     };
+    
+    // Only set Content-Type if not already provided and not using FormData
+    if (!options.headers['Content-Type'] && !(options.body instanceof FormData)) {
+        options.headers['Content-Type'] = 'application/json';
+    }
 
     let response = await fetch(url, options);
 
