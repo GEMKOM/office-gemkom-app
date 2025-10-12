@@ -4,6 +4,8 @@ export class FileViewer {
         this.currentPageContent = null;
         this.currentPageTitle = null;
         this.zoomLevel = 100;
+        this.currentFileUrl = null;
+        this.currentFileName = null;
     }
     
     /**
@@ -13,6 +15,10 @@ export class FileViewer {
      * @param {string} fileExtension - File extension
      */
     openFile(fileUrl, fileName, fileExtension) {
+        // Store current file info for download
+        this.currentFileUrl = fileUrl;
+        this.currentFileName = fileName;
+        
         // Create full-page file viewer overlay
         const fileViewerHtml = this.createFileViewerHtml(fileUrl, fileName, fileExtension);
         
@@ -26,7 +32,7 @@ export class FileViewer {
             left: 0;
             width: 100vw;
             height: 100vh;
-            background: #2c3e50;
+            background: #1a1a1a;
             z-index: 9999;
         `;
         
@@ -48,9 +54,9 @@ export class FileViewer {
         const fileType = this.getFileType(fileExtension);
         
         return `
-            <div class="file-viewer-container" style="width: 100%; height: 100%; background: #2c3e50;">
+            <div class="file-viewer-container" style="width: 100%; height: 100%; background: #1a1a1a;">
                 <!-- Header -->
-                <div class="file-viewer-header d-flex align-items-center justify-content-between p-3" style="background: #34495e; border-bottom: 1px solid #4a5f7a;">
+                <div class="file-viewer-header d-flex align-items-center justify-content-between p-3" style="background: #2d2d2d; border-bottom: 1px solid #404040;">
                     <div class="d-flex align-items-center">
                         <i class="${fileIcon} me-2"></i>
                         <span class="text-white fw-medium">${fileName}</span>
@@ -348,6 +354,9 @@ export class FileViewer {
         // This will be set by the calling code
         if (this.downloadCallback) {
             this.downloadCallback();
+        } else {
+            // Fallback: try to download the current file
+            this.downloadFile(this.currentFileUrl, this.currentFileName);
         }
     }
     
@@ -356,6 +365,49 @@ export class FileViewer {
      */
     setDownloadCallback(callback) {
         this.downloadCallback = callback;
+    }
+    
+    /**
+     * Download file with proper handling for different file types
+     */
+    async downloadFile(fileUrl, fileName) {
+        try {
+            // Try to fetch the file as a blob first
+            const response = await fetch(fileUrl);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const blob = await response.blob();
+            
+            // Create download link
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            
+            // Append to body, click, and remove
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            
+            // Clean up the URL object
+            window.URL.revokeObjectURL(url);
+            
+        } catch (error) {
+            console.warn('Failed to download via fetch, falling back to direct link:', error);
+            
+            // Fallback: try direct download link
+            const link = document.createElement('a');
+            link.href = fileUrl;
+            link.download = fileName;
+            link.target = '_blank';
+            
+            // Append to body, click, and remove
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
     }
     
     /**

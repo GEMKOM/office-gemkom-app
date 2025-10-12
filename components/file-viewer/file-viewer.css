@@ -2,10 +2,13 @@
 
 .file-viewer-container {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1a1a !important;
 }
 
 .file-viewer-header {
     user-select: none;
+    background: #2d2d2d !important;
+    border-bottom: 1px solid #404040 !important;
 }
 
 .file-viewer-content {
@@ -14,7 +17,9 @@
 
 .file-viewer-controls .btn {
     border-radius: 0;
-    border: 1px solid #495057;
+    border: 1px solid #404040;
+    background-color: #2d2d2d;
+    color: #ffffff;
 }
 
 .file-viewer-controls .btn:first-child {
@@ -28,8 +33,9 @@
 }
 
 .file-viewer-controls .btn:hover {
-    background-color: #495057;
-    border-color: #6c757d;
+    background-color: #404040;
+    border-color: #555555;
+    color: #ffffff;
 }
 
 .zoom-level {

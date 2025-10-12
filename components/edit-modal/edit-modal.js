@@ -120,8 +120,8 @@ export class EditModal {
     addSection(sectionConfig) {
         const section = {
             id: sectionConfig.id || `section-${Date.now()}`,
-            title: sectionConfig.title || 'Bölüm',
-            icon: sectionConfig.icon || 'fas fa-info-circle',
+            title: sectionConfig.title,
+            icon: sectionConfig.icon,
             iconColor: sectionConfig.iconColor || 'text-primary',
             fields: sectionConfig.fields || [],
             ...sectionConfig
@@ -159,9 +159,13 @@ export class EditModal {
         sectionDiv.className = 'form-section compact mb-3';
         sectionDiv.dataset.sectionId = section.id;
         
-        const title = document.createElement('h6');
-        title.className = `section-subtitle compact ${section.iconColor}`;
-        title.innerHTML = `<i class="${section.icon} me-2"></i>${section.title}`;
+        // Add title only if provided (like DisplayModal)
+        if (section.title) {
+            const title = document.createElement('h6');
+            title.className = `section-subtitle compact ${section.iconColor}`;
+            title.innerHTML = `<i class="${section.icon} me-2"></i>${section.title}`;
+            sectionDiv.appendChild(title);
+        }
         
         const fieldsContainer = document.createElement('div');
         fieldsContainer.className = 'row g-2';
@@ -171,7 +175,6 @@ export class EditModal {
             fieldsContainer.appendChild(fieldElement);
         });
         
-        sectionDiv.appendChild(title);
         sectionDiv.appendChild(fieldsContainer);
         
         return sectionDiv;

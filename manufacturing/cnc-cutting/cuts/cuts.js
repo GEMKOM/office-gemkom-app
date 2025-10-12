@@ -1,4 +1,5 @@
 import { initNavbar } from '../../../components/navbar.js';
+import { fetchMachines } from '../../../apis/machines.js';
 import { 
     getCncTasks, 
     getCncTask, 
@@ -7,8 +8,21 @@ import {
     deleteCncTask,
     formatCncTaskForDisplay,
     validateCncTaskData,
-    validateCncPartData
+    addFilesToCncTask
 } from '../../../apis/cnc_cutting/crud.js';
+import { 
+    createCncPart, 
+    updateCncPart, 
+    deleteCncPart, 
+    getCncPart, 
+    getCncParts,
+    validateCncPartData 
+} from '../../../apis/cnc_cutting/parts.js';
+import { 
+    deleteCncFile, 
+    getCncFile, 
+    getCncTaskFiles 
+} from '../../../apis/cnc_cutting/files.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
@@ -25,6 +39,7 @@ let currentOrdering = 'key';
 let currentSortField = 'key';
 let currentSortDirection = 'asc';
 let cuts = [];
+let machines = [];
 let totalCuts = 0;
 let isLoading = false;
 let cutsStats = null; // Statistics Cards component instance
@@ -32,6 +47,10 @@ let cutsFilters = null; // Filters component instance
 let cutsTable = null; // Table component instance
 let createCutModal = null; // Create modal instance
 let detailsModal = null; // Details modal instance
+let editCutModal = null; // Edit modal instance
+let partsTable = null; // Parts table instance
+let filesTable = null; // Files table instance
+let currentEditTask = null; // Current task being edited
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -107,12 +126,32 @@ async function initializeCuts() {
     try {
         initializeFiltersComponent();
         initializeTableComponent();
+        await loadMachines();
         
         await loadCuts();
         updateCutCounts();
     } catch (error) {
         console.error('Error initializing cuts:', error);
         showNotification('Kesimler yüklenirken hata oluştu', 'error');
+    }
+}
+
+async function loadMachines() {
+    try {
+        const machinesResponse = await fetchMachines(1, 100, { used_in: 'cutting' });
+        machines = machinesResponse.results || machinesResponse || [];
+        
+        // Update machine filter options if filters component is initialized
+        if (cutsFilters) {
+            const machineOptions = [
+                { value: '', label: 'Tüm Makineler' },
+                ...machines.map(machine => ({ value: machine.id.toString(), label: machine.name }))
+            ];
+            cutsFilters.updateFilterOptions('machine-name-filter', machineOptions);
+        }
+    } catch (error) {
+        console.error('Error loading machines:', error);
+        machines = [];
     }
 }
 
@@ -161,6 +200,16 @@ function initializeFiltersComponent() {
         id: 'material-filter',
         label: 'Malzeme',
         placeholder: 'Malzeme türü',
+        colSize: 2
+    });
+
+    cutsFilters.addDropdownFilter({
+        id: 'machine-name-filter',
+        label: 'Makine',
+        options: [
+            { value: '', label: 'Tüm Makineler' }
+        ],
+        placeholder: 'Tüm Makineler',
         colSize: 2
     });
 
@@ -233,6 +282,16 @@ function initializeTableComponent() {
                 width: '10%',
                 type: 'number',
                 formatter: (value) => `<span class="thickness-badge">${value || 0} mm</span>`
+            },
+            {
+                field: 'machine_fk',
+                label: 'Makine',
+                sortable: true,
+                width: '10%',
+                formatter: (value, row) => {
+                    // Display machine name, not ID
+                    return `<span class="machine-name">${row.machine_name || '-'}</span>`;
+                }
             },
             {
                 field: 'nesting_file_url',
@@ -400,6 +459,7 @@ async function loadCuts(page = 1) {
             const nameFilter = filterValues['name-filter']?.trim();
             const nestingIdFilter = filterValues['nesting-id-filter']?.trim();
             const materialFilter = filterValues['material-filter']?.trim();
+            const machineNameFilter = filterValues['machine-name-filter']?.trim();
             const statusFilter = filterValues['status-filter'] || '';
             
             if (keyFilter) {
@@ -423,6 +483,12 @@ async function loadCuts(page = 1) {
             if (materialFilter) {
                 filteredCuts = filteredCuts.filter(cut => 
                     cut.material && cut.material.toLowerCase().includes(materialFilter.toLowerCase())
+                );
+            }
+            
+            if (machineNameFilter) {
+                filteredCuts = filteredCuts.filter(cut => 
+                    cut.machine_fk && cut.machine_fk.toString() === machineNameFilter
                 );
             }
             
@@ -530,11 +596,6 @@ function updateCutCounts() {
 }
 
 function setupEventListeners() {
-    // Update cut button
-    document.getElementById('update-cut-btn')?.addEventListener('click', () => {
-        updateCut();
-    });
-    
     // Confirm delete button
     document.getElementById('confirm-delete-btn')?.addEventListener('click', async () => {
         const cutKey = window.pendingDeleteCutKey;
@@ -598,48 +659,7 @@ function setupUrlHandlers() {
 }
 
 
-async function updateCut() {
-    const form = document.getElementById('edit-cut-form');
-    if (!form) return;
-    
-    const cutKey = document.getElementById('edit-cut-key')?.value;
-    if (!cutKey) {
-        showNotification('Kesim anahtarı bulunamadı', 'error');
-        return;
-    }
-    
-    const cutData = {
-        name: document.getElementById('edit-cut-name')?.value,
-        nesting_id: document.getElementById('edit-cut-nesting-id')?.value,
-        material: document.getElementById('edit-cut-material')?.value,
-        dimensions: document.getElementById('edit-cut-dimensions')?.value,
-        thickness_mm: parseFloat(document.getElementById('edit-cut-thickness')?.value) || 0,
-        nesting_file: document.getElementById('edit-cut-nesting-file')?.files[0] || null
-    };
-    
-    // Validate data
-    const validation = validateCncTaskData(cutData);
-    if (!validation.isValid) {
-        showNotification('Lütfen gerekli alanları doldurun: ' + validation.errors.join(', '), 'error');
-        return;
-    }
-    
-    try {
-        const response = await updateCncTask(cutKey, cutData);
-        
-        if (response) {
-            showNotification('Kesim başarıyla güncellendi', 'success');
-            bootstrap.Modal.getInstance(document.getElementById('editCutModal')).hide();
-            form.reset();
-            loadCuts(currentPage);
-        } else {
-            throw new Error('Failed to update cut');
-        }
-    } catch (error) {
-        console.error('Error updating cut:', error);
-        showNotification('Kesim güncellenirken hata oluştu', 'error');
-    }
-}
+// Global variable to store the current edit modal instance
 
 // Global functions for table actions
 window.showCutDetails = async function(cutKey) {
@@ -668,17 +688,7 @@ window.editCut = async function(cutKey) {
         const cut = await getCncTask(cutKey);
         
         if (cut) {
-            // Populate edit form
-            document.getElementById('edit-cut-key').value = cut.key;
-            document.getElementById('edit-cut-name').value = cut.name || '';
-            document.getElementById('edit-cut-nesting-id').value = cut.nesting_id || '';
-            document.getElementById('edit-cut-material').value = cut.material || '';
-            document.getElementById('edit-cut-dimensions').value = cut.dimensions || '';
-            document.getElementById('edit-cut-thickness').value = cut.thickness_mm || '';
-            
-            // Show edit modal
-            const modal = new bootstrap.Modal(document.getElementById('editCutModal'));
-            modal.show();
+            showEditCutModal(cut);
         } else {
             showNotification('Kesim bulunamadı', 'error');
         }
@@ -909,6 +919,22 @@ function setupCreateCutForm(createCutModal) {
                 helpText: 'Malzeme kalınlığı milimetre cinsinden'
             },
             {
+                id: 'cut-machine-fk',
+                label: 'Makine',
+                type: 'dropdown',
+                required: false,
+                placeholder: 'Makine seçin...',
+                options: [
+                    { value: '', label: 'Makine seçin...' },
+                    ...machines.map(machine => ({ 
+                        value: machine.id.toString(), 
+                        label: machine.name 
+                    }))
+                ],
+                colSize: 6,
+                helpText: 'Kesim makinesi seçin'
+            },
+            {
                 id: 'cut-files',
                 label: 'Dosyalar',
                 type: 'file',
@@ -1043,6 +1069,7 @@ async function handleCreateCutSave(formData) {
         material: formData['cut-material'],
         dimensions: formData['cut-dimensions'],
         thickness_mm: parseFloat(formData['cut-thickness']) || 0,
+        machine_fk: formData['cut-machine-fk'] ? parseInt(formData['cut-machine-fk']) : null,
         files: uploadedFiles,
         parts_data: []
     };
@@ -1096,6 +1123,756 @@ async function handleCreateCutSave(formData) {
     }
 }
 
+function showEditCutModal(cut) {
+    // Create Edit Modal instance for editing existing cut
+    editCutModal = new EditModal('edit-cut-modal-container', {
+        title: 'Kesim Düzenle',
+        icon: 'fas fa-edit',
+        saveButtonText: 'Değişiklikleri Kaydet',
+        size: 'lg'
+    });
+    
+    // Set up the edit cut form
+    setupEditCutForm(editCutModal, cut);
+    
+    // Show the modal
+    editCutModal.show();
+}
+
+async function setupEditCutForm(editCutModal, cut) {
+    // Store current task for parts and files operations
+    currentEditTask = cut;
+    
+    // Add basic information section
+    editCutModal.addSection({
+        id: 'basic-info',
+        title: 'Temel Bilgiler',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'cut-name',
+                label: 'Kesim Adı',
+                type: 'text',
+                required: true,
+                placeholder: 'Kesim adını girin',
+                value: cut.name || '',
+                colSize: 6,
+                helpText: 'Kesimi tanımlayan açıklayıcı isim'
+            },
+            {
+                id: 'cut-nesting-id',
+                label: 'Nesting ID',
+                type: 'text',
+                required: true,
+                placeholder: 'Nesting ID girin',
+                value: cut.nesting_id || '',
+                colSize: 6,
+                helpText: 'Nesting dosyası ID\'si'
+            },
+            {
+                id: 'cut-material',
+                label: 'Malzeme',
+                type: 'text',
+                required: true,
+                placeholder: 'Malzeme türü',
+                value: cut.material || '',
+                colSize: 6,
+                helpText: 'Kesilecek malzeme türü'
+            },
+            {
+                id: 'cut-dimensions',
+                label: 'Boyutlar',
+                type: 'text',
+                required: true,
+                placeholder: '100x50x10',
+                value: cut.dimensions || '',
+                colSize: 6,
+                helpText: 'Malzeme boyutları (örn: 100x50x10)'
+            },
+            {
+                id: 'cut-thickness',
+                label: 'Kalınlık (mm)',
+                type: 'number',
+                required: true,
+                placeholder: '10.0',
+                step: '0.1',
+                min: '0.1',
+                value: cut.thickness_mm || '',
+                colSize: 6,
+                helpText: 'Malzeme kalınlığı milimetre cinsinden'
+            },
+            {
+                id: 'cut-machine-fk',
+                label: 'Makine',
+                type: 'dropdown',
+                required: false,
+                placeholder: 'Makine seçin...',
+                value: cut.machine_fk || '',
+                options: [
+                    { value: '', label: 'Makine seçin...' },
+                    ...machines.map(machine => ({ 
+                        value: machine.id.toString(), 
+                        label: machine.name 
+                    }))
+                ],
+                colSize: 6,
+                helpText: 'Kesim makinesi seçin'
+            }
+        ]
+    });
+    
+    // Add parts management section
+    editCutModal.addSection({
+        id: 'parts-section',
+        fields: []
+    });
+    
+    // Add files management section
+    editCutModal.addSection({
+        id: 'files-section',
+        fields: []
+    });
+    
+    // Set up save callback
+    editCutModal.onSaveCallback(async (formData) => {
+        await handleEditCutSave(formData, cut.key);
+    });
+    
+    // Set up cancel callback
+    editCutModal.onCancelCallback(() => {
+        console.log('Edit cut cancelled');
+    });
+    
+    // Render the modal
+    editCutModal.render();
+    
+    // Add a small delay to ensure DOM is ready, then add table containers
+    setTimeout(() => {
+        addTableContainers();
+        
+        // Initialize tables after containers are added
+        initializePartsTable(cut);
+        initializeFilesTable(cut);
+    }, 100);
+}
+
+function addTableContainers() {
+    // Add parts table section
+    const partsSectionHtml = `
+        <div class="mt-3">
+            <div id="parts-table-container"></div>
+        </div>
+    `;
+    
+    // Add files table section
+    const filesSectionHtml = `
+        <div class="mt-3">
+            <div id="files-table-container"></div>
+        </div>
+    `;
+    
+    // Find the parts section and add table container
+    const partsSection = editCutModal.container.querySelector('[data-section-id="parts-section"]');
+    if (partsSection) {
+        const sectionBody = partsSection.querySelector('.row.g-2');
+        if (sectionBody) {
+            sectionBody.insertAdjacentHTML('beforeend', partsSectionHtml);
+        }
+    }
+    
+    // Find the files section and add table container
+    const filesSection = editCutModal.container.querySelector('[data-section-id="files-section"]');
+    if (filesSection) {
+        const sectionBody = filesSection.querySelector('.row.g-2');
+        if (sectionBody) {
+            sectionBody.insertAdjacentHTML('beforeend', filesSectionHtml);
+        }
+    }
+}
+
+async function initializePartsTable(cut) {
+    const parts = cut.parts || [];
+    
+    partsTable = new TableComponent('parts-table-container', {
+        title: 'Parçalar',
+        icon: 'fas fa-puzzle-piece',
+        iconColor: 'text-success',
+        refreshable: false,
+        columns: [
+            {
+                field: 'job_no',
+                label: 'İş No',
+                sortable: true,
+                width: '20%',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'image_no',
+                label: 'Resim No',
+                sortable: true,
+                width: '20%',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'position_no',
+                label: 'Pozisyon No',
+                sortable: true,
+                width: '20%',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'weight_kg',
+                label: 'Ağırlık (kg)',
+                sortable: true,
+                width: '20%',
+                formatter: (value) => value ? `${value} kg` : '-'
+            },
+            {
+                field: 'actions',
+                label: 'İşlemler',
+                sortable: false,
+                width: '20%',
+                formatter: (value, row) => {
+                    return `
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-primary" onclick="editPart(${row.id})" title="Düzenle">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deletePart(${JSON.stringify(row).replace(/"/g, '&quot;')})" title="Sil">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+        ],
+        data: parts,
+        sortable: true,
+        pagination: false,
+        exportable: false,
+        refreshable: false,
+        striped: true,
+        small: true,
+        emptyMessage: 'Parça bulunamadı',
+        emptyIcon: 'fas fa-puzzle-piece'
+    });
+    
+    // Add the add button to the table header after rendering
+    setTimeout(() => {
+        const cardActions = document.querySelector('#parts-table-container .card-actions');
+        if (cardActions) {
+            const addButton = document.createElement('button');
+            addButton.type = 'button';
+            addButton.className = 'btn btn-sm btn-success';
+            addButton.innerHTML = '<i class="fas fa-plus me-1"></i>Parça Ekle';
+            addButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                showAddPartModal();
+            });
+            cardActions.appendChild(addButton);
+        }
+    }, 100);
+}
+
+async function initializeFilesTable(cut) {
+    const files = cut.files || [];
+    
+    filesTable = new TableComponent('files-table-container', {
+        title: 'Dosyalar',
+        icon: 'fas fa-file',
+        iconColor: 'text-info',
+        columns: [
+            {
+                field: 'file_name',
+                label: 'Dosya Adı',
+                sortable: true,
+                width: '50%',
+                formatter: (value) => {
+                    // Extract filename from path
+                    const filename = value.split('/').pop();
+                    return filename || value;
+                }
+            },
+            {
+                field: 'uploaded_at',
+                label: 'Yüklenme Tarihi',
+                sortable: true,
+                width: '25%',
+                formatter: (value) => {
+                    if (!value) return '-';
+                    const date = new Date(value);
+                    return date.toLocaleDateString('tr-TR') + ' ' + date.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+                }
+            },
+            {
+                field: 'uploaded_by_username',
+                label: 'Yükleyen',
+                sortable: true,
+                width: '15%'
+            },
+            {
+                field: 'actions',
+                label: 'İşlemler',
+                sortable: false,
+                width: '10%',
+                formatter: (value, row) => {
+                    return `
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteFile(${JSON.stringify(row).replace(/"/g, '&quot;')}); return false;" title="Sil">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    `;
+                }
+            }
+        ],
+        data: files,
+        sortable: true,
+        pagination: false,
+        exportable: false,
+        refreshable: false,
+        striped: true,
+        small: true,
+        emptyMessage: 'Dosya bulunamadı',
+        emptyIcon: 'fas fa-file'
+    });
+    
+    // Add the add button to the table header after rendering
+    setTimeout(() => {
+        const cardActions = document.querySelector('#files-table-container .card-actions');
+        if (cardActions) {
+            const addButton = document.createElement('button');
+            addButton.type = 'button';
+            addButton.className = 'btn btn-sm btn-info';
+            addButton.innerHTML = '<i class="fas fa-plus me-1"></i>Dosya Ekle';
+            addButton.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                showAddFileModal();
+            });
+            cardActions.appendChild(addButton);
+        }
+    }, 100);
+}
+
+// Parts table action functions
+async function editPart(partId) {
+    try {
+        // Get the part data
+        const part = await getCncPart(partId);
+        
+        // Create a simple edit modal for the part
+        const editPartModal = new EditModal('edit-part-modal-container', {
+            title: 'Parça Düzenle',
+            icon: 'fas fa-edit',
+            saveButtonText: 'Değişiklikleri Kaydet',
+            size: 'md'
+        });
+        
+        editPartModal.addSection({
+            id: 'part-edit',
+            title: 'Parça Bilgileri',
+            icon: 'fas fa-puzzle-piece',
+            iconColor: 'text-success',
+            fields: [
+                {
+                    id: 'part-job-no',
+                    label: 'İş No',
+                    type: 'text',
+                    required: true,
+                    value: part.job_no || '',
+                    colSize: 6
+                },
+                {
+                    id: 'part-image-no',
+                    label: 'Resim No',
+                    type: 'text',
+                    required: false,
+                    value: part.image_no || '',
+                    colSize: 6
+                },
+                {
+                    id: 'part-position-no',
+                    label: 'Pozisyon No',
+                    type: 'text',
+                    required: false,
+                    value: part.position_no || '',
+                    colSize: 6
+                },
+                {
+                    id: 'part-weight',
+                    label: 'Ağırlık (kg)',
+                    type: 'number',
+                    required: false,
+                    step: '0.001',
+                    min: '0',
+                    value: part.weight_kg || '',
+                    colSize: 6
+                }
+            ]
+        });
+        
+        editPartModal.onSaveCallback(async (formData) => {
+            const updateData = {
+                job_no: formData['part-job-no'],
+                image_no: formData['part-image-no'],
+                position_no: formData['part-position-no'],
+                weight_kg: formData['part-weight']
+            };
+            
+            try {
+                await updateCncPart(partId, updateData);
+                showNotification('Parça başarıyla güncellendi', 'success');
+                
+                // Close modal
+                const modalInstance = bootstrap.Modal.getOrCreateInstance(document.querySelector('#edit-part-modal-container .modal'));
+                if (modalInstance) {
+                    modalInstance.hide();
+                }
+                
+                // Refresh the parts table
+                await refreshPartsTable();
+            } catch (error) {
+                console.error('Error updating part:', error);
+                showNotification('Parça güncellenirken hata oluştu', 'error');
+            }
+        });
+        
+        editPartModal.render();
+        editPartModal.show();
+        
+    } catch (error) {
+        console.error('Error editing part:', error);
+        showNotification('Parça bilgileri alınırken hata oluştu', 'error');
+    }
+}
+
+async function deletePart(partData) {
+    // partData is now the complete row object
+    const partName = partData.job_no ? `İş No: ${partData.job_no}` : `Parça (ID: ${partData.id})`;
+    
+    // Update the delete confirmation modal content
+    document.getElementById('delete-cut-name').textContent = `Parça - ${partName}`;
+    
+    // Set up the confirm delete button
+    const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+    confirmDeleteBtn.onclick = async () => {
+        try {
+            await deleteCncPart(partData.id);
+            showNotification('Parça başarıyla silindi', 'success');
+            
+            // Close the modal
+            const deleteModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteConfirmModal'));
+            deleteModal.hide();
+            
+            // Refresh the parts table
+            await refreshPartsTable();
+        } catch (error) {
+            console.error('Error deleting part:', error);
+            showNotification('Parça silinirken hata oluştu', 'error');
+        }
+    };
+    
+    // Show the delete confirmation modal
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+    deleteModal.show();
+}
+
+// Add new part modal
+function showAddPartModal() {
+    // Create a simple add modal for the part
+    const addPartModal = new EditModal('add-part-modal-container', {
+        title: 'Yeni Parça Ekle',
+        icon: 'fas fa-plus',
+        saveButtonText: 'Parçayı Ekle',
+        size: 'md'
+    });
+    
+    addPartModal.addSection({
+        id: 'part-add',
+        title: 'Parça Bilgileri',
+        icon: 'fas fa-puzzle-piece',
+        iconColor: 'text-success',
+        fields: [
+            {
+                id: 'part-job-no',
+                label: 'İş No',
+                type: 'text',
+                required: true,
+                placeholder: 'İş numarasını girin',
+                colSize: 6
+            },
+            {
+                id: 'part-image-no',
+                label: 'Resim No',
+                type: 'text',
+                required: false,
+                placeholder: 'Resim numarasını girin',
+                colSize: 6
+            },
+            {
+                id: 'part-position-no',
+                label: 'Pozisyon No',
+                type: 'text',
+                required: false,
+                placeholder: 'Pozisyon numarasını girin',
+                colSize: 6
+            },
+            {
+                id: 'part-weight',
+                label: 'Ağırlık (kg)',
+                type: 'number',
+                required: false,
+                step: '0.001',
+                min: '0',
+                placeholder: '0.000',
+                colSize: 6
+            }
+        ]
+    });
+    
+    addPartModal.onSaveCallback(async (formData) => {
+        const partData = {
+            cnc_task: currentEditTask.key,
+            job_no: formData['part-job-no'],
+            image_no: formData['part-image-no'],
+            position_no: formData['part-position-no'],
+            weight_kg: formData['part-weight']
+        };
+        
+        // Validate required fields
+        if (!partData.job_no || partData.job_no.trim() === '') {
+            showNotification('İş numarası gereklidir', 'error');
+            return;
+        }
+        
+        try {
+            await createCncPart(partData);
+            showNotification('Parça başarıyla eklendi', 'success');
+            
+            // Close modal
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(document.querySelector('#add-part-modal-container .modal'));
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            
+            // Refresh the parts table
+            await refreshPartsTable();
+        } catch (error) {
+            console.error('Error creating part:', error);
+            showNotification('Parça eklenirken hata oluştu', 'error');
+        }
+    });
+    
+    addPartModal.render();
+    addPartModal.show();
+}
+
+// Add new file modal
+function showAddFileModal() {
+    // Create a simple add modal for the file
+    const addFileModal = new EditModal('add-file-modal-container', {
+        title: 'Yeni Dosya Ekle',
+        icon: 'fas fa-plus',
+        saveButtonText: 'Dosyayı Ekle',
+        size: 'md'
+    });
+    
+    addFileModal.addSection({
+        id: 'file-add',
+        title: 'Dosya Bilgileri',
+        icon: 'fas fa-file',
+        iconColor: 'text-info',
+        fields: [
+            {
+                id: 'file-upload',
+                label: 'Dosya Seç',
+                type: 'file',
+                required: true,
+                accept: '*/*',
+                multiple: true,
+                colSize: 12,
+                helpText: 'Bir veya birden fazla dosya seçebilirsiniz'
+            }
+        ]
+    });
+    
+    addFileModal.onSaveCallback(async (formData) => {
+        // Get the actual file objects from the file input
+        const fileInput = addFileModal.container.querySelector('input[type="file"]');
+        const uploadedFiles = fileInput ? Array.from(fileInput.files) : [];
+        
+        if (uploadedFiles.length === 0) {
+            showNotification('Lütfen en az bir dosya seçin', 'error');
+            return;
+        }
+        
+        try {
+            await addFilesToCncTask(currentEditTask.key, uploadedFiles);
+            showNotification('Dosya(lar) başarıyla eklendi', 'success');
+            
+            // Close modal
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(document.querySelector('#add-file-modal-container .modal'));
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            
+            // Refresh the files table
+            await refreshFilesTable();
+        } catch (error) {
+            console.error('Error adding files:', error);
+            showNotification('Dosya(lar) eklenirken hata oluştu', 'error');
+        }
+    });
+    
+    addFileModal.render();
+    addFileModal.show();
+}
+
+// Files table action functions
+async function deleteFile(fileData) {
+    // fileData is now the complete row object
+    const fileName = fileData.file_name ? fileData.file_name.split('/').pop() : `Dosya (ID: ${fileData.id})`;
+    
+    // Update the delete confirmation modal content
+    document.getElementById('delete-cut-name').textContent = `Dosya - ${fileName}`;
+    
+    // Set up the confirm delete button
+    const confirmDeleteBtn = document.getElementById('confirm-delete-btn');
+    confirmDeleteBtn.onclick = async () => {
+        try {
+            await deleteCncFile(fileData.id);
+            showNotification('Dosya başarıyla silindi', 'success');
+            
+            // Close the modal
+            const deleteModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteConfirmModal'));
+            deleteModal.hide();
+            
+            // Refresh the files table
+            await refreshFilesTable();
+        } catch (error) {
+            console.error('Error deleting file:', error);
+            showNotification('Dosya silinirken hata oluştu', 'error');
+        }
+    };
+    
+    // Show the delete confirmation modal
+    const deleteModal = new bootstrap.Modal(document.getElementById('deleteConfirmModal'));
+    deleteModal.show();
+}
+
+function viewFile(fileUrl, fileName) {
+    // Use the existing file viewer
+    if (window.previewFile) {
+        window.previewFile(fileUrl, fileName);
+    }
+}
+
+function downloadFile(fileUrl, fileName) {
+    // Create a temporary link to download the file
+    const link = document.createElement('a');
+    link.href = fileUrl;
+    link.download = fileName;
+    link.target = '_blank';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+}
+
+// Refresh functions
+async function refreshPartsTable() {
+    if (!currentEditTask) return;
+    
+    try {
+        // Get updated task data
+        const updatedTask = await getCncTask(currentEditTask.key);
+        currentEditTask = updatedTask;
+        
+        // Clear and reinitialize parts table with updated data
+        const container = document.getElementById('parts-table-container');
+        if (container) {
+            await initializePartsTable(updatedTask);
+        }
+    } catch (error) {
+        console.error('Error refreshing parts table:', error);
+    }
+}
+
+async function refreshFilesTable() {
+    if (!currentEditTask) return;
+    
+    try {
+        // Get updated task data
+        const updatedTask = await getCncTask(currentEditTask.key);
+        currentEditTask = updatedTask;
+        
+        // Clear and reinitialize files table with updated data
+        const container = document.getElementById('files-table-container');
+        if (container) {
+            await initializeFilesTable(updatedTask);
+        }
+    } catch (error) {
+        console.error('Error refreshing files table:', error);
+    }
+}
+
+async function handleEditCutSave(formData, cutKey) {
+    // Get the actual file objects from the file input
+    const fileInput = editCutModal.container.querySelector('input[type="file"]');
+    const uploadedFiles = fileInput ? Array.from(fileInput.files) : [];
+    
+    const cutData = {
+        name: formData['cut-name'],
+        nesting_id: formData['cut-nesting-id'],
+        material: formData['cut-material'],
+        dimensions: formData['cut-dimensions'],
+        thickness_mm: parseFloat(formData['cut-thickness']) || 0,
+        machine_fk: formData['cut-machine-fk'] ? parseInt(formData['cut-machine-fk']) : null
+    };
+    
+    // Validate data
+    const validation = validateCncTaskData(cutData);
+    if (!validation.isValid) {
+        showNotification('Lütfen gerekli alanları doldurun: ' + validation.errors.join(', '), 'error');
+        return;
+    }
+    
+    try {
+        // Update the basic cut data first
+        const response = await updateCncTask(cutKey, cutData);
+        
+        if (response) {
+            // If there are new files, upload them separately
+            if (uploadedFiles.length > 0) {
+                try {
+                    await addFilesToCncTask(cutKey, uploadedFiles);
+                    showNotification('Kesim ve dosyalar başarıyla güncellendi', 'success');
+                } catch (fileError) {
+                    console.error('Error uploading files:', fileError);
+                    showNotification('Kesim güncellendi ancak dosyalar yüklenirken hata oluştu', 'warning');
+                }
+            } else {
+                showNotification('Kesim başarıyla güncellendi', 'success');
+            }
+            
+            // Close the modal
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(document.querySelector('#edit-cut-modal-container .modal'));
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            
+            // Reload cuts list
+            loadCuts(currentPage);
+        } else {
+            throw new Error('Failed to update cut');
+        }
+    } catch (error) {
+        console.error('Error updating cut:', error);
+        showNotification('Kesim güncellenirken hata oluştu', 'error');
+    }
+}
 
 function showNotification(message, type = 'info') {
     // Remove existing notifications
@@ -1286,6 +2063,17 @@ async function showCutDetails(cutData) {
             type: 'text',
             value: taskData.total_hours_spent ? `${taskData.total_hours_spent} saat` : '0 saat',
             icon: 'fas fa-hourglass-half',
+            colSize: 3,
+            layout: 'horizontal'
+        });
+        
+        detailsModal.addField({
+            id: 'cut-machine-name',
+            name: 'machine_name',
+            label: 'Makine',
+            type: 'text',
+            value: taskData.machine_name || '-',
+            icon: 'fas fa-cogs',
             colSize: 3,
             layout: 'horizontal'
         });
@@ -1535,17 +2323,23 @@ function initializePartsDetailsTable(parts) {
     });
 }
 
+// Expose functions to global scope for table onclick handlers
+window.editPart = editPart;
+window.deletePart = deletePart;
+window.deleteFile = deleteFile;
+window.viewFile = viewFile;
+window.downloadFile = downloadFile;
+window.showAddPartModal = showAddPartModal;
+window.showAddFileModal = showAddFileModal;
+
 // File preview function using FileViewer component
 window.previewFile = function(fileUrl, fileName, fileExtension) {
     // Create FileViewer instance
     const fileViewer = new FileViewer();
     
-    // Set download callback
-    fileViewer.setDownloadCallback(() => {
-        const link = document.createElement('a');
-        link.href = fileUrl;
-        link.download = fileName;
-        link.click();
+    // Set download callback with improved download handling
+    fileViewer.setDownloadCallback(async () => {
+        await fileViewer.downloadFile(fileUrl, fileName);
     });
     
     // Open file in viewer

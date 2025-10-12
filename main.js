@@ -69,6 +69,12 @@ async function handleLandingPage() {
                             link: '/manufacturing/machining'
                         },
                         {
+                            label: 'CNC Kesim',
+                            icon: 'fas fa-cut',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/manufacturing/cnc-cutting'
+                        },
+                        {
                             label: 'Bakım',
                             icon: 'fas fa-wrench',
                             iconColor: 'rgba(139, 0, 0, 1)',

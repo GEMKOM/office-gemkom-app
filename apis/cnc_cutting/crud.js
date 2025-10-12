@@ -183,79 +183,37 @@ export async function deleteCncTask(taskId) {
 }
 
 /**
- * Create a new CNC part for a specific task
+ * Add files to an existing CNC task
  * @param {number} taskId - The CNC task ID
- * @param {Object} partData - Part data
- * @param {string} partData.job_no - Job number
- * @param {string} partData.image_no - Image number
- * @param {string} partData.position_no - Position number
- * @param {number} partData.weight_kg - Weight in kg
- * @returns {Promise<Object>} Created CNC part
+ * @param {FileList|Array<File>} files - Files to upload
+ * @returns {Promise<Object>} Response with uploaded file information
  */
-export async function createCncPart(taskId, partData) {
+export async function addFilesToCncTask(taskId, files) {
     try {
-        const response = await authedFetch(`${CNC_CUTTING_BASE_URL}/tasks/${taskId}/parts/`, {
+        // Create FormData for file upload
+        const formData = new FormData();
+        
+        // Handle both FileList and Array
+        const fileArray = Array.isArray(files) ? files : Array.from(files);
+        
+        // Add each file to FormData
+        fileArray.forEach(file => {
+            formData.append('files', file);
+        });
+        
+        const response = await authedFetch(`${CNC_CUTTING_BASE_URL}/tasks/${taskId}/add-file/`, {
             method: 'POST',
-            body: JSON.stringify(partData)
+            body: formData
         });
         
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
-            throw new Error(`Failed to create CNC part: ${response.statusText} - ${JSON.stringify(errorData)}`);
+            throw new Error(`Failed to add files to CNC task: ${response.statusText} - ${JSON.stringify(errorData)}`);
         }
         
         return await response.json();
     } catch (error) {
-        console.error('Error creating CNC part:', error);
-        throw error;
-    }
-}
-
-/**
- * Update a CNC part
- * @param {number} taskId - The CNC task ID
- * @param {number} partId - The CNC part ID
- * @param {Object} partData - Updated part data
- * @returns {Promise<Object>} Updated CNC part
- */
-export async function updateCncPart(taskId, partId, partData) {
-    try {
-        const response = await authedFetch(`${CNC_CUTTING_BASE_URL}/tasks/${taskId}/parts/${partId}/`, {
-            method: 'PATCH',
-            body: JSON.stringify(partData)
-        });
-        
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            throw new Error(`Failed to update CNC part: ${response.statusText} - ${JSON.stringify(errorData)}`);
-        }
-        
-        return await response.json();
-    } catch (error) {
-        console.error('Error updating CNC part:', error);
-        throw error;
-    }
-}
-
-/**
- * Delete a CNC part
- * @param {number} taskId - The CNC task ID
- * @param {number} partId - The CNC part ID
- * @returns {Promise<boolean>} Success status
- */
-export async function deleteCncPart(taskId, partId) {
-    try {
-        const response = await authedFetch(`${CNC_CUTTING_BASE_URL}/tasks/${taskId}/parts/${partId}/`, {
-            method: 'DELETE'
-        });
-        
-        if (!response.ok) {
-            throw new Error(`Failed to delete CNC part: ${response.statusText}`);
-        }
-        
-        return true;
-    } catch (error) {
-        console.error('Error deleting CNC part:', error);
+        console.error('Error adding files to CNC task:', error);
         throw error;
     }
 }
@@ -314,32 +272,3 @@ export function validateCncTaskData(taskData) {
     };
 }
 
-/**
- * Utility function to validate CNC part data
- * @param {Object} partData - CNC part data to validate
- * @returns {Object} Validation result with isValid and errors
- */
-export function validateCncPartData(partData) {
-    const errors = [];
-    
-    if (!partData.job_no || partData.job_no.trim() === '') {
-        errors.push('Job number is required');
-    }
-    
-    if (!partData.image_no || partData.image_no.trim() === '') {
-        errors.push('Image number is required');
-    }
-    
-    if (!partData.position_no || partData.position_no.trim() === '') {
-        errors.push('Position number is required');
-    }
-    
-    if (!partData.weight_kg || isNaN(partData.weight_kg) || partData.weight_kg <= 0) {
-        errors.push('Valid weight (kg) is required');
-    }
-    
-    return {
-        isValid: errors.length === 0,
-        errors
-    };
-}

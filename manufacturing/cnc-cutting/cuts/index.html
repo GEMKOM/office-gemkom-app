@@ -9,40 +9,6 @@
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../../style.css">
-    <style>
-        .file-attachment-card {
-            transition: all 0.2s ease;
-            border: 1px solid #e1e5e9 !important;
-        }
-        
-        .file-attachment-card:hover {
-            border-color: #c1c7d0 !important;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        
-        .file-preview-thumbnail {
-            transition: all 0.2s ease;
-        }
-        
-        .file-preview-thumbnail:hover {
-            transform: scale(1.05);
-        }
-        
-        .file-name {
-            color: #172b4d !important;
-            font-weight: 500 !important;
-        }
-        
-        .file-meta {
-            color: #6b778c !important;
-            font-size: 12px !important;
-        }
-        
-        .file-actions .btn {
-            font-size: 12px !important;
-            padding: 4px 8px !important;
-        }
-    </style>
     <link rel="stylesheet" href="../../../components/navbar.css">
     <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
@@ -86,99 +52,17 @@
     <!-- Cut Details Modal Container -->
     <div id="cut-details-modal-container"></div>
 
-    <!-- Edit Cut Modal -->
-    <div class="modal fade" id="editCutModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content compact">
-                <div class="modal-header compact">
-                    <h6 class="modal-title">
-                        <i class="fas fa-edit me-2"></i>Kesim Düzenle
-                    </h6>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body compact">
-                    <form id="edit-cut-form">
-                        <input type="hidden" id="edit-cut-key">
-                        
-                        <!-- Basic Information Section -->
-                        <div class="form-section compact mb-3">
-                            <h6 class="section-subtitle compact">
-                                <i class="fas fa-info-circle me-2 text-primary"></i>Temel Bilgiler
-                            </h6>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-tag me-1"></i>Kesim Adı *
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="edit-cut-name" placeholder="Kesim adını girin" required>
-                                        <div class="form-text compact">Kesimi tanımlayan açıklayıcı isim</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-hashtag me-1"></i>Nesting ID *
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="edit-cut-nesting-id" placeholder="Nesting ID girin" required>
-                                        <div class="form-text compact">Nesting dosyası ID'si</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-cube me-1"></i>Malzeme *
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="edit-cut-material" placeholder="Malzeme türü" required>
-                                        <div class="form-text compact">Kesilecek malzeme türü</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-ruler me-1"></i>Boyutlar *
-                                        </label>
-                                        <input type="text" class="form-control form-control-sm" id="edit-cut-dimensions" placeholder="100x50x10" required>
-                                        <div class="form-text compact">Malzeme boyutları (örn: 100x50x10)</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="row g-2">
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-layer-group me-1"></i>Kalınlık (mm) *
-                                        </label>
-                                        <input type="number" class="form-control form-control-sm" id="edit-cut-thickness" step="0.1" min="0.1" placeholder="10.0" required>
-                                        <div class="form-text compact">Malzeme kalınlığı milimetre cinsinden</div>
-                                    </div>
-                                </div>
-                                <div class="col-md-6">
-                                    <div class="mb-2">
-                                        <label class="form-label compact">
-                                            <i class="fas fa-file-upload me-1"></i>Nesting Dosyası
-                                        </label>
-                                        <input type="file" class="form-control form-control-sm" id="edit-cut-nesting-file" accept=".dxf,.dwg,.pdf">
-                                        <div class="form-text compact">Yeni nesting dosyası (opsiyonel)</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer compact">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-1"></i>İptal
-                    </button>
-                    <button type="button" class="btn btn-sm btn-primary" id="update-cut-btn">
-                        <i class="fas fa-save me-1"></i>Değişiklikleri Kaydet
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <!-- Edit Cut Modal Container -->
+    <div id="edit-cut-modal-container"></div>
+    
+    <!-- Edit Part Modal Container -->
+    <div id="edit-part-modal-container"></div>
+    
+    <!-- Add Part Modal Container -->
+    <div id="add-part-modal-container"></div>
+    
+    <!-- Add File Modal Container -->
+    <div id="add-file-modal-container"></div>
 
     <!-- Delete Confirmation Modal -->
     <div class="modal fade" id="deleteConfirmModal" tabindex="-1">
