@@ -290,7 +290,6 @@ function showCreateMachineModal() {
 function showEditMachineModal(machineId) {
     const machine = machines.find(m => String(m.id) === String(machineId));
     if (!machine) {
-        alert('Makine bulunamadı');
         return;
     }
 
@@ -428,7 +427,6 @@ function showEditMachineModal(machineId) {
 function showMachinePropertiesModal(machineId) {
     const machine = machines.find(m => String(m.id) === String(machineId));
     if (!machine) {
-        alert('Makine bulunamadı');
         return;
     }
 
@@ -539,7 +537,6 @@ function showMachinePropertiesModal(machineId) {
 function showAssignedUsersModal(machineId) {
     const machine = machines.find(m => String(m.id) === String(machineId));
     if (!machine) {
-        alert('Makine bulunamadı');
         return;
     }
 
@@ -1032,7 +1029,6 @@ function setupEventListeners() {
                 const result = await apiDeleteMachine(machineId);
                 
                 if (result) {
-                    alert('Makine silindi');
                     // Hide the modal
                     deleteMachineModal.hide();
                     // Clear the pending delete key
@@ -1042,7 +1038,6 @@ function setupEventListeners() {
                 }
             } catch (error) {
                 // Error deleting machine
-                alert('Makine silinirken hata oluştu');
             }
         }
     });
@@ -1074,7 +1069,6 @@ async function saveMachine(formData) {
             try {
                 properties = JSON.parse(formData.properties);
             } catch (e) {
-                alert('Özellikler JSON formatında değil. Lütfen doğru formatta girin.');
                 return;
             }
         }
@@ -1091,7 +1085,6 @@ async function saveMachine(formData) {
         
         const created = await apiCreateMachine(machineData);
         if (created) {
-            alert('Makine başarıyla oluşturuldu');
             
             // Hide modal
             createMachineModal.hide();
@@ -1101,14 +1094,12 @@ async function saveMachine(formData) {
         }
     } catch (error) {
         // Error creating machine
-        alert(error.message || 'Makine oluşturulurken hata oluştu');
     }
 }
 
 async function updateMachine(formData) {
     const machineId = window.editingMachineId;
     if (!machineId) {
-        alert('Düzenlenecek makine bulunamadı');
         return;
     }
     
@@ -1119,7 +1110,6 @@ async function updateMachine(formData) {
             try {
                 properties = JSON.parse(formData.properties);
             } catch (e) {
-                alert('Özellikler JSON formatında değil. Lütfen doğru formatta girin.');
                 return;
             }
         }
@@ -1136,7 +1126,6 @@ async function updateMachine(formData) {
         
         const updated = await apiUpdateMachine(machineId, machineData);
         if (updated) {
-            alert('Makine başarıyla güncellendi');
             
             // Hide modal
             editMachineModal.hide();
@@ -1149,7 +1138,6 @@ async function updateMachine(formData) {
         }
     } catch (error) {
         // Error updating machine
-        alert(error.message || 'Makine güncellenirken hata oluştu');
     }
 }
 

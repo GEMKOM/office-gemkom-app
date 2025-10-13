@@ -80,6 +80,16 @@ export async function createCncTask(taskData) {
         formData.append('dimensions', taskData.dimensions);
         formData.append('thickness_mm', taskData.thickness_mm);
         
+        // Add machine_fk if provided
+        if (taskData.machine_fk !== undefined && taskData.machine_fk !== null) {
+            formData.append('machine_fk', taskData.machine_fk);
+        }
+        
+        // Add estimated_hours if provided
+        if (taskData.estimated_hours !== undefined && taskData.estimated_hours !== null) {
+            formData.append('estimated_hours', taskData.estimated_hours);
+        }
+        
         // Add files if provided
         if (taskData.files && taskData.files.length > 0) {
             taskData.files.forEach(file => {
@@ -132,6 +142,8 @@ export async function updateCncTask(taskId, taskData) {
         if (taskData.material !== undefined) formData.append('material', taskData.material);
         if (taskData.dimensions !== undefined) formData.append('dimensions', taskData.dimensions);
         if (taskData.thickness_mm !== undefined) formData.append('thickness_mm', taskData.thickness_mm);
+        if (taskData.machine_fk !== undefined && taskData.machine_fk !== null) formData.append('machine_fk', taskData.machine_fk);
+        if (taskData.estimated_hours !== undefined && taskData.estimated_hours !== null) formData.append('estimated_hours', taskData.estimated_hours);
         
         // Add nesting file if provided
         if (taskData.nesting_file) {
@@ -142,7 +154,6 @@ export async function updateCncTask(taskId, taskData) {
             method: 'PATCH',
             headers: {
                 // Don't set Content-Type for FormData, let browser set it with boundary
-                'Authorization': response.headers.get('Authorization'),
                 'X-Subdomain': 'ofis.gemcore.com.tr'
             },
             body: formData

@@ -873,6 +873,7 @@ function setupCreateCutForm(createCutModal) {
         fields: [
             {
                 id: 'cut-name',
+                name: 'cut-name',
                 label: 'Kesim Adı',
                 type: 'text',
                 required: true,
@@ -882,6 +883,7 @@ function setupCreateCutForm(createCutModal) {
             },
             {
                 id: 'cut-nesting-id',
+                name: 'cut-nesting-id',
                 label: 'Nesting ID',
                 type: 'text',
                 required: true,
@@ -891,6 +893,7 @@ function setupCreateCutForm(createCutModal) {
             },
             {
                 id: 'cut-material',
+                name: 'cut-material',
                 label: 'Malzeme',
                 type: 'text',
                 required: true,
@@ -900,6 +903,7 @@ function setupCreateCutForm(createCutModal) {
             },
             {
                 id: 'cut-dimensions',
+                name: 'cut-dimensions',
                 label: 'Boyutlar',
                 type: 'text',
                 required: true,
@@ -909,6 +913,7 @@ function setupCreateCutForm(createCutModal) {
             },
             {
                 id: 'cut-thickness',
+                name: 'cut-thickness',
                 label: 'Kalınlık (mm)',
                 type: 'number',
                 required: true,
@@ -920,6 +925,7 @@ function setupCreateCutForm(createCutModal) {
             },
             {
                 id: 'cut-machine-fk',
+                name: 'cut-machine-fk',
                 label: 'Makine',
                 type: 'dropdown',
                 required: false,
@@ -933,6 +939,18 @@ function setupCreateCutForm(createCutModal) {
                 ],
                 colSize: 6,
                 helpText: 'Kesim makinesi seçin'
+            },
+            {
+                id: 'cut-estimated-hours',
+                name: 'cut-estimated-hours',
+                label: 'Tahmini Süre (Saat)',
+                type: 'number',
+                required: false,
+                placeholder: '0.0',
+                step: '0.1',
+                min: '0',
+                colSize: 6,
+                helpText: 'Kesim işleminin tahmini süresi saat cinsinden'
             },
             {
                 id: 'cut-files',
@@ -1054,6 +1072,17 @@ function setupCreateCutForm(createCutModal) {
 }
 
 async function handleCreateCutSave(formData) {
+    // Debug: Log the form data to see what's being captured
+    console.log('Form data received:', formData);
+    console.log('Machine FK value:', formData['cut-machine-fk']);
+    
+    // Debug: Check if dropdown instance exists
+    const dropdown = createCutModal.dropdowns?.get('cut-machine-fk');
+    console.log('Dropdown instance:', dropdown);
+    if (dropdown) {
+        console.log('Dropdown value:', dropdown.getValue());
+    }
+    
     // Get the actual file objects from the file input
     const fileInput = createCutModal.container.querySelector('input[type="file"]');
     const uploadedFiles = fileInput ? Array.from(fileInput.files) : [];
@@ -1063,16 +1092,27 @@ async function handleCreateCutSave(formData) {
         console.log(`Selected ${uploadedFiles.length} files:`, uploadedFiles.map(f => f.name));
     }
     
+    // Get machine_fk value manually if not in formData
+    let machineFkValue = formData['cut-machine-fk'];
+    if (!machineFkValue && dropdown) {
+        machineFkValue = dropdown.getValue();
+        console.log('Using manual dropdown value:', machineFkValue);
+    }
+    
     const cutData = {
         name: formData['cut-name'],
         nesting_id: formData['cut-nesting-id'],
         material: formData['cut-material'],
         dimensions: formData['cut-dimensions'],
         thickness_mm: parseFloat(formData['cut-thickness']) || 0,
-        machine_fk: formData['cut-machine-fk'] ? parseInt(formData['cut-machine-fk']) : null,
+        machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
+        estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null,
         files: uploadedFiles,
         parts_data: []
     };
+    
+    // Debug: Log the final payload
+    console.log('Create cut payload:', cutData);
     
     // Collect parts data from dynamic rows
     const partRows = document.querySelectorAll('.part-row');
@@ -1152,6 +1192,7 @@ async function setupEditCutForm(editCutModal, cut) {
         fields: [
             {
                 id: 'cut-name',
+                name: 'cut-name',
                 label: 'Kesim Adı',
                 type: 'text',
                 required: true,
@@ -1162,6 +1203,7 @@ async function setupEditCutForm(editCutModal, cut) {
             },
             {
                 id: 'cut-nesting-id',
+                name: 'cut-nesting-id',
                 label: 'Nesting ID',
                 type: 'text',
                 required: true,
@@ -1172,6 +1214,7 @@ async function setupEditCutForm(editCutModal, cut) {
             },
             {
                 id: 'cut-material',
+                name: 'cut-material',
                 label: 'Malzeme',
                 type: 'text',
                 required: true,
@@ -1182,6 +1225,7 @@ async function setupEditCutForm(editCutModal, cut) {
             },
             {
                 id: 'cut-dimensions',
+                name: 'cut-dimensions',
                 label: 'Boyutlar',
                 type: 'text',
                 required: true,
@@ -1192,6 +1236,7 @@ async function setupEditCutForm(editCutModal, cut) {
             },
             {
                 id: 'cut-thickness',
+                name: 'cut-thickness',
                 label: 'Kalınlık (mm)',
                 type: 'number',
                 required: true,
@@ -1204,6 +1249,7 @@ async function setupEditCutForm(editCutModal, cut) {
             },
             {
                 id: 'cut-machine-fk',
+                name: 'cut-machine-fk',
                 label: 'Makine',
                 type: 'dropdown',
                 required: false,
@@ -1218,6 +1264,19 @@ async function setupEditCutForm(editCutModal, cut) {
                 ],
                 colSize: 6,
                 helpText: 'Kesim makinesi seçin'
+            },
+            {
+                id: 'cut-estimated-hours',
+                name: 'cut-estimated-hours',
+                label: 'Tahmini Süre (Saat)',
+                type: 'number',
+                required: false,
+                placeholder: '0.0',
+                step: '0.1',
+                min: '0',
+                value: cut.estimated_hours || '',
+                colSize: 6,
+                helpText: 'Kesim işleminin tahmini süresi saat cinsinden'
             }
         ]
     });
@@ -1819,9 +1878,27 @@ async function refreshFilesTable() {
 }
 
 async function handleEditCutSave(formData, cutKey) {
+    // Debug: Log the form data to see what's being captured
+    console.log('Edit form data received:', formData);
+    console.log('Edit Machine FK value:', formData['cut-machine-fk']);
+    
+    // Debug: Check if dropdown instance exists
+    const dropdown = editCutModal.dropdowns?.get('cut-machine-fk');
+    console.log('Edit dropdown instance:', dropdown);
+    if (dropdown) {
+        console.log('Edit dropdown value:', dropdown.getValue());
+    }
+    
     // Get the actual file objects from the file input
     const fileInput = editCutModal.container.querySelector('input[type="file"]');
     const uploadedFiles = fileInput ? Array.from(fileInput.files) : [];
+    
+    // Get machine_fk value manually if not in formData
+    let machineFkValue = formData['cut-machine-fk'];
+    if (!machineFkValue && dropdown) {
+        machineFkValue = dropdown.getValue();
+        console.log('Using manual edit dropdown value:', machineFkValue);
+    }
     
     const cutData = {
         name: formData['cut-name'],
@@ -1829,8 +1906,12 @@ async function handleEditCutSave(formData, cutKey) {
         material: formData['cut-material'],
         dimensions: formData['cut-dimensions'],
         thickness_mm: parseFloat(formData['cut-thickness']) || 0,
-        machine_fk: formData['cut-machine-fk'] ? parseInt(formData['cut-machine-fk']) : null
+        machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
+        estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null
     };
+    
+    // Debug: Log the final payload
+    console.log('Edit cut payload:', cutData);
     
     // Validate data
     const validation = validateCncTaskData(cutData);

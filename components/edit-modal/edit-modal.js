@@ -565,7 +565,9 @@ export class EditModal {
     getFormData() {
         const data = {};
         this.fields.forEach((field, fieldId) => {
-            data[fieldId] = this.getFieldValue(fieldId);
+            // Use field.name as the key instead of fieldId
+            const fieldName = field.name || fieldId;
+            data[fieldName] = this.getFieldValue(fieldId);
         });
         return data;
     }
