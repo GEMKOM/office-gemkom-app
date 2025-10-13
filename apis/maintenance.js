@@ -36,6 +36,21 @@ export async function resolveMaintenanceRequest(requestId, resolutionData) {
     return extractResultsFromResponse(data);
 }
 
+export async function deleteMaintenanceRequest(requestId) {
+    const response = await authedFetch(`${backendBase}/machines/faults/${requestId}/`, {
+        method: 'DELETE',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    });
+    
+    if (!response.ok) {
+        throw new Error('Failed to delete maintenance request');
+    }
+    
+    return true; // DELETE requests typically don't return content
+}
+
 export async function fetchMachineFaults(filters = {}) {
     try {
         const queryParams = new URLSearchParams();

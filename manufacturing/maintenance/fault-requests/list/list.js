@@ -1,16 +1,17 @@
-import { guardRoute } from '../../../../authService.js';
+import { guardRoute, getUser, isAdmin } from '../../../../authService.js';
 import { initNavbar } from '../../../../components/navbar.js';
-import { fetchMachineFaults, createMaintenanceRequest } from '../../../../apis/maintenance.js';
+import { fetchMachineFaults, createMaintenanceRequest, deleteMaintenanceRequest } from '../../../../apis/maintenance.js';
 import { fetchMachines } from '../../../../apis/machines.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { TableComponent } from '../../../../components/table/table.js';
 import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
+import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
 
 let allFaults = [];
 let filteredFaults = [];
-let headerComponent, statisticsCards, filtersComponent, tableComponent, createFaultModal;
+let headerComponent, statisticsCards, filtersComponent, tableComponent, createFaultModal, deleteFaultModal;
 let currentPage = 1;
 let itemsPerPage = 20;
 let totalItems = 0;
@@ -219,8 +220,7 @@ function initializeComponents() {
                 field: 'resolved_at', 
                 label: 'Çözüm Tarihi', 
                 sortable: true,
-                type: 'date',
-                formatter: (value) => value ? null : '-' // Let the table component handle date formatting
+                type: 'date'
             },
             { 
                 field: 'resolution_description', 
@@ -233,6 +233,14 @@ function initializeComponents() {
                         <span title="${value.replace(/"/g, '&quot;')}">${truncated}</span>
                         ${value.length > 80 ? '<button class="btn btn-link btn-sm p-0 ms-1" onclick="showFullResolution(' + row.id + ')" title="Tam çözümü göster"><i class="fas fa-expand-alt"></i></button>' : ''}
                     `;
+                }
+            },
+            { 
+                field: 'actions', 
+                label: 'İşlemler', 
+                sortable: false,
+                formatter: (value, row) => {
+                    return getActionButtons(row);
                 }
             }
         ],
@@ -264,6 +272,9 @@ function initializeComponents() {
 
     // Initialize Create Fault Request Modal
     initializeCreateFaultModal();
+    
+    // Initialize Delete Fault Request Modal
+    initializeDeleteFaultModal();
 }
 
 function initializeCreateFaultModal() {
@@ -389,6 +400,15 @@ function initializeCreateFaultModal() {
     
     // Set up equipment type checkbox interaction
     setupEquipmentTypeInteraction();
+}
+
+function initializeDeleteFaultModal() {
+    deleteFaultModal = new DisplayModal('delete-fault-modal-container', {
+        title: 'Arıza Talebi Silme Onayı',
+        icon: 'fas fa-exclamation-triangle',
+        size: 'md',
+        showEditButton: false
+    });
 }
 
 async function loadMachinesForModal() {
@@ -824,6 +844,161 @@ function showFullResolution(faultId) {
     }
 }
 
+// Action buttons function
+function getActionButtons(row) {
+    let buttons = '';
+    
+    // Check if user can delete this request
+    if (canDeleteRequest(row)) {
+        buttons += `
+            <button class="btn btn-outline-danger btn-sm me-1" 
+                    onclick="showDeleteFaultModal(${row.id})" 
+                    title="Arıza talebini sil">
+                <i class="fas fa-trash"></i>
+            </button>
+        `;
+    }
+    
+    return buttons || '-';
+}
+
+// Check if current user can delete the request
+function canDeleteRequest(row) {
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        const currentUserId = user.id;
+        const isSuperuser = user.is_superuser || user.is_admin;
+        
+        // Superuser can delete all requests
+        if (isSuperuser) {
+            return true;
+        }
+        
+        // Regular users can only delete their own requests that are not completed
+        const isOwnRequest = row.reported_by === currentUserId;
+        const isNotCompleted = !row.resolved_at; // Not resolved means not completed
+        
+        return isOwnRequest && isNotCompleted;
+    } catch (error) {
+        console.warn('Error checking delete permissions:', error);
+        return false;
+    }
+}
+
+// Show delete fault request confirmation modal
+function showDeleteFaultModal(requestId) {
+    const request = allFaults.find(f => f.id === requestId);
+    if (!request) {
+        showAlert('Arıza talebi bulunamadı', 'danger');
+        return;
+    }
+    
+    // Store the request ID for deletion
+    window.pendingDeleteRequestId = requestId;
+
+    // Clear and configure the delete modal
+    deleteFaultModal.clearData();
+    
+    // Add warning section
+    deleteFaultModal.addSection({
+        title: 'Silme Onayı',
+        icon: 'fas fa-exclamation-triangle',
+        iconColor: 'text-danger'
+    });
+
+    // Add warning message
+    deleteFaultModal.addField({
+        id: 'delete-warning',
+        name: 'warning',
+        label: 'Uyarı',
+        type: 'text',
+        value: 'Bu arıza talebini silmek istediğinize emin misiniz?',
+        icon: 'fas fa-exclamation-triangle',
+        colSize: 12
+    });
+
+    // Add equipment name
+    const machineName = request.machine_name || request.asset_name || 'Bilinmeyen Ekipman';
+    deleteFaultModal.addField({
+        id: 'delete-equipment-name',
+        name: 'equipment_name',
+        label: 'Ekipman',
+        type: 'text',
+        value: machineName,
+        icon: 'fas fa-cogs',
+        colSize: 12
+    });
+
+    // Add request description
+    if (request.description) {
+        deleteFaultModal.addField({
+            id: 'delete-description',
+            name: 'description',
+            label: 'Açıklama',
+            type: 'text',
+            value: request.description.length > 100 ? request.description.substring(0, 100) + '...' : request.description,
+            icon: 'fas fa-align-left',
+            colSize: 12
+        });
+    }
+
+    // Add warning about permanent deletion
+    deleteFaultModal.addField({
+        id: 'delete-warning-permanent',
+        name: 'permanent_warning',
+        label: 'Dikkat',
+        type: 'text',
+        value: 'Bu işlem geri alınamaz ve arıza talebi kalıcı olarak silinecektir.',
+        icon: 'fas fa-trash',
+        colSize: 12
+    });
+
+    // Render the modal first
+    deleteFaultModal.render();
+    
+    // Add custom buttons after rendering
+    const modalFooter = deleteFaultModal.container.querySelector('.modal-footer');
+    if (modalFooter) {
+        modalFooter.innerHTML = `
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                <i class="fas fa-times me-1"></i>İptal
+            </button>
+            <button type="button" class="btn btn-sm btn-danger" id="confirm-delete-fault-btn">
+                <i class="fas fa-trash me-1"></i>Evet, Sil
+            </button>
+        `;
+        
+        // Add event listener to confirm delete button
+        const confirmDeleteBtn = modalFooter.querySelector('#confirm-delete-fault-btn');
+        if (confirmDeleteBtn) {
+            confirmDeleteBtn.addEventListener('click', async () => {
+                await deleteRequest(requestId);
+            });
+        }
+    }
+    
+    // Show the modal
+    deleteFaultModal.show();
+}
+
+// Delete request function
+async function deleteRequest(requestId) {
+    try {
+        await deleteMaintenanceRequest(requestId);
+        showAlert('Arıza talebi başarıyla silindi!', 'success');
+        
+        // Hide the modal
+        deleteFaultModal.hide();
+        
+        // Reload the fault requests list
+        await loadFaultRequests();
+    } catch (error) {
+        console.error('Error deleting fault request:', error);
+        showAlert('Arıza talebi silinirken hata oluştu: ' + error.message, 'danger');
+    }
+}
+
 // Make functions globally available for onclick handlers
 window.showFullDescription = showFullDescription;
 window.showFullResolution = showFullResolution;
+window.showDeleteFaultModal = showDeleteFaultModal;
