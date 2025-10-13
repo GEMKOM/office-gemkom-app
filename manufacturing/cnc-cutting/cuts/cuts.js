@@ -1072,16 +1072,8 @@ function setupCreateCutForm(createCutModal) {
 }
 
 async function handleCreateCutSave(formData) {
-    // Debug: Log the form data to see what's being captured
-    console.log('Form data received:', formData);
-    console.log('Machine FK value:', formData['cut-machine-fk']);
-    
-    // Debug: Check if dropdown instance exists
+    // Get machine_fk value manually if not in formData
     const dropdown = createCutModal.dropdowns?.get('cut-machine-fk');
-    console.log('Dropdown instance:', dropdown);
-    if (dropdown) {
-        console.log('Dropdown value:', dropdown.getValue());
-    }
     
     // Get the actual file objects from the file input
     const fileInput = createCutModal.container.querySelector('input[type="file"]');
@@ -1096,7 +1088,6 @@ async function handleCreateCutSave(formData) {
     let machineFkValue = formData['cut-machine-fk'];
     if (!machineFkValue && dropdown) {
         machineFkValue = dropdown.getValue();
-        console.log('Using manual dropdown value:', machineFkValue);
     }
     
     const cutData = {
@@ -1111,8 +1102,6 @@ async function handleCreateCutSave(formData) {
         parts_data: []
     };
     
-    // Debug: Log the final payload
-    console.log('Create cut payload:', cutData);
     
     // Collect parts data from dynamic rows
     const partRows = document.querySelectorAll('.part-row');
@@ -1878,16 +1867,8 @@ async function refreshFilesTable() {
 }
 
 async function handleEditCutSave(formData, cutKey) {
-    // Debug: Log the form data to see what's being captured
-    console.log('Edit form data received:', formData);
-    console.log('Edit Machine FK value:', formData['cut-machine-fk']);
-    
-    // Debug: Check if dropdown instance exists
+    // Get machine_fk value manually if not in formData
     const dropdown = editCutModal.dropdowns?.get('cut-machine-fk');
-    console.log('Edit dropdown instance:', dropdown);
-    if (dropdown) {
-        console.log('Edit dropdown value:', dropdown.getValue());
-    }
     
     // Get the actual file objects from the file input
     const fileInput = editCutModal.container.querySelector('input[type="file"]');
@@ -1897,7 +1878,6 @@ async function handleEditCutSave(formData, cutKey) {
     let machineFkValue = formData['cut-machine-fk'];
     if (!machineFkValue && dropdown) {
         machineFkValue = dropdown.getValue();
-        console.log('Using manual edit dropdown value:', machineFkValue);
     }
     
     const cutData = {
@@ -1910,8 +1890,6 @@ async function handleEditCutSave(formData, cutKey) {
         estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null
     };
     
-    // Debug: Log the final payload
-    console.log('Edit cut payload:', cutData);
     
     // Validate data
     const validation = validateCncTaskData(cutData);
