@@ -495,10 +495,15 @@ function setupTableEventListeners() {
 async function handleStopTimer(timerId) {
     try {
         const finishTime = getSyncedNow();
-        await stopTimer(timerId, finishTime);
+        const success = await stopTimer({ timerId, finishTime });
         
-        // Refresh the dashboard to update the data
-        await refreshActiveTimers();
+        if (success) {
+            // Refresh the dashboard to update the data
+            await refreshActiveTimers();
+            console.log('Timer stopped successfully');
+        } else {
+            console.error('Failed to stop timer');
+        }
         
     } catch (error) {
         console.error('Error stopping timer:', error);
