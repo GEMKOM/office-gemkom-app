@@ -345,9 +345,9 @@ function initializeTableComponent() {
                     normalizedNew = parseFloat(newValue) || 0;
                 }
                 
-                // For machine field, compare IDs
+                // For machine field, compare IDs using oldValue passed by table (row is already mutated)
                 if (field === 'machine_fk') {
-                    normalizedOld = row.machine_fk ? row.machine_fk.toString() : '';
+                    normalizedOld = oldValue ? oldValue.toString() : '';
                     normalizedNew = newValue ? newValue.toString() : '';
                 }
                 
