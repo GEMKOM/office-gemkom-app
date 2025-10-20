@@ -125,6 +125,17 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
+            '/manufacturing/cnc-cutting': {
+                label: 'CNC Kesim',
+                icon: 'fas fa-cut',
+                children: {
+                    '/manufacturing/cnc-cutting/cuts': {
+                        label: 'Kesimler',
+                        icon: 'fas fa-scissors',
+                        children: {}
+                    }
+                }
+            },
 
 
         }

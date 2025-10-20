@@ -1,0 +1,77 @@
+/* File Viewer Component Styles */
+
+.file-viewer-container {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #1a1a1a !important;
+}
+
+.file-viewer-header {
+    user-select: none;
+    background: #2d2d2d !important;
+    border-bottom: 1px solid #404040 !important;
+}
+
+.file-viewer-content {
+    overflow: hidden;
+}
+
+.file-viewer-controls .btn {
+    border-radius: 0;
+    border: 1px solid #404040;
+    background-color: #2d2d2d;
+    color: #ffffff;
+}
+
+.file-viewer-controls .btn:first-child {
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
+}
+
+.file-viewer-controls .btn:last-child {
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
+}
+
+.file-viewer-controls .btn:hover {
+    background-color: #404040;
+    border-color: #555555;
+    color: #ffffff;
+}
+
+.zoom-level {
+    font-family: monospace;
+    user-select: none;
+}
+
+/* Smooth transitions for zoom */
+#viewer-image,
+#viewer-pdf,
+#viewer-video,
+#viewer-text {
+    transition: transform 0.2s ease;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .file-viewer-header {
+        padding: 0.75rem !important;
+    }
+    
+    .file-viewer-header .d-flex {
+        flex-direction: column;
+        align-items: flex-start !important;
+        gap: 0.5rem;
+    }
+    
+    .file-viewer-controls {
+        bottom: 10px !important;
+        right: 10px !important;
+    }
+    
+    .zoom-level {
+        bottom: 10px !important;
+        left: 10px !important;
+        font-size: 10px !important;
+        padding: 3px 6px !important;
+    }
+}

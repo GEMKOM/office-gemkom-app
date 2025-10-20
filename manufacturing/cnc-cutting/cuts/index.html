@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - CNC Kesim Kesimler</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../style.css">
+    <link rel="stylesheet" href="../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
+    <link rel="icon" type="image/png" href="../../../images/gemkom.png">
+    <link rel="stylesheet" href="../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="../../../components/filters/filters.css">
+    <link rel="stylesheet" href="../../../components/display-modal/display-modal.css">
+    <link rel="stylesheet" href="../../../components/table/table.css">
+    <link rel="stylesheet" href="../../../components/badges/badges.css">
+    <link rel="stylesheet" href="../../../components/edit-modal/edit-modal.css">
+    <link rel="stylesheet" href="../../../components/file-viewer/file-viewer.css">
+    <link rel="stylesheet" href="../../../components/file-attachments/file-attachments.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <div id="navbar-container"></div>
+
+    <!-- Main Content Section -->
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <!-- Header Component Placeholder -->
+            <div id="header-placeholder"></div>
+            <!-- Statistics Cards -->
+            <div id="cuts-statistics"></div>
+
+            <!-- Filters Section -->
+            <div id="filters-placeholder"></div>
+
+            <!-- Cuts Table Section -->
+            <div class="row">
+                <div class="col-12">
+                    <div id="cuts-table-container"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Create Cut Modal Container -->
+    <div id="create-cut-modal-container"></div>
+    
+    <!-- Cut Details Modal Container -->
+    <div id="cut-details-modal-container"></div>
+
+    <!-- Edit Cut Modal Container -->
+    <div id="edit-cut-modal-container"></div>
+    
+    <!-- Edit Part Modal Container -->
+    <div id="edit-part-modal-container"></div>
+    
+    <!-- Add Part Modal Container -->
+    <div id="add-part-modal-container"></div>
+    
+    <!-- Add File Modal Container -->
+    <div id="add-file-modal-container"></div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal fade" id="deleteConfirmModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-danger text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-exclamation-triangle me-2"></i>Kesim Silme Onayı
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center">
+                        <i class="fas fa-trash-alt fa-3x text-danger mb-3"></i>
+                        <h5>Bu kesimi silmek istediğinize emin misiniz?</h5>
+                        <p class="text-muted">Bu işlem geri alınamaz ve kesim kalıcı olarak silinecektir.</p>
+                        <div class="alert alert-warning">
+                            <strong>Kesim:</strong> <span id="delete-cut-name">-</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>İptal
+                    </button>
+                    <button type="button" class="btn btn-danger" id="confirm-delete-btn">
+                        <i class="fas fa-trash me-2"></i>Evet, Sil
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Display Modal Container -->
+    <div id="display-modal-container"></div>
+
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Header Component -->
+    <script src="../../../components/header/header.js"></script>
+    <!-- Statistics Cards Component -->
+    <script src="../../../components/statistics-cards/statistics-cards.js"></script>
+    <!-- File Viewer Component -->
+    <script src="../../../components/file-viewer/file-viewer.js"></script>
+    <!-- File Attachments Component -->
+    <script src="../../../components/file-attachments/file-attachments.js"></script>
+    <script type="module" src="cuts.js"></script>
+</body>
+</html>

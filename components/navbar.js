@@ -527,6 +527,12 @@ export function initNavbar() {
                             return;
                         }
                         
+                        if (path.startsWith('/manufacturing/cnc-cutting/')) {
+                            // Allow navigation to CNC cutting pages
+                            navigateTo(path);
+                            return;
+                        }
+                        
                                         if (path.startsWith('/general/') && !path.startsWith('/general/users') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime')) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
@@ -598,6 +604,12 @@ export function initNavbar() {
                 
                 if (path.startsWith('/manufacturing/maintenance/')) {
                     // Allow navigation to maintenance pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                if (path.startsWith('/manufacturing/cnc-cutting/')) {
+                    // Allow navigation to CNC cutting pages
                     navigateTo(path);
                     return;
                 }

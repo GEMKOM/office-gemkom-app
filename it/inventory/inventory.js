@@ -833,18 +833,18 @@ async function updateDevice() {
     const formData = editDeviceModal.getFormData();
     
     // Handle assigned users (convert from array of IDs to array of user objects)
-    const assignedUserIds = formData['assigned-users'] || [];
+    const assignedUserIds = formData['assigned_users'] || [];
     const assignedUsers = assignedUserIds.map(userId => parseInt(userId));
     
     // Handle properties (collect from dynamic form)
     const properties = collectPropertiesFromForm('edit');
     
     const deviceData = {
-        name: formData['device-name'],
-        code: formData['device-code'] || null,
-        machine_type: formData['device-type'],
-        used_in: formData['used-in'],
-        is_active: formData['device-status'] === 'active',
+        name: formData['name'],
+        code: formData['code'] || null,
+        machine_type: formData['machine_type'],
+        used_in: formData['used_in'],
+        is_active: formData['is_active'] === 'active',
         assigned_users: assignedUsers,
         properties: properties
     };
