@@ -31,6 +31,7 @@ import { TableComponent } from '../../../components/table/table.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
+import { parsePartsFromText } from './partsPasteParser.js';
 
 // State management
 let currentPage = 1;
@@ -55,6 +56,7 @@ let currentEditTask = null; // Current task being edited
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
+    await loadMachines();
     
     // Initialize header component
     const header = new HeaderComponent({
@@ -126,7 +128,6 @@ async function initializeCuts() {
     try {
         initializeFiltersComponent();
         initializeTableComponent();
-        await loadMachines();
         
         await loadCuts();
         updateCutCounts();
@@ -139,16 +140,8 @@ async function initializeCuts() {
 async function loadMachines() {
     try {
         const machinesResponse = await fetchMachines(1, 100, { used_in: 'cutting' });
-        machines = machinesResponse.results || machinesResponse || [];
+        machines = machinesResponse.results || machinesResponse || [];   
         
-        // Update machine filter options if filters component is initialized
-        if (cutsFilters) {
-            const machineOptions = [
-                { value: '', label: 'Tüm Makineler' },
-                ...machines.map(machine => ({ value: machine.id.toString(), label: machine.name }))
-            ];
-            cutsFilters.updateFilterOptions('machine-name-filter', machineOptions);
-        }
     } catch (error) {
         console.error('Error loading machines:', error);
         machines = [];
@@ -224,6 +217,15 @@ function initializeFiltersComponent() {
         placeholder: 'Tümü',
         colSize: 2
     });
+
+    // Update machine filter options if filters component is initialized
+    if (cutsFilters) {
+        const machineOptions = [
+            { value: '', label: 'Tüm Makineler' },
+            ...machines.map(machine => ({ value: machine.id.toString(), label: machine.name }))
+        ];
+        cutsFilters.updateFilterOptions('machine-name-filter', machineOptions);
+    }
 }
 
 function initializeTableComponent() {
@@ -291,20 +293,6 @@ function initializeTableComponent() {
                 formatter: (value, row) => {
                     // Display machine name, not ID
                     return `<span class="machine-name">${row.machine_name || '-'}</span>`;
-                }
-            },
-            {
-                field: 'nesting_file_url',
-                label: 'Nesting Dosyası',
-                sortable: false,
-                width: '10%',
-                formatter: (value, row) => {
-                    if (value) {
-                        return `<a href="${value}" target="_blank" class="btn btn-sm btn-outline-primary">
-                            <i class="fas fa-download"></i> İndir
-                        </a>`;
-                    }
-                    return '-';
                 }
             },
             {
@@ -401,33 +389,6 @@ function initializeTableComponent() {
         emptyIcon: 'fas fa-cut',
         rowAttributes: (row) => `data-cut-key="${row.key}" class="data-update"`
     });
-}
-
-// Handle URL parameters for filtering
-function handleUrlParameters() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const filterParam = urlParams.get('filter');
-    const cutParam = urlParams.get('cut');
-    
-    // Handle cut parameter to open modal
-    if (cutParam) {
-        // Open the cut details modal with the specified cut key
-        showCutDetails(cutParam);
-        return true; // Indicate that a parameter was handled
-    }
-    
-    if (filterParam && cutsFilters) {
-        // Set the key filter with the provided value
-        cutsFilters.setFilterValues({ 'key-filter': filterParam });
-        
-        // Show a notification that the page is filtered
-        showNotification(`"${filterParam}" için filtrelenmiş sonuçlar gösteriliyor`, 'info');
-        
-        // Automatically apply the filter
-        return true; // Indicate that a filter was applied
-    }
-    
-    return false; // No parameter was applied
 }
 
 async function loadCuts(page = 1) {
@@ -1016,10 +977,27 @@ function setupCreateCutForm(createCutModal) {
     const partsHtml = `
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h6 class="mb-0">Parça Listesi</h6>
-            <button type="button" class="btn btn-sm btn-outline-primary" id="add-part-btn">
-                <i class="fas fa-plus me-1"></i>Parça Ekle
-            </button>
+			<div class="d-flex gap-2">
+				<button type="button" class="btn btn-sm btn-outline-primary" id="add-part-btn">
+					<i class="fas fa-plus me-1"></i>Parça Ekle
+				</button>
+				<button type="button" class="btn btn-sm btn-outline-danger" id="clear-parts-btn">
+					<i class="fas fa-trash-alt me-1"></i>Tümünü Temizle
+				</button>
+			</div>
         </div>
+		<div class="mb-2">
+			<label class="form-label small text-muted fw-bold mb-1">
+				<i class="fas fa-paste me-1"></i>Toplu Yapıştır (Excel kopyasını buraya yapıştırın)
+			</label>
+			<textarea id="bulk-paste-input" class="form-control form-control-sm" rows="4" placeholder="Excel'den kopyaladığınız verileri buraya yapıştırın"></textarea>
+			<div class="d-flex gap-2 mt-2">
+				<button type="button" class="btn btn-sm btn-outline-success" id="parse-paste-btn">
+					<i class="fas fa-magic me-1"></i>Yapıştırılanı Ayrıştır ve Ekle
+				</button>
+				<small class="text-muted">İlk satır: İş No  Resim No  Pozisyon No. Sonraki satırlar: genişlik (mm), yükseklik (mm), alan (m²), ağırlık (kg), malzeme, kalınlık (mm), proje, talep eden, not.</small>
+			</div>
+		</div>
         <div class="row g-2 mb-2">
             <div class="col-md-3">
                 <small class="text-muted fw-bold">
@@ -1064,11 +1042,35 @@ function setupCreateCutForm(createCutModal) {
     if (addPartBtn) {
         addPartBtn.addEventListener('click', addPart);
     }
+
+	// Clear all parts
+	const clearPartsBtn = createCutModal.container.querySelector('#clear-parts-btn');
+	if (clearPartsBtn) {
+		clearPartsBtn.addEventListener('click', () => {
+			const container = document.getElementById('parts-container');
+			if (!container) return;
+			container.innerHTML = '';
+			showNotification('Tüm parçalar temizlendi', 'info');
+		});
+	}
+
+	// Bulk paste handling
+	const parsePasteBtn = createCutModal.container.querySelector('#parse-paste-btn');
+	const bulkPasteInput = createCutModal.container.querySelector('#bulk-paste-input');
+	if (parsePasteBtn && bulkPasteInput) {
+		parsePasteBtn.addEventListener('click', () => {
+			const text = bulkPasteInput.value;
+			const parsed = parsePartsFromText(text);
+			if (!parsed || parsed.length === 0) {
+				showNotification('Yapıştırılan veriler ayrıştırılamadı', 'warning');
+				return;
+			}
+			populatePartsFromParsed(parsed);
+			showNotification(`${parsed.length} parça eklendi`, 'success');
+		});
+	}
     
-    // Add initial part
-    setTimeout(() => {
-        addPart();
-    }, 100);
+	// Start with no default part rows; user can add or paste
 }
 
 async function handleCreateCutSave(formData) {
@@ -1998,17 +2000,34 @@ function addPart() {
     container.insertAdjacentHTML('beforeend', partHtml);
 }
 
+// Populate parts from parsed objects
+function populatePartsFromParsed(parsedParts) {
+    if (!Array.isArray(parsedParts) || parsedParts.length === 0) return;
+    const container = document.getElementById('parts-container');
+    if (!container) return;
+
+    for (const p of parsedParts) {
+        // Create a new row
+        addPart();
+        const lastRow = container.lastElementChild;
+        if (!lastRow) continue;
+        const jobInput = lastRow.querySelector('input[name="job_no"]');
+        const imageInput = lastRow.querySelector('input[name="image_no"]');
+        const positionInput = lastRow.querySelector('input[name="position_no"]');
+        const weightInput = lastRow.querySelector('input[name="weight"]');
+
+        if (jobInput) jobInput.value = p.job_no || '';
+        if (imageInput) imageInput.value = p.image_no || '';
+        if (positionInput) positionInput.value = p.position_no || '';
+        if (weightInput && p.weight_kg != null) weightInput.value = String(p.weight_kg);
+    }
+}
+
 // Remove part
 function removePart(index) {
     const partRow = document.querySelector(`.part-row[data-index="${index}"]`);
     if (partRow) {
-        // Don't remove if it's the only part
-        const container = document.getElementById('parts-container');
-        if (container.children.length > 1) {
-            partRow.remove();
-        } else {
-            showNotification('En az bir parça olmalıdır.', 'error');
-        }
+        partRow.remove();
     }
 }
 
