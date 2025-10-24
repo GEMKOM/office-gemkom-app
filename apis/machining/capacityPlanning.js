@@ -1,7 +1,7 @@
 import { authedFetch } from '../../authService.js';
 import { backendBase } from '../../base.js';
 
-export async function getCapacityPlanning(machine_id, filters = {}) {
+export async function getCapacityPlanning(machine_id, module='machining', filters = {}) {
     try {
         const queryParams = new URLSearchParams();
         
@@ -18,7 +18,7 @@ export async function getCapacityPlanning(machine_id, filters = {}) {
             throw new Error('Machine ID is required');
         }
 
-        const url = `${backendBase}/machining/planning/list/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const url = `${backendBase}/${module}/planning/list/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
         
         const response = await authedFetch(url);
         
