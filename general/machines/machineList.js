@@ -1,7 +1,7 @@
 import { guardRoute } from '../../authService.js';
 import { initNavbar } from '../../components/navbar.js';
 import { fetchMachines, fetchMachineTypes, fetchMachineUsedIn, createMachine as apiCreateMachine, updateMachine as apiUpdateMachine, deleteMachine as apiDeleteMachine } from '../../apis/machines.js';
-import { fetchUsers } from '../../apis/users.js';
+import { fetchAllUsers } from '../../apis/users.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
@@ -228,6 +228,7 @@ function showCreateMachineModal() {
         colSize: 6,
         help: 'Bu makineden sorumlu kullanıcılar',
         multiple: true,
+        searchable: true,
         options: users.map(user => ({ 
             value: user.id, 
             label: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username 
@@ -356,6 +357,7 @@ function showEditMachineModal(machineId) {
         colSize: 6,
         help: 'Bu makineden sorumlu kullanıcılar',
         multiple: true,
+        searchable: true,
         options: users.map(user => ({ 
             value: user.id, 
             label: `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username 
@@ -897,7 +899,7 @@ async function loadMetadata() {
         const [typesResponse, usedInResponse, usersResponse] = await Promise.all([
             fetchMachineTypes(),
             fetchMachineUsedIn(),
-            fetchUsers()
+            fetchAllUsers()
         ]);
 
         machineTypes = typesResponse.results || typesResponse || [];

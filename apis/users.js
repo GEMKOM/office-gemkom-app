@@ -2,6 +2,14 @@ import { backendBase } from "../base.js";
 import { extractResultsFromResponse } from "./paginationHelper.js";
 import { authedFetch } from "../authService.js";
 
+
+export async function fetchAllUsers() {
+    const resp = await authedFetch(`${backendBase}/users/?for_dropdown=true&page_size=10000`);
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    return data.results;
+}
+
 export async function fetchUsers(team = null) {
     // Adjust endpoint if needed
     let url = `${backendBase}/users/`;
