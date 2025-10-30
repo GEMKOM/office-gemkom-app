@@ -1245,7 +1245,7 @@ async function setupEditCutForm(editCutModal, cut) {
                 type: 'dropdown',
                 required: false,
                 placeholder: 'Makine seçin...',
-                value: cut.machine_fk || '',
+                value: (cut.machine_fk !== null && cut.machine_fk !== undefined && cut.machine_fk !== '') ? cut.machine_fk.toString() : '',
                 options: [
                     { value: '', label: 'Makine seçin...' },
                     ...machines.map(machine => ({ 
