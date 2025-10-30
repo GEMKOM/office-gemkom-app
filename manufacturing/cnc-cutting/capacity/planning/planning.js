@@ -521,7 +521,7 @@ function initTasksTable() {
                 },
                 {
                     field: 'key',
-                    label: 'TI No',
+                    label: 'CNC No',
                     sortable: true,
                     formatter: (value) => `<strong>${value}</strong>`
                 },
@@ -531,16 +531,28 @@ function initTasksTable() {
                     sortable: true
                 },
                 {
-                    field: 'job_no',
-                    label: 'İş No',
+                    field: 'nesting_id',
+                    label: 'Nesting ID',
                     sortable: true,
                     formatter: (value) => value || '-'
                 },
                 {
-                    field: 'quantity',
-                    label: 'Adet',
+                    field: 'material',
+                    label: 'Malzeme',
                     sortable: true,
                     formatter: (value) => value || '-'
+                },
+                {
+                    field: 'dimensions',
+                    label: 'Ölçüler',
+                    sortable: true,
+                    formatter: (value) => value || '-'
+                },
+                {
+                    field: 'thickness_mm',
+                    label: 'Kalınlık (mm)',
+                    sortable: true,
+                    formatter: (value) => (value !== null && value !== undefined && value !== '' ? value : '-')
                 },
                 {
                     field: 'estimated_hours',
@@ -662,7 +674,7 @@ async function loadMachines() {
         if (machinesTable) {
             machinesTable.setLoading(true);
         }
-        const response = await fetchMachines(1, 100, { used_in: 'cnc_cutting' });
+        const response = await fetchMachines(1, 100, { used_in: 'cutting' });
         
         machines = response.results || response;
         // Handle case where no machines are returned
@@ -670,15 +682,7 @@ async function loadMachines() {
             machines = [];
         }
         
-        // If no machines found, add some mock data for testing
-        if (machines.length === 0) {
-            machines = [
-                { id: 1, name: 'CNC Tezgah 1', is_active: true },
-                { id: 2, name: 'CNC Tezgah 2', is_active: true },
-                { id: 3, name: 'Torna Tezgahı', is_active: false },
-                { id: 4, name: 'Freze Tezgahı', is_active: true }
-            ];
-        }
+        // Use backend response as-is; do not inject mock data
         
         // Use tasks_count from API response (don't override it)
         // Sort machines by task count (most to least)
@@ -1232,7 +1236,7 @@ async function savePlan() {
             })
         };
         
-        const result = await updateCapacityPlanning(updateData);
+        const result = await updateCapacityPlanning(updateData, 'cnc_cutting');
         // Reset change tracking after successful save
         resetChangeTracking();
         showNotification('Plan başarıyla kaydedildi', 'success');

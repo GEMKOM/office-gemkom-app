@@ -35,9 +35,9 @@ export async function getCapacityPlanning(machine_id, module='machining', filter
 }
 
 
-export async function updateCapacityPlanning(data) {
+export async function updateCapacityPlanning(data, module='machining') {
     try {
-        const response = await authedFetch(`${backendBase}/machining/planning/bulk-save/`, {
+        const response = await authedFetch(`${backendBase}/${module}/planning/bulk-save/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',

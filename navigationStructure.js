@@ -133,6 +133,17 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Kesimler',
                         icon: 'fas fa-scissors',
                         children: {}
+                    },
+                    '/manufacturing/cnc-cutting/capacity': {
+                        label: 'Kapasite Yönetimi',
+                        icon: 'fas fa-industry',
+                        children: {
+                            '/manufacturing/cnc-cutting/capacity/planning': {
+                                label: 'Kapasite Planlayıcı',
+                                icon: 'fas fa-calendar-alt',
+                                children: {}
+                            }
+                        }
                     }
                 }
             },
