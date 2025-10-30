@@ -122,6 +122,22 @@ export const NAVIGATION_STRUCTURE = {
                                 children: {}
                             }
                         }
+                    },
+                    '/manufacturing/maintenance/reports': {
+                        label: 'Raporlar',
+                        icon: 'fas fa-chart-bar',
+                        children: {
+                            '/manufacturing/maintenance/reports/faults': {
+                                label: 'Arızalar Özeti',
+                                icon: 'fas fa-file-alt',
+                                children: {}
+                            },
+                            '/manufacturing/maintenance/reports/user-resolution': {
+                                label: 'Kullanıcı Çözüm Raporu',
+                                icon: 'fas fa-user-check',
+                                children: {}
+                            }
+                        }
                     }
                 }
             },

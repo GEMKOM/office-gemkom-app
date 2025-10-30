@@ -9,6 +9,10 @@ import { GanttChart } from '../../../../components/gantt/gantt.js';
 import { fetchMachines, getMachineCalendar } from '../../../../apis/machines.js';
 import { getCapacityPlanning, updateCapacityPlanning } from '../../../../apis/machining/capacityPlanning.js';
 import { formatDateTime } from '../../../../apis/formatters.js';
+import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
+import { getCncTask } from '../../../../apis/cnc_cutting/crud.js';
+import { FileAttachments } from '../../../../components/file-attachments/file-attachments.js';
+import { FileViewer } from '../../../../components/file-viewer/file-viewer.js';
 
 // Global state
 let currentMachineId = null;
@@ -23,6 +27,7 @@ let isLoadingTasks = false;
 let ganttChart = null;
 let machineCalendar = null;
 let isInlineEditing = false; // Flag to prevent multiple simultaneous inline edits
+let unplannedTasksTable = null; // TableComponent for unplanned tasks
 
 // Change tracking for efficient submissions
 let originalTasks = []; // Store original state for comparison
@@ -112,6 +117,150 @@ function getChangedTasks() {
     
     return changed;
 }
+
+// Details modal: show task details identical to cuts page
+window.showTaskDetails = async function(taskKey) {
+    try {
+        // Fetch task data
+        const task = await getCncTask(taskKey);
+        if (!task) {
+            showNotification('Görev bulunamadı', 'error');
+            return;
+        }
+
+        // Create Display Modal instance
+        const displayModal = new DisplayModal('display-modal-container', {
+            title: `Kesim Detayları - ${task.key}`,
+            icon: 'fas fa-cut text-primary',
+            size: 'lg',
+            showEditButton: false
+        });
+
+        // Kesim Bilgileri
+        displayModal.addSection({
+            title: 'Kesim Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary',
+            fields: [
+                { id: 'cut-key', label: 'Kesim No', value: task.key, type: 'text', colSize: 4, copyable: true },
+                { id: 'cut-name', label: 'Kesim Adı', value: task.name, type: 'text', colSize: 4 },
+                { id: 'nesting-id', label: 'Nesting ID', value: task.nesting_id, type: 'text', colSize: 4 },
+                { id: 'material', label: 'Malzeme', value: task.material, type: 'text', colSize: 4 },
+                { id: 'dimensions', label: 'Boyutlar', value: task.dimensions, type: 'text', colSize: 4 },
+                { id: 'thickness', label: 'Kalınlık (mm)', value: task.thickness_mm, type: 'number', colSize: 4 }
+            ]
+        });
+
+        // Dosya bölümü (varsa)
+        if (task.nesting_file_url) {
+            displayModal.addSection({
+                title: 'Nesting Dosyası',
+                icon: 'fas fa-file',
+                iconColor: 'text-success',
+                fields: [
+                    { id: 'nesting-file', label: 'Dosya', value: task.nesting_file_url, type: 'url', colSize: 12 }
+                ]
+            });
+        }
+
+        // Parça Listesi tablosu
+        const partsSectionHtml = `
+            <div class="mt-4">
+                <div id="parts-details-table-container"></div>
+            </div>
+        `;
+        const lastSectionForParts = displayModal.container.querySelector('[data-section-id*="section"]:last-of-type');
+        if (lastSectionForParts) {
+            const sectionBody = lastSectionForParts.querySelector('.row.g-2');
+            if (sectionBody) {
+                sectionBody.insertAdjacentHTML('beforeend', partsSectionHtml);
+            }
+        }
+        new TableComponent('parts-details-table-container', {
+            title: 'Parça Listesi',
+            icon: 'fas fa-puzzle-piece',
+            iconColor: 'text-success',
+            columns: [
+                { field: 'job_no', label: 'İş No', sortable: true, width: '25%', formatter: (value) => value || '-' },
+                { field: 'image_no', label: 'Resim No', sortable: true, width: '25%', formatter: (value) => value || '-' },
+                { field: 'position_no', label: 'Pozisyon No', sortable: true, width: '25%', formatter: (value) => value || '-' },
+                { field: 'weight_kg', label: 'Ağırlık (kg)', sortable: true, width: '25%', formatter: (value) => value ? `${value} kg` : '-' }
+            ],
+            data: task.parts || [],
+            sortable: true,
+            pagination: false,
+            exportable: false,
+            refreshable: false,
+            striped: true,
+            small: true,
+            emptyMessage: 'Parça bulunamadı',
+            emptyIcon: 'fas fa-puzzle-piece'
+        });
+
+        // Render and show
+        displayModal.render().show();
+
+        // After render: Ekler (attachments)
+        if (task.files && task.files.length > 0) {
+            const filesContainerHtml = `
+                <div class="mt-4">
+                    <div id="task-files-container"></div>
+                </div>
+            `;
+            const lastSection = displayModal.container.querySelector('[data-section-id*="section"]:last-of-type');
+            if (lastSection) {
+                const sectionBody = lastSection.querySelector('.row.g-2');
+                if (sectionBody) {
+                    sectionBody.insertAdjacentHTML('beforeend', filesContainerHtml);
+                }
+            }
+
+            const fileAttachments = new FileAttachments('task-files-container', {
+                title: 'Ekler',
+                titleIcon: 'fas fa-paperclip',
+                titleIconColor: 'text-muted',
+                layout: 'grid',
+                onFileClick: (file) => {
+                    const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                    const fileExtension = fileName.split('.').pop().toLowerCase();
+                    const viewer = new FileViewer();
+                    viewer.setDownloadCallback(async () => {
+                        await viewer.downloadFile(file.file_url, fileName);
+                    });
+                    viewer.openFile(file.file_url, fileName, fileExtension);
+                },
+                onDownloadClick: (fileUrl, fileName) => {
+                    fetch(fileUrl)
+                        .then(response => response.blob())
+                        .then(blob => {
+                            const url = window.URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = fileName;
+                            link.style.display = 'none';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            window.URL.revokeObjectURL(url);
+                        })
+                        .catch(error => {
+                            console.error('Download failed:', error);
+                            const link = document.createElement('a');
+                            link.href = fileUrl;
+                            link.download = fileName;
+                            link.target = '_blank';
+                            link.click();
+                        });
+                }
+            });
+
+            fileAttachments.setFiles(task.files);
+        }
+    } catch (error) {
+        console.error('Error showing task details:', error);
+        showNotification('Görev detayları gösterilirken hata oluştu', 'error');
+    }
+};
 
 // Machine Calendar Utility Functions
 function parseTimeToMinutes(timeString) {
@@ -520,21 +669,22 @@ function initTasksTable() {
                     `
                 },
                 {
-                    field: 'key',
-                    label: 'CNC No',
-                    sortable: true,
-                    formatter: (value) => `<strong>${value}</strong>`
-                },
-                {
-                    field: 'name',
-                    label: 'Görev Adı',
-                    sortable: true
-                },
-                {
                     field: 'nesting_id',
                     label: 'Nesting ID',
                     sortable: true,
-                    formatter: (value) => value || '-'
+                    formatter: (value) => `<strong>${value || '-'}</strong>`
+                },
+                {
+                    field: 'key',
+                    label: 'CNC No',
+                    sortable: true,
+                    formatter: (value) => `${value}`
+                },
+                {
+                    field: 'thickness_mm',
+                    label: 'Kalınlık (mm)',
+                    sortable: true,
+                    formatter: (value) => (value !== null && value !== undefined && value !== '' ? value : '-')
                 },
                 {
                     field: 'material',
@@ -548,12 +698,7 @@ function initTasksTable() {
                     sortable: true,
                     formatter: (value) => value || '-'
                 },
-                {
-                    field: 'thickness_mm',
-                    label: 'Kalınlık (mm)',
-                    sortable: true,
-                    formatter: (value) => (value !== null && value !== undefined && value !== '' ? value : '-')
-                },
+                
                 {
                     field: 'estimated_hours',
                     label: 'Tahmini Saat',
@@ -594,22 +739,15 @@ function initTasksTable() {
                     }
                 },
                 {
-                    field: 'plan_locked',
-                    label: 'Durum',
-                    sortable: true,
-                    formatter: (value) => `
-                        <span class="badge ${value ? 'bg-warning' : 'bg-success'}">
-                            ${value ? 'Kilitli' : 'Aktif'}
-                        </span>
-                    `
-                },
-                {
                     field: 'actions',
                     label: 'İşlemler',
                     sortable: false,
                     width: '100px',
                     formatter: (value, row) => `
                         <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-info btn-sm" onclick="showTaskDetails('${row.key}')" title="Detaylar">
+                                <i class="fas fa-info-circle"></i>
+                            </button>
                             <button class="btn btn-outline-primary btn-sm" onclick="editTask('${row.key}')" title="Düzenle">
                                 <i class="fas fa-edit"></i>
                             </button>
@@ -852,35 +990,106 @@ function renderTasksTable(tasks) {
 
 // Render unplanned tasks table
 function renderUnplannedTasksTable(tasks) {
-    const tbody = document.getElementById('unplanned-tasks-table-body');
-    if (!tbody) return;
+    const containerId = 'unplanned-tasks-table-container';
+    const container = document.getElementById(containerId);
+    if (!container) return;
 
-    if (tasks.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="6" class="text-center text-muted">
-                    <i class="fas fa-check-circle me-2"></i>
-                    Tüm görevler planlanmış
-                </td>
-            </tr>
-        `;
-        return;
+    if (!unplannedTasksTable) {
+        unplannedTasksTable = new TableComponent(containerId, {
+            title: 'Planlanmamış Görevler',
+            icon: 'fas fa-exclamation-triangle',
+            iconColor: 'text-warning',
+            striped: true,
+            small: true,
+            pagination: false,
+            skeleton: true,
+            skeletonRows: 5,
+            columns: [
+                {
+                    field: 'plan_order',
+                    label: 'Sıra',
+                    sortable: true,
+                    width: '30px',
+                    formatter: (value) => `
+                        <span class="badge bg-primary">${value || '-'}</span>
+                    `
+                },
+                {
+                    field: 'nesting_id',
+                    label: 'Nesting ID',
+                    sortable: true,
+                    formatter: (value) => `<strong>${value || '-'}</strong>`
+                },
+                {
+                    field: 'key',
+                    label: 'CNC No',
+                    sortable: true,
+                    formatter: (value) => `${value}`
+                },   
+                {
+                    field: 'thickness_mm',
+                    label: 'Kalınlık (mm)',
+                    sortable: true,
+                    formatter: (value) => (value !== null && value !== undefined && value !== '' ? value : '-')
+                },
+                {
+                    field: 'material',
+                    label: 'Malzeme',
+                    sortable: true,
+                    formatter: (value) => value || '-'
+                },
+                {
+                    field: 'dimensions',
+                    label: 'Ölçüler',
+                    sortable: true,
+                    formatter: (value) => value || '-'
+                },
+                {
+                    field: 'estimated_hours',
+                    label: 'Tahmini Saat',
+                    sortable: true,
+                    formatter: (value) => value ? `${value}h` : '-'
+                },
+                {
+                    field: 'remaining_hours',
+                    label: 'Kalan Saat',
+                    sortable: true,
+                    formatter: (value) => value ? `${value}h` : '-'
+                },
+                {
+                    field: 'finish_time',
+                    label: 'Bitiş Tarihi',
+                    sortable: true,
+                    formatter: (value) => {
+                        if (!value) return '-';
+                        return `<div class="created-date">${formatDateTime(value, false)}</div>`;
+                    }
+                },
+                {
+                    field: 'actions',
+                    label: 'İşlemler',
+                    sortable: false,
+                    width: '110px',
+                    formatter: (value, row) => `
+                        <div class="btn-group btn-group-sm">
+                            <button class="btn btn-outline-success btn-sm" onclick="addToPlan('${row.key}')" title="Plana Ekle">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                            <button class="btn btn-outline-info btn-sm" onclick="showTaskDetails('${row.key}')" title="Detaylar">
+                                <i class="fas fa-info-circle"></i>
+                            </button>
+                        </div>
+                    `
+                }
+            ],
+            data: tasks,
+            refreshable: false,
+            emptyMessage: 'Planlanmamış görev bulunamadı',
+            emptyIcon: 'fas fa-check-circle'
+        });
+    } else {
+        unplannedTasksTable.updateData(tasks);
     }
-
-    tbody.innerHTML = tasks.map(task => `
-        <tr class="unplanned-task-row" data-task-key="${task.key}">
-            <td><strong>${task.key}</strong></td>
-            <td>${task.name}</td>
-            <td>${task.job_no || '-'}</td>
-            <td>${task.estimated_hours || '-'}h</td>
-            <td>${task.finish_time ? new Date(task.finish_time).toLocaleDateString('tr-TR') : '-'}</td>
-            <td>
-                <button class="btn btn-success btn-sm" onclick="addToPlan('${task.key}')" title="Plana Ekle">
-                    <i class="fas fa-plus"></i>
-                </button>
-            </td>
-        </tr>
-    `).join('');
 }
 
 

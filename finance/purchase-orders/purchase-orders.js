@@ -3,8 +3,10 @@ import {
     getPurchaseOrders, 
     getPurchaseOrderById, 
     exportPurchaseOrders,
-    markSchedulePaid
+    markSchedulePaid,
+    deletePurchaseOrder
 } from '../../apis/purchaseOrders.js';
+import { isAdmin } from '../../authService.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
@@ -36,6 +38,26 @@ document.addEventListener('DOMContentLoaded', async function() {
         onExportClick: exportPurchaseOrdersData,
         onRefreshClick: loadPurchaseOrders
     });
+
+    // Build actions, include delete only for admins
+    const tableActions = [
+        {
+            key: 'view',
+            label: 'Detayları Görüntüle',
+            icon: 'fas fa-eye',
+            class: 'btn-outline-primary',
+            onClick: (row) => viewPurchaseOrderDetails(row.id)
+        }
+    ];
+    if (isAdmin()) {
+        tableActions.push({
+            key: 'delete',
+            label: 'Sil',
+            icon: 'fas fa-trash',
+            class: 'btn-outline-danger',
+            onClick: (row) => confirmAndDeletePurchaseOrder(row.id)
+        });
+    }
 
     // Initialize table component
     window.purchaseOrdersTable = new TableComponent('purchase-orders-table-container', {
@@ -111,15 +133,7 @@ document.addEventListener('DOMContentLoaded', async function() {
                 formatter: (value, row) => renderPaymentSchedules(row)
             }
         ],
-        actions: [
-            {
-                key: 'view',
-                label: 'Detayları Görüntüle',
-                icon: 'fas fa-eye',
-                class: 'btn-outline-primary',
-                onClick: (row) => viewPurchaseOrderDetails(row.id)
-            }
-        ],
+        actions: tableActions,
         onSort: handleSort,
         onRowClick: handleRowClick,
         refreshable: true,
@@ -573,6 +587,34 @@ async function confirmMarkPaid() {
     }
 }
 
+
+// Delete purchase order (admin only)
+async function confirmAndDeletePurchaseOrder(orderId) {
+    try {
+        if (!isAdmin()) {
+            showErrorMessage('Bu işlem için yetkiniz yok.');
+            return;
+        }
+        const confirmed = confirm('Bu satın alma siparişini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.');
+        if (!confirmed) return;
+
+        await deletePurchaseOrder(orderId);
+
+        // If details modal is open for this order, close it
+        if (selectedPurchaseOrder && selectedPurchaseOrder.id === orderId) {
+            const modalEl = document.getElementById('purchaseOrderDetailsModal');
+            const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+            modal.hide();
+            selectedPurchaseOrder = null;
+        }
+
+        showSuccessMessage('Satın alma siparişi silindi.');
+        loadPurchaseOrders();
+    } catch (error) {
+        console.error('Error deleting purchase order:', error);
+        showErrorMessage(error.message || 'Sipariş silinirken hata oluştu.');
+    }
+}
 
 // View purchase order details
 async function viewPurchaseOrderDetails(orderId) {

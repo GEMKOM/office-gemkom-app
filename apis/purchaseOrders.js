@@ -60,6 +60,32 @@ export async function getPurchaseOrderById(orderId) {
 }
 
 /**
+ * Delete a specific purchase order by ID
+ * @param {string|number} orderId - Purchase order ID
+ * @returns {Promise<void>} Resolves if deletion successful
+ */
+export async function deletePurchaseOrder(orderId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/purchase-orders/${orderId}/`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            let detail = '';
+            try {
+                const err = await response.json();
+                detail = err?.detail || '';
+            } catch (_) {}
+            throw new Error(detail || `HTTP error! status: ${response.status}`);
+        }
+        return;
+    } catch (error) {
+        console.error(`Error deleting purchase order ${orderId}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Update purchase order status
  * @param {string|number} orderId - Purchase order ID
  * @param {Object} updateData - Data to update

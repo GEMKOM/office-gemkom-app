@@ -1,17 +1,18 @@
-import { guardRoute, getUser, isAdmin } from '../../../../authService.js';
-import { initNavbar } from '../../../../components/navbar.js';
-import { fetchMachineFaults, createMaintenanceRequest, deleteMaintenanceRequest } from '../../../../apis/maintenance.js';
-import { fetchMachines } from '../../../../apis/machines.js';
-import { HeaderComponent } from '../../../../components/header/header.js';
-import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
-import { FiltersComponent } from '../../../../components/filters/filters.js';
-import { TableComponent } from '../../../../components/table/table.js';
-import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
-import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
+import { guardRoute, getUser, isAdmin } from '../../../authService.js';
+import { initNavbar } from '../../../components/navbar.js';
+import { fetchMachineFaults, createMaintenanceRequest, deleteMaintenanceRequest } from '../../../apis/maintenance.js';
+import { fetchMachines } from '../../../apis/machines.js';
+import { HeaderComponent } from '../../../components/header/header.js';
+import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
+import { FiltersComponent } from '../../../components/filters/filters.js';
+import { TableComponent } from '../../../components/table/table.js';
+import { EditModal } from '../../../components/edit-modal/edit-modal.js';
+import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 
 let allFaults = [];
 let filteredFaults = [];
 let headerComponent, statisticsCards, filtersComponent, tableComponent, createFaultModal, deleteFaultModal;
+let viewFaultModal;
 let currentPage = 1;
 let itemsPerPage = 20;
 let totalItems = 0;
@@ -92,12 +93,10 @@ function initializeComponents() {
         id: 'statusFilter',
         label: 'Durum',
         options: [
-            { value: '', label: 'Tümü' },
-            { value: 'pending', label: 'Bekleyen' },
-            { value: 'in_progress', label: 'İşlemde' },
-            { value: 'resolved', label: 'Çözüldü' },
-            { value: 'closed', label: 'Kapatıldı' }
+            { value: 'false', label: 'Çözülmemiş' },
+            { value: 'true', label: 'Çözüldü' }
         ],
+        value: 'false',
         colSize: 3
     });
 
@@ -133,6 +132,9 @@ function initializeComponents() {
         ],
         colSize: 3
     });
+
+    // Apply default: unresolved = true on initial load
+    currentFilters = { unresolved: true };
 
     // Initialize Table Component
     tableComponent = new TableComponent('table-container', {
@@ -172,13 +174,10 @@ function initializeComponents() {
                 field: 'description', 
                 label: 'Açıklama', 
                 sortable: false,
-                formatter: (value, row) => {
+                formatter: (value) => {
                     if (!value || value.trim() === '') return '-';
                     const truncated = value.length > 100 ? value.substring(0, 100) + '...' : value;
-                    return `
-                        <span title="${value.replace(/"/g, '&quot;')}">${truncated}</span>
-                        ${value.length > 100 ? '<button class="btn btn-link btn-sm p-0 ms-1" onclick="showFullDescription(' + row.id + ')" title="Tam açıklamayı göster"><i class="fas fa-expand-alt"></i></button>' : ''}
-                    `;
+                    return `<span title="${value.replace(/"/g, '&quot;')}">${truncated}</span>`;
                 }
             },
             { 
@@ -226,13 +225,10 @@ function initializeComponents() {
                 field: 'resolution_description', 
                 label: 'Çözüm Açıklaması', 
                 sortable: false,
-                formatter: (value, row) => {
+                formatter: (value) => {
                     if (!value || value.trim() === '') return '-';
                     const truncated = value.length > 80 ? value.substring(0, 80) + '...' : value;
-                    return `
-                        <span title="${value.replace(/"/g, '&quot;')}">${truncated}</span>
-                        ${value.length > 80 ? '<button class="btn btn-link btn-sm p-0 ms-1" onclick="showFullResolution(' + row.id + ')" title="Tam çözümü göster"><i class="fas fa-expand-alt"></i></button>' : ''}
-                    `;
+                    return `<span title="${value.replace(/"/g, '&quot;')}">${truncated}</span>`;
                 }
             },
             { 
@@ -275,6 +271,9 @@ function initializeComponents() {
     
     // Initialize Delete Fault Request Modal
     initializeDeleteFaultModal();
+
+    // Initialize View Fault Details Modal
+    initializeViewFaultModal();
 }
 
 function initializeCreateFaultModal() {
@@ -407,6 +406,15 @@ function initializeDeleteFaultModal() {
         title: 'Arıza Talebi Silme Onayı',
         icon: 'fas fa-exclamation-triangle',
         size: 'md',
+        showEditButton: false
+    });
+}
+
+function initializeViewFaultModal() {
+    viewFaultModal = new DisplayModal('view-fault-modal-container', {
+        title: 'Arıza Talebi',
+        icon: 'fas fa-eye',
+        size: 'lg',
         showEditButton: false
     });
 }
@@ -738,9 +746,11 @@ function applyFilters() {
     // Build server-side filters
     currentFilters = {};
     
-    // Status filter
-    if (filterValues.statusFilter) {
-        currentFilters.status = filterValues.statusFilter;
+    // Status filter (unresolved true/false)
+    if (filterValues.statusFilter === 'true' || filterValues.statusFilter === 'false') {
+        // 'Çözülmemiş' (value 'false') => unresolved=true
+        // 'Çözüldü' (value 'true') => unresolved=false
+        currentFilters.unresolved = filterValues.statusFilter === 'false';
     }
     
     // Priority filter
@@ -829,37 +839,80 @@ function getPriorityBadge(fault) {
     return '<span class="status-badge status-grey">Düşük</span>';
 }
 
-// Functions for showing full descriptions and resolutions
-function showFullDescription(faultId) {
+// Show fault details in modal
+function showFaultDetails(faultId) {
     const fault = allFaults.find(f => f.id === faultId);
-    if (fault && fault.description) {
-        showAlert(fault.description, 'info');
+    if (!fault) {
+        showAlert('Kayıt bulunamadı', 'danger');
+        return;
     }
-}
 
-function showFullResolution(faultId) {
-    const fault = allFaults.find(f => f.id === faultId);
-    if (fault && fault.resolution_description) {
-        showAlert(fault.resolution_description, 'info');
+    const machineDisplay = fault.machine_name || (fault.asset_name && fault.location ? `${fault.asset_name} - ${fault.location}` : fault.asset_name) || '-';
+    const statusText = fault.resolved_at ? 'Çözüldü' : (fault.is_breaking ? 'Makine Duruşta' : 'Bekleyen');
+    const priorityText = fault.is_breaking ? 'Kritik' : (fault.is_maintenance ? 'Orta' : 'Düşük');
+
+    viewFaultModal.clearData();
+    viewFaultModal.setTitle(`Arıza Talebi #${fault.id}`);
+    
+    viewFaultModal.addSection({ title: 'Genel Bilgiler', icon: 'fas fa-info-circle', iconColor: 'text-primary' });
+    viewFaultModal.addField({ id: 'vf-id', label: 'ID', type: 'text', value: fault.id, icon: 'fas fa-hashtag', colSize: 3, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-status', label: 'Durum', type: 'text', value: statusText, icon: 'fas fa-flag', colSize: 4, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-priority', label: 'Öncelik', type: 'text', value: priorityText, icon: 'fas fa-exclamation', colSize: 5, layout: 'horizontal' });
+
+    viewFaultModal.addSection({ title: 'Ekipman', icon: 'fas fa-cogs', iconColor: 'text-primary' });
+    viewFaultModal.addField({ id: 'vf-machine', label: 'Ekipman', type: 'text', value: machineDisplay, icon: 'fas fa-cog', colSize: 12 });
+
+    viewFaultModal.addSection({ title: 'Açıklamalar', icon: 'fas fa-align-left', iconColor: 'text-primary' });
+    viewFaultModal.addField({ id: 'vf-description', label: 'Açıklama', type: 'text', value: fault.description || '-', icon: 'fas fa-file-alt', colSize: 12 });
+    if (fault.resolution_description) {
+        viewFaultModal.addField({ id: 'vf-resolution', label: 'Çözüm Açıklaması', type: 'text', value: fault.resolution_description, icon: 'fas fa-check-circle', colSize: 12 });
     }
+
+    viewFaultModal.addSection({ title: 'Zaman ve Kullanıcı', icon: 'fas fa-user-clock', iconColor: 'text-primary' });
+    viewFaultModal.addField({ id: 'vf-reported-by', label: 'Bildiren', type: 'text', value: fault.reported_by_username || '-', icon: 'fas fa-user', colSize: 6, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-reported-at', label: 'Bildirilme Tarihi', type: 'datetime', value: fault.reported_at || '-', icon: 'fas fa-calendar-plus', colSize: 6, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-resolved-by', label: 'Çözen', type: 'text', value: fault.resolved_by_username || '-', icon: 'fas fa-user-check', colSize: 6, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-resolved-at', label: 'Çözüm Tarihi', type: 'datetime', value: fault.resolved_at || '-', icon: 'fas fa-calendar-check', colSize: 6, layout: 'horizontal' });
+
+    viewFaultModal.addSection({ title: 'Diğer', icon: 'fas fa-list', iconColor: 'text-primary' });
+    viewFaultModal.addField({ id: 'vf-type', label: 'Tür', type: 'text', value: fault.is_maintenance ? 'Bakım' : 'Arıza', icon: 'fas fa-tools', colSize: 6, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-breaking', label: 'Makine Duruşta', type: 'boolean', value: !!fault.is_breaking, icon: 'fas fa-stop-circle', colSize: 6, layout: 'horizontal' });
+
+    viewFaultModal.render();
+    viewFaultModal.show();
 }
 
 // Action buttons function
 function getActionButtons(row) {
-    let buttons = '';
-    
-    // Check if user can delete this request
+    const btns = [];
+
+    // View details button
+    btns.push(`
+        <button class="btn btn-outline-primary btn-sm" 
+                onclick=\"showFaultDetails(${row.id})\" 
+                title=\"Detayları görüntüle\"> 
+            <i class=\"fas fa-eye\"></i>
+        </button>
+    `);
+
+    // Delete button (if permitted)
     if (canDeleteRequest(row)) {
-        buttons += `
-            <button class="btn btn-outline-danger btn-sm me-1" 
+        btns.push(`
+            <button class="btn btn-outline-danger btn-sm" 
                     onclick="showDeleteFaultModal(${row.id})" 
                     title="Arıza talebini sil">
                 <i class="fas fa-trash"></i>
             </button>
-        `;
+        `);
     }
-    
-    return buttons || '-';
+
+    if (btns.length === 0) return '-';
+
+    return `
+        <div class="d-inline-flex align-items-center gap-1">
+            ${btns.join('')}
+        </div>
+    `;
 }
 
 // Check if current user can delete the request
@@ -999,6 +1052,5 @@ async function deleteRequest(requestId) {
 }
 
 // Make functions globally available for onclick handlers
-window.showFullDescription = showFullDescription;
-window.showFullResolution = showFullResolution;
+window.showFaultDetails = showFaultDetails;
 window.showDeleteFaultModal = showDeleteFaultModal;

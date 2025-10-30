@@ -10,11 +10,19 @@ const CNC_CUTTING_BASE_URL = `${backendBase}/cnc_cutting`;
 
 /**
  * Get all CNC tasks (list view)
- * @returns {Promise<Array>} Array of CNC tasks
+ * @param {URLSearchParams|Object} [params] - Optional search params (URLSearchParams or plain object)
+ * @returns {Promise<Array|Object>} Array of CNC tasks or paginated response
  */
-export async function getCncTasks() {
+export async function getCncTasks(params = undefined) {
     try {
-        const response = await authedFetch(`${CNC_CUTTING_BASE_URL}/tasks/`);
+        let query = '';
+        if (params) {
+            const searchParams = params instanceof URLSearchParams ? params : new URLSearchParams(params);
+            const qs = searchParams.toString();
+            query = qs ? `?${qs}` : '';
+        }
+        const url = `${CNC_CUTTING_BASE_URL}/tasks/${query}`;
+        const response = await authedFetch(url);
         
         if (!response.ok) {
             throw new Error(`Failed to fetch CNC tasks: ${response.statusText}`);

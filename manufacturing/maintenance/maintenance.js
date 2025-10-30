@@ -19,19 +19,26 @@ document.addEventListener('DOMContentLoaded', async () => {
                 description: 'Yeni arıza talepleri oluşturun ve mevcut arıza durumlarını takip edin.',
                 icon: 'fas fa-exclamation-triangle',
                 iconColor: 'danger',
-                link: '/manufacturing/maintenance/fault-requests',
+                link: '/manufacturing/maintenance/fault-requests'
+            },
+            {
+                title: 'Raporlar',
+                description: 'Bakım ve arıza süreçlerine ait raporlar.',
+                icon: 'fas fa-chart-bar',
+                iconColor: 'primary',
+                link: '/manufacturing/maintenance/reports',
                 features: [
                     {
-                        label: 'Arıza Listesi',
-                        icon: 'fas fa-list',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/fault-requests/list'
+                        label: 'Arızalar Özeti',
+                        icon: 'fas fa-file-alt',
+                        iconColor: 'rgba(13, 110, 253, 1)',
+                        link: '/manufacturing/maintenance/reports/faults'
                     },
                     {
-                        label: 'Arıza İstatistikleri',
-                        icon: 'fas fa-chart-bar',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/maintenance/fault-requests/statistics'
+                        label: 'Kullanıcı Çözüm Raporu',
+                        icon: 'fas fa-user-check',
+                        iconColor: 'rgba(25, 135, 84, 1)',
+                        link: '/manufacturing/maintenance/reports/user-resolution'
                     }
                 ]
             }

@@ -3,16 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GEMKOM - Arıza Talepleri</title>
+    <title>GEMKOM - Arıza Talepleri Listesi</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    <link rel="stylesheet" href="../../../style.css">
-    <link rel="stylesheet" href="../../../components/navbar.css">
-    <link rel="stylesheet" href="../../../components/menu/menu.css">
-    <link rel="icon" type="image/png" href="../../../images/gemkom.png">
-    <link rel="stylesheet" href="fault-requests.css">
+    <link rel="stylesheet" href="/style.css">
+    <link rel="stylesheet" href="/components/navbar.css">
+    <link rel="stylesheet" href="/components/header/header.css">
+    <link rel="stylesheet" href="/components/table/table.css">
+    <link rel="stylesheet" href="/components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="/components/filters/filters.css">
+    <link rel="stylesheet" href="/components/edit-modal/edit-modal.css">
+    <link rel="stylesheet" href="/components/display-modal/display-modal.css">
+    <link rel="stylesheet" href="/components/badges/badges.css">
+    <link rel="icon" type="image/png" href="/images/gemkom.png">
 </head>
 <body>
     <!-- Navigation -->
@@ -23,13 +28,33 @@
     <div class="floating-element"></div>
     <div class="floating-element"></div>
 
-    <!-- Menu Component Container -->
-    <div id="menu-container"></div>
+    <!-- Main Content -->
+    <div class="container-fluid py-4">
+        <!-- Header Component -->
+        <div id="header-placeholder"></div>
 
+        <!-- Statistics Cards Component -->
+        <div id="statistics-container"></div>
+
+        <!-- Filters Component -->
+        <div id="filters-container"></div>
+
+        <!-- Table Component -->
+        <div id="table-container"></div>
+    </div>
+
+    <!-- Create Fault Request Modal -->
+    <div id="create-fault-modal-container"></div>
+
+    <!-- Delete Fault Request Modal -->
+    <div id="delete-fault-modal-container"></div>
+
+        <!-- View Fault Details Modal -->
+        <div id="view-fault-modal-container"></div>
 
 
     <!-- Footer -->
-    <footer class="footer-section">
+    <footer class="footer-section mt-5">
         <div class="container">
             <div class="row">
                 <div class="col-md-6">
@@ -44,6 +69,6 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script type="module" src="fault-requests.js"></script>
+    <script type="module" src="list.js"></script>
 </body>
 </html>

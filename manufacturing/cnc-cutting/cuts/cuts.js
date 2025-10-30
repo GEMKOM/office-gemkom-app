@@ -52,6 +52,7 @@ let editCutModal = null; // Edit modal instance
 let partsTable = null; // Parts table instance
 let filesTable = null; // Files table instance
 let currentEditTask = null; // Current task being edited
+let currentPageSize = 20; // Current page size for pagination
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -167,25 +168,17 @@ function initializeFiltersComponent() {
         }
     });
 
-    // Add text filters
-    cutsFilters.addTextFilter({
-        id: 'key-filter',
-        label: 'Kesim No',
-        placeholder: 'CNC-001',
-        colSize: 2
-    });
-
-    cutsFilters.addTextFilter({
-        id: 'name-filter',
-        label: 'Kesim Adı',
-        placeholder: 'Kesim adı',
-        colSize: 2
-    });
-
     cutsFilters.addTextFilter({
         id: 'nesting-id-filter',
         label: 'Nesting ID',
         placeholder: 'Nesting ID',
+        colSize: 2
+    });
+
+    cutsFilters.addTextFilter({
+        id: 'thickness-mm-filter',
+        label: 'Kalınlık (mm)',
+        placeholder: 'örn. 10',
         colSize: 2
     });
 
@@ -247,21 +240,11 @@ function initializeTableComponent() {
                 }
             },
             {
-                field: 'name',
-                label: 'Ad',
-                sortable: true,
-                width: '15%',
-                formatter: (value, row) => {
-                    const description = row.description ? `<br><small class="text-muted">${row.description}</small>` : '';
-                    return `<div class="cut-name"><strong>${value || '-'}</strong>${description}</div>`;
-                }
-            },
-            {
                 field: 'nesting_id',
                 label: 'Nesting ID',
                 sortable: true,
                 width: '10%',
-                formatter: (value) => value || '-'
+                formatter: (value) => `<strong>${value || '-'}</strong>`
             },
             {
                 field: 'material',
@@ -366,12 +349,16 @@ function initializeTableComponent() {
         loading: true, // Show skeleton loading immediately when page loads
         sortable: true,
         pagination: true,
-        itemsPerPage: 20,
+        itemsPerPage: currentPageSize,
         currentPage: 1,
         totalItems: 0,
         serverSidePagination: true,
         onPageChange: (page) => {
             loadCuts(page);
+        },
+        onPageSizeChange: (newSize) => {
+            currentPageSize = newSize;
+            loadCuts(1);
         },
         onSort: (field, direction) => {
             currentSortField = field;
@@ -402,108 +389,30 @@ async function loadCuts(page = 1) {
     }
     
     try {
-        const queryParams = buildCutQuery(page);
-        const response = await getCncTasks();
+        const params = buildCutQuery(page);
+        const response = await getCncTasks(params);
         
         if (response && (Array.isArray(response) || (response.results && Array.isArray(response.results)))) {
-            // Handle both direct array response and paginated response
-            let allCuts = Array.isArray(response) ? response : response.results;
-            
-            // Apply client-side filtering since the API doesn't support query parameters yet
-            let filteredCuts = allCuts;
-            
-            // Get filter values from the filters component
-            const filterValues = cutsFilters ? cutsFilters.getFilterValues() : {};
-            
-            // Apply filters
-            const keyFilter = filterValues['key-filter']?.trim();
-            const nameFilter = filterValues['name-filter']?.trim();
-            const nestingIdFilter = filterValues['nesting-id-filter']?.trim();
-            const materialFilter = filterValues['material-filter']?.trim();
-            const machineNameFilter = filterValues['machine-name-filter']?.trim();
-            const statusFilter = filterValues['status-filter'] || '';
-            
-            if (keyFilter) {
-                filteredCuts = filteredCuts.filter(cut => 
-                    cut.key && cut.key.toLowerCase().includes(keyFilter.toLowerCase())
-                );
+            // Respect backend filtering/sorting/pagination
+            if (Array.isArray(response)) {
+                // Fallback: array response
+                const itemsPerPage = currentPageSize;
+                const startIndex = (page - 1) * itemsPerPage;
+                const endIndex = startIndex + itemsPerPage;
+                cuts = response.slice(startIndex, endIndex);
+                totalCuts = response.length;
+                currentPage = page;
+            } else {
+                cuts = response.results;
+                totalCuts = response.count ?? response.results.length;
+                currentPage = page;
             }
-            
-            if (nameFilter) {
-                filteredCuts = filteredCuts.filter(cut => 
-                    cut.name && cut.name.toLowerCase().includes(nameFilter.toLowerCase())
-                );
-            }
-            
-            if (nestingIdFilter) {
-                filteredCuts = filteredCuts.filter(cut => 
-                    cut.nesting_id && cut.nesting_id.toLowerCase().includes(nestingIdFilter.toLowerCase())
-                );
-            }
-            
-            if (materialFilter) {
-                filteredCuts = filteredCuts.filter(cut => 
-                    cut.material && cut.material.toLowerCase().includes(materialFilter.toLowerCase())
-                );
-            }
-            
-            if (machineNameFilter) {
-                filteredCuts = filteredCuts.filter(cut => 
-                    cut.machine_fk && cut.machine_fk.toString() === machineNameFilter
-                );
-            }
-            
-            if (statusFilter) {
-                if (statusFilter === 'completed') {
-                    filteredCuts = filteredCuts.filter(cut => cut.completion_date);
-                } else if (statusFilter === 'pending') {
-                    filteredCuts = filteredCuts.filter(cut => !cut.completion_date);
-                }
-            }
-            
-            // Apply sorting
-            if (currentSortField) {
-                filteredCuts.sort((a, b) => {
-                    let aVal = a[currentSortField];
-                    let bVal = b[currentSortField];
-                    
-                    // Handle null/undefined values
-                    if (aVal == null) aVal = '';
-                    if (bVal == null) bVal = '';
-                    
-                    // Convert to string for comparison
-                    aVal = aVal.toString().toLowerCase();
-                    bVal = bVal.toString().toLowerCase();
-                    
-                    if (currentSortDirection === 'asc') {
-                        return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
-                    } else {
-                        return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
-                    }
-                });
-            }
-            
-            // Apply pagination
-            const itemsPerPage = 20;
-            const startIndex = (page - 1) * itemsPerPage;
-            const endIndex = startIndex + itemsPerPage;
-            const paginatedCuts = filteredCuts.slice(startIndex, endIndex);
-            
-            cuts = paginatedCuts;
-            totalCuts = filteredCuts.length;
-            currentPage = page;
-            
-            // Update total count from API response if available
-            if (response.count !== undefined) {
-                totalCuts = response.count;
-            }
-            
-            // Update table component with new data
+
             if (cutsTable) {
                 cutsTable.setLoading(false);
                 cutsTable.updateData(cuts, totalCuts, currentPage);
             }
-            
+
             updateCutCounts();
         } else {
             throw new Error('Failed to load cuts');
@@ -528,14 +437,32 @@ function buildCutQuery(page = 1) {
     const params = new URLSearchParams();
     
     // Add pagination
-    params.append('page', page);
-    params.append('page_size', '20');
+    params.append('page', String(page));
+    params.append('page_size', String(currentPageSize));
     
     // Add ordering
     const orderingParam = currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`;
     params.append('ordering', orderingParam);
     
-    return `?${params.toString()}`;
+    // Add backend-supported filters
+    const filterValues = cutsFilters ? cutsFilters.getFilterValues() : {};
+    const key = filterValues['key-filter']?.trim();
+    const name = filterValues['name-filter']?.trim();
+    const nestingId = filterValues['nesting-id-filter']?.trim();
+    const material = filterValues['material-filter']?.trim();
+    const machine = filterValues['machine-name-filter']?.toString().trim();
+    const status = filterValues['status-filter'] || '';
+    const thickness = filterValues['thickness-mm-filter']?.toString().trim();
+
+    if (key) params.append('key', key);
+    if (name) params.append('name', name);
+    if (nestingId) params.append('nesting_id', nestingId);
+    if (material) params.append('material', material);
+    if (machine) params.append('machine_fk', machine);
+    if (thickness) params.append('thickness_mm', thickness);
+    if (status) params.append('status', status);
+    
+    return params;
 }
 
 function updateCutCounts() {

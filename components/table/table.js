@@ -145,6 +145,7 @@ export class TableComponent {
         const headers = this.options.columns.map(column => {
             const sortable = this.options.sortable && column.sortable !== false;
             const sortClass = sortable ? 'sortable' : '';
+            const headerExtraClass = column.headerClass || '';
             
             // Determine sort icon based on current sort state
             let sortIcon = '';
@@ -166,7 +167,7 @@ export class TableComponent {
             }
             
             return `
-                <th class="${sortClass}" data-field="${column.field}">
+                <th class="${sortClass} ${headerExtraClass}" data-field="${column.field}">
                     ${column.label} ${sortIcon}
                 </th>
             `;
@@ -211,11 +212,12 @@ export class TableComponent {
             const value = this.getCellValue(row, column);
                             const isEditable = this.isColumnEditable(column);
             const editableClass = isEditable ? 'editable-cell' : '';
+            const cellExtraClass = column.cellClass || '';
             const dataAttributes = isEditable ? 
                 `data-field="${column.field}" data-row-index="${rowIndex}"` : '';
             
             return `
-                <td class="${editableClass}" ${dataAttributes}>
+                <td class="${editableClass} ${cellExtraClass}" ${dataAttributes}>
                     ${this.formatCellValue(value, column, row)}
                 </td>
             `;
