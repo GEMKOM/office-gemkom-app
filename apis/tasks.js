@@ -41,8 +41,8 @@ export async function updateTask(taskKey, task) {
     return resp;
 }
 
-export async function markTaskCompleted(taskKey) {
-    const url = `${backendBase}/machining/tasks/mark-completed/`;
+export async function markTaskCompleted(taskKey, module = 'machining') {
+    const url = `${backendBase}/${module}/tasks/mark-completed/`;
     const resp = await authedFetch(url, {
         method: 'POST',
         body: JSON.stringify({ key: taskKey }),
@@ -50,8 +50,8 @@ export async function markTaskCompleted(taskKey) {
     return resp;
 }
 
-export async function unmarkTaskCompleted(taskKey) {
-    const url = `${backendBase}/machining/tasks/unmark-completed/`;
+export async function unmarkTaskCompleted(taskKey, module = 'machining') {
+    const url = `${backendBase}/${module}/tasks/unmark-completed/`;
     const resp = await authedFetch(url, {
         method: 'POST',
         body: JSON.stringify({ key: taskKey }),

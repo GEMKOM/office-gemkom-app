@@ -32,6 +32,8 @@ import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { parsePartsFromText } from './partsPasteParser.js';
+import { markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
+import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 
 // State management
 let currentPage = 1;
@@ -53,6 +55,7 @@ let partsTable = null; // Parts table instance
 let filesTable = null; // Files table instance
 let currentEditTask = null; // Current task being edited
 let currentPageSize = 20; // Current page size for pagination
+let statusChangeModal = null; // Status change confirmation modal instance
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -129,6 +132,20 @@ async function initializeCuts() {
     try {
         initializeFiltersComponent();
         initializeTableComponent();
+        
+        // Initialize status change confirmation modal
+        if (!statusChangeModal) {
+            statusChangeModal = new ConfirmationModal('status-change-confirm-modal-container', {
+                title: 'Durum Değişikliği Onayı',
+                icon: 'fas fa-exchange-alt',
+                confirmText: 'Evet, Değiştir',
+                cancelText: 'İptal',
+                confirmButtonClass: 'btn-primary'
+            });
+        }
+        
+        // Set up status toggle listeners once (uses document-level delegation)
+        setupStatusToggleListeners();
         
         await loadCuts();
         updateCutCounts();
@@ -294,12 +311,19 @@ function initializeTableComponent() {
                 sortable: false,
                 width: '8%',
                 formatter: (value, row) => {
-                    // Status based on completion_date
-                    if (row.completion_date) {
-                        return '<span class="status-badge status-green">Tamamlandı</span>';
-                    } else {
-                        return '<span class="status-badge status-yellow">Bekliyor</span>';
-                    }
+                    // Status based on completion_date - make it clickable to toggle
+                    const isCompleted = !!row.completion_date;
+                    const statusClass = isCompleted ? 'status-green' : 'status-yellow';
+                    const statusText = isCompleted ? 'Tamamlandı' : 'Bekliyor';
+                    const taskKey = row.key || row.id;
+                    
+                    return `<button type="button" class="btn btn-sm status-badge ${statusClass} editable-status" 
+                            data-task-key="${taskKey}" 
+                            data-is-completed="${isCompleted}"
+                            style="border: none; cursor: pointer; padding: 0.25rem 0.5rem; font-size: 0.875rem;"
+                            title="Durumu değiştirmek için tıklayın">
+                            ${statusText}
+                        </button>`;
                 }
             },
             {
@@ -460,7 +484,13 @@ function buildCutQuery(page = 1) {
     if (material) params.append('material', material);
     if (machine) params.append('machine_fk', machine);
     if (thickness) params.append('thickness_mm', thickness);
-    if (status) params.append('status', status);
+    
+    // Map status filter to completion_date__isnull parameter
+    if (status === 'pending') {
+        params.append('completion_date__isnull', 'true');
+    } else if (status === 'completed') {
+        params.append('completion_date__isnull', 'false');
+    }
     
     return params;
 }
@@ -481,6 +511,141 @@ function updateCutCounts() {
             3: pendingCount.toString()
         });
     }
+}
+
+// Show status change confirmation modal
+function showStatusChangeConfirmation(taskKey, isCompleted, statusButton) {
+    // Initialize modal if not already done
+    if (!statusChangeModal) {
+        statusChangeModal = new ConfirmationModal('status-change-confirm-modal-container', {
+            title: 'Durum Değişikliği Onayı',
+            icon: 'fas fa-exchange-alt',
+            confirmText: 'Evet, Değiştir',
+            cancelText: 'İptal',
+            confirmButtonClass: 'btn-primary'
+        });
+    }
+    
+    // Find the row to get task details
+    const row = statusButton.closest('tr');
+    let taskName = taskKey;
+    if (row) {
+        // Try to get task name from the row if available
+        const nameCell = row.querySelector('td');
+        if (nameCell) {
+            const nameText = nameCell.textContent?.trim();
+            if (nameText && nameText !== taskKey) {
+                taskName = nameText;
+            }
+        }
+    }
+    
+    // Set modal content
+    const currentStatus = isCompleted ? 'Tamamlandı' : 'Bekliyor';
+    const newStatus = isCompleted ? 'Bekliyor' : 'Tamamlandı';
+    
+    // Build details HTML
+    const detailsHtml = `
+        <strong>Kesim:</strong> ${taskKey}<br>
+        <strong>Mevcut Durum:</strong> ${currentStatus}<br>
+        <strong>Yeni Durum:</strong> ${newStatus}
+    `;
+    
+    // Store the pending status change info
+    window.pendingStatusChange = {
+        taskKey: taskKey,
+        isCompleted: isCompleted,
+        statusButton: statusButton
+    };
+    
+    // Show the modal with options
+    statusChangeModal.show({
+        message: 'Durumu değiştirmek istediğinize emin misiniz?',
+        description: 'Kesim durumu güncellenecektir.',
+        details: detailsHtml,
+        onConfirm: async () => {
+            await handleStatusChangeConfirm(taskKey, isCompleted, statusButton);
+        },
+        onCancel: () => {
+            window.pendingStatusChange = null;
+        }
+    });
+}
+
+// Toggle task completion status
+async function toggleTaskStatus(taskKey, isCompleted) {
+    try {
+        let response;
+        if (isCompleted) {
+            // Mark as incomplete (unmark completed)
+            response = await unmarkTaskCompleted(taskKey, 'cnc_cutting');
+        } else {
+            // Mark as complete
+            response = await markTaskCompleted(taskKey, 'cnc_cutting');
+        }
+        
+        if (response && response.ok) {
+            showNotification(isCompleted ? 'Kesim tamamlanmadı olarak işaretlendi' : 'Kesim tamamlandı olarak işaretlendi', 'success');
+            // Reload cuts to refresh the table
+            await loadCuts(currentPage);
+        } else {
+            let errorMessage = 'Görev durumu güncellenemedi';
+            if (response) {
+                try {
+                    const errorData = await response.json();
+                    errorMessage = errorData.detail || errorData.message || errorMessage;
+                } catch (e) {
+                    errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+                }
+            }
+            throw new Error(errorMessage);
+        }
+    } catch (error) {
+        console.error('Error toggling task status:', error);
+        showNotification(error.message || 'Durum güncellenirken hata oluştu', 'error');
+    }
+}
+
+// Set up event listeners for status toggle buttons using event delegation
+// Use a flag to ensure we only set up once
+let statusToggleListenersSetup = false;
+
+function setupStatusToggleListeners() {
+    // Only set up once using event delegation on document
+    if (statusToggleListenersSetup) {
+        return;
+    }
+    
+    // Use document-level event delegation for maximum compatibility
+    // This ensures clicks are captured regardless of when the table is rendered
+    document.addEventListener('click', async (e) => {
+        // Check if click is on a status button
+        const statusButton = e.target.closest('.editable-status');
+        if (!statusButton) return;
+        
+        // Make sure it's within our table container
+        const tableContainer = document.getElementById('cuts-table-container');
+        if (!tableContainer || !tableContainer.contains(statusButton)) {
+            return;
+        }
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const taskKey = statusButton.getAttribute('data-task-key');
+        const isCompleted = statusButton.getAttribute('data-is-completed') === 'true';
+        
+        if (!taskKey) {
+            console.error('Task key not found on status button');
+            return;
+        }
+        
+        // Show status change confirmation modal
+        showStatusChangeConfirmation(taskKey, isCompleted, statusButton);
+    });
+    
+    statusToggleListenersSetup = true;
+    console.log('Status toggle listeners set up');
 }
 
 function setupEventListeners() {

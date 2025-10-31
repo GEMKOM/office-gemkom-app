@@ -150,14 +150,14 @@ function initTables() {
                                 font-size: 0.9rem;
                             ">
                                 <i class="fas fa-external-link-alt me-1"></i>
-                                ${row.issue_key || 'Bilinmeyen Görev'}
+                                ${row.nesting_id || '-'}
                             </div>
                             <small class="text-muted" style="
                                 color: #6c757d;
                                 font-size: 0.8rem;
                                 display: block;
                                 margin-top: 0.25rem;
-                            ">${row.issue_name || ''}</small>
+                            ">${row.thickness_mm ? `${row.thickness_mm} mm` : '-'}</small>
                         </div>
                     `;
                 }
@@ -421,6 +421,8 @@ function updateActiveTimersTable() {
             task: timer.issue_key || 'Bilinmeyen Görev',
             issue_key: timer.issue_key,
             issue_name: timer.issue_name,
+            nesting_id: timer.nesting_id,
+            thickness_mm: timer.thickness_mm,
             duration: duration,
             start_time: timer.start_time
         };
