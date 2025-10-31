@@ -11,10 +11,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         subtitle: 'CNC kesim operasyonları yönetimi',
         cards: [
             {
+                title: 'Dashboard',
+                description: 'Gerçek zamanlı görünüm ile aktif zamanlayıcıları, makine durumlarını ve istatistikleri takip edin.',
+                icon: 'fas fa-chart-line',
+                iconColor: 'primary',
+                link: '/manufacturing/cnc-cutting/dashboard'
+            },
+            {
                 title: 'Kesimler',
                 description: 'CNC kesim görevlerini yönetin ve takip edin',
                 icon: 'fas fa-scissors',
-                iconColor: 'primary',
+                iconColor: 'success',
                 link: '/manufacturing/cnc-cutting/cuts/',
                 features: []
             }

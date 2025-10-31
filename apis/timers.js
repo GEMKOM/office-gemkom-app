@@ -1,8 +1,12 @@
 import { backendBase } from '../base.js';
 import { authedFetch } from '../authService.js';
 
-export async function fetchTimers(is_active = null, machine_id = null, issue_key = null, start_after = null) {
-    let url = `${backendBase}/machining/timers/`;
+export async function fetchTimers(is_active = null, machine_id = null, issue_key = null, start_after = null, module = 'machining') {
+    // Validate module parameter
+    const validModules = ['machining', 'cnc_cutting'];
+    const moduleName = validModules.includes(module) ? module : 'machining';
+    
+    let url = `${backendBase}/${moduleName}/timers/`;
     const params = [];
     
     if (is_active !== null) {
@@ -27,15 +31,23 @@ export async function fetchTimers(is_active = null, machine_id = null, issue_key
     return responseData;
 }
 
-export async function fetchTimerById(timerId) {
-    const res = await authedFetch(`${backendBase}/machining/timers/${timerId}/`);
+export async function fetchTimerById(timerId, module = 'machining') {
+    // Validate module parameter
+    const validModules = ['machining', 'cnc_cutting'];
+    const moduleName = validModules.includes(module) ? module : 'machining';
+    
+    const res = await authedFetch(`${backendBase}/${moduleName}/timers/${timerId}/`);
     if (!res.ok) return null;
     const timer = await res.json();
     return timer;
 }
 
-export async function stopTimer({ timerId, finishTime}) {
-    const response = await authedFetch(`${backendBase}/machining/timers/stop/`, {
+export async function stopTimer({ timerId, finishTime, module = 'machining' }) {
+    // Validate module parameter
+    const validModules = ['machining', 'cnc_cutting'];
+    const moduleName = validModules.includes(module) ? module : 'machining';
+    
+    const response = await authedFetch(`${backendBase}/${moduleName}/timers/stop/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

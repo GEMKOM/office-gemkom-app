@@ -145,6 +145,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'CNC Kesim',
                 icon: 'fas fa-cut',
                 children: {
+                    '/manufacturing/cnc-cutting/dashboard': {
+                        label: 'Dashboard',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    },
                     '/manufacturing/cnc-cutting/cuts': {
                         label: 'Kesimler',
                         icon: 'fas fa-scissors',
