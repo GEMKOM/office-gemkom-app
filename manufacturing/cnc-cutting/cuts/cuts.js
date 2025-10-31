@@ -377,7 +377,7 @@ function initializeTableComponent() {
         rowAttributes: (row) => `data-cut-key="${row.key}" class="data-update"`
     });
 }
-//HELLO
+
 async function loadCuts(page = 1) {
     if (isLoading) return;
     
