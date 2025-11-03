@@ -163,6 +163,17 @@ function initializeTableComponent() {
             currentSortDirection = direction;
             await loadUsers();
         },
+        onPageSizeChange: async (newPageSize) => {
+            // Update local variable to keep in sync
+            let itemsPerPage = newPageSize;
+            // Ensure table component also has the correct value (should already be set, but ensure sync)
+            if (usersTable) {
+                usersTable.options.itemsPerPage = newPageSize;
+            }
+            // Reset to page 1 and load with new page size
+            currentPage = 1;
+            await loadUsers();
+        },
         onPageChange: async (page) => {
             currentPage = page;
             await loadUsers();
@@ -357,7 +368,10 @@ async function loadUsers() {
         // Build query parameters
         const params = new URLSearchParams();
         params.append('page', currentPage.toString());
-        params.append('page_size', '20');
+        // Get page size from table component if available, otherwise use default
+        // This ensures we always use the most up-to-date page size
+        const pageSize = usersTable ? usersTable.options.itemsPerPage : 20;
+        params.append('page_size', String(pageSize));
         
         // Add filters
         if (filterValues['username-filter']) {

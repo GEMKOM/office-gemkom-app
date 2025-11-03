@@ -345,7 +345,13 @@ function initializeTable() {
             loadTimers(page);
         },
         onPageSizeChange: (newPageSize) => {
+            // Update local variable to keep in sync
             pageSize = newPageSize;
+            // Ensure table component also has the correct value (should already be set, but ensure sync)
+            if (timersTable) {
+                timersTable.options.itemsPerPage = newPageSize;
+            }
+            // Reset to page 1 and load with new page size
             currentPage = 1;
             loadTimers(1);
         },
@@ -630,9 +636,13 @@ function addTableEventListeners() {
 function buildTimerQuery(page = 1) {
     const params = new URLSearchParams();
     
+    // Get page size from table component if available, otherwise use local variable
+    // This ensures we always use the most up-to-date page size
+    const effectivePageSize = timersTable ? timersTable.options.itemsPerPage : pageSize;
+    
     // Pagination
     params.append('page', page.toString());
-    params.append('page_size', pageSize.toString());
+    params.append('page_size', effectivePageSize.toString());
     
     // Sorting
     params.append('ordering', currentSortDirection === 'desc' ? `-${currentSortField}` : currentSortField);

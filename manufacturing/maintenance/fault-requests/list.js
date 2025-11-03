@@ -253,7 +253,13 @@ function initializeComponents() {
             loadFaultRequests();
         },
         onPageSizeChange: (newPageSize) => {
+            // Update local variable to keep in sync
             itemsPerPage = newPageSize;
+            // Ensure table component also has the correct value (should already be set, but ensure sync)
+            if (tableComponent) {
+                tableComponent.options.itemsPerPage = newPageSize;
+            }
+            // Reset to page 1 and load with new page size
             currentPage = 1;
             loadFaultRequests();
         },
@@ -645,9 +651,12 @@ async function loadFaultRequests() {
         tableComponent.setLoading(true);
         
         // Prepare API filters with pagination
+        // Get page size from table component if available, otherwise use local variable
+        // This ensures we always use the most up-to-date page size
+        const pageSize = tableComponent ? tableComponent.options.itemsPerPage : itemsPerPage;
         const apiFilters = {
             page: currentPage,
-            page_size: itemsPerPage,
+            page_size: pageSize,
             ...currentFilters
         };
         

@@ -798,6 +798,15 @@ function initializeTableComponent() {
             currentPage = page;
             await loadMachineData();
         },
+        onPageSizeChange: async (newSize) => {
+            // Ensure table component also has the correct value (should already be set, but ensure sync)
+            if (machinesTable) {
+                machinesTable.options.itemsPerPage = newSize;
+            }
+            // Reset to page 1 and load with new page size
+            currentPage = 1;
+            await loadMachineData();
+        },
         actions: [
             {
                 key: 'edit',

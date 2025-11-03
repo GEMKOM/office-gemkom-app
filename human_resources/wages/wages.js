@@ -459,7 +459,9 @@ class WagesManager {
             const filters = {
                 ...this.currentFilters,
                 page: this.currentPage,
-                page_size: this.pageSize
+                // Get page size from table component if available, otherwise use local variable
+                // This ensures we always use the most up-to-date page size
+                page_size: this.tableComponent ? this.tableComponent.options.itemsPerPage : this.pageSize
             };
             
             const response = await fetchWageRates(filters);
@@ -614,7 +616,13 @@ class WagesManager {
     }
 
     async handlePageSizeChange(pageSize) {
+        // Update local variable to keep in sync
         this.pageSize = pageSize;
+        // Ensure table component also has the correct value (should already be set, but ensure sync)
+        if (this.tableComponent) {
+            this.tableComponent.options.itemsPerPage = pageSize;
+        }
+        // Reset to page 1 and load with new page size
         this.currentPage = 1;
         await this.loadWageRates();
     }

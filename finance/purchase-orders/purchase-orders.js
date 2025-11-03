@@ -293,7 +293,9 @@ async function loadPurchaseOrders() {
         const filtersWithPagination = {
             ...currentFilters,
             page: currentPage,
-            page_size: itemsPerPage
+            // Get page size from table component if available, otherwise use local variable
+            // This ensures we always use the most up-to-date page size
+            page_size: window.purchaseOrdersTable ? window.purchaseOrdersTable.options.itemsPerPage : itemsPerPage
         };
         
         const data = await getPurchaseOrders(filtersWithPagination);
@@ -390,8 +392,14 @@ function handlePageChange(page) {
 
 function handlePageSizeChange(newPageSize) {
     console.log('Page size changed to:', newPageSize);
+    // Update local variable to keep in sync
     itemsPerPage = newPageSize;
-    currentPage = 1; // Reset to first page when changing page size
+    // Ensure table component also has the correct value (should already be set, but ensure sync)
+    if (window.purchaseOrdersTable) {
+        window.purchaseOrdersTable.options.itemsPerPage = newPageSize;
+    }
+    // Reset to page 1 and load with new page size
+    currentPage = 1;
     loadPurchaseOrders();
 }
 

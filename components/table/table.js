@@ -530,12 +530,8 @@ export class TableComponent {
             if (pageSizeSelect) {
                 pageSizeSelect.addEventListener('change', (e) => {
                     const newPageSize = parseInt(e.target.value);
+                    // changePageSize will handle calling onPageSizeChange or onPageChange
                     this.changePageSize(newPageSize);
-                    
-                    // Call the callback if provided
-                    if (this.options.onPageSizeChange) {
-                        this.options.onPageSizeChange(newPageSize);
-                    }
                 });
             }
             
@@ -838,10 +834,19 @@ export class TableComponent {
         // Add loading state to pagination
         this.addPaginationLoading();
         
+        // Update page size FIRST before any callbacks
+        // This ensures that any code reading from this.options.itemsPerPage gets the correct value
         this.options.itemsPerPage = newPageSize;
         this.options.currentPage = 1; // Reset to first page when changing page size
         
-        if (this.options.onPageChange) {
+        // If onPageSizeChange callback exists, call it instead of onPageChange
+        // onPageSizeChange should handle loading data with the new page size
+        // Pages can either use the newSize parameter or read from this.options.itemsPerPage
+        if (this.options.onPageSizeChange) {
+            this.options.onPageSizeChange(newPageSize);
+        } else if (this.options.onPageChange) {
+            // Fallback: if no onPageSizeChange handler, use onPageChange
+            // Pages should read from this.options.itemsPerPage if they need the new page size
             this.options.onPageChange(1);
         }
         

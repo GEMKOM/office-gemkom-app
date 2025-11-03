@@ -315,6 +315,17 @@ function initializeTableComponent() {
         onPageChange: (page) => {
             loadTasks(page);
         },
+        onPageSizeChange: (newSize) => {
+            // Update local variable to keep in sync
+            let itemsPerPage = newSize;
+            // Ensure table component also has the correct value (should already be set, but ensure sync)
+            if (tasksTable) {
+                tasksTable.options.itemsPerPage = newSize;
+            }
+            // Reset to page 1 and load with new page size
+            currentPage = 1;
+            loadTasks(1);
+        },
         onSort: (field, direction) => {
             currentSortField = field;
             currentSortDirection = direction;
@@ -579,7 +590,10 @@ function buildTaskQuery(page = 1) {
     
     // Add pagination
     params.append('page', page);
-    params.append('page_size', '20');
+    // Get page size from table component if available, otherwise use default
+    // This ensures we always use the most up-to-date page size
+    const pageSize = tasksTable ? tasksTable.options.itemsPerPage : 20;
+    params.append('page_size', String(pageSize));
     
     // Add ordering
     const orderingParam = currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`;

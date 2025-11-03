@@ -224,7 +224,13 @@ function initializeTableComponent() {
             await loadDeviceData();
         },
         onPageSizeChange: async (newPageSize) => {
+            // Update local variable to keep in sync
             itemsPerPage = newPageSize;
+            // Ensure table component also has the correct value (should already be set, but ensure sync)
+            if (inventoryTable) {
+                inventoryTable.options.itemsPerPage = newPageSize;
+            }
+            // Reset to page 1 and load with new page size
             currentPage = 1;
             await loadDeviceData();
         },

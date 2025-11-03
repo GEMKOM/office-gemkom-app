@@ -381,7 +381,14 @@ function initializeTableComponent() {
             loadCuts(page);
         },
         onPageSizeChange: (newSize) => {
+            // Update local variable to keep in sync
             currentPageSize = newSize;
+            // Ensure table component also has the correct value (should already be set, but ensure sync)
+            if (cutsTable) {
+                cutsTable.options.itemsPerPage = newSize;
+            }
+            // Reset to page 1 and load with new page size
+            currentPage = 1;
             loadCuts(1);
         },
         onSort: (field, direction) => {
@@ -460,9 +467,13 @@ async function loadCuts(page = 1) {
 function buildCutQuery(page = 1) {
     const params = new URLSearchParams();
     
+    // Get page size from table component if available, otherwise use local variable
+    // This ensures we always use the most up-to-date page size
+    const pageSize = cutsTable ? cutsTable.options.itemsPerPage : currentPageSize;
+    
     // Add pagination
     params.append('page', String(page));
-    params.append('page_size', String(currentPageSize));
+    params.append('page_size', String(pageSize));
     
     // Add ordering
     const orderingParam = currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`;

@@ -306,7 +306,13 @@ function initializeTableComponent() {
             await loadOvertimeRequests();
         },
         onPageSizeChange: async (newPageSize) => {
+            // Update local variable to keep in sync
             itemsPerPage = newPageSize;
+            // Ensure table component also has the correct value (should already be set, but ensure sync)
+            if (overtimeTable) {
+                overtimeTable.options.itemsPerPage = newPageSize;
+            }
+            // Reset to page 1 and load with new page size
             currentPage = 1;
             await loadOvertimeRequests();
         },
@@ -662,7 +668,9 @@ async function loadOvertimeRequests() {
         const apiFilters = {
             ...currentFilters,
             page: currentPage,
-            page_size: itemsPerPage
+            // Get page size from table component if available, otherwise use local variable
+            // This ensures we always use the most up-to-date page size
+            page_size: overtimeTable ? overtimeTable.options.itemsPerPage : itemsPerPage
         };
         
         // Convert filter names to API format
