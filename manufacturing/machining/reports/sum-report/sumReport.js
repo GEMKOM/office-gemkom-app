@@ -295,35 +295,52 @@ async function processReportData(data) {
     
     if (groupBy === 'user') {
         const users = await fetchUsers('machining');
+        // Match by username (group_val is username string when grouping by user)
         processedData = users.map(user => {
-            const found = data.find(row => row.group === user.username);
+            const found = data.find(row => row.group_val === user.username || row.group_val === user.id || row.group_val === String(user.id));
             return {
                 group: user.display_name || user.username || user.id,
                 total_hours: found ? found.total_hours : 0,
                 timer_count: found ? found.timer_count : 0,
-                avg_hours: found ? (found.total_hours / found.timer_count) : 0
+                avg_hours: found ? (found.avg_duration || (found.total_hours / found.timer_count)) : 0
             };
         });
+        // Filter out users with no data
+        processedData = processedData.filter(row => row.timer_count > 0);
     } else if (groupBy === 'machine') {
         const machinesResponse = await fetchMachines(1, 100, { used_in: 'machining' });
         const machines = machinesResponse.results || machinesResponse || [];
+        // Match by machine ID (group_val is numeric ID when grouping by machine)
         processedData = machines.map(machine => {
-            const found = data.find(row => row.group === machine.id);
+            const found = data.find(row => {
+                // Handle both numeric and string comparisons
+                const rowVal = row.group_val;
+                const machineId = machine.id;
+                return rowVal === machineId || rowVal === parseInt(machineId) || String(rowVal) === String(machineId);
+            });
             return {
                 group: machine.name || machine.id,
                 total_hours: found ? found.total_hours : 0,
                 timer_count: found ? found.timer_count : 0,
-                avg_hours: found ? (found.total_hours / found.timer_count) : 0
+                avg_hours: found ? (found.avg_duration || (found.total_hours / found.timer_count)) : 0
             };
         });
+        // Filter out machines with no data
+        processedData = processedData.filter(row => row.timer_count > 0);
     } else {
-        // Default: use data as is, preserving server order
-        processedData = data.map(row => ({
-            group: Object.values(row)[0],
-            total_hours: row.total_hours || 0,
-            timer_count: row.timer_count || 0,
-            avg_hours: row.timer_count ? (row.total_hours / row.timer_count) : 0
-        }));
+        // For job_no and issue_key, the API uses 'group' field instead of 'group_val'
+        // Handle both field names for backwards compatibility
+        processedData = data.map(row => {
+            const groupValue = row.group || row.group_val;
+            return {
+                group: groupValue?.toString() || '-',
+                total_hours: row.total_hours || 0,
+                timer_count: row.timer_count || 0,
+                avg_hours: row.avg_duration || (row.timer_count ? (row.total_hours / row.timer_count) : 0)
+            };
+        });
+        // Filter out rows with zero timer_count
+        processedData = processedData.filter(row => row.timer_count > 0);
     }
     
     return processedData;
