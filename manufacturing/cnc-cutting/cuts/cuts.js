@@ -572,6 +572,25 @@ function showStatusChangeConfirmation(taskKey, isCompleted, statusButton) {
     });
 }
 
+// Handle status change confirmation
+async function handleStatusChangeConfirm(taskKey, isCompleted, statusButton) {
+    try {
+        // Call toggleTaskStatus to make the API request
+        await toggleTaskStatus(taskKey, isCompleted);
+        
+        // Clear pending status change
+        window.pendingStatusChange = null;
+        
+        // Hide the modal
+        if (statusChangeModal) {
+            statusChangeModal.hide();
+        }
+    } catch (error) {
+        console.error('Error handling status change confirmation:', error);
+        // Error notification is already shown in toggleTaskStatus
+    }
+}
+
 // Toggle task completion status
 async function toggleTaskStatus(taskKey, isCompleted) {
     try {
