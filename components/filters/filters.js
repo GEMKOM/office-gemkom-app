@@ -72,13 +72,17 @@ export class FiltersComponent {
         const clearBtn = this.container.querySelector('#clear-filters');
 
         if (applyBtn && this.options.showApplyButton) {
-            applyBtn.addEventListener('click', () => {
+            applyBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 this.applyFilters();
             });
         }
 
         if (clearBtn && this.options.showClearButton) {
-            clearBtn.addEventListener('click', () => {
+            clearBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
                 this.clearFilters();
             });
         }
@@ -399,7 +403,7 @@ export class FiltersComponent {
         
         if (this.options.showApplyButton) {
             buttons.push(`
-                <button class="btn btn-sm btn-primary" id="apply-filters">
+                <button type="button" class="btn btn-sm btn-primary" id="apply-filters">
                     <i class="fas fa-search me-1"></i>${this.options.applyButtonText}
                 </button>
             `);
@@ -407,7 +411,7 @@ export class FiltersComponent {
         
         if (this.options.showClearButton) {
             buttons.push(`
-                <button class="btn btn-sm btn-outline-secondary" id="clear-filters">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="clear-filters">
                     <i class="fas fa-times me-1"></i>${this.options.clearButtonText}
                 </button>
             `);

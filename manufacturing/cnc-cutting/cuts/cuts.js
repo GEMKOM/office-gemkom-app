@@ -34,6 +34,7 @@ import { FileAttachments } from '../../../components/file-attachments/file-attac
 import { parsePartsFromText } from './partsPasteParser.js';
 import { markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
+import { getRemnantPlates } from '../../../apis/cnc_cutting/remnants.js';
 
 // State management
 let currentPage = 1;
@@ -56,6 +57,10 @@ let filesTable = null; // Files table instance
 let currentEditTask = null; // Current task being edited
 let currentPageSize = 20; // Current page size for pagination
 let statusChangeModal = null; // Status change confirmation modal instance
+let selectedRemnantPlate = null; // Selected remnant plate for create cut
+let selectRemnantModal = null; // Modal for selecting remnant plate
+let remnantFilters = null; // Filters component for remnant selection
+let remnantSelectionTable = null; // Table component for remnant selection
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -947,6 +952,18 @@ function showCreateCutModal() {
 }
 
 function setupCreateCutForm(createCutModal) {
+    // Reset selected remnant plate
+    selectedRemnantPlate = null;
+    
+    // Add remnant plate selection section at the top
+    createCutModal.addSection({
+        id: 'remnant-selection',
+        title: 'Artık Plaka Seçimi',
+        icon: 'fas fa-layer-group',
+        iconColor: 'text-info',
+        fields: []
+    });
+    
     // Add basic information section
     createCutModal.addSection({
         id: 'basic-info',
@@ -1095,6 +1112,56 @@ function setupCreateCutForm(createCutModal) {
     // Render the modal
     createCutModal.render();
     
+    // Add remnant plate selection button
+    setTimeout(() => {
+        const remnantSection = createCutModal.container.querySelector('[data-section-id="remnant-selection"]');
+        if (remnantSection) {
+            const fieldsContainer = remnantSection.querySelector('.row.g-2');
+            if (fieldsContainer) {
+                const remnantHtml = `
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <button type="button" class="btn btn-outline-info" id="select-remnant-btn">
+                                    <i class="fas fa-layer-group me-2"></i>Artık Plaka Seç
+                                </button>
+                            </div>
+                            <div id="selected-remnant-display" style="display: none;">
+                                <span class="badge bg-success">
+                                    <i class="fas fa-check me-1"></i>
+                                    Seçili: <span id="selected-remnant-info">-</span>
+                                </span>
+                                <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="clear-remnant-btn">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                fieldsContainer.innerHTML = remnantHtml;
+                
+                // Add event listener for select button
+                const selectBtn = createCutModal.container.querySelector('#select-remnant-btn');
+                if (selectBtn) {
+                    selectBtn.addEventListener('click', () => {
+                        showSelectRemnantModal();
+                    });
+                }
+                
+                // Add event listener for clear button
+                const clearBtn = createCutModal.container.querySelector('#clear-remnant-btn');
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', () => {
+                        selectedRemnantPlate = null;
+                        updateSelectedRemnantDisplay();
+                    });
+                }
+                
+                updateSelectedRemnantDisplay();
+            }
+        }
+    }, 100);
+    
     // Add parts table inside the Parça Bilgileri section
     const partsHtml = `
         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -1223,7 +1290,8 @@ async function handleCreateCutSave(formData) {
         machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
         estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null,
         files: uploadedFiles,
-        parts_data: []
+        parts_data: [],
+        selected_plate: selectedRemnantPlate ? selectedRemnantPlate.id : null
     };
     
     
@@ -1295,6 +1363,52 @@ function showEditCutModal(cut) {
 async function setupEditCutForm(editCutModal, cut) {
     // Store current task for parts and files operations
     currentEditTask = cut;
+    
+    // Load existing selected remnant plate if it exists
+    // Handle both object and ID cases
+    if (cut.selected_plate) {
+        if (typeof cut.selected_plate === 'object' && cut.selected_plate.id) {
+            selectedRemnantPlate = cut.selected_plate;
+        } else if (typeof cut.selected_plate === 'number' || typeof cut.selected_plate === 'string') {
+            // If it's just an ID, we'll need to fetch it or create a minimal object
+            // For now, we'll try to fetch it
+            try {
+                const params = new URLSearchParams();
+                params.append('id', cut.selected_plate);
+                const response = await getRemnantPlates(params);
+                if (response && Array.isArray(response) && response.length > 0) {
+                    selectedRemnantPlate = response[0];
+                } else if (response && response.results && Array.isArray(response.results) && response.results.length > 0) {
+                    selectedRemnantPlate = response.results[0];
+                } else {
+                    // If fetch fails, create a minimal object with just the ID
+                    selectedRemnantPlate = { id: cut.selected_plate, dimensions: '-', material: '-' };
+                }
+            } catch (error) {
+                console.error('Error fetching remnant plate:', error);
+                // Create a minimal object with just the ID
+                selectedRemnantPlate = { id: cut.selected_plate, dimensions: '-', material: '-' };
+            }
+        }
+    } else if (cut.remnant_plate) {
+        // Fallback to remnant_plate field
+        if (typeof cut.remnant_plate === 'object' && cut.remnant_plate.id) {
+            selectedRemnantPlate = cut.remnant_plate;
+        } else {
+            selectedRemnantPlate = { id: cut.remnant_plate, dimensions: '-', material: '-' };
+        }
+    } else {
+        selectedRemnantPlate = null;
+    }
+    
+    // Add remnant plate selection section at the top
+    editCutModal.addSection({
+        id: 'remnant-selection',
+        title: 'Artık Plaka Seçimi',
+        icon: 'fas fa-layer-group',
+        iconColor: 'text-info',
+        fields: []
+    });
     
     // Add basic information section
     editCutModal.addSection({
@@ -1419,8 +1533,55 @@ async function setupEditCutForm(editCutModal, cut) {
     // Render the modal
     editCutModal.render();
     
-    // Add a small delay to ensure DOM is ready, then add table containers
+    // Add remnant plate selection button
     setTimeout(() => {
+        const remnantSection = editCutModal.container.querySelector('[data-section-id="remnant-selection"]');
+        if (remnantSection) {
+            const fieldsContainer = remnantSection.querySelector('.row.g-2');
+            if (fieldsContainer) {
+                const remnantHtml = `
+                    <div class="col-12">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <button type="button" class="btn btn-outline-info" id="select-remnant-btn-edit">
+                                    <i class="fas fa-layer-group me-2"></i>Artık Plaka Seç
+                                </button>
+                            </div>
+                            <div id="selected-remnant-display-edit" style="display: none;">
+                                <span class="badge bg-success">
+                                    <i class="fas fa-check me-1"></i>
+                                    Seçili: <span id="selected-remnant-info-edit">-</span>
+                                </span>
+                                <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="clear-remnant-btn-edit">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                fieldsContainer.innerHTML = remnantHtml;
+                
+                // Add event listener for select button
+                const selectBtn = editCutModal.container.querySelector('#select-remnant-btn-edit');
+                if (selectBtn) {
+                    selectBtn.addEventListener('click', () => {
+                        showSelectRemnantModal();
+                    });
+                }
+                
+                // Add event listener for clear button
+                const clearBtn = editCutModal.container.querySelector('#clear-remnant-btn-edit');
+                if (clearBtn) {
+                    clearBtn.addEventListener('click', () => {
+                        selectedRemnantPlate = null;
+                        updateSelectedRemnantDisplayEdit();
+                    });
+                }
+                
+                updateSelectedRemnantDisplayEdit();
+            }
+        }
+        
         addTableContainers();
         
         // Initialize tables after containers are added
@@ -2011,7 +2172,8 @@ async function handleEditCutSave(formData, cutKey) {
         dimensions: formData['cut-dimensions'],
         thickness_mm: parseFloat(formData['cut-thickness']) || 0,
         machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
-        estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null
+        estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null,
+        selected_plate: selectedRemnantPlate ? selectedRemnantPlate.id : null
     };
     
     
@@ -2529,6 +2691,333 @@ window.deletePart = deletePart;
 window.deleteFile = deleteFile;
 window.viewFile = viewFile;
 window.downloadFile = downloadFile;
+function updateSelectedRemnantDisplay() {
+    if (!createCutModal || !createCutModal.container) return;
+    
+    const display = createCutModal.container.querySelector('#selected-remnant-display');
+    const info = createCutModal.container.querySelector('#selected-remnant-info');
+    const selectBtn = createCutModal.container.querySelector('#select-remnant-btn');
+    
+    if (display && info && selectBtn) {
+        if (selectedRemnantPlate) {
+            display.style.display = 'block';
+            info.textContent = `ID: ${selectedRemnantPlate.id} - ${selectedRemnantPlate.dimensions} - ${selectedRemnantPlate.material}`;
+            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Artık Plaka Değiştir';
+        } else {
+            display.style.display = 'none';
+            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Artık Plaka Seç';
+        }
+    }
+}
+
+function updateSelectedRemnantDisplayEdit() {
+    if (!editCutModal || !editCutModal.container) return;
+    
+    const display = editCutModal.container.querySelector('#selected-remnant-display-edit');
+    const info = editCutModal.container.querySelector('#selected-remnant-info-edit');
+    const selectBtn = editCutModal.container.querySelector('#select-remnant-btn-edit');
+    
+    if (display && info && selectBtn) {
+        if (selectedRemnantPlate) {
+            display.style.display = 'block';
+            info.textContent = `ID: ${selectedRemnantPlate.id} - ${selectedRemnantPlate.dimensions} - ${selectedRemnantPlate.material}`;
+            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Artık Plaka Değiştir';
+        } else {
+            display.style.display = 'none';
+            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Artık Plaka Seç';
+        }
+    }
+}
+
+function showSelectRemnantModal() {
+    // Create modal for selecting remnant plate
+    selectRemnantModal = new EditModal('select-remnant-modal-container', {
+        title: 'Artık Plaka Seç',
+        icon: 'fas fa-layer-group',
+        saveButtonText: 'Seç',
+        size: 'xl',
+        showSaveButton: false,
+        showCancelButton: true
+    });
+    
+    // Add filters section
+    selectRemnantModal.addSection({
+        id: 'remnant-filters',
+        title: 'Filtreler',
+        icon: 'fas fa-filter',
+        iconColor: 'text-primary',
+        fields: []
+    });
+    
+    // Add table section
+    selectRemnantModal.addSection({
+        id: 'remnant-table-section',
+        title: 'Artık Plakalar',
+        icon: 'fas fa-table',
+        iconColor: 'text-info',
+        fields: []
+    });
+    
+    // Render the modal
+    selectRemnantModal.render();
+    
+    // Initialize filters and table after render
+    setTimeout(() => {
+        initializeRemnantSelectionFilters();
+        initializeRemnantSelectionTable();
+    }, 100);
+    
+    // Show the modal
+    selectRemnantModal.show();
+}
+
+function initializeRemnantSelectionFilters() {
+    const filterSection = selectRemnantModal.container.querySelector('[data-section-id="remnant-filters"]');
+    if (!filterSection) return;
+    
+    const fieldsContainer = filterSection.querySelector('.row.g-2');
+    if (!fieldsContainer) return;
+    
+    // Create filter container
+    const filterContainer = document.createElement('div');
+    filterContainer.id = 'remnant-selection-filters-container';
+    filterContainer.className = 'col-12';
+    fieldsContainer.appendChild(filterContainer);
+    
+    // Initialize FiltersComponent
+    remnantFilters = new FiltersComponent('remnant-selection-filters-container', {
+        title: 'Plaka Filtreleri',
+        onApply: (values) => {
+            // Only send request when Apply is clicked
+            loadRemnantSelectionTable(1);
+        },
+        onClear: () => {
+            loadRemnantSelectionTable(1);
+        },
+        onFilterChange: (filterId, value) => {
+            // Don't send request on change, only on Apply
+        }
+    });
+    
+    remnantFilters.addTextFilter({
+        id: 'thickness-mm-filter',
+        label: 'Kalınlık (mm)',
+        placeholder: 'örn. 10',
+        colSize: 2
+    });
+    
+    remnantFilters.addTextFilter({
+        id: 'dimensions-filter',
+        label: 'Boyutlar',
+        placeholder: 'örn. 1200x800',
+        colSize: 2
+    });
+    
+    remnantFilters.addTextFilter({
+        id: 'material-filter',
+        label: 'Malzeme',
+        placeholder: 'Malzeme türü',
+        colSize: 2
+    });
+    
+    remnantFilters.addDropdownFilter({
+        id: 'assigned-filter',
+        label: 'Atama Durumu',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'assigned', label: 'Atanmış' },
+            { value: 'unassigned', label: 'Atanmamış' }
+        ],
+        placeholder: 'Tümü',
+        colSize: 2
+    });
+}
+
+function initializeRemnantSelectionTable() {
+    const tableSection = selectRemnantModal.container.querySelector('[data-section-id="remnant-table-section"]');
+    if (!tableSection) return;
+    
+    const fieldsContainer = tableSection.querySelector('.row.g-2');
+    if (!fieldsContainer) return;
+    
+    // Create table container
+    const tableContainer = document.createElement('div');
+    tableContainer.id = 'remnant-selection-table-container';
+    tableContainer.className = 'col-12';
+    fieldsContainer.appendChild(tableContainer);
+    
+    // Initialize TableComponent
+    remnantSelectionTable = new TableComponent('remnant-selection-table-container', {
+        title: 'Artık Plakalar Listesi',
+        icon: 'fas fa-table',
+        iconColor: 'text-primary',
+        columns: [
+            {
+                field: 'id',
+                label: 'ID',
+                sortable: true,
+                width: '8%',
+                formatter: (value) => `<span class="remnant-id">${value || '-'}</span>`
+            },
+            {
+                field: 'thickness_mm',
+                label: 'Kalınlık (mm)',
+                sortable: true,
+                width: '12%',
+                type: 'number',
+                formatter: (value) => value ? `${value} mm` : '-'
+            },
+            {
+                field: 'dimensions',
+                label: 'Boyutlar',
+                sortable: true,
+                width: '15%',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'quantity',
+                label: 'Adet',
+                sortable: true,
+                width: '10%',
+                type: 'number',
+                formatter: (value) => value ? `${value}` : '-'
+            },
+            {
+                field: 'material',
+                label: 'Malzeme',
+                sortable: true,
+                width: '15%',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'assigned_to',
+                label: 'Atanan Kişi',
+                sortable: false,
+                width: '20%',
+                formatter: (value) => value || '-'
+            }
+        ],
+        actions: [
+            {
+                key: 'select',
+                label: 'Seç',
+                icon: 'fas fa-check',
+                class: 'btn-outline-success',
+                title: 'Bu plakayı seç',
+                onClick: (row) => {
+                    selectedRemnantPlate = row;
+                    updateSelectedRemnantDisplay();
+                    updateSelectedRemnantDisplayEdit();
+                    
+                    // Close the selection modal
+                    const modalElement = document.querySelector('#select-remnant-modal-container .modal');
+                    if (modalElement) {
+                        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+                        if (modalInstance) {
+                            modalInstance.hide();
+                        }
+                    }
+                    
+                    showNotification('Artık plaka seçildi', 'success');
+                }
+            }
+        ],
+        data: [],
+        loading: false,
+        sortable: true,
+        pagination: true,
+        itemsPerPage: 20,
+        currentPage: 1,
+        totalItems: 0,
+        serverSidePagination: true,
+        onPageChange: (page) => {
+            loadRemnantSelectionTable(page);
+        },
+        onSort: (field, direction) => {
+            remnantSelectionSortField = field;
+            remnantSelectionSortDirection = direction;
+            loadRemnantSelectionTable(1);
+        },
+        striped: false,
+        small: false,
+        emptyMessage: 'Artık plaka bulunamadı',
+        emptyIcon: 'fas fa-layer-group'
+    });
+    
+    // Don't load initial data - wait for filter Apply
+}
+
+let remnantSelectionPage = 1;
+let remnantSelectionSortField = 'id';
+let remnantSelectionSortDirection = 'asc';
+
+async function loadRemnantSelectionTable(page = 1) {
+    if (!remnantSelectionTable) return;
+    
+    remnantSelectionTable.setLoading(true);
+    remnantSelectionPage = page;
+    
+    try {
+        const params = buildRemnantSelectionQuery(page);
+        const response = await getRemnantPlates(params);
+        
+        if (response && (Array.isArray(response) || (response.results && Array.isArray(response.results)))) {
+            let remnants = [];
+            let totalRemnants = 0;
+            
+            if (Array.isArray(response)) {
+                remnants = response;
+                totalRemnants = response.length;
+            } else {
+                remnants = response.results;
+                totalRemnants = response.count ?? response.results.length;
+            }
+            
+            remnantSelectionTable.setLoading(false);
+            remnantSelectionTable.updateData(remnants, totalRemnants, page);
+        } else {
+            throw new Error('Failed to load remnants');
+        }
+    } catch (error) {
+        console.error('Error loading remnant selection table:', error);
+        showNotification('Artık plakalar yüklenirken hata oluştu', 'error');
+        remnantSelectionTable.setLoading(false);
+        remnantSelectionTable.updateData([], 0, 1);
+    }
+}
+
+function buildRemnantSelectionQuery(page = 1) {
+    const params = new URLSearchParams();
+    
+    params.append('page', String(page));
+    params.append('page_size', '20');
+    
+    // Add ordering
+    const orderingParam = remnantSelectionSortDirection === 'asc' ? remnantSelectionSortField : `-${remnantSelectionSortField}`;
+    params.append('ordering', orderingParam);
+    
+    // Add filters from FiltersComponent
+    if (remnantFilters) {
+        const filterValues = remnantFilters.getFilterValues();
+        const thickness = filterValues['thickness-mm-filter']?.toString().trim();
+        const dimensions = filterValues['dimensions-filter']?.toString().trim();
+        const material = filterValues['material-filter']?.toString().trim();
+        const assigned = filterValues['assigned-filter'] || '';
+
+        if (thickness) params.append('thickness_mm', thickness);
+        if (dimensions) params.append('dimensions', dimensions);
+        if (material) params.append('material', material);
+        
+        if (assigned === 'assigned') {
+            params.append('assigned_to__isnull', 'false');
+        } else if (assigned === 'unassigned') {
+            params.append('assigned_to__isnull', 'true');
+        }
+    }
+    
+    return params;
+}
+
 window.showAddPartModal = showAddPartModal;
 window.showAddFileModal = showAddFileModal;
 

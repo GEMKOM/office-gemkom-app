@@ -257,10 +257,10 @@ export class TableComponent {
             if (!isVisible) return '';
             
             const onClick = action.onClick ? 
-                `onclick="document.getElementById('${this.containerId}').dispatchEvent(new CustomEvent('actionClick', {detail: {action: '${action.key}', index: ${rowIndex}}}))"` : '';
+                `onclick="event.preventDefault(); event.stopPropagation(); document.getElementById('${this.containerId}').dispatchEvent(new CustomEvent('actionClick', {detail: {action: '${action.key}', index: ${rowIndex}}}))"` : '';
             
             return `
-                <button class="btn btn-sm ${action.class || 'btn-outline-secondary'}" 
+                <button type="button" class="btn btn-sm ${action.class || 'btn-outline-secondary'}" 
                         title="${action.title || action.label}" 
                         ${onClick}>
                     <i class="${action.icon}"></i>
@@ -592,6 +592,8 @@ export class TableComponent {
         
         // Action click events
         this.container.addEventListener('actionClick', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
             const action = this.options.actions.find(a => a.key === e.detail.action);
             if (action && action.onClick) {
                 const index = e.detail.index;

@@ -60,6 +60,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function initializeRemnants() {
     initializeFiltersComponent();
     initializeTableComponent();
+    // Set default filter value for assigned filter
+    setTimeout(() => {
+        if (remnantFilters && remnantFilters.dropdowns) {
+            const assignedDropdown = remnantFilters.dropdowns.get('assigned-filter');
+            if (assignedDropdown) {
+                assignedDropdown.setValue('unassigned');
+            }
+        }
+    }, 200);
     await loadRemnants(1);
 }
 
@@ -107,11 +116,11 @@ function initializeFiltersComponent() {
         id: 'assigned-filter',
         label: 'Atama Durumu',
         options: [
-            { value: '', label: 'Tümü' },
-            { value: 'assigned', label: 'Atanmış' },
-            { value: 'unassigned', label: 'Atanmamış' }
+            { value: 'unassigned', label: 'Atanmamış' },
+            { value: 'assigned', label: 'Atanmış' }
         ],
-        placeholder: 'Tümü',
+        placeholder: 'Atanmamış',
+        value: 'unassigned', // Set default value
         colSize: 2
     });
 }
@@ -161,11 +170,15 @@ function initializeTableComponent() {
                 formatter: (value) => value || '-'
             },
             {
-                field: 'assigned_to',
-                label: 'Atanan Kişi',
+                field: 'task',
+                label: 'Görev',
                 sortable: false,
                 width: '20%',
-                formatter: (value) => value || '-'
+                formatter: (value, row) => {
+                    // Try multiple possible field names for task
+                    const task = value || row.task_key || row.cnc_task || row.related_task || row.task_id || '-';
+                    return task;
+                }
             }
         ],
         actions: [],
@@ -282,18 +295,19 @@ function buildRemnantQuery(page = 1) {
     const thickness = filterValues['thickness-mm-filter']?.toString().trim();
     const dimensions = filterValues['dimensions-filter']?.toString().trim();
     const material = filterValues['material-filter']?.toString().trim();
-    const assigned = filterValues['assigned-filter'] || '';
+    // Default to 'unassigned' if filter is not set
+    const assigned = filterValues['assigned-filter'] || 'unassigned';
 
     if (thickness) params.append('thickness_mm', thickness);
     if (dimensions) params.append('dimensions', dimensions);
     if (material) params.append('material', material);
     
-    // Map assigned filter to assigned_to__isnull parameter
+    // Map assigned filter to unassigned parameter
+    // Default is 'unassigned', so only send query param if 'assigned' is selected
     if (assigned === 'assigned') {
-        params.append('assigned_to__isnull', 'false');
-    } else if (assigned === 'unassigned') {
-        params.append('assigned_to__isnull', 'true');
+        params.append('unassigned', 'false');
     }
+    // If 'unassigned' is selected (default), don't send any query param
     
     return params;
 }
