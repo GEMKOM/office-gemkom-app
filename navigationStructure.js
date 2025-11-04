@@ -155,6 +155,11 @@ export const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-scissors',
                         children: {}
                     },
+                    '/manufacturing/cnc-cutting/remnants': {
+                        label: 'Artık Plakalar',
+                        icon: 'fas fa-layer-group',
+                        children: {}
+                    },
                     '/manufacturing/cnc-cutting/capacity': {
                         label: 'Kapasite Yönetimi',
                         icon: 'fas fa-industry',

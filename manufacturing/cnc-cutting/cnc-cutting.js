@@ -24,6 +24,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 iconColor: 'success',
                 link: '/manufacturing/cnc-cutting/cuts/',
                 features: []
+            },
+            {
+                title: 'Artık Plakalar',
+                description: 'CNC kesim artık plakalarını görüntüleyin ve yönetin',
+                icon: 'fas fa-layer-group',
+                iconColor: 'info',
+                link: '/manufacturing/cnc-cutting/remnants/',
+                features: []
             }
         ]
     });
