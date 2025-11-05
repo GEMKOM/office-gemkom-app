@@ -1,5 +1,5 @@
 import { initNavbar } from '../../../components/navbar.js';
-import { getRemnantPlates, createRemnantPlate, bulkCreateRemnantPlates } from '../../../apis/cnc_cutting/remnants.js';
+import { getRemnantPlates, createRemnantPlate, bulkCreateRemnantPlates, deleteRemnantPlate } from '../../../apis/cnc_cutting/remnants.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
@@ -181,7 +181,16 @@ function initializeTableComponent() {
                 }
             }
         ],
-        actions: [],
+        actions: [
+            {
+                key: 'delete',
+                label: 'Sil',
+                icon: 'fas fa-trash',
+                class: 'btn-outline-danger',
+                title: 'Sil',
+                onClick: (row) => deleteRemnant(row.id)
+            }
+        ],
         data: [],
         loading: true, // Show skeleton loading immediately when page loads
         sortable: true,
@@ -796,8 +805,56 @@ function updateBulkPreview(bulkData) {
 }
 
 function setupEventListeners() {
-    // Add any additional event listeners if needed
+    // Set up delete confirmation button handler
+    const confirmDeleteBtn = document.getElementById('confirm-delete-remnant-btn');
+    if (confirmDeleteBtn) {
+        confirmDeleteBtn.addEventListener('click', async () => {
+            const remnantId = window.pendingDeleteRemnantId;
+            if (!remnantId) return;
+            
+            try {
+                const response = await deleteRemnantPlate(remnantId);
+                if (response && (response.success || response.status === 'success')) {
+                    showNotification('Plaka başarıyla silindi', 'success');
+                    
+                    // Close the modal
+                    const deleteModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteRemnantConfirmModal'));
+                    deleteModal.hide();
+                    
+                    // Clear the pending delete ID
+                    window.pendingDeleteRemnantId = null;
+                    
+                    // Reload remnants
+                    loadRemnants(currentPage);
+                } else {
+                    throw new Error('Failed to delete remnant');
+                }
+            } catch (error) {
+                console.error('Error deleting remnant:', error);
+                showNotification('Plaka silinirken hata oluştu', 'error');
+            }
+        });
+    }
 }
+
+// Global function for table actions
+window.deleteRemnant = function(remnantId) {
+    // Set the pending delete ID
+    window.pendingDeleteRemnantId = remnantId;
+    
+    // Find the remnant for display
+    const remnant = remnants.find(r => r.id === remnantId);
+    const remnantInfo = remnant 
+        ? `ID: ${remnant.id} - ${remnant.dimensions || '-'} - ${remnant.material || '-'}`
+        : `ID: ${remnantId}`;
+    
+    // Update the delete confirmation modal
+    document.getElementById('delete-remnant-info').textContent = remnantInfo;
+    
+    // Show the delete confirmation modal
+    const deleteModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteRemnantConfirmModal'));
+    deleteModal.show();
+};
 
 // Helper function to show notifications (if available in the global scope)
 function showNotification(message, type = 'info') {

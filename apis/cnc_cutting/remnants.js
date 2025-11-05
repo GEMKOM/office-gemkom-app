@@ -94,3 +94,34 @@ export async function bulkCreateRemnantPlates(remnantsData) {
         throw error;
     }
 }
+
+/**
+ * Delete a remnant plate
+ * @param {number|string} remnantId - Remnant plate ID to delete
+ * @returns {Promise<Object>} Deletion response
+ */
+export async function deleteRemnantPlate(remnantId) {
+    try {
+        const response = await authedFetch(`${backendBase}/cnc_cutting/remnants/${remnantId}/`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Failed to delete remnant plate: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+        
+        // DELETE requests may not have a response body
+        if (response.status === 204 || response.status === 200) {
+            return { success: true };
+        }
+        
+        return await response.json().catch(() => ({ success: true }));
+    } catch (error) {
+        console.error('Error deleting remnant plate:', error);
+        throw error;
+    }
+}
