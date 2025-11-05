@@ -28,6 +28,7 @@ let ganttChart = null;
 let machineCalendar = null;
 let isInlineEditing = false; // Flag to prevent multiple simultaneous inline edits
 let unplannedTasksTable = null; // TableComponent for unplanned tasks
+let planningFilters = null; // Filters component instance
 
 // Change tracking for efficient submissions
 let originalTasks = []; // Store original state for comparison
@@ -568,43 +569,85 @@ function initHeader() {
 
 // Initialize filters component
 function initFilters() {
-    const filters = new FiltersComponent('filters-placeholder', {
+    planningFilters = new FiltersComponent('filters-placeholder', {
         title: 'Planlama Filtreleri',
-        showApplyButton: true,
-        showClearButton: true,
         onApply: (values) => {
-            applyFilters(values);
-        },
-        onClear: () => {
+            // Apply filters and reload tasks
             if (currentMachineId) {
                 loadMachineTasks(currentMachineId);
             }
+        },
+        onClear: () => {
+            // Clear filters and reload tasks
+            if (currentMachineId) {
+                loadMachineTasks(currentMachineId);
+            }
+            showNotification('Filtreler temizlendi', 'info');
+        },
+        onFilterChange: (filterId, value) => {
+            // Optional: Handle individual filter changes
+            console.log(`Filter ${filterId} changed to:`, value);
         }
     });
 
-    // Add filter fields
-    filters
-        .addDateFilter({
-            id: 'start-date',
-            label: 'Başlangıç Tarihi',
-            colSize: 2
-        })
-        .addDateFilter({
-            id: 'end-date',
-            label: 'Bitiş Tarihi',
-            colSize: 2
-        })
-        .addSelectFilter({
-            id: 'status-filter',
-            label: 'Durum',
-            options: [
-                { value: '', label: 'Tümü' },
-                { value: 'planned', label: 'Planlanmış' },
-                { value: 'unplanned', label: 'Planlanmamış' },
-                { value: 'locked', label: 'Kilitli' }
-            ],
-            colSize: 2
-        });
+    // Add filters matching cuts page exactly
+    planningFilters.addTextFilter({
+        id: 'nesting-id-filter',
+        label: 'Nesting ID',
+        placeholder: 'Nesting ID',
+        colSize: 2
+    });
+
+    planningFilters.addTextFilter({
+        id: 'thickness-mm-filter',
+        label: 'Kalınlık (mm)',
+        placeholder: 'örn. 10',
+        colSize: 2
+    });
+
+    planningFilters.addTextFilter({
+        id: 'material-filter',
+        label: 'Malzeme',
+        placeholder: 'Malzeme türü',
+        colSize: 2
+    });
+
+    // Machine filter - always exists, will be populated after machines load
+    planningFilters.addDropdownFilter({
+        id: 'machine-name-filter',
+        label: 'Makine',
+        options: [
+            { value: '', label: 'Tüm Makineler' }
+        ],
+        placeholder: 'Tüm Makineler',
+        colSize: 2
+    });
+
+    planningFilters.addDropdownFilter({
+        id: 'status-filter',
+        label: 'Durum',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'completed', label: 'Tamamlanan' },
+            { value: 'pending', label: 'Bekliyor' }
+        ],
+        placeholder: 'Tümü',
+        colSize: 2
+    });
+
+    // Update machine filter options after machines are loaded
+    updateMachineFilterOptions();
+}
+
+// Update machine filter options with loaded machines
+function updateMachineFilterOptions() {
+    if (planningFilters && machines && machines.length > 0) {
+        const machineOptions = [
+            { value: '', label: 'Tüm Makineler' },
+            ...machines.map(machine => ({ value: machine.id.toString(), label: machine.name }))
+        ];
+        planningFilters.updateFilterOptions('machine-name-filter', machineOptions);
+    }
 }
 
 // Initialize machines table component
@@ -813,8 +856,7 @@ async function loadMachines() {
             machinesTable.setLoading(true);
         }
         const response = await fetchMachines(1, 100, { used_in: 'cutting' });
-        
-        machines = response.results || response;
+        machines = response.results || response || [];
         // Handle case where no machines are returned
         if (!machines || !Array.isArray(machines)) {
             machines = [];
@@ -825,6 +867,9 @@ async function loadMachines() {
         // Use tasks_count from API response (don't override it)
         // Sort machines by task count (most to least)
         machines = machines.sort((a, b) => (b.tasks_count || 0) - (a.tasks_count || 0));
+        
+        // Update machine filter options after machines are loaded
+        updateMachineFilterOptions();
         
         if (machinesTable) {
             // Update the table's internal state first
@@ -947,9 +992,24 @@ async function loadMachineCalendar(machineId) {
 }
 
 // Load tasks for selected machine
-async function loadMachineTasks(machineId) {
+async function loadMachineTasks(machineId, filters = null) {
     try {
-        const tasks = await getCapacityPlanning(machineId, 'cnc_cutting');
+        // Build filters from filter component if not provided
+        if (!filters && planningFilters) {
+            filters = buildPlanningFilters();
+        }
+        
+        // If machine filter is set, use that machine instead of the selected one
+        // Otherwise, use the selected machine
+        const effectiveMachineId = filters?.machine_fk || machineId;
+        
+        // Remove machine_fk from filters since it's passed as machine_id parameter
+        const filtersForApi = { ...filters };
+        if (filtersForApi.machine_fk) {
+            delete filtersForApi.machine_fk;
+        }
+        
+        const tasks = await getCapacityPlanning(effectiveMachineId, 'cnc_cutting', filtersForApi || {});
         currentTasks = tasks;
         
         // Initialize change tracking with original state
@@ -967,6 +1027,36 @@ async function loadMachineTasks(machineId) {
     } catch (error) {
         showNotification('Görevler yüklenirken hata oluştu', 'error');
     }
+}
+
+// Build filter query parameters from filter component
+function buildPlanningFilters() {
+    const filters = {};
+    
+    if (!planningFilters) {
+        return filters;
+    }
+    
+    const filterValues = planningFilters.getFilterValues();
+    const nestingId = filterValues['nesting-id-filter']?.trim();
+    const material = filterValues['material-filter']?.trim();
+    const machine = filterValues['machine-name-filter']?.toString().trim();
+    const status = filterValues['status-filter'] || '';
+    const thickness = filterValues['thickness-mm-filter']?.toString().trim();
+    
+    if (nestingId) filters.nesting_id = nestingId;
+    if (material) filters.material = material;
+    if (machine) filters.machine_fk = machine; // This will override selected machine
+    if (thickness) filters.thickness_mm = thickness;
+    
+    // Map status filter to completion_date__isnull parameter
+    if (status === 'pending') {
+        filters.completion_date__isnull = 'true';
+    } else if (status === 'completed') {
+        filters.completion_date__isnull = 'false';
+    }
+    
+    return filters;
 }
 
 // Render tasks table
@@ -1069,7 +1159,7 @@ function renderUnplannedTasksTable(tasks) {
                     field: 'actions',
                     label: 'İşlemler',
                     sortable: false,
-                    width: '110px',
+                    width: '150px',
                     formatter: (value, row) => `
                         <div class="btn-group btn-group-sm">
                             <button class="btn btn-outline-success btn-sm" onclick="addToPlan('${row.key}')" title="Plana Ekle">
@@ -1077,6 +1167,9 @@ function renderUnplannedTasksTable(tasks) {
                             </button>
                             <button class="btn btn-outline-info btn-sm" onclick="showTaskDetails('${row.key}')" title="Detaylar">
                                 <i class="fas fa-info-circle"></i>
+                            </button>
+                            <button class="btn btn-outline-warning btn-sm" onclick="openEditCutInNewTab('${row.key}')" title="Düzenle">
+                                <i class="fas fa-edit"></i>
                             </button>
                         </div>
                     `
@@ -1457,7 +1550,8 @@ async function savePlan() {
 
 // Apply filters
 function applyFilters(values) {
-    // Implementation would depend on specific filtering requirements
+    // Filters are already applied in onApply callback
+    // This function is kept for compatibility but not needed
 }
 
 // Reset machine selection state
@@ -1890,6 +1984,14 @@ async function finishInlineEdit(cell, taskKey, field, newValue, originalContent)
 window.editTask = editTask;
 window.addToPlan = addToPlan;
 window.removeFromPlan = removeFromPlan;
+
+// Open edit cut page in a new tab
+window.openEditCutInNewTab = function(cutKey) {
+    // Construct the URL to the cuts page with edit mode
+    // Relative path from planning to cuts: ../../cuts/
+    const editUrl = `../../cuts/?cut=${encodeURIComponent(cutKey)}&mode=edit`;
+    window.open(editUrl, '_blank');
+};
 
 // Initialize when DOM is loaded
 document.addEventListener('DOMContentLoaded', () => {

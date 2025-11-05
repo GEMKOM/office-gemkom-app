@@ -62,39 +62,130 @@ let selectRemnantModal = null; // Modal for selecting remnant plate
 let remnantFilters = null; // Filters component for remnant selection
 let remnantSelectionTable = null; // Table component for remnant selection
 
+// Check URL and start fetching modal data immediately (before page load)
+let modalDataPromise = null;
+let machinesPromise = null;
+let shouldOpenModal = false;
+let pendingModalMode = null;
+let pendingCutKey = null;
+
+// Check URL parameters immediately when script loads
+(function checkUrlEarly() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const cutParam = urlParams.get('cut');
+    const modeParam = urlParams.get('mode');
+    
+    // Always fetch machines early (needed for modal dropdowns)
+    machinesPromise = (async () => {
+        try {
+            const machinesResponse = await fetchMachines(1, 100, { used_in: 'cutting' });
+            machines = machinesResponse.results || machinesResponse || [];
+            return machines;
+        } catch (error) {
+            console.error('Error loading machines:', error);
+            machines = [];
+            return machines;
+        }
+    })();
+    
+    if (cutParam) {
+        shouldOpenModal = true;
+        pendingCutKey = cutParam;
+        pendingModalMode = modeParam === 'edit' ? 'edit' : 'view';
+        
+        // Start fetching cut data immediately (don't wait for page load)
+        modalDataPromise = getCncTask(cutParam).catch(error => {
+            console.error('Error fetching cut data for modal:', error);
+            shouldOpenModal = false;
+            return null;
+        });
+    }
+})();
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
-    await initNavbar();
-    await loadMachines();
+    // Start page initialization in parallel with modal opening
+    const pageInitPromise = (async () => {
+        await initNavbar();
+        
+        // Only load machines if not already loading/fetched (to avoid duplicate requests)
+        if (!machinesPromise) {
+            await loadMachines();
+        } else {
+            // Wait for the early machines fetch to complete
+            await machinesPromise;
+        }
+        
+        // Initialize header component
+        const header = new HeaderComponent({
+            title: 'CNC Kesim Kesimler',
+            subtitle: 'CNC kesim görevleri yönetimi ve takibi',
+            icon: 'cut',
+            showBackButton: 'block',
+            showCreateButton: 'block',
+            showExportButton: 'none',
+            showRefreshButton: 'none',
+            createButtonText: 'Yeni Kesim',
+            onBackClick: () => window.location.href = '/manufacturing/cnc-cutting/',
+            onCreateClick: () => showCreateCutModal()
+        });
+        
+        // Initialize Statistics Cards component
+        cutsStats = new StatisticsCards('cuts-statistics', {
+            cards: [
+                { title: 'Tüm Kesimler', value: '0', icon: 'fas fa-list', color: 'primary', id: 'all-cuts-count' },
+                { title: 'Aktif Kesimler', value: '0', icon: 'fas fa-play', color: 'success', id: 'active-cuts-count' },
+                { title: 'Tamamlanan', value: '0', icon: 'fas fa-check', color: 'info', id: 'completed-cuts-count' },
+                { title: 'Bekleyen', value: '0', icon: 'fas fa-clock', color: 'warning', id: 'pending-cuts-count' }
+            ],
+            compact: true,
+            animation: true
+        });
+        
+        await initializeCuts();
+        setupEventListeners();
+    })();
     
-    // Initialize header component
-    const header = new HeaderComponent({
-        title: 'CNC Kesim Kesimler',
-        subtitle: 'CNC kesim görevleri yönetimi ve takibi',
-        icon: 'cut',
-        showBackButton: 'block',
-        showCreateButton: 'block',
-        showExportButton: 'none',
-        showRefreshButton: 'none',
-        createButtonText: 'Yeni Kesim',
-        onBackClick: () => window.location.href = '/manufacturing/cnc-cutting/',
-        onCreateClick: () => showCreateCutModal()
-    });
+    // Open modal as soon as DOM is ready and data is fetched (prioritize modal)
+    if (shouldOpenModal && modalDataPromise) {
+        try {
+            // Wait for machines to be loaded (needed for edit modal dropdown)
+            if (machinesPromise) {
+                await machinesPromise;
+            }
+            
+            // Wait for cut data to be fetched
+            const cut = await modalDataPromise;
+            
+            if (cut) {
+                if (pendingModalMode === 'edit') {
+                    showEditCutModal(cut);
+                } else {
+                    await showCutDetails(cut);
+                }
+            } else {
+                showNotification('Kesim bulunamadı', 'error');
+                // Clean up URL if cut not found
+                const url = new URL(window.location);
+                url.searchParams.delete('cut');
+                url.searchParams.delete('mode');
+                window.history.replaceState({}, '', url);
+            }
+        } catch (error) {
+            console.error('Error opening modal from URL:', error);
+            showNotification('Modal açılırken hata oluştu', 'error');
+            // Clean up URL on error
+            const url = new URL(window.location);
+            url.searchParams.delete('cut');
+            url.searchParams.delete('mode');
+            window.history.replaceState({}, '', url);
+        }
+    }
     
-    // Initialize Statistics Cards component
-    cutsStats = new StatisticsCards('cuts-statistics', {
-        cards: [
-            { title: 'Tüm Kesimler', value: '0', icon: 'fas fa-list', color: 'primary', id: 'all-cuts-count' },
-            { title: 'Aktif Kesimler', value: '0', icon: 'fas fa-play', color: 'success', id: 'active-cuts-count' },
-            { title: 'Tamamlanan', value: '0', icon: 'fas fa-check', color: 'info', id: 'completed-cuts-count' },
-            { title: 'Bekleyen', value: '0', icon: 'fas fa-clock', color: 'warning', id: 'pending-cuts-count' }
-        ],
-        compact: true,
-        animation: true
-    });
+    // Continue with page initialization (don't block on it)
+    await pageInitPromise;
     
-    await initializeCuts();
-    setupEventListeners();
+    // Setup URL handlers for browser navigation
     setupUrlHandlers();
 });
 
@@ -355,7 +446,7 @@ function initializeTableComponent() {
                 icon: 'fas fa-eye',
                 class: 'btn-outline-info',
                 title: 'Kesim Detayları',
-                onClick: (row) => showCutDetails(row)
+                onClick: (row) => window.showCutDetails(row.key)
             },
             {
                 key: 'edit',
@@ -722,28 +813,91 @@ function setupEventListeners() {
 }
 
 function setupUrlHandlers() {
-    // Handle browser back/forward navigation
+    // Don't check URL on initial load here - it's already handled earlier
+    // Only handle browser back/forward navigation
     window.addEventListener('popstate', (event) => {
-        const urlParams = new URLSearchParams(window.location.search);
-        const cutParam = urlParams.get('cut');
-        
-        if (cutParam) {
-            // Open modal if cut parameter is present
-            showCutDetails(cutParam);
-        } else {
-            // Close any open modals if no cut parameter
-            const displayModalContainer = document.getElementById('display-modal-container');
-            if (displayModalContainer) {
-                const existingModal = displayModalContainer.querySelector('.modal');
-                if (existingModal) {
-                    const modalInstance = bootstrap.Modal.getInstance(existingModal);
-                    if (modalInstance) {
-                        modalInstance.hide();
-                    }
+        checkUrlAndOpenModal();
+    });
+}
+
+async function checkUrlAndOpenModal() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const cutParam = urlParams.get('cut');
+    const modeParam = urlParams.get('mode');
+    
+    if (cutParam) {
+        try {
+            // Fetch cut data from API
+            const cut = await getCncTask(cutParam);
+            
+            if (cut) {
+                if (modeParam === 'edit') {
+                    // Open edit modal directly (without updating URL again)
+                    showEditCutModal(cut);
+                } else {
+                    // Open details modal directly (without updating URL again)
+                    // Use the internal showCutDetails function that takes an object
+                    await showCutDetails(cut);
                 }
+            } else {
+                showNotification('Kesim bulunamadı', 'error');
+                // Clean up URL if cut not found
+                const url = new URL(window.location);
+                url.searchParams.delete('cut');
+                url.searchParams.delete('mode');
+                window.history.replaceState({}, '', url);
+            }
+        } catch (error) {
+            console.error('Error opening modal from URL:', error);
+            showNotification('Modal açılırken hata oluştu', 'error');
+            // Clean up URL on error
+            const url = new URL(window.location);
+            url.searchParams.delete('cut');
+            url.searchParams.delete('mode');
+            window.history.replaceState({}, '', url);
+        }
+    } else {
+        // Close any open modals if no cut parameter
+        closeAllModals();
+    }
+}
+
+function closeAllModals() {
+    // Close display modal
+    const displayModalContainer = document.getElementById('display-modal-container');
+    if (displayModalContainer) {
+        const existingModal = displayModalContainer.querySelector('.modal');
+        if (existingModal) {
+            const modalInstance = bootstrap.Modal.getInstance(existingModal);
+            if (modalInstance) {
+                modalInstance.hide();
             }
         }
-    });
+    }
+    
+    // Close cut details modal
+    const cutDetailsModalContainer = document.getElementById('cut-details-modal-container');
+    if (cutDetailsModalContainer) {
+        const existingModal = cutDetailsModalContainer.querySelector('.modal');
+        if (existingModal) {
+            const modalInstance = bootstrap.Modal.getInstance(existingModal);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+        }
+    }
+    
+    // Close edit modal
+    const editModalContainer = document.getElementById('edit-cut-modal-container');
+    if (editModalContainer) {
+        const existingModal = editModalContainer.querySelector('.modal');
+        if (existingModal) {
+            const modalInstance = bootstrap.Modal.getInstance(existingModal);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+        }
+    }
 }
 
 
@@ -755,34 +909,61 @@ window.showCutDetails = async function(cutKey) {
         // Update URL to include cut key parameter
         const url = new URL(window.location);
         url.searchParams.set('cut', cutKey);
+        // Remove mode parameter if present (to show details, not edit)
+        url.searchParams.delete('mode');
         window.history.pushState({ cut: cutKey }, '', url);
         
         // Fetch cut data from API
         const cut = await getCncTask(cutKey);
         
         if (cut) {
-            showCutDetailsModal(cut);
+            // Use the detailed showCutDetails function (which uses cut-details-modal-container)
+            await showCutDetails(cut);
         } else {
             showNotification('Kesim bulunamadı', 'error');
+            // Clean up URL if cut not found
+            const url = new URL(window.location);
+            url.searchParams.delete('cut');
+            window.history.pushState({}, '', url);
         }
     } catch (error) {
         console.error('Error showing cut details:', error);
         showNotification('Kesim detayları gösterilirken hata oluştu', 'error');
+        // Clean up URL on error
+        const url = new URL(window.location);
+        url.searchParams.delete('cut');
+        window.history.pushState({}, '', url);
     }
 };
 
 window.editCut = async function(cutKey) {
     try {
+        // Update URL to include cut key and edit mode parameter
+        const url = new URL(window.location);
+        url.searchParams.set('cut', cutKey);
+        url.searchParams.set('mode', 'edit');
+        window.history.pushState({ cut: cutKey, mode: 'edit' }, '', url);
+        
         const cut = await getCncTask(cutKey);
         
         if (cut) {
             showEditCutModal(cut);
         } else {
             showNotification('Kesim bulunamadı', 'error');
+            // Clean up URL if cut not found
+            const url = new URL(window.location);
+            url.searchParams.delete('cut');
+            url.searchParams.delete('mode');
+            window.history.pushState({}, '', url);
         }
     } catch (error) {
         console.error('Error editing cut:', error);
         showNotification('Kesim düzenlenirken hata oluştu', 'error');
+        // Clean up URL on error
+        const url = new URL(window.location);
+        url.searchParams.delete('cut');
+        url.searchParams.delete('mode');
+        window.history.pushState({}, '', url);
     }
 };
 
@@ -858,6 +1039,13 @@ function showCutDetailsModal(cut) {
                 label: 'Kalınlık (mm)',
                 value: cut.thickness_mm,
                 type: 'number',
+                colSize: 4
+            },
+            {
+                id: 'quantity',
+                label: 'Adet',
+                value: cut.quantity || '-',
+                type: 'text',
                 colSize: 4
             }
         ]
@@ -1051,6 +1239,18 @@ function setupCreateCutForm(createCutModal) {
                 min: '0',
                 colSize: 6,
                 helpText: 'Kesim işleminin tahmini süresi saat cinsinden'
+            },
+            {
+                id: 'cut-quantity',
+                name: 'cut-quantity',
+                label: 'Adet',
+                type: 'number',
+                required: false,
+                placeholder: '1',
+                step: '1',
+                min: '1',
+                colSize: 6,
+                helpText: 'Kesim adedi'
             },
             {
                 id: 'cut-files',
@@ -1289,6 +1489,7 @@ async function handleCreateCutSave(formData) {
         thickness_mm: parseFloat(formData['cut-thickness']) || 0,
         machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
         estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null,
+        quantity: formData['cut-quantity'] ? parseInt(formData['cut-quantity']) : null,
         files: uploadedFiles,
         parts_data: [],
         selected_plate: selectedRemnantPlate ? selectedRemnantPlate.id : null
@@ -1358,6 +1559,20 @@ function showEditCutModal(cut) {
     
     // Show the modal
     editCutModal.show();
+    
+    // Add event listener to clean up URL when modal is closed
+    const modalElement = editCutModal.container.querySelector('.modal');
+    if (modalElement) {
+        modalElement.addEventListener('hidden.bs.modal', () => {
+            // Remove cut and mode parameters from URL when modal is closed
+            const url = new URL(window.location);
+            if (url.searchParams.has('cut') || url.searchParams.has('mode')) {
+                url.searchParams.delete('cut');
+                url.searchParams.delete('mode');
+                window.history.pushState({}, '', url);
+            }
+        });
+    }
 }
 
 async function setupEditCutForm(editCutModal, cut) {
@@ -1504,6 +1719,19 @@ async function setupEditCutForm(editCutModal, cut) {
                 value: cut.estimated_hours || '',
                 colSize: 6,
                 helpText: 'Kesim işleminin tahmini süresi saat cinsinden'
+            },
+            {
+                id: 'cut-quantity',
+                name: 'cut-quantity',
+                label: 'Adet',
+                type: 'number',
+                required: false,
+                placeholder: '1',
+                step: '1',
+                min: '1',
+                value: cut.quantity || '',
+                colSize: 6,
+                helpText: 'Kesim adedi'
             }
         ]
     });
@@ -2173,6 +2401,7 @@ async function handleEditCutSave(formData, cutKey) {
         thickness_mm: parseFloat(formData['cut-thickness']) || 0,
         machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
         estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null,
+        quantity: formData['cut-quantity'] ? parseInt(formData['cut-quantity']) : null,
         selected_plate: selectedRemnantPlate ? selectedRemnantPlate.id : null
     };
     
@@ -2419,6 +2648,17 @@ async function showCutDetails(cutData) {
         });
         
         detailsModal.addField({
+            id: 'cut-quantity',
+            name: 'quantity',
+            label: 'Adet',
+            type: 'text',
+            value: taskData.quantity ? `${taskData.quantity}` : '-',
+            icon: 'fas fa-list-ol',
+            colSize: 3,
+            layout: 'horizontal'
+        });
+        
+        detailsModal.addField({
             id: 'cut-total-hours',
             name: 'total_hours_spent',
             label: 'Harcanan Saat',
@@ -2630,6 +2870,19 @@ async function showCutDetails(cutData) {
         
         // Show the modal
         detailsModal.show();
+        
+        // Add event listener to clean up URL when modal is closed
+        const modalElement = detailsModal.container.querySelector('.modal');
+        if (modalElement) {
+            modalElement.addEventListener('hidden.bs.modal', () => {
+                // Remove cut parameter from URL when modal is closed
+                const url = new URL(window.location);
+                if (url.searchParams.has('cut')) {
+                    url.searchParams.delete('cut');
+                    window.history.pushState({}, '', url);
+                }
+            });
+        }
         
     } catch (error) {
         console.error('Error showing cut details:', error);
