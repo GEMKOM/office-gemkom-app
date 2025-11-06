@@ -56,9 +56,20 @@ document.addEventListener('DOMContentLoaded', async () => {
         animation: true
     });
     
-    await initializeTasks();
     setupEventListeners();
     setupUrlHandlers();
+    
+    // Check for task parameter in URL FIRST - if found, open modal immediately and skip table loading
+    const urlParams = new URLSearchParams(window.location.search);
+    const taskParam = urlParams.get('task');
+    
+    if (taskParam) {
+        // Open modal directly and load table after modal closes
+        await openTaskModalAndLoadTableAfter(taskParam);
+    } else {
+        // No task parameter, load table normally
+        await initializeTasks();
+    }
 });
 
 async function initializeTasks() {
@@ -96,8 +107,13 @@ async function loadMachines() {
         updateTableMachineOptions();
         
         // Set default status filter to 'active' if no URL parameters were applied
-        const filterApplied = handleUrlParameters();
-        if (!filterApplied && taskFilters) {
+        // Only check for filter parameter here (not task parameter, as that's handled earlier)
+        const urlParams = new URLSearchParams(window.location.search);
+        const filterParam = urlParams.get('filter');
+        if (filterParam && taskFilters) {
+            taskFilters.setFilterValues({ 'key-filter': filterParam });
+            showNotification(`"${filterParam}" için filtrelenmiş sonuçlar gösteriliyor`, 'info');
+        } else if (!filterParam && taskFilters) {
             taskFilters.setFilterValues({ 'status-filter': 'active' });
         }
     } catch (error) {
@@ -439,7 +455,66 @@ function initializeTableComponent() {
     });
 }
 
-// Handle URL parameters for filtering and task modal
+// Open task modal directly and load table after modal closes
+async function openTaskModalAndLoadTableAfter(taskKey) {
+    try {
+        // Fetch task data directly FIRST (this is all we need to show the modal)
+        const task = await fetchTaskById(taskKey);
+        
+        if (task) {
+            // Update URL to include task key parameter
+            const url = new URL(window.location);
+            url.searchParams.set('task', taskKey);
+            window.history.pushState({ task: taskKey }, '', url);
+            
+            // Open modal immediately with task data
+            showCompletionDataModal(task);
+            
+            // Load machines in parallel AFTER modal is shown (non-blocking, for potential editing)
+            loadMachines().catch(err => {
+                console.error('Error loading machines:', err);
+            });
+            
+            // Set up listener to load table when modal closes
+            const displayModalContainer = document.getElementById('display-modal-container');
+            if (displayModalContainer) {
+                const modalElement = displayModalContainer.querySelector('.modal');
+                if (modalElement) {
+                    const handleModalClose = async () => {
+                        // Remove the listener to avoid multiple calls
+                        modalElement.removeEventListener('hidden.bs.modal', handleModalClose);
+                        
+                        // Remove task parameter from URL
+                        const url = new URL(window.location);
+                        if (url.searchParams.has('task')) {
+                            url.searchParams.delete('task');
+                            window.history.pushState({}, '', url);
+                        }
+                        
+                        // Now load the table and initialize filters
+                        initializeFiltersComponent();
+                        initializeTableComponent();
+                        await loadTasks();
+                        updateTaskCounts();
+                    };
+                    
+                    modalElement.addEventListener('hidden.bs.modal', handleModalClose);
+                }
+            }
+        } else {
+            showNotification('Görev bulunamadı', 'error');
+            // Load table anyway if task not found
+            await initializeTasks();
+        }
+    } catch (error) {
+        console.error('Error opening task modal:', error);
+        showNotification('Görev verileri gösterilirken hata oluştu', 'error');
+        // Load table anyway if error
+        await initializeTasks();
+    }
+}
+
+// Handle URL parameters for filtering and task modal (for when table is already loaded)
 function handleUrlParameters() {
     const urlParams = new URLSearchParams(window.location.search);
     const filterParam = urlParams.get('filter');

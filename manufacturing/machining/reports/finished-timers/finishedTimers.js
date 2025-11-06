@@ -57,10 +57,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeEditModal();
     initializeTable();
     setupEventListeners();
-    await initializeFinishedTimers();
     
-    // Check for edit parameter in URL
-    checkForEditParameter();
+    // Check for edit parameter in URL FIRST - if found, open modal immediately and skip table loading
+    const urlParams = new URLSearchParams(window.location.search);
+    const editTimerId = urlParams.get('edit');
+    
+    if (editTimerId) {
+        // Load timer directly and open modal, then load table after modal closes
+        await loadTimerByIdAndOpenModal(editTimerId);
+    } else {
+        // No edit parameter, load table normally
+        await initializeFinishedTimers();
+    }
 });
 
 // Initialize Edit Modal
@@ -1143,7 +1151,52 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 
-// Check for edit parameter in URL and open modal if found
+// Load timer by ID and open modal, then load table after modal closes
+async function loadTimerByIdAndOpenModal(timerId) {
+    try {
+        // Load the timer directly FIRST (this is all we need to show the modal)
+        const response = await authedFetch(`${backendBase}/machining/timers/${timerId}/`);
+        if (response.ok) {
+            const timer = await response.json();
+            // Open modal immediately with timer data
+            showEditTimerModal(timer);
+            
+            // Load machines/users in parallel AFTER modal is shown (non-blocking, for potential editing)
+            Promise.all([loadMachines(), loadUsers()]).catch(err => {
+                console.error('Error loading machines/users:', err);
+            });
+            
+            // Set up listener to load table when modal closes
+            const modalElement = editTimerModal.modal || editTimerModal.container.querySelector('#editModal');
+            if (modalElement) {
+                const handleModalClose = async () => {
+                    // Remove the listener to avoid multiple calls
+                    modalElement.removeEventListener('hidden.bs.modal', handleModalClose);
+                    
+                    // Now load the table and initialize filters
+                    initializeFiltersComponent();
+                    initializeSortableHeaders();
+                    setDefaultDateFilters();
+                    await loadTimers();
+                    updateStatistics();
+                };
+                
+                modalElement.addEventListener('hidden.bs.modal', handleModalClose);
+            }
+        } else {
+            showNotification('Zamanlayıcı bulunamadı', 'error');
+            // Load table anyway if timer not found
+            await initializeFinishedTimers();
+        }
+    } catch (error) {
+        console.error('Error loading timer:', error);
+        showNotification('Zamanlayıcı yüklenirken hata oluştu', 'error');
+        // Load table anyway if error
+        await initializeFinishedTimers();
+    }
+}
+
+// Check for edit parameter in URL and open modal if found (for when table is already loaded)
 function checkForEditParameter() {
     const urlParams = new URLSearchParams(window.location.search);
     const editTimerId = urlParams.get('edit');
@@ -1161,7 +1214,7 @@ function checkForEditParameter() {
     }
 }
 
-// Load a specific timer by ID
+// Load a specific timer by ID (used when table is already loaded)
 async function loadTimerById(timerId) {
     try {
         const response = await authedFetch(`${backendBase}/machining/timers/${timerId}/`);
