@@ -32,6 +32,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 iconColor: 'info',
                 link: '/manufacturing/cnc-cutting/remnants/',
                 features: []
+            },
+            {
+                title: 'Raporlar',
+                description: 'Detaylı raporlar ve analizler ile performansınızı ölçün ve veriye dayalı kararlar alın.',
+                icon: 'fas fa-chart-bar',
+                iconColor: 'warning',
+                link: '/manufacturing/cnc-cutting/reports',
+                features: [
+                    {
+                        label: 'Biten Zamanlayıcılar',
+                        icon: 'fas fa-clock',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/cnc-cutting/reports/finished-timers'
+                    }
+                ]
             }
         ]
     });

@@ -3033,35 +3033,23 @@ function initializeRemnantSelectionFilters() {
     });
     
     remnantFilters.addTextFilter({
-        id: 'thickness-mm-filter',
+        id: 'remnant-thickness-mm-filter',
         label: 'Kalınlık (mm)',
         placeholder: 'örn. 10',
         colSize: 2
     });
     
     remnantFilters.addTextFilter({
-        id: 'dimensions-filter',
+        id: 'remnant-dimensions-filter',
         label: 'Boyutlar',
         placeholder: 'örn. 1200x800',
         colSize: 2
     });
     
     remnantFilters.addTextFilter({
-        id: 'material-filter',
+        id: 'remnant-material-filter',
         label: 'Malzeme',
         placeholder: 'Malzeme türü',
-        colSize: 2
-    });
-    
-    remnantFilters.addDropdownFilter({
-        id: 'assigned-filter',
-        label: 'Atama Durumu',
-        options: [
-            { value: '', label: 'Tümü' },
-            { value: 'assigned', label: 'Atanmış' },
-            { value: 'unassigned', label: 'Atanmamış' }
-        ],
-        placeholder: 'Tümü',
         colSize: 2
     });
 }
@@ -3120,13 +3108,6 @@ function initializeRemnantSelectionTable() {
                 label: 'Malzeme',
                 sortable: true,
                 width: '15%',
-                formatter: (value) => value || '-'
-            },
-            {
-                field: 'assigned_to',
-                label: 'Atanan Kişi',
-                sortable: false,
-                width: '20%',
                 formatter: (value) => value || '-'
             }
         ],
@@ -3232,20 +3213,13 @@ function buildRemnantSelectionQuery(page = 1) {
     // Add filters from FiltersComponent
     if (remnantFilters) {
         const filterValues = remnantFilters.getFilterValues();
-        const thickness = filterValues['thickness-mm-filter']?.toString().trim();
-        const dimensions = filterValues['dimensions-filter']?.toString().trim();
-        const material = filterValues['material-filter']?.toString().trim();
-        const assigned = filterValues['assigned-filter'] || '';
-
+        const thickness = filterValues['remnant-thickness-mm-filter']?.toString().trim();
+        const dimensions = filterValues['remnant-dimensions-filter']?.toString().trim();
+        const material = filterValues['remnant-material-filter']?.toString().trim();
+        
         if (thickness) params.append('thickness_mm', thickness);
         if (dimensions) params.append('dimensions', dimensions);
         if (material) params.append('material', material);
-        
-        if (assigned === 'assigned') {
-            params.append('assigned_to__isnull', 'false');
-        } else if (assigned === 'unassigned') {
-            params.append('assigned_to__isnull', 'true');
-        }
     }
     
     return params;

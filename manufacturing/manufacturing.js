@@ -65,6 +65,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         icon: 'fas fa-scissors',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/cnc-cutting/cuts'
+                    },
+                    {
+                        label: 'Raporlar',
+                        icon: 'fas fa-chart-bar',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/cnc-cutting/reports'
                     }
                 ]
             },

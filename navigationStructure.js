@@ -160,6 +160,17 @@ export const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-layer-group',
                         children: {}
                     },
+                    '/manufacturing/cnc-cutting/reports': {
+                        label: 'Raporlar',
+                        icon: 'fas fa-chart-bar',
+                        children: {
+                            '/manufacturing/cnc-cutting/reports/finished-timers': {
+                                label: 'Biten Zamanlayıcılar',
+                                icon: 'fas fa-clock',
+                                children: {}
+                            }
+                        }
+                    },
                     '/manufacturing/cnc-cutting/capacity': {
                         label: 'Kapasite Yönetimi',
                         icon: 'fas fa-industry',
