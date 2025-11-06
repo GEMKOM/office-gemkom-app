@@ -189,39 +189,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupUrlHandlers();
 });
 
-// Listen for file viewer close event to re-initialize page
+// Listen for file viewer close event
+// Note: We don't refresh the table when file preview is closed
 window.addEventListener('fileViewerClosed', () => {
-    // Re-initialize everything after file viewer closes
-    setTimeout(() => {
-        initializeCuts();
-        setupEventListeners();
-        setupUrlHandlers();
-        
-        // Re-initialize header component
-        const header = new HeaderComponent({
-            title: 'CNC Kesim Kesimler',
-            subtitle: 'CNC kesim görevleri yönetimi ve takibi',
-            icon: 'cut',
-            showBackButton: 'block',
-            showCreateButton: 'block',
-            showBulkCreateButton: 'none',
-            showExportButton: 'none',
-            showRefreshButton: 'none',
-            createButtonText: 'Yeni Kesim',
-            onBackClick: () => window.location.href = '/manufacturing/cnc-cutting/',
-            onCreateClick: () => showCreateCutModal(),
-            buttons: [
-                {
-                    text: 'Yeni Kesim',
-                    icon: 'fas fa-plus',
-                    class: 'btn-primary',
-                    onClick: () => showCreateCutModal()
-                }
-            ],
-            compact: true,
-            animation: true
-        });
-    }, 100);
+    // File viewer closed - no action needed
+    // Table should not refresh when preview is closed
 });
 
 async function initializeCuts() {
@@ -380,6 +352,14 @@ function initializeTableComponent() {
                 width: '10%',
                 type: 'number',
                 formatter: (value) => `<span class="thickness-badge">${value || 0} mm</span>`
+            },
+            {
+                field: 'quantity',
+                label: 'Adet',
+                sortable: true,
+                width: '8%',
+                type: 'number',
+                formatter: (value) => value ? `${value}` : '-'
             },
             {
                 field: 'machine_fk',

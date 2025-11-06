@@ -730,6 +730,13 @@ function initTasksTable() {
                     formatter: (value) => (value !== null && value !== undefined && value !== '' ? value : '-')
                 },
                 {
+                    field: 'quantity',
+                    label: 'Adet',
+                    sortable: true,
+                    type: 'number',
+                    formatter: (value) => value ? `${value}` : '-'
+                },
+                {
                     field: 'material',
                     label: 'Malzeme',
                     sortable: true,
@@ -1121,6 +1128,13 @@ function renderUnplannedTasksTable(tasks) {
                     label: 'Kalınlık (mm)',
                     sortable: true,
                     formatter: (value) => (value !== null && value !== undefined && value !== '' ? value : '-')
+                },
+                {
+                    field: 'quantity',
+                    label: 'Adet',
+                    sortable: true,
+                    type: 'number',
+                    formatter: (value) => value ? `${value}` : '-'
                 },
                 {
                     field: 'material',

@@ -72,6 +72,7 @@ export async function getCncTask(taskId) {
  * @param {string} taskData.material - Material type
  * @param {string} taskData.dimensions - Dimensions
  * @param {number} taskData.thickness_mm - Thickness in mm
+ * @param {number} [taskData.quantity] - Quantity (optional)
  * @param {File} taskData.nesting_file - Nesting file (optional)
  * @param {Array} taskData.parts_data - Array of parts data (optional)
  * @returns {Promise<Object>} Created CNC task
@@ -96,6 +97,11 @@ export async function createCncTask(taskData) {
         // Add estimated_hours if provided
         if (taskData.estimated_hours !== undefined && taskData.estimated_hours !== null) {
             formData.append('estimated_hours', taskData.estimated_hours);
+        }
+        
+        // Add quantity if provided
+        if (taskData.quantity !== undefined && taskData.quantity !== null) {
+            formData.append('quantity', taskData.quantity);
         }
         
         // Add selected_plate if provided
@@ -141,6 +147,7 @@ export async function createCncTask(taskData) {
  * @param {string} [taskData.material] - Material type
  * @param {string} [taskData.dimensions] - Dimensions
  * @param {number} [taskData.thickness_mm] - Thickness in mm
+ * @param {number} [taskData.quantity] - Quantity (optional)
  * @param {File} [taskData.nesting_file] - New nesting file (optional)
  * @returns {Promise<Object>} Updated CNC task
  */
@@ -157,6 +164,7 @@ export async function updateCncTask(taskId, taskData) {
         if (taskData.thickness_mm !== undefined) formData.append('thickness_mm', taskData.thickness_mm);
         if (taskData.machine_fk !== undefined && taskData.machine_fk !== null) formData.append('machine_fk', taskData.machine_fk);
         if (taskData.estimated_hours !== undefined && taskData.estimated_hours !== null) formData.append('estimated_hours', taskData.estimated_hours);
+        if (taskData.quantity !== undefined && taskData.quantity !== null) formData.append('quantity', taskData.quantity);
         if (taskData.selected_plate !== undefined && taskData.selected_plate !== null) formData.append('selected_plate', taskData.selected_plate);
         
         // Add nesting file if provided

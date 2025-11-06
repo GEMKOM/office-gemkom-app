@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Parts Paste Parser Test</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .result-table {
+            margin-top: 20px;
+        }
+        .result-table th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+        }
+        .debug-info {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            font-family: monospace;
+            font-size: 12px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .success-badge {
+            background-color: #28a745;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        .error-badge {
+            background-color: #dc3545;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        textarea {
+            font-family: monospace;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1 class="mb-4">
+            <i class="fas fa-clipboard-check me-2"></i>Parts Paste Parser Test
+        </h1>
+
+        <div class="test-section">
+            <h3><i class="fas fa-paste me-2"></i>Test Data Input</h3>
+            <p class="text-muted">Paste your Excel data below (with column headers in the first row):</p>
+            
+            <textarea 
+                id="paste-input" 
+                class="form-control" 
+                rows="15" 
+                placeholder="Paste Excel data here (first row should be headers)..."></textarea>
+            
+            <div class="mt-3 d-flex gap-2">
+                <button id="parse-btn" class="btn btn-primary">
+                    <i class="fas fa-magic me-2"></i>Parse Data
+                </button>
+                <button id="clear-btn" class="btn btn-secondary">
+                    <i class="fas fa-trash me-2"></i>Clear
+                </button>
+                <button id="load-sample-btn" class="btn btn-outline-info">
+                    <i class="fas fa-file-excel me-2"></i>Load Sample Data
+                </button>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3><i class="fas fa-chart-line me-2"></i>Parse Results</h3>
+            
+            <div id="result-summary" class="mb-3"></div>
+            
+            <div id="result-container">
+                <p class="text-muted">No data parsed yet. Paste your Excel data and click "Parse Data".</p>
+            </div>
+        </div>
+
+        <div class="test-section">
+            <h3><i class="fas fa-bug me-2"></i>Debug Information</h3>
+            <div id="debug-info" class="debug-info">
+                <p class="text-muted mb-0">Debug information will appear here...</p>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { parsePartsFromText } from './partsPasteParser.js';
+
+        const pasteInput = document.getElementById('paste-input');
+        const parseBtn = document.getElementById('parse-btn');
+        const clearBtn = document.getElementById('clear-btn');
+        const loadSampleBtn = document.getElementById('load-sample-btn');
+        const resultContainer = document.getElementById('result-container');
+        const resultSummary = document.getElementById('result-summary');
+        const debugInfo = document.getElementById('debug-info');
+
+        // Sample data from user's example
+        const sampleData = `Geometry	Part	Assembly	Order	Item	Ordered	Nested	Material	Thickness	Part Area	Weight	Width	Height	Taşeron1 Adet	Taşeron2 Adet	Taşeron 1	Taşeron 2	Part Category 3	State	Delivery Date	Priority	Filler	Extra Date	Extra Bit	Category 1	Category 2	Note 1	Note 2	Mirror Type	Free mirrorable	Step Angle	Free rotatable	Created on	Created by	Modified on	Modified by
+	114-09 0124 P8-B	<None>	<None>	2pcs	2	P265GH	20.00mm	0.2441m²	38.33kg	1400.00mm	754.50mm	<none>	<none>	<none>	<none>	Not set	05/11/2025	Normal	False	05/11/2025	False	<none>	<none>	Not	True	180°	True	05/11/2025 08:52	GEMKOM\\acan	05/11/2025 08:52	GEMKOM\\acan
+	114-09 0124 P8-A	<None>	<None>	2pcs	2	P265GH	20.00mm	0.2441m²	38.33kg	1400.00mm	754.50mm	<none>	<none>	<none>	<none>	Not set	05/11/2025	Normal	False	05/11/2025	False	<none>	<none>	Not	True	180°	True	05/11/2025 08:52	GEMKOM\\acan	05/11/2025 08:52	GEMKOM\\acan`;
+
+        function updateDebugInfo(data) {
+            let debugHtml = `
+                <strong>Raw Input (first 300 chars):</strong><br>
+                <pre style="white-space: pre-wrap; word-wrap: break-word; font-size: 10px;">${data.rawInput.substring(0, 300)}${data.rawInput.length > 300 ? '...' : ''}</pre>
+                <br>
+                <strong>Total Lines:</strong> ${data.lines.length}<br>
+                <strong>Headers (${data.headers.length} columns):</strong><br>
+                <pre style="font-size: 10px;">${JSON.stringify(data.headers, null, 2)}</pre>
+                <br>
+                <strong>Part Column Index:</strong> ${data.partColIndex} ${data.partColIndex >= 0 ? `(Header: "${data.headers[data.partColIndex]}")` : '<span style="color: red;">NOT FOUND</span>'}<br>
+                <strong>Weight Column Index:</strong> ${data.weightColIndex} ${data.weightColIndex >= 0 ? `(Header: "${data.headers[data.weightColIndex]}")` : '<span style="color: orange;">NOT FOUND</span>'}<br>
+                <br>
+                <strong>Sample Row Analysis:</strong><br>
+            `;
+            
+            if (data.sampleRow) {
+                debugHtml += `
+                    <pre style="font-size: 10px;">Row cells: ${JSON.stringify(data.sampleRow.cells, null, 2)}</pre>
+                    <strong>Part Value:</strong> "${data.sampleRow.partValue}"<br>
+                    <strong>Split Result:</strong> job_no="${data.sampleRow.job_no}", image_no="${data.sampleRow.image_no}", position_no="${data.sampleRow.position_no}"<br>
+                `;
+            }
+            
+            debugHtml += `<strong>Parsed Parts Count:</strong> ${data.partsCount}`;
+            
+            debugInfo.innerHTML = debugHtml;
+        }
+
+        function displayResults(parts, debugData) {
+            if (!parts || parts.length === 0) {
+                resultContainer.innerHTML = `
+                    <div class="alert alert-warning">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        No parts were parsed. Please check your data format.
+                    </div>
+                `;
+                resultSummary.innerHTML = '<span class="error-badge">0 parts parsed</span>';
+                return;
+            }
+
+            resultSummary.innerHTML = `
+                <span class="success-badge">
+                    <i class="fas fa-check-circle me-1"></i>
+                    ${parts.length} part(s) parsed successfully
+                </span>
+            `;
+
+            let tableHtml = `
+                <table class="table table-striped table-bordered result-table">
+                    <thead>
+                        <tr>
+                            <th>#</th>
+                            <th>Job No</th>
+                            <th>Image No</th>
+                            <th>Position No</th>
+                            <th>Weight (kg)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            parts.forEach((part, index) => {
+                tableHtml += `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td><code>${part.job_no || '-'}</code></td>
+                        <td><code>${part.image_no || '-'}</code></td>
+                        <td><code>${part.position_no || '-'}</code></td>
+                        <td>${part.weight_kg !== null ? part.weight_kg.toFixed(2) : '-'}</td>
+                    </tr>
+                `;
+            });
+
+            tableHtml += `
+                    </tbody>
+                </table>
+            `;
+
+            resultContainer.innerHTML = tableHtml;
+
+            // Update debug info
+            updateDebugInfo(debugData);
+        }
+
+        function parseData() {
+            const rawText = pasteInput.value.trim();
+            
+            if (!rawText) {
+                resultContainer.innerHTML = `
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Please paste some data first.
+                    </div>
+                `;
+                return;
+            }
+
+            try {
+                // Parse the data
+                const parts = parsePartsFromText(rawText);
+
+                // Extract debug information
+                const lines = rawText.split(/\r?\n/g).map(l => l.trim()).filter(l => l.length > 0);
+                const headerLine = lines[0] || '';
+                const headers = headerLine.includes('\t') 
+                    ? headerLine.split('\t').map(h => h.trim())
+                    : headerLine.split(/\s{2,}/).map(h => h.trim());
+                
+                const partColIndex = headers.findIndex(h => h.toLowerCase() === 'part');
+                const weightColIndex = headers.findIndex(h => h.toLowerCase() === 'weight');
+
+                // Analyze first data row for debugging
+                let sampleRow = null;
+                if (lines.length > 1) {
+                    const firstDataLine = lines[1];
+                    const cells = firstDataLine.includes('\t')
+                        ? firstDataLine.split('\t').map(c => c.trim())
+                        : firstDataLine.split(/\s{2,}/).map(c => c.trim());
+                    
+                    if (partColIndex >= 0 && cells.length > partColIndex) {
+                        const partValue = cells[partColIndex] || '';
+                        // Simulate the split
+                        const parts = partValue.trim().split(/\s+/).filter(p => p && p.length > 0);
+                        sampleRow = {
+                            cells: cells,
+                            partValue: partValue,
+                            job_no: parts.length >= 1 ? parts[0] : '',
+                            image_no: parts.length >= 2 ? parts[1] : '',
+                            position_no: parts.length >= 3 ? parts[2] : ''
+                        };
+                    }
+                }
+
+                const debugData = {
+                    rawInput: rawText,
+                    lines: lines,
+                    headers: headers,
+                    partColIndex: partColIndex,
+                    weightColIndex: weightColIndex,
+                    partsCount: parts.length,
+                    sampleRow: sampleRow
+                };
+
+                displayResults(parts, debugData);
+            } catch (error) {
+                resultContainer.innerHTML = `
+                    <div class="alert alert-danger">
+                        <i class="fas fa-exclamation-circle me-2"></i>
+                        <strong>Error:</strong> ${error.message}
+                    </div>
+                `;
+                resultSummary.innerHTML = '<span class="error-badge">Parse Error</span>';
+                debugInfo.innerHTML = `<pre>${error.stack}</pre>`;
+                console.error('Parse error:', error);
+            }
+        }
+
+        function clearData() {
+            pasteInput.value = '';
+            resultContainer.innerHTML = '<p class="text-muted">No data parsed yet. Paste your Excel data and click "Parse Data".</p>';
+            resultSummary.innerHTML = '';
+            debugInfo.innerHTML = '<p class="text-muted mb-0">Debug information will appear here...</p>';
+        }
+
+        function loadSampleData() {
+            pasteInput.value = sampleData;
+            parseData();
+        }
+
+        // Event listeners
+        parseBtn.addEventListener('click', parseData);
+        clearBtn.addEventListener('click', clearData);
+        loadSampleBtn.addEventListener('click', loadSampleData);
+
+        // Auto-parse on paste (optional)
+        pasteInput.addEventListener('paste', () => {
+            setTimeout(() => {
+                // Auto-parse after paste
+                // parseData();
+            }, 100);
+        });
+    </script>
+</body>
+</html>
+
