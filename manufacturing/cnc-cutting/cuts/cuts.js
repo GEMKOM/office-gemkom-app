@@ -1062,6 +1062,7 @@ function showCutDetailsModal(cut) {
                             <th>Resim No</th>
                             <th>Pozisyon No</th>
                             <th>Ağırlık (kg)</th>
+                            <th>Adet</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -1071,6 +1072,7 @@ function showCutDetailsModal(cut) {
                                 <td>${part.image_no || '-'}</td>
                                 <td>${part.position_no || '-'}</td>
                                 <td>${part.weight_kg || '-'}</td>
+                                <td>${part.quantity != null ? part.quantity : '-'}</td>
                             </tr>
                         `).join('')}
                     </tbody>
@@ -1368,17 +1370,17 @@ function setupCreateCutForm(createCutModal) {
 			</div>
 		</div>
         <div class="row g-2 mb-2">
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <small class="text-muted fw-bold">
                     <i class="fas fa-hashtag me-1"></i>İş No
                 </small>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <small class="text-muted fw-bold">
                     <i class="fas fa-image me-1"></i>Resim No
                 </small>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <small class="text-muted fw-bold">
                     <i class="fas fa-map-marker-alt me-1"></i>Pozisyon No
                 </small>
@@ -1388,7 +1390,12 @@ function setupCreateCutForm(createCutModal) {
                     <i class="fas fa-weight me-1"></i>Ağırlık (kg)
                 </small>
             </div>
-            <div class="col-md-1">
+            <div class="col-md-2">
+                <small class="text-muted fw-bold">
+                    <i class="fas fa-list-ol me-1"></i>Adet
+                </small>
+            </div>
+            <div class="col-md-2">
                 <small class="text-muted fw-bold">İşlem</small>
             </div>
         </div>
@@ -1483,14 +1490,16 @@ async function handleCreateCutSave(formData) {
         const imageNo = row.querySelector('input[name="image_no"]')?.value?.trim();
         const positionNo = row.querySelector('input[name="position_no"]')?.value?.trim();
         const weight = row.querySelector('input[name="weight"]')?.value?.trim();
+        const quantity = row.querySelector('input[name="quantity"]')?.value?.trim();
         
         // Only add part if at least one field has data
-        if (jobNo || imageNo || positionNo || weight) {
+        if (jobNo || imageNo || positionNo || weight || quantity) {
             cutData.parts_data.push({
                 job_no: jobNo || '',
                 image_no: imageNo || '',
                 position_no: positionNo || '',
-                weight_kg: parseFloat(weight) || 0
+                weight_kg: parseFloat(weight) || 0,
+                quantity: quantity ? parseInt(quantity, 10) : null
             });
         }
     }
@@ -1845,35 +1854,42 @@ async function initializePartsTable(cut) {
                 field: 'job_no',
                 label: 'İş No',
                 sortable: true,
-                width: '20%',
+                width: '18%',
                 formatter: (value) => value || '-'
             },
             {
                 field: 'image_no',
                 label: 'Resim No',
                 sortable: true,
-                width: '20%',
+                width: '18%',
                 formatter: (value) => value || '-'
             },
             {
                 field: 'position_no',
                 label: 'Pozisyon No',
                 sortable: true,
-                width: '20%',
+                width: '18%',
                 formatter: (value) => value || '-'
             },
             {
                 field: 'weight_kg',
                 label: 'Ağırlık (kg)',
                 sortable: true,
-                width: '20%',
+                width: '14%',
                 formatter: (value) => value ? `${value} kg` : '-'
+            },
+            {
+                field: 'quantity',
+                label: 'Adet',
+                sortable: true,
+                width: '14%',
+                formatter: (value) => value != null ? value : '-'
             },
             {
                 field: 'actions',
                 label: 'İşlemler',
                 sortable: false,
-                width: '20%',
+                width: '18%',
                 formatter: (value, row) => {
                     return `
                         <div class="btn-group" role="group">
@@ -2051,6 +2067,16 @@ async function editPart(partId) {
                     min: '0',
                     value: part.weight_kg || '',
                     colSize: 6
+                },
+                {
+                    id: 'part-quantity',
+                    label: 'Adet',
+                    type: 'number',
+                    required: false,
+                    step: '1',
+                    min: '0',
+                    value: part.quantity != null ? part.quantity : '',
+                    colSize: 6
                 }
             ]
         });
@@ -2060,7 +2086,8 @@ async function editPart(partId) {
                 job_no: formData['part-job-no'],
                 image_no: formData['part-image-no'],
                 position_no: formData['part-position-no'],
-                weight_kg: formData['part-weight']
+                weight_kg: formData['part-weight'],
+                quantity: formData['part-quantity'] ? parseInt(formData['part-quantity'], 10) : null
             };
             
             try {
@@ -2170,6 +2197,16 @@ function showAddPartModal() {
                 min: '0',
                 placeholder: '0.000',
                 colSize: 6
+            },
+            {
+                id: 'part-quantity',
+                label: 'Adet',
+                type: 'number',
+                required: false,
+                step: '1',
+                min: '0',
+                placeholder: '0',
+                colSize: 6
             }
         ]
     });
@@ -2180,7 +2217,8 @@ function showAddPartModal() {
             job_no: formData['part-job-no'],
             image_no: formData['part-image-no'],
             position_no: formData['part-position-no'],
-            weight_kg: formData['part-weight']
+            weight_kg: formData['part-weight'],
+            quantity: formData['part-quantity'] ? parseInt(formData['part-quantity'], 10) : null
         };
         
         // Validate required fields
@@ -2469,19 +2507,22 @@ function addPart() {
     const partHtml = `
         <div class="part-row mb-3" data-index="${partIndex}">
             <div class="row g-2">
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş numarası">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <input type="text" class="form-control form-control-sm" name="image_no" placeholder="Resim numarası">
                 </div>
-                <div class="col-md-3">
+                <div class="col-md-2">
                     <input type="text" class="form-control form-control-sm" name="position_no" placeholder="Pozisyon numarası">
                 </div>
                 <div class="col-md-2">
                     <input type="number" class="form-control form-control-sm" name="weight" step="0.01" min="0" placeholder="0.00">
                 </div>
-                <div class="col-md-1">
+                <div class="col-md-2">
+                    <input type="number" class="form-control form-control-sm" name="quantity" step="1" min="0" placeholder="0">
+                </div>
+                <div class="col-md-2">
                     <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePart(${partIndex})" title="Parçayı Kaldır">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -2508,11 +2549,13 @@ function populatePartsFromParsed(parsedParts) {
         const imageInput = lastRow.querySelector('input[name="image_no"]');
         const positionInput = lastRow.querySelector('input[name="position_no"]');
         const weightInput = lastRow.querySelector('input[name="weight"]');
+        const quantityInput = lastRow.querySelector('input[name="quantity"]');
 
         if (jobInput) jobInput.value = p.job_no || '';
         if (imageInput) imageInput.value = p.image_no || '';
         if (positionInput) positionInput.value = p.position_no || '';
         if (weightInput && p.weight_kg != null) weightInput.value = String(p.weight_kg);
+        if (quantityInput && p.quantity != null) quantityInput.value = String(p.quantity);
     }
 }
 
@@ -2902,8 +2945,15 @@ function initializePartsDetailsTable(parts) {
                 field: 'weight_kg',
                 label: 'Ağırlık (kg)',
                 sortable: true,
-                width: '25%',
+                width: '20%',
                 formatter: (value) => value ? `${value} kg` : '-'
+            },
+            {
+                field: 'quantity',
+                label: 'Adet',
+                sortable: true,
+                width: '20%',
+                formatter: (value) => value != null ? value : '-'
             }
         ],
         data: parts,

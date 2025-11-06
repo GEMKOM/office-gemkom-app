@@ -38,6 +38,7 @@ export function parsePartsFromText(rawText) {
     // Find column indices - use exact match for "Weight" (case-insensitive)
     const partColIndex = findColumnIndex(headers, ['part']);
     const weightColIndex = findColumnIndex(headers, ['weight']);
+    const nestedColIndex = findColumnIndex(headers, ['nested']);
 
     if (partColIndex === -1) {
         // If no "Part" column found, return empty array
@@ -103,13 +104,24 @@ export function parsePartsFromText(rawText) {
             }
         }
 
+        // Extract Nested column (quantity) (if available)
+        let quantity = null;
+        if (nestedColIndex >= 0 && row.length > nestedColIndex) {
+            const nestedValue = row[nestedColIndex] || '';
+            if (nestedValue && nestedValue.toLowerCase() !== 'nested') {
+                const parsed = parseInt(nestedValue, 10);
+                quantity = isFinite(parsed) ? parsed : null;
+            }
+        }
+
         // Only add if we have at least job_no or position info
         if (job_no || image_no || position_no) {
             parts.push({
                 job_no: job_no || '',
                 image_no: image_no || '',
                 position_no: position_no || '',
-                weight_kg: weight_kg
+                weight_kg: weight_kg,
+                quantity: quantity
             });
         }
     }
