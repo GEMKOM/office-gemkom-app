@@ -251,6 +251,7 @@ async function showOvertimeDetailsModal(request = null) {
             const participantsData = requestToShow.entries.map((entry, index) => ({
                 id: index + 1,
                 user_name: entry.user_full_name || entry.user_username || entry.username,
+                job_no: entry.job_no || '-',
                 reason: entry.description || 'Belirtilmemiş'
             }));
             
@@ -263,6 +264,7 @@ async function showOvertimeDetailsModal(request = null) {
                                 <tr>
                                     <th>#</th>
                                     <th>Katılımcı</th>
+                                    <th>İş No</th>
                                     <th>Neden</th>
                                 </tr>
                             </thead>
@@ -271,6 +273,7 @@ async function showOvertimeDetailsModal(request = null) {
                                     <tr>
                                         <td>${participant.id}</td>
                                         <td><strong>${participant.user_name}</strong></td>
+                                        <td>${participant.job_no}</td>
                                         <td>${participant.reason}</td>
                                     </tr>
                                 `).join('')}
