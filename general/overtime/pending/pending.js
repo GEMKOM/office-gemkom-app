@@ -302,9 +302,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function initializeRequests() {
     try {
+        // Load pending requests first (needed for modals)
         await loadRequests();
-        await loadApprovedRequests();
+        // Load approved requests in the background without blocking
+        loadApprovedRequests().catch(error => {
+            console.error('Error loading approved requests:', error);
+        });
     } catch (error) {
+        console.error('Error loading requests:', error);
     }
 }
 

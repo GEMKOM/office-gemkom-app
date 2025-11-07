@@ -66,6 +66,13 @@ function initializeModalComponents() {
             approveBtn.disabled = false;
             approveBtn.innerHTML = '<i class="fas fa-check me-1"></i>Onayla';
         }
+        
+        // Reset confirmation modal button state
+        const confirmBtn = approveOvertimeModal.modal.querySelector('#confirm-action-btn');
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = '<i class="fas fa-check me-2"></i>Evet, Onayla';
+        }
     });
     
     // Setup reject modal cancel callback
@@ -360,6 +367,14 @@ function showApproveOvertimeModal(requestId) {
             await confirmApproveOvertime(requestId);
         }
     });
+    
+    // Reset button state when modal is shown (in case it was disabled from previous approval)
+    setTimeout(() => {
+        const confirmBtn = approveOvertimeModal.modal.querySelector('#confirm-action-btn');
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+        }
+    }, 100);
 }
 
 // Show reject overtime modal
@@ -476,29 +491,38 @@ async function confirmApproveOvertime(requestId) {
         await approveOvertimeRequest(requestId);
         showNotification('Mesai talebi başarıyla onaylandı', 'success');
         
-        // Close the approve modal
-        if (approveOvertimeModal) {
-            approveOvertimeModal.hide();
-        }
+        // Clear stored request ID
+        window.currentApproveRequestId = null;
         
         // Close the details modal if it's open
         if (overtimeDetailsModal) {
             overtimeDetailsModal.hide();
         }
         
-        // Clear stored request ID
-        window.currentApproveRequestId = null;
+        // Note: The confirmation modal will be closed automatically by handleConfirm after this promise resolves
         
         await loadRequests();
         await loadApprovedRequests();
+        
+        // Reset button state after modal is hidden (for next time)
+        setTimeout(() => {
+            const confirmBtn = approveOvertimeModal.modal.querySelector('#confirm-action-btn');
+            if (confirmBtn) {
+                confirmBtn.disabled = false;
+                confirmBtn.innerHTML = '<i class="fas fa-check me-2"></i>Evet, Onayla';
+            }
+        }, 300);
     } catch (error) {
         showNotification('Mesai talebi onaylanırken hata oluştu: ' + error.message, 'error');
         
-        // Re-enable button on error
+        // Re-enable button on error (modal stays open so user can try again or cancel)
         if (confirmApproveBtn) {
             confirmApproveBtn.disabled = false;
             confirmApproveBtn.innerHTML = originalContent;
         }
+        
+        // Re-throw error so handleConfirm knows not to close the modal
+        throw error;
     }
 }
 

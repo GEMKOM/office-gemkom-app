@@ -90,9 +90,18 @@ export class ConfirmationModal {
         }
     }
     
-    handleConfirm() {
+    async handleConfirm() {
         if (this.onConfirm) {
-            this.onConfirm();
+            const result = this.onConfirm();
+            // If onConfirm returns a promise, wait for it before hiding
+            if (result && typeof result.then === 'function') {
+                try {
+                    await result;
+                } catch (error) {
+                    // Don't hide on error - let the callback handle it
+                    return;
+                }
+            }
         }
         this.hide();
     }
