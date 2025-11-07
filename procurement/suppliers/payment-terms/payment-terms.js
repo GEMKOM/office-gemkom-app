@@ -586,6 +586,19 @@ async function savePaymentTerm() {
         }
     });
     
+    // Validate that payment lines exist
+    if (paymentLines.length === 0) {
+        showNotification('En az bir ödeme satırı eklemelisiniz', 'error');
+        return;
+    }
+    
+    // Validate that the sum of percentages equals exactly 100
+    const totalPercentage = paymentLines.reduce((sum, line) => sum + line.percentage, 0);
+    if (Math.abs(totalPercentage - 100) > 0.01) { // Using 0.01 tolerance for floating point precision
+        showNotification(`Ödeme satırlarının yüzde toplamı tam olarak 100 olmalıdır. Mevcut toplam: ${totalPercentage.toFixed(2)}%`, 'error');
+        return;
+    }
+    
     const paymentTermData = {
         name: document.getElementById('payment-term-name').value.trim(),
         code: document.getElementById('payment-term-code').value.trim(),

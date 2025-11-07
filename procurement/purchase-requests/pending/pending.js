@@ -4,6 +4,7 @@ import { HeaderComponent } from '../../../components/header/header.js';
 import { ComparisonTable } from '../../../components/comparison-table/comparison-table.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
+import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 
 
 import { 
@@ -48,6 +49,7 @@ let comparisonTable = null; // Comparison table component instance
 let pendingTable = null; // Pending requests table component instance
 let approvedTable = null; // Approved requests table component instance
 let displayModal = null; // Display modal component instance
+let approveConfirmationModal = null; // Approval confirmation modal instance
 let isModalLoading = false; // Flag to prevent multiple modal openings
 
 // Initialize the page
@@ -67,6 +69,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: 'fas fa-file-invoice',
         size: 'xl',
         showEditButton: false
+    });
+    
+    // Initialize approval confirmation modal
+    approveConfirmationModal = new ConfirmationModal('approve-confirmation-modal-container', {
+        title: 'Talep Onayı',
+        icon: 'fas fa-check-circle',
+        confirmText: 'Evet, Onayla',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-success'
     });
     
     // Initialize comparison table component
@@ -1088,15 +1099,70 @@ function updateComparisonTableRates() {
 
 // Action functions
 async function approveRequest(requestId) {
-    if (!confirm('Bu talebi onaylamak istediğinizden emin misiniz?')) {
+    if (!approveConfirmationModal) {
+        console.error('approveConfirmationModal is not initialized');
         return;
     }
+    
+    // Find the request to show details
+    const request = requests.find(r => r.id === parseInt(requestId));
+    
+    // Build details HTML
+    const detailsHtml = request ? `
+        <div class="row g-2">
+            <div class="col-6">
+                <strong>Talep No:</strong> ${request.request_number || '-'}
+            </div>
+            <div class="col-6">
+                <strong>Talep Eden:</strong> ${request.requestor_username || '-'}
+            </div>
+            ${request.title ? `
+                <div class="col-12">
+                    <strong>Başlık:</strong> ${request.title}
+                </div>
+            ` : ''}
+            ${request.total_amount_eur ? `
+                <div class="col-6">
+                    <strong>Toplam Tutar:</strong> ${formatCurrency(request.total_amount_eur, 'EUR')}
+                </div>
+            ` : ''}
+        </div>
+    ` : '';
+    
+    // Show confirmation modal
+    approveConfirmationModal.show({
+        title: 'Talep Onayı',
+        message: 'Bu talebi onaylamak istediğinizden emin misiniz?',
+        description: '',
+        details: detailsHtml,
+        confirmText: 'Evet, Onayla',
+        onConfirm: async () => {
+            await confirmApproveRequest(requestId);
+        }
+    });
+}
 
+// Confirm approve request
+async function confirmApproveRequest(requestId) {
+    // Get the button and disable it
+    const confirmBtn = approveConfirmationModal.modal.querySelector('#confirm-action-btn');
+    const originalContent = confirmBtn ? confirmBtn.innerHTML : '';
+    
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Onaylanıyor...';
+    }
+    
     try {
         await approvePurchaseRequest(requestId);
         showNotification('Talep başarıyla onaylandı', 'success');
         
-        // Close the modal
+        // Close the confirmation modal
+        if (approveConfirmationModal) {
+            approveConfirmationModal.hide();
+        }
+        
+        // Close the display modal if it's open
         if (displayModal) {
             displayModal.hide();
         }
@@ -1105,6 +1171,12 @@ async function approveRequest(requestId) {
     } catch (error) {
         console.error('Error approving request:', error);
         showNotification('Talep onaylanırken hata oluştu: ' + error.message, 'error');
+        
+        // Re-enable button on error
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = originalContent;
+        }
     }
 }
 
