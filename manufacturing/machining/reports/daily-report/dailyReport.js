@@ -161,8 +161,9 @@ function renderUsersTable() {
     // Prepare table data
     const tableData = reportData.users.map(user => {
         // Calculate total_time_in_office_hours if not provided
+        // Include total_hold_hours as idle time in efficiency calculation
         const totalTimeInOffice = user.total_time_in_office_hours || 
-            (user.total_work_hours + user.total_idle_hours);
+            (user.total_work_hours + user.total_idle_hours + (user.total_hold_hours || 0));
         
         const efficiency = totalTimeInOffice > 0 
             ? ((user.total_work_hours / totalTimeInOffice) * 100).toFixed(1)
@@ -233,6 +234,14 @@ function renderUsersTable() {
                     }
                 },
                 {
+                    field: 'total_hold_hours',
+                    label: 'Bekleme Saati',
+                    sortable: true,
+                    formatter: (value) => {
+                        return `<span class="text-secondary fw-bold">${(value || 0).toFixed(2)}</span>`;
+                    }
+                },
+                {
                     field: '_efficiency',
                     label: 'Verimlilik',
                     sortable: true,
@@ -289,8 +298,9 @@ function renderUsersTable() {
 
 function showUserDetails(user) {
     // Calculate values
+    // Include total_hold_hours as idle time in efficiency calculation
     const totalTimeInOffice = user._totalTimeInOffice || 
-        (user.total_work_hours + user.total_idle_hours);
+        (user.total_work_hours + user.total_idle_hours + (user.total_hold_hours || 0));
     const efficiency = totalTimeInOffice > 0 
         ? ((user.total_work_hours / totalTimeInOffice) * 100).toFixed(1)
         : '0';
@@ -326,7 +336,17 @@ function showUserDetails(user) {
     }
     
     // Add statistics section with custom content - compact, all on one row
-    const colSize = user.total_tasks_completed !== undefined ? 3 : 4;
+    // Calculate column size based on available fields
+    let colSize = 3;
+    const hasTasksCompleted = user.total_tasks_completed !== undefined;
+    const hasHoldHours = user.total_hold_hours !== undefined && user.total_hold_hours > 0;
+    
+    if (hasTasksCompleted && hasHoldHours) {
+        colSize = 2; // 6 fields: work, idle, hold, efficiency, tasks completed
+    } else if (hasTasksCompleted || hasHoldHours) {
+        colSize = 2; // 5 fields
+    }
+    
     let statsContent = `
         <div class="row mb-3">
             <div class="col-md-${colSize}">
@@ -345,6 +365,16 @@ function showUserDetails(user) {
                     <div class="stat-value text-danger" style="font-size: 1.25rem;">${user.total_idle_hours.toFixed(2)}</div>
                 </div>
             </div>
+            ${hasHoldHours ? `
+            <div class="col-md-${colSize}">
+                <div class="stat-item" style="padding: 0.5rem;">
+                    <div class="stat-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">
+                        <i class="fas fa-pause-circle me-1"></i>Bekleme Saati
+                    </div>
+                    <div class="stat-value text-secondary" style="font-size: 1.25rem;">${(user.total_hold_hours || 0).toFixed(2)}</div>
+                </div>
+            </div>
+            ` : ''}
             <div class="col-md-${colSize}">
                 <div class="stat-item" style="padding: 0.5rem;">
                     <div class="stat-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">
@@ -355,7 +385,7 @@ function showUserDetails(user) {
             </div>
     `;
     
-    if (user.total_tasks_completed !== undefined) {
+    if (hasTasksCompleted) {
         statsContent += `
             <div class="col-md-${colSize}">
                 <div class="stat-item" style="padding: 0.5rem;">
@@ -389,8 +419,32 @@ function showUserDetails(user) {
         customContent: `<div id="${idlePeriodsContainerId}"></div>`
     });
     
+    // Add hold tasks section with TableComponent (no section title, table has its own)
+    const holdTasksContainerId = `hold-tasks-table-${Date.now()}`;
+    displayModal.addCustomSection({
+        customContent: `<div id="${holdTasksContainerId}"></div>`
+    });
+    
     // Render and show modal
     displayModal.render().show();
+    
+    // Set up event delegation for comment buttons on document (works even if buttons are added later)
+    // Use a one-time setup that will handle all comment buttons in the modal
+    const handleCommentClick = (e) => {
+        const btn = e.target.closest('.comment-view-btn');
+        if (btn) {
+            e.preventDefault();
+            e.stopPropagation();
+            const commentEncoded = btn.getAttribute('data-comment');
+            if (commentEncoded) {
+                const comment = decodeURIComponent(commentEncoded);
+                showComment(comment);
+            }
+        }
+    };
+    
+    // Attach to document with a namespace so we can remove it later if needed
+    document.addEventListener('click', handleCommentClick);
     
     // Create tasks table after modal is shown
     setTimeout(() => {
@@ -475,7 +529,10 @@ function showUserDetails(user) {
                         label: 'Yorum',
                         sortable: false,
                         formatter: (value, row) => {
-                            return value ? `<button class="btn btn-sm btn-outline-info" onclick="showComment('${escapeHtml(value)}')"><i class="fas fa-comment"></i></button>` : '-';
+                            if (!value) return '-';
+                            // Use encodeURIComponent to safely store in data attribute
+                            const commentEncoded = encodeURIComponent(value);
+                            return `<button class="btn btn-sm btn-outline-info comment-view-btn" data-comment="${commentEncoded}"><i class="fas fa-comment"></i></button>`;
                         }
                     }
                 ],
@@ -537,6 +594,105 @@ function showUserDetails(user) {
                 </div>
             `;
         }
+        
+        // Create hold tasks table after modal is shown
+        const holdTasksContainer = document.getElementById(holdTasksContainerId);
+        if (holdTasksContainer && user.hold_tasks && user.hold_tasks.length > 0) {
+            const holdTasksTable = new TableComponent(holdTasksContainerId, {
+                title: `Bekleme Görevleri (${user.hold_tasks.length})`,
+                icon: 'fas fa-pause-circle',
+                iconColor: 'text-warning',
+                columns: [
+                    {
+                        field: 'timer_id',
+                        label: '#',
+                        sortable: true,
+                        formatter: (value) => {
+                            if (!value) return '-';
+                            return `<a href="/manufacturing/machining/reports/finished-timers/?edit=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-secondary text-decoration-none" style="cursor: pointer;">#${value}</a>`;
+                        }
+                    },
+                    {
+                        field: 'start_time',
+                        label: 'Başlangıç',
+                        sortable: true,
+                        formatter: (value) => formatDateTime(value)
+                    },
+                    {
+                        field: 'finish_time',
+                        label: 'Bitiş',
+                        sortable: true,
+                        formatter: (value) => formatDateTime(value)
+                    },
+                    {
+                        field: 'task_key',
+                        label: 'TI No',
+                        sortable: true,
+                        formatter: (value) => {
+                            if (!value) return '-';
+                            return `<a href="/manufacturing/machining/tasks/?task=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-primary text-decoration-none" style="cursor: pointer;">${value}</a>`;
+                        }
+                    },
+                    {
+                        field: 'task_name',
+                        label: 'Görev Adı',
+                        sortable: true
+                    },
+                    {
+                        field: 'job_no',
+                        label: 'İş No',
+                        sortable: true
+                    },
+                    {
+                        field: 'duration_minutes',
+                        label: 'Süre',
+                        sortable: true,
+                        formatter: (value) => formatDurationFromMinutes(value)
+                    },
+                    {
+                        field: 'estimated_hours',
+                        label: 'Tahmini',
+                        sortable: true,
+                        formatter: (value) => value !== null && value !== undefined ? `${value.toFixed(1)}s` : '-'
+                    },
+                    {
+                        field: 'machine_name',
+                        label: 'Makine',
+                        sortable: true
+                    },
+                    {
+                        field: 'manual_entry',
+                        label: 'Manuel',
+                        sortable: true,
+                        formatter: (value) => value ? '<span class="badge bg-success">Manuel</span>' : '<span class="text-muted">-</span>'
+                    },
+                    {
+                        field: 'comment',
+                        label: 'Yorum',
+                        sortable: false,
+                        formatter: (value, row) => {
+                            if (!value) return '-';
+                            // Use encodeURIComponent to safely store in data attribute
+                            const commentEncoded = encodeURIComponent(value);
+                            return `<button class="btn btn-sm btn-outline-info comment-view-btn" data-comment="${commentEncoded}"><i class="fas fa-comment"></i></button>`;
+                        }
+                    }
+                ],
+                data: user.hold_tasks,
+                sortable: true,
+                pagination: false,
+                responsive: true,
+                small: true,
+                emptyMessage: 'Bu kullanıcı için bekleme görevi kaydı bulunmamaktadır',
+                emptyIcon: 'fas fa-inbox'
+            });
+        } else if (holdTasksContainer) {
+            holdTasksContainer.innerHTML = `
+                <div class="text-muted text-center py-3">
+                    <i class="fas fa-inbox me-2"></i>Bu kullanıcı için bekleme görevi kaydı bulunmamaktadır
+                </div>
+            `;
+        }
     }, 100);
 }
 
@@ -568,8 +724,9 @@ function getWarnings(user, totalTimeInOffice) {
         warnings.push(`Verimlilik düşük: %${efficiency.toFixed(1)}`);
     }
     
-    if (user.total_idle_hours > user.total_work_hours * 1.5) {
-        warnings.push('Boşta geçen süre çalışma süresinden çok fazla');
+    const totalIdleTime = (user.total_idle_hours || 0) + (user.total_hold_hours || 0);
+    if (totalIdleTime > user.total_work_hours * 1.5) {
+        warnings.push('Boşta geçen ve bekleme süresi çalışma süresinden çok fazla');
     }
     
     if (user.idle_periods && user.idle_periods.length > 5) {
@@ -615,6 +772,9 @@ function escapeHtml(text) {
 window.showComment = function(comment) {
     const modal = document.createElement('div');
     modal.className = 'modal fade';
+    modal.id = 'comment-modal-' + Date.now();
+    // Escape HTML and preserve newlines
+    const commentText = escapeHtml(comment).replace(/\n/g, '<br>');
     modal.innerHTML = `
         <div class="modal-dialog">
             <div class="modal-content">
@@ -623,7 +783,7 @@ window.showComment = function(comment) {
                     <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
                 </div>
                 <div class="modal-body">
-                    ${comment}
+                    ${commentText}
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
@@ -632,11 +792,13 @@ window.showComment = function(comment) {
         </div>
     `;
     document.body.appendChild(modal);
-    const bsModal = new bootstrap.Modal(modal);
+    const bsModal = bootstrap.Modal.getOrCreateInstance(modal);
     bsModal.show();
     modal.addEventListener('hidden.bs.modal', () => {
-        document.body.removeChild(modal);
-    });
+        if (modal.parentNode) {
+            document.body.removeChild(modal);
+        }
+    }, { once: true });
 };
 
 function updateStatistics() {
@@ -655,10 +817,12 @@ function updateStatistics() {
     const totalUsers = reportData.users.length;
     const totalWorkHours = reportData.users.reduce((sum, user) => sum + (user.total_work_hours || 0), 0);
     const totalIdleHours = reportData.users.reduce((sum, user) => sum + (user.total_idle_hours || 0), 0);
+    const totalHoldHours = reportData.users.reduce((sum, user) => sum + (user.total_hold_hours || 0), 0);
     
-    // Calculate total office hours (work + idle) if not provided
+    // Calculate total office hours (work + idle + hold) if not provided
     const totalOfficeHours = reportData.users.reduce((sum, user) => {
-        const officeHours = user.total_time_in_office_hours || (user.total_work_hours + user.total_idle_hours);
+        const officeHours = user.total_time_in_office_hours || 
+            (user.total_work_hours + user.total_idle_hours + (user.total_hold_hours || 0));
         return sum + (officeHours || 0);
     }, 0);
     

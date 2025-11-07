@@ -112,9 +112,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 field: 'total_users',
                 label: 'Katılımcı',
                 sortable: true,
-                formatter: (value) => `
-                    <div style="color: #495057; font-weight: 500;">${value || 0} kişi</div>
-                `
+                formatter: (value, row) => {
+                    const count = value || (row.entries ? row.entries.length : 0);
+                    return `
+                        <div style="color: #495057; font-weight: 500;">${count} kişi</div>
+                    `;
+                }
             },
             {
                 field: 'approval',
@@ -227,9 +230,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 field: 'total_users',
                 label: 'Katılımcı',
                 sortable: true,
-                formatter: (value) => `
-                    <div style="color: #495057; font-weight: 500;">${value || 0} kişi</div>
-                `
+                formatter: (value, row) => {
+                    const count = value || (row.entries ? row.entries.length : 0);
+                    return `
+                        <div style="color: #495057; font-weight: 500;">${count} kişi</div>
+                    `;
+                }
             },
             {
                 field: 'approval',
@@ -382,9 +388,104 @@ async function loadApprovedRequests() {
 
 
 function setupEventListeners() {
-    // Event listeners for non-modal functionality
-    // Modal event listeners are handled in modals.js
-    // Rejection modal is now handled by ConfirmationModal in modals.js
+    // Rejection modal event listeners
+    const rejectModal = document.getElementById('rejectOvertimeModal');
+    if (rejectModal) {
+        // Character counter for comment textarea
+        const commentTextarea = document.getElementById('rejectComment');
+        const commentCounter = document.getElementById('commentCounter');
+        
+        if (commentTextarea && commentCounter) {
+            commentTextarea.addEventListener('input', () => {
+                const length = commentTextarea.value.length;
+                commentCounter.textContent = length;
+                
+                // Change color based on length
+                if (length > 450) {
+                    commentCounter.style.color = '#dc3545';
+                } else if (length > 400) {
+                    commentCounter.style.color = '#fd7e14';
+                } else {
+                    commentCounter.style.color = '#6c757d';
+                }
+            });
+        }
+        
+        // Confirm reject button
+        const confirmRejectBtn = document.getElementById('confirmRejectOvertime');
+        if (confirmRejectBtn) {
+            confirmRejectBtn.addEventListener('click', async () => {
+                const comment = commentTextarea ? commentTextarea.value.trim() : '';
+                const requestId = window.currentRejectRequestId;
+                
+                if (!requestId) {
+                    showNotification('Hata: Talep ID bulunamadı', 'error');
+                    return;
+                }
+                
+                try {
+                    // Disable button during request
+                    confirmRejectBtn.disabled = true;
+                    confirmRejectBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reddediliyor...';
+                    
+                    await rejectOvertimeRequest(requestId, comment);
+                    showNotification('Mesai talebi başarıyla reddedildi', 'success');
+                    
+                    // Close both modals
+                    const rejectModalInstance = bootstrap.Modal.getOrCreateInstance(rejectModal);
+                    rejectModalInstance.hide();
+                    
+                    // Close details modal if it's open
+                    const detailsModalContainer = document.getElementById('overtime-details-modal-container');
+                    if (detailsModalContainer) {
+                        const detailsModalElement = detailsModalContainer.querySelector('.modal');
+                        if (detailsModalElement) {
+                            const detailsModalInstance = bootstrap.Modal.getInstance(detailsModalElement);
+                            if (detailsModalInstance) {
+                                detailsModalInstance.hide();
+                            }
+                        }
+                    }
+                    
+                    // Clear the form
+                    if (commentTextarea) {
+                        commentTextarea.value = '';
+                        commentCounter.textContent = '0';
+                        commentCounter.style.color = '#6c757d';
+                    }
+                    
+                    // Reload data
+                    await loadRequests();
+                    await loadApprovedRequests();
+                    
+                } catch (error) {
+                    console.error('Error rejecting request:', error);
+                    showNotification('Mesai talebi reddedilirken hata oluştu: ' + error.message, 'error');
+                } finally {
+                    // Re-enable button
+                    confirmRejectBtn.disabled = false;
+                    confirmRejectBtn.innerHTML = '<i class="fas fa-times-circle me-1"></i>Reddet';
+                }
+            });
+        }
+        
+        // Clear form when modal is hidden
+        rejectModal.addEventListener('hidden.bs.modal', () => {
+            const commentTextarea = document.getElementById('rejectComment');
+            const commentCounter = document.getElementById('commentCounter');
+            
+            if (commentTextarea) {
+                commentTextarea.value = '';
+            }
+            if (commentCounter) {
+                commentCounter.textContent = '0';
+                commentCounter.style.color = '#6c757d';
+            }
+            
+            // Clear stored request ID
+            window.currentRejectRequestId = null;
+        });
+    }
 }
 
 async function viewOvertimeDetails(requestId) {

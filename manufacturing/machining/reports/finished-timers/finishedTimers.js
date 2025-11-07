@@ -10,6 +10,7 @@ import { authedFetch } from '../../../../authService.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
+import { ConfirmationModal } from '../../../../components/confirmation-modal/confirmation-modal.js';
 
 // State management
 let currentPage = 1;
@@ -31,6 +32,9 @@ let finishedTimersStats = null;
 
 // Edit Modal component instance
 let editTimerModal = null;
+
+// Delete Confirmation Modal component instance
+let deleteConfirmationModal = null;
 
 // Table component instance
 let timersTable = null;
@@ -55,6 +59,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     initializeEditModal();
+    initializeDeleteConfirmationModal();
     initializeTable();
     setupEventListeners();
     
@@ -70,6 +75,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         await initializeFinishedTimers();
     }
 });
+
+// Initialize Delete Confirmation Modal
+function initializeDeleteConfirmationModal() {
+    deleteConfirmationModal = new ConfirmationModal('delete-confirmation-modal-container', {
+        title: 'Zamanlayıcı Silme Onayı',
+        icon: 'fas fa-exclamation-triangle',
+        message: 'Bu zamanlayıcıyı silmek istediğinize emin misiniz?',
+        confirmText: 'Evet, Sil',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-danger'
+    });
+}
 
 // Initialize Edit Modal
 function initializeEditModal() {
@@ -214,6 +231,13 @@ function initializeTable() {
         icon: 'fas fa-table',
         iconColor: 'text-primary',
         columns: [
+            {
+                field: 'id',
+                label: 'ID',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => `<span style="font-weight: 600; color: #6c757d; font-family: 'Courier New', monospace;">${value || '-'}</span>`
+            },
             {
                 field: 'username',
                 label: 'Kullanıcı',
@@ -752,7 +776,58 @@ function setupEventListeners() {
 
 
 
-async function deleteTimer(timerId) {
+function deleteTimer(timerId) {
+    // Find the timer to get its details for the confirmation modal
+    const timer = timers.find(t => t.id === timerId);
+    
+    if (!timer) {
+        showNotification('Zamanlayıcı bulunamadı', 'error');
+        return;
+    }
+    
+    if (!deleteConfirmationModal) {
+        console.error('Delete confirmation modal not initialized');
+        return;
+    }
+    
+    // Build timer details for the confirmation modal
+    const timerDetails = `
+        <div class="row g-2">
+            <div class="col-6">
+                <strong>ID:</strong> ${timer.id || '-'}
+            </div>
+            <div class="col-6">
+                <strong>Kullanıcı:</strong> ${timer.username || '-'}
+            </div>
+            <div class="col-6">
+                <strong>TI No:</strong> ${timer.issue_key || '-'}
+            </div>
+            <div class="col-6">
+                <strong>İş No:</strong> ${timer.job_no || '-'}
+            </div>
+            <div class="col-6">
+                <strong>Makine:</strong> ${timer.machine_name || '-'}
+            </div>
+            <div class="col-6">
+                <strong>Başlangıç:</strong> ${timer.start_time ? formatDateTime(timer.start_time) : '-'}
+            </div>
+        </div>
+    `;
+    
+    // Show confirmation modal
+    deleteConfirmationModal.show({
+        title: 'Zamanlayıcı Silme Onayı',
+        message: 'Bu zamanlayıcıyı silmek istediğinize emin misiniz?',
+        description: 'Bu işlem geri alınamaz ve zamanlayıcı kalıcı olarak silinecektir.',
+        details: timerDetails,
+        confirmText: 'Evet, Sil',
+        onConfirm: async () => {
+            await performDeleteTimer(timerId);
+        }
+    });
+}
+
+async function performDeleteTimer(timerId) {
     try {
         const response = await authedFetch(`${backendBase}/machining/timers/${timerId}/`, {
             method: 'DELETE'

@@ -2,7 +2,6 @@ import { DisplayModal } from '../../../components/display-modal/display-modal.js
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { 
     approveOvertimeRequest,
-    rejectOvertimeRequest,
     formatOvertimeDuration
 } from '../../../apis/overtime.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
@@ -10,7 +9,6 @@ import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 // Modal instances
 let overtimeDetailsModal = null;
 let approveOvertimeModal = null;
-let rejectOvertimeModal = null;
 
 // Global variables that will be set by the main file
 let currentRequest = null;
@@ -36,15 +34,6 @@ function initializeModalComponents() {
         confirmText: 'Evet, Onayla',
         cancelText: 'İptal',
         confirmButtonClass: 'btn-success'
-    });
-
-    // Initialize reject overtime modal using ConfirmationModal
-    rejectOvertimeModal = new ConfirmationModal('reject-overtime-modal-container', {
-        title: 'Mesai Talebi Reddi',
-        icon: 'fas fa-times-circle',
-        confirmText: 'Evet, Reddet',
-        cancelText: 'İptal',
-        confirmButtonClass: 'btn-danger'
     });
 
     // Setup modal callbacks
@@ -75,11 +64,6 @@ function initializeModalComponents() {
         }
     });
     
-    // Setup reject modal cancel callback
-    rejectOvertimeModal.setOnCancel(() => {
-        currentRequest = null;
-        window.currentRejectRequestId = null;
-    });
 }
 
 // Show overtime details modal
@@ -380,104 +364,6 @@ function showApproveOvertimeModal(requestId) {
     }, 100);
 }
 
-// Show reject overtime modal
-function showRejectOvertimeModal(requestId) {
-    if (!rejectOvertimeModal) return;
-    
-    // Find the request
-    const request = requests.find(r => r.id === parseInt(requestId));
-    if (!request) return;
-    
-    // Store the request ID
-    window.currentRejectRequestId = requestId;
-    
-    // Build details HTML with textarea for rejection reason
-    const detailsHtml = `
-        <div class="row g-2 mb-3">
-            <div class="col-6">
-                <strong>Talep No:</strong> #${request.id}
-            </div>
-            <div class="col-6">
-                <strong>Talep Eden:</strong> ${request.requester_username}
-            </div>
-            <div class="col-6">
-                <strong>Mesai Süresi:</strong> ${formatOvertimeDuration(parseFloat(request.duration_hours))}
-            </div>
-            <div class="col-6">
-                <strong>Tarih:</strong> ${formatDate(request.start_at)} - ${formatDate(request.end_at)}
-            </div>
-        </div>
-        <div class="mb-3">
-            <label for="reject-reason-textarea" class="form-label">
-                <i class="fas fa-comment-alt me-1"></i>
-                Reddetme Gerekçesi <span class="text-danger">*</span>
-            </label>
-            <textarea
-                class="form-control"
-                id="reject-reason-textarea"
-                name="rejectReason"
-                rows="4"
-                placeholder="Reddetme gerekçenizi buraya yazın..."
-                maxlength="500"
-                required
-            ></textarea>
-            <div class="form-text">
-                <span id="reject-reason-counter">0</span>/500 karakter
-            </div>
-        </div>
-    `;
-    
-    // Create onConfirm handler function
-    const handleRejectConfirm = async () => {
-        // Get rejection reason
-        const textarea = rejectOvertimeModal.modal.querySelector('#reject-reason-textarea');
-        const rejectionReason = textarea ? textarea.value.trim() : '';
-        
-        // Validate - if validation fails, prevent modal from closing by reopening it
-        if (!rejectionReason || rejectionReason.length === 0) {
-            showNotification('Reddetme gerekçesi zorunludur. Lütfen bir gerekçe belirtin.', 'error');
-            // Reopen modal after a short delay to prevent it from closing
-            setTimeout(() => {
-                showRejectOvertimeModal(requestId);
-            }, 100);
-            return;
-        }
-        
-        if (rejectionReason.length < 10) {
-            showNotification('Reddetme gerekçesi en az 10 karakter olmalıdır.', 'error');
-            // Reopen modal after a short delay to prevent it from closing
-            setTimeout(() => {
-                showRejectOvertimeModal(requestId);
-            }, 100);
-            return;
-        }
-        
-        await confirmRejectOvertime(requestId, rejectionReason);
-    };
-    
-    // Show confirmation modal
-    rejectOvertimeModal.show({
-        title: 'Mesai Talebi Reddi',
-        message: 'Bu mesai talebini reddetmek istediğinizden emin misiniz? Bu işlem geri alınamaz.',
-        description: '',
-        details: detailsHtml,
-        confirmText: 'Evet, Reddet',
-        onConfirm: handleRejectConfirm
-    });
-    
-    // Setup character counter after modal is shown
-    setTimeout(() => {
-        const textarea = rejectOvertimeModal.modal.querySelector('#reject-reason-textarea');
-        const counter = rejectOvertimeModal.modal.querySelector('#reject-reason-counter');
-        
-        if (textarea && counter) {
-            textarea.addEventListener('input', () => {
-                const length = textarea.value.length;
-                counter.textContent = length;
-            });
-        }
-    }, 100);
-}
 
 // Confirm approve overtime
 async function confirmApproveOvertime(requestId) {
@@ -529,46 +415,6 @@ async function confirmApproveOvertime(requestId) {
     }
 }
 
-// Confirm reject overtime
-async function confirmRejectOvertime(requestId, rejectionReason) {
-    // Get the button and disable it
-    const confirmRejectBtn = rejectOvertimeModal.modal.querySelector('#confirm-action-btn');
-    const originalContent = confirmRejectBtn ? confirmRejectBtn.innerHTML : '';
-    
-    if (confirmRejectBtn) {
-        confirmRejectBtn.disabled = true;
-        confirmRejectBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Reddediliyor...';
-    }
-    
-    try {
-        await rejectOvertimeRequest(requestId, rejectionReason);
-        showNotification('Mesai talebi başarıyla reddedildi', 'success');
-        
-        // Close the reject modal
-        if (rejectOvertimeModal) {
-            rejectOvertimeModal.hide();
-        }
-        
-        // Close the details modal if it's open
-        if (overtimeDetailsModal) {
-            overtimeDetailsModal.hide();
-        }
-        
-        // Clear stored request ID
-        window.currentRejectRequestId = null;
-        
-        await loadRequests();
-        await loadApprovedRequests();
-    } catch (error) {
-        showNotification('Mesai talebi reddedilirken hata oluştu: ' + error.message, 'error');
-        
-        // Re-enable button on error
-        if (confirmRejectBtn) {
-            confirmRejectBtn.disabled = false;
-            confirmRejectBtn.innerHTML = originalContent;
-        }
-    }
-}
 
 // Approve overtime function
 async function approveOvertime(requestId) {
@@ -589,13 +435,12 @@ async function approveOvertime(requestId) {
 
 // Reject overtime function
 async function rejectOvertime(requestId) {
-    // Close details modal if it's open to prevent conflicts
-    if (overtimeDetailsModal) {
-        overtimeDetailsModal.hide();
-    }
+    // Store the request ID for the modal
+    window.currentRejectRequestId = requestId;
     
-    // Show reject confirmation modal
-    showRejectOvertimeModal(requestId);
+    // Show the rejection modal
+    const rejectModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('rejectOvertimeModal'));
+    rejectModal.show();
 }
 
 // Utility functions
@@ -695,9 +540,7 @@ export {
     initializeModalComponents,
     showOvertimeDetailsModal,
     showApproveOvertimeModal,
-    showRejectOvertimeModal,
     confirmApproveOvertime,
-    confirmRejectOvertime,
     approveOvertime,
     rejectOvertime,
     setupModalEventListeners,
