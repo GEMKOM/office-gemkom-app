@@ -37,6 +37,26 @@ export async function getRemnantPlates(params = undefined) {
 }
 
 /**
+ * Get a single remnant plate by ID
+ * @param {number|string} remnantId - Remnant plate ID
+ * @returns {Promise<Object>} Remnant plate object
+ */
+export async function getRemnantPlateById(remnantId) {
+    try {
+        const response = await authedFetch(`${backendBase}/cnc_cutting/remnants/${remnantId}/`);
+        
+        if (!response.ok) {
+            throw new Error(`Failed to fetch remnant plate: ${response.statusText}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching remnant plate by ID:', error);
+        throw error;
+    }
+}
+
+/**
  * Create a new remnant plate
  * @param {Object} remnantData - Remnant plate data
  * @param {string} remnantData.thickness_mm - Thickness in mm

@@ -16,7 +16,9 @@ import {
     deleteCncPart, 
     getCncPart, 
     getCncParts,
-    validateCncPartData 
+    validateCncPartData,
+    bulkCreateCncParts,
+    bulkDeleteCncParts
 } from '../../../apis/cnc_cutting/parts.js';
 import { 
     deleteCncFile, 
@@ -34,7 +36,7 @@ import { FileAttachments } from '../../../components/file-attachments/file-attac
 import { parsePartsFromText } from './partsPasteParser.js';
 import { markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
-import { getRemnantPlates } from '../../../apis/cnc_cutting/remnants.js';
+import { getRemnantPlates, getRemnantPlateById } from '../../../apis/cnc_cutting/remnants.js';
 
 // State management
 let currentPage = 1;
@@ -1128,7 +1130,7 @@ function setupCreateCutForm(createCutModal) {
     // Add remnant plate selection section at the top
     createCutModal.addSection({
         id: 'remnant-selection',
-        title: 'Artık Plaka Seçimi',
+        title: 'Fire Plaka Seçimi',
         icon: 'fas fa-layer-group',
         iconColor: 'text-info',
         fields: []
@@ -1305,11 +1307,11 @@ function setupCreateCutForm(createCutModal) {
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <button type="button" class="btn btn-outline-info" id="select-remnant-btn">
-                                    <i class="fas fa-layer-group me-2"></i>Artık Plaka Seç
+                                    <i class="fas fa-layer-group me-2"></i>Fire Plaka Seç
                                 </button>
                             </div>
                             <div id="selected-remnant-display" style="display: none;">
-                                <span class="badge bg-success">
+                                <span class="badge bg-success" id="selected-remnant-badge" style="cursor: pointer;">
                                     <i class="fas fa-check me-1"></i>
                                     Seçili: <span id="selected-remnant-info">-</span>
                                 </span>
@@ -1574,25 +1576,9 @@ async function setupEditCutForm(editCutModal, cut) {
         if (typeof cut.selected_plate === 'object' && cut.selected_plate.id) {
             selectedRemnantPlate = cut.selected_plate;
         } else if (typeof cut.selected_plate === 'number' || typeof cut.selected_plate === 'string') {
-            // If it's just an ID, we'll need to fetch it or create a minimal object
-            // For now, we'll try to fetch it
-            try {
-                const params = new URLSearchParams();
-                params.append('id', cut.selected_plate);
-                const response = await getRemnantPlates(params);
-                if (response && Array.isArray(response) && response.length > 0) {
-                    selectedRemnantPlate = response[0];
-                } else if (response && response.results && Array.isArray(response.results) && response.results.length > 0) {
-                    selectedRemnantPlate = response.results[0];
-                } else {
-                    // If fetch fails, create a minimal object with just the ID
-                    selectedRemnantPlate = { id: cut.selected_plate, dimensions: '-', material: '-' };
-                }
-            } catch (error) {
-                console.error('Error fetching remnant plate:', error);
-                // Create a minimal object with just the ID
-                selectedRemnantPlate = { id: cut.selected_plate, dimensions: '-', material: '-' };
-            }
+            // If it's just an ID, create a minimal object with just the ID
+            // Full details will be available if user clicks to change the remnant
+            selectedRemnantPlate = { id: cut.selected_plate, dimensions: '-', material: '-' };
         }
     } else if (cut.remnant_plate) {
         // Fallback to remnant_plate field
@@ -1608,7 +1594,7 @@ async function setupEditCutForm(editCutModal, cut) {
     // Add remnant plate selection section at the top
     editCutModal.addSection({
         id: 'remnant-selection',
-        title: 'Artık Plaka Seçimi',
+        title: 'Fire Plaka Seçimi',
         icon: 'fas fa-layer-group',
         iconColor: 'text-info',
         fields: []
@@ -1761,11 +1747,11 @@ async function setupEditCutForm(editCutModal, cut) {
                         <div class="d-flex justify-content-between align-items-center">
                             <div>
                                 <button type="button" class="btn btn-outline-info" id="select-remnant-btn-edit">
-                                    <i class="fas fa-layer-group me-2"></i>Artık Plaka Seç
+                                    <i class="fas fa-layer-group me-2"></i>Fire Plaka Seç
                                 </button>
                             </div>
                             <div id="selected-remnant-display-edit" style="display: none;">
-                                <span class="badge bg-success">
+                                <span class="badge bg-success" id="selected-remnant-badge-edit" style="cursor: pointer;">
                                     <i class="fas fa-check me-1"></i>
                                     Seçili: <span id="selected-remnant-info-edit">-</span>
                                 </span>
@@ -1808,8 +1794,56 @@ async function setupEditCutForm(editCutModal, cut) {
 }
 
 function addTableContainers() {
-    // Add parts table section
+    // Add parts table section with paste functionality
     const partsSectionHtml = `
+        <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <h6 class="mb-0">Parça Yönetimi</h6>
+                <button type="button" class="btn btn-sm btn-outline-info" id="toggle-paste-section-edit">
+                    <i class="fas fa-paste me-1"></i>Toplu Yapıştır
+                </button>
+            </div>
+            <div class="mb-2" id="paste-section-edit" style="display: none;">
+                <label class="form-label small text-muted fw-bold mb-1">
+                    <i class="fas fa-paste me-1"></i>Toplu Yapıştır (Excel kopyasını buraya yapıştırın - Tüm mevcut parçaları değiştirir)
+                </label>
+                <textarea id="bulk-paste-input-edit" class="form-control form-control-sm" rows="4" placeholder="Excel'den kopyaladığınız verileri buraya yapıştırın"></textarea>
+                <div class="d-flex gap-2 mt-2 align-items-center">
+                    <button type="button" class="btn btn-sm btn-outline-info" id="preview-paste-btn-edit" onclick="event.preventDefault(); event.stopPropagation(); return false;">
+                        <i class="fas fa-eye me-1"></i>Önizle
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-success" id="parse-paste-btn-edit" onclick="event.preventDefault(); event.stopPropagation(); return false;" style="display: none;">
+                        <i class="fas fa-magic me-1"></i>Onayla ve Değiştir
+                    </button>
+                    <small class="text-muted">İlk satır: İş No  Resim No  Pozisyon No. Sonraki satırlar: genişlik (mm), yükseklik (mm), alan (m²), ağırlık (kg), malzeme, kalınlık (mm), proje, talep eden, not.</small>
+                </div>
+                <div id="paste-preview-edit" class="mt-3" style="display: none;">
+                    <div class="card border-info">
+                        <div class="card-header bg-info text-white">
+                            <h6 class="mb-0"><i class="fas fa-eye me-2"></i>Önizleme - <span id="preview-count-edit">0</span> parça bulundu</h6>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                                <table class="table table-sm table-striped table-hover mb-0">
+                                    <thead class="table-light sticky-top">
+                                        <tr>
+                                            <th>İş No</th>
+                                            <th>Resim No</th>
+                                            <th>Pozisyon No</th>
+                                            <th>Ağırlık (kg)</th>
+                                            <th>Adet</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="preview-table-body-edit">
+                                        <!-- Preview rows will be inserted here -->
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
         <div class="mt-3">
             <div id="parts-table-container"></div>
         </div>
@@ -1929,6 +1963,356 @@ async function initializePartsTable(cut) {
                 showAddPartModal();
             });
             cardActions.appendChild(addButton);
+        }
+        
+        // Add toggle button for paste section
+        const togglePasteBtn = editCutModal.container.querySelector('#toggle-paste-section-edit');
+        const pasteSection = editCutModal.container.querySelector('#paste-section-edit');
+        if (togglePasteBtn && pasteSection) {
+            togglePasteBtn.addEventListener('click', () => {
+                const isHidden = pasteSection.style.display === 'none';
+                pasteSection.style.display = isHidden ? 'block' : 'none';
+                togglePasteBtn.innerHTML = isHidden 
+                    ? '<i class="fas fa-chevron-up me-1"></i>Gizle'
+                    : '<i class="fas fa-paste me-1"></i>Toplu Yapıştır';
+            });
+        }
+        
+        // Add event listener for preview button
+        const previewPasteBtn = editCutModal.container.querySelector('#preview-paste-btn-edit');
+        const parsePasteBtn = editCutModal.container.querySelector('#parse-paste-btn-edit');
+        const bulkPasteInput = editCutModal.container.querySelector('#bulk-paste-input-edit');
+        const previewSection = editCutModal.container.querySelector('#paste-preview-edit');
+        const previewTableBody = editCutModal.container.querySelector('#preview-table-body-edit');
+        const previewCount = editCutModal.container.querySelector('#preview-count-edit');
+        
+        let currentParsedParts = null; // Store parsed parts for confirmation
+        
+        if (previewPasteBtn && bulkPasteInput && previewSection && previewTableBody) {
+            previewPasteBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const text = bulkPasteInput.value;
+                if (!text || text.trim() === '') {
+                    showNotification('Lütfen yapıştırılacak veri girin', 'warning');
+                    return;
+                }
+                
+                const parsed = parsePartsFromText(text);
+                if (!parsed || parsed.length === 0) {
+                    showNotification('Yapıştırılan veriler ayrıştırılamadı', 'warning');
+                    previewSection.style.display = 'none';
+                    parsePasteBtn.style.display = 'none';
+                    currentParsedParts = null;
+                    return;
+                }
+                
+                // Store parsed parts
+                currentParsedParts = parsed;
+                
+                // Show preview
+                previewTableBody.innerHTML = '';
+                parsed.forEach((part, index) => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>${part.job_no || '-'}</td>
+                        <td>${part.image_no || '-'}</td>
+                        <td>${part.position_no || '-'}</td>
+                        <td>${part.weight_kg != null ? part.weight_kg : '-'}</td>
+                        <td>${part.quantity != null ? part.quantity : '-'}</td>
+                    `;
+                    previewTableBody.appendChild(row);
+                });
+                
+                if (previewCount) {
+                    previewCount.textContent = parsed.length;
+                }
+                
+                previewSection.style.display = 'block';
+                parsePasteBtn.style.display = 'inline-block';
+            });
+        }
+        
+        // Add event listener for bulk paste in edit modal
+        if (parsePasteBtn && bulkPasteInput) {
+            parsePasteBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                
+                // Use the previewed parts if available, otherwise parse again
+                let parsed = currentParsedParts;
+                if (!parsed || parsed.length === 0) {
+                    const text = bulkPasteInput.value;
+                    if (!text || text.trim() === '') {
+                        showNotification('Lütfen önce önizleme yapın', 'warning');
+                        return;
+                    }
+                    parsed = parsePartsFromText(text);
+                    if (!parsed || parsed.length === 0) {
+                        showNotification('Yapıştırılan veriler ayrıştırılamadı', 'warning');
+                        return;
+                    }
+                }
+                
+                // Save current scroll position of the edit modal and lock it
+                const editModalBody = editCutModal.container.querySelector('.modal-body');
+                const editModalDialog = editCutModal.container.querySelector('.modal-dialog');
+                const editModalElement = editCutModal.container.querySelector('.modal');
+                const scrollPosition = editModalBody ? editModalBody.scrollTop : 0;
+                
+                // Also check if modal-dialog or modal itself is scrollable
+                const dialogScrollPosition = editModalDialog ? editModalDialog.scrollTop : 0;
+                const modalScrollPosition = editModalElement ? editModalElement.scrollTop : 0;
+                
+                // Lock scroll position by intercepting scrollTop property
+                let scrollLocked = true;
+                let scrollTopDescriptor = null;
+                let originalScrollTop = null;
+                
+                if (editModalBody) {
+                    // Save original scrollTop descriptor
+                    scrollTopDescriptor = Object.getOwnPropertyDescriptor(Element.prototype, 'scrollTop') || 
+                                         Object.getOwnPropertyDescriptor(HTMLElement.prototype, 'scrollTop');
+                    
+                    // Intercept scrollTop setter
+                    Object.defineProperty(editModalBody, 'scrollTop', {
+                        get: function() {
+                            return scrollLocked ? scrollPosition : (scrollTopDescriptor ? scrollTopDescriptor.get.call(this) : this._scrollTop || 0);
+                        },
+                        set: function(value) {
+                            if (scrollLocked) {
+                                // Ignore scrollTop changes while locked
+                                if (scrollTopDescriptor && scrollTopDescriptor.set) {
+                                    scrollTopDescriptor.set.call(this, scrollPosition);
+                                } else {
+                                    this._scrollTop = scrollPosition;
+                                }
+                            } else {
+                                // Allow normal scrollTop changes when unlocked
+                                if (scrollTopDescriptor && scrollTopDescriptor.set) {
+                                    scrollTopDescriptor.set.call(this, value);
+                                } else {
+                                    this._scrollTop = value;
+                                }
+                            }
+                        },
+                        configurable: true
+                    });
+                    
+                    // Also prevent scroll events
+                    const preventScroll = (e) => {
+                        if (scrollLocked) {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (scrollTopDescriptor && scrollTopDescriptor.set) {
+                                scrollTopDescriptor.set.call(editModalBody, scrollPosition);
+                            }
+                            return false;
+                        }
+                    };
+                    
+                    editModalBody.addEventListener('scroll', preventScroll, { passive: false, capture: true });
+                    
+                    // Store the preventScroll function for cleanup
+                    editModalBody._preventScroll = preventScroll;
+                    
+                    // Also prevent scroll on modal-dialog and modal if they exist
+                    if (editModalDialog) {
+                        const preventDialogScroll = (e) => {
+                            if (scrollLocked) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                editModalDialog.scrollTop = dialogScrollPosition;
+                                return false;
+                            }
+                        };
+                        editModalDialog.addEventListener('scroll', preventDialogScroll, { passive: false, capture: true });
+                        editModalDialog._preventScroll = preventDialogScroll;
+                    }
+                    
+                    if (editModalElement) {
+                        const preventModalScroll = (e) => {
+                            if (scrollLocked) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                editModalElement.scrollTop = modalScrollPosition;
+                                return false;
+                            }
+                        };
+                        editModalElement.addEventListener('scroll', preventModalScroll, { passive: false, capture: true });
+                        editModalElement._preventScroll = preventModalScroll;
+                    }
+                }
+                
+                // Continuous scroll monitoring as fallback
+                let scrollMonitorInterval = null;
+                if (editModalBody) {
+                    scrollMonitorInterval = setInterval(() => {
+                        if (scrollLocked) {
+                            if (editModalBody && editModalBody.scrollTop !== scrollPosition) {
+                                editModalBody.scrollTop = scrollPosition;
+                            }
+                            if (editModalDialog && editModalDialog.scrollTop !== dialogScrollPosition) {
+                                editModalDialog.scrollTop = dialogScrollPosition;
+                            }
+                            if (editModalElement && editModalElement.scrollTop !== modalScrollPosition) {
+                                editModalElement.scrollTop = modalScrollPosition;
+                            }
+                        }
+                    }, 10); // Check every 10ms
+                }
+                
+                // Confirm replacement using ConfirmationModal
+                let partsReplaceModal = new ConfirmationModal('parts-replace-confirm-modal-container', {
+                    title: 'Parçaları Değiştir',
+                    icon: 'fas fa-exchange-alt',
+                    message: 'Tüm mevcut parçalar silinecek ve yeni parçalar eklenecek',
+                    description: `${parsed.length} yeni parça eklenecek. Bu işlem geri alınamaz.`,
+                    confirmText: 'Evet, Değiştir',
+                    cancelText: 'İptal',
+                    confirmButtonClass: 'btn-warning'
+                });
+                
+                // Unlock scroll when confirmation modal is hidden
+                const unlockScroll = () => {
+                    // Clear the monitoring interval
+                    if (scrollMonitorInterval) {
+                        clearInterval(scrollMonitorInterval);
+                        scrollMonitorInterval = null;
+                    }
+                    scrollLocked = false;
+                    if (editModalBody) {
+                        // Restore original scrollTop property
+                        if (scrollTopDescriptor) {
+                            Object.defineProperty(editModalBody, 'scrollTop', scrollTopDescriptor);
+                        } else {
+                            delete editModalBody.scrollTop;
+                        }
+                        
+                        // Remove scroll event listener
+                        if (editModalBody._preventScroll) {
+                            editModalBody.removeEventListener('scroll', editModalBody._preventScroll, { capture: true });
+                            delete editModalBody._preventScroll;
+                        }
+                        
+                        // Restore scroll position
+                        editModalBody.scrollTop = scrollPosition;
+                        
+                        // Clean up dialog and modal scroll listeners
+                        if (editModalDialog && editModalDialog._preventScroll) {
+                            editModalDialog.removeEventListener('scroll', editModalDialog._preventScroll, { capture: true });
+                            delete editModalDialog._preventScroll;
+                            editModalDialog.scrollTop = dialogScrollPosition;
+                        }
+                        
+                        if (editModalElement && editModalElement._preventScroll) {
+                            editModalElement.removeEventListener('scroll', editModalElement._preventScroll, { capture: true });
+                            delete editModalElement._preventScroll;
+                            editModalElement.scrollTop = modalScrollPosition;
+                        }
+                    }
+                };
+                
+                // Listen for confirmation modal close events
+                const confirmationModalElement = partsReplaceModal.modal;
+                if (confirmationModalElement) {
+                    confirmationModalElement.addEventListener('hidden.bs.modal', unlockScroll, { once: true });
+                }
+                
+                partsReplaceModal.show({
+                    onConfirm: async () => {
+                        try {
+                            // Show loading
+                            parsePasteBtn.disabled = true;
+                            parsePasteBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>İşleniyor...';
+                            
+                            // Get all existing parts for this task
+                            const taskKey = currentEditTask ? currentEditTask.key : null;
+                            if (!taskKey) {
+                                showNotification('Görev bilgisi bulunamadı', 'error');
+                                parsePasteBtn.disabled = false;
+                                parsePasteBtn.innerHTML = '<i class="fas fa-magic me-1"></i>Yapıştırılanı Ayrıştır ve Ekle';
+                                return;
+                            }
+                            
+                            const existingParts = await getCncParts({ cnc_task: taskKey });
+                            const partsArray = Array.isArray(existingParts) ? existingParts : (existingParts.results || []);
+                            
+                            // Bulk delete all existing parts
+                            if (partsArray.length > 0) {
+                                const partIds = partsArray.map(part => part.id);
+                                try {
+                                    await bulkDeleteCncParts(partIds);
+                                } catch (error) {
+                                    console.error('Error bulk deleting parts:', error);
+                                    // Fallback to individual deletion if bulk delete fails
+                                    for (const part of partsArray) {
+                                        try {
+                                            await deleteCncPart(part.id);
+                                        } catch (deleteError) {
+                                            console.error(`Error deleting part ${part.id}:`, deleteError);
+                                        }
+                                    }
+                                }
+                            }
+                            
+                            // Prepare parts data for bulk create
+                            const partsData = parsed.map(p => ({
+                                cnc_task: taskKey,
+                                job_no: p.job_no || '',
+                                image_no: p.image_no || '',
+                                position_no: p.position_no || '',
+                                weight_kg: p.weight_kg || null,
+                                quantity: p.quantity || null
+                            }));
+                            
+                            // Bulk create new parts
+                            let successCount = 0;
+                            let errorCount = 0;
+                            try {
+                                const createdParts = await bulkCreateCncParts(partsData);
+                                // Handle both array and object response
+                                if (Array.isArray(createdParts)) {
+                                    successCount = createdParts.length;
+                                } else if (createdParts.results && Array.isArray(createdParts.results)) {
+                                    successCount = createdParts.results.length;
+                                } else {
+                                    successCount = partsData.length;
+                                }
+                            } catch (error) {
+                                console.error('Error bulk creating parts:', error);
+                                errorCount = partsData.length;
+                            }
+                            
+                            // Clear the textarea
+                            bulkPasteInput.value = '';
+                            
+                            // Refresh the parts table
+                            const updatedTask = await getCncTask(taskKey);
+                            await initializePartsTable(updatedTask);
+                            
+                            // Show success message
+                            if (errorCount === 0) {
+                                showNotification(`${successCount} parça başarıyla değiştirildi`, 'success');
+                            } else {
+                                showNotification(`${successCount} parça eklendi, ${errorCount} parça eklenirken hata oluştu`, 'warning');
+                            }
+                        } catch (error) {
+                            console.error('Error replacing parts:', error);
+                            showNotification('Parçalar değiştirilirken hata oluştu', 'error');
+                        } finally {
+                            parsePasteBtn.disabled = false;
+                            parsePasteBtn.innerHTML = '<i class="fas fa-magic me-1"></i>Yapıştırılanı Ayrıştır ve Ekle';
+                            // Unlock scroll after operation completes
+                            unlockScroll();
+                        }
+                    },
+                    onCancel: () => {
+                        // User cancelled, unlock scroll
+                        unlockScroll();
+                    }
+                });
+            });
         }
     }, 100);
 }
@@ -2980,15 +3364,26 @@ function updateSelectedRemnantDisplay() {
     const display = createCutModal.container.querySelector('#selected-remnant-display');
     const info = createCutModal.container.querySelector('#selected-remnant-info');
     const selectBtn = createCutModal.container.querySelector('#select-remnant-btn');
+    const badge = createCutModal.container.querySelector('#selected-remnant-badge');
     
     if (display && info && selectBtn) {
         if (selectedRemnantPlate) {
             display.style.display = 'block';
-            info.textContent = `ID: ${selectedRemnantPlate.id} - ${selectedRemnantPlate.dimensions} - ${selectedRemnantPlate.material}`;
-            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Artık Plaka Değiştir';
+            info.textContent = `ID: ${selectedRemnantPlate.id}`;
+            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Fire Plaka Değiştir';
+            
+            // Add click handler to badge if it exists
+            if (badge) {
+                badge.onclick = (e) => {
+                    e.stopPropagation();
+                    if (selectedRemnantPlate && selectedRemnantPlate.id) {
+                        showRemnantDetailsModal(selectedRemnantPlate.id);
+                    }
+                };
+            }
         } else {
             display.style.display = 'none';
-            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Artık Plaka Seç';
+            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Fire Plaka Seç';
         }
     }
 }
@@ -2999,23 +3394,127 @@ function updateSelectedRemnantDisplayEdit() {
     const display = editCutModal.container.querySelector('#selected-remnant-display-edit');
     const info = editCutModal.container.querySelector('#selected-remnant-info-edit');
     const selectBtn = editCutModal.container.querySelector('#select-remnant-btn-edit');
+    const badge = editCutModal.container.querySelector('#selected-remnant-badge-edit');
     
     if (display && info && selectBtn) {
         if (selectedRemnantPlate) {
             display.style.display = 'block';
-            info.textContent = `ID: ${selectedRemnantPlate.id} - ${selectedRemnantPlate.dimensions} - ${selectedRemnantPlate.material}`;
-            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Artık Plaka Değiştir';
+            info.textContent = `ID: ${selectedRemnantPlate.id}`;
+            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Fire Plaka Değiştir';
+            
+            // Add click handler to badge if it exists
+            if (badge) {
+                badge.onclick = (e) => {
+                    e.stopPropagation();
+                    if (selectedRemnantPlate && selectedRemnantPlate.id) {
+                        showRemnantDetailsModal(selectedRemnantPlate.id);
+                    }
+                };
+            }
         } else {
             display.style.display = 'none';
-            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Artık Plaka Seç';
+            selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Fire Plaka Seç';
         }
+    }
+}
+
+async function showRemnantDetailsModal(remnantId) {
+    try {
+        // Fetch remnant plate data
+        const remnantData = await getRemnantPlateById(remnantId);
+        
+        // Create Display Modal instance
+        const remnantDetailsModal = new DisplayModal('remnant-details-modal-container', {
+            title: 'Fire Plaka Detayları',
+            icon: 'fas fa-layer-group',
+            showEditButton: false
+        });
+        
+        // Clear previous data
+        remnantDetailsModal.clearData();
+        
+        // Add basic information section
+        remnantDetailsModal.addSection({
+            title: 'Temel Bilgiler',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary'
+        });
+        
+        // Add fields
+        remnantDetailsModal.addField({
+            id: 'remnant-id',
+            name: 'id',
+            label: 'ID',
+            type: 'text',
+            value: remnantData.id || '-',
+            icon: 'fas fa-hashtag',
+            colSize: 6,
+            layout: 'horizontal'
+        });
+        
+        remnantDetailsModal.addField({
+            id: 'remnant-thickness',
+            name: 'thickness_mm',
+            label: 'Kalınlık',
+            type: 'text',
+            value: remnantData.thickness_mm ? `${remnantData.thickness_mm} mm` : '-',
+            icon: 'fas fa-ruler-vertical',
+            colSize: 6,
+            layout: 'horizontal'
+        });
+        
+        remnantDetailsModal.addField({
+            id: 'remnant-dimensions',
+            name: 'dimensions',
+            label: 'Boyutlar',
+            type: 'text',
+            value: remnantData.dimensions || '-',
+            icon: 'fas fa-ruler-combined',
+            colSize: 6,
+            layout: 'horizontal'
+        });
+        
+        remnantDetailsModal.addField({
+            id: 'remnant-quantity',
+            name: 'quantity',
+            label: 'Adet',
+            type: 'text',
+            value: remnantData.quantity ? `${remnantData.quantity}` : '-',
+            icon: 'fas fa-list-ol',
+            colSize: 6,
+            layout: 'horizontal'
+        });
+        
+        remnantDetailsModal.addField({
+            id: 'remnant-material',
+            name: 'material',
+            label: 'Malzeme',
+            type: 'text',
+            value: remnantData.material || '-',
+            icon: 'fas fa-cube',
+            colSize: 12,
+            layout: 'horizontal'
+        });
+        
+        // Render and show modal
+        remnantDetailsModal.render().show();
+        
+        // Get Bootstrap modal instance and show it
+        const modalElement = remnantDetailsModal.container.querySelector('.modal');
+        if (modalElement) {
+            const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+            modalInstance.show();
+        }
+    } catch (error) {
+        console.error('Error showing remnant details:', error);
+        showNotification('Fire plaka detayları yüklenirken hata oluştu', 'error');
     }
 }
 
 function showSelectRemnantModal() {
     // Create modal for selecting remnant plate
     selectRemnantModal = new EditModal('select-remnant-modal-container', {
-        title: 'Artık Plaka Seç',
+        title: 'Fire Plaka Seç',
         icon: 'fas fa-layer-group',
         saveButtonText: 'Seç',
         size: 'xl',
@@ -3035,7 +3534,7 @@ function showSelectRemnantModal() {
     // Add table section
     selectRemnantModal.addSection({
         id: 'remnant-table-section',
-        title: 'Artık Plakalar',
+        title: 'Fire Plakalar',
         icon: 'fas fa-table',
         iconColor: 'text-info',
         fields: []
@@ -3119,7 +3618,7 @@ function initializeRemnantSelectionTable() {
     
     // Initialize TableComponent
     remnantSelectionTable = new TableComponent('remnant-selection-table-container', {
-        title: 'Artık Plakalar Listesi',
+        title: 'Fire Plakalar Listesi',
         icon: 'fas fa-table',
         iconColor: 'text-primary',
         columns: [
@@ -3182,7 +3681,7 @@ function initializeRemnantSelectionTable() {
                         }
                     }
                     
-                    showNotification('Artık plaka seçildi', 'success');
+                    showNotification('Fire plaka seçildi', 'success');
                 }
             }
         ],
@@ -3204,7 +3703,7 @@ function initializeRemnantSelectionTable() {
         },
         striped: false,
         small: false,
-        emptyMessage: 'Artık plaka bulunamadı',
+        emptyMessage: 'Fire plaka bulunamadı',
         emptyIcon: 'fas fa-layer-group'
     });
     
@@ -3244,7 +3743,7 @@ async function loadRemnantSelectionTable(page = 1) {
         }
     } catch (error) {
         console.error('Error loading remnant selection table:', error);
-        showNotification('Artık plakalar yüklenirken hata oluştu', 'error');
+        showNotification('Fire plakalar yüklenirken hata oluştu', 'error');
         remnantSelectionTable.setLoading(false);
         remnantSelectionTable.updateData([], 0, 1);
     }

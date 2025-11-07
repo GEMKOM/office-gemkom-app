@@ -26,8 +26,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 features: []
             },
             {
-                title: 'Artık Plakalar',
-                description: 'CNC kesim artık plakalarını görüntüleyin ve yönetin',
+                title: 'Fire Plakalar',
+                description: 'CNC kesim fire plakalarını görüntüleyin ve yönetin',
                 icon: 'fas fa-layer-group',
                 iconColor: 'info',
                 link: '/manufacturing/cnc-cutting/remnants/',

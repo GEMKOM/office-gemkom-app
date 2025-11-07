@@ -41,6 +41,33 @@ export async function createCncPart(partData) {
 }
 
 /**
+ * Bulk create CNC parts
+ * @param {Array<Object>} partsData - Array of part data objects
+ * @returns {Promise<Array>} Array of created CNC parts
+ */
+export async function bulkCreateCncParts(partsData) {
+    try {
+        const response = await authedFetch(`${CNC_CUTTING_BASE_URL}/parts/bulk-create/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(partsData)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Failed to bulk create CNC parts: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error bulk creating CNC parts:', error);
+        throw error;
+    }
+}
+
+/**
  * Partially update a CNC part
  * @param {number} partId - The CNC part ID
  * @param {Object} partData - Updated part data (only fields to update)
@@ -90,6 +117,38 @@ export async function deleteCncPart(partId) {
         return true;
     } catch (error) {
         console.error('Error deleting CNC part:', error);
+        throw error;
+    }
+}
+
+/**
+ * Bulk delete CNC parts
+ * @param {Array<number>} partIds - Array of part IDs to delete
+ * @returns {Promise<Object>} Deletion response
+ */
+export async function bulkDeleteCncParts(partIds) {
+    try {
+        const response = await authedFetch(`${CNC_CUTTING_BASE_URL}/parts/bulk-delete/`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ ids: partIds })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Failed to bulk delete CNC parts: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+        
+        // Handle 204 No Content response
+        if (response.status === 204) {
+            return { status: 'Parts deleted successfully' };
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error bulk deleting CNC parts:', error);
         throw error;
     }
 }

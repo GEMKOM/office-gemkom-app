@@ -26,8 +26,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize header component
     const header = new HeaderComponent({
-        title: 'Artık Plakalar',
-        subtitle: 'CNC kesim artık plakaları yönetimi ve takibi',
+        title: 'Fire Plakalar',
+        subtitle: 'CNC kesim fire plakaları yönetimi ve takibi',
         icon: 'layer-group',
         showBackButton: 'block',
         showCreateButton: 'block',
@@ -128,7 +128,7 @@ function initializeFiltersComponent() {
 function initializeTableComponent() {
     // Initialize table component
     remnantsTable = new TableComponent('remnants-table-container', {
-        title: 'Artık Plakalar Listesi',
+        title: 'Fire Plakalar Listesi',
         icon: 'fas fa-table',
         iconColor: 'text-primary',
         columns: [
@@ -225,7 +225,7 @@ function initializeTableComponent() {
         },
         striped: false,
         small: false,
-        emptyMessage: 'Artık plaka bulunamadı',
+        emptyMessage: 'Fire plaka bulunamadı',
         emptyIcon: 'fas fa-layer-group'
     });
 }
@@ -271,7 +271,7 @@ async function loadRemnants(page = 1) {
         }
     } catch (error) {
         console.error('Error loading remnants:', error);
-        showNotification('Artık plakalar yüklenirken hata oluştu', 'error');
+        showNotification('Fire plakalar yüklenirken hata oluştu', 'error');
         remnants = [];
         totalRemnants = 0;
         
@@ -342,7 +342,7 @@ function updateRemnantCounts() {
 function showCreateRemnantModal() {
     // Create Edit Modal instance for creating new remnant
     createRemnantModal = new EditModal('create-remnant-modal-container', {
-        title: 'Yeni Artık Plaka Ekle',
+        title: 'Yeni Fire Plaka Ekle',
         icon: 'fas fa-plus-circle',
         saveButtonText: 'Plaka Oluştur',
         size: 'md'
@@ -434,7 +434,7 @@ function showCreateRemnantModal() {
         
         try {
             await createRemnantPlate(remnantData);
-            showNotification('Artık plaka başarıyla oluşturuldu', 'success');
+            showNotification('Fire plaka başarıyla oluşturuldu', 'success');
             
             // Close modal
             const modalElement = document.querySelector('#create-remnant-modal-container .modal');
@@ -461,7 +461,7 @@ function showCreateRemnantModal() {
 function showBulkCreateRemnantsModal() {
     // Create Edit Modal instance for bulk creating remnants
     bulkCreateRemnantsModal = new EditModal('bulk-create-remnants-modal-container', {
-        title: 'Toplu Artık Plaka Ekle',
+        title: 'Toplu Fire Plaka Ekle',
         icon: 'fas fa-layer-group',
         saveButtonText: 'Plakaları Oluştur',
         size: 'lg'
@@ -575,7 +575,7 @@ function showBulkCreateRemnantsModal() {
         
         try {
             await bulkCreateRemnantPlates(remnantsData);
-            showNotification(`${remnantsData.length} adet artık plaka başarıyla oluşturuldu`, 'success');
+            showNotification(`${remnantsData.length} adet fire plaka başarıyla oluşturuldu`, 'success');
             
             // Close modal
             const modalElement = document.querySelector('#bulk-create-remnants-modal-container .modal');

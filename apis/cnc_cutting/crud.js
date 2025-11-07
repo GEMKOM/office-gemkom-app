@@ -165,7 +165,10 @@ export async function updateCncTask(taskId, taskData) {
         if (taskData.machine_fk !== undefined && taskData.machine_fk !== null) formData.append('machine_fk', taskData.machine_fk);
         if (taskData.estimated_hours !== undefined && taskData.estimated_hours !== null) formData.append('estimated_hours', taskData.estimated_hours);
         if (taskData.quantity !== undefined && taskData.quantity !== null) formData.append('quantity', taskData.quantity);
-        if (taskData.selected_plate !== undefined && taskData.selected_plate !== null) formData.append('selected_plate', taskData.selected_plate);
+        // Always include selected_plate when defined (even if null) to allow removal
+        if (taskData.selected_plate !== undefined) {
+            formData.append('selected_plate', taskData.selected_plate === null ? '' : taskData.selected_plate);
+        }
         
         // Add nesting file if provided
         if (taskData.nesting_file) {
