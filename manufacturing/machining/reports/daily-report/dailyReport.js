@@ -188,8 +188,23 @@ function renderUsersTable() {
     
     // Initialize or update table
     if (usersTable) {
-        usersTable.updateData(tableData);
-    } else {
+        // If table exists but was created with empty columns, we need to recreate it
+        if (usersTable.options.columns.length === 0) {
+            // Destroy old table and create new one
+            const container = document.getElementById('users-report-table-container');
+            if (container) {
+                container.innerHTML = '';
+            }
+            usersTable = null;
+        }
+    }
+    
+    if (!usersTable) {
+        const container = document.getElementById('users-report-table-container');
+        if (!container) {
+            console.error('Container element "users-report-table-container" not found!');
+            return;
+        }
         usersTable = new TableComponent('users-report-table-container', {
             title: 'Günlük Kullanıcı Raporu',
             icon: 'users',
@@ -293,6 +308,9 @@ function renderUsersTable() {
             emptyMessage: 'Bu tarih için rapor verisi bulunamadı',
             emptyIcon: 'fas fa-inbox'
         });
+    } else {
+        // Update existing table
+        usersTable.updateData(tableData);
     }
 }
 

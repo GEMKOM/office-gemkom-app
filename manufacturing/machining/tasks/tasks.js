@@ -163,6 +163,20 @@ function initializeFiltersComponent() {
         colSize: 2
     });
 
+    taskFilters.addTextFilter({
+        id: 'image-no-filter',
+        label: 'Resim No',
+        placeholder: 'Resim numarası',
+        colSize: 2
+    });
+
+    taskFilters.addTextFilter({
+        id: 'position-no-filter',
+        label: 'Pozisyon No',
+        placeholder: 'Pozisyon numarası',
+        colSize: 2
+    });
+
     // Add dropdown filters with initial empty options
     taskFilters.addDropdownFilter({
         id: 'machine-filter',
@@ -635,6 +649,8 @@ function buildTaskQuery(page = 1) {
     const keyFilter = filterValues['key-filter']?.trim();
     const nameFilter = filterValues['name-filter']?.trim();
     const jobNoFilter = filterValues['job-no-filter']?.trim();
+    const imageNoFilter = filterValues['image-no-filter']?.trim();
+    const positionNoFilter = filterValues['position-no-filter']?.trim();
     const machineFilter = filterValues['machine-filter'] || '';
     const statusFilter = filterValues['status-filter'] || '';
     
@@ -648,6 +664,8 @@ function buildTaskQuery(page = 1) {
     
     if (nameFilter) params.append('name', nameFilter);
     if (jobNoFilter) params.append('job_no', jobNoFilter);
+    if (imageNoFilter) params.append('image_no', imageNoFilter);
+    if (positionNoFilter) params.append('position_no', positionNoFilter);
     if (machineFilter) params.append('machine_fk', machineFilter);
     
     // Add status filter
