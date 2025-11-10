@@ -201,6 +201,14 @@ function initializeFiltersComponent() {
         placeholder: 'Tümü',
         colSize: 2
     });
+
+    // Add checkbox filter
+    taskFilters.addCheckboxFilter({
+        id: 'exceeded-estimated-hours-filter',
+        label: 'Tahmini Saati Aşan',
+        checked: false,
+        colSize: 2
+    });
 }
 
 function initializeTableComponent() {
@@ -653,6 +661,7 @@ function buildTaskQuery(page = 1) {
     const positionNoFilter = filterValues['position-no-filter']?.trim();
     const machineFilter = filterValues['machine-filter'] || '';
     const statusFilter = filterValues['status-filter'] || '';
+    const exceededEstimatedHoursFilter = filterValues['exceeded-estimated-hours-filter'] || false;
     
     if (keyFilter) {
         let key = keyFilter;
@@ -667,6 +676,11 @@ function buildTaskQuery(page = 1) {
     if (imageNoFilter) params.append('image_no', imageNoFilter);
     if (positionNoFilter) params.append('position_no', positionNoFilter);
     if (machineFilter) params.append('machine_fk', machineFilter);
+    
+    // Add exceeded estimated hours filter
+    if (exceededEstimatedHoursFilter) {
+        params.append('exceeded_estimated_hours', 'true');
+    }
     
     // Add status filter
     if (statusFilter === 'active') {
