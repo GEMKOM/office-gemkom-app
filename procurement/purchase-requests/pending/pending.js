@@ -49,8 +49,8 @@ let comparisonTable = null; // Comparison table component instance
 let pendingTable = null; // Pending requests table component instance
 let approvedTable = null; // Approved requests table component instance
 let displayModal = null; // Display modal component instance
-let approveConfirmationModal = null; // Approval confirmation modal instance
 let isModalLoading = false; // Flag to prevent multiple modal openings
+let currentApprovalModal = null; // Current approval confirmation modal instance (created fresh each time)
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -69,15 +69,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: 'fas fa-file-invoice',
         size: 'xl',
         showEditButton: false
-    });
-    
-    // Initialize approval confirmation modal
-    approveConfirmationModal = new ConfirmationModal('approve-confirmation-modal-container', {
-        title: 'Talep Onayı',
-        icon: 'fas fa-check-circle',
-        confirmText: 'Evet, Onayla',
-        cancelText: 'İptal',
-        confirmButtonClass: 'btn-success'
     });
     
     // Initialize comparison table component
@@ -1099,9 +1090,17 @@ function updateComparisonTableRates() {
 
 // Action functions
 async function approveRequest(requestId) {
-    if (!approveConfirmationModal) {
-        console.error('approveConfirmationModal is not initialized');
-        return;
+    // Clean up any existing approval modal first
+    if (currentApprovalModal && currentApprovalModal.modal) {
+        const existingModalInstance = bootstrap.Modal.getInstance(currentApprovalModal.modal);
+        if (existingModalInstance) {
+            existingModalInstance.hide();
+        }
+        // Find and remove the existing container
+        const existingContainers = document.querySelectorAll('[id^="approve-confirmation-modal-"]');
+        existingContainers.forEach(container => {
+            cleanupApprovalModal(container.id);
+        });
     }
     
     // Find the request to show details
@@ -1129,6 +1128,32 @@ async function approveRequest(requestId) {
         </div>
     ` : '';
     
+    // Create a unique container ID for this modal instance
+    const modalId = `approve-confirmation-modal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const containerId = `${modalId}-container`;
+    
+    // Create a new container element for this modal
+    const container = document.createElement('div');
+    container.id = containerId;
+    document.body.appendChild(container);
+    
+    // Create a new confirmation modal instance
+    const approveConfirmationModal = new ConfirmationModal(containerId, {
+        title: 'Talep Onayı',
+        icon: 'fas fa-check-circle',
+        confirmText: 'Evet, Onayla',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-success'
+    });
+    
+    // Store reference to current modal
+    currentApprovalModal = approveConfirmationModal;
+    
+    // Set up cleanup when modal is hidden
+    approveConfirmationModal.modal.addEventListener('hidden.bs.modal', () => {
+        cleanupApprovalModal(containerId);
+    });
+    
     // Show confirmation modal
     approveConfirmationModal.show({
         title: 'Talep Onayı',
@@ -1137,13 +1162,37 @@ async function approveRequest(requestId) {
         details: detailsHtml,
         confirmText: 'Evet, Onayla',
         onConfirm: async () => {
-            await confirmApproveRequest(requestId);
+            await confirmApproveRequest(requestId, approveConfirmationModal, containerId);
+        },
+        onCancel: () => {
+            cleanupApprovalModal(containerId);
         }
     });
 }
 
+// Cleanup function to remove modal
+function cleanupApprovalModal(containerId) {
+    const container = document.getElementById(containerId);
+    if (container) {
+        // Remove Bootstrap modal instance if it exists
+        const modalElement = container.querySelector('.modal');
+        if (modalElement) {
+            const modalInstance = bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) {
+                modalInstance.dispose();
+            }
+        }
+        // Remove the container from DOM
+        container.remove();
+    }
+    // Clear reference
+    if (currentApprovalModal) {
+        currentApprovalModal = null;
+    }
+}
+
 // Confirm approve request
-async function confirmApproveRequest(requestId) {
+async function confirmApproveRequest(requestId, approveConfirmationModal, containerId) {
     // Get the button and disable it
     const confirmBtn = approveConfirmationModal.modal.querySelector('#confirm-action-btn');
     const originalContent = confirmBtn ? confirmBtn.innerHTML : '';
@@ -1161,6 +1210,11 @@ async function confirmApproveRequest(requestId) {
         if (approveConfirmationModal) {
             approveConfirmationModal.hide();
         }
+        
+        // Cleanup the modal after a short delay to allow animation to complete
+        setTimeout(() => {
+            cleanupApprovalModal(containerId);
+        }, 300);
         
         // Close the display modal if it's open
         if (displayModal) {
