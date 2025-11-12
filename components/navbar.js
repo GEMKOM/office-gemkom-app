@@ -533,12 +533,12 @@ export function initNavbar() {
                             return;
                         }
                         
-                                        if (path.startsWith('/general/') && !path.startsWith('/general/users') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime')) {
+                                        if (path.startsWith('/general/') && !path.startsWith('/general/users') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime') && !path.startsWith('/general/department-requests')) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;
                 }
-                
+
                 if (path.startsWith('/procurement/')) {
                     // Allow navigation to procurement pages
                     navigateTo(path);
@@ -565,6 +565,12 @@ export function initNavbar() {
                 
                 if (path.startsWith('/management/')) {
                     // Allow navigation to management pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                if (path.startsWith('/planning/')) {
+                    // Allow navigation to planning pages
                     navigateTo(path);
                     return;
                 }
@@ -614,12 +620,12 @@ export function initNavbar() {
                     return;
                 }
                 
-                if (path.startsWith('/general/') && !path.startsWith('/general/users') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime')) {
+                if (path.startsWith('/general/') && !path.startsWith('/general/users') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime') && !path.startsWith('/general/department-requests')) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;
                 }
-                
+
                 if (path.startsWith('/procurement/')) {
                     // Allow navigation to procurement pages
                     navigateTo(path);
@@ -646,6 +652,12 @@ export function initNavbar() {
                 
                 if (path.startsWith('/management/')) {
                     // Allow navigation to management pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                if (path.startsWith('/planning/')) {
+                    // Allow navigation to planning pages
                     navigateTo(path);
                     return;
                 }

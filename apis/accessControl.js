@@ -31,6 +31,8 @@ export const TEAM_ACCESS_CONFIG = {
     // Management team - has access to most sections
     management: {
         allowedRoutes: mergeWithBaseRoutes([
+            '/planning',
+            '/planning/department-requests',
             '/manufacturing',
             '/manufacturing/machining',
             '/manufacturing/machining/dashboard',
@@ -66,7 +68,7 @@ export const TEAM_ACCESS_CONFIG = {
             '/finance/reports/executive-overview',
             '/finance/reports/projects'
         ]),
-        allowedSections: ['general', 'manufacturing', 'procurement', 'finance']
+        allowedSections: ['planning', 'general', 'manufacturing', 'procurement', 'finance']
     },
     
     // Manufacturing team - access to manufacturing and related areas
@@ -173,6 +175,8 @@ export const TEAM_ACCESS_CONFIG = {
     // Planning team - access to planning and related areas
     planning: {
         allowedRoutes: mergeWithBaseRoutes([
+            '/planning',
+            '/planning/department-requests',
             '/manufacturing',
             '/manufacturing/machining',
             '/manufacturing/machining/capacity',
@@ -184,7 +188,7 @@ export const TEAM_ACCESS_CONFIG = {
             '/procurement/purchase-requests/pending',
             '/procurement/purchase-requests/registry'
         ]),
-        allowedSections: ['manufacturing_planning', 'procurement', 'general', 'general_overtime']
+        allowedSections: ['planning', 'manufacturing_planning', 'procurement', 'general', 'general_overtime']
     },
     
     // Finance team - access to financial areas

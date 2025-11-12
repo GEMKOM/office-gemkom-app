@@ -38,6 +38,17 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     }
                 }
+            },
+            '/general/department-requests': {
+                label: 'Departman Talepleri',
+                icon: 'fas fa-boxes',
+                children: {
+                    '/general/department-requests/pending': {
+                        label: 'Bekleyen Talepler',
+                        icon: 'fas fa-clock',
+                        children: {}
+                    }
+                }
             }
         }
     },
@@ -346,6 +357,17 @@ export const NAVIGATION_STRUCTURE = {
             '/management/analytics': {
                 label: 'Analitik',
                 icon: 'fas fa-chart-pie',
+                children: {}
+            }
+        }
+    },
+    '/planning': {
+        label: 'Planlama',
+        icon: 'fas fa-calendar-alt',
+        children: {
+            '/planning/department-requests': {
+                label: 'Departman Talepleri',
+                icon: 'fas fa-boxes',
                 children: {}
             }
         }
