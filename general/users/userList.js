@@ -392,7 +392,7 @@ async function loadUsers() {
         params.append('ordering', orderingParam);
         
         // Call API with parameters
-        const usersResponse = await authFetchUsers(currentPage, 20, {
+        const usersResponse = await authFetchUsers(currentPage, pageSize, {
             username: filterValues['username-filter'] || '',
             team: filterValues['team-filter'] || '',
             work_location: filterValues['work-location-filter'] || '',

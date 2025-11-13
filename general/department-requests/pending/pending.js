@@ -79,12 +79,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 `
             },
             {
-                field: 'department_label',
+                field: 'department',
                 label: 'Departman',
                 sortable: true,
-                formatter: (value) => `
-                    <div style="color: #495057; font-weight: 500;">${value || '-'}</div>
-                `
+                formatter: (value, row) => {
+                    const departmentLabel = row.department_label || formatDepartmentName(value) || '-';
+                    return `
+                        <div style="color: #495057; font-weight: 500;">${departmentLabel}</div>
+                    `;
+                }
             },
             {
                 field: 'priority',
@@ -94,7 +97,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             {
                 field: 'needed_date',
-                label: 'Talep Tarihi',
+                label: 'İhtiyaç Tarihi',
                 sortable: true,
                 type: 'date'
             },
@@ -105,12 +108,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 formatter: (value) => `
                     <div style="color: #495057; font-weight: 500;">${value || 0} ürün</div>
                 `
-            },
-            {
-                field: 'approval',
-                label: 'Onay Durumu',
-                sortable: false,
-                formatter: (value, row) => getApprovalInfo(row)
             },
             {
                 field: 'status',
@@ -186,12 +183,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 `
             },
             {
-                field: 'department_label',
+                field: 'department',
                 label: 'Departman',
                 sortable: true,
-                formatter: (value) => `
-                    <div style="color: #495057; font-weight: 500;">${value || '-'}</div>
-                `
+                formatter: (value, row) => {
+                    const departmentLabel = row.department_label || formatDepartmentName(value) || '-';
+                    return `
+                        <div style="color: #495057; font-weight: 500;">${departmentLabel}</div>
+                    `;
+                }
             },
             {
                 field: 'priority',
@@ -201,7 +201,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             {
                 field: 'needed_date',
-                label: 'Talep Tarihi',
+                label: 'İhtiyaç Tarihi',
                 sortable: true,
                 type: 'date'
             },
@@ -212,12 +212,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 formatter: (value) => `
                     <div style="color: #495057; font-weight: 500;">${value || 0} ürün</div>
                 `
-            },
-            {
-                field: 'approval',
-                label: 'Onay Durumu',
-                sortable: false,
-                formatter: (value, row) => getApprovalInfo(row)
             },
             {
                 field: 'status',
@@ -308,6 +302,12 @@ async function loadRequests() {
         requests = response.results || response || [];
         totalRequests = response.count || (Array.isArray(response) ? response.length : 0);
 
+        // Add items_count to each request based on items array
+        requests = requests.map(request => ({
+            ...request,
+            items_count: request.items ? request.items.length : 0
+        }));
+
         // Update the table component
         pendingTable.updateData(requests, totalRequests, currentPage);
 
@@ -343,6 +343,12 @@ async function loadApprovedRequests() {
             approvedRequests = [];
             totalApprovedRequests = 0;
         }
+
+        // Add items_count to each request based on items array
+        approvedRequests = approvedRequests.map(request => ({
+            ...request,
+            items_count: request.items ? request.items.length : 0
+        }));
 
         // Update the table component
         approvedTable.updateData(approvedRequests, totalApprovedRequests, approvedCurrentPage);
@@ -560,6 +566,23 @@ function renderPriorityBadge(priority) {
             ${label}
         </span>
     `;
+}
+
+function formatDepartmentName(department) {
+    if (!department) return '-';
+    
+    const departmentMap = {
+        'maintenance': 'Bakım',
+        'manufacturing': 'İmalat',
+        'procurement': 'Satın Alma',
+        'finance': 'Finans',
+        'it': 'Bilgi İşlem',
+        'human_resources': 'İnsan Kaynakları',
+        'management': 'Yönetim',
+        'planning': 'Planlama'
+    };
+    
+    return departmentMap[department] || department.charAt(0).toUpperCase() + department.slice(1);
 }
 
 function getApprovalInfo(request) {
