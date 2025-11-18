@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Planning API Test Page</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        body {
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-section h3 {
+            margin-bottom: 15px;
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        .btn-group-test {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .response-area {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 4px;
+            padding: 15px;
+            margin-top: 15px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .response-area pre {
+            margin: 0;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .success {
+            color: #28a745;
+        }
+        .error {
+            color: #dc3545;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            font-weight: 600;
+            margin-bottom: 5px;
+        }
+        .input-group {
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <h1 class="mb-4">
+            <i class="fas fa-vial me-2"></i>
+            Planning API Test Page
+        </h1>
+
+        <!-- Department Requests Section -->
+        <div class="test-section">
+            <h3><i class="fas fa-building me-2"></i>Department Requests</h3>
+            
+            <div class="form-group">
+                <label>Filters:</label>
+                <div class="row">
+                    <div class="col-md-3">
+                        <input type="text" class="form-control" id="dr-status-filter" placeholder="Status (draft, submitted, approved)">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" class="form-control" id="dr-priority-filter" placeholder="Priority (normal, urgent, critical)">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" class="form-control" id="dr-department-filter" placeholder="Department">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" class="form-control" id="dr-search-filter" placeholder="Search query">
+                    </div>
+                </div>
+            </div>
+
+            <div class="btn-group-test">
+                <button class="btn btn-primary" id="dr-get-all">
+                    <i class="fas fa-list me-1"></i>Get All Department Requests
+                </button>
+                <button class="btn btn-info" id="dr-get-my">
+                    <i class="fas fa-user me-1"></i>Get My Requests
+                </button>
+                <button class="btn btn-secondary" id="dr-get-pending">
+                    <i class="fas fa-clock me-1"></i>Get Pending Approval
+                </button>
+                <button class="btn btn-success" id="dr-get-approved">
+                    <i class="fas fa-check me-1"></i>Get Approved
+                </button>
+                <button class="btn btn-warning" id="dr-get-completed">
+                    <i class="fas fa-check-circle me-1"></i>Get Completed
+                </button>
+                <button class="btn btn-info" id="dr-get-one">
+                    <i class="fas fa-eye me-1"></i>Get Department Request (ID)
+                </button>
+                <button class="btn btn-success" id="dr-create">
+                    <i class="fas fa-plus me-1"></i>Create Department Request
+                </button>
+                <button class="btn btn-warning" id="dr-update">
+                    <i class="fas fa-edit me-1"></i>Update Department Request
+                </button>
+                <button class="btn btn-primary" id="dr-approve">
+                    <i class="fas fa-check me-1"></i>Approve Request
+                </button>
+                <button class="btn btn-danger" id="dr-reject">
+                    <i class="fas fa-times me-1"></i>Reject Request
+                </button>
+                <button class="btn btn-secondary" id="dr-mark-transferred">
+                    <i class="fas fa-exchange-alt me-1"></i>Mark Transferred
+                </button>
+                <button class="btn btn-danger" id="dr-delete">
+                    <i class="fas fa-trash me-1"></i>Delete Request
+                </button>
+            </div>
+
+            <div class="form-group">
+                <label>Create/Update Form:</label>
+                <div class="row">
+                    <div class="col-md-6">
+                        <input type="number" class="form-control mb-2" id="dr-id" placeholder="Department Request ID (for get/update/delete/approve/reject)">
+                        <input type="text" class="form-control mb-2" id="dr-title" placeholder="Title (required for create)">
+                        <textarea class="form-control mb-2" id="dr-description" placeholder="Description" rows="2"></textarea>
+                        <input type="text" class="form-control mb-2" id="dr-department" placeholder="Department">
+                        <input type="date" class="form-control mb-2" id="dr-needed-date" placeholder="Needed Date">
+                    </div>
+                    <div class="col-md-6">
+                        <select class="form-control mb-2" id="dr-priority">
+                            <option value="">Select Priority</option>
+                            <option value="normal">Normal</option>
+                            <option value="urgent">Urgent</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                        <select class="form-control mb-2" id="dr-status">
+                            <option value="">Select Status</option>
+                            <option value="draft">Draft</option>
+                            <option value="submitted">Submitted</option>
+                            <option value="approved">Approved</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="transferred">Transferred</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                        <textarea class="form-control mb-2" id="dr-items" placeholder="Items (JSON array)" rows="3"></textarea>
+                        <textarea class="form-control mb-2" id="dr-comment" placeholder="Comment (for approve/reject)" rows="2"></textarea>
+                        <input type="file" class="form-control mb-2" id="dr-attachments" multiple>
+                    </div>
+                </div>
+            </div>
+
+            <div class="response-area" id="dr-response">
+                <pre>Response will appear here...</pre>
+            </div>
+        </div>
+
+        <!-- Planning Requests Section -->
+        <div class="test-section">
+            <h3><i class="fas fa-clipboard-list me-2"></i>Planning Requests</h3>
+            
+            <div class="form-group">
+                <label>Filters:</label>
+                <div class="row">
+                    <div class="col-md-3">
+                        <input type="text" class="form-control" id="pr-status-filter" placeholder="Status (draft, ready, converted)">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" class="form-control" id="pr-priority-filter" placeholder="Priority (normal, urgent, critical)">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="number" class="form-control" id="pr-dept-request-filter" placeholder="Department Request ID">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" class="form-control" id="pr-search-filter" placeholder="Search query">
+                    </div>
+                </div>
+            </div>
+
+            <div class="btn-group-test">
+                <button class="btn btn-primary" id="pr-get-all">
+                    <i class="fas fa-list me-1"></i>Get All Planning Requests
+                </button>
+                <button class="btn btn-info" id="pr-get-one">
+                    <i class="fas fa-eye me-1"></i>Get Planning Request (ID)
+                </button>
+                <button class="btn btn-success" id="pr-create">
+                    <i class="fas fa-plus me-1"></i>Create Planning Request
+                </button>
+                <button class="btn btn-warning" id="pr-update">
+                    <i class="fas fa-edit me-1"></i>Update Planning Request
+                </button>
+                <button class="btn btn-danger" id="pr-delete">
+                    <i class="fas fa-trash me-1"></i>Delete Planning Request
+                </button>
+            </div>
+
+            <div class="form-group">
+                <label>Create/Update Form:</label>
+                <div class="row">
+                    <div class="col-md-6">
+                        <input type="number" class="form-control mb-2" id="pr-id" placeholder="Planning Request ID (for get/update/delete)">
+                        <input type="number" class="form-control mb-2" id="pr-dept-request-id" placeholder="Department Request ID (required for create)">
+                        <input type="text" class="form-control mb-2" id="pr-title" placeholder="Title">
+                        <textarea class="form-control mb-2" id="pr-description" placeholder="Description" rows="2"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <input type="date" class="form-control mb-2" id="pr-needed-date" placeholder="Needed Date">
+                        <select class="form-control mb-2" id="pr-priority">
+                            <option value="">Select Priority</option>
+                            <option value="normal">Normal</option>
+                            <option value="urgent">Urgent</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                        <select class="form-control mb-2" id="pr-status">
+                            <option value="">Select Status</option>
+                            <option value="draft">Draft</option>
+                            <option value="ready">Ready</option>
+                            <option value="converted">Converted</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
+                        <input type="file" class="form-control mb-2" id="pr-attachments" multiple>
+                    </div>
+                </div>
+            </div>
+
+            <div class="response-area" id="pr-response">
+                <pre>Response will appear here...</pre>
+            </div>
+        </div>
+
+        <!-- Planning Request Items Section -->
+        <div class="test-section">
+            <h3><i class="fas fa-boxes me-2"></i>Planning Request Items</h3>
+            
+            <div class="form-group">
+                <label>Filters:</label>
+                <div class="row">
+                    <div class="col-md-3">
+                        <input type="number" class="form-control" id="pri-planning-request-filter" placeholder="Planning Request ID">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="number" class="form-control" id="pri-item-filter" placeholder="Item ID">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" class="form-control" id="pri-job-no-filter" placeholder="Job Number">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" class="form-control" id="pri-priority-filter" placeholder="Priority">
+                    </div>
+                </div>
+            </div>
+
+            <div class="btn-group-test">
+                <button class="btn btn-primary" id="pri-get-all">
+                    <i class="fas fa-list me-1"></i>Get All Items
+                </button>
+                <button class="btn btn-info" id="pri-get-one">
+                    <i class="fas fa-eye me-1"></i>Get Item (ID)
+                </button>
+                <button class="btn btn-success" id="pri-create">
+                    <i class="fas fa-plus me-1"></i>Create Item
+                </button>
+                <button class="btn btn-warning" id="pri-bulk-create">
+                    <i class="fas fa-layer-group me-1"></i>Bulk Create Items
+                </button>
+                <button class="btn btn-secondary" id="pri-update">
+                    <i class="fas fa-edit me-1"></i>Update Item
+                </button>
+                <button class="btn btn-danger" id="pri-delete">
+                    <i class="fas fa-trash me-1"></i>Delete Item
+                </button>
+            </div>
+
+            <div class="form-group">
+                <label>Create/Update Form:</label>
+                <div class="row">
+                    <div class="col-md-6">
+                        <input type="number" class="form-control mb-2" id="pri-id" placeholder="Item ID (for get/update/delete)">
+                        <input type="number" class="form-control mb-2" id="pri-planning-request" placeholder="Planning Request ID (required)">
+                        <input type="number" class="form-control mb-2" id="pri-item-id" placeholder="Item ID (required)">
+                        <input type="text" class="form-control mb-2" id="pri-job-no" placeholder="Job Number (required)">
+                        <input type="number" class="form-control mb-2" id="pri-quantity" placeholder="Quantity (required)" step="0.01">
+                    </div>
+                    <div class="col-md-6">
+                        <select class="form-control mb-2" id="pri-priority">
+                            <option value="">Select Priority</option>
+                            <option value="normal">Normal</option>
+                            <option value="urgent">Urgent</option>
+                            <option value="critical">Critical</option>
+                        </select>
+                        <textarea class="form-control mb-2" id="pri-specifications" placeholder="Specifications" rows="2"></textarea>
+                        <input type="number" class="form-control mb-2" id="pri-source-item-index" placeholder="Source Item Index">
+                        <input type="number" class="form-control mb-2" id="pri-order" placeholder="Order">
+                        <input type="file" class="form-control mb-2" id="pri-attachments" multiple>
+                    </div>
+                </div>
+            </div>
+
+            <div class="response-area" id="pri-response">
+                <pre>Response will appear here...</pre>
+            </div>
+        </div>
+
+        <!-- Item Suggestions Section -->
+        <div class="test-section">
+            <h3><i class="fas fa-lightbulb me-2"></i>Item Suggestions</h3>
+            
+            <div class="form-group">
+                <div class="row">
+                    <div class="col-md-6">
+                        <input type="text" class="form-control" id="is-query" placeholder="Search query (item code or name)">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="number" class="form-control" id="is-limit" placeholder="Limit (optional)">
+                    </div>
+                    <div class="col-md-3">
+                        <button class="btn btn-primary w-100" id="is-get">
+                            <i class="fas fa-search me-1"></i>Get Suggestions
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="response-area" id="is-response">
+                <pre>Response will appear here...</pre>
+            </div>
+        </div>
+    </div>
+
+    <script type="module">
+        import {
+            createDepartmentRequest,
+            updateDepartmentRequest,
+            approveDepartmentRequest,
+            rejectDepartmentRequest,
+            getDepartmentRequests,
+            getMyDepartmentRequests,
+            getPendingApprovalDepartmentRequests,
+            getApprovedDepartmentRequests,
+            getCompletedDepartmentRequests,
+            getDepartmentRequest,
+            markDepartmentRequestTransferred,
+            deleteDepartmentRequest
+        } from './departmentRequests.js';
+
+        import {
+            getPlanningRequests,
+            getPlanningRequest,
+            createPlanningRequest,
+            updatePlanningRequest,
+            partialUpdatePlanningRequest,
+            deletePlanningRequest
+        } from './planningRequests.js';
+        
+        import {
+            getPlanningRequestItems,
+            getPlanningRequestItem,
+            createPlanningRequestItem,
+            bulkCreatePlanningRequestItems,
+            updatePlanningRequestItem,
+            partialUpdatePlanningRequestItem,
+            deletePlanningRequestItem
+        } from './planningRequestItems.js';
+        
+        import {
+            getItemSuggestions
+        } from './itemSuggestions.js';
+
+        // Make all functions available globally
+        // Department Request test functions
+        window.testGetDepartmentRequests = async function() {
+            const filters = {};
+            const status = document.getElementById('dr-status-filter').value;
+            const priority = document.getElementById('dr-priority-filter').value;
+            const department = document.getElementById('dr-department-filter').value;
+            const search = document.getElementById('dr-search-filter').value;
+
+            if (status) filters.status = status;
+            if (priority) filters.priority = priority;
+            if (department) filters.department = department;
+            if (search) filters.search = search;
+
+            try {
+                const response = await getDepartmentRequests(filters);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testGetMyDepartmentRequests = async function() {
+            const filters = {};
+            const status = document.getElementById('dr-status-filter').value;
+            const priority = document.getElementById('dr-priority-filter').value;
+            const department = document.getElementById('dr-department-filter').value;
+            const search = document.getElementById('dr-search-filter').value;
+
+            if (status) filters.status = status;
+            if (priority) filters.priority = priority;
+            if (department) filters.department = department;
+            if (search) filters.search = search;
+
+            try {
+                const response = await getMyDepartmentRequests(filters);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testGetPendingApprovalDepartmentRequests = async function() {
+            const filters = {};
+            const status = document.getElementById('dr-status-filter').value;
+            const priority = document.getElementById('dr-priority-filter').value;
+            const department = document.getElementById('dr-department-filter').value;
+            const search = document.getElementById('dr-search-filter').value;
+
+            if (status) filters.status = status;
+            if (priority) filters.priority = priority;
+            if (department) filters.department = department;
+            if (search) filters.search = search;
+
+            try {
+                const response = await getPendingApprovalDepartmentRequests(filters);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testGetApprovedDepartmentRequests = async function() {
+            const filters = {};
+            const status = document.getElementById('dr-status-filter').value;
+            const priority = document.getElementById('dr-priority-filter').value;
+            const department = document.getElementById('dr-department-filter').value;
+            const search = document.getElementById('dr-search-filter').value;
+
+            if (status) filters.status = status;
+            if (priority) filters.priority = priority;
+            if (department) filters.department = department;
+            if (search) filters.search = search;
+
+            try {
+                const response = await getApprovedDepartmentRequests(filters);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testGetCompletedDepartmentRequests = async function() {
+            const filters = {};
+            const status = document.getElementById('dr-status-filter').value;
+            const priority = document.getElementById('dr-priority-filter').value;
+            const department = document.getElementById('dr-department-filter').value;
+            const search = document.getElementById('dr-search-filter').value;
+
+            if (status) filters.status = status;
+            if (priority) filters.priority = priority;
+            if (department) filters.department = department;
+            if (search) filters.search = search;
+
+            try {
+                const response = await getCompletedDepartmentRequests(filters);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testGetDepartmentRequest = async function() {
+            const id = document.getElementById('dr-id').value;
+            if (!id) {
+                alert('Please enter a Department Request ID');
+                return;
+            }
+
+            try {
+                const response = await getDepartmentRequest(id);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testCreateDepartmentRequest = async function() {
+            const title = document.getElementById('dr-title').value;
+            if (!title) {
+                alert('Please enter a Title');
+                return;
+            }
+
+            const requestData = {
+                title: title
+            };
+
+            const description = document.getElementById('dr-description').value;
+            const department = document.getElementById('dr-department').value;
+            const neededDate = document.getElementById('dr-needed-date').value;
+            const priority = document.getElementById('dr-priority').value;
+            const itemsText = document.getElementById('dr-items').value;
+
+            if (description) requestData.description = description;
+            if (department) requestData.department = department;
+            if (neededDate) requestData.needed_date = neededDate;
+            if (priority) requestData.priority = priority;
+            if (itemsText) {
+                try {
+                    requestData.items = JSON.parse(itemsText);
+                } catch (e) {
+                    alert('Invalid JSON format for items. Please enter a valid JSON array.');
+                    return;
+                }
+            } else {
+                requestData.items = [];
+            }
+
+            // Get files from file input and convert to attachments format
+            const fileInput = document.getElementById('dr-attachments');
+            if (fileInput && fileInput.files && fileInput.files.length > 0) {
+                requestData.attachments = Array.from(fileInput.files).map(file => ({
+                    file: file,
+                    description: file.name || ''
+                }));
+            }
+
+            try {
+                const response = await createDepartmentRequest(requestData);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testUpdateDepartmentRequest = async function() {
+            const id = document.getElementById('dr-id').value;
+            if (!id) {
+                alert('Please enter a Department Request ID');
+                return;
+            }
+
+            const updateData = {};
+            const title = document.getElementById('dr-title').value;
+            const description = document.getElementById('dr-description').value;
+            const department = document.getElementById('dr-department').value;
+            const neededDate = document.getElementById('dr-needed-date').value;
+            const priority = document.getElementById('dr-priority').value;
+            const status = document.getElementById('dr-status').value;
+            const itemsText = document.getElementById('dr-items').value;
+
+            if (title) updateData.title = title;
+            if (description) updateData.description = description;
+            if (department) updateData.department = department;
+            if (neededDate) updateData.needed_date = neededDate;
+            if (priority) updateData.priority = priority;
+            if (status) updateData.status = status;
+            if (itemsText) {
+                try {
+                    updateData.items = JSON.parse(itemsText);
+                } catch (e) {
+                    alert('Invalid JSON format for items. Please enter a valid JSON array.');
+                    return;
+                }
+            }
+
+            if (Object.keys(updateData).length === 0) {
+                alert('Please enter at least one field to update');
+                return;
+            }
+
+            try {
+                const response = await updateDepartmentRequest(id, updateData);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testApproveDepartmentRequest = async function() {
+            const id = document.getElementById('dr-id').value;
+            if (!id) {
+                alert('Please enter a Department Request ID');
+                return;
+            }
+
+            const comment = document.getElementById('dr-comment').value || '';
+
+            try {
+                const response = await approveDepartmentRequest(id, comment);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testRejectDepartmentRequest = async function() {
+            const id = document.getElementById('dr-id').value;
+            if (!id) {
+                alert('Please enter a Department Request ID');
+                return;
+            }
+
+            const comment = document.getElementById('dr-comment').value || '';
+
+            try {
+                const response = await rejectDepartmentRequest(id, comment);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testMarkDepartmentRequestTransferred = async function() {
+            const id = document.getElementById('dr-id').value;
+            if (!id) {
+                alert('Please enter a Department Request ID');
+                return;
+            }
+
+            try {
+                const response = await markDepartmentRequestTransferred(id);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testDeleteDepartmentRequest = async function() {
+            const id = document.getElementById('dr-id').value;
+            if (!id) {
+                alert('Please enter a Department Request ID');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete Department Request ${id}?`)) {
+                return;
+            }
+
+            try {
+                const response = await deleteDepartmentRequest(id);
+                document.getElementById('dr-response').innerHTML = `<pre class="success">Deleted successfully: ${response}</pre>`;
+            } catch (error) {
+                document.getElementById('dr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        // Make functions available globally
+        window.testGetPlanningRequests = async function() {
+            const filters = {};
+            const status = document.getElementById('pr-status-filter').value;
+            const priority = document.getElementById('pr-priority-filter').value;
+            const deptRequest = document.getElementById('pr-dept-request-filter').value;
+            const search = document.getElementById('pr-search-filter').value;
+
+            if (status) filters.status = status;
+            if (priority) filters.priority = priority;
+            if (deptRequest) filters.department_request = deptRequest;
+            if (search) filters.search = search;
+
+            try {
+                const response = await getPlanningRequests(filters);
+                document.getElementById('pr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('pr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testGetPlanningRequest = async function() {
+            const id = document.getElementById('pr-id').value;
+            if (!id) {
+                alert('Please enter a Planning Request ID');
+                return;
+            }
+
+            try {
+                const response = await getPlanningRequest(id);
+                document.getElementById('pr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('pr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testCreatePlanningRequest = async function() {
+            const deptRequestId = document.getElementById('pr-dept-request-id').value;
+            if (!deptRequestId) {
+                alert('Please enter a Department Request ID');
+                return;
+            }
+
+            const requestData = {
+                department_request_id: parseInt(deptRequestId)
+            };
+
+            // Add items if needed (would need a more complex form for this)
+            // For now, just basic creation
+
+            // Handle attachments
+            const fileInput = document.getElementById('pr-attachments');
+            if (fileInput.files.length > 0) {
+                requestData.attachments = Array.from(fileInput.files).map(file => ({
+                    file: file,
+                    description: ''
+                }));
+            }
+
+            try {
+                const response = await createPlanningRequest(requestData);
+                document.getElementById('pr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('pr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testUpdatePlanningRequest = async function() {
+            const id = document.getElementById('pr-id').value;
+            if (!id) {
+                alert('Please enter a Planning Request ID');
+                return;
+            }
+
+            const updateData = {};
+            const title = document.getElementById('pr-title').value;
+            const description = document.getElementById('pr-description').value;
+            const neededDate = document.getElementById('pr-needed-date').value;
+            const priority = document.getElementById('pr-priority').value;
+            const status = document.getElementById('pr-status').value;
+
+            if (title) updateData.title = title;
+            if (description) updateData.description = description;
+            if (neededDate) updateData.needed_date = neededDate;
+            if (priority) updateData.priority = priority;
+            if (status) updateData.status = status;
+
+            if (Object.keys(updateData).length === 0) {
+                alert('Please enter at least one field to update');
+                return;
+            }
+
+            try {
+                const response = await partialUpdatePlanningRequest(id, updateData);
+                document.getElementById('pr-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('pr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testDeletePlanningRequest = async function() {
+            const id = document.getElementById('pr-id').value;
+            if (!id) {
+                alert('Please enter a Planning Request ID');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete Planning Request ${id}?`)) {
+                return;
+            }
+
+            try {
+                const response = await deletePlanningRequest(id);
+                document.getElementById('pr-response').innerHTML = `<pre class="success">Deleted successfully: ${response}</pre>`;
+            } catch (error) {
+                document.getElementById('pr-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testGetPlanningRequestItems = async function() {
+            const filters = {};
+            const planningRequest = document.getElementById('pri-planning-request-filter').value;
+            const item = document.getElementById('pri-item-filter').value;
+            const jobNo = document.getElementById('pri-job-no-filter').value;
+            const priority = document.getElementById('pri-priority-filter').value;
+
+            if (planningRequest) filters.planning_request = planningRequest;
+            if (item) filters.item = item;
+            if (jobNo) filters.job_no = jobNo;
+            if (priority) filters.priority = priority;
+
+            try {
+                const response = await getPlanningRequestItems(filters);
+                document.getElementById('pri-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('pri-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testGetPlanningRequestItem = async function() {
+            const id = document.getElementById('pri-id').value;
+            if (!id) {
+                alert('Please enter an Item ID');
+                return;
+            }
+
+            try {
+                const response = await getPlanningRequestItem(id);
+                document.getElementById('pri-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('pri-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testCreatePlanningRequestItem = async function() {
+            const planningRequest = document.getElementById('pri-planning-request').value;
+            const itemId = document.getElementById('pri-item-id').value;
+            const jobNo = document.getElementById('pri-job-no').value;
+            const quantity = document.getElementById('pri-quantity').value;
+
+            if (!planningRequest || !itemId || !jobNo || !quantity) {
+                alert('Please fill in all required fields: Planning Request ID, Item ID, Job Number, and Quantity');
+                return;
+            }
+
+            const itemData = {
+                planning_request: parseInt(planningRequest),
+                item_id: parseInt(itemId),
+                job_no: jobNo,
+                quantity: parseFloat(quantity)
+            };
+
+            const priority = document.getElementById('pri-priority').value;
+            const specifications = document.getElementById('pri-specifications').value;
+            const sourceItemIndex = document.getElementById('pri-source-item-index').value;
+            const order = document.getElementById('pri-order').value;
+
+            if (priority) itemData.priority = priority;
+            if (specifications) itemData.specifications = specifications;
+            if (sourceItemIndex) itemData.source_item_index = parseInt(sourceItemIndex);
+            if (order) itemData.order = parseInt(order);
+
+            // Handle attachments
+            const fileInput = document.getElementById('pri-attachments');
+            if (fileInput.files.length > 0) {
+                itemData.attachments = Array.from(fileInput.files).map(file => ({
+                    file: file,
+                    description: ''
+                }));
+            }
+
+            try {
+                const response = await createPlanningRequestItem(itemData);
+                document.getElementById('pri-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('pri-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testBulkCreateItems = async function() {
+            const planningRequestId = document.getElementById('pri-planning-request').value;
+            if (!planningRequestId) {
+                alert('Please enter a Planning Request ID');
+                return;
+            }
+
+            // Example bulk data - in a real scenario, you'd have a more complex form
+            const bulkData = {
+                planning_request_id: parseInt(planningRequestId),
+                items: [
+                    {
+                        item_id: parseInt(document.getElementById('pri-item-id').value) || 1,
+                        job_no: document.getElementById('pri-job-no').value || 'JOB-001',
+                        quantity: parseFloat(document.getElementById('pri-quantity').value) || 1
+                    }
+                ]
+            };
+
+            try {
+                const response = await bulkCreatePlanningRequestItems(bulkData);
+                document.getElementById('pri-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('pri-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testUpdatePlanningRequestItem = async function() {
+            const id = document.getElementById('pri-id').value;
+            if (!id) {
+                alert('Please enter an Item ID');
+                return;
+            }
+
+            const updateData = {};
+            const jobNo = document.getElementById('pri-job-no').value;
+            const quantity = document.getElementById('pri-quantity').value;
+            const priority = document.getElementById('pri-priority').value;
+            const specifications = document.getElementById('pri-specifications').value;
+
+            if (jobNo) updateData.job_no = jobNo;
+            if (quantity) updateData.quantity = parseFloat(quantity);
+            if (priority) updateData.priority = priority;
+            if (specifications) updateData.specifications = specifications;
+
+            if (Object.keys(updateData).length === 0) {
+                alert('Please enter at least one field to update');
+                return;
+            }
+
+            try {
+                const response = await partialUpdatePlanningRequestItem(id, updateData);
+                document.getElementById('pri-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('pri-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testDeletePlanningRequestItem = async function() {
+            const id = document.getElementById('pri-id').value;
+            if (!id) {
+                alert('Please enter an Item ID');
+                return;
+            }
+
+            if (!confirm(`Are you sure you want to delete Item ${id}?`)) {
+                return;
+            }
+
+            try {
+                const response = await deletePlanningRequestItem(id);
+                document.getElementById('pri-response').innerHTML = `<pre class="success">Deleted successfully: ${response}</pre>`;
+            } catch (error) {
+                document.getElementById('pri-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        window.testGetItemSuggestions = async function() {
+            const query = document.getElementById('is-query').value;
+            const limit = document.getElementById('is-limit').value;
+
+            const params = {};
+            if (query) params.query = query;
+            if (limit) params.limit = parseInt(limit);
+
+            if (!query) {
+                alert('Please enter a search query');
+                return;
+            }
+
+            try {
+                const response = await getItemSuggestions(params);
+                document.getElementById('is-response').innerHTML = `<pre class="success">${JSON.stringify(response, null, 2)}</pre>`;
+            } catch (error) {
+                document.getElementById('is-response').innerHTML = `<pre class="error">Error: ${error.message}</pre>`;
+            }
+        };
+
+        // Setup event listeners after module loads and DOM is ready
+        function setupEventListeners() {
+            // Department Requests buttons
+            const drGetAll = document.getElementById('dr-get-all');
+            const drGetMy = document.getElementById('dr-get-my');
+            const drGetPending = document.getElementById('dr-get-pending');
+            const drGetApproved = document.getElementById('dr-get-approved');
+            const drGetCompleted = document.getElementById('dr-get-completed');
+            const drGetOne = document.getElementById('dr-get-one');
+            const drCreate = document.getElementById('dr-create');
+            const drUpdate = document.getElementById('dr-update');
+            const drApprove = document.getElementById('dr-approve');
+            const drReject = document.getElementById('dr-reject');
+            const drMarkTransferred = document.getElementById('dr-mark-transferred');
+            const drDelete = document.getElementById('dr-delete');
+
+            if (drGetAll) drGetAll.addEventListener('click', window.testGetDepartmentRequests);
+            if (drGetMy) drGetMy.addEventListener('click', window.testGetMyDepartmentRequests);
+            if (drGetPending) drGetPending.addEventListener('click', window.testGetPendingApprovalDepartmentRequests);
+            if (drGetApproved) drGetApproved.addEventListener('click', window.testGetApprovedDepartmentRequests);
+            if (drGetCompleted) drGetCompleted.addEventListener('click', window.testGetCompletedDepartmentRequests);
+            if (drGetOne) drGetOne.addEventListener('click', window.testGetDepartmentRequest);
+            if (drCreate) drCreate.addEventListener('click', window.testCreateDepartmentRequest);
+            if (drUpdate) drUpdate.addEventListener('click', window.testUpdateDepartmentRequest);
+            if (drApprove) drApprove.addEventListener('click', window.testApproveDepartmentRequest);
+            if (drReject) drReject.addEventListener('click', window.testRejectDepartmentRequest);
+            if (drMarkTransferred) drMarkTransferred.addEventListener('click', window.testMarkDepartmentRequestTransferred);
+            if (drDelete) drDelete.addEventListener('click', window.testDeleteDepartmentRequest);
+
+            // Planning Requests buttons
+            const prGetAll = document.getElementById('pr-get-all');
+            const prGetOne = document.getElementById('pr-get-one');
+            const prCreate = document.getElementById('pr-create');
+            const prUpdate = document.getElementById('pr-update');
+            const prDelete = document.getElementById('pr-delete');
+
+            if (prGetAll) prGetAll.addEventListener('click', window.testGetPlanningRequests);
+            if (prGetOne) prGetOne.addEventListener('click', window.testGetPlanningRequest);
+            if (prCreate) prCreate.addEventListener('click', window.testCreatePlanningRequest);
+            if (prUpdate) prUpdate.addEventListener('click', window.testUpdatePlanningRequest);
+            if (prDelete) prDelete.addEventListener('click', window.testDeletePlanningRequest);
+
+            // Planning Request Items buttons
+            const priGetAll = document.getElementById('pri-get-all');
+            const priGetOne = document.getElementById('pri-get-one');
+            const priCreate = document.getElementById('pri-create');
+            const priBulkCreate = document.getElementById('pri-bulk-create');
+            const priUpdate = document.getElementById('pri-update');
+            const priDelete = document.getElementById('pri-delete');
+
+            if (priGetAll) priGetAll.addEventListener('click', window.testGetPlanningRequestItems);
+            if (priGetOne) priGetOne.addEventListener('click', window.testGetPlanningRequestItem);
+            if (priCreate) priCreate.addEventListener('click', window.testCreatePlanningRequestItem);
+            if (priBulkCreate) priBulkCreate.addEventListener('click', window.testBulkCreateItems);
+            if (priUpdate) priUpdate.addEventListener('click', window.testUpdatePlanningRequestItem);
+            if (priDelete) priDelete.addEventListener('click', window.testDeletePlanningRequestItem);
+
+            // Item Suggestions button
+            const isGet = document.getElementById('is-get');
+            if (isGet) isGet.addEventListener('click', window.testGetItemSuggestions);
+        }
+
+        // Setup listeners when DOM is ready
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', setupEventListeners);
+        } else {
+            // DOM already loaded, setup immediately
+            setupEventListeners();
+        }
+    </script>
+</body>
+</html>
+

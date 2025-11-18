@@ -2,7 +2,7 @@ import { DisplayModal } from '../../../components/display-modal/display-modal.js
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import {
     markDepartmentRequestTransferred as markTransferredAPI
-} from '../../../apis/departmentRequests.js';
+} from '../../../apis/planning/departmentRequests.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 
 // Modal instances

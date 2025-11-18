@@ -7,7 +7,7 @@ import {
     getApprovedDepartmentRequests,
     getCompletedDepartmentRequests,
     markDepartmentRequestTransferred
-} from '../../../apis/departmentRequests.js';
+} from '../../../apis/planning/departmentRequests.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 import {
     initializeModalComponents,
