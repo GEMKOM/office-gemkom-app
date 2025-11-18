@@ -160,6 +160,71 @@ function initTables() {
                 }
             },
             {
+                key: 'efficiency',
+                label: 'Verimlilik',
+                sortable: false,
+                formatter: (value, row) => {
+                    // Store data attributes for real-time updates
+                    const estimatedHours = parseFloat(row.estimated_hours) || 0;
+                    const taskTotalHours = parseFloat(row.task_total_hours) || 0;
+                    const startTime = row.start_time;
+                    
+                    if (!estimatedHours || !startTime) {
+                        return '<span class="efficiency-display" style="color: #6c757d;">-</span>';
+                    }
+                    
+                    // Calculate initial efficiency
+                    let efficiency = '-';
+                    if (estimatedHours > 0 && taskTotalHours >= 0) {
+                        const now = new Date();
+                        const start = new Date(startTime);
+                        const durationMs = now - start;
+                        const durationInHours = durationMs / (1000 * 60 * 60);
+                        const totalTimeSpent = taskTotalHours + durationInHours;
+                        
+                        if (totalTimeSpent > 0) {
+                            const efficiencyValue = (estimatedHours / totalTimeSpent) * 100;
+                            efficiency = efficiencyValue.toFixed(3);
+                        }
+                    }
+                    
+                    // Determine color based on efficiency
+                    const efficiencyNum = parseFloat(efficiency);
+                    let color = '#6c757d'; // Default gray
+                    let bgColor = 'rgba(108, 117, 125, 0.1)';
+                    let borderColor = 'rgba(108, 117, 125, 0.2)';
+                    
+                    if (!isNaN(efficiencyNum)) {
+                        if (efficiencyNum >= 100) {
+                            color = '#28a745'; // Green for on track or ahead
+                            bgColor = 'rgba(40, 167, 69, 0.1)';
+                            borderColor = 'rgba(40, 167, 69, 0.2)';
+                        } else if (efficiencyNum >= 80) {
+                            color = '#ffc107'; // Yellow for slightly behind
+                            bgColor = 'rgba(255, 193, 7, 0.1)';
+                            borderColor = 'rgba(255, 193, 7, 0.2)';
+                        } else {
+                            color = '#dc3545'; // Red for significantly behind
+                            bgColor = 'rgba(220, 53, 69, 0.1)';
+                            borderColor = 'rgba(220, 53, 69, 0.2)';
+                        }
+                    }
+                    
+                    return `<span class="efficiency-display" style="
+                        color: ${color};
+                        font-weight: 600;
+                        font-size: 0.95rem;
+                        background: ${bgColor};
+                        padding: 0.25rem 0.5rem;
+                        border-radius: 6px;
+                        border: 1px solid ${borderColor};
+                        display: inline-block;
+                        min-width: 85px;
+                        text-align: center;
+                    " data-start-time="${startTime}" data-estimated-hours="${estimatedHours}" data-task-total-hours="${taskTotalHours}">${efficiency}%</span>`;
+                }
+            },
+            {
                 key: 'duration',
                 label: 'Süre',
                 sortable: false,
@@ -419,6 +484,18 @@ function updateActiveTimersTable() {
         const durationMs = now - startTime;
         const duration = formatDurationFromMs(durationMs);
         
+        // Calculate efficiency
+        let efficiency = '-';
+        const estimatedHours = parseFloat(timer.estimated_hours) || 0;
+        const taskTotalHours = parseFloat(timer.task_total_hours) || 0;
+        const durationInHours = durationMs / (1000 * 60 * 60); // Convert milliseconds to hours
+        const totalTimeSpent = taskTotalHours + durationInHours;
+        
+        if (estimatedHours > 0 && totalTimeSpent > 0) {
+            const efficiencyValue = (estimatedHours / totalTimeSpent) * 100;
+            efficiency = efficiencyValue.toFixed(3);
+        }
+        
         return {
             id: timer.id,
             user: timer.username || 'Bilinmeyen Kullanıcı',
@@ -426,8 +503,11 @@ function updateActiveTimersTable() {
             task: timer.issue_key || 'Bilinmeyen Görev',
             issue_key: timer.issue_key,
             issue_name: timer.issue_name,
+            efficiency: efficiency,
             duration: duration,
-            start_time: timer.start_time
+            start_time: timer.start_time,
+            estimated_hours: timer.estimated_hours,
+            task_total_hours: timer.task_total_hours
         };
     });
     
@@ -558,6 +638,59 @@ function updateTimerDisplays() {
             const durationMs = now - start;
             const duration = formatDurationFromMs(durationMs);
             element.textContent = duration;
+        }
+    });
+    
+    // Update efficiency displays
+    const efficiencyElements = document.querySelectorAll('.efficiency-display[data-start-time]');
+    
+    efficiencyElements.forEach(element => {
+        const startTime = element.getAttribute('data-start-time');
+        const estimatedHours = parseFloat(element.getAttribute('data-estimated-hours')) || 0;
+        const taskTotalHours = parseFloat(element.getAttribute('data-task-total-hours')) || 0;
+        
+        if (startTime && estimatedHours > 0) {
+            const start = new Date(parseInt(startTime));
+            const now = new Date();
+            const durationMs = now - start;
+            const durationInHours = durationMs / (1000 * 60 * 60);
+            const totalTimeSpent = taskTotalHours + durationInHours;
+            
+            let efficiency = '-';
+            if (totalTimeSpent > 0) {
+                const efficiencyValue = (estimatedHours / totalTimeSpent) * 100;
+                efficiency = efficiencyValue.toFixed(3);
+            }
+            
+            // Update efficiency value
+            element.textContent = efficiency + '%';
+            
+            // Update color based on efficiency
+            const efficiencyNum = parseFloat(efficiency);
+            let color = '#6c757d';
+            let bgColor = 'rgba(108, 117, 125, 0.1)';
+            let borderColor = 'rgba(108, 117, 125, 0.2)';
+            
+            if (!isNaN(efficiencyNum)) {
+                if (efficiencyNum >= 100) {
+                    color = '#28a745';
+                    bgColor = 'rgba(40, 167, 69, 0.1)';
+                    borderColor = 'rgba(40, 167, 69, 0.2)';
+                } else if (efficiencyNum >= 80) {
+                    color = '#ffc107';
+                    bgColor = 'rgba(255, 193, 7, 0.1)';
+                    borderColor = 'rgba(255, 193, 7, 0.2)';
+                } else {
+                    color = '#dc3545';
+                    bgColor = 'rgba(220, 53, 69, 0.1)';
+                    borderColor = 'rgba(220, 53, 69, 0.2)';
+                }
+            }
+            
+            // Update styles
+            element.style.color = color;
+            element.style.background = bgColor;
+            element.style.borderColor = borderColor;
         }
     });
 }

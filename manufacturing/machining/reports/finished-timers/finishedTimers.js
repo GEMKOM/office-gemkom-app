@@ -250,9 +250,11 @@ function initializeTable() {
                 label: 'TI No',
                 sortable: true,
                 type: 'text',
+                width: '12%',
                 formatter: (value) => {
                     if (!value) return '-';
-                    return `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value}</span>`;
+                    const url = `http://127.0.0.1:8080/manufacturing/machining/tasks/?task=${encodeURIComponent(value)}`;
+                    return `<a href="${url}" target="_blank" rel="noopener noreferrer" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); text-decoration: none; display: inline-block; white-space: nowrap; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='rgba(13, 110, 253, 0.2)'; this.style.textDecoration='underline';" onmouseout="this.style.background='rgba(13, 110, 253, 0.1)'; this.style.textDecoration='none';">${value}</a>`;
                 }
             },
             {
