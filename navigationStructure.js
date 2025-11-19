@@ -43,6 +43,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Departman Talepleri',
                 icon: 'fas fa-boxes',
                 children: {
+                    '/general/department-requests/list': {
+                        label: 'Tüm Talepler',
+                        icon: 'fas fa-list',
+                        children: {}
+                    },
                     '/general/department-requests/pending': {
                         label: 'Bekleyen Talepler',
                         icon: 'fas fa-clock',

@@ -254,3 +254,49 @@ export async function deletePlanningRequestItem(itemId) {
     }
 }
 
+/**
+ * Upload an attachment to a planning request item
+ * @param {number} itemId - Planning request item ID
+ * @param {Object} attachmentData - Attachment data
+ * @param {File} attachmentData.file - File to upload (required)
+ * @param {string} [attachmentData.description] - File description (optional)
+ * @param {number} [attachmentData.source_attachment_id] - Source attachment ID if mapping from another request (optional)
+ * @returns {Promise<Object>} Created attachment
+ */
+export async function uploadPlanningRequestItemAttachment(itemId, attachmentData) {
+    try {
+        const formData = new FormData();
+        
+        // Add file (required)
+        if (!attachmentData.file) {
+            throw new Error('File is required for attachment upload');
+        }
+        formData.append('file', attachmentData.file);
+        
+        // Add description if provided
+        if (attachmentData.description) {
+            formData.append('description', attachmentData.description);
+        }
+        
+        // Add source_attachment_id if provided
+        if (attachmentData.source_attachment_id) {
+            formData.append('source_attachment_id', attachmentData.source_attachment_id);
+        }
+        
+        const response = await authedFetch(`${PLANNING_BASE_URL}/items/${itemId}/attachments/`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Dosya yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error uploading planning request item attachment:', error);
+        throw error;
+    }
+}
+

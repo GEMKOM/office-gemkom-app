@@ -67,9 +67,13 @@ export async function getPlanningRequest(requestId) {
 }
 
 /**
- * Create a planning request from an approved department request
+ * Create a planning request (standalone or from an approved department request)
  * @param {Object} requestData - Planning request data
- * @param {number} requestData.department_request_id - Department request ID (required)
+ * @param {number} [requestData.department_request_id] - Department request ID (optional, for creating from department request)
+ * @param {string} [requestData.title] - Title (required for standalone creation)
+ * @param {string} [requestData.description] - Description (optional)
+ * @param {string} [requestData.needed_date] - Needed date (optional)
+ * @param {string} [requestData.priority] - Priority: 'low', 'normal', 'high', 'urgent' (optional, default: 'normal')
  * @param {Array} [requestData.items] - Optional initial item mappings
  * @param {Array} [requestData.attachments] - Optional file attachments
  * @param {File} [requestData.attachments[].file] - File to upload
@@ -81,8 +85,24 @@ export async function createPlanningRequest(requestData) {
     try {
         const formData = new FormData();
         
-        // Add department_request_id (required)
-        formData.append('department_request_id', requestData.department_request_id);
+        // Add department_request_id if provided (for creating from department request)
+        if (requestData.department_request_id !== undefined && requestData.department_request_id !== null) {
+            formData.append('department_request_id', requestData.department_request_id);
+        }
+
+        // Add standalone creation fields (required if no department_request_id)
+        if (requestData.title !== undefined && requestData.title !== null) {
+            formData.append('title', requestData.title);
+        }
+        if (requestData.description !== undefined && requestData.description !== null) {
+            formData.append('description', requestData.description);
+        }
+        if (requestData.needed_date !== undefined && requestData.needed_date !== null) {
+            formData.append('needed_date', requestData.needed_date);
+        }
+        if (requestData.priority !== undefined && requestData.priority !== null) {
+            formData.append('priority', requestData.priority);
+        }
 
         // Add items if provided
         // Note: Items are nested serializers, so we send them as JSON string
@@ -93,7 +113,23 @@ export async function createPlanningRequest(requestData) {
             formData.append('items', JSON.stringify(requestData.items));
         }
 
-        // Add attachments if provided
+        // Add files if provided (new structure with attach_to)
+        if (requestData.files && requestData.files.length > 0) {
+            requestData.files.forEach((fileData, index) => {
+                if (fileData.file) {
+                    formData.append(`files[${index}].file`, fileData.file);
+                }
+                if (fileData.description) {
+                    formData.append(`files[${index}].description`, fileData.description);
+                }
+                if (fileData.attach_to && Array.isArray(fileData.attach_to)) {
+                    // Send attach_to as JSON array
+                    formData.append(`files[${index}].attach_to`, JSON.stringify(fileData.attach_to));
+                }
+            });
+        }
+
+        // Legacy support: Add attachments if provided (old structure)
         if (requestData.attachments && requestData.attachments.length > 0) {
             requestData.attachments.forEach((attachment, index) => {
                 if (attachment.file) {
@@ -200,6 +236,52 @@ export async function deletePlanningRequest(requestId) {
         return true;
     } catch (error) {
         console.error('Error deleting planning request:', error);
+        throw error;
+    }
+}
+
+/**
+ * Upload an attachment to a planning request
+ * @param {number} requestId - Planning request ID
+ * @param {Object} attachmentData - Attachment data
+ * @param {File} attachmentData.file - File to upload (required)
+ * @param {string} [attachmentData.description] - File description (optional)
+ * @param {number} [attachmentData.source_attachment_id] - Source attachment ID if mapping from another request (optional)
+ * @returns {Promise<Object>} Created attachment
+ */
+export async function uploadPlanningRequestAttachment(requestId, attachmentData) {
+    try {
+        const formData = new FormData();
+        
+        // Add file (required)
+        if (!attachmentData.file) {
+            throw new Error('File is required for attachment upload');
+        }
+        formData.append('file', attachmentData.file);
+        
+        // Add description if provided
+        if (attachmentData.description) {
+            formData.append('description', attachmentData.description);
+        }
+        
+        // Add source_attachment_id if provided
+        if (attachmentData.source_attachment_id) {
+            formData.append('source_attachment_id', attachmentData.source_attachment_id);
+        }
+        
+        const response = await authedFetch(`${PLANNING_BASE_URL}/requests/${requestId}/attachments/`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Dosya yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error uploading planning request attachment:', error);
         throw error;
     }
 }

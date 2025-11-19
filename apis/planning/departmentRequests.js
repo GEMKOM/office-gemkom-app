@@ -11,10 +11,7 @@ import { backendBase } from '../../base.js';
  * @param {string} [requestData.needed_date] - Needed date (optional)
  * @param {string} [requestData.priority] - Priority (optional)
  * @param {Array} [requestData.items] - Array of items data (optional)
- * @param {Array<Object>} [requestData.attachments] - Array of attachment objects (optional)
- * @param {File} [requestData.attachments[].file] - File to upload
- * @param {string} [requestData.attachments[].description] - File description (optional)
- * @param {number} [requestData.attachments[].source_attachment_id] - Source attachment ID if mapping from another request (optional)
+ * @param {Array<File>} [requestData.files] - Array of files to upload (optional)
  * @returns {Promise<Object>} Created department request
  */
 export async function createDepartmentRequest(requestData) {
@@ -44,18 +41,10 @@ export async function createDepartmentRequest(requestData) {
             formData.append('items', JSON.stringify(requestData.items));
         }
         
-        // Add attachments if provided - format: attachments[index].file, attachments[index].description
-        if (requestData.attachments && requestData.attachments.length > 0) {
-            requestData.attachments.forEach((attachment, index) => {
-                if (attachment.file) {
-                    formData.append(`attachments[${index}].file`, attachment.file);
-                }
-                if (attachment.description) {
-                    formData.append(`attachments[${index}].description`, attachment.description);
-                }
-                if (attachment.source_attachment_id) {
-                    formData.append(`attachments[${index}].source_attachment_id`, attachment.source_attachment_id);
-                }
+        // Add files if provided
+        if (requestData.files && requestData.files.length > 0) {
+            requestData.files.forEach(file => {
+                formData.append('files', file);
             });
         }
         
@@ -79,7 +68,7 @@ export async function createDepartmentRequest(requestData) {
 export async function updateDepartmentRequest(requestId, requestData) {
     try {
         const response = await authedFetch(`${backendBase}/planning/department-requests/${requestId}/`, {
-            method: 'PUT',
+            method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -335,6 +324,52 @@ export async function deleteDepartmentRequest(requestId) {
         return true; // Successfully deleted
     } catch (error) {
         console.error('Error deleting department request:', error);
+        throw error;
+    }
+}
+
+/**
+ * Upload an attachment to a department request
+ * @param {number} requestId - Department request ID
+ * @param {Object} attachmentData - Attachment data
+ * @param {File} attachmentData.file - File to upload (required)
+ * @param {string} [attachmentData.description] - File description (optional)
+ * @param {number} [attachmentData.source_attachment_id] - Source attachment ID if mapping from another request (optional)
+ * @returns {Promise<Object>} Created attachment
+ */
+export async function uploadDepartmentRequestAttachment(requestId, attachmentData) {
+    try {
+        const formData = new FormData();
+        
+        // Add file (required)
+        if (!attachmentData.file) {
+            throw new Error('File is required for attachment upload');
+        }
+        formData.append('file', attachmentData.file);
+        
+        // Add description if provided
+        if (attachmentData.description) {
+            formData.append('description', attachmentData.description);
+        }
+        
+        // Add source_attachment_id if provided
+        if (attachmentData.source_attachment_id) {
+            formData.append('source_attachment_id', attachmentData.source_attachment_id);
+        }
+        
+        const response = await authedFetch(`${backendBase}/planning/department-requests/${requestId}/attachments/`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Dosya yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error uploading department request attachment:', error);
         throw error;
     }
 }

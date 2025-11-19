@@ -21,6 +21,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         subtitle: 'Departman taleplerinin yönetimi ve takibi',
         cards: [
             {
+                title: 'Tüm Talepler',
+                description: 'Tüm departman taleplerinin listesi, oluşturma, düzenleme ve silme işlemleri.',
+                icon: 'fas fa-list',
+                iconColor: 'primary',
+                link: '/general/department-requests/list'
+            },
+            {
                 title: 'Bekleyen Talepler',
                 description: 'Onay bekleyen departman taleplerinin listesi ve durum takibi.',
                 icon: 'fas fa-clock',
