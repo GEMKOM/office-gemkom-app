@@ -7,8 +7,7 @@ import {
     getPendingApprovalDepartmentRequests,
     getApprovedDepartmentRequests,
     rejectDepartmentRequest
-} from '../../../apis/departmentRequests.js';
-import { formatDate, formatDateTime } from '../../../apis/formatters.js';
+    } from '../../../apis/planning/departmentRequests.js';
 import {
     initializeModalComponents,
     showDepartmentRequestDetailsModal,

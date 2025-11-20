@@ -1,20 +1,61 @@
-import { authedFetch } from '../authService.js';
-import { backendBase } from '../base.js';
+import { authedFetch } from '../../authService.js';
+import { backendBase } from '../../base.js';
 
 // Department Request API Functions
+/**
+ * Create a new department request
+ * @param {Object} requestData - Department request data
+ * @param {string} requestData.title - Request title
+ * @param {string} [requestData.description] - Request description (optional)
+ * @param {string} [requestData.department] - Department (optional)
+ * @param {string} [requestData.needed_date] - Needed date (optional)
+ * @param {string} [requestData.priority] - Priority (optional)
+ * @param {Array} [requestData.items] - Array of items data (optional)
+ * @param {Array<File>} [requestData.files] - Array of files to upload (optional)
+ * @returns {Promise<Object>} Created department request
+ */
 export async function createDepartmentRequest(requestData) {
     try {
-        const response = await authedFetch(`${backendBase}/procurement/department-requests/`, {
+        // Create FormData for file upload support
+        const formData = new FormData();
+        
+        // Add basic request fields
+        if (requestData.title !== undefined && requestData.title !== null) {
+            formData.append('title', requestData.title);
+        }
+        if (requestData.description !== undefined && requestData.description !== null) {
+            formData.append('description', requestData.description);
+        }
+        if (requestData.department !== undefined && requestData.department !== null) {
+            formData.append('department', requestData.department);
+        }
+        if (requestData.needed_date !== undefined && requestData.needed_date !== null) {
+            formData.append('needed_date', requestData.needed_date);
+        }
+        if (requestData.priority !== undefined && requestData.priority !== null) {
+            formData.append('priority', requestData.priority);
+        }
+        
+        // Add items if provided - send as JSON array
+        if (requestData.items && requestData.items.length > 0) {
+            formData.append('items', JSON.stringify(requestData.items));
+        }
+        
+        // Add files if provided
+        if (requestData.files && requestData.files.length > 0) {
+            requestData.files.forEach(file => {
+                formData.append('files', file);
+            });
+        }
+        
+        const response = await authedFetch(`${backendBase}/planning/department-requests/`, {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestData)
+            body: formData
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Sunucu hatas1');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.detail || 'Sunucu hatası');
         }
 
         return await response.json();
@@ -26,8 +67,8 @@ export async function createDepartmentRequest(requestData) {
 
 export async function updateDepartmentRequest(requestId, requestData) {
     try {
-        const response = await authedFetch(`${backendBase}/procurement/department-requests/${requestId}/`, {
-            method: 'PUT',
+        const response = await authedFetch(`${backendBase}/planning/department-requests/${requestId}/`, {
+            method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
             },
@@ -48,7 +89,7 @@ export async function updateDepartmentRequest(requestId, requestData) {
 
 export async function approveDepartmentRequest(requestId, comment = '') {
     try {
-        const response = await authedFetch(`${backendBase}/procurement/department-requests/${requestId}/approve/`, {
+        const response = await authedFetch(`${backendBase}/planning/department-requests/${requestId}/approve/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -72,7 +113,7 @@ export async function approveDepartmentRequest(requestId, comment = '') {
 
 export async function rejectDepartmentRequest(requestId, comment = '') {
     try {
-        const response = await authedFetch(`${backendBase}/procurement/department-requests/${requestId}/reject/`, {
+        const response = await authedFetch(`${backendBase}/planning/department-requests/${requestId}/reject/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -106,7 +147,7 @@ export async function getDepartmentRequests(filters = {}) {
             }
         });
 
-        const url = `${backendBase}/procurement/department-requests/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const url = `${backendBase}/planning/department-requests/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
         const response = await authedFetch(url);
 
         if (!response.ok) {
@@ -133,7 +174,7 @@ export async function getMyDepartmentRequests(filters = {}) {
             }
         });
 
-        const url = `${backendBase}/procurement/department-requests/my_requests/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const url = `${backendBase}/planning/department-requests/my_requests/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
         const response = await authedFetch(url);
 
         if (!response.ok) {
@@ -160,7 +201,7 @@ export async function getPendingApprovalDepartmentRequests(filters = {}) {
             }
         });
 
-        const url = `${backendBase}/procurement/department-requests/pending_approval/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const url = `${backendBase}/planning/department-requests/pending_approval/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
         const response = await authedFetch(url);
 
         if (!response.ok) {
@@ -187,7 +228,7 @@ export async function getApprovedDepartmentRequests(filters = {}) {
             }
         });
 
-        const url = `${backendBase}/procurement/department-requests/approved_requests/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const url = `${backendBase}/planning/department-requests/approved_requests/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
         const response = await authedFetch(url);
 
         if (!response.ok) {
@@ -214,7 +255,7 @@ export async function getCompletedDepartmentRequests(filters = {}) {
             }
         });
 
-        const url = `${backendBase}/procurement/department-requests/completed_requests/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const url = `${backendBase}/planning/department-requests/completed_requests/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
         const response = await authedFetch(url);
 
         if (!response.ok) {
@@ -231,7 +272,7 @@ export async function getCompletedDepartmentRequests(filters = {}) {
 
 export async function getDepartmentRequest(requestId) {
     try {
-        const response = await authedFetch(`${backendBase}/procurement/department-requests/${requestId}/`);
+        const response = await authedFetch(`${backendBase}/planning/department-requests/${requestId}/`);
 
         if (!response.ok) {
             const errorData = await response.json();
@@ -247,7 +288,7 @@ export async function getDepartmentRequest(requestId) {
 
 export async function markDepartmentRequestTransferred(requestId) {
     try {
-        const response = await authedFetch(`${backendBase}/procurement/department-requests/${requestId}/mark_transferred/`, {
+        const response = await authedFetch(`${backendBase}/planning/department-requests/${requestId}/mark_transferred/`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
@@ -268,7 +309,7 @@ export async function markDepartmentRequestTransferred(requestId) {
 
 export async function deleteDepartmentRequest(requestId) {
     try {
-        const response = await authedFetch(`${backendBase}/procurement/department-requests/${requestId}/`, {
+        const response = await authedFetch(`${backendBase}/planning/department-requests/${requestId}/`, {
             method: 'DELETE',
             headers: {
                 'Content-Type': 'application/json',
@@ -283,6 +324,52 @@ export async function deleteDepartmentRequest(requestId) {
         return true; // Successfully deleted
     } catch (error) {
         console.error('Error deleting department request:', error);
+        throw error;
+    }
+}
+
+/**
+ * Upload an attachment to a department request
+ * @param {number} requestId - Department request ID
+ * @param {Object} attachmentData - Attachment data
+ * @param {File} attachmentData.file - File to upload (required)
+ * @param {string} [attachmentData.description] - File description (optional)
+ * @param {number} [attachmentData.source_attachment_id] - Source attachment ID if mapping from another request (optional)
+ * @returns {Promise<Object>} Created attachment
+ */
+export async function uploadDepartmentRequestAttachment(requestId, attachmentData) {
+    try {
+        const formData = new FormData();
+        
+        // Add file (required)
+        if (!attachmentData.file) {
+            throw new Error('File is required for attachment upload');
+        }
+        formData.append('file', attachmentData.file);
+        
+        // Add description if provided
+        if (attachmentData.description) {
+            formData.append('description', attachmentData.description);
+        }
+        
+        // Add source_attachment_id if provided
+        if (attachmentData.source_attachment_id) {
+            formData.append('source_attachment_id', attachmentData.source_attachment_id);
+        }
+        
+        const response = await authedFetch(`${backendBase}/planning/department-requests/${requestId}/attachments/`, {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Dosya yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error uploading department request attachment:', error);
         throw error;
     }
 }
