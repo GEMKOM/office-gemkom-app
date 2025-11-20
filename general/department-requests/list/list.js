@@ -16,6 +16,10 @@ import {
     getDepartmentRequest
 } from '../../../apis/planning/departmentRequests.js';
 import { formatDate } from '../../../apis/formatters.js';
+import { UNIT_CHOICES, PREDEFINED_PROCESS_ITEMS } from '../../../apis/constants.js';
+import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
+import { FiltersComponent } from '../../../components/filters/filters.js';
+import { fetchAllUsers } from '../../../apis/users.js';
 
 // State management
 let currentPage = 1;
@@ -30,6 +34,7 @@ let detailsModal = null;
 let deleteModal = null;
 let currentRequest = null;
 let isEditMode = false;
+let departmentRequestsFilters = null;
 
 // Priority options
 const priorityOptions = [
@@ -72,6 +77,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize modals
     initializeModals();
+
+    // Initialize filters component
+    await initializeFiltersComponent();
 
     // Initialize table component
     initializeTableComponent();
@@ -128,6 +136,106 @@ function initializeModals() {
             showEditModal(currentRequest);
         }
     });
+}
+
+async function initializeFiltersComponent() {
+    // Initialize filters component
+    departmentRequestsFilters = new FiltersComponent('filters-placeholder', {
+        title: 'Departman Talepleri Filtreleri',
+        onApply: (values) => {
+            // Apply filters and reload requests
+            currentPage = 1;
+            loadRequests();
+        },
+        onClear: () => {
+            // Clear filters and reload requests
+            currentPage = 1;
+            loadRequests();
+            showNotification('Filtreler temizlendi', 'info');
+        },
+        onFilterChange: (filterId, value) => {
+            // Optional: Handle individual filter changes
+            console.log(`Filter ${filterId} changed to:`, value);
+        }
+    });
+
+    // Status filter
+    departmentRequestsFilters.addDropdownFilter({
+        id: 'status-filter',
+        label: 'Durum',
+        options: [
+            { value: 'draft', label: 'Taslak' },
+            { value: 'submitted', label: 'Gönderildi' },
+            { value: 'approved', label: 'Onaylandı' },
+            { value: 'rejected', label: 'Reddedildi' },
+            { value: 'cancelled', label: 'İptal Edildi' },
+            { value: 'transferred', label: 'Transfer Edildi' }
+        ],
+        placeholder: 'Durum seçin',
+        colSize: 2
+    });
+
+    // Department filter
+    departmentRequestsFilters.addDropdownFilter({
+        id: 'department-filter',
+        label: 'Departman',
+        options: [
+            { value: 'maintenance', label: 'Bakım' },
+            { value: 'manufacturing', label: 'İmalat' },
+            { value: 'procurement', label: 'Satın Alma' },
+            { value: 'finance', label: 'Finans' },
+            { value: 'it', label: 'Bilgi İşlem' },
+            { value: 'human_resources', label: 'İnsan Kaynakları' },
+            { value: 'management', label: 'Yönetim' },
+            { value: 'planning', label: 'Planlama' }
+        ],
+        placeholder: 'Departman seçin',
+        colSize: 2
+    });
+
+    // Priority filter
+    departmentRequestsFilters.addDropdownFilter({
+        id: 'priority-filter',
+        label: 'Öncelik',
+        options: [
+            { value: 'normal', label: 'Normal' },
+            { value: 'urgent', label: 'Acil' },
+            { value: 'critical', label: 'Kritik' }
+        ],
+        placeholder: 'Öncelik seçin',
+        colSize: 2
+    });
+
+    // Requestor filter - load users and create dropdown
+    try {
+        const users = await fetchAllUsers();
+        const userOptions = users.map(user => ({
+            value: user.id ? user.id.toString() : user.username,
+            label: user.full_name ? `${user.full_name} (${user.username})` : 
+                   (user.first_name && user.last_name) ? `${user.first_name} ${user.last_name} (${user.username})` :
+                   user.username
+        }));
+
+        departmentRequestsFilters.addDropdownFilter({
+            id: 'requestor-filter',
+            label: 'Talep Eden',
+            options: userOptions,
+            placeholder: 'Kullanıcı seçin',
+            colSize: 2,
+            searchable: true
+        });
+    } catch (error) {
+        console.error('Error loading users for filter:', error);
+        // Add empty dropdown if users fail to load
+        departmentRequestsFilters.addDropdownFilter({
+            id: 'requestor-filter',
+            label: 'Talep Eden',
+            options: [],
+            placeholder: 'Kullanıcı yüklenemedi',
+            colSize: 2,
+            searchable: true
+        });
+    }
 }
 
 function initializeTableComponent() {
@@ -245,6 +353,24 @@ async function loadRequests() {
             ordering: currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`
         };
 
+        // Get filter values and add to filters
+        if (departmentRequestsFilters) {
+            const filterValues = departmentRequestsFilters.getFilterValues();
+            
+            if (filterValues['status-filter'] && filterValues['status-filter'] !== '') {
+                filters.status = filterValues['status-filter'];
+            }
+            if (filterValues['department-filter'] && filterValues['department-filter'] !== '') {
+                filters.department = filterValues['department-filter'];
+            }
+            if (filterValues['priority-filter'] && filterValues['priority-filter'] !== '') {
+                filters.priority = filterValues['priority-filter'];
+            }
+            if (filterValues['requestor-filter'] && filterValues['requestor-filter'] !== '') {
+                filters.requestor = filterValues['requestor-filter'];
+            }
+        }
+
         const response = await getDepartmentRequests(filters);
 
         // Handle paginated response
@@ -311,6 +437,7 @@ function showEditModal(request) {
 function setupCreateEditForm(request = null) {
     // Add basic information section
     createEditModal.addSection({
+        id: 'basic-info-section',
         title: 'Temel Bilgiler',
         icon: 'fas fa-info-circle',
         iconColor: 'text-primary',
@@ -343,6 +470,7 @@ function setupCreateEditForm(request = null) {
 
     // Add request details section
     createEditModal.addSection({
+        id: 'request-details-section',
         title: 'Talep Detayları',
         icon: 'fas fa-clipboard-list',
         iconColor: 'text-success',
@@ -355,7 +483,7 @@ function setupCreateEditForm(request = null) {
                 value: request?.priority || 'normal',
                 required: false,
                 icon: 'fas fa-exclamation-triangle',
-                colSize: 6,
+                colSize: 12,
                 helpText: 'Talebin öncelik seviyesi',
                 options: priorityOptions
             },
@@ -367,7 +495,7 @@ function setupCreateEditForm(request = null) {
                 value: request?.needed_date ? formatDateForInput(request.needed_date) : '',
                 required: false,
                 icon: 'fas fa-calendar-alt',
-                colSize: 6,
+                colSize: 12,
                 helpText: 'Talebin ihtiyaç duyulduğu tarih (opsiyonel)'
             },
             {
@@ -408,8 +536,45 @@ function setupCreateEditForm(request = null) {
     // Render the modal first
     createEditModal.render();
 
-    // Add items table after rendering
+    // Rearrange sections into two-column layout after rendering
     setTimeout(() => {
+        const form = createEditModal.container.querySelector('#edit-modal-form');
+        const basicInfoSection = createEditModal.container.querySelector('[data-section-id="basic-info-section"]');
+        const requestDetailsSection = createEditModal.container.querySelector('[data-section-id="request-details-section"]');
+        
+        if (form && basicInfoSection && requestDetailsSection) {
+            // Create a wrapper row for two-column layout
+            const wrapperRow = document.createElement('div');
+            wrapperRow.className = 'row g-3 mb-3';
+            
+            // Wrap basic info section in left column
+            const leftCol = document.createElement('div');
+            leftCol.className = 'col-md-6';
+            basicInfoSection.classList.remove('mb-3');
+            basicInfoSection.classList.add('mb-0', 'h-100');
+            leftCol.appendChild(basicInfoSection);
+            
+            // Wrap request details section in right column
+            const rightCol = document.createElement('div');
+            rightCol.className = 'col-md-6';
+            requestDetailsSection.classList.remove('mb-3');
+            requestDetailsSection.classList.add('mb-0', 'h-100');
+            rightCol.appendChild(requestDetailsSection);
+            
+            // Add columns to wrapper row
+            wrapperRow.appendChild(leftCol);
+            wrapperRow.appendChild(rightCol);
+            
+            // Insert wrapper row at the beginning of the form (before items section)
+            const itemsSection = createEditModal.container.querySelector('[data-section-id="items-info"]');
+            if (itemsSection) {
+                form.insertBefore(wrapperRow, itemsSection);
+            } else {
+                form.insertBefore(wrapperRow, form.firstChild);
+            }
+        }
+        
+        // Add items table after rendering
         setupItemsSection(request);
     }, 100);
 }
@@ -424,7 +589,8 @@ function setupItemsSection(request = null) {
     const itemsHtml = `
         <div class="d-flex justify-content-between align-items-center mb-2">
             <h6 class="mb-0">Ürün Listesi</h6>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 align-items-center">
+                <div id="predefined-items-dropdown-container" style="width: 200px;"></div>
                 <button type="button" class="btn btn-sm btn-outline-primary" id="add-item-btn">
                     <i class="fas fa-plus me-1"></i>Ürün Ekle
                 </button>
@@ -470,6 +636,58 @@ function setupItemsSection(request = null) {
 
     fieldsContainer.insertAdjacentHTML('beforeend', itemsHtml);
 
+    // Initialize predefined items dropdown using ModernDropdown
+    const predefinedItemsContainer = createEditModal.container.querySelector('#predefined-items-dropdown-container');
+    if (predefinedItemsContainer) {
+        setTimeout(() => {
+            const predefinedDropdown = new ModernDropdown(predefinedItemsContainer, {
+                placeholder: 'Hazır Ürün Ekle',
+                searchable: true,
+                multiple: false,
+                maxHeight: 300,
+                width: '200px'
+            });
+
+            // Convert predefined items to dropdown format
+            const dropdownItems = PREDEFINED_PROCESS_ITEMS.map(item => ({
+                value: `${item.code}|${item.name}|${item.unit}`,
+                text: item.name
+            }));
+
+            predefinedDropdown.setItems(dropdownItems);
+
+            // Handle selection
+            predefinedItemsContainer.addEventListener('dropdown:select', (e) => {
+                const selectedValue = e.detail.value;
+                if (selectedValue) {
+                    const [code, name, unit] = selectedValue.split('|');
+                    
+                    // Add a new item row
+                    addItem();
+                    
+                    // Get the last added item row
+                    const container = document.getElementById('items-container');
+                    if (container) {
+                        const lastRow = container.lastElementChild;
+                        if (lastRow) {
+                            // Fill in the fields
+                            const codeInput = lastRow.querySelector('input[name="item_code"]');
+                            const nameInput = lastRow.querySelector('input[name="item_name"]');
+                            const unitSelect = lastRow.querySelector('select[name="item_unit"]');
+                            
+                            if (codeInput) codeInput.value = code;
+                            if (nameInput) nameInput.value = name;
+                            if (unitSelect) unitSelect.value = unit;
+                        }
+                    }
+                    
+                    // Reset dropdown selection
+                    predefinedDropdown.setValue(null);
+                }
+            });
+        }, 150);
+    }
+
     // Add event listener for add item button
     const addItemBtn = createEditModal.container.querySelector('#add-item-btn');
     if (addItemBtn) {
@@ -495,13 +713,13 @@ function setupItemsSection(request = null) {
             if (lastRow) {
                 const codeInput = lastRow.querySelector('input[name="item_code"]');
                 const nameInput = lastRow.querySelector('input[name="item_name"]');
-                const unitInput = lastRow.querySelector('input[name="item_unit"]');
+                const unitSelect = lastRow.querySelector('select[name="item_unit"]');
                 const quantityInput = lastRow.querySelector('input[name="item_quantity"]');
                 const descInput = lastRow.querySelector('input[name="item_description"]');
                 
                 if (codeInput) codeInput.value = item.item_code || '';
                 if (nameInput) nameInput.value = item.item_name || '';
-                if (unitInput) unitInput.value = item.item_unit || '';
+                if (unitSelect) unitSelect.value = item.item_unit || '';
                 if (quantityInput) quantityInput.value = item.quantity || '1';
                 if (descInput) descInput.value = item.description || '';
             }
@@ -529,15 +747,23 @@ function addItem() {
                     <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="1" min="1" value="1">
                 </div>
                 <div class="col-md-2">
-                    <input type="text" class="form-control form-control-sm" name="item_unit" placeholder="Birim">
+                    <select class="form-control form-control-sm" name="item_unit">
+                        <option value="">Birim Seçin</option>
+                        ${UNIT_CHOICES.map(unit => `<option value="${unit.value}">${unit.label}</option>`).join('')}
+                    </select>
                 </div>
                 <div class="col-md-3">
                     <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Açıklama">
                 </div>
                 <div class="col-md-1">
-                    <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removeItem(${itemIndex})" title="Ürünü Kaldır">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="btn-group w-100" role="group">
+                        <button type="button" class="btn btn-outline-info btn-sm" onclick="duplicateItem(${itemIndex})" title="Ürünü Kopyala">
+                            <i class="fas fa-copy"></i>
+                        </button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" onclick="removeItem(${itemIndex})" title="Ürünü Kaldır">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -550,11 +776,76 @@ function removeItem(index) {
     const itemRow = document.querySelector(`.item-row[data-index="${index}"]`);
     if (itemRow) {
         itemRow.remove();
+        // Update indices after removal
+        updateItemIndices();
     }
 }
 
-// Make removeItem globally available
+function duplicateItem(index) {
+    const itemRow = document.querySelector(`.item-row[data-index="${index}"]`);
+    if (!itemRow) return;
+
+    // Get all values from the current item
+    const codeInput = itemRow.querySelector('input[name="item_code"]');
+    const nameInput = itemRow.querySelector('input[name="item_name"]');
+    const quantityInput = itemRow.querySelector('input[name="item_quantity"]');
+    const unitSelect = itemRow.querySelector('select[name="item_unit"]');
+    const descInput = itemRow.querySelector('input[name="item_description"]');
+
+    const code = codeInput ? codeInput.value : '';
+    const name = nameInput ? nameInput.value : '';
+    const quantity = quantityInput ? quantityInput.value : '1';
+    const unit = unitSelect ? unitSelect.value : '';
+    const description = descInput ? descInput.value : '';
+
+    // Add a new item
+    addItem();
+
+    // Get the container and find the last added row
+    const container = document.getElementById('items-container');
+    if (container) {
+        const lastRow = container.lastElementChild;
+        if (lastRow) {
+            // Fill in the duplicated values
+            const newCodeInput = lastRow.querySelector('input[name="item_code"]');
+            const newNameInput = lastRow.querySelector('input[name="item_name"]');
+            const newQuantityInput = lastRow.querySelector('input[name="item_quantity"]');
+            const newUnitSelect = lastRow.querySelector('select[name="item_unit"]');
+            const newDescInput = lastRow.querySelector('input[name="item_description"]');
+
+            if (newCodeInput) newCodeInput.value = code;
+            if (newNameInput) newNameInput.value = name;
+            if (newQuantityInput) newQuantityInput.value = quantity;
+            if (newUnitSelect) newUnitSelect.value = unit;
+            if (newDescInput) newDescInput.value = description;
+        }
+    }
+}
+
+function updateItemIndices() {
+    const container = document.getElementById('items-container');
+    if (!container) return;
+
+    const itemRows = container.querySelectorAll('.item-row');
+    itemRows.forEach((row, newIndex) => {
+        row.setAttribute('data-index', newIndex);
+        
+        // Update onclick handlers for buttons
+        const duplicateBtn = row.querySelector('button[onclick*="duplicateItem"]');
+        const removeBtn = row.querySelector('button[onclick*="removeItem"]');
+        
+        if (duplicateBtn) {
+            duplicateBtn.setAttribute('onclick', `duplicateItem(${newIndex})`);
+        }
+        if (removeBtn) {
+            removeBtn.setAttribute('onclick', `removeItem(${newIndex})`);
+        }
+    });
+}
+
+// Make functions globally available
 window.removeItem = removeItem;
+window.duplicateItem = duplicateItem;
 
 async function handleSaveRequest(formData) {
     try {
@@ -568,7 +859,7 @@ async function handleSaveRequest(formData) {
         for (const row of itemRows) {
             const itemCode = row.querySelector('input[name="item_code"]')?.value?.trim();
             const itemName = row.querySelector('input[name="item_name"]')?.value?.trim();
-            const itemUnit = row.querySelector('input[name="item_unit"]')?.value?.trim();
+            const itemUnit = row.querySelector('select[name="item_unit"]')?.value?.trim();
             const itemQuantity = row.querySelector('input[name="item_quantity"]')?.value?.trim();
             const itemDescription = row.querySelector('input[name="item_description"]')?.value?.trim();
             

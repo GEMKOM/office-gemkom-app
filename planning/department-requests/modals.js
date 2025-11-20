@@ -443,20 +443,12 @@ async function confirmTransferDepartmentRequest(requestId) {
 }
 
 // Transfer department request function
+// This function is now overridden in department-requests.js
+// Keeping this for backward compatibility but it should not be called directly
 async function transferDepartmentRequest(requestId) {
-    // Ensure we have a valid requestId
-    if (!requestId) {
-        console.error('transferDepartmentRequest: requestId is required');
-        return;
-    }
-
-    // Close details modal if it's open to prevent conflicts
-    if (departmentRequestDetailsModal) {
-        departmentRequestDetailsModal.hide();
-    }
-
-    // Show transfer confirmation modal directly (not the details modal)
-    showTransferDepartmentRequestModal(requestId);
+    // This function is overridden in department-requests.js
+    // The actual implementation is there
+    console.warn('transferDepartmentRequest called from modals.js - this should be handled in department-requests.js');
 }
 
 // Utility functions
@@ -597,4 +589,9 @@ export {
     setupModalEventListeners,
     setGlobalVariables
 };
+
+// Export modal instances for external access
+export function getDepartmentRequestDetailsModal() {
+    return departmentRequestDetailsModal;
+}
 

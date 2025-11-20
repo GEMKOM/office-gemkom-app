@@ -105,27 +105,32 @@ export async function createPlanningRequest(requestData) {
         }
 
         // Add items if provided
-        // Note: Items are nested serializers, so we send them as JSON string
-        // The backend should parse this correctly
+        // Send items as JSON string - backend will parse it
         if (requestData.items && requestData.items.length > 0) {
-            // For nested serializers with FormData, we typically send as JSON
-            // If the backend doesn't accept this format, items should be created separately
             formData.append('items', JSON.stringify(requestData.items));
         }
 
         // Add files if provided (new structure with attach_to)
+        // Use flattened structure: files[0].file, files[0].attach_to, etc.
         if (requestData.files && requestData.files.length > 0) {
             requestData.files.forEach((fileData, index) => {
-                if (fileData.file) {
-                    formData.append(`files[${index}].file`, fileData.file);
+                // File is required - must be a File/Blob object
+                if (!fileData.file) {
+                    throw new Error(`File at index ${index} is required`);
                 }
+                formData.append(`files[${index}].file`, fileData.file);
+                
+                // Description is optional
                 if (fileData.description) {
                     formData.append(`files[${index}].description`, fileData.description);
                 }
-                if (fileData.attach_to && Array.isArray(fileData.attach_to)) {
-                    // Send attach_to as JSON array
-                    formData.append(`files[${index}].attach_to`, JSON.stringify(fileData.attach_to));
+                
+                // attach_to is required and must be sent as JSON string
+                // Backend requires this field, so always send it
+                if (!fileData.attach_to || !Array.isArray(fileData.attach_to) || fileData.attach_to.length === 0) {
+                    throw new Error(`attach_to is required for file at index ${index} and must contain at least one target`);
                 }
+                formData.append(`files[${index}].attach_to`, JSON.stringify(fileData.attach_to));
             });
         }
 
