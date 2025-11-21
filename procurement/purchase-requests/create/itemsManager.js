@@ -258,6 +258,16 @@ export class ItemsManager {
             }
         });
 
+        // Remove from planning_request_item_ids if this item came from a planning request
+        if (item.source_planning_request_item_id) {
+            const itemId = item.source_planning_request_item_id;
+            if (this.requestData.planning_request_item_ids) {
+                this.requestData.planning_request_item_ids = this.requestData.planning_request_item_ids.filter(
+                    id => id !== itemId
+                );
+            }
+        }
+        
         this.requestData.items.splice(index, 1);
         this.renderItemsTable();
         this.autoSave();

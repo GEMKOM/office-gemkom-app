@@ -17,6 +17,8 @@
     <link rel="stylesheet" href="../../../components/header/header.css">
     <link rel="stylesheet" href="../../../components/comparison-table/comparison-table.css">
     <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
+    <link rel="stylesheet" href="../../../components/table/table.css">
+    <link rel="stylesheet" href="../../../components/filters/filters.css">
 </head>
 <body class="pre-auth">
     <!-- Navigation -->
@@ -77,6 +79,9 @@
                         <div class="card-header d-flex justify-content-between align-items-center">
                             <h5 class="mb-0"><i class="fas fa-boxes me-2"></i>Malzeme Listesi</h5>
                             <div class="btn-group">
+                                <button class="btn btn-outline-info btn-sm" id="attach-planning-items-btn">
+                                    <i class="fas fa-clipboard-list me-1"></i>Planlama Talebi Malzemeleri
+                                </button>
                                 <button class="btn btn-outline-primary btn-sm" id="bulk-import-btn">
                                     <i class="fas fa-upload me-1"></i>Toplu İçe Aktar
                                 </button>
@@ -590,6 +595,34 @@
                 </div>
                 <div class="modal-footer">
                     <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Planning Request Items Modal -->
+    <div class="modal fade" id="planningRequestItemsModal" tabindex="-1" data-bs-backdrop="static" data-bs-keyboard="false">
+        <div class="modal-dialog modal-fullscreen">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-clipboard-list me-2"></i>
+                        Planlama Talebi Malzemeleri
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div id="planning-items-filters-container" class="mb-3"></div>
+                    <div id="planning-items-table-container"></div>
+                </div>
+                <div class="modal-footer">
+                    <div class="me-auto">
+                        <span id="selected-items-count" class="text-muted">0 malzeme seçildi</span>
+                    </div>
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-primary" id="add-selected-items-btn" disabled>
+                        <i class="fas fa-plus me-1"></i>Seçilenleri Ekle
+                    </button>
                 </div>
             </div>
         </div>

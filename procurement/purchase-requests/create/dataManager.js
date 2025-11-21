@@ -83,6 +83,7 @@ export class DataManager {
                 offers: this.requestData.offers,
                 recommendations: this.requestData.recommendations,
                 itemRecommendations: this.requestData.itemRecommendations,
+                planning_request_item_ids: this.requestData.planning_request_item_ids || [],
                 timestamp: new Date().toISOString()
             };
             
@@ -162,6 +163,7 @@ export class DataManager {
                     this.requestData.offers = draftData.offers || {};
                     this.requestData.recommendations = draftData.recommendations || {};
                     this.requestData.itemRecommendations = draftData.itemRecommendations || {};
+                    this.requestData.planning_request_item_ids = draftData.planning_request_item_ids || [];
                     
                     console.log('Loaded needed_date from localStorage:', this.requestData.needed_date);
                     
