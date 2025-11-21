@@ -8,10 +8,6 @@ import { DataManager } from './dataManager.js';
 import { ValidationManager } from './validationManager.js';
 import { fetchCurrencyRates } from '../../../apis/formatters.js';
 import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft } from '../../../apis/procurement.js';
-import { getPlanningRequests } from '../../../apis/planning/planningRequests.js';
-import { getPlanningRequestItems } from '../../../apis/planning/planningRequestItems.js';
-import { TableComponent } from '../../../components/table/table.js';
-import { FiltersComponent } from '../../../components/filters/filters.js';
 
 // Global state
 let headerComponent;
@@ -33,8 +29,7 @@ let requestData = {
     suppliers: [],
     offers: {},
     recommendations: {},
-    itemRecommendations: {},
-    planning_request_item_ids: [] // Track selected planning request item IDs
+    itemRecommendations: {}
 };
 
 
@@ -139,9 +134,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize modal cleanup
     initializeModalCleanup();
-    
-    // Initialize planning request items modal
-    initializePlanningRequestItemsModal();
     
     // Now render all components with proper currency rates
     await renderAll();
@@ -329,8 +321,7 @@ async function saveDraftAsJSON() {
             offers: transformedOffers,
             recommendations: transformedRecommendations,
             total_amount_eur: totalAmountEUR,
-            is_rolling_mill: isRollingMill,
-            planning_request_item_ids: requestData.planning_request_item_ids || []
+            is_rolling_mill: isRollingMill
         };
         
         // Prepare draft data according to the model structure
@@ -1032,8 +1023,7 @@ async function submitRequest() {
             offers: transformedOffers,
             recommendations: transformedRecommendations,
             total_amount_eur: totalAmountEUR,
-            is_rolling_mill: isRollingMill,
-            planning_request_item_ids: requestData.planning_request_item_ids || []
+            is_rolling_mill: isRollingMill
         };
         
         // Create purchase request using apis function
@@ -1062,384 +1052,6 @@ async function submitRequest() {
             exportBtn.disabled = false;
             exportBtn.innerHTML = '<i class="fas fa-paper-plane me-2"></i>Gönder';
         }
-    }
-}
-
-// Planning Request Items Modal Management
-let planningItemsTable = null;
-let planningItemsFilters = null;
-let selectedPlanningItems = new Set();
-let allPlanningItems = [];
-
-function initializePlanningRequestItemsModal() {
-    const attachBtn = document.getElementById('attach-planning-items-btn');
-    if (attachBtn) {
-        attachBtn.addEventListener('click', () => showPlanningRequestItemsModal());
-    }
-    
-    const addSelectedBtn = document.getElementById('add-selected-items-btn');
-    if (addSelectedBtn) {
-        addSelectedBtn.addEventListener('click', () => addSelectedPlanningItems());
-    }
-    
-    // Initialize modal event listeners
-    const modal = document.getElementById('planningRequestItemsModal');
-    if (modal) {
-        modal.addEventListener('hidden.bs.modal', () => {
-            // Clear selections when modal is closed
-            selectedPlanningItems.clear();
-            if (planningItemsTable) {
-                updateSelectedItemsCount();
-            }
-        });
-    }
-}
-
-async function showPlanningRequestItemsModal() {
-    const modalElement = document.getElementById('planningRequestItemsModal');
-    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
-    
-    // Reset selections
-    selectedPlanningItems.clear();
-    updateSelectedItemsCount();
-    
-    // Initialize filters
-    if (!planningItemsFilters) {
-        initializePlanningItemsFilters();
-    }
-    
-    // Initialize table
-    if (!planningItemsTable) {
-        initializePlanningItemsTable();
-    }
-    
-    // Load data
-    await loadPlanningRequestItems();
-    
-    modal.show();
-}
-
-function initializePlanningItemsFilters() {
-    const container = document.getElementById('planning-items-filters-container');
-    if (!container) return;
-    
-    planningItemsFilters = new FiltersComponent('planning-items-filters-container', {
-        title: 'Filtreler',
-        showClearButton: true,
-        showApplyButton: true,
-        applyButtonText: 'Filtrele',
-        clearButtonText: 'Temizle',
-        onApply: () => {
-            loadPlanningRequestItems();
-        },
-        onClear: () => {
-            loadPlanningRequestItems();
-        }
-    });
-    
-    // Add filters
-    planningItemsFilters.addTextFilter({
-        id: 'item-code-filter',
-        label: 'Malzeme Kodu',
-        placeholder: 'Malzeme kodu ara...',
-        colSize: 2
-    });
-    
-    planningItemsFilters.addTextFilter({
-        id: 'item-name-filter',
-        label: 'Malzeme Adı',
-        placeholder: 'Malzeme adı ara...',
-        colSize: 2
-    });
-    
-    planningItemsFilters.addTextFilter({
-        id: 'job-no-filter',
-        label: 'İş No',
-        placeholder: 'İş numarası ara...',
-        colSize: 2
-    });
-    
-    // Get planning requests for dropdown
-    getPlanningRequests({ status: 'draft', page_size: 100 }).then(response => {
-        const planningRequests = response.results || [];
-        planningItemsFilters.addDropdownFilter({
-            id: 'planning-request-filter',
-            label: 'Planlama Talebi',
-            options: planningRequests.map(pr => ({
-                value: pr.id,
-                label: `${pr.request_number || pr.id} - ${pr.title || '-'}`
-            })),
-            placeholder: 'Tüm planlama talepleri',
-            searchable: true,
-            colSize: 3
-        });
-    }).catch(error => {
-        console.error('Error loading planning requests for filter:', error);
-    });
-}
-
-function initializePlanningItemsTable() {
-    const container = document.getElementById('planning-items-table-container');
-    if (!container) return;
-    
-    planningItemsTable = new TableComponent('planning-items-table-container', {
-        title: 'Planlama Talebi Malzemeleri',
-        columns: [
-            {
-                field: 'selected',
-                label: '',
-                formatter: (value, row) => {
-                    const isSelected = selectedPlanningItems.has(row.id);
-                    return `<input type="checkbox" class="planning-item-checkbox" data-item-id="${row.id}" ${isSelected ? 'checked' : ''}>`;
-                },
-                sortable: false
-            },
-            {
-                field: 'planning_request',
-                label: 'Planlama Talebi',
-                formatter: (value) => {
-                    if (value && value.request_number) {
-                        return `${value.request_number} - ${value.title || '-'}`;
-                    }
-                    return value?.id || '-';
-                },
-                sortable: true
-            },
-            {
-                field: 'item',
-                label: 'Malzeme Kodu',
-                formatter: (value) => value?.code || '-',
-                sortable: true
-            },
-            {
-                field: 'item',
-                label: 'Malzeme Adı',
-                formatter: (value) => value?.name || '-',
-                sortable: true
-            },
-            {
-                field: 'job_no',
-                label: 'İş No',
-                sortable: true
-            },
-            {
-                field: 'quantity',
-                label: 'Miktar',
-                formatter: (value) => value || '-',
-                sortable: true
-            },
-            {
-                field: 'item',
-                label: 'Birim',
-                formatter: (value) => value?.unit || '-',
-                sortable: true
-            },
-            {
-                field: 'specifications',
-                label: 'Teknik Özellikler',
-                formatter: (value) => {
-                    if (!value) return '-';
-                    return value.length > 50 ? value.substring(0, 50) + '...' : value;
-                },
-                sortable: false
-            }
-        ],
-        data: [],
-        pagination: true,
-        itemsPerPage: 20,
-        sortable: true,
-        responsive: true,
-        striped: true
-    });
-    
-    // Add event listener for checkboxes
-    container.addEventListener('change', (e) => {
-        if (e.target.classList.contains('planning-item-checkbox')) {
-            const itemId = parseInt(e.target.dataset.itemId);
-            if (e.target.checked) {
-                selectedPlanningItems.add(itemId);
-            } else {
-                selectedPlanningItems.delete(itemId);
-            }
-            updateSelectedItemsCount();
-        }
-    });
-}
-
-async function loadPlanningRequestItems() {
-    if (!planningItemsTable) return;
-    
-    try {
-        planningItemsTable.setLoading(true);
-        
-        // Get filter values
-        const filterValues = planningItemsFilters ? planningItemsFilters.getFilterValues() : {};
-        
-        // Build API filters
-        const apiFilters = {
-            page_size: 1000 // Get all items, we'll paginate in the table
-        };
-        
-        // Add planning request filter if selected
-        if (filterValues['planning-request-filter']) {
-            apiFilters.planning_request = filterValues['planning-request-filter'];
-        }
-        
-        // Get planning requests first to filter by status
-        const planningRequestsResponse = await getPlanningRequests({ status: 'draft', page_size: 1000 });
-        const readyPlanningRequestIds = (planningRequestsResponse.results || []).map(pr => pr.id);
-        
-        if (readyPlanningRequestIds.length === 0) {
-            planningItemsTable.updateData([], 0);
-            planningItemsTable.setLoading(false);
-            return;
-        }
-        
-        // If a specific planning request is selected, use it; otherwise get items from all ready requests
-        if (apiFilters.planning_request) {
-            // Get items from specific planning request
-            const itemsResponse = await getPlanningRequestItems(apiFilters);
-            allPlanningItems = itemsResponse.results || [];
-        } else {
-            // Get items from all ready planning requests
-            const allItems = [];
-            for (const prId of readyPlanningRequestIds) {
-                try {
-                    const itemsResponse = await getPlanningRequestItems({ planning_request: prId, page_size: 1000 });
-                    const items = itemsResponse.results || [];
-                    allItems.push(...items);
-                } catch (error) {
-                    console.error(`Error loading items for planning request ${prId}:`, error);
-                }
-            }
-            allPlanningItems = allItems;
-        }
-        
-        // Apply text filters
-        let filteredItems = allPlanningItems;
-        if (filterValues['item-code-filter']) {
-            const searchTerm = filterValues['item-code-filter'].toLowerCase();
-            filteredItems = filteredItems.filter(item => 
-                item.item?.code?.toLowerCase().includes(searchTerm)
-            );
-        }
-        if (filterValues['item-name-filter']) {
-            const searchTerm = filterValues['item-name-filter'].toLowerCase();
-            filteredItems = filteredItems.filter(item => 
-                item.item?.name?.toLowerCase().includes(searchTerm)
-            );
-        }
-        if (filterValues['job-no-filter']) {
-            const searchTerm = filterValues['job-no-filter'].toLowerCase();
-            filteredItems = filteredItems.filter(item => 
-                item.job_no?.toLowerCase().includes(searchTerm)
-            );
-        }
-        
-        // Update table with filtered data
-        planningItemsTable.updateData(filteredItems, filteredItems.length);
-        planningItemsTable.setLoading(false);
-        
-        // Re-render checkboxes to reflect current selection state
-        setTimeout(() => {
-            const checkboxes = document.querySelectorAll('.planning-item-checkbox');
-            checkboxes.forEach(cb => {
-                const itemId = parseInt(cb.dataset.itemId);
-                cb.checked = selectedPlanningItems.has(itemId);
-            });
-        }, 100);
-        
-    } catch (error) {
-        console.error('Error loading planning request items:', error);
-        showNotification('Planlama talebi malzemeleri yüklenirken hata oluştu: ' + error.message, 'error');
-        planningItemsTable.setLoading(false);
-    }
-}
-
-function updateSelectedItemsCount() {
-    const countElement = document.getElementById('selected-items-count');
-    const addBtn = document.getElementById('add-selected-items-btn');
-    
-    const count = selectedPlanningItems.size;
-    if (countElement) {
-        countElement.textContent = `${count} malzeme seçildi`;
-    }
-    if (addBtn) {
-        addBtn.disabled = count === 0;
-    }
-}
-
-async function addSelectedPlanningItems() {
-    if (selectedPlanningItems.size === 0) {
-        showNotification('Lütfen en az bir malzeme seçin', 'warning');
-        return;
-    }
-    
-    try {
-        let addedCount = 0;
-        
-        for (const itemId of selectedPlanningItems) {
-            const planningItem = allPlanningItems.find(item => item.id === itemId);
-            if (!planningItem) continue;
-            
-            // Check if item is already added (by planning_request_item_id)
-            const existingItem = requestData.items.find(item => 
-                item.source_planning_request_item_id === itemId
-            );
-            
-            if (existingItem) {
-                continue; // Skip if already added
-            }
-            
-            // Convert planning request item to purchase request item
-            const newItem = {
-                id: window.itemsManager ? window.itemsManager.generateItemId() : 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
-                code: planningItem.item?.code || '',
-                name: planningItem.item?.name || '',
-                job_no: planningItem.job_no || '',
-                quantity: parseFloat(planningItem.quantity) || 1,
-                unit: planningItem.item?.unit || 'adet',
-                specs: planningItem.specifications || '',
-                source_planning_request_item_id: itemId // Track source
-            };
-            
-            requestData.items.push(newItem);
-            
-            // Add to planning_request_item_ids for submission
-            if (!requestData.planning_request_item_ids.includes(itemId)) {
-                requestData.planning_request_item_ids.push(itemId);
-            }
-            
-            addedCount++;
-        }
-        
-        if (addedCount > 0) {
-            // Re-render items table
-            if (itemsManager) {
-                itemsManager.renderItemsTable();
-            }
-            
-            // Auto-save
-            if (dataManager) {
-                dataManager.autoSave();
-            }
-            
-            // Re-render comparison table
-            await renderAll();
-            
-            showNotification(`${addedCount} malzeme eklendi`, 'success');
-            
-            // Close modal
-            const modal = bootstrap.Modal.getInstance(document.getElementById('planningRequestItemsModal'));
-            if (modal) {
-                modal.hide();
-            }
-        } else {
-            showNotification('Seçilen malzemeler zaten eklenmiş', 'info');
-        }
-    } catch (error) {
-        console.error('Error adding planning request items:', error);
-        showNotification('Malzemeler eklenirken hata oluştu: ' + error.message, 'error');
     }
 }
 
