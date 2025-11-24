@@ -111,14 +111,25 @@ export async function createPlanningRequest(requestData) {
         }
 
         // Add files if provided (new structure with attach_to)
-        // Use flattened structure: files[0].file, files[0].attach_to, etc.
+        // Supports both new uploads (file) and existing file references (source_attachment_id)
         if (requestData.files && requestData.files.length > 0) {
             requestData.files.forEach((fileData, index) => {
-                // File is required - must be a File/Blob object
-                if (!fileData.file) {
-                    throw new Error(`File at index ${index} is required`);
+                // Either file or source_attachment_id is required
+                if (!fileData.file && !fileData.source_attachment_id) {
+                    throw new Error(`File at index ${index} must have either 'file' or 'source_attachment_id'`);
                 }
-                formData.append(`files[${index}].file`, fileData.file);
+                
+                // Cannot have both
+                if (fileData.file && fileData.source_attachment_id) {
+                    throw new Error(`File at index ${index} cannot have both 'file' and 'source_attachment_id'`);
+                }
+                
+                // Add file or source_attachment_id
+                if (fileData.file) {
+                    formData.append(`files[${index}].file`, fileData.file);
+                } else if (fileData.source_attachment_id) {
+                    formData.append(`files[${index}].source_attachment_id`, fileData.source_attachment_id);
+                }
                 
                 // Description is optional
                 if (fileData.description) {
@@ -126,7 +137,6 @@ export async function createPlanningRequest(requestData) {
                 }
                 
                 // attach_to is required and must be sent as JSON string
-                // Backend requires this field, so always send it
                 if (!fileData.attach_to || !Array.isArray(fileData.attach_to) || fileData.attach_to.length === 0) {
                     throw new Error(`attach_to is required for file at index ${index} and must contain at least one target`);
                 }
@@ -135,6 +145,7 @@ export async function createPlanningRequest(requestData) {
         }
 
         // Legacy support: Add attachments if provided (old structure)
+        // Also used for existing files with source_attachment_id and attach_to
         if (requestData.attachments && requestData.attachments.length > 0) {
             requestData.attachments.forEach((attachment, index) => {
                 if (attachment.file) {
@@ -145,6 +156,10 @@ export async function createPlanningRequest(requestData) {
                 }
                 if (attachment.source_attachment_id) {
                     formData.append(`attachments[${index}].source_attachment_id`, attachment.source_attachment_id);
+                }
+                // Support attach_to for existing files
+                if (attachment.attach_to && Array.isArray(attachment.attach_to) && attachment.attach_to.length > 0) {
+                    formData.append(`attachments[${index}].attach_to`, JSON.stringify(attachment.attach_to));
                 }
             });
         }

@@ -8,6 +8,13 @@ import { DataManager } from './dataManager.js';
 import { ValidationManager } from './validationManager.js';
 import { fetchCurrencyRates } from '../../../apis/formatters.js';
 import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft } from '../../../apis/procurement.js';
+import { getPlanningRequests, getPlanningRequest } from '../../../apis/planning/planningRequests.js';
+import { getPlanningRequestItems } from '../../../apis/planning/planningRequestItems.js';
+import { TableComponent } from '../../../components/table/table.js';
+import { FiltersComponent } from '../../../components/filters/filters.js';
+import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
+import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
+import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 
 // Global state
 let headerComponent;
@@ -29,7 +36,8 @@ let requestData = {
     suppliers: [],
     offers: {},
     recommendations: {},
-    itemRecommendations: {}
+    itemRecommendations: {},
+    planning_request_item_ids: [] // Track selected planning request item IDs
 };
 
 
@@ -134,6 +142,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize modal cleanup
     initializeModalCleanup();
+    
+    // Initialize planning request items modal
+    initializePlanningRequestItemsModal();
     
     // Now render all components with proper currency rates
     await renderAll();
@@ -321,7 +332,8 @@ async function saveDraftAsJSON() {
             offers: transformedOffers,
             recommendations: transformedRecommendations,
             total_amount_eur: totalAmountEUR,
-            is_rolling_mill: isRollingMill
+            is_rolling_mill: isRollingMill,
+            planning_request_item_ids: requestData.planning_request_item_ids || []
         };
         
         // Prepare draft data according to the model structure
@@ -1023,7 +1035,8 @@ async function submitRequest() {
             offers: transformedOffers,
             recommendations: transformedRecommendations,
             total_amount_eur: totalAmountEUR,
-            is_rolling_mill: isRollingMill
+            is_rolling_mill: isRollingMill,
+            planning_request_item_ids: requestData.planning_request_item_ids || []
         };
         
         // Create purchase request using apis function
@@ -1055,6 +1068,670 @@ async function submitRequest() {
     }
 }
 
+// Planning Request Items Modal Management
+let planningItemsTable = null;
+let planningItemsFilters = null;
+let selectedPlanningItems = new Set();
+let allPlanningItems = [];
+let planningItemsEventListenersSetup = false;
+let planningItemFilesModal = null;
+let planningRequestDetailsModal = null;
+
+function initializePlanningRequestItemsModal() {
+    const attachBtn = document.getElementById('attach-planning-items-btn');
+    if (attachBtn) {
+        attachBtn.addEventListener('click', () => showPlanningRequestItemsModal());
+    }
+    
+    const addSelectedBtn = document.getElementById('add-selected-items-btn');
+    if (addSelectedBtn) {
+        addSelectedBtn.addEventListener('click', () => addSelectedPlanningItems());
+    }
+    
+    // Initialize modal event listeners
+    const modal = document.getElementById('planningRequestItemsModal');
+    if (modal) {
+        modal.addEventListener('hidden.bs.modal', () => {
+            // Clear selections when modal is closed
+            selectedPlanningItems.clear();
+            if (planningItemsTable) {
+                updateSelectedItemsCount();
+            }
+        });
+    }
+    
+    // Setup event listeners for table items
+    setupPlanningItemsEventListeners();
+}
+
+async function showPlanningRequestItemsModal() {
+    const modalElement = document.getElementById('planningRequestItemsModal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+    
+    // Reset selections
+    selectedPlanningItems.clear();
+    updateSelectedItemsCount();
+    
+    // Initialize filters
+    if (!planningItemsFilters) {
+        initializePlanningItemsFilters();
+    }
+    
+    // Initialize table
+    if (!planningItemsTable) {
+        initializePlanningItemsTable();
+    }
+    
+    // Load data
+    await loadPlanningRequestItems();
+    
+    modal.show();
+}
+
+function initializePlanningItemsFilters() {
+    const container = document.getElementById('planning-items-filters-container');
+    if (!container) return;
+    
+    planningItemsFilters = new FiltersComponent('planning-items-filters-container', {
+        title: 'Filtreler',
+        showClearButton: true,
+        showApplyButton: true,
+        applyButtonText: 'Filtrele',
+        clearButtonText: 'Temizle',
+        onApply: () => {
+            loadPlanningRequestItems();
+        },
+        onClear: () => {
+            loadPlanningRequestItems();
+        }
+    });
+    
+    // Add filters
+    planningItemsFilters.addTextFilter({
+        id: 'item-code-filter',
+        label: 'Malzeme Kodu',
+        placeholder: 'Malzeme kodu ara...',
+        colSize: 2
+    });
+    
+    planningItemsFilters.addTextFilter({
+        id: 'item-name-filter',
+        label: 'Malzeme Adı',
+        placeholder: 'Malzeme adı ara...',
+        colSize: 2
+    });
+    
+    planningItemsFilters.addTextFilter({
+        id: 'job-no-filter',
+        label: 'İş No',
+        placeholder: 'İş numarası ara...',
+        colSize: 2
+    });
+}
+
+function initializePlanningItemsTable() {
+    const container = document.getElementById('planning-items-table-container');
+    if (!container) return;
+    
+    planningItemsTable = new TableComponent('planning-items-table-container', {
+        title: 'Planlama Talebi Malzemeleri',
+        columns: [
+            {
+                field: 'selected',
+                label: '',
+                formatter: (value, row) => {
+                    const isSelected = selectedPlanningItems.has(row.id);
+                    return `<input type="checkbox" class="planning-item-checkbox" data-item-id="${row.id}" ${isSelected ? 'checked' : ''}>`;
+                },
+                sortable: false
+            },
+            {
+                field: 'planning_request_number',
+                label: 'Planlama Talebi No',
+                formatter: (value, row) => {
+                    if (!value) return '-';
+                    return `<button type="button" class="btn btn-link btn-sm p-0 view-planning-request-btn" data-planning-request-id="${row.planning_request}" data-request-number="${value}">
+                        ${value}
+                    </button>`;
+                },
+                sortable: true
+            },
+            {
+                field: 'item_code',
+                label: 'Malzeme Kodu',
+                formatter: (value) => value || '-',
+                sortable: true
+            },
+            {
+                field: 'item_name',
+                label: 'Malzeme Adı',
+                formatter: (value) => value || '-',
+                sortable: true
+            },
+            {
+                field: 'job_no',
+                label: 'İş No',
+                formatter: (value) => value || '-',
+                sortable: true
+            },
+            {
+                field: 'quantity',
+                label: 'Miktar',
+                formatter: (value) => value || '-',
+                sortable: true
+            },
+            {
+                field: 'item_unit',
+                label: 'Birim',
+                formatter: (value) => value || '-',
+                sortable: true
+            },
+            {
+                field: 'specifications',
+                label: 'Teknik Özellikler',
+                formatter: (value) => {
+                    if (!value) return '-';
+                    return value.length > 50 ? value.substring(0, 50) + '...' : value;
+                },
+                sortable: false
+            },
+            {
+                field: 'files',
+                label: 'Dosyalar',
+                formatter: (value, row) => {
+                    const fileCount = Array.isArray(value) ? value.length : 0;
+                    if (fileCount === 0) return '-';
+                    return `<button type="button" class="btn btn-sm btn-outline-info view-item-files-btn" data-item-id="${row.id}" data-item-name="${row.item_name || 'Malzeme'}">
+                        <i class="fas fa-paperclip me-1"></i>${fileCount} dosya
+                    </button>`;
+                },
+                sortable: false
+            }
+        ],
+        data: [],
+        pagination: true,
+        itemsPerPage: 20,
+        sortable: true,
+        responsive: true,
+        striped: true
+    });
+    
+}
+
+// Setup event listeners for planning items table (using document-level delegation)
+function setupPlanningItemsEventListeners() {
+    // Only setup once to avoid duplicate listeners
+    if (planningItemsEventListenersSetup) return;
+    planningItemsEventListenersSetup = true;
+    
+    // Add event listener for checkboxes (document-level to ensure it works)
+    document.addEventListener('change', (e) => {
+        if (e.target.classList.contains('planning-item-checkbox')) {
+            const itemId = parseInt(e.target.dataset.itemId);
+            if (e.target.checked) {
+                selectedPlanningItems.add(itemId);
+            } else {
+                selectedPlanningItems.delete(itemId);
+            }
+            updateSelectedItemsCount();
+        }
+    });
+    
+    // Add event listener for view files buttons
+    document.addEventListener('click', (e) => {
+        const filesBtn = e.target.closest('.view-item-files-btn');
+        if (filesBtn) {
+            const itemId = parseInt(filesBtn.dataset.itemId);
+            const itemName = filesBtn.dataset.itemName;
+            showPlanningItemFilesModal(itemId, itemName);
+        }
+        
+        // Add event listener for planning request number buttons
+        const planningRequestBtn = e.target.closest('.view-planning-request-btn');
+        if (planningRequestBtn) {
+            const planningRequestId = parseInt(planningRequestBtn.dataset.planningRequestId);
+            const requestNumber = planningRequestBtn.dataset.requestNumber;
+            showPlanningRequestDetailsModal(planningRequestId, requestNumber);
+        }
+    });
+}
+
+async function loadPlanningRequestItems() {
+    if (!planningItemsTable) return;
+    
+    try {
+        planningItemsTable.setLoading(true);
+        
+        // Get filter values
+        const filterValues = planningItemsFilters ? planningItemsFilters.getFilterValues() : {};
+        
+        // Get all planning request items
+        const itemsResponse = await getPlanningRequestItems({ page_size: 1000 });
+        allPlanningItems = itemsResponse.results || [];
+        
+        // Apply text filters
+        let filteredItems = allPlanningItems;
+        if (filterValues['item-code-filter']) {
+            const searchTerm = filterValues['item-code-filter'].toLowerCase();
+            filteredItems = filteredItems.filter(item => 
+                item.item_code?.toLowerCase().includes(searchTerm)
+            );
+        }
+        if (filterValues['item-name-filter']) {
+            const searchTerm = filterValues['item-name-filter'].toLowerCase();
+            filteredItems = filteredItems.filter(item => 
+                item.item_name?.toLowerCase().includes(searchTerm)
+            );
+        }
+        if (filterValues['job-no-filter']) {
+            const searchTerm = filterValues['job-no-filter'].toLowerCase();
+            filteredItems = filteredItems.filter(item => 
+                item.job_no?.toLowerCase().includes(searchTerm)
+            );
+        }
+        
+        // Update table with filtered data
+        planningItemsTable.updateData(filteredItems, filteredItems.length);
+        planningItemsTable.setLoading(false);
+        
+        // Re-render checkboxes to reflect current selection state
+        setTimeout(() => {
+            const checkboxes = document.querySelectorAll('.planning-item-checkbox');
+            checkboxes.forEach(cb => {
+                const itemId = parseInt(cb.dataset.itemId);
+                cb.checked = selectedPlanningItems.has(itemId);
+            });
+            // Update button state after checkboxes are restored
+            updateSelectedItemsCount();
+        }, 100);
+        
+    } catch (error) {
+        console.error('Error loading planning request items:', error);
+        showNotification('Planlama talebi malzemeleri yüklenirken hata oluştu: ' + error.message, 'error');
+        planningItemsTable.setLoading(false);
+    }
+}
+
+function updateSelectedItemsCount() {
+    const countElement = document.getElementById('selected-items-count');
+    const addBtn = document.getElementById('add-selected-items-btn');
+    
+    const count = selectedPlanningItems.size;
+    if (countElement) {
+        countElement.textContent = `${count} malzeme seçildi`;
+    }
+    if (addBtn) {
+        addBtn.disabled = count === 0;
+    }
+}
+
+function showPlanningItemFilesModal(itemId, itemName) {
+    // Find the item in allPlanningItems
+    const item = allPlanningItems.find(i => i.id === itemId);
+    if (!item || !item.files || item.files.length === 0) {
+        showNotification('Bu malzeme için dosya bulunmuyor', 'info');
+        return;
+    }
+    
+    // Initialize DisplayModal if not already created
+    if (!planningItemFilesModal) {
+        // Create container element if it doesn't exist
+        let container = document.getElementById('planning-item-files-modal-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'planning-item-files-modal-container';
+            document.body.appendChild(container);
+        }
+        
+        planningItemFilesModal = new DisplayModal('planning-item-files-modal-container', {
+            title: 'Malzeme Dosyaları',
+            icon: 'fas fa-paperclip',
+            size: 'lg',
+            showEditButton: false
+        });
+    }
+    
+    // Clear previous data
+    planningItemFilesModal.clearData();
+    
+    // Update title
+    planningItemFilesModal.setTitle(`${itemName} - Dosyalar`);
+    
+    // Add files section
+    planningItemFilesModal.addCustomSection({
+        id: 'files-section',
+        title: '',
+        customContent: `
+            <div class="row g-2">
+                <div class="col-12">
+                    <div id="planning-item-files-display-container"></div>
+                </div>
+            </div>
+        `
+    });
+    
+    // Render the modal
+    planningItemFilesModal.render();
+    
+    // Initialize FileAttachments component after modal is rendered
+    setTimeout(() => {
+        const container = document.getElementById('planning-item-files-display-container');
+        if (container) {
+            const fileAttachments = new FileAttachments('planning-item-files-display-container', {
+                title: '',
+                layout: 'grid',
+                showTitle: false,
+                onFileClick: (file) => {
+                    const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                    const fileExtension = fileName.split('.').pop().toLowerCase();
+                    const viewer = new FileViewer();
+                    viewer.setDownloadCallback(async () => {
+                        await viewer.downloadFile(file.file_url, fileName);
+                    });
+                    viewer.openFile(file.file_url, fileName, fileExtension);
+                }
+            });
+            fileAttachments.setFiles(item.files);
+        }
+    }, 100);
+    
+    // Show the modal
+    planningItemFilesModal.show();
+}
+
+async function showPlanningRequestDetailsModal(planningRequestId, requestNumber) {
+    try {
+        // Show loading notification
+        showNotification('Planlama talebi detayları yükleniyor...', 'info', 2000);
+        
+        // Fetch planning request details
+        const planningRequest = await getPlanningRequest(planningRequestId);
+        
+        // Initialize DisplayModal if not already created
+        if (!planningRequestDetailsModal) {
+            // Create container element if it doesn't exist
+            let container = document.getElementById('planning-request-details-modal-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'planning-request-details-modal-container';
+                document.body.appendChild(container);
+            }
+            
+            planningRequestDetailsModal = new DisplayModal('planning-request-details-modal-container', {
+                title: 'Planlama Talebi Detayları',
+                icon: 'fas fa-clipboard-list',
+                size: 'xl',
+                showEditButton: false
+            });
+        }
+        
+        // Clear previous data
+        planningRequestDetailsModal.clearData();
+        
+        // Update title with request number
+        planningRequestDetailsModal.setTitle(`Planlama Talebi - ${requestNumber}`);
+        
+        // Add basic information section
+        planningRequestDetailsModal.addSection({
+            title: 'Genel Bilgiler',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary'
+        });
+        
+        planningRequestDetailsModal.addField({
+            label: 'Talep No',
+            value: planningRequest.request_number || '-',
+            colSize: 4
+        });
+        
+        planningRequestDetailsModal.addField({
+            label: 'Durum',
+            value: planningRequest.status_label || planningRequest.status || '-',
+            colSize: 4
+        });
+        
+        planningRequestDetailsModal.addField({
+            label: 'Öncelik',
+            value: getPriorityLabel(planningRequest.priority),
+            colSize: 4
+        });
+        
+        if (planningRequest.title) {
+            planningRequestDetailsModal.addField({
+                label: 'Başlık',
+                value: planningRequest.title,
+                colSize: 12
+            });
+        }
+        
+        if (planningRequest.description) {
+            planningRequestDetailsModal.addField({
+                label: 'Açıklama',
+                value: planningRequest.description,
+                colSize: 12
+            });
+        }
+        
+        planningRequestDetailsModal.addField({
+            label: 'İhtiyaç Tarihi',
+            value: planningRequest.needed_date ? formatDate(planningRequest.needed_date) : '-',
+            colSize: 6
+        });
+        
+        planningRequestDetailsModal.addField({
+            label: 'Oluşturulma',
+            value: planningRequest.created_at ? formatDateTime(planningRequest.created_at) : '-',
+            colSize: 6
+        });
+        
+        if (planningRequest.created_by_full_name || planningRequest.created_by_username) {
+            planningRequestDetailsModal.addField({
+                label: 'Oluşturan',
+                value: planningRequest.created_by_full_name || planningRequest.created_by_username,
+                colSize: 6
+            });
+        }
+        
+        // Add items section if items exist
+        if (planningRequest.items && planningRequest.items.length > 0) {
+            planningRequestDetailsModal.addCustomSection({
+                id: 'items-section',
+                title: 'Talep Edilen Malzemeler',
+                icon: 'fas fa-boxes',
+                iconColor: 'text-success',
+                customContent: `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-striped">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>#</th>
+                                    <th>Malzeme Kodu</th>
+                                    <th>Malzeme Adı</th>
+                                    <th>İş No</th>
+                                    <th>Miktar</th>
+                                    <th>Birim</th>
+                                    <th>Teknik Özellikler</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${planningRequest.items.map((item, index) => `
+                                    <tr>
+                                        <td>${index + 1}</td>
+                                        <td><strong>${item.item_code || '-'}</strong></td>
+                                        <td>${item.item_name || '-'}</td>
+                                        <td>${item.job_no || '-'}</td>
+                                        <td>${item.quantity || '-'}</td>
+                                        <td>${item.item_unit || '-'}</td>
+                                        <td>${item.specifications || '-'}</td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `
+            });
+        }
+        
+        // Add files section if files exist
+        if (planningRequest.files && planningRequest.files.length > 0) {
+            planningRequestDetailsModal.addCustomSection({
+                id: 'files-section',
+                title: 'Dosya Ekleri',
+                icon: 'fas fa-paperclip',
+                iconColor: 'text-info',
+                customContent: `
+                    <div class="row g-2">
+                        <div class="col-12">
+                            <div id="planning-request-files-display-container"></div>
+                        </div>
+                    </div>
+                `
+            });
+        }
+        
+        // Render the modal
+        planningRequestDetailsModal.render();
+        
+        // Initialize FileAttachments component if files exist
+        if (planningRequest.files && planningRequest.files.length > 0) {
+            setTimeout(() => {
+                const container = document.getElementById('planning-request-files-display-container');
+                if (container) {
+                    const fileAttachments = new FileAttachments('planning-request-files-display-container', {
+                        title: '',
+                        layout: 'grid',
+                        showTitle: false,
+                        onFileClick: (file) => {
+                            const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                            const fileExtension = fileName.split('.').pop().toLowerCase();
+                            const viewer = new FileViewer();
+                            viewer.setDownloadCallback(async () => {
+                                await viewer.downloadFile(file.file_url, fileName);
+                            });
+                            viewer.openFile(file.file_url, fileName, fileExtension);
+                        }
+                    });
+                    fileAttachments.setFiles(planningRequest.files);
+                }
+            }, 100);
+        }
+        
+        // Show the modal
+        planningRequestDetailsModal.show();
+        
+    } catch (error) {
+        console.error('Error showing planning request details:', error);
+        showNotification('Planlama talebi detayları yüklenirken hata oluştu: ' + error.message, 'error');
+    }
+}
+
+// Helper function to get priority label
+function getPriorityLabel(priority) {
+    const priorityMap = {
+        'low': 'Düşük',
+        'normal': 'Normal',
+        'high': 'Yüksek',
+        'urgent': 'Acil'
+    };
+    return priorityMap[priority] || priority || 'Normal';
+}
+
+// Helper function to format date
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleDateString('tr-TR');
+    } catch (error) {
+        return dateString;
+    }
+}
+
+// Helper function to format datetime
+function formatDateTime(dateString) {
+    if (!dateString) return '-';
+    try {
+        const date = new Date(dateString);
+        return date.toLocaleString('tr-TR');
+    } catch (error) {
+        return dateString;
+    }
+}
+
+async function addSelectedPlanningItems() {
+    if (selectedPlanningItems.size === 0) {
+        showNotification('Lütfen en az bir malzeme seçin', 'warning');
+        return;
+    }
+    
+    try {
+        let addedCount = 0;
+        
+        for (const itemId of selectedPlanningItems) {
+            const planningItem = allPlanningItems.find(item => item.id === itemId);
+            if (!planningItem) continue;
+            
+            // Check if item is already added (by planning_request_item_id)
+            const existingItem = requestData.items.find(item => 
+                item.source_planning_request_item_id === itemId
+            );
+            
+            if (existingItem) {
+                continue; // Skip if already added
+            }
+            
+            // Convert planning request item to purchase request item
+            const newItem = {
+                id: window.itemsManager ? window.itemsManager.generateItemId() : 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
+                code: planningItem.item_code || '',
+                name: planningItem.item_name || '',
+                job_no: planningItem.job_no || '',
+                quantity: parseFloat(planningItem.quantity) || 1,
+                unit: planningItem.item_unit || 'adet',
+                specs: planningItem.specifications || '',
+                source_planning_request_item_id: itemId // Track source
+            };
+            
+            requestData.items.push(newItem);
+            
+            // Add to planning_request_item_ids for submission
+            if (!requestData.planning_request_item_ids.includes(itemId)) {
+                requestData.planning_request_item_ids.push(itemId);
+            }
+            
+            addedCount++;
+        }
+        
+        if (addedCount > 0) {
+            // Re-render items table
+            if (itemsManager) {
+                itemsManager.renderItemsTable();
+            }
+            
+            // Auto-save
+            if (dataManager) {
+                dataManager.autoSave();
+            }
+            
+            // Re-render comparison table
+            await renderAll();
+            
+            showNotification(`${addedCount} malzeme eklendi`, 'success');
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('planningRequestItemsModal'));
+            if (modal) {
+                modal.hide();
+            }
+        } else {
+            showNotification('Seçilen malzemeler zaten eklenmiş', 'info');
+        }
+    } catch (error) {
+        console.error('Error adding planning request items:', error);
+        showNotification('Malzemeler eklenirken hata oluştu: ' + error.message, 'error');
+    }
+}
+
 function showNotification(message, type = 'info') {
     // Create notification element
     const notification = document.createElement('div');
@@ -1075,17 +1752,6 @@ function showNotification(message, type = 'info') {
     }, 5000);
 }
 
-function formatDate(dateString) {
-    if (!dateString) return '-';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('tr-TR', {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-    });
-}
 
 // Export functions for potential external use
 window.purchaseRequestApp = {

@@ -1335,8 +1335,9 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 items.push(itemData);
             }
 
-            // Prepare files array with attach_to information
+            // Prepare files array (includes both new uploads and existing file references)
             const files = [];
+            
             for (const attachment of fileAttachments) {
                 // Validate that at least one target is selected
                 if (!attachment.attachTo || attachment.attachTo.length === 0) {
@@ -1354,11 +1355,21 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                     }
                 }
 
-                files.push({
-                    file: attachment.file,
+                // Build file object for API
+                const fileObj = {
                     description: attachment.description || '',
                     attach_to: attachment.attachTo
-                });
+                };
+
+                // For existing files, use source_attachment_id
+                // For new files, use file
+                if (attachment.isExisting) {
+                    fileObj.source_attachment_id = attachment.sourceAttachmentId;
+                } else {
+                    fileObj.file = attachment.file;
+                }
+
+                files.push(fileObj);
             }
 
             // Prepare request data
@@ -1531,15 +1542,31 @@ function prefillFilesFromDepartmentRequest(departmentRequest) {
         modalContainer.appendChild(hiddenInput);
     }
 
-    // For files from department request, we need to download them and create File objects
-    // However, since we can't directly download files from URLs in the browser without CORS issues,
-    // we'll show a message that files need to be re-uploaded or handle them differently
+    // Add existing files to fileAttachments array
+    departmentRequest.files.forEach(file => {
+        // Create a file-like object with the existing file data
+        const fileObj = {
+            name: file.file_name ? file.file_name.split('/').pop() : 'Dosya',
+            size: 0, // We don't have size from API
+            type: '', // We don't have type from API
+            url: file.file_url,
+            id: file.id,
+            asset_id: file.asset_id
+        };
+        
+        fileAttachments.push({
+            file: fileObj,
+            description: file.description || '',
+            attachTo: ['request'], // Default to request
+            isExisting: true,
+            sourceAttachmentId: file.id
+        });
+    });
     
-    // For now, we'll add a note that files from the department request can be re-attached
-    // The user will need to manually attach files if needed, or we can implement file download logic
-    
-    // Note: If the backend supports source_attachment_id, we could pass that instead
-    // For now, we'll leave file handling as-is and let users manually attach files if needed
+    // Render the files list to show the existing files
+    setTimeout(() => {
+        renderFilesList();
+    }, 200);
 }
 
 // Setup items section with dynamic add/remove functionality
@@ -1698,7 +1725,8 @@ function removePlanningItem(index) {
 window.removePlanningItem = removePlanningItem;
 
 // File attachments state
-let fileAttachments = []; // Array of { file: File, description: string, attachTo: Array }
+// Array of { file: File|Object, description: string, attachTo: Array, isExisting: boolean, sourceAttachmentId: number }
+let fileAttachments = [];
 
 // Setup attachments section with file upload and target selection
 function setupAttachmentsSection() {
@@ -1770,7 +1798,9 @@ function renderFilesList() {
 
     const filesHtml = fileAttachments.map((attachment, fileIndex) => {
         const fileName = attachment.file.name;
-        const fileSize = (attachment.file.size / 1024).toFixed(2) + ' KB';
+        const fileSize = attachment.isExisting ? 
+            '<span class="badge bg-info">Mevcut Dosya</span>' : 
+            (attachment.file.size / 1024).toFixed(2) + ' KB';
         const displayName = attachment.description || fileName;
         
         // Build checkboxes for attachment targets
@@ -1819,18 +1849,26 @@ function renderFilesList() {
         `;
 
         return `
-            <div class="card mb-3" data-file-index="${fileIndex}">
+            <div class="card mb-3 ${attachment.isExisting ? 'border-info' : ''}" data-file-index="${fileIndex}">
                 <div class="card-body">
                     <div class="d-flex justify-content-between align-items-start mb-2">
                         <div class="flex-grow-1">
                             <h6 class="mb-1">
                                 <i class="fas fa-file me-2"></i>${displayName}
+                                ${attachment.isExisting ? '<span class="badge bg-info ms-2">Departman Talebinden</span>' : ''}
                             </h6>
                             <small class="text-muted">${fileSize} - ${fileName}</small>
                         </div>
-                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removePlanningFile(${fileIndex})">
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        <div class="btn-group">
+                            ${attachment.isExisting ? `
+                                <button type="button" class="btn btn-sm btn-outline-primary" onclick="viewExistingFile(${fileIndex})">
+                                    <i class="fas fa-eye"></i>
+                                </button>
+                            ` : ''}
+                            <button type="button" class="btn btn-sm btn-outline-danger" onclick="removePlanningFile(${fileIndex})">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small">
@@ -1904,9 +1942,11 @@ function updateFileDescription(fileIndex, description) {
         if (fileCard) {
             const titleElement = fileCard.querySelector('h6');
             if (titleElement) {
-                const fileName = fileAttachments[fileIndex].file.name;
+                const attachment = fileAttachments[fileIndex];
+                const fileName = attachment.file.name;
                 const displayName = description || fileName;
-                titleElement.innerHTML = `<i class="fas fa-file me-2"></i>${displayName}`;
+                const badge = attachment.isExisting ? '<span class="badge bg-info ms-2">Departman Talebinden</span>' : '';
+                titleElement.innerHTML = `<i class="fas fa-file me-2"></i>${displayName}${badge}`;
             }
         }
     }
@@ -1920,9 +1960,26 @@ function removePlanningFile(fileIndex) {
     }
 }
 
+// View existing file from department request
+function viewExistingFile(fileIndex) {
+    if (fileIndex >= 0 && fileIndex < fileAttachments.length) {
+        const attachment = fileAttachments[fileIndex];
+        if (attachment.isExisting && attachment.file.url) {
+            const fileName = attachment.file.name;
+            const fileExtension = fileName.split('.').pop().toLowerCase();
+            const viewer = new FileViewer();
+            viewer.setDownloadCallback(async () => {
+                await viewer.downloadFile(attachment.file.url, fileName);
+            });
+            viewer.openFile(attachment.file.url, fileName, fileExtension);
+        }
+    }
+}
+
 // Make functions globally available
 window.removePlanningFile = removePlanningFile;
 window.updateFileDescription = updateFileDescription;
+window.viewExistingFile = viewExistingFile;
 
 // Update files list when items are added/removed
 const originalAddPlanningItem = addPlanningItem;

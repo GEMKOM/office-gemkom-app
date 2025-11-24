@@ -610,7 +610,12 @@ function setupItemsSection(request = null) {
                     <i class="fas fa-tag me-1"></i>Ürün Adı
                 </small>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-1">
+                <small class="text-muted fw-bold">
+                    <i class="fas fa-hashtag me-1"></i>İş No
+                </small>
+            </div>
+            <div class="col-md-1">
                 <small class="text-muted fw-bold">
                     <i class="fas fa-list-ol me-1"></i>Miktar
                 </small>
@@ -713,12 +718,14 @@ function setupItemsSection(request = null) {
             if (lastRow) {
                 const codeInput = lastRow.querySelector('input[name="item_code"]');
                 const nameInput = lastRow.querySelector('input[name="item_name"]');
+                const jobNoInput = lastRow.querySelector('input[name="job_no"]');
                 const unitSelect = lastRow.querySelector('select[name="item_unit"]');
                 const quantityInput = lastRow.querySelector('input[name="item_quantity"]');
                 const descInput = lastRow.querySelector('input[name="item_description"]');
                 
                 if (codeInput) codeInput.value = item.item_code || '';
                 if (nameInput) nameInput.value = item.item_name || '';
+                if (jobNoInput) jobNoInput.value = item.job_no || '';
                 if (unitSelect) unitSelect.value = item.item_unit || '';
                 if (quantityInput) quantityInput.value = item.quantity || '1';
                 if (descInput) descInput.value = item.description || '';
@@ -743,7 +750,10 @@ function addItem() {
                 <div class="col-md-2">
                     <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" required>
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-1">
+                    <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no">
+                </div>
+                <div class="col-md-1">
                     <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="1" min="1" value="1">
                 </div>
                 <div class="col-md-2">
@@ -788,12 +798,14 @@ function duplicateItem(index) {
     // Get all values from the current item
     const codeInput = itemRow.querySelector('input[name="item_code"]');
     const nameInput = itemRow.querySelector('input[name="item_name"]');
+    const jobNoInput = itemRow.querySelector('input[name="job_no"]');
     const quantityInput = itemRow.querySelector('input[name="item_quantity"]');
     const unitSelect = itemRow.querySelector('select[name="item_unit"]');
     const descInput = itemRow.querySelector('input[name="item_description"]');
 
     const code = codeInput ? codeInput.value : '';
     const name = nameInput ? nameInput.value : '';
+    const jobNo = jobNoInput ? jobNoInput.value : '';
     const quantity = quantityInput ? quantityInput.value : '1';
     const unit = unitSelect ? unitSelect.value : '';
     const description = descInput ? descInput.value : '';
@@ -809,12 +821,14 @@ function duplicateItem(index) {
             // Fill in the duplicated values
             const newCodeInput = lastRow.querySelector('input[name="item_code"]');
             const newNameInput = lastRow.querySelector('input[name="item_name"]');
+            const newJobNoInput = lastRow.querySelector('input[name="job_no"]');
             const newQuantityInput = lastRow.querySelector('input[name="item_quantity"]');
             const newUnitSelect = lastRow.querySelector('select[name="item_unit"]');
             const newDescInput = lastRow.querySelector('input[name="item_description"]');
 
             if (newCodeInput) newCodeInput.value = code;
             if (newNameInput) newNameInput.value = name;
+            if (newJobNoInput) newJobNoInput.value = jobNo;
             if (newQuantityInput) newQuantityInput.value = quantity;
             if (newUnitSelect) newUnitSelect.value = unit;
             if (newDescInput) newDescInput.value = description;
@@ -859,6 +873,7 @@ async function handleSaveRequest(formData) {
         for (const row of itemRows) {
             const itemCode = row.querySelector('input[name="item_code"]')?.value?.trim();
             const itemName = row.querySelector('input[name="item_name"]')?.value?.trim();
+            const jobNo = row.querySelector('input[name="job_no"]')?.value?.trim();
             const itemUnit = row.querySelector('select[name="item_unit"]')?.value?.trim();
             const itemQuantity = row.querySelector('input[name="item_quantity"]')?.value?.trim();
             const itemDescription = row.querySelector('input[name="item_description"]')?.value?.trim();
@@ -868,6 +883,7 @@ async function handleSaveRequest(formData) {
                 items.push({
                     item_code: itemCode || null,
                     item_name: itemName,
+                    job_no: jobNo || null,
                     item_unit: itemUnit || null,
                     quantity: itemQuantity ? parseInt(itemQuantity, 10) : 1,
                     description: itemDescription || null
@@ -1057,6 +1073,12 @@ function showRequestDetailsModal(request) {
                         {
                             field: 'item_name',
                             label: 'Ürün Adı',
+                            sortable: true,
+                            formatter: (value) => value || '-'
+                        },
+                        {
+                            field: 'job_no',
+                            label: 'İş No',
                             sortable: true,
                             formatter: (value) => value || '-'
                         },
