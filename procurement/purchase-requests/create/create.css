@@ -316,20 +316,23 @@ thead .btn.btn-outline-warning {
     margin: 0;
 }
 
-/* Modal styling */
-.modal-content {
+/* Modal styling - Only apply to specific modals, not DisplayModal components */
+#planningRequestItemsModal .modal-content,
+.bulk-import-modal .modal-content {
     border: none;
     border-radius: 12px;
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
-.modal-header {
+#planningRequestItemsModal .modal-header,
+.bulk-import-modal .modal-header {
     background: linear-gradient(135deg, #f8f9fa, #e9ecef);
     border-bottom: 1px solid #dee2e6;
     border-radius: 12px 12px 0 0;
 }
 
-.modal-title {
+#planningRequestItemsModal .modal-title,
+.bulk-import-modal .modal-title {
     color: #495057;
     font-weight: 600;
 }

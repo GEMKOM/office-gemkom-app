@@ -1,5 +1,7 @@
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
+import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
+import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import {
     markDepartmentRequestTransferred as markTransferredAPI
 } from '../../../apis/planning/departmentRequests.js';
@@ -103,12 +105,22 @@ async function showDepartmentRequestDetailsModal(request = null) {
                             <div class="field-value">#${requestToShow.id}</div>
                         </div>
                     </div>
+                    ${requestToShow.request_number ? `
+                    <div class="col-12">
+                        <div class="field-display mb-2 d-flex align-items-center">
+                            <label class="field-label me-2 mb-0 flex-shrink-0">
+                                <i class="fas fa-barcode me-1"></i>Talep Numarası:
+                            </label>
+                            <div class="field-value">${requestToShow.request_number}</div>
+                        </div>
+                    </div>
+                    ` : ''}
                     <div class="col-12">
                         <div class="field-display mb-2 d-flex align-items-center">
                             <label class="field-label me-2 mb-0 flex-shrink-0">
                                 <i class="fas fa-user me-1"></i>Talep Eden:
                             </label>
-                            <div class="field-value">${requestToShow.requestor_username || 'Bilinmiyor'}</div>
+                            <div class="field-value">${requestToShow.requestor_full_name || requestToShow.requestor_username || 'Bilinmiyor'}</div>
                         </div>
                     </div>
                     <div class="col-12">
@@ -135,14 +147,16 @@ async function showDepartmentRequestDetailsModal(request = null) {
                             <div class="field-value">${formatDateTime(requestToShow.created_at)}</div>
                         </div>
                     </div>
+                    ${requestToShow.submitted_at ? `
                     <div class="col-12">
                         <div class="field-display mb-2 d-flex align-items-center">
                             <label class="field-label me-2 mb-0 flex-shrink-0">
-                                <i class="fas fa-calendar-check me-1"></i>Son Güncelleme:
+                                <i class="fas fa-paper-plane me-1"></i>Gönderilme:
                             </label>
-                            <div class="field-value">${formatDateTime(requestToShow.updated_at)}</div>
+                            <div class="field-value">${formatDateTime(requestToShow.submitted_at)}</div>
                         </div>
                     </div>
+                    ` : ''}
                 </div>
             </div>
             <div class="col-md-6">
@@ -179,9 +193,9 @@ async function showDepartmentRequestDetailsModal(request = null) {
                     <div class="col-12">
                         <div class="field-display mb-2 d-flex align-items-center">
                             <label class="field-label me-2 mb-0 flex-shrink-0">
-                                <i class="fas fa-calendar me-1"></i>Talep Tarihi:
+                                <i class="fas fa-calendar me-1"></i>İhtiyaç Tarihi:
                             </label>
-                            <div class="field-value">${formatDate(requestToShow.needed_date)}</div>
+                            <div class="field-value">${requestToShow.needed_date ? formatDate(requestToShow.needed_date) : '-'}</div>
                         </div>
                     </div>
                     <div class="col-12">
@@ -254,9 +268,11 @@ async function showDepartmentRequestDetailsModal(request = null) {
             // Create items table
             const itemsData = requestToShow.items.map((item, index) => ({
                 id: index + 1,
-                name: item.name || item.product_name || '-',
+                item_code: item.item_code || '-',
+                item_name: item.item_name || item.name || item.product_name || '-',
+                job_no: item.job_no || '-',
                 quantity: item.quantity || 0,
-                unit: item.unit || 'Adet',
+                unit: item.item_unit || item.unit || 'adet',
                 description: item.description || item.notes || '-'
             }));
 
@@ -268,7 +284,9 @@ async function showDepartmentRequestDetailsModal(request = null) {
                             <thead class="table-light">
                                 <tr>
                                     <th>#</th>
-                                    <th>Ad</th>
+                                    <th>Ürün Kodu</th>
+                                    <th>Ürün Adı</th>
+                                    <th>İş No</th>
                                     <th>Miktar</th>
                                     <th>Birim</th>
                                     <th>Açıklama</th>
@@ -278,7 +296,9 @@ async function showDepartmentRequestDetailsModal(request = null) {
                                 ${itemsData.map(item => `
                                     <tr>
                                         <td>${item.id}</td>
-                                        <td><strong>${item.name}</strong></td>
+                                        <td><strong>${item.item_code}</strong></td>
+                                        <td>${item.item_name}</td>
+                                        <td>${item.job_no}</td>
                                         <td>${item.quantity}</td>
                                         <td>${item.unit}</td>
                                         <td>${item.description}</td>
@@ -291,6 +311,21 @@ async function showDepartmentRequestDetailsModal(request = null) {
             `;
 
             departmentRequestDetailsModal.addCustomContent(tableHtml);
+        }
+
+        // Add files section if files exist
+        if (requestToShow.files && requestToShow.files.length > 0) {
+            departmentRequestDetailsModal.addSection({
+                title: 'Dosya Ekleri',
+                icon: 'fas fa-paperclip',
+                iconColor: 'text-info'
+            });
+
+            const filesHtml = `
+                <div id="department-request-files-container" class="mt-3"></div>
+            `;
+
+            departmentRequestDetailsModal.addCustomContent(filesHtml);
         }
 
         // Render the modal
@@ -325,6 +360,30 @@ async function showDepartmentRequestDetailsModal(request = null) {
 
         // Show the modal
         departmentRequestDetailsModal.show();
+
+        // Initialize files component after modal is rendered
+        if (requestToShow.files && requestToShow.files.length > 0) {
+            setTimeout(() => {
+                const filesContainer = document.getElementById('department-request-files-container');
+                if (filesContainer) {
+                    const fileAttachments = new FileAttachments('department-request-files-container', {
+                        title: '',
+                        layout: 'grid',
+                        showTitle: false,
+                        onFileClick: (file) => {
+                            const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                            const fileExtension = fileName.split('.').pop().toLowerCase();
+                            const viewer = new FileViewer();
+                            viewer.setDownloadCallback(async () => {
+                                await viewer.downloadFile(file.file_url, fileName);
+                            });
+                            viewer.openFile(file.file_url, fileName, fileExtension);
+                        }
+                    });
+                    fileAttachments.setFiles(requestToShow.files);
+                }
+            }, 100);
+        }
     }
 }
 
@@ -442,14 +501,8 @@ async function confirmTransferDepartmentRequest(requestId) {
     }
 }
 
-// Transfer department request function
-// This function is now overridden in department-requests.js
-// Keeping this for backward compatibility but it should not be called directly
-async function transferDepartmentRequest(requestId) {
-    // This function is overridden in department-requests.js
-    // The actual implementation is there
-    console.warn('transferDepartmentRequest called from modals.js - this should be handled in department-requests.js');
-}
+// Transfer department request function - removed from here
+// The actual implementation is in department-requests.js
 
 // Utility functions
 function getStatusBadge(status, statusLabel) {
@@ -549,14 +602,13 @@ function setupModalEventListeners() {
                 transferBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Yükleniyor...';
 
                 try {
-                    // Show transfer confirmation modal
-                    transferDepartmentRequest(currentRequest.id);
-                    // After modal opens, change button text to indicate waiting for confirmation
-                    setTimeout(() => {
-                        if (transferBtn && transferBtn.disabled) {
-                            transferBtn.innerHTML = '<i class="fas fa-exchange-alt me-1"></i>Transfer Bekleniyor...';
-                        }
-                    }, 300);
+                    // Call the global transfer function from department-requests.js
+                    if (window.transferDepartmentRequest) {
+                        await window.transferDepartmentRequest(currentRequest.id);
+                    }
+                    // After modal opens, re-enable button
+                    transferBtn.disabled = false;
+                    transferBtn.innerHTML = originalContent;
                 } catch (error) {
                     // Re-enable button on error
                     transferBtn.disabled = false;
@@ -585,7 +637,6 @@ export {
     showDepartmentRequestDetailsModal,
     showTransferDepartmentRequestModal,
     confirmTransferDepartmentRequest,
-    transferDepartmentRequest,
     setupModalEventListeners,
     setGlobalVariables
 };
