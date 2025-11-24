@@ -1182,10 +1182,23 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
 
     // Add basic information section
     createPlanningRequestModal.addSection({
+        id: 'basic-info-section',
         title: 'Temel Bilgiler',
         icon: 'fas fa-info-circle',
         iconColor: 'text-primary',
         fields: [
+            {
+                id: 'request_number',
+                name: 'request_number',
+                label: 'Talep Numarası',
+                type: 'text',
+                placeholder: 'Planlama talebi numarasını girin',
+                value: '',
+                required: false,
+                icon: 'fas fa-barcode',
+                colSize: 12,
+                help: 'Planlama talebi numarası (opsiyonel)'
+            },
             {
                 id: 'title',
                 name: 'title',
@@ -1216,6 +1229,7 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
 
     // Add request details section
     createPlanningRequestModal.addSection({
+        id: 'request-details-section',
         title: 'Talep Detayları',
         icon: 'fas fa-clipboard-list',
         iconColor: 'text-success',
@@ -1228,7 +1242,7 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 value: departmentRequest?.priority || 'normal',
                 required: false,
                 icon: 'fas fa-exclamation-triangle',
-                colSize: 6,
+                colSize: 12,
                 help: 'Talebin öncelik seviyesi',
                 options: priorityOptions
             },
@@ -1240,7 +1254,7 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 value: departmentRequest?.needed_date || '',
                 required: false,
                 icon: 'fas fa-calendar-alt',
-                colSize: 6,
+                colSize: 12,
                 help: 'Talebin ihtiyaç duyulduğu tarih (opsiyonel)'
             }
         ]
@@ -1381,6 +1395,11 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 items: items.length > 0 ? items : undefined,
                 files: files.length > 0 ? files : undefined
             };
+            
+            // Add request_number if provided
+            if (formData.request_number && formData.request_number.trim()) {
+                requestData.request_number = formData.request_number.trim();
+            }
 
             // Add department_request_id if creating from department request
             const departmentRequestId = createPlanningRequestModal.container.querySelector('[data-department-request-id]')?.dataset.departmentRequestId;
@@ -1427,8 +1446,45 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
     // Render the modal
     createPlanningRequestModal.render();
 
-    // Setup items section with custom HTML after rendering
+    // Rearrange sections into two-column layout after rendering
     setTimeout(() => {
+        const form = createPlanningRequestModal.container.querySelector('#edit-modal-form');
+        const basicInfoSection = createPlanningRequestModal.container.querySelector('[data-section-id="basic-info-section"]');
+        const requestDetailsSection = createPlanningRequestModal.container.querySelector('[data-section-id="request-details-section"]');
+        
+        if (form && basicInfoSection && requestDetailsSection) {
+            // Create a wrapper row for two-column layout
+            const wrapperRow = document.createElement('div');
+            wrapperRow.className = 'row g-3 mb-3';
+            
+            // Wrap basic info section in left column
+            const leftCol = document.createElement('div');
+            leftCol.className = 'col-md-6';
+            basicInfoSection.classList.remove('mb-3');
+            basicInfoSection.classList.add('mb-0', 'h-100');
+            leftCol.appendChild(basicInfoSection);
+            
+            // Wrap request details section in right column
+            const rightCol = document.createElement('div');
+            rightCol.className = 'col-md-6';
+            requestDetailsSection.classList.remove('mb-3');
+            requestDetailsSection.classList.add('mb-0', 'h-100');
+            rightCol.appendChild(requestDetailsSection);
+            
+            // Add columns to wrapper row
+            wrapperRow.appendChild(leftCol);
+            wrapperRow.appendChild(rightCol);
+            
+            // Insert wrapper row at the beginning of the form (before items section)
+            const itemsSection = createPlanningRequestModal.container.querySelector('[data-section-id="items-info"]');
+            if (itemsSection) {
+                form.insertBefore(wrapperRow, itemsSection);
+            } else {
+                form.insertBefore(wrapperRow, form.firstChild);
+            }
+        }
+        
+        // Setup items section with custom HTML after rendering
         setupItemsSection();
         setupAttachmentsSection();
         
@@ -1584,6 +1640,9 @@ function setupItemsSection() {
                 <button type="button" class="btn btn-sm btn-outline-primary" id="add-planning-item-btn">
                     <i class="fas fa-plus me-1"></i>Ürün Ekle
                 </button>
+                <button type="button" class="btn btn-sm btn-outline-success" id="export-items-csv-btn">
+                    <i class="fas fa-file-csv me-1"></i>CSV Olarak Dışa Aktar
+                </button>
                 <button type="button" class="btn btn-sm btn-outline-danger" id="clear-planning-items-btn">
                     <i class="fas fa-trash-alt me-1"></i>Tümünü Temizle
                 </button>
@@ -1635,6 +1694,12 @@ function setupItemsSection() {
     const addItemBtn = createPlanningRequestModal.container.querySelector('#add-planning-item-btn');
     if (addItemBtn) {
         addItemBtn.addEventListener('click', addPlanningItem);
+    }
+
+    // Export items to CSV
+    const exportCsvBtn = createPlanningRequestModal.container.querySelector('#export-items-csv-btn');
+    if (exportCsvBtn) {
+        exportCsvBtn.addEventListener('click', exportItemsToCSV);
     }
 
     // Clear all items
@@ -1723,6 +1788,63 @@ function removePlanningItem(index) {
 
 // Make removePlanningItem globally available
 window.removePlanningItem = removePlanningItem;
+
+// Export items to CSV
+function exportItemsToCSV() {
+    const container = document.getElementById('planning-items-container');
+    if (!container) {
+        showNotification('Ürün listesi bulunamadı', 'error');
+        return;
+    }
+
+    const itemRows = container.querySelectorAll('.planning-item-row');
+    if (itemRows.length === 0) {
+        showNotification('Dışa aktarılacak ürün bulunamadı', 'error');
+        return;
+    }
+
+    // Get needed_date from the form
+    const neededDateInput = createPlanningRequestModal.container.querySelector('input[name="needed_date"]');
+    const neededDate = neededDateInput?.value || '';
+    
+    // Format date from YYYY-MM-DD to DD.MM.YYYY
+    let formattedDate = '';
+    if (neededDate) {
+        const dateParts = neededDate.split('-');
+        if (dateParts.length === 3) {
+            formattedDate = `${dateParts[2]}.${dateParts[1]}.${dateParts[0]}`;
+        }
+    }
+
+    // Build CSV content
+    const csvLines = [];
+    itemRows.forEach(row => {
+        const itemCode = row.querySelector('input[name="item_code"]')?.value?.trim() || '';
+        const quantity = row.querySelector('input[name="item_quantity"]')?.value?.trim() || '';
+        const description = row.querySelector('input[name="item_specifications"]')?.value?.trim() || '';
+        
+        // Format: S;item_code;quantity;date;description
+        const csvLine = `S;${itemCode};${quantity};${formattedDate};${description}`;
+        csvLines.push(csvLine);
+    });
+
+    // Create CSV content (no headers)
+    const csvContent = csvLines.join('\n');
+
+    // Create blob and download
+    const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel UTF-8 support
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.setAttribute('href', url);
+    link.setAttribute('download', `planlama_talebi_urunleri_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    showNotification('Ürünler CSV olarak dışa aktarıldı', 'success');
+}
 
 // File attachments state
 // Array of { file: File|Object, description: string, attachTo: Array, isExisting: boolean, sourceAttachmentId: number }

@@ -103,6 +103,9 @@ export async function createPlanningRequest(requestData) {
         if (requestData.priority !== undefined && requestData.priority !== null) {
             formData.append('priority', requestData.priority);
         }
+        if (requestData.request_number !== undefined && requestData.request_number !== null && requestData.request_number.trim() !== '') {
+            formData.append('request_number', requestData.request_number);
+        }
 
         // Add items if provided
         // Send items as JSON string - backend will parse it

@@ -9,7 +9,7 @@ import { ValidationManager } from './validationManager.js';
 import { fetchCurrencyRates } from '../../../apis/formatters.js';
 import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft } from '../../../apis/procurement.js';
 import { getPlanningRequests, getPlanningRequest } from '../../../apis/planning/planningRequests.js';
-import { getPlanningRequestItems } from '../../../apis/planning/planningRequestItems.js';
+import { getPlanningRequestItems, getNumberOfAvailablePlanningRequestItems } from '../../../apis/planning/planningRequestItems.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
@@ -1088,6 +1088,11 @@ function initializePlanningRequestItemsModal() {
         addSelectedBtn.addEventListener('click', () => addSelectedPlanningItems());
     }
     
+    const downloadFilesBtn = document.getElementById('download-selected-files-btn');
+    if (downloadFilesBtn) {
+        downloadFilesBtn.addEventListener('click', () => downloadSelectedItemsFiles());
+    }
+    
     // Initialize modal event listeners
     const modal = document.getElementById('planningRequestItemsModal');
     if (modal) {
@@ -1097,11 +1102,48 @@ function initializePlanningRequestItemsModal() {
             if (planningItemsTable) {
                 updateSelectedItemsCount();
             }
+            // Refresh count after modal closes
+            loadAvailableItemsCount();
         });
     }
     
     // Setup event listeners for table items
     setupPlanningItemsEventListeners();
+    
+    // Load available items count on initialization
+    loadAvailableItemsCount();
+}
+
+async function loadAvailableItemsCount() {
+    try {
+        const response = await getNumberOfAvailablePlanningRequestItems();
+        const count = response.count || response.available_count || 0;
+        updatePlanningItemsButtonCount(count);
+    } catch (error) {
+        console.error('Error loading available items count:', error);
+        // Don't show error notification, just set count to 0
+        updatePlanningItemsButtonCount(0);
+    }
+}
+
+function updatePlanningItemsButtonCount(count) {
+    const attachBtn = document.getElementById('attach-planning-items-btn');
+    if (!attachBtn) return;
+    
+    // Remove existing badge if any
+    const existingBadge = attachBtn.querySelector('.planning-items-count-badge');
+    if (existingBadge) {
+        existingBadge.remove();
+    }
+    
+    // Add count badge
+    if (count > 0) {
+        const badge = document.createElement('span');
+        badge.className = 'planning-items-count-badge badge bg-success ms-2';
+        badge.textContent = count;
+        badge.style.cssText = 'font-size: 0.75rem; padding: 0.25rem 0.5rem;';
+        attachBtn.appendChild(badge);
+    }
 }
 
 async function showPlanningRequestItemsModal() {
@@ -1241,7 +1283,7 @@ function initializePlanningItemsTable() {
                 formatter: (value, row) => {
                     const fileCount = Array.isArray(value) ? value.length : 0;
                     if (fileCount === 0) return '-';
-                    return `<button type="button" class="btn btn-sm btn-outline-info view-item-files-btn" data-item-id="${row.id}" data-item-name="${row.item_name || 'Malzeme'}">
+                    return `<button type="button" class="btn btn-sm btn-outline-primary view-item-files-btn" data-item-id="${row.id}" data-item-name="${row.item_name || 'Malzeme'}">
                         <i class="fas fa-paperclip me-1"></i>${fileCount} dosya
                     </button>`;
                 },
@@ -1305,8 +1347,11 @@ async function loadPlanningRequestItems() {
         // Get filter values
         const filterValues = planningItemsFilters ? planningItemsFilters.getFilterValues() : {};
         
-        // Get all planning request items
-        const itemsResponse = await getPlanningRequestItems({ page_size: 1000 });
+        // Get all planning request items (only available ones)
+        const itemsResponse = await getPlanningRequestItems({ 
+            page_size: 1000,
+            is_available: true
+        });
         allPlanningItems = itemsResponse.results || [];
         
         // Apply text filters
@@ -1355,6 +1400,7 @@ async function loadPlanningRequestItems() {
 function updateSelectedItemsCount() {
     const countElement = document.getElementById('selected-items-count');
     const addBtn = document.getElementById('add-selected-items-btn');
+    const downloadBtn = document.getElementById('download-selected-files-btn');
     
     const count = selectedPlanningItems.size;
     if (countElement) {
@@ -1362,6 +1408,14 @@ function updateSelectedItemsCount() {
     }
     if (addBtn) {
         addBtn.disabled = count === 0;
+    }
+    if (downloadBtn) {
+        // Check if any selected items have files
+        const hasFiles = Array.from(selectedPlanningItems).some(itemId => {
+            const item = allPlanningItems.find(i => i.id === itemId);
+            return item && item.files && item.files.length > 0;
+        });
+        downloadBtn.disabled = count === 0 || !hasFiles;
     }
 }
 
@@ -1658,6 +1712,160 @@ function formatDateTime(dateString) {
     }
 }
 
+// Function to sanitize Turkish characters for file/folder names
+function sanitizeFileName(name) {
+    if (!name) return 'Unknown';
+    
+    // Map Turkish characters to English equivalents
+    const turkishCharMap = {
+        'ç': 'c', 'Ç': 'C',
+        'ğ': 'g', 'Ğ': 'G',
+        'ı': 'i', 'İ': 'I',
+        'ö': 'o', 'Ö': 'O',
+        'ş': 's', 'Ş': 'S',
+        'ü': 'u', 'Ü': 'U'
+    };
+    
+    // Replace Turkish characters
+    let sanitized = name.split('').map(char => turkishCharMap[char] || char).join('');
+    
+    // Remove or replace invalid characters for file/folder names
+    sanitized = sanitized.replace(/[<>:"/\\|?*\x00-\x1F]/g, '_');
+    
+    // Replace spaces with underscores
+    sanitized = sanitized.replace(/\s+/g, '_');
+    
+    // Remove multiple consecutive underscores
+    sanitized = sanitized.replace(/_+/g, '_');
+    
+    // Remove leading/trailing underscores
+    sanitized = sanitized.replace(/^_+|_+$/g, '');
+    
+    // Limit length to avoid issues
+    if (sanitized.length > 100) {
+        sanitized = sanitized.substring(0, 100);
+    }
+    
+    return sanitized || 'Unknown';
+}
+
+async function downloadSelectedItemsFiles() {
+    if (selectedPlanningItems.size === 0) {
+        showNotification('Lütfen en az bir malzeme seçin', 'warning');
+        return;
+    }
+    
+    // Check if JSZip is available
+    if (typeof JSZip === 'undefined') {
+        showNotification('Zip indirme özelliği yüklenemedi. Lütfen sayfayı yenileyin.', 'error');
+        return;
+    }
+    
+    try {
+        // Collect all files from selected items
+        const fileMap = new Map(); // To avoid duplicates
+        
+        for (const itemId of selectedPlanningItems) {
+            const item = allPlanningItems.find(i => i.id === itemId);
+            if (!item || !item.files || item.files.length === 0) continue;
+            
+            item.files.forEach(file => {
+                // Use file URL as key to avoid duplicates
+                const fileKey = file.file_url || file.id;
+                if (!fileMap.has(fileKey)) {
+                    fileMap.set(fileKey, {
+                        ...file,
+                        itemName: item.item_name || 'Bilinmeyen Malzeme',
+                        itemCode: item.item_code || '',
+                        planningRequestNumber: item.planning_request_number || ''
+                    });
+                }
+            });
+        }
+        
+        if (fileMap.size === 0) {
+            showNotification('Seçilen malzemelerde dosya bulunmuyor', 'info');
+            return;
+        }
+        
+        // Convert map to array
+        const filesToDownload = Array.from(fileMap.values());
+        
+        // Show notification
+        showNotification(`${filesToDownload.length} dosya zip dosyasına ekleniyor...`, 'info', 3000);
+        
+        // Create zip file
+        const zip = new JSZip();
+        const downloadPromises = [];
+        
+        // Fetch and add each file to zip
+        for (const file of filesToDownload) {
+            try {
+                const fileName = file.file_name ? file.file_name.split('/').pop() : `file_${file.id || Date.now()}`;
+                // Create folder name using planning request number and item name
+                const planningRequestNum = sanitizeFileName(file.planningRequestNumber || 'Unknown');
+                const itemName = sanitizeFileName(file.itemName || 'Bilinmeyen Malzeme');
+                const itemFolder = `${planningRequestNum}_${itemName}`;
+                const zipPath = `${itemFolder}/${sanitizeFileName(fileName)}`;
+                
+                // Fetch file as blob
+                const fetchPromise = fetch(file.file_url)
+                    .then(response => {
+                        if (!response.ok) throw new Error(`Failed to fetch ${fileName}`);
+                        return response.blob();
+                    })
+                    .then(blob => {
+                        zip.file(zipPath, blob);
+                    })
+                    .catch(error => {
+                        console.error(`Error fetching file ${fileName}:`, error);
+                    });
+                
+                downloadPromises.push(fetchPromise);
+            } catch (error) {
+                console.error(`Error processing file ${file.file_name}:`, error);
+            }
+        }
+        
+        // Wait for all files to be fetched
+        await Promise.all(downloadPromises);
+        
+        // Generate zip file
+        showNotification('Zip dosyası oluşturuluyor...', 'info', 2000);
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        
+        // Create zip file name with request title and date
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const dateStr = `${year}-${month}-${day}_${hours}-${minutes}`;
+        
+        // Use request title if available, otherwise use default
+        const title = requestData.title && requestData.title.trim() 
+            ? sanitizeFileName(requestData.title.trim())
+            : 'planlama_talebi_dosyalari';
+        
+        const zipFileName = `${title}_${dateStr}.zip`;
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(zipBlob);
+        link.download = zipFileName;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+        
+        showNotification(`${filesToDownload.length} dosya zip dosyası olarak indirildi`, 'success');
+        
+    } catch (error) {
+        console.error('Error downloading files:', error);
+        showNotification('Dosyalar indirilirken hata oluştu: ' + error.message, 'error');
+    }
+}
+
 async function addSelectedPlanningItems() {
     if (selectedPlanningItems.size === 0) {
         showNotification('Lütfen en az bir malzeme seçin', 'warning');
@@ -1717,6 +1925,9 @@ async function addSelectedPlanningItems() {
             await renderAll();
             
             showNotification(`${addedCount} malzeme eklendi`, 'success');
+            
+            // Refresh available items count
+            loadAvailableItemsCount();
             
             // Close modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('planningRequestItemsModal'));

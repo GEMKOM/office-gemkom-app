@@ -7,6 +7,16 @@ const PLANNING_BASE_URL = `${backendBase}/planning`;
  * Planning Request Item API Functions
  * Handles all planning request item operations
  */
+/**API to get the number of available planning request items */
+export async function getNumberOfAvailablePlanningRequestItems() {
+    try {
+        const response = await authedFetch(`${PLANNING_BASE_URL}/items/available_count/`);
+        return response.json();
+    } catch (error) {
+        console.error('Error getting number of available planning request items:', error);
+        throw error;
+    }
+}
 
 /**
  * Get all planning request items with optional filtering
