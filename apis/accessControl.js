@@ -43,6 +43,7 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/machining/reports',
             '/manufacturing/machining/reports/sum-report',
             '/manufacturing/machining/reports/finished-timers',
+            '/manufacturing/machining/reports/daily-report',
             '/manufacturing/maintenance',
             '/manufacturing/maintenance/fault-requests',
             '/manufacturing/maintenance/fault-requests/list',
@@ -84,6 +85,7 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/machining/reports',
             '/manufacturing/machining/reports/sum-report',
             '/manufacturing/machining/reports/finished-timers',
+            '/manufacturing/machining/reports/daily-report',
             '/manufacturing/maintenance',
             '/manufacturing/maintenance/fault-requests',
             '/manufacturing/maintenance/fault-requests/list',
@@ -106,6 +108,7 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/machining/reports',
             '/manufacturing/machining/reports/sum-report',
             '/manufacturing/machining/reports/finished-timers',
+            '/manufacturing/machining/reports/daily-report',
             '/manufacturing/cnc-cutting',
             '/manufacturing/cnc-cutting/cuts'
         ]),

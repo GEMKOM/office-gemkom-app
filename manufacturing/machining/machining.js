@@ -62,6 +62,12 @@ function initMachiningModule() {
                         icon: 'fas fa-calendar-alt',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/machining/reports/production-plan'
+                    },
+                    {
+                        label: 'Günlük Rapor',
+                        icon: 'fas fa-calendar-day',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/reports/daily-report'
                     }
                 ]
             },

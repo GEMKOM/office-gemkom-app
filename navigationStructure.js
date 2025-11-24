@@ -103,6 +103,11 @@ export const NAVIGATION_STRUCTURE = {
                                 label: 'Üretim Planı',
                                 icon: 'fas fa-calendar-alt',
                                 children: {}
+                            },
+                            '/manufacturing/machining/reports/daily-report': {
+                                label: 'Günlük Rapor',
+                                icon: 'fas fa-calendar-day',
+                                children: {}
                             }
                         }
                     },
@@ -172,7 +177,7 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     },
                     '/manufacturing/cnc-cutting/remnants': {
-                        label: 'Artık Plakalar',
+                        label: 'Fire Plakalar',
                         icon: 'fas fa-layer-group',
                         children: {}
                     },

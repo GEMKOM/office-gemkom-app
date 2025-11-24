@@ -47,6 +47,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                         link: '/manufacturing/cnc-cutting/reports/finished-timers'
                     }
                 ]
+            },
+            {
+                title: 'Kapasite Yönetimi',
+                description: 'Makine kapasitelerini planlayın ve geçmiş çalışma verilerini analiz edin.',
+                icon: 'fas fa-industry',
+                iconColor: 'secondary',
+                link: '/manufacturing/cnc-cutting/capacity',
+                features: [
+                    {
+                        label: 'Kapasite Planlayıcı',
+                        icon: 'fas fa-calendar-alt',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/cnc-cutting/capacity/planning'
+                    }
+                ]
             }
         ]
     });
