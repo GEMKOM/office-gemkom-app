@@ -8,8 +8,8 @@ import { DataManager } from './dataManager.js';
 import { ValidationManager } from './validationManager.js';
 import { fetchCurrencyRates } from '../../../apis/formatters.js';
 import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft } from '../../../apis/procurement.js';
-import { getPlanningRequests, getPlanningRequest } from '../../../apis/planning/planningRequests.js';
-import { getPlanningRequestItems, getNumberOfAvailablePlanningRequestItems } from '../../../apis/planning/planningRequestItems.js';
+import { getPlanningRequest } from '../../../apis/planning/planningRequests.js';
+import { getPlanningRequestItems, getNumberOfAvailablePlanningRequestItems, getPlanningRequestItem } from '../../../apis/planning/planningRequestItems.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
@@ -1072,10 +1072,15 @@ async function submitRequest() {
 let planningItemsTable = null;
 let planningItemsFilters = null;
 let selectedPlanningItems = new Set();
-let allPlanningItems = [];
+let allPlanningItems = []; // Keep for backward compatibility, but will only contain current page items
 let planningItemsEventListenersSetup = false;
 let planningItemFilesModal = null;
 let planningRequestDetailsModal = null;
+// Pagination state
+let planningItemsCurrentPage = 1;
+let planningItemsPageSize = 20;
+let planningItemsCurrentSortField = null;
+let planningItemsCurrentSortDirection = null;
 
 function initializePlanningRequestItemsModal() {
     const attachBtn = document.getElementById('attach-planning-items-btn');
@@ -1154,6 +1159,11 @@ async function showPlanningRequestItemsModal() {
     selectedPlanningItems.clear();
     updateSelectedItemsCount();
     
+    // Reset pagination to first page
+    planningItemsCurrentPage = 1;
+    planningItemsCurrentSortField = null;
+    planningItemsCurrentSortDirection = null;
+    
     // Initialize filters
     if (!planningItemsFilters) {
         initializePlanningItemsFilters();
@@ -1162,6 +1172,10 @@ async function showPlanningRequestItemsModal() {
     // Initialize table
     if (!planningItemsTable) {
         initializePlanningItemsTable();
+    } else {
+        // Reset table pagination state
+        planningItemsTable.options.currentPage = 1;
+        planningItemsTable.options.itemsPerPage = planningItemsPageSize;
     }
     
     // Load data
@@ -1181,9 +1195,11 @@ function initializePlanningItemsFilters() {
         applyButtonText: 'Filtrele',
         clearButtonText: 'Temizle',
         onApply: () => {
+            planningItemsCurrentPage = 1; // Reset to first page on filter apply
             loadPlanningRequestItems();
         },
         onClear: () => {
+            planningItemsCurrentPage = 1; // Reset to first page on filter clear
             loadPlanningRequestItems();
         }
     });
@@ -1292,10 +1308,29 @@ function initializePlanningItemsTable() {
         ],
         data: [],
         pagination: true,
-        itemsPerPage: 20,
+        serverSidePagination: true,
+        itemsPerPage: planningItemsPageSize,
+        currentPage: planningItemsCurrentPage,
+        totalItems: 0,
         sortable: true,
         responsive: true,
-        striped: true
+        striped: true,
+        onPageChange: async (page) => {
+            planningItemsCurrentPage = page;
+            await loadPlanningRequestItems();
+        },
+        onPageSizeChange: async (newPageSize) => {
+            planningItemsPageSize = newPageSize;
+            planningItemsTable.options.itemsPerPage = newPageSize;
+            planningItemsCurrentPage = 1;
+            await loadPlanningRequestItems();
+        },
+        onSort: async (field, direction) => {
+            planningItemsCurrentSortField = field;
+            planningItemsCurrentSortDirection = direction;
+            planningItemsCurrentPage = 1;
+            await loadPlanningRequestItems();
+        }
     });
     
 }
@@ -1347,36 +1382,42 @@ async function loadPlanningRequestItems() {
         // Get filter values
         const filterValues = planningItemsFilters ? planningItemsFilters.getFilterValues() : {};
         
-        // Get all planning request items (only available ones)
-        const itemsResponse = await getPlanningRequestItems({ 
-            page_size: 1000,
-            is_available: true
-        });
-        allPlanningItems = itemsResponse.results || [];
+        // Build backend filter parameters
+        const filters = {
+            available_for_procurement: true,
+            page: planningItemsCurrentPage,
+            page_size: planningItemsPageSize
+        };
         
-        // Apply text filters
-        let filteredItems = allPlanningItems;
+        // Map frontend filter IDs to backend filter names
         if (filterValues['item-code-filter']) {
-            const searchTerm = filterValues['item-code-filter'].toLowerCase();
-            filteredItems = filteredItems.filter(item => 
-                item.item_code?.toLowerCase().includes(searchTerm)
-            );
+            filters.item_code = filterValues['item-code-filter'];
         }
         if (filterValues['item-name-filter']) {
-            const searchTerm = filterValues['item-name-filter'].toLowerCase();
-            filteredItems = filteredItems.filter(item => 
-                item.item_name?.toLowerCase().includes(searchTerm)
-            );
+            filters.item_name = filterValues['item-name-filter'];
         }
         if (filterValues['job-no-filter']) {
-            const searchTerm = filterValues['job-no-filter'].toLowerCase();
-            filteredItems = filteredItems.filter(item => 
-                item.job_no?.toLowerCase().includes(searchTerm)
-            );
+            filters.job_no = filterValues['job-no-filter'];
         }
         
-        // Update table with filtered data
-        planningItemsTable.updateData(filteredItems, filteredItems.length);
+        // Add sorting if specified
+        if (planningItemsCurrentSortField) {
+            const sortPrefix = planningItemsCurrentSortDirection === 'desc' ? '-' : '';
+            filters.ordering = `${sortPrefix}${planningItemsCurrentSortField}`;
+        }
+        
+        // Fetch items from backend with filters and pagination
+        const itemsResponse = await getPlanningRequestItems(filters);
+        
+        // Extract results and count from paginated response
+        const items = itemsResponse.results || [];
+        const totalCount = itemsResponse.count || items.length;
+        
+        // Store current page items (for backward compatibility and checkbox restoration)
+        allPlanningItems = items;
+        
+        // Update table with paginated data
+        planningItemsTable.updateData(items, totalCount);
         planningItemsTable.setLoading(false);
         
         // Re-render checkboxes to reflect current selection state
@@ -1410,18 +1451,27 @@ function updateSelectedItemsCount() {
         addBtn.disabled = count === 0;
     }
     if (downloadBtn) {
-        // Check if any selected items have files
-        const hasFiles = Array.from(selectedPlanningItems).some(itemId => {
-            const item = allPlanningItems.find(i => i.id === itemId);
-            return item && item.files && item.files.length > 0;
-        });
-        downloadBtn.disabled = count === 0 || !hasFiles;
+        // For download button, we'll check files when actually downloading
+        // since selected items might not be on current page
+        downloadBtn.disabled = count === 0;
     }
 }
 
-function showPlanningItemFilesModal(itemId, itemName) {
-    // Find the item in allPlanningItems
-    const item = allPlanningItems.find(i => i.id === itemId);
+async function showPlanningItemFilesModal(itemId, itemName) {
+    // Find the item in allPlanningItems (current page)
+    let item = allPlanningItems.find(i => i.id === itemId);
+    
+    // If not found on current page, fetch it from backend
+    if (!item) {
+        try {
+            item = await getPlanningRequestItem(itemId);
+        } catch (error) {
+            console.error('Error fetching planning request item:', error);
+            showNotification('Malzeme bilgileri yüklenirken hata oluştu', 'error');
+            return;
+        }
+    }
+    
     if (!item || !item.files || item.files.length === 0) {
         showNotification('Bu malzeme için dosya bulunmuyor', 'info');
         return;
@@ -1765,8 +1815,32 @@ async function downloadSelectedItemsFiles() {
         // Collect all files from selected items
         const fileMap = new Map(); // To avoid duplicates
         
-        for (const itemId of selectedPlanningItems) {
-            const item = allPlanningItems.find(i => i.id === itemId);
+        // Fetch items that are not on current page
+        const itemsToFetch = Array.from(selectedPlanningItems).filter(itemId => 
+            !allPlanningItems.find(i => i.id === itemId)
+        );
+        
+        // Fetch missing items from backend
+        const fetchedItems = [];
+        if (itemsToFetch.length > 0) {
+            showNotification(`${itemsToFetch.length} malzeme yükleniyor...`, 'info', 2000);
+            for (const itemId of itemsToFetch) {
+                try {
+                    const item = await getPlanningRequestItem(itemId);
+                    fetchedItems.push(item);
+                } catch (error) {
+                    console.error(`Error fetching item ${itemId}:`, error);
+                }
+            }
+        }
+        
+        // Combine current page items and fetched items
+        const allSelectedItems = [
+            ...allPlanningItems.filter(item => selectedPlanningItems.has(item.id)),
+            ...fetchedItems
+        ];
+        
+        for (const item of allSelectedItems) {
             if (!item || !item.files || item.files.length === 0) continue;
             
             item.files.forEach(file => {
@@ -1875,8 +1949,32 @@ async function addSelectedPlanningItems() {
     try {
         let addedCount = 0;
         
-        for (const itemId of selectedPlanningItems) {
-            const planningItem = allPlanningItems.find(item => item.id === itemId);
+        // Fetch items that are not on current page
+        const itemsToFetch = Array.from(selectedPlanningItems).filter(itemId => 
+            !allPlanningItems.find(i => i.id === itemId)
+        );
+        
+        // Fetch missing items from backend
+        const fetchedItems = [];
+        if (itemsToFetch.length > 0) {
+            showNotification(`${itemsToFetch.length} malzeme yükleniyor...`, 'info', 2000);
+            for (const itemId of itemsToFetch) {
+                try {
+                    const item = await getPlanningRequestItem(itemId);
+                    fetchedItems.push(item);
+                } catch (error) {
+                    console.error(`Error fetching item ${itemId}:`, error);
+                }
+            }
+        }
+        
+        // Combine current page items and fetched items
+        const allSelectedItems = [
+            ...allPlanningItems.filter(item => selectedPlanningItems.has(item.id)),
+            ...fetchedItems
+        ];
+        
+        for (const planningItem of allSelectedItems) {
             if (!planningItem) continue;
             
             // Check if item is already added (by planning_request_item_id)

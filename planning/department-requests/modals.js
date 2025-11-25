@@ -426,6 +426,17 @@ function showTransferDepartmentRequestModal(requestId) {
                 <strong>Talep Tarihi:</strong> ${formatDate(request.needed_date)}
             </div>
         </div>
+        <div class="row g-2 mt-3">
+            <div class="col-12">
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" id="transfer-check-inventory" name="check_inventory">
+                    <label class="form-check-label" for="transfer-check-inventory">
+                        <i class="fas fa-warehouse me-2"></i>Envanter Kontrolü
+                    </label>
+                    <small class="form-text text-muted d-block ms-4 mt-1">Talebi envanter kontrolü için gönder</small>
+                </div>
+            </div>
+        </div>
     `;
 
     // Show confirmation modal
@@ -461,7 +472,11 @@ async function confirmTransferDepartmentRequest(requestId) {
     }
 
     try {
-        await markTransferredAPI(requestId);
+        // Get check_inventory value from checkbox
+        const checkInventoryCheckbox = transferDepartmentRequestModal.modal.querySelector('#transfer-check-inventory');
+        const checkInventory = checkInventoryCheckbox ? checkInventoryCheckbox.checked : false;
+        
+        await markTransferredAPI(requestId, { check_inventory: checkInventory });
         showNotification('Departman talebi başarıyla transfer edildi', 'success');
 
         // Clear stored request ID

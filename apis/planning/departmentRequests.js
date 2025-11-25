@@ -286,13 +286,14 @@ export async function getDepartmentRequest(requestId) {
     }
 }
 
-export async function markDepartmentRequestTransferred(requestId) {
+export async function markDepartmentRequestTransferred(requestId, data = {}) {
     try {
         const response = await authedFetch(`${backendBase}/planning/department-requests/${requestId}/mark_transferred/`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
-            }
+            },
+            body: JSON.stringify(data)
         });
 
         if (!response.ok) {

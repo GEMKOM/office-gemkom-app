@@ -1256,6 +1256,17 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 icon: 'fas fa-calendar-alt',
                 colSize: 12,
                 help: 'Talebin ihtiyaç duyulduğu tarih (opsiyonel)'
+            },
+            {
+                id: 'check_inventory',
+                name: 'check_inventory',
+                label: 'Envanter Kontrolü',
+                type: 'checkbox',
+                value: false,
+                required: false,
+                icon: 'fas fa-warehouse',
+                colSize: 12,
+                help: 'Talebi envanter kontrolü için gönder'
             }
         ]
     });
@@ -1399,6 +1410,11 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
             // Add request_number if provided
             if (formData.request_number && formData.request_number.trim()) {
                 requestData.request_number = formData.request_number.trim();
+            }
+
+            // Add check_inventory if checkbox is checked
+            if (formData.check_inventory) {
+                requestData.check_inventory = true;
             }
 
             // Add department_request_id if creating from department request
