@@ -4,6 +4,7 @@ import { HeaderComponent } from '../../../components/header/header.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
+import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import {
@@ -1148,6 +1149,8 @@ function showNotification(message, type = 'info', timeout = 5000) {
 let createPlanningRequestModal = null;
 // Planning request details modal instance
 let planningRequestDetailsModal = null;
+// Export confirmation modal instance
+let exportConfirmationModal = null;
 
 // Show create planning request modal
 // departmentRequest: Optional department request object to pre-fill the form
@@ -1419,9 +1422,10 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
             await loadRequests();
             await loadPlanningRequests();
 
-            // Optionally redirect to the planning request detail page or refresh
-            // For now, just show success message
-            console.log('Created planning request:', createdRequest);
+            // Show export confirmation modal if there are items
+            if (createdRequest.items && createdRequest.items.length > 0) {
+                showExportConfirmationModal(createdRequest);
+            }
         } catch (error) {
             console.error('Error creating planning request:', error);
             if (error.message !== 'Job number required for all items' && 
@@ -1639,9 +1643,6 @@ function setupItemsSection() {
                 <button type="button" class="btn btn-sm btn-outline-primary" id="add-planning-item-btn">
                     <i class="fas fa-plus me-1"></i>Ürün Ekle
                 </button>
-                <button type="button" class="btn btn-sm btn-outline-success" id="export-items-csv-btn">
-                    <i class="fas fa-file-csv me-1"></i>CSV Olarak Dışa Aktar
-                </button>
                 <button type="button" class="btn btn-sm btn-outline-danger" id="clear-planning-items-btn">
                     <i class="fas fa-trash-alt me-1"></i>Tümünü Temizle
                 </button>
@@ -1693,12 +1694,6 @@ function setupItemsSection() {
     const addItemBtn = createPlanningRequestModal.container.querySelector('#add-planning-item-btn');
     if (addItemBtn) {
         addItemBtn.addEventListener('click', addPlanningItem);
-    }
-
-    // Export items to CSV
-    const exportCsvBtn = createPlanningRequestModal.container.querySelector('#export-items-csv-btn');
-    if (exportCsvBtn) {
-        exportCsvBtn.addEventListener('click', exportItemsToCSV);
     }
 
     // Clear all items
@@ -1789,22 +1784,14 @@ function removePlanningItem(index) {
 window.removePlanningItem = removePlanningItem;
 
 // Export items to CSV
-function exportItemsToCSV() {
-    const container = document.getElementById('planning-items-container');
-    if (!container) {
-        showNotification('Ürün listesi bulunamadı', 'error');
-        return;
-    }
-
-    const itemRows = container.querySelectorAll('.planning-item-row');
-    if (itemRows.length === 0) {
+function exportItemsToCSV(createdRequest) {
+    if (!createdRequest || !createdRequest.items || createdRequest.items.length === 0) {
         showNotification('Dışa aktarılacak ürün bulunamadı', 'error');
         return;
     }
 
-    // Get needed_date from the form
-    const neededDateInput = createPlanningRequestModal.container.querySelector('input[name="needed_date"]');
-    const neededDate = neededDateInput?.value || '';
+    // Get needed_date from the created request
+    const neededDate = createdRequest.needed_date || '';
     
     // Format date from YYYY-MM-DD to DD.MM.YYYY
     let formattedDate = '';
@@ -1815,15 +1802,18 @@ function exportItemsToCSV() {
         }
     }
 
+    // Get request_number from the created request
+    const requestNumber = createdRequest.request_number || '';
+
     // Build CSV content
     const csvLines = [];
-    itemRows.forEach(row => {
-        const itemCode = row.querySelector('input[name="item_code"]')?.value?.trim() || '';
-        const quantity = row.querySelector('input[name="item_quantity"]')?.value?.trim() || '';
-        const description = row.querySelector('input[name="item_specifications"]')?.value?.trim() || '';
+    createdRequest.items.forEach(item => {
+        const itemCode = item.item_code || '';
+        const quantity = item.quantity || '';
+        const description = item.specifications || '';
         
-        // Format: S;item_code;quantity;date;description
-        const csvLine = `S;${itemCode};${quantity};${formattedDate};${description}`;
+        // Format: S;item_code;quantity;date;description;request_number
+        const csvLine = `S;${itemCode};${quantity};${formattedDate};${description};${requestNumber}`;
         csvLines.push(csvLine);
     });
 
@@ -1835,7 +1825,7 @@ function exportItemsToCSV() {
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `planlama_talebi_urunleri_${new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', `planlama_talebi_urunleri_${requestNumber || new Date().toISOString().split('T')[0]}.csv`);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -2156,6 +2146,48 @@ async function transferDepartmentRequest(requestId) {
         console.error('Error transferring department request:', error);
         showNotification('Departman talebi yüklenirken hata oluştu: ' + error.message, 'error');
     }
+}
+
+// Show export confirmation modal
+function showExportConfirmationModal(createdRequest) {
+    if (!exportConfirmationModal) {
+        exportConfirmationModal = new ConfirmationModal('export-confirmation-modal-container', {
+            title: 'CSV Dışa Aktarma',
+            icon: 'fas fa-file-csv',
+            confirmText: 'Evet, Dışa Aktar',
+            cancelText: 'İptal',
+            confirmButtonClass: 'btn-success'
+        });
+    }
+
+    const requestNumber = createdRequest.request_number || '-';
+    const itemsCount = createdRequest.items?.length || 0;
+
+    exportConfirmationModal.show({
+        title: 'CSV Dışa Aktarma',
+        message: 'Ürünleri CSV olarak dışa aktarmak istiyor musunuz?',
+        description: `Planlama talebi "${requestNumber}" başarıyla oluşturuldu. ${itemsCount} ürün bulunmaktadır.`,
+        details: `
+            <div class="row g-2">
+                <div class="col-6">
+                    <strong>Talep No:</strong> #${createdRequest.id}
+                </div>
+                <div class="col-6">
+                    <strong>Talep Numarası:</strong> ${requestNumber}
+                </div>
+                <div class="col-6">
+                    <strong>Ürün Sayısı:</strong> ${itemsCount} ürün
+                </div>
+                <div class="col-6">
+                    <strong>Başlık:</strong> ${createdRequest.title || '-'}
+                </div>
+            </div>
+        `,
+        confirmText: 'Evet, Dışa Aktar',
+        onConfirm: () => {
+            exportItemsToCSV(createdRequest);
+        }
+    });
 }
 
 // Make functions globally available for onclick handlers
