@@ -1188,18 +1188,6 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
         iconColor: 'text-primary',
         fields: [
             {
-                id: 'request_number',
-                name: 'request_number',
-                label: 'Talep Numarası',
-                type: 'text',
-                placeholder: 'Planlama talebi numarasını girin',
-                value: '',
-                required: false,
-                icon: 'fas fa-barcode',
-                colSize: 12,
-                help: 'Planlama talebi numarası (opsiyonel)'
-            },
-            {
                 id: 'title',
                 name: 'title',
                 label: 'Başlık',
@@ -1406,11 +1394,6 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 items: items.length > 0 ? items : undefined,
                 files: files.length > 0 ? files : undefined
             };
-            
-            // Add request_number if provided
-            if (formData.request_number && formData.request_number.trim()) {
-                requestData.request_number = formData.request_number.trim();
-            }
 
             // Add check_inventory if checkbox is checked
             if (formData.check_inventory) {

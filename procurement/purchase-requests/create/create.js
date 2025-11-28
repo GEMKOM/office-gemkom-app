@@ -1979,7 +1979,7 @@ async function addSelectedPlanningItems() {
             
             // Check if item is already added (by planning_request_item_id)
             const existingItem = requestData.items.find(item => 
-                item.source_planning_request_item_id === itemId
+                item.source_planning_request_item_id === planningItem.id
             );
             
             if (existingItem) {
@@ -1995,14 +1995,14 @@ async function addSelectedPlanningItems() {
                 quantity: parseFloat(planningItem.quantity) || 1,
                 unit: planningItem.item_unit || 'adet',
                 specs: planningItem.specifications || '',
-                source_planning_request_item_id: itemId // Track source
+                source_planning_request_item_id: planningItem.id // Track source
             };
             
             requestData.items.push(newItem);
             
             // Add to planning_request_item_ids for submission
-            if (!requestData.planning_request_item_ids.includes(itemId)) {
-                requestData.planning_request_item_ids.push(itemId);
+            if (!requestData.planning_request_item_ids.includes(planningItem.id)) {
+                requestData.planning_request_item_ids.push(planningItem.id);
             }
             
             addedCount++;

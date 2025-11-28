@@ -1065,20 +1065,8 @@ function showRequestDetailsModal(request) {
                     icon: 'fas fa-boxes',
                     columns: [
                         {
-                            field: 'item_code',
-                            label: 'Ürün Kodu',
-                            sortable: true,
-                            formatter: (value) => `<strong>${value || '-'}</strong>`
-                        },
-                        {
-                            field: 'item_name',
+                            field: 'name',
                             label: 'Ürün Adı',
-                            sortable: true,
-                            formatter: (value) => value || '-'
-                        },
-                        {
-                            field: 'job_no',
-                            label: 'İş No',
                             sortable: true,
                             formatter: (value) => value || '-'
                         },
@@ -1089,7 +1077,7 @@ function showRequestDetailsModal(request) {
                             formatter: (value) => value || '-'
                         },
                         {
-                            field: 'item_unit',
+                            field: 'unit',
                             label: 'Birim',
                             sortable: true,
                             formatter: (value) => value || '-'
