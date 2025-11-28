@@ -1023,6 +1023,29 @@ async function showPlanningRequestDetailsModal(request) {
     // Render the modal
     planningRequestDetailsModal.render();
 
+    // Add custom footer with export button if items exist
+    const modalFooter = planningRequestDetailsModal.container.querySelector('.modal-footer');
+    if (modalFooter && request.items && request.items.length > 0) {
+        modalFooter.innerHTML = `
+            <div class="d-flex justify-content-end gap-2">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Kapat
+                </button>
+                <button type="button" class="btn btn-success" id="export-planning-items-btn" style="min-width: 140px;">
+                    <i class="fas fa-file-csv me-1"></i>CSV Dışa Aktar
+                </button>
+            </div>
+        `;
+        
+        // Add event listener for export button
+        const exportBtn = modalFooter.querySelector('#export-planning-items-btn');
+        if (exportBtn) {
+            exportBtn.addEventListener('click', () => {
+                exportItemsToCSV(request);
+            });
+        }
+    }
+
     // Initialize file attachments components after rendering
     setTimeout(() => {
         // Initialize request-level files
@@ -1500,6 +1523,15 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
         
         // Pre-fill items if department request is provided
         if (departmentRequest) {
+            // Store department request ID for later use (always set, even if no files)
+            const modalContainer = createPlanningRequestModal.container;
+            if (!modalContainer.querySelector('[data-department-request-id]')) {
+                const hiddenInput = document.createElement('div');
+                hiddenInput.setAttribute('data-department-request-id', departmentRequest.id);
+                hiddenInput.style.display = 'none';
+                modalContainer.appendChild(hiddenInput);
+            }
+            
             prefillItemsFromDepartmentRequest(departmentRequest);
             prefillFilesFromDepartmentRequest(departmentRequest);
         }
@@ -1601,15 +1633,6 @@ function prefillItemsFromDepartmentRequest(departmentRequest) {
 function prefillFilesFromDepartmentRequest(departmentRequest) {
     if (!departmentRequest.files || departmentRequest.files.length === 0) {
         return;
-    }
-
-    // Store department request ID for later use
-    const modalContainer = createPlanningRequestModal.container;
-    if (!modalContainer.querySelector('[data-department-request-id]')) {
-        const hiddenInput = document.createElement('div');
-        hiddenInput.setAttribute('data-department-request-id', departmentRequest.id);
-        hiddenInput.style.display = 'none';
-        modalContainer.appendChild(hiddenInput);
     }
 
     // Add existing files to fileAttachments array
@@ -1829,7 +1852,10 @@ function exportItemsToCSV(createdRequest) {
     createdRequest.items.forEach(item => {
         const itemCode = item.item_code || '';
         const quantity = item.quantity || '';
-        const description = item.specifications || '';
+        const itemDescription = item.item_description || '';
+        const itemSpecifications = item.specifications || '';
+        // Combine item_description and item_specifications with | separator
+        const description = [itemDescription, itemSpecifications].filter(Boolean).join('|');
         
         // Format: S;item_code;quantity;date;description;request_number
         const csvLine = `S;${itemCode};${quantity};${formattedDate};${description};${requestNumber}`;
