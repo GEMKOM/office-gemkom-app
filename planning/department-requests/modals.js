@@ -270,10 +270,11 @@ async function showDepartmentRequestDetailsModal(request = null) {
                 id: index + 1,
                 item_code: item.item_code || '-',
                 item_name: item.item_name || item.name || item.product_name || '-',
+                item_description: item.item_description || '-',
                 job_no: item.job_no || '-',
                 quantity: item.quantity || 0,
                 unit: item.item_unit || item.unit || 'adet',
-                description: item.description || item.notes || '-'
+                specifications: item.item_specifications || item.specifications || '-'
             }));
 
             // Add custom HTML content for the table
@@ -286,10 +287,11 @@ async function showDepartmentRequestDetailsModal(request = null) {
                                     <th>#</th>
                                     <th>Ürün Kodu</th>
                                     <th>Ürün Adı</th>
+                                    <th>Ürün Açıklaması</th>
                                     <th>İş No</th>
                                     <th>Miktar</th>
                                     <th>Birim</th>
-                                    <th>Açıklama</th>
+                                    <th>Özellikler</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -298,10 +300,11 @@ async function showDepartmentRequestDetailsModal(request = null) {
                                         <td>${item.id}</td>
                                         <td><strong>${item.item_code}</strong></td>
                                         <td>${item.item_name}</td>
+                                        <td>${item.item_description}</td>
                                         <td>${item.job_no}</td>
                                         <td>${item.quantity}</td>
                                         <td>${item.unit}</td>
-                                        <td>${item.description}</td>
+                                        <td>${item.specifications}</td>
                                     </tr>
                                 `).join('')}
                             </tbody>

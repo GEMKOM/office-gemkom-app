@@ -913,6 +913,7 @@ async function showPlanningRequestDetailsModal(request) {
             id: index + 1,
             code: item.item_code || '-',
             name: item.item_name || '-',
+            description: item.item_description || '-',
             job_no: item.job_no || '-',
             quantity: item.quantity || 0,
             unit: item.item_unit || 'adet',
@@ -931,6 +932,7 @@ async function showPlanningRequestDetailsModal(request) {
                                 <th>#</th>
                                 <th>Ürün Kodu</th>
                                 <th>Ürün Adı</th>
+                                <th>Ürün Açıklaması</th>
                                 <th>İş No</th>
                                 <th>Miktar</th>
                                 <th>Birim</th>
@@ -945,6 +947,7 @@ async function showPlanningRequestDetailsModal(request) {
                                     <td>${item.id}</td>
                                     <td><strong>${item.code}</strong></td>
                                     <td>${item.name}</td>
+                                    <td>${item.description}</td>
                                     <td>${item.job_no}</td>
                                     <td>${item.quantity}</td>
                                     <td>${item.unit}</td>
@@ -1290,6 +1293,7 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 const itemCode = row.querySelector('input[name="item_code"]')?.value?.trim();
                 const itemId = itemCode && !isNaN(itemCode) ? parseInt(itemCode, 10) : null;
                 const itemName = row.querySelector('input[name="item_name"]')?.value?.trim();
+                const itemDescription = row.querySelector('input[name="item_description"]')?.value?.trim();
                 const itemUnit = row.querySelector('select[name="item_unit"]')?.value?.trim() || 'adet';
                 const itemQuantity = row.querySelector('input[name="item_quantity"]')?.value?.trim();
                 const jobNo = row.querySelector('input[name="job_no"]')?.value?.trim();
@@ -1329,6 +1333,9 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 // Add optional fields
                 if (itemName) {
                     itemData.item_name = itemName;
+                }
+                if (itemDescription) {
+                    itemData.item_description = itemDescription;
                 }
                 if (itemUnit) {
                     itemData.item_unit = itemUnit;
@@ -1530,10 +1537,11 @@ function prefillItemsFromDepartmentRequest(departmentRequest) {
         // Try multiple possible field names for each field
         const itemCode = item.item_code || item.code || item.product_code || item.item_id?.toString() || '';
         const itemName = item.name || item.product_name || item.item_name || '';
+        const itemDescription = item.item_description || item.description || '';
         const itemUnit = item.unit || item.item_unit || 'adet';
         const quantity = item.quantity || item.qty || 1;
         const jobNo = item.job_no || item.job_number || item.job || '';
-        const specifications = item.description || item.notes || item.specifications || item.specs || '';
+        const specifications = item.item_specifications || item.specifications || item.specs || '';
 
         const itemHtml = `
             <div class="planning-item-row mb-2" data-index="${index}" data-source-item-index="${index}">
@@ -1543,6 +1551,9 @@ function prefillItemsFromDepartmentRequest(departmentRequest) {
                     </div>
                     <div class="col-md-2">
                         <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" value="${escapeHtml(itemName)}">
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtml(itemDescription)}">
                     </div>
                     <div class="col-md-1">
                         <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtml(jobNo)}" required>
@@ -1555,8 +1566,8 @@ function prefillItemsFromDepartmentRequest(departmentRequest) {
                             ${UNIT_CHOICES.map(unit => `<option value="${unit.value}" ${unit.value === itemUnit ? 'selected' : ''}>${unit.label}</option>`).join('')}
                         </select>
                     </div>
-                    <div class="col-md-4">
-                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler/Açıklama" value="${escapeHtml(specifications)}">
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtml(specifications)}">
                     </div>
                     <div class="col-md-1">
                         <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePlanningItem(${index})" title="Ürünü Kaldır">
@@ -1659,6 +1670,11 @@ function setupItemsSection() {
                     <i class="fas fa-tag me-1"></i>Ürün Adı
                 </small>
             </div>
+            <div class="col-md-2">
+                <small class="text-muted fw-bold">
+                    <i class="fas fa-align-left me-1"></i>Ürün Açıklaması
+                </small>
+            </div>
             <div class="col-md-1">
                 <small class="text-muted fw-bold">
                     <i class="fas fa-hashtag me-1"></i>İş No
@@ -1674,9 +1690,9 @@ function setupItemsSection() {
                     <i class="fas fa-ruler me-1"></i>Birim
                 </small>
             </div>
-            <div class="col-md-4">
+            <div class="col-md-2">
                 <small class="text-muted fw-bold">
-                    <i class="fas fa-align-left me-1"></i>Özellikler/Açıklama
+                    <i class="fas fa-cog me-1"></i>Özellikler
                 </small>
             </div>
             <div class="col-md-1">
@@ -1734,6 +1750,9 @@ function addPlanningItem() {
                 <div class="col-md-2">
                     <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı">
                 </div>
+                <div class="col-md-2">
+                    <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması">
+                </div>
                 <div class="col-md-1">
                     <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" required>
                 </div>
@@ -1745,8 +1764,8 @@ function addPlanningItem() {
                         ${UNIT_CHOICES.map(unit => `<option value="${unit.value}" ${unit.value === 'adet' ? 'selected' : ''}>${unit.label}</option>`).join('')}
                     </select>
                 </div>
-                <div class="col-md-4">
-                    <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler/Açıklama">
+                <div class="col-md-2">
+                    <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler">
                 </div>
                 <div class="col-md-1">
                     <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePlanningItem(${itemIndex})" title="Ürünü Kaldır">
