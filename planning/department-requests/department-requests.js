@@ -15,7 +15,7 @@ import {
 } from '../../../apis/planning/departmentRequests.js';
 import { createPlanningRequest, getPlanningRequests, getPlanningRequest } from '../../../apis/planning/planningRequests.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
-import { UNIT_CHOICES } from '../../../apis/constants.js';
+import { UNIT_CHOICES, ITEM_CODE_NAMES } from '../../../apis/constants.js';
 import {
     initializeModalComponents,
     showDepartmentRequestDetailsModal,
@@ -289,6 +289,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeModalComponents();
     setupEventListeners();
     setupModalEventListeners();
+    setupExcelImportListeners();
 
     // Check if there's a request parameter in the URL to open modal (after modal is initialized)
     const urlParams = new URLSearchParams(window.location.search);
@@ -1677,6 +1678,9 @@ function setupItemsSection() {
                 <button type="button" class="btn btn-sm btn-outline-primary" id="add-planning-item-btn">
                     <i class="fas fa-plus me-1"></i>Ürün Ekle
                 </button>
+                <button type="button" class="btn btn-sm btn-outline-success" id="excel-import-btn">
+                    <i class="fas fa-file-excel me-1"></i>Excel'den İçe Aktar
+                </button>
                 <button type="button" class="btn btn-sm btn-outline-danger" id="clear-planning-items-btn">
                     <i class="fas fa-trash-alt me-1"></i>Tümünü Temizle
                 </button>
@@ -1734,6 +1738,16 @@ function setupItemsSection() {
     if (addItemBtn) {
         addItemBtn.addEventListener('click', addPlanningItem);
     }
+
+    // Add event listener for Excel import button
+    const excelImportBtn = createPlanningRequestModal.container.querySelector('#excel-import-btn');
+    if (excelImportBtn) {
+        excelImportBtn.addEventListener('click', () => {
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('excel-import-modal'));
+            modal.show();
+        });
+    }
+
 
     // Clear all items
     const clearItemsBtn = createPlanningRequestModal.container.querySelector('#clear-planning-items-btn');
@@ -1825,6 +1839,22 @@ function removePlanningItem(index) {
 // Make removePlanningItem globally available
 window.removePlanningItem = removePlanningItem;
 
+// Helper function to format numbers with comma as decimal separator (Turkish locale)
+function formatNumberForExport(value) {
+    if (value === null || value === undefined || value === '') {
+        return '';
+    }
+    const numValue = typeof value === 'number' ? value : parseFloat(value);
+    if (isNaN(numValue)) {
+        return value.toString();
+    }
+    // Format with comma as decimal separator, always show 2 decimal places
+    return numValue.toLocaleString('tr-TR', { 
+        minimumFractionDigits: 2, 
+        maximumFractionDigits: 2 
+    });
+}
+
 // Export items to CSV
 function exportItemsToCSV(createdRequest) {
     if (!createdRequest || !createdRequest.items || createdRequest.items.length === 0) {
@@ -1851,14 +1881,17 @@ function exportItemsToCSV(createdRequest) {
     const csvLines = [];
     createdRequest.items.forEach(item => {
         const itemCode = item.item_code || '';
-        const quantity = item.quantity || '';
+        const quantity = formatNumberForExport(item.quantity);
         const itemDescription = item.item_description || '';
         const itemSpecifications = item.specifications || '';
         // Combine item_description and item_specifications with | separator
         const description = [itemDescription, itemSpecifications].filter(Boolean).join('|');
         
-        // Format: S;item_code;quantity;date;description;request_number
-        const csvLine = `S;${itemCode};${quantity};${formattedDate};${description};${requestNumber}`;
+        // Determine prefix: G for special item codes, S for others
+        const prefix = ITEM_CODE_NAMES.hasOwnProperty(itemCode) ? 'G' : 'S';
+        
+        // Format: S/G;item_code;quantity;date;description;request_number
+        const csvLine = `${prefix};${itemCode};${quantity};${formattedDate};${description};${requestNumber}`;
         csvLines.push(csvLine);
     });
 
@@ -2234,6 +2267,554 @@ function showExportConfirmationModal(createdRequest) {
         }
     });
 }
+
+// Excel import functionality
+let excelImportData = null; // Store parsed Excel data
+
+function setupExcelImportListeners() {
+    const previewBtn = document.getElementById('preview-excel-import-btn');
+    const clearBtn = document.getElementById('clear-excel-import-btn');
+    const importBtn = document.getElementById('import-excel-items-btn');
+    const confirmMappingBtn = document.getElementById('confirm-excel-mapping-btn');
+
+    if (previewBtn) {
+        previewBtn.addEventListener('click', previewExcelImport);
+    }
+    if (clearBtn) {
+        clearBtn.addEventListener('click', clearExcelImport);
+    }
+    if (importBtn) {
+        importBtn.addEventListener('click', importExcelItems);
+    }
+    if (confirmMappingBtn) {
+        confirmMappingBtn.addEventListener('click', confirmExcelColumnMapping);
+    }
+}
+
+function previewExcelImport() {
+    const fileInput = document.getElementById('excel-file-input');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showNotification('Lütfen bir dosya seçin', 'warning');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            let jsonData;
+            
+            if (file.name.toLowerCase().endsWith('.csv')) {
+                // Handle CSV files
+                const csvText = e.target.result;
+                jsonData = parseCSV(csvText);
+            } else {
+                // Handle Excel files
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            }
+
+            if (jsonData.length < 2) {
+                showNotification('Dosya boş veya geçersiz format', 'error');
+                return;
+            }
+
+            processExcelData(jsonData);
+        } catch (error) {
+            console.error('Dosya okuma hatası:', error);
+            showNotification('Dosya okunamadı. Lütfen geçerli bir Excel veya CSV dosyası seçin', 'error');
+        }
+    };
+    
+    if (file.name.toLowerCase().endsWith('.csv')) {
+        reader.readAsText(file, 'UTF-8');
+    } else {
+        reader.readAsArrayBuffer(file);
+    }
+}
+
+function parseCSV(csvText) {
+    const lines = csvText.split('\n');
+    const result = [];
+    
+    lines.forEach(line => {
+        if (line.trim()) {
+            // Handle both comma and semicolon separators
+            const values = line.includes(';') ? line.split(';') : line.split(',');
+            result.push(values.map(value => value.trim().replace(/^["']|["']$/g, '')));
+        }
+    });
+    
+    return result;
+}
+
+function processExcelData(data) {
+    const headers = data[0];
+    const dataRows = data.slice(1);
+    
+    // Auto-detect column mappings based on user's requirements
+    const columnMapping = detectExcelColumnMapping(headers, dataRows);
+    
+    // Validate required columns
+    const missingColumns = validateRequiredExcelColumns(columnMapping);
+    
+    if (missingColumns.length > 0) {
+        showExcelColumnMappingModal(headers, columnMapping, dataRows);
+        return;
+    }
+    
+    // Always show mapping modal for manual verification/adjustment
+    showExcelColumnMappingModal(headers, columnMapping, dataRows);
+}
+
+function detectExcelColumnMapping(headers, dataRows = []) {
+    const mapping = {
+        item_code: -1,      // Kodu → ürün kodu
+        item_name: -1,      // ismi → ürün adı
+        job_no: -1,         // srm.mrk. → iş no
+        item_description: -1, // Açıklama 1 → Ürün Açıklaması
+        specifications: -1,  // Açıklama 2 → Özellikler
+        quantity: -1,      // Miktar → Miktar
+        unit: -1            // Birim → Birim
+    };
+
+    // Column keywords based on user's requirements (all lowercase, normalized)
+    const columnKeywords = {
+        item_code: ['kodu', 'kod', 'code', 'urun kodu', 'stok kodu', 'malzeme kodu', 'product code', 'item code'],
+        item_name: ['ismi', 'isim', 'name', 'urun adi', 'urun adı', 'malzeme adi', 'malzeme adı', 'product name', 'item name'],
+        job_no: ['srm.mrk.', 'srm mrk', 'srm.mrk', 'srm mrk.', 'is no', 'job no', 'job number', 'is kodu', 'work no'],
+        item_description: ['aciklama 1', 'aciklama1', 'description 1', 'urun aciklamasi', 'urun açıklaması', 'aciklama', 'description'],
+        specifications: ['aciklama 2', 'aciklama2', 'description 2', 'ozellikler', 'specifications', 'specs', 'ozellik'],
+        quantity: ['miktar', 'quantity', 'qty', 'adet', 'sayi', 'number', 'amount'],
+        unit: ['birim', 'unit', 'olcu', 'measure', 'uom', 'measurement']
+    };
+
+    headers.forEach((header, index) => {
+        if (!header) return;
+        
+        // Normalize the header for comparison (case-insensitive, Turkish character handling)
+        const headerNormalized = normalizeTurkish(header.toString().trim());
+        
+        // Try exact matches and partial matches
+        for (const [field, keywords] of Object.entries(columnKeywords)) {
+            if (mapping[field] === -1) {
+                for (const keyword of keywords) {
+                    const keywordNormalized = normalizeTurkish(keyword);
+                    
+                    // Exact match (case-insensitive, Turkish normalized)
+                    if (headerNormalized === keywordNormalized) {
+                        mapping[field] = index;
+                        break;
+                    }
+                    // Partial match (contains keyword)
+                    if (headerNormalized.includes(keywordNormalized) || keywordNormalized.includes(headerNormalized)) {
+                        mapping[field] = index;
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    return mapping;
+}
+
+function validateRequiredExcelColumns(mapping) {
+    const required = ['item_code', 'item_name', 'job_no', 'quantity', 'unit'];
+    return required.filter(field => mapping[field] === -1);
+}
+
+function showExcelColumnMappingModal(headers, detectedMapping, dataRows) {
+    const mappingContainer = document.getElementById('excel-column-mapping-container');
+    mappingContainer.innerHTML = '';
+    
+    const requiredFields = [
+        { key: 'item_code', label: 'Ürün Kodu (Kodu)', required: true },
+        { key: 'item_name', label: 'Ürün Adı (ismi)', required: true },
+        { key: 'job_no', label: 'İş No (srm.mrk.)', required: true },
+        { key: 'quantity', label: 'Miktar', required: true },
+        { key: 'unit', label: 'Birim', required: true },
+        { key: 'item_description', label: 'Ürün Açıklaması (Açıklama 1)', required: false },
+        { key: 'specifications', label: 'Özellikler (Açıklama 2)', required: false }
+    ];
+
+    requiredFields.forEach(field => {
+        const fieldDiv = document.createElement('div');
+        fieldDiv.className = 'mb-3';
+        const isDetected = detectedMapping[field.key] !== -1;
+        const detectedText = isDetected ? ` (Otomatik algılandı: "${headers[detectedMapping[field.key]] || 'Bilinmeyen'}")` : '';
+        
+        fieldDiv.innerHTML = `
+            <label class="form-label">
+                ${field.label} ${field.required ? '<span class="text-danger">*</span>' : ''}
+                ${isDetected ? `<span class="text-success">${detectedText}</span>` : ''}
+            </label>
+            <select class="form-select excel-column-mapping-select" data-field="${field.key}">
+                <option value="">Seçiniz</option>
+                ${headers.map((header, index) => 
+                    `<option value="${index}" ${detectedMapping[field.key] === index ? 'selected' : ''}>
+                        ${header || `Sütun ${index + 1}`}
+                    </option>`
+                ).join('')}
+            </select>
+        `;
+        mappingContainer.appendChild(fieldDiv);
+    });
+
+    // Show mapping modal
+    const mappingModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('excel-column-mapping-modal'));
+    mappingModal.show();
+
+    // Store data for later processing
+    excelImportData = { headers, dataRows };
+}
+
+function confirmExcelColumnMapping() {
+    const selects = document.querySelectorAll('.excel-column-mapping-select');
+    const mapping = {};
+
+    selects.forEach(select => {
+        const field = select.dataset.field;
+        const value = select.value ? parseInt(select.value) : -1;
+        mapping[field] = value;
+    });
+
+    // Validate required mappings
+    const missingRequired = ['item_code', 'item_name', 'job_no', 'quantity', 'unit'].filter(field => mapping[field] === -1);
+    if (missingRequired.length > 0) {
+        showNotification('Lütfen gerekli alanları eşleştirin', 'error');
+        return;
+    }
+
+    // Process data with user mapping
+    processExcelDataWithMapping(excelImportData.dataRows, mapping, excelImportData.headers);
+    
+    // Close mapping modal
+    const mappingModal = bootstrap.Modal.getInstance(document.getElementById('excel-column-mapping-modal'));
+    if (mappingModal) {
+        mappingModal.hide();
+    }
+}
+
+function processExcelDataWithMapping(dataRows, mapping, headers = []) {
+    const processedItems = [];
+    const errors = [];
+    let skippedRows = 0;
+
+    dataRows.forEach((row, index) => {
+        if (!row || row.length === 0) {
+            skippedRows++;
+            return;
+        }
+
+        try {
+            const item = {
+                item_code: getExcelCellValue(row, mapping.item_code),
+                item_name: getExcelCellValue(row, mapping.item_name),
+                job_no: getExcelCellValue(row, mapping.job_no),
+                quantity: parseExcelQuantity(getExcelCellValue(row, mapping.quantity)),
+                unit: getExcelCellValue(row, mapping.unit) || 'adet',
+                item_description: getExcelCellValue(row, mapping.item_description) || '',
+                specifications: getExcelCellValue(row, mapping.specifications) || ''
+            };
+
+            // Validate required fields - skip invalid rows instead of stopping
+            let isValid = true;
+            if (!item.item_code) {
+                errors.push(`Satır ${index + 2}: Ürün kodu eksik - satır atlandı`);
+                skippedRows++;
+                isValid = false;
+            }
+            if (!item.item_name) {
+                errors.push(`Satır ${index + 2}: Ürün adı eksik - satır atlandı`);
+                skippedRows++;
+                isValid = false;
+            }
+            if (!item.job_no) {
+                errors.push(`Satır ${index + 2}: İş no eksik - satır atlandı`);
+                skippedRows++;
+                isValid = false;
+            }
+            if (item.quantity <= 0) {
+                errors.push(`Satır ${index + 2}: Geçersiz miktar değeri - satır atlandı`);
+                skippedRows++;
+                isValid = false;
+            }
+            if (!item.unit) {
+                errors.push(`Satır ${index + 2}: Birim eksik - satır atlandı`);
+                skippedRows++;
+                isValid = false;
+            }
+
+            // If any validation failed, skip this row
+            if (!isValid) {
+                return;
+            }
+
+            processedItems.push(item);
+        } catch (error) {
+            errors.push(`Satır ${index + 2}: ${error.message} - satır atlandı`);
+            skippedRows++;
+        }
+    });
+
+    // Show results summary
+    if (processedItems.length === 0) {
+        showExcelImportErrors(errors);
+        return;
+    }
+
+    // Show summary of processed data
+    if (errors.length > 0 || skippedRows > 0) {
+        showExcelImportSummary(processedItems.length, errors.length, skippedRows, errors);
+    }
+
+    displayExcelImportPreview(processedItems);
+}
+
+function getExcelCellValue(row, columnIndex) {
+    if (columnIndex === -1 || columnIndex >= row.length) return '';
+    const value = row[columnIndex];
+    return value ? value.toString().trim() : '';
+}
+
+function parseExcelQuantity(value) {
+    if (!value) return 0;
+    const parsed = parseFloat(value.toString().replace(',', '.'));
+    return isNaN(parsed) ? 0 : parsed;
+}
+
+function normalizeTurkish(str) {
+    if (!str) return '';
+    // First convert to lowercase (this handles most cases)
+    let normalized = str.toString().toLowerCase();
+    
+    // Then handle Turkish-specific character normalization
+    // This ensures İ (capital I with dot) becomes 'i', and ı (lowercase i without dot) becomes 'i'
+    normalized = normalized
+        .replace(/ı/g, 'i')
+        .replace(/İ/g, 'i')  // Capital I with dot
+        .replace(/ğ/g, 'g')
+        .replace(/Ğ/g, 'g')
+        .replace(/ü/g, 'u')
+        .replace(/Ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/Ş/g, 's')
+        .replace(/ö/g, 'o')
+        .replace(/Ö/g, 'o')
+        .replace(/ç/g, 'c')
+        .replace(/Ç/g, 'c');
+    
+    // Remove extra spaces
+    normalized = normalized.trim().replace(/\s+/g, ' ');
+    
+    return normalized;
+}
+
+function showExcelImportErrors(errors) {
+    const errorContainer = document.getElementById('excel-import-errors');
+    errorContainer.innerHTML = `
+        <div class="alert alert-danger">
+            <h6>İçe aktarma hataları:</h6>
+            <ul class="mb-0">
+                ${errors.map(error => `<li>${error}</li>`).join('')}
+            </ul>
+        </div>
+    `;
+    errorContainer.style.display = 'block';
+}
+
+function showExcelImportSummary(processedCount, errorCount, skippedCount, errors) {
+    const errorContainer = document.getElementById('excel-import-errors');
+    let html = `
+        <div class="alert alert-info">
+            <h6>İçe Aktarma Özeti:</h6>
+            <ul class="mb-0">
+                <li><strong>Başarıyla işlenen:</strong> ${processedCount} satır</li>
+                <li><strong>Atlanan satırlar:</strong> ${skippedCount} satır</li>
+                <li><strong>Hatalı satırlar:</strong> ${errorCount} satır</li>
+            </ul>
+        </div>
+    `;
+    
+    if (errors.length > 0) {
+        html += `
+            <div class="alert alert-warning">
+                <h6>Atlanan Satırlar:</h6>
+                <ul class="mb-0">
+                    ${errors.map(error => `<li>${error}</li>`).join('')}
+                </ul>
+            </div>
+        `;
+    }
+    
+    errorContainer.innerHTML = html;
+    errorContainer.style.display = 'block';
+}
+
+function displayExcelImportPreview(processedItems) {
+    const previewDiv = document.getElementById('excel-import-preview');
+    const tbody = document.getElementById('excel-preview-tbody');
+    const importBtn = document.getElementById('import-excel-items-btn');
+    const errorContainer = document.getElementById('excel-import-errors');
+    
+    tbody.innerHTML = '';
+    errorContainer.style.display = 'none';
+    
+    processedItems.forEach((item, index) => {
+        const tr = document.createElement('tr');
+        tr.setAttribute('data-item-index', index);
+        tr.innerHTML = `
+            <td>${index + 1}</td>
+            <td>${item.item_code}</td>
+            <td>${item.item_name}</td>
+            <td>${item.item_description || '-'}</td>
+            <td>${item.job_no}</td>
+            <td>${item.quantity}</td>
+            <td>${item.unit}</td>
+            <td>${item.specifications || '-'}</td>
+            <td><span class="badge bg-success">Geçerli</span></td>
+            <td>
+                <button class="btn btn-outline-danger btn-sm" onclick="deleteExcelPreviewItem(${index})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+    
+    previewDiv.style.display = 'block';
+    importBtn.disabled = false;
+    
+    // Update the preview title to show count
+    const previewTitle = previewDiv.querySelector('h6');
+    if (previewTitle) {
+        previewTitle.textContent = `Önizleme (${processedItems.length} ürün)`;
+    }
+    
+    // Update import button text to show count
+    if (importBtn) {
+        importBtn.innerHTML = `<i class="fas fa-upload me-1"></i>${processedItems.length} Ürünü İçe Aktar`;
+    }
+    
+    // Store the processed items for import
+    excelImportData.processedItems = processedItems;
+}
+
+function deleteExcelPreviewItem(index) {
+    if (!excelImportData || !excelImportData.processedItems || 
+        index < 0 || index >= excelImportData.processedItems.length) {
+        return;
+    }
+    
+    // Remove the item from the parsed data
+    excelImportData.processedItems.splice(index, 1);
+    
+    // Re-render the preview table with updated data
+    displayExcelImportPreview(excelImportData.processedItems);
+    
+    // Update the import button state
+    const importBtn = document.getElementById('import-excel-items-btn');
+    if (excelImportData.processedItems.length === 0) {
+        importBtn.disabled = true;
+        importBtn.innerHTML = '<i class="fas fa-upload me-1"></i>Ürünleri İçe Aktar';
+    }
+    
+    showNotification('Satır başarıyla silindi', 'success');
+}
+
+function clearExcelImport() {
+    document.getElementById('excel-file-input').value = '';
+    document.getElementById('excel-import-preview').style.display = 'none';
+    document.getElementById('excel-import-errors').style.display = 'none';
+    document.getElementById('import-excel-items-btn').disabled = true;
+    excelImportData = null;
+}
+
+function importExcelItems() {
+    if (!excelImportData || !excelImportData.processedItems) return;
+    
+    const container = document.getElementById('planning-items-container');
+    if (!container) return;
+
+    let addedCount = 0;
+    
+    excelImportData.processedItems.forEach(item => {
+        const itemIndex = container.children.length;
+        
+        const itemHtml = `
+            <div class="planning-item-row mb-2" data-index="${itemIndex}">
+                <div class="row g-2">
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm" name="item_code" placeholder="Ürün kodu veya ID" value="${escapeHtml(item.item_code)}" required>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" value="${escapeHtml(item.item_name)}">
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtml(item.item_description)}">
+                    </div>
+                    <div class="col-md-1">
+                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtml(item.job_no)}" required>
+                    </div>
+                    <div class="col-md-1">
+                        <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="0.01" min="0.01" value="${item.quantity}" required>
+                    </div>
+                    <div class="col-md-1">
+                        <select class="form-control form-control-sm" name="item_unit">
+                            ${UNIT_CHOICES.map(unit => `<option value="${unit.value}" ${unit.value === item.unit ? 'selected' : ''}>${unit.label}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtml(item.specifications)}">
+                    </div>
+                    <div class="col-md-1">
+                        <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePlanningItem(${itemIndex})" title="Ürünü Kaldır">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        container.insertAdjacentHTML('beforeend', itemHtml);
+        
+        // Add event listener to item specifications field to update file list when description changes
+        const itemRow = container.querySelector(`.planning-item-row[data-index="${itemIndex}"]`);
+        if (itemRow) {
+            const specsInput = itemRow.querySelector('input[name="item_specifications"]');
+            if (specsInput) {
+                specsInput.dataset.hasFileListListener = 'true';
+                specsInput.addEventListener('input', () => {
+                    renderFilesList(); // Update file list to reflect new item description
+                });
+            }
+        }
+        
+        addedCount++;
+    });
+    
+    // Update file list to show new items
+    renderFilesList();
+    
+    // Close the Excel import modal
+    const excelModal = bootstrap.Modal.getInstance(document.getElementById('excel-import-modal'));
+    if (excelModal) {
+        excelModal.hide();
+    }
+    
+    // Clear import data
+    clearExcelImport();
+    
+    showNotification(`${addedCount} ürün başarıyla içe aktarıldı`, 'success');
+}
+
+// Make functions globally available
+window.deleteExcelPreviewItem = deleteExcelPreviewItem;
 
 // Make functions globally available for onclick handlers
 window.viewDepartmentRequestDetails = viewDepartmentRequestDetails;

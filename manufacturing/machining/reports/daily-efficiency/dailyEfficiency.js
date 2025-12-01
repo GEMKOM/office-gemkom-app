@@ -376,13 +376,82 @@ function renderUsersTable() {
             sortable: true,
             pagination: false,
             responsive: true,
+            exportable: true,
+            exportFormats: ['excel'],
             emptyMessage: 'Bu tarih için rapor verisi bulunamadı',
             emptyIcon: 'fas fa-inbox'
         });
+        
+        // Override prepareExportData to include user column in export
+        setupExportWithUserColumn();
     } else {
         // Update existing table
         usersTable.updateData(tableData);
+        // Re-setup export override in case table was recreated
+        setupExportWithUserColumn();
     }
+}
+
+function setupExportWithUserColumn() {
+    if (!usersTable) return;
+    
+    // Override prepareExportData to include user column and fix task_key in export
+    const originalPrepareExportData = usersTable.prepareExportData.bind(usersTable);
+    usersTable.prepareExportData = function() {
+        // Set export flag so formatters can handle it differently if needed
+        window.isExporting = true;
+        
+        const headers = this.options.columns
+            .filter(col => col.field !== 'actions' && !col.hidden)
+            .map(col => col.label || col.field);
+        
+        const rows = this.options.data.map(row => {
+            return this.options.columns
+                .filter(col => col.field !== 'actions' && !col.hidden)
+                .map(col => {
+                    const value = row[col.field];
+                    
+                    // For task_key, use raw value in export instead of formatted HTML
+                    if (col.field === 'task_key') {
+                        return value || '-';
+                    }
+                    
+                    // Handle different data types
+                    if (col.type === 'boolean') {
+                        return value ? 'Evet' : 'Hayır';
+                    } else if (col.formatter && typeof col.formatter === 'function') {
+                        // Use formatter but strip HTML tags
+                        const formatted = col.formatter(value, row);
+                        return this.stripHtmlTags(formatted);
+                    } else {
+                        return value ?? '';
+                    }
+                });
+        });
+        
+        const data = [headers, ...rows];
+        
+        // Clear export flag
+        window.isExporting = false;
+        
+        // Add user column header at the beginning
+        data[0] = ['Kullanıcı', ...data[0]];
+        
+        // Add user data to each row
+        for (let i = 1; i < data.length; i++) {
+            const rowIndex = i - 1;
+            const row = this.options.data[rowIndex];
+            if (row) {
+                const userDisplayName = row._userDisplayName || row._username || '';
+                const usernameHtml = (row._userFirstName && row._userLastName) 
+                    ? ` (@${row._username})` 
+                    : '';
+                const userValue = `${userDisplayName}${usernameHtml}`;
+                data[i] = [userValue, ...data[i]];
+            }
+        }
+        return data;
+    };
 }
 
 

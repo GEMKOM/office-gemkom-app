@@ -1074,10 +1074,25 @@ export class TableComponent {
                     // Handle different data types
                     if (col.type === 'boolean') {
                         return value ? 'Evet' : 'Hayır';
+                    } else if (col.type === 'number' || (typeof value === 'number' && !isNaN(value))) {
+                        // Format numbers with comma as decimal separator (Turkish locale)
+                        return value.toLocaleString('tr-TR', { 
+                            minimumFractionDigits: 2, 
+                            maximumFractionDigits: 2 
+                        });
                     } else if (col.formatter && typeof col.formatter === 'function') {
                         // Use formatter but strip HTML tags
                         const formatted = col.formatter(value, row);
-                        return this.stripHtmlTags(formatted);
+                        const stripped = this.stripHtmlTags(formatted);
+                        // Check if the stripped value is a number and format it
+                        const numValue = parseFloat(stripped.replace(/[^\d,.-]/g, '').replace(',', '.'));
+                        if (!isNaN(numValue) && stripped.match(/[\d,.-]/)) {
+                            return numValue.toLocaleString('tr-TR', { 
+                                minimumFractionDigits: 2, 
+                                maximumFractionDigits: 2 
+                            });
+                        }
+                        return stripped;
                     } else {
                         return value ?? '';
                     }

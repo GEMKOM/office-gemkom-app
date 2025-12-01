@@ -73,3 +73,10 @@ export function getPredefinedProcessItems() {
     return PREDEFINED_PROCESS_ITEMS;
 }
 
+
+
+export const ITEM_CODE_NAMES = {
+    '730.06.004': 'FABRİKA BAKIM ONARIM GİDERLERİ',
+    '730.06.005': 'FABRİKA MAKİNE BAKIM ONARIM GİDERİ',
+    '730.10.004': 'MAKİNA KİRALAMA GİDERİ'
+};

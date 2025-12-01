@@ -921,7 +921,10 @@ export class ComparisonTable {
         
         const totalQuantity = Object.keys(quantityByUnit).length > 0 
             ? Object.entries(quantityByUnit)
-                .map(([unit, quantity]) => `${quantity.toFixed(2)} ${unit}`)
+                .map(([unit, quantity]) => {
+                    const formattedQty = parseFloat(quantity).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    return `${formattedQty} ${unit}`;
+                })
                 .join(', ')
             : '-';
         
@@ -1173,10 +1176,14 @@ export class ComparisonTable {
     }
 
     generateCSVRow(item, itemIndex) {
+        // Format quantity with comma as decimal separator
+        const formattedQuantity = item.quantity ? 
+            parseFloat(item.quantity).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+        
         const row = [
             item.name || '',
             item.job_no || '',
-            item.quantity || '',
+            formattedQuantity,
             item.unit || ''
         ];
         
@@ -1190,8 +1197,9 @@ export class ComparisonTable {
                 this.data.itemRecommendations[itemIndex] === supplier.id;
             
             if (this.options.showUnitPrice) {
-                row.push(offer && offer.unitPrice ? 
-                    `${offer.unitPrice} ${supplier.default_currency || ''}` : '');
+                const formattedUnitPrice = offer && offer.unitPrice ? 
+                    parseFloat(offer.unitPrice).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+                row.push(formattedUnitPrice ? `${formattedUnitPrice} ${supplier.default_currency || ''}` : '');
             }
             
             if (this.options.showDeliveryDays) {
@@ -1199,14 +1207,17 @@ export class ComparisonTable {
             }
             
             if (this.options.showOriginalTotal) {
-                row.push(offer && offer.totalPrice ? 
-                    `${offer.totalPrice} ${supplier.default_currency || ''}` : '');
+                const formattedTotalPrice = offer && offer.totalPrice ? 
+                    parseFloat(offer.totalPrice).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+                row.push(formattedTotalPrice ? `${formattedTotalPrice} ${supplier.default_currency || ''}` : '');
             }
             
             if (this.options.showEuroTotal) {
                 if (offer && offer.totalPrice && supplier.default_currency) {
                     const euroAmount = this.convertCurrency(offer.totalPrice, supplier.default_currency, 'EUR');
-                    row.push(euroAmount ? `€${euroAmount.toFixed(2)}` : '');
+                    const formattedEuro = euroAmount ? 
+                        parseFloat(euroAmount).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+                    row.push(formattedEuro ? `€${formattedEuro}` : '');
                 } else {
                     row.push('');
                 }
@@ -1235,18 +1246,23 @@ export class ComparisonTable {
             }
             
             if (this.options.showDeliveryDays) {
-                row.push(totals.avgDeliveryDays ? totals.avgDeliveryDays.toFixed(1) : '');
+                const formattedAvgDays = totals.avgDeliveryDays ? 
+                    parseFloat(totals.avgDeliveryDays).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '';
+                row.push(formattedAvgDays);
             }
             
             if (this.options.showOriginalTotal) {
-                row.push(totals.totalPrice ? 
-                    `${totals.totalPrice} ${supplier.default_currency || ''}` : '');
+                const formattedTotalPrice = totals.totalPrice ? 
+                    parseFloat(totals.totalPrice).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+                row.push(formattedTotalPrice ? `${formattedTotalPrice} ${supplier.default_currency || ''}` : '');
             }
             
             if (this.options.showEuroTotal) {
                 if (totals.totalPrice && supplier.default_currency) {
                     const euroAmount = this.convertCurrency(totals.totalPrice, supplier.default_currency, 'EUR');
-                    row.push(euroAmount ? `€${euroAmount.toFixed(2)}` : '');
+                    const formattedEuro = euroAmount ? 
+                        parseFloat(euroAmount).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+                    row.push(formattedEuro ? `€${formattedEuro}` : '');
                 } else {
                     row.push('');
                 }
@@ -1376,7 +1392,9 @@ export class ComparisonTable {
                 if (this.options.showEuroTotal) {
                     if (offer && offer.totalPrice && supplier.default_currency) {
                         const euroAmount = this.convertCurrency(offer.totalPrice, supplier.default_currency, 'EUR');
-                        row.push(euroAmount ? `€${euroAmount.toFixed(2)}` : '-');
+                        const formattedEuro = euroAmount ? 
+                            parseFloat(euroAmount).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+                        row.push(formattedEuro ? `€${formattedEuro}` : '-');
                     } else {
                         row.push('-');
                     }
@@ -1407,17 +1425,23 @@ export class ComparisonTable {
                 }
                 
                 if (this.options.showDeliveryDays) {
-                    summaryRow.push(totals.avgDeliveryDays ? `${totals.avgDeliveryDays.toFixed(1)} gün` : '-');
+                    const formattedAvgDays = totals.avgDeliveryDays ? 
+                        parseFloat(totals.avgDeliveryDays).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '';
+                    summaryRow.push(formattedAvgDays ? `${formattedAvgDays} gün` : '-');
                 }
                 
                 if (this.options.showOriginalTotal) {
-                    summaryRow.push(totals.totalPrice ? `${totals.totalPrice} ${supplier.default_currency || ''}` : '-');
+                    const formattedTotalPrice = totals.totalPrice ? 
+                        parseFloat(totals.totalPrice).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+                    summaryRow.push(formattedTotalPrice ? `${formattedTotalPrice} ${supplier.default_currency || ''}` : '-');
                 }
                 
                 if (this.options.showEuroTotal) {
                     if (totals.totalPrice && supplier.default_currency) {
                         const euroAmount = this.convertCurrency(totals.totalPrice, supplier.default_currency, 'EUR');
-                        summaryRow.push(euroAmount ? `€${euroAmount.toFixed(2)}` : '-');
+                        const formattedEuro = euroAmount ? 
+                            parseFloat(euroAmount).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '';
+                        summaryRow.push(formattedEuro ? `€${formattedEuro}` : '-');
                     } else {
                         summaryRow.push('-');
                     }
@@ -1453,8 +1477,9 @@ export class ComparisonTable {
             data.push([supplier.name]);
             data.push(['Toplam Fiyat', totals.totalPrice ? 
                 `${totals.totalPrice} ${supplier.default_currency || ''}` : 'N/A']);
-            data.push(['Ortalama Teslim Süresi', totals.avgDeliveryDays ? 
-                totals.avgDeliveryDays.toFixed(1) : 'N/A']);
+            const formattedAvgDays = totals.avgDeliveryDays ? 
+                parseFloat(totals.avgDeliveryDays).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '';
+            data.push(['Ortalama Teslim Süresi', formattedAvgDays || 'N/A']);
             data.push(['']);
         });
         
@@ -1678,8 +1703,9 @@ export class ComparisonTable {
             data.push([supplier.name, '']);
             data.push(['Toplam Fiyat', totals.totalPrice ? 
                 `${totals.totalPrice} ${supplier.default_currency || ''}` : 'N/A']);
-            data.push(['Ortalama Teslim Süresi', totals.avgDeliveryDays ? 
-                `${totals.avgDeliveryDays.toFixed(1)} gün` : 'N/A']);
+            const formattedAvgDays = totals.avgDeliveryDays ? 
+                parseFloat(totals.avgDeliveryDays).toLocaleString('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 }) : '';
+            data.push(['Ortalama Teslim Süresi', formattedAvgDays ? `${formattedAvgDays} gün` : 'N/A']);
             data.push(['']);
         });
         
