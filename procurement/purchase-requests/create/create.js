@@ -1267,13 +1267,19 @@ function initializePlanningItemsTable() {
                 sortable: true
             },
             {
+                field: 'item_description',
+                label: 'Malzeme Açıklaması',
+                formatter: (value) => value || '-',
+                sortable: false
+            },
+            {
                 field: 'job_no',
                 label: 'İş No',
                 formatter: (value) => value || '-',
                 sortable: true
             },
             {
-                field: 'quantity',
+                field: 'quantity_to_purchase',
                 label: 'Miktar',
                 formatter: (value) => value || '-',
                 sortable: true
@@ -1651,6 +1657,7 @@ async function showPlanningRequestDetailsModal(planningRequestId, requestNumber)
                                     <th>#</th>
                                     <th>Malzeme Kodu</th>
                                     <th>Malzeme Adı</th>
+                                    <th>Malzeme Açıklaması</th>
                                     <th>İş No</th>
                                     <th>Miktar</th>
                                     <th>Birim</th>
@@ -1663,8 +1670,9 @@ async function showPlanningRequestDetailsModal(planningRequestId, requestNumber)
                                         <td>${index + 1}</td>
                                         <td><strong>${item.item_code || '-'}</strong></td>
                                         <td>${item.item_name || '-'}</td>
+                                        <td>${item.item_description || '-'}</td>
                                         <td>${item.job_no || '-'}</td>
-                                        <td>${item.quantity || '-'}</td>
+                                        <td>${item.quantity_to_purchase || '-'}</td>
                                         <td>${item.item_unit || '-'}</td>
                                         <td>${item.specifications || '-'}</td>
                                     </tr>

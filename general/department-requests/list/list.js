@@ -522,6 +522,17 @@ function setupCreateEditForm(request = null) {
         fields: []
     });
 
+    // Add files display section if editing (always show, even if no files)
+    if (isEditMode && request) {
+        createEditModal.addSection({
+            id: 'files-display-section',
+            title: 'Dosya Ekleri',
+            icon: 'fas fa-paperclip',
+            iconColor: 'text-info',
+            fields: []
+        });
+    }
+
     // Set up save callback
     createEditModal.onSaveCallback(async (formData) => {
         await handleSaveRequest(formData);
@@ -576,6 +587,51 @@ function setupCreateEditForm(request = null) {
         
         // Add items table after rendering
         setupItemsSection(request);
+        
+        // Setup files display section if editing
+        if (isEditMode && request) {
+            setupFilesDisplaySection(request);
+        }
+    }, 100);
+}
+
+function setupFilesDisplaySection(request) {
+    // Find the files section
+    const filesSection = createEditModal.container.querySelector('[data-section-id="files-display-section"]');
+    if (!filesSection) return;
+    
+    // Find the row container (EditModal creates .row.g-2 for fields)
+    const fieldsContainer = filesSection.querySelector('.row.g-2');
+    if (fieldsContainer) {
+        // Clear any existing content and add files container
+        fieldsContainer.innerHTML = `
+            <div class="col-12">
+                <div id="existing-files-container"></div>
+            </div>
+        `;
+    }
+    
+    // Initialize FileAttachments component
+    setTimeout(() => {
+        const filesContainer = document.getElementById('existing-files-container');
+        if (filesContainer) {
+            const fileAttachments = new FileAttachments('existing-files-container', {
+                title: '',
+                layout: 'grid',
+                showTitle: false,
+                onFileClick: (file) => {
+                    const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                    const fileExtension = fileName.split('.').pop().toLowerCase();
+                    const viewer = new FileViewer();
+                    viewer.setDownloadCallback(async () => {
+                        await viewer.downloadFile(file.file_url, fileName);
+                    });
+                    viewer.openFile(file.file_url, fileName, fileExtension);
+                }
+            });
+            // Set files data (empty array if no files)
+            fileAttachments.setFiles(request.files || []);
+        }
     }, 100);
 }
 
@@ -620,14 +676,19 @@ function setupItemsSection(request = null) {
                     <i class="fas fa-list-ol me-1"></i>Miktar
                 </small>
             </div>
-            <div class="col-md-2">
+            <div class="col-md-1">
                 <small class="text-muted fw-bold">
                     <i class="fas fa-ruler me-1"></i>Birim
                 </small>
             </div>  
-            <div class="col-md-3">
+            <div class="col-md-2">
                 <small class="text-muted fw-bold">
-                    <i class="fas fa-align-left me-1"></i>Açıklama
+                    <i class="fas fa-align-left me-1"></i>Ürün Açıklaması
+                </small>
+            </div>
+            <div class="col-md-2">
+                <small class="text-muted fw-bold">
+                    <i class="fas fa-cog me-1"></i>Özellikler
                 </small>
             </div>
             <div class="col-md-1">
@@ -722,13 +783,15 @@ function setupItemsSection(request = null) {
                 const unitSelect = lastRow.querySelector('select[name="item_unit"]');
                 const quantityInput = lastRow.querySelector('input[name="item_quantity"]');
                 const descInput = lastRow.querySelector('input[name="item_description"]');
+                const specsInput = lastRow.querySelector('input[name="item_specifications"]');
                 
                 if (codeInput) codeInput.value = item.item_code || '';
-                if (nameInput) nameInput.value = item.item_name || '';
+                if (nameInput) nameInput.value = item.item_name || item.name || '';
                 if (jobNoInput) jobNoInput.value = item.job_no || '';
-                if (unitSelect) unitSelect.value = item.item_unit || '';
+                if (unitSelect) unitSelect.value = item.item_unit || item.unit || '';
                 if (quantityInput) quantityInput.value = item.quantity || '1';
-                if (descInput) descInput.value = item.description || '';
+                if (descInput) descInput.value = item.item_description || item.description || '';
+                if (specsInput) specsInput.value = item.item_specifications || item.specifications || '';
             }
         });
     }
@@ -756,14 +819,17 @@ function addItem() {
                 <div class="col-md-1">
                     <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="1" min="1" value="1">
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-1">
                     <select class="form-control form-control-sm" name="item_unit">
                         <option value="">Birim Seçin</option>
                         ${UNIT_CHOICES.map(unit => `<option value="${unit.value}">${unit.label}</option>`).join('')}
                     </select>
                 </div>
-                <div class="col-md-3">
-                    <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Açıklama">
+                <div class="col-md-2">
+                    <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması">
+                </div>
+                <div class="col-md-2">
+                    <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler">
                 </div>
                 <div class="col-md-1">
                     <div class="btn-group w-100" role="group">
@@ -802,6 +868,7 @@ function duplicateItem(index) {
     const quantityInput = itemRow.querySelector('input[name="item_quantity"]');
     const unitSelect = itemRow.querySelector('select[name="item_unit"]');
     const descInput = itemRow.querySelector('input[name="item_description"]');
+    const specsInput = itemRow.querySelector('input[name="item_specifications"]');
 
     const code = codeInput ? codeInput.value : '';
     const name = nameInput ? nameInput.value : '';
@@ -809,6 +876,7 @@ function duplicateItem(index) {
     const quantity = quantityInput ? quantityInput.value : '1';
     const unit = unitSelect ? unitSelect.value : '';
     const description = descInput ? descInput.value : '';
+    const specifications = specsInput ? specsInput.value : '';
 
     // Add a new item
     addItem();
@@ -825,6 +893,7 @@ function duplicateItem(index) {
             const newQuantityInput = lastRow.querySelector('input[name="item_quantity"]');
             const newUnitSelect = lastRow.querySelector('select[name="item_unit"]');
             const newDescInput = lastRow.querySelector('input[name="item_description"]');
+            const newSpecsInput = lastRow.querySelector('input[name="item_specifications"]');
 
             if (newCodeInput) newCodeInput.value = code;
             if (newNameInput) newNameInput.value = name;
@@ -832,6 +901,7 @@ function duplicateItem(index) {
             if (newQuantityInput) newQuantityInput.value = quantity;
             if (newUnitSelect) newUnitSelect.value = unit;
             if (newDescInput) newDescInput.value = description;
+            if (newSpecsInput) newSpecsInput.value = specifications;
         }
     }
 }
@@ -877,6 +947,7 @@ async function handleSaveRequest(formData) {
             const itemUnit = row.querySelector('select[name="item_unit"]')?.value?.trim();
             const itemQuantity = row.querySelector('input[name="item_quantity"]')?.value?.trim();
             const itemDescription = row.querySelector('input[name="item_description"]')?.value?.trim();
+            const itemSpecifications = row.querySelector('input[name="item_specifications"]')?.value?.trim();
             
             // Only add item if at least name is provided
             if (itemName) {
@@ -886,7 +957,8 @@ async function handleSaveRequest(formData) {
                     job_no: jobNo || null,
                     item_unit: itemUnit || null,
                     quantity: itemQuantity ? parseInt(itemQuantity, 10) : 1,
-                    description: itemDescription || null
+                    item_description: itemDescription || null,
+                    item_specifications: itemSpecifications || null
                 });
             }
         }
@@ -1033,22 +1105,20 @@ function showRequestDetailsModal(request) {
         });
     }
 
-    // Add files section if files exist - using FileAttachments component
-    if (request.files && request.files.length > 0) {
-        detailsModal.addCustomSection({
-            id: 'files-section',
-            title: 'Ekler',
-            icon: 'fas fa-paperclip',
-            iconColor: 'text-info',
-            customContent: `
-                <div class="row g-2">
-                    <div class="col-12">
-                        <div id="files-container"></div>
-                    </div>
+    // Add files section (always show, even if no files) - using FileAttachments component
+    detailsModal.addCustomSection({
+        id: 'files-section',
+        title: 'Dosya Ekleri',
+        icon: 'fas fa-paperclip',
+        iconColor: 'text-info',
+        customContent: `
+            <div class="row g-2">
+                <div class="col-12">
+                    <div id="files-container"></div>
                 </div>
-            `
-        });
-    }
+            </div>
+        `
+    });
 
     // Render the modal with all sections
     detailsModal.render();
@@ -1060,10 +1130,24 @@ function showRequestDetailsModal(request) {
             const itemsTableContainer = document.getElementById('items-table-container');
             if (itemsTableContainer) {
                 // Initialize TableComponent for items
+                // Map items to include all fields
+                const itemsData = request.items.map(item => ({
+                    ...item,
+                    item_code: item.item_code || '-',
+                    item_description: item.item_description || '-',
+                    item_specifications: item.item_specifications || '-'
+                }));
+
                 const itemsTable = new TableComponent('items-table-container', {
                     title: 'Ürünler',
                     icon: 'fas fa-boxes',
                     columns: [
+                        {
+                            field: 'item_code',
+                            label: 'Ürün Kodu',
+                            sortable: true,
+                            formatter: (value) => value ? `<strong>${value}</strong>` : '-'
+                        },
                         {
                             field: 'name',
                             label: 'Ürün Adı',
@@ -1083,13 +1167,19 @@ function showRequestDetailsModal(request) {
                             formatter: (value) => value || '-'
                         },
                         {
-                            field: 'description',
-                            label: 'Açıklama',
+                            field: 'item_description',
+                            label: 'Ürün Açıklaması',
+                            sortable: false,
+                            formatter: (value) => value || '-'
+                        },
+                        {
+                            field: 'item_specifications',
+                            label: 'Özellikler',
                             sortable: false,
                             formatter: (value) => value || '-'
                         }
                     ],
-                    data: request.items,
+                    data: itemsData,
                     sortable: true,
                     pagination: false,
                     exportable: false,
@@ -1102,56 +1192,52 @@ function showRequestDetailsModal(request) {
             }
         }
 
-        // Initialize files component if files exist
-        if (request.files && request.files.length > 0) {
-            const filesContainer = document.getElementById('files-container');
-            if (filesContainer) {
-                // Initialize FileAttachments component
-                const fileAttachments = new FileAttachments('files-container', {
-                    title: 'Ekler',
-                    titleIcon: 'fas fa-paperclip',
-                    titleIconColor: 'text-info',
-                    layout: 'grid',
-                    showTitle: false, // Title is already in section
-                    onFileClick: (file) => {
-                        const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
-                        const fileExtension = fileName.split('.').pop().toLowerCase();
-                        const viewer = new FileViewer();
-                        viewer.setDownloadCallback(async () => {
-                            await viewer.downloadFile(file.file_url, fileName);
+        // Initialize files component (always initialize, even if no files)
+        const filesContainer = document.getElementById('files-container');
+        if (filesContainer) {
+            // Initialize FileAttachments component
+            const fileAttachments = new FileAttachments('files-container', {
+                title: '',
+                layout: 'grid',
+                showTitle: false, // Title is already in section
+                onFileClick: (file) => {
+                    const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                    const fileExtension = fileName.split('.').pop().toLowerCase();
+                    const viewer = new FileViewer();
+                    viewer.setDownloadCallback(async () => {
+                        await viewer.downloadFile(file.file_url, fileName);
+                    });
+                    viewer.openFile(file.file_url, fileName, fileExtension);
+                },
+                onDownloadClick: (fileUrl, fileName) => {
+                    // Force download by creating a blob and downloading it
+                    fetch(fileUrl)
+                        .then(response => response.blob())
+                        .then(blob => {
+                            const url = window.URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = fileName;
+                            link.style.display = 'none';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            window.URL.revokeObjectURL(url);
+                        })
+                        .catch(error => {
+                            console.error('Download failed:', error);
+                            // Fallback to direct link
+                            const link = document.createElement('a');
+                            link.href = fileUrl;
+                            link.download = fileName;
+                            link.target = '_blank';
+                            link.click();
                         });
-                        viewer.openFile(file.file_url, fileName, fileExtension);
-                    },
-                    onDownloadClick: (fileUrl, fileName) => {
-                        // Force download by creating a blob and downloading it
-                        fetch(fileUrl)
-                            .then(response => response.blob())
-                            .then(blob => {
-                                const url = window.URL.createObjectURL(blob);
-                                const link = document.createElement('a');
-                                link.href = url;
-                                link.download = fileName;
-                                link.style.display = 'none';
-                                document.body.appendChild(link);
-                                link.click();
-                                document.body.removeChild(link);
-                                window.URL.revokeObjectURL(url);
-                            })
-                            .catch(error => {
-                                console.error('Download failed:', error);
-                                // Fallback to direct link
-                                const link = document.createElement('a');
-                                link.href = fileUrl;
-                                link.download = fileName;
-                                link.target = '_blank';
-                                link.click();
-                            });
-                    }
-                });
+                }
+            });
 
-                // Set files data
-                fileAttachments.setFiles(request.files);
-            }
+            // Set files data (empty array if no files)
+            fileAttachments.setFiles(request.files || []);
         }
     }, 100);
 

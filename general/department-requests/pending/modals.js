@@ -1,5 +1,7 @@
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
+import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
+import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import {
     approveDepartmentRequest as approveDepartmentRequestAPI
 } from '../../../apis/planning/departmentRequests.js';
@@ -254,10 +256,12 @@ async function showDepartmentRequestDetailsModal(request = null) {
             // Create items table
             const itemsData = requestToShow.items.map((item, index) => ({
                 id: index + 1,
+                item_code: item.item_code || '-',
                 name: item.name || item.product_name || '-',
                 quantity: item.quantity || 0,
                 unit: item.unit || 'Adet',
-                description: item.description || item.notes || '-'
+                item_description: item.item_description || '-',
+                item_specifications: item.item_specifications || '-'
             }));
 
             // Add custom HTML content for the table
@@ -268,20 +272,24 @@ async function showDepartmentRequestDetailsModal(request = null) {
                             <thead class="table-light">
                                 <tr>
                                     <th>#</th>
+                                    <th>Ürün Kodu</th>
                                     <th>Ad</th>
                                     <th>Miktar</th>
                                     <th>Birim</th>
-                                    <th>Açıklama</th>
+                                    <th>Ürün Açıklaması</th>
+                                    <th>Özellikler</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 ${itemsData.map(item => `
                                     <tr>
                                         <td>${item.id}</td>
-                                        <td><strong>${item.name}</strong></td>
+                                        <td><strong>${item.item_code}</strong></td>
+                                        <td>${item.name}</td>
                                         <td>${item.quantity}</td>
                                         <td>${item.unit}</td>
-                                        <td>${item.description}</td>
+                                        <td>${item.item_description}</td>
+                                        <td>${item.item_specifications}</td>
                                     </tr>
                                 `).join('')}
                             </tbody>
@@ -292,6 +300,19 @@ async function showDepartmentRequestDetailsModal(request = null) {
 
             departmentRequestDetailsModal.addCustomContent(tableHtml);
         }
+
+        // Add files section (always show, even if no files)
+        departmentRequestDetailsModal.addSection({
+            title: 'Dosya Ekleri',
+            icon: 'fas fa-paperclip',
+            iconColor: 'text-info'
+        });
+
+        const filesHtml = `
+            <div id="department-request-files-container" class="mt-3"></div>
+        `;
+
+        departmentRequestDetailsModal.addCustomContent(filesHtml);
 
         // Render the modal
         departmentRequestDetailsModal.render();
@@ -328,6 +349,29 @@ async function showDepartmentRequestDetailsModal(request = null) {
 
         // Show the modal
         departmentRequestDetailsModal.show();
+
+        // Initialize files component after modal is rendered (always initialize, even if no files)
+        setTimeout(() => {
+            const filesContainer = document.getElementById('department-request-files-container');
+            if (filesContainer) {
+                const fileAttachments = new FileAttachments('department-request-files-container', {
+                    title: '',
+                    layout: 'grid',
+                    showTitle: false,
+                    onFileClick: (file) => {
+                        const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                        const fileExtension = fileName.split('.').pop().toLowerCase();
+                        const viewer = new FileViewer();
+                        viewer.setDownloadCallback(async () => {
+                            await viewer.downloadFile(file.file_url, fileName);
+                        });
+                        viewer.openFile(file.file_url, fileName, fileExtension);
+                    }
+                });
+                // Set files (empty array if no files)
+                fileAttachments.setFiles(requestToShow.files || []);
+            }
+        }, 100);
     }
 }
 

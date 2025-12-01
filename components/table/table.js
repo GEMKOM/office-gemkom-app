@@ -68,12 +68,19 @@ export class TableComponent {
             draggable: false,
             onReorder: null, // Callback function when rows are reordered
             
+            // Grouping configuration
+            groupBy: null, // Field name to group by (e.g., 'user_id', 'category')
+            groupHeaderFormatter: null, // Function to format group header (receives groupValue, groupRows)
+            groupCollapsible: false, // Allow collapsing/expanding groups
+            defaultGroupExpanded: true, // Default state for groups (expanded/collapsed)
+            
             ...options
         };
         
         this.currentSortField = null;
         this.currentSortDirection = 'asc';
         this.isInlineEditing = false;
+        this.groupExpandedState = {}; // Track expanded/collapsed state of groups
         
         this.init();
     }
@@ -192,6 +199,11 @@ export class TableComponent {
             return this.renderEmptyState();
         }
         
+        // If grouping is enabled, render grouped data
+        if (this.options.groupBy) {
+            return this.renderGroupedBody();
+        }
+        
         // For server-side pagination, use all data as-is
         // For client-side pagination, slice the data
         let pageData = this.options.data;
@@ -205,6 +217,95 @@ export class TableComponent {
         }
         
         return pageData.map((row, index) => this.renderRow(row, startIndex + index)).join('');
+    }
+    
+    renderGroupedBody() {
+        // Group data by the specified field
+        const groups = {};
+        this.options.data.forEach((row, index) => {
+            const groupValue = this.getGroupValue(row);
+            if (!groups[groupValue]) {
+                groups[groupValue] = [];
+            }
+            groups[groupValue].push({ row, originalIndex: index });
+        });
+        
+        // Sort groups (optional - could be made configurable)
+        const sortedGroupKeys = Object.keys(groups).sort();
+        
+        // Calculate total items for pagination (all rows, not just groups)
+        if (this.options.pagination && !this.options.serverSidePagination) {
+            // Total items is the total number of data rows
+            this.options.totalItems = this.options.data.length;
+        }
+        
+        let html = '';
+        let rowIndex = 0;
+        
+        sortedGroupKeys.forEach(groupKey => {
+            const groupRows = groups[groupKey];
+            const groupValue = groupRows[0].row[this.options.groupBy];
+            
+            // Initialize expanded state if not set
+            if (this.groupExpandedState[groupKey] === undefined) {
+                this.groupExpandedState[groupKey] = this.options.defaultGroupExpanded !== false;
+            }
+            
+            const isExpanded = this.groupExpandedState[groupKey];
+            
+            // Render group header
+            html += this.renderGroupHeader(groupKey, groupValue, groupRows, isExpanded);
+            
+            // Render group rows if expanded
+            if (isExpanded) {
+                groupRows.forEach(({ row }) => {
+                    html += this.renderRow(row, rowIndex);
+                    rowIndex++;
+                });
+            }
+        });
+        
+        return html;
+    }
+    
+    getGroupValue(row) {
+        const value = row[this.options.groupBy];
+        // Use a consistent string representation for grouping
+        if (value === null || value === undefined) {
+            return '__null__';
+        }
+        return String(value);
+    }
+    
+    renderGroupHeader(groupKey, groupValue, groupRows, isExpanded) {
+        const colspan = this.options.columns.length + (this.options.actions.length > 0 ? 1 : 0);
+        const toggleIcon = isExpanded ? 'fa-chevron-down' : 'fa-chevron-right';
+        const toggleClass = this.options.groupCollapsible ? 'group-header-toggle' : '';
+        const toggleClick = this.options.groupCollapsible ? 
+            `onclick="document.getElementById('${this.containerId}').dispatchEvent(new CustomEvent('toggleGroup', {detail: {groupKey: '${groupKey}'}}))"` : '';
+        
+        // Format group header
+        let headerContent = '';
+        if (this.options.groupHeaderFormatter && typeof this.options.groupHeaderFormatter === 'function') {
+            headerContent = this.options.groupHeaderFormatter(groupValue, groupRows.map(gr => gr.row));
+        } else {
+            // Default formatting
+            headerContent = `
+                <div class="d-flex align-items-center">
+                    ${this.options.groupCollapsible ? `<i class="fas ${toggleIcon} me-2"></i>` : ''}
+                    <strong>${groupValue || '-'}</strong>
+                    <span class="badge bg-secondary ms-2">${groupRows.length} ${groupRows.length === 1 ? 'görev' : 'görev'}</span>
+                </div>
+            `;
+        }
+        
+        return `
+            <tr class="group-header ${toggleClass}" data-group-key="${groupKey}" ${toggleClick}>
+                <td colspan="${colspan}" class="group-header-cell">
+                    ${headerContent}
+                </td>
+            </tr>
+        `;
     }
     
     renderRow(row, rowIndex) {
@@ -610,6 +711,26 @@ export class TableComponent {
         // Drag and drop
         if (this.options.draggable) {
             this.setupDragAndDrop();
+        }
+        
+        // Group toggle functionality
+        if (this.options.groupBy && this.options.groupCollapsible) {
+            this.container.addEventListener('toggleGroup', (e) => {
+                const groupKey = e.detail.groupKey;
+                this.toggleGroup(groupKey);
+            });
+        }
+    }
+    
+    toggleGroup(groupKey) {
+        // Toggle the expanded state
+        this.groupExpandedState[groupKey] = !this.groupExpandedState[groupKey];
+        // Re-render the table body
+        const tbody = this.container.querySelector(`#${this.containerId}-tbody`);
+        if (tbody) {
+            tbody.innerHTML = this.renderBody();
+            // Re-setup event listeners after re-rendering
+            this.setupEventListeners();
         }
     }
     

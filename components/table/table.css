@@ -774,3 +774,41 @@ tr[draggable="true"]:hover {
     margin-left: 0.25rem;
 }
 
+/* Group Header Styling */
+.group-header {
+    background-color: #e9ecef !important;
+    border-top: 2px solid #dee2e6;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.group-header:hover {
+    background-color: #dee2e6 !important;
+}
+
+.group-header-cell {
+    padding: 0.875rem 1rem !important;
+    font-weight: 600;
+    background-color: #e9ecef;
+    border-bottom: 2px solid #dee2e6;
+}
+
+.group-header-toggle {
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.group-header-toggle:hover {
+    background-color: #dee2e6 !important;
+}
+
+.group-header-toggle i {
+    transition: transform 0.2s ease;
+    color: #495057;
+}
+
+.group-header .badge {
+    font-size: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    font-weight: 500;
+}
+
