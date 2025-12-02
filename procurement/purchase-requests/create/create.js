@@ -1207,6 +1207,13 @@ function initializePlanningItemsFilters() {
     
     // Add filters
     planningItemsFilters.addTextFilter({
+        id: 'planning-request-number-filter',
+        label: 'Planlama Talebi No',
+        placeholder: 'Planlama talebi no ara... (örn: PLR-2025-0001, PLR-2025, 0001)',
+        colSize: 2
+    });
+    
+    planningItemsFilters.addTextFilter({
         id: 'item-code-filter',
         label: 'Malzeme Kodu',
         placeholder: 'Malzeme kodu ara...',
@@ -1397,6 +1404,9 @@ async function loadPlanningRequestItems() {
         };
         
         // Map frontend filter IDs to backend filter names
+        if (filterValues['planning-request-number-filter']) {
+            filters.planning_request_number = filterValues['planning-request-number-filter'];
+        }
         if (filterValues['item-code-filter']) {
             filters.item_code = filterValues['item-code-filter'];
         }

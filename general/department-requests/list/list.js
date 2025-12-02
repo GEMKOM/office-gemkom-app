@@ -290,6 +290,18 @@ function initializeTableComponent() {
                 formatter: (value, row) => renderStatusBadge(value, row.status_label)
             },
             {
+                field: 'planning_request_keys',
+                label: 'Planlama Talepleri',
+                sortable: false,
+                formatter: (value, row) => formatRequestKeys(value || row.planning_request_keys, 'planning')
+            },
+            {
+                field: 'purchase_request_keys',
+                label: 'Satın Alma Talepleri',
+                sortable: false,
+                formatter: (value, row) => formatRequestKeys(value || row.purchase_request_keys, 'purchase')
+            },
+            {
                 field: 'created_at',
                 label: 'Oluşturulma',
                 sortable: true,
@@ -1081,6 +1093,24 @@ function showRequestDetailsModal(request) {
         layout: 'horizontal'
     });
     
+    // Add planning request keys if they exist
+    if (request.planning_request_keys && request.planning_request_keys.length > 0) {
+        detailsModal.addField({ 
+            label: 'Planlama Talepleri', 
+            value: formatRequestKeysForDetails(request.planning_request_keys), 
+            colSize: 12 
+        });
+    }
+    
+    // Add purchase request keys if they exist
+    if (request.purchase_request_keys && request.purchase_request_keys.length > 0) {
+        detailsModal.addField({ 
+            label: 'Satın Alma Talepleri', 
+            value: formatRequestKeysForDetails(request.purchase_request_keys), 
+            colSize: 12 
+        });
+    }
+    
     // Add description separately if it exists
     if (request.description) {
         detailsModal.addField({ 
@@ -1130,12 +1160,21 @@ function showRequestDetailsModal(request) {
             const itemsTableContainer = document.getElementById('items-table-container');
             if (itemsTableContainer) {
                 // Initialize TableComponent for items
-                // Map items to include all fields
+                // Map items to normalize field names (handle both formats)
                 const itemsData = request.items.map(item => ({
                     ...item,
-                    item_code: item.item_code || '-',
-                    item_description: item.item_description || '-',
-                    item_specifications: item.item_specifications || '-'
+                    // Normalize item code - check both item_code and code
+                    item_code: item.item_code || item.code || '-',
+                    // Normalize item name - check both name and item_name
+                    name: item.name || item.item_name || '-',
+                    // Normalize description - check both description and item_description
+                    item_description: item.item_description || item.description || '-',
+                    // Normalize specifications - check both specifications and item_specifications
+                    item_specifications: item.item_specifications || item.specifications || '-',
+                    // Normalize unit - check both unit and item_unit
+                    unit: item.unit || item.item_unit || '-',
+                    // Normalize quantity
+                    quantity: item.quantity || 0
                 }));
 
                 const itemsTable = new TableComponent('items-table-container', {
@@ -1146,37 +1185,53 @@ function showRequestDetailsModal(request) {
                             field: 'item_code',
                             label: 'Ürün Kodu',
                             sortable: true,
-                            formatter: (value) => value ? `<strong>${value}</strong>` : '-'
+                            formatter: (value, row) => {
+                                // Check both item_code and code fields
+                                const code = value || row.code || row.item_code || '-';
+                                return code !== '-' ? `<strong>${code}</strong>` : '-';
+                            }
                         },
                         {
                             field: 'name',
                             label: 'Ürün Adı',
                             sortable: true,
-                            formatter: (value) => value || '-'
+                            formatter: (value, row) => {
+                                // Check both name and item_name fields
+                                return value || row.item_name || '-';
+                            }
                         },
                         {
                             field: 'quantity',
                             label: 'Miktar',
                             sortable: true,
-                            formatter: (value) => value || '-'
+                            formatter: (value) => value || value === 0 ? value : '-'
                         },
                         {
                             field: 'unit',
                             label: 'Birim',
                             sortable: true,
-                            formatter: (value) => value || '-'
+                            formatter: (value, row) => {
+                                // Check both unit and item_unit fields
+                                return value || row.item_unit || '-';
+                            }
                         },
                         {
                             field: 'item_description',
                             label: 'Ürün Açıklaması',
                             sortable: false,
-                            formatter: (value) => value || '-'
+                            formatter: (value, row) => {
+                                // Check both item_description and description fields
+                                return value || row.description || row.item_description || '-';
+                            }
                         },
                         {
                             field: 'item_specifications',
                             label: 'Özellikler',
                             sortable: false,
-                            formatter: (value) => value || '-'
+                            formatter: (value, row) => {
+                                // Check both item_specifications and specifications fields
+                                return value || row.specifications || row.item_specifications || '-';
+                            }
                         }
                     ],
                     data: itemsData,
@@ -1342,6 +1397,27 @@ function formatStatus(status) {
         'transferred': 'Transfer Edildi'
     };
     return statusMap[status] || status || '-';
+}
+
+function formatRequestKeys(keys, type) {
+    if (!keys || !Array.isArray(keys) || keys.length === 0) {
+        return '<span style="color: #6c757d;">-</span>';
+    }
+    
+    const badgeClass = type === 'planning' ? 'status-blue' : 'status-green';
+    const keysHtml = keys.map(key => 
+        `<span class="status-badge ${badgeClass}" style="margin-right: 0.25rem; margin-bottom: 0.25rem; display: inline-block;">${key}</span>`
+    ).join('');
+    
+    return `<div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">${keysHtml}</div>`;
+}
+
+function formatRequestKeysForDetails(keys) {
+    if (!keys || !Array.isArray(keys) || keys.length === 0) {
+        return '-';
+    }
+    
+    return keys.join(', ');
 }
 
 function formatDateForInput(dateString) {
