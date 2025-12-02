@@ -2014,7 +2014,7 @@ async function addSelectedPlanningItems() {
                 code: planningItem.item_code || '',
                 name: isSpecialItemCode ? (planningItem.item_description || '') : (planningItem.item_name || ''),
                 job_no: planningItem.job_no || '',
-                quantity: parseFloat(planningItem.quantity) || 1,
+                quantity: parseFloat(planningItem.quantity_to_purchase) || 1,
                 unit: planningItem.item_unit || 'adet',
                 specs: planningItem.specifications || '',
                 source_planning_request_item_id: planningItem.id // Track source

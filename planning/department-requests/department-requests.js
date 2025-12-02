@@ -46,6 +46,16 @@ let isCompletedLoading = false;
 let completedTable = null;
 let departmentRequestsFilters = null;
 let planningRequestsFilters = null;
+let pendingErpEntryFilters = null;
+
+// Pending ERP Entry requests state
+let pendingErpEntryCurrentPage = 1;
+let pendingErpEntryCurrentSortField = 'id';
+let pendingErpEntryCurrentSortDirection = 'desc';
+let pendingErpEntryRequests = [];
+let totalPendingErpEntryRequests = 0;
+let isPendingErpEntryLoading = false;
+let pendingErpEntryTable = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -272,6 +282,104 @@ document.addEventListener('DOMContentLoaded', async () => {
         emptyIcon: 'fas fa-clipboard-list'
     });
 
+    // Initialize pending ERP entry requests table component
+    pendingErpEntryTable = new TableComponent('pending-erp-entry-table-container', {
+        title: 'ERP Girişi Bekleyen Planlama Talepleri',
+        icon: 'fas fa-clock',
+        iconColor: 'text-warning',
+        columns: [
+            {
+                field: 'id',
+                label: 'Talep No',
+                sortable: true,
+                formatter: (value) => `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value || '-'}</span>`
+            },
+            {
+                field: 'request_number',
+                label: 'Talep Numarası',
+                sortable: true,
+                formatter: (value) => value ? `<span style="font-weight: 600; color: #495057;">${value}</span>` : '-'
+            },
+            {
+                field: 'title',
+                label: 'Başlık',
+                sortable: true,
+                formatter: (value) => `<div style="font-weight: 500; color: #212529;">${value || '-'}</div>`
+            },
+            {
+                field: 'created_by_username',
+                label: 'Oluşturan',
+                sortable: true,
+                formatter: (value) => `
+                    <div style="font-weight: 500; color: #495057;">
+                        <i class="fas fa-user-circle me-2 text-muted"></i>
+                        ${value || 'Bilinmiyor'}
+                    </div>
+                `
+            },
+            {
+                field: 'priority',
+                label: 'Öncelik',
+                sortable: true,
+                formatter: (value) => renderPriorityBadge(value)
+            },
+            {
+                field: 'needed_date',
+                label: 'İhtiyaç Tarihi',
+                sortable: true,
+                type: 'date'
+            },
+            {
+                field: 'items',
+                label: 'Ürün Sayısı',
+                sortable: false,
+                formatter: (value, row) => {
+                    const itemsCount = row.items_count || (Array.isArray(value) ? value.length : 0);
+                    return `
+                        <div style="color: #495057; font-weight: 500;">${itemsCount} ürün</div>
+                    `;
+                }
+            },
+            {
+                field: 'status',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value, row) => renderPlanningRequestStatusBadge(value, row.status_label)
+            },
+            {
+                field: 'created_at',
+                label: 'Oluşturulma',
+                sortable: true,
+                type: 'date'
+            }
+        ],
+        actions: [
+            {
+                key: 'view',
+                label: 'Detayları Görüntüle',
+                icon: 'fas fa-eye',
+                class: 'btn-outline-primary',
+                onClick: (row) => viewPlanningRequestDetails(row.id)
+            }
+        ],
+        pagination: true,
+        itemsPerPage: 20,
+        refreshable: true,
+        onRefresh: loadPendingErpEntryRequests,
+        onSort: (field, direction) => {
+            pendingErpEntryCurrentSortField = field;
+            pendingErpEntryCurrentSortDirection = direction;
+            pendingErpEntryCurrentPage = 1;
+            loadPendingErpEntryRequests();
+        },
+        onPageChange: (page) => {
+            pendingErpEntryCurrentPage = page;
+            loadPendingErpEntryRequests();
+        },
+        emptyMessage: 'ERP girişi bekleyen planlama talebi bulunamadı.',
+        emptyIcon: 'fas fa-clock'
+    });
+
     // Initialize filters for both tables
     await initializeFiltersComponents();
 
@@ -454,6 +562,72 @@ async function initializeFiltersComponents() {
         type: 'number',
         colSize: 2
     });
+
+    // Initialize filters for pending ERP entry requests
+    pendingErpEntryFilters = new FiltersComponent('pending-erp-entry-filters-placeholder', {
+        title: 'ERP Girişi Bekleyen Planlama Talepleri Filtreleri',
+        onApply: (values) => {
+            pendingErpEntryCurrentPage = 1;
+            loadPendingErpEntryRequests();
+        },
+        onClear: () => {
+            pendingErpEntryCurrentPage = 1;
+            loadPendingErpEntryRequests();
+            showNotification('Filtreler temizlendi', 'info');
+        }
+    });
+
+    // Priority filter for pending ERP entry requests
+    pendingErpEntryFilters.addDropdownFilter({
+        id: 'pending-erp-priority-filter',
+        label: 'Öncelik',
+        options: [
+            { value: 'normal', label: 'Normal' },
+            { value: 'urgent', label: 'Acil' },
+            { value: 'critical', label: 'Kritik' }
+        ],
+        placeholder: 'Öncelik seçin',
+        colSize: 2
+    });
+
+    // Created by filter for pending ERP entry requests
+    try {
+        const users = await fetchAllUsers();
+        const userOptions = users.map(user => ({
+            value: user.id ? user.id.toString() : user.username,
+            label: user.full_name ? `${user.full_name} (${user.username})` : 
+                   (user.first_name && user.last_name) ? `${user.first_name} ${user.last_name} (${user.username})` :
+                   user.username
+        }));
+
+        pendingErpEntryFilters.addDropdownFilter({
+            id: 'pending-erp-created-by-filter',
+            label: 'Oluşturan',
+            options: userOptions,
+            placeholder: 'Kullanıcı seçin',
+            colSize: 2,
+            searchable: true
+        });
+    } catch (error) {
+        console.error('Error loading users for filter:', error);
+        pendingErpEntryFilters.addDropdownFilter({
+            id: 'pending-erp-created-by-filter',
+            label: 'Oluşturan',
+            options: [],
+            placeholder: 'Kullanıcı yüklenemedi',
+            colSize: 2,
+            searchable: true
+        });
+    }
+
+    // Department request filter for pending ERP entry requests (text input for ID)
+    pendingErpEntryFilters.addTextFilter({
+        id: 'pending-erp-department-request-filter',
+        label: 'Departman Talebi No',
+        placeholder: 'Departman talebi numarası',
+        type: 'number',
+        colSize: 2
+    });
 }
 
 async function initializeRequests() {
@@ -463,6 +637,10 @@ async function initializeRequests() {
         // Load planning requests in the background without blocking
         loadPlanningRequests().catch(error => {
             console.error('Error loading planning requests:', error);
+        });
+        // Load pending ERP entry requests in the background without blocking
+        loadPendingErpEntryRequests().catch(error => {
+            console.error('Error loading pending ERP entry requests:', error);
         });
     } catch (error) {
         console.error('Error loading requests:', error);
@@ -585,6 +763,65 @@ async function loadPlanningRequests() {
     } finally {
         isCompletedLoading = false;
         completedTable.setLoading(false);
+    }
+}
+
+async function loadPendingErpEntryRequests() {
+    if (isPendingErpEntryLoading) return;
+
+    try {
+        isPendingErpEntryLoading = true;
+        pendingErpEntryTable.setLoading(true);
+
+        // Build filters for pending ERP entry requests
+        const filters = {
+            page: pendingErpEntryCurrentPage,
+            page_size: 20,
+            ordering: pendingErpEntryCurrentSortDirection === 'desc' ? `-${pendingErpEntryCurrentSortField}` : pendingErpEntryCurrentSortField,
+            status: 'pending_erp_entry' // Filter by pending_erp_entry status
+        };
+
+        // Get filter values and add to filters
+        if (pendingErpEntryFilters) {
+            const filterValues = pendingErpEntryFilters.getFilterValues();
+            
+            if (filterValues['pending-erp-priority-filter'] && filterValues['pending-erp-priority-filter'] !== '') {
+                filters.priority = filterValues['pending-erp-priority-filter'];
+            }
+            if (filterValues['pending-erp-created-by-filter'] && filterValues['pending-erp-created-by-filter'] !== '') {
+                filters.created_by = filterValues['pending-erp-created-by-filter'];
+            }
+            if (filterValues['pending-erp-department-request-filter'] && filterValues['pending-erp-department-request-filter'] !== '') {
+                filters.department_request = filterValues['pending-erp-department-request-filter'];
+            }
+        }
+
+        // Use the planning requests API endpoint
+        const response = await getPlanningRequests(filters);
+
+        // Handle response - this endpoint returns paginated data
+        if (response && response.results) {
+            pendingErpEntryRequests = response.results;
+            totalPendingErpEntryRequests = response.count || response.results.length;
+        } else if (Array.isArray(response)) {
+            pendingErpEntryRequests = response;
+            totalPendingErpEntryRequests = response.length;
+        } else {
+            pendingErpEntryRequests = [];
+            totalPendingErpEntryRequests = 0;
+        }
+
+        // Update the table component
+        pendingErpEntryTable.updateData(pendingErpEntryRequests, totalPendingErpEntryRequests, pendingErpEntryCurrentPage);
+
+    } catch (error) {
+        console.error('Error loading pending ERP entry requests:', error);
+        pendingErpEntryRequests = [];
+        totalPendingErpEntryRequests = 0;
+        pendingErpEntryTable.updateData([], 0, 1);
+    } finally {
+        isPendingErpEntryLoading = false;
+        pendingErpEntryTable.setLoading(false);
     }
 }
 
