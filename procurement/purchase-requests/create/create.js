@@ -15,6 +15,7 @@ import { FiltersComponent } from '../../../components/filters/filters.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
+import { ITEM_CODE_NAMES } from '../../../apis/constants.js';
 
 // Global state
 let headerComponent;
@@ -1995,10 +1996,13 @@ async function addSelectedPlanningItems() {
             }
             
             // Convert planning request item to purchase request item
+            // For special item codes, move description to name and specifications to specs
+            const isSpecialItemCode = planningItem.item_code && ITEM_CODE_NAMES.hasOwnProperty(planningItem.item_code);
+            
             const newItem = {
                 id: window.itemsManager ? window.itemsManager.generateItemId() : 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                 code: planningItem.item_code || '',
-                name: planningItem.item_name || '',
+                name: isSpecialItemCode ? (planningItem.item_description || '') : (planningItem.item_name || ''),
                 job_no: planningItem.job_no || '',
                 quantity: parseFloat(planningItem.quantity) || 1,
                 unit: planningItem.item_unit || 'adet',
