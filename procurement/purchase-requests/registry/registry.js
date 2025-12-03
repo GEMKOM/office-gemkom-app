@@ -4,6 +4,8 @@ import { HeaderComponent } from '../../../components/header/header.js';
 import { ComparisonTable } from '../../../components/comparison-table/comparison-table.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
+import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
+import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { 
@@ -38,6 +40,7 @@ let currencySymbols = {
 let comparisonTable = null; // Comparison table component instance
 let displayModal = null; // DisplayModal component instance
 let isModalLoading = false; // Prevent multiple modal openings
+let filesModal = null; // Files modal instance
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -60,7 +63,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         showEuroTotal: false, // Show Euro Total column for registry page
         autoSave: null, // No auto-save needed for registry page
         onRecommendationChange: null, // No recommendation changes needed for registry page
-        onSupplierRecommendAll: null // No bulk recommendations needed for registry page
+        onSupplierRecommendAll: null, // No bulk recommendations needed for registry page
+        onShowFiles: (itemIndex, files, item) => showFilesModal(files, item),
+        onShowSpecifications: (itemIndex, specifications, itemDescription, item) => showSpecificationsModal(specifications, itemDescription, item)
     });
     
     // Initialize DisplayModal component
@@ -848,7 +853,9 @@ async function showRequestDetailsModal() {
             columnOrder: ['unitPrice', 'originalTotal', 'deliveryDays'],
             autoSave: null,
             onRecommendationChange: null,
-            onSupplierRecommendAll: null
+            onSupplierRecommendAll: null,
+            onShowFiles: (itemIndex, files, item) => showFilesModal(files, item),
+            onShowSpecifications: (itemIndex, specifications, itemDescription, item) => showSpecificationsModal(specifications, itemDescription, item)
         });
         
         // Render the comparison table with the current request data
@@ -921,9 +928,11 @@ function renderComparisonTable() {
         quantity: item.quantity,
         unit: item.item.unit,
         specifications: item.specifications || '',
+        item_description: item.item_description || item.item?.description || '',
         job_no: item.allocations && item.allocations.length > 0 
             ? item.allocations.map(allocation => allocation.job_no).join(', ')
-            : '-'
+            : '-',
+        files: item.files || [] // Include files from the request item
     }));
 
     const suppliers = currentRequest.offers.map(offer => ({
@@ -970,9 +979,10 @@ function renderComparisonTable() {
     window.comparisonTableInstance = comparisonTable;
     
     // Set default column minimization for registry page AFTER data is loaded
-    // "Birim" (Unit) and "Teslim" (Delivery Days) columns should be minimized by default
+    // "Birim" (Unit), "Teslim" (Delivery Days), and "Dosyalar" (Files) columns should be minimized by default
     comparisonTable.setColumnMinimization('unit', true); // Minimize Unit column
     comparisonTable.setColumnMinimization('deliveryDays', true); // Minimize Delivery Days column
+    comparisonTable.setColumnMinimization('files', true); // Minimize Files column
 }
 
 function renderComparisonTableForModal(comparisonTableInstance) {
@@ -988,9 +998,11 @@ function renderComparisonTableForModal(comparisonTableInstance) {
         quantity: item.quantity,
         unit: item.item.unit,
         specifications: item.specifications || '',
+        item_description: item.item_description || item.item?.description || '',
         job_no: item.allocations && item.allocations.length > 0 
             ? item.allocations.map(allocation => allocation.job_no).join(', ')
-            : '-'
+            : '-',
+        files: item.files || [] // Include files from the request item
     }));
 
     const suppliers = currentRequest.offers.map(offer => ({
@@ -1039,6 +1051,7 @@ function renderComparisonTableForModal(comparisonTableInstance) {
     // Set default column minimization for registry page AFTER data is loaded
     comparisonTableInstance.setColumnMinimization('unit', true);
     comparisonTableInstance.setColumnMinimization('deliveryDays', true);
+    comparisonTableInstance.setColumnMinimization('files', true);
 }
 
 // Update comparison table currency rates when they change
@@ -1046,6 +1059,183 @@ function updateComparisonTableRates() {
     if (comparisonTable && currencyRates) {
         comparisonTable.setCurrencyRates(currencyRates);
     }
+}
+
+function cleanupBackdrops() {
+    // Remove all Bootstrap modal backdrops that might be lingering
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    backdrops.forEach(backdrop => {
+        backdrop.remove();
+    });
+    
+    // Remove any body classes that Bootstrap modals might have added
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
+}
+
+function showFilesModal(files, item) {
+    // Create or get the files modal container
+    let modalContainer = document.getElementById('files-modal-container');
+    if (!modalContainer) {
+        modalContainer = document.createElement('div');
+        modalContainer.id = 'files-modal-container';
+        document.body.appendChild(modalContainer);
+    }
+    
+    // Destroy existing modal if it exists
+    if (filesModal) {
+        filesModal.destroy();
+    }
+    
+    // Create a new DisplayModal for files
+    filesModal = new DisplayModal('files-modal-container', {
+        title: `Dosya Ekleri - ${item.name || item.code || 'Ürün'}`,
+        icon: 'fas fa-paperclip',
+        size: 'lg',
+        showEditButton: false
+    });
+    
+    // Add custom section for file attachments
+    filesModal.addCustomSection({
+        id: 'files-section',
+        title: 'Dosyalar',
+        icon: 'fas fa-paperclip',
+        iconColor: 'text-info',
+        customContent: '<div id="files-attachments-container"></div>'
+    });
+    
+    // Render the modal
+    filesModal.render();
+    
+    // Initialize FileAttachments component after modal is rendered
+    setTimeout(() => {
+        const filesContainer = document.getElementById('files-attachments-container');
+        if (filesContainer) {
+            const fileAttachments = new FileAttachments('files-attachments-container', {
+                title: '',
+                layout: 'grid',
+                showTitle: false,
+                onFileClick: (file) => {
+                    const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                    const fileExtension = fileName.split('.').pop().toLowerCase();
+                    const viewer = new FileViewer();
+                    viewer.setDownloadCallback(async () => {
+                        await viewer.downloadFile(file.file_url, fileName);
+                    });
+                    viewer.openFile(file.file_url, fileName, fileExtension);
+                },
+                onDownloadClick: (fileUrl, fileName) => {
+                    // Force download by creating a blob and downloading it
+                    fetch(fileUrl)
+                        .then(response => response.blob())
+                        .then(blob => {
+                            const url = window.URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = fileName;
+                            link.style.display = 'none';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            window.URL.revokeObjectURL(url);
+                        })
+                        .catch(error => {
+                            console.error('Download failed:', error);
+                            // Fallback to direct link
+                            const link = document.createElement('a');
+                            link.href = fileUrl;
+                            link.download = fileName;
+                            link.target = '_blank';
+                            link.click();
+                        });
+                }
+            });
+            
+            // Set files data
+            fileAttachments.setFiles(files || []);
+        }
+    }, 100);
+    
+    // Show the modal
+    filesModal.show();
+    
+    // Setup cleanup on close
+    filesModal.onCloseCallback(() => {
+        setTimeout(() => {
+            cleanupBackdrops();
+        }, 300);
+    });
+}
+
+function showSpecificationsModal(specifications, itemDescription, item) {
+    // Create or get the specifications modal container
+    let modalContainer = document.getElementById('specifications-modal-container');
+    if (!modalContainer) {
+        modalContainer = document.createElement('div');
+        modalContainer.id = 'specifications-modal-container';
+        document.body.appendChild(modalContainer);
+    }
+    
+    // Destroy existing modal if it exists
+    let specsModal = null;
+    const existingModal = document.querySelector('#specifications-modal-container .modal');
+    if (existingModal) {
+        const existingInstance = bootstrap.Modal.getInstance(existingModal);
+        if (existingInstance) {
+            existingInstance.dispose();
+        }
+    }
+    
+    // Create a new DisplayModal for specifications
+    specsModal = new DisplayModal('specifications-modal-container', {
+        title: `Teknik Özellikler - ${item.name || item.code || 'Ürün'}`,
+        icon: 'fas fa-comment-dots',
+        size: 'lg',
+        showEditButton: false
+    });
+    
+    // Add sections for description and specifications
+    if (itemDescription && itemDescription.trim()) {
+        specsModal.addSection({
+            id: 'description-section',
+            title: 'Ürün Açıklaması',
+            icon: 'fas fa-align-left',
+            iconColor: 'text-primary',
+            fields: [{
+                id: 'item_description',
+                label: 'Açıklama',
+                value: itemDescription,
+                colSize: 12
+            }]
+        });
+    }
+    
+    if (specifications && specifications.trim()) {
+        specsModal.addSection({
+            id: 'specifications-section',
+            title: 'Özellikler',
+            icon: 'fas fa-cogs',
+            iconColor: 'text-info',
+            fields: [{
+                id: 'specifications',
+                label: 'Teknik Özellikler',
+                value: specifications,
+                colSize: 12
+            }]
+        });
+    }
+    
+    // Render and show the modal
+    specsModal.render();
+    specsModal.show();
+    
+    // Setup cleanup on close
+    specsModal.onCloseCallback(() => {
+        setTimeout(() => {
+            cleanupBackdrops();
+        }, 300);
+    });
 }
 
 // Action functions

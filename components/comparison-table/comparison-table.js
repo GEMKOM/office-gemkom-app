@@ -49,6 +49,7 @@ export class ComparisonTable {
             quantity: { minimized: false, width: 'auto' },
             unit: { minimized: false, width: 'auto' },
             specifications: { minimized: true, width: 'auto' },
+            files: { minimized: true, width: 'auto' },
             // Supplier columns
             unitPrice: { minimized: false, width: 'auto' },
             deliveryDays: { minimized: false, width: 'auto' },
@@ -210,19 +211,31 @@ export class ComparisonTable {
             { key: 'job_no', name: 'İş No', icon: 'fa-tag' },
             { key: 'quantity', name: 'Miktar', icon: 'fa-hashtag' },
             { key: 'unit', name: 'Birim', icon: 'fa-ruler' },
-            { key: 'specifications', name: '', icon: 'fa-cogs' }
+            { key: 'specifications', name: '', icon: 'fa-cogs' },
+            { key: 'files', name: '', icon: 'fa-paperclip' }
         ];
 
         return generalColumns.map(col => {
             const isMinimized = this.isColumnMinimized(col.key);
-            const displayName = col.name || 'Teknik Özellikler'; // Fallback for tooltip
+            // Set appropriate display name for tooltip based on column key
+            let displayName = col.name;
+            if (!displayName) {
+                if (col.key === 'specifications') {
+                    displayName = 'Teknik Özellikler';
+                } else if (col.key === 'files') {
+                    displayName = 'Dosyalar';
+                } else {
+                    displayName = col.name || '';
+                }
+            }
+            
             if (isMinimized) {
                 return `
                     <th rowspan="3" class="align-middle minimized-column clickable-header" style="width: 40px; min-width: 40px;" 
                         onclick="window.comparisonTableInstance.toggleColumnMinimization('${col.key}')" 
                         title="Genişlet ${displayName}">
                         <div class="minimized-header">
-                            <span class="rotated-text">${col.name || '⚙'}</span>
+                            <span class="rotated-text"><i class="fas ${col.icon}"></i></span>
                         </div>
                     </th>
                 `;
@@ -239,7 +252,7 @@ export class ComparisonTable {
     }
 
     getGeneralColumnsCount() {
-        const generalColumns = ['item', 'job_no', 'quantity', 'unit', 'specifications'];
+        const generalColumns = ['item', 'job_no', 'quantity', 'unit', 'specifications', 'files'];
         let count = 0;
         
         generalColumns.forEach(colKey => {
@@ -454,35 +467,101 @@ export class ComparisonTable {
             { key: 'job_no', content: item.job_no || '-' },
             { key: 'quantity', content: item.quantity },
             { key: 'unit', content: item.unit },
-            { key: 'specifications', content: this.formatSpecificationsCell(item.specifications) }
+            { key: 'specifications', content: this.formatSpecificationsCell(item.specifications, item.item_description, itemIndex) },
+            { key: 'files', content: this.formatFilesCell(item.files || [], itemIndex) }
         ];
 
         return generalColumns.map(col => {
             const isMinimized = this.isColumnMinimized(col.key);
             if (isMinimized) {
-                return `
-                    <td class="minimized-cell" style="width: 40px; min-width: 40px;">
-                        <div class="minimized-content">
-                            <span class="rotated-text">${col.content}</span>
-                        </div>
-                    </td>
-                `;
+                // For minimized columns, we need to handle clickable content differently
+                // If the content has an onclick handler (like files), we need to preserve it
+                const hasOnclick = col.content.includes('onclick=');
+                if (hasOnclick && col.key === 'files') {
+                    // For files column, render the icon directly without rotation wrapper
+                    return `
+                        <td class="minimized-cell" style="width: 40px; min-width: 40px;">
+                            <div class="minimized-content" style="display: flex; align-items: center; justify-content: center;">
+                                ${col.content}
+                            </div>
+                        </td>
+                    `;
+                } else {
+                    return `
+                        <td class="minimized-cell" style="width: 40px; min-width: 40px;">
+                            <div class="minimized-content">
+                                <span class="rotated-text">${col.content}</span>
+                            </div>
+                        </td>
+                    `;
+                }
             } else {
-                return `<td>${col.content}</td>`;
+                return `<td class="text-center">${col.content}</td>`;
             }
         }).join('');
     }
-
-    formatSpecificationsCell(specifications) {
-        if (!specifications || specifications.trim() === '') {
+    
+    formatFilesCell(files, itemIndex) {
+        if (!files || !Array.isArray(files) || files.length === 0) {
             return '-';
         }
+        
+        const fileCount = files.length;
+        const titleText = fileCount === 1 ? '1 dosya' : `${fileCount} dosya`;
+        return `
+            <div class="files-cell" style="position: relative; justify-content: center; cursor: pointer; display: flex; align-items: center; justify-content: center; width: 100%; height: 100%;" 
+                 onclick="if(window.comparisonTableInstance) { window.comparisonTableInstance.showFilesModal(${itemIndex}); }"
+                 title="${titleText}">
+                <i class="fas fa-paperclip text-primary" style="font-size: 1rem;"></i>
+            </div>
+        `;
+    }
+    
+    showFilesModal(itemIndex) {
+        // This will be called from the onclick handler
+        // The actual modal will be created in the parent component (pending.js)
+        if (this.options.onShowFiles && typeof this.options.onShowFiles === 'function') {
+            const item = this.data.items[itemIndex];
+            if (item && item.files) {
+                this.options.onShowFiles(itemIndex, item.files, item);
+            }
+        }
+    }
+    
+    showSpecificationsModal(itemIndex) {
+        // This will be called from the onclick handler
+        // The actual modal will be created in the parent component (pending.js)
+        if (this.options.onShowSpecifications && typeof this.options.onShowSpecifications === 'function') {
+            const item = this.data.items[itemIndex];
+            if (item) {
+                this.options.onShowSpecifications(itemIndex, item.specifications, item.item_description, item);
+            }
+        }
+    }
 
-        const specsText = specifications.trim();
+    formatSpecificationsCell(specifications, itemDescription, itemIndex) {
+        const hasSpecs = specifications && specifications.trim() !== '';
+        const hasDescription = itemDescription && itemDescription.trim() !== '';
+        
+        if (!hasSpecs && !hasDescription) {
+            return '-';
+        }
+        
+        // Combine both texts for display
+        const combinedText = [];
+        if (hasDescription) {
+            combinedText.push(`Açıklama: ${itemDescription.trim()}`);
+        }
+        if (hasSpecs) {
+            combinedText.push(`Özellikler: ${specifications.trim()}`);
+        }
+        const fullText = combinedText.join('\n\n');
         
         return `
-            <div class="specs-cell" style="position: relative; justify-content: center;">
-                <i class="fas fa-comment-dots text-info" title="${this.escapeHtml(specsText)}"></i>
+            <div class="specs-cell" style="position: relative; justify-content: center; cursor: pointer;" 
+                 onclick="window.comparisonTableInstance.showSpecificationsModal(${itemIndex})"
+                 title="${this.escapeHtml(fullText)}">
+                <i class="fas fa-comment-dots text-info"></i>
             </div>
         `;
     }

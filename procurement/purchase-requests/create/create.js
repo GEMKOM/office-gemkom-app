@@ -2013,10 +2013,9 @@ async function addSelectedPlanningItems() {
             const fileAssetIds = [];
             if (planningItem.files && Array.isArray(planningItem.files)) {
                 planningItem.files.forEach(file => {
-                    // Use id or asset_id field as FileAsset ID
-                    const fileAssetId = file.id || file.asset_id;
-                    if (fileAssetId) {
-                        fileAssetIds.push(fileAssetId);
+                    // Use asset_id field as FileAsset ID
+                    if (file.asset_id) {
+                        fileAssetIds.push(file.asset_id);
                     }
                 });
             }

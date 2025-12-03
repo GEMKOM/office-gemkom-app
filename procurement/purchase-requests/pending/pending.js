@@ -5,6 +5,8 @@ import { ComparisonTable } from '../../../components/comparison-table/comparison
 import { TableComponent } from '../../../components/table/table.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
+import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
+import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 
 
 import { 
@@ -51,6 +53,7 @@ let approvedTable = null; // Approved requests table component instance
 let displayModal = null; // Display modal component instance
 let isModalLoading = false; // Flag to prevent multiple modal openings
 let currentApprovalModal = null; // Current approval confirmation modal instance (created fresh each time)
+let filesModal = null; // Files modal instance
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -82,7 +85,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         columnOrder: ['unitPrice', 'originalTotal', 'deliveryDays'], // Custom column order for pending page (euroTotal removed)
         autoSave: null, // No auto-save needed for pending page
         onRecommendationChange: null, // No recommendation changes needed for pending page
-        onSupplierRecommendAll: null // No bulk recommendations needed for pending page
+        onSupplierRecommendAll: null, // No bulk recommendations needed for pending page
+        onShowFiles: (itemIndex, files, item) => showFilesModal(files, item),
+        onShowSpecifications: (itemIndex, specifications, itemDescription, item) => showSpecificationsModal(specifications, itemDescription, item)
     });
     
     // Initialize pending requests table component
@@ -521,6 +526,11 @@ function enableTableActions() {
                         displayModal.hide();
                     }
                     
+                    // Clean up backdrops after closing modals
+                    setTimeout(() => {
+                        cleanupBackdrops();
+                    }, 300);
+                    
                     // Clear the form
                     if (commentTextarea) {
                         commentTextarea.value = '';
@@ -722,6 +732,9 @@ async function showRequestDetailsModal() {
         const url = new URL(window.location);
         url.searchParams.delete('talep');
         window.history.pushState({}, '', url);
+        
+        // Clean up any lingering Bootstrap backdrops
+        cleanupBackdrops();
     });
     
     // Update modal title to include request number
@@ -872,7 +885,9 @@ async function showRequestDetailsModal() {
             columnOrder: ['unitPrice', 'originalTotal', 'deliveryDays'],
             autoSave: null,
             onRecommendationChange: null,
-            onSupplierRecommendAll: null
+            onSupplierRecommendAll: null,
+            onShowFiles: (itemIndex, files, item) => showFilesModal(files, item),
+            onShowSpecifications: (itemIndex, specifications, itemDescription, item) => showSpecificationsModal(specifications, itemDescription, item)
         });
         
         // Render the comparison table with the current request data
@@ -961,9 +976,11 @@ function renderComparisonTable() {
         quantity: item.quantity,
         unit: item.item.unit,
         specifications: item.specifications || '',
+        item_description: item.item_description || item.item?.description || '',
         job_no: item.allocations && item.allocations.length > 0 
             ? item.allocations.map(allocation => allocation.job_no).join(', ')
-            : '-'
+            : '-',
+        files: item.files || [] // Include files from the request item
     }));
 
     const suppliers = currentRequest.offers.map(offer => ({
@@ -1010,9 +1027,10 @@ function renderComparisonTable() {
     window.comparisonTableInstance = comparisonTable;
     
     // Set default column minimization for pending page AFTER data is loaded
-    // "Birim" (Unit) and "Teslim" (Delivery Days) columns should be minimized by default
+    // "Birim" (Unit), "Teslim" (Delivery Days), and "Dosyalar" (Files) columns should be minimized by default
     comparisonTable.setColumnMinimization('unit', true); // Minimize Unit column
     comparisonTable.setColumnMinimization('deliveryDays', true); // Minimize Delivery Days column
+    comparisonTable.setColumnMinimization('files', true); // Minimize Files column
 }
 
 function renderComparisonTableForModal(modalComparisonTable) {
@@ -1028,9 +1046,11 @@ function renderComparisonTableForModal(modalComparisonTable) {
         quantity: item.quantity,
         unit: item.item.unit,
         specifications: item.specifications || '',
+        item_description: item.item_description || item.item?.description || '',
         job_no: item.allocations && item.allocations.length > 0 
             ? item.allocations.map(allocation => allocation.job_no).join(', ')
-            : '-'
+            : '-',
+        files: item.files || [] // Include files from the request item
     }));
 
     const suppliers = currentRequest.offers.map(offer => ({
@@ -1079,6 +1099,7 @@ function renderComparisonTableForModal(modalComparisonTable) {
     // Set default column minimization for pending page AFTER data is loaded
     modalComparisonTable.setColumnMinimization('unit', true);
     modalComparisonTable.setColumnMinimization('deliveryDays', true);
+    modalComparisonTable.setColumnMinimization('files', true);
 }
 
 // Update comparison table currency rates when they change
@@ -1219,6 +1240,10 @@ async function confirmApproveRequest(requestId, approveConfirmationModal, contai
         // Close the display modal if it's open
         if (displayModal) {
             displayModal.hide();
+            // Clean up backdrops after hiding
+            setTimeout(() => {
+                cleanupBackdrops();
+            }, 300);
         }
         
         await loadRequests();
@@ -1471,6 +1496,183 @@ function showNotification(message, type = 'info') {
             notification.remove();
         }
     }, 5000);
+}
+
+function showFilesModal(files, item) {
+    // Create or get the files modal container
+    let modalContainer = document.getElementById('files-modal-container');
+    if (!modalContainer) {
+        modalContainer = document.createElement('div');
+        modalContainer.id = 'files-modal-container';
+        document.body.appendChild(modalContainer);
+    }
+    
+    // Destroy existing modal if it exists
+    if (filesModal) {
+        filesModal.destroy();
+    }
+    
+    // Create a new DisplayModal for files
+    filesModal = new DisplayModal('files-modal-container', {
+        title: `Dosya Ekleri - ${item.name || item.code || 'Ürün'}`,
+        icon: 'fas fa-paperclip',
+        size: 'lg',
+        showEditButton: false
+    });
+    
+    // Add custom section for file attachments
+    filesModal.addCustomSection({
+        id: 'files-section',
+        title: 'Dosyalar',
+        icon: 'fas fa-paperclip',
+        iconColor: 'text-info',
+        customContent: '<div id="files-attachments-container"></div>'
+    });
+    
+    // Render the modal
+    filesModal.render();
+    
+    // Initialize FileAttachments component after modal is rendered
+    setTimeout(() => {
+        const filesContainer = document.getElementById('files-attachments-container');
+        if (filesContainer) {
+            const fileAttachments = new FileAttachments('files-attachments-container', {
+                title: '',
+                layout: 'grid',
+                showTitle: false,
+                onFileClick: (file) => {
+                    const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                    const fileExtension = fileName.split('.').pop().toLowerCase();
+                    const viewer = new FileViewer();
+                    viewer.setDownloadCallback(async () => {
+                        await viewer.downloadFile(file.file_url, fileName);
+                    });
+                    viewer.openFile(file.file_url, fileName, fileExtension);
+                },
+                onDownloadClick: (fileUrl, fileName) => {
+                    // Force download by creating a blob and downloading it
+                    fetch(fileUrl)
+                        .then(response => response.blob())
+                        .then(blob => {
+                            const url = window.URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = fileName;
+                            link.style.display = 'none';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            window.URL.revokeObjectURL(url);
+                        })
+                        .catch(error => {
+                            console.error('Download failed:', error);
+                            // Fallback to direct link
+                            const link = document.createElement('a');
+                            link.href = fileUrl;
+                            link.download = fileName;
+                            link.target = '_blank';
+                            link.click();
+                        });
+                }
+            });
+            
+            // Set files data
+            fileAttachments.setFiles(files || []);
+        }
+    }, 100);
+    
+    // Show the modal
+    filesModal.show();
+    
+    // Setup cleanup on close
+    filesModal.onCloseCallback(() => {
+        setTimeout(() => {
+            cleanupBackdrops();
+        }, 300);
+    });
+}
+
+function showSpecificationsModal(specifications, itemDescription, item) {
+    // Create or get the specifications modal container
+    let modalContainer = document.getElementById('specifications-modal-container');
+    if (!modalContainer) {
+        modalContainer = document.createElement('div');
+        modalContainer.id = 'specifications-modal-container';
+        document.body.appendChild(modalContainer);
+    }
+    
+    // Destroy existing modal if it exists
+    let specsModal = null;
+    const existingModal = document.querySelector('#specifications-modal-container .modal');
+    if (existingModal) {
+        const existingInstance = bootstrap.Modal.getInstance(existingModal);
+        if (existingInstance) {
+            existingInstance.dispose();
+        }
+    }
+    
+    // Create a new DisplayModal for specifications
+    specsModal = new DisplayModal('specifications-modal-container', {
+        title: `Teknik Özellikler - ${item.name || item.code || 'Ürün'}`,
+        icon: 'fas fa-comment-dots',
+        size: 'lg',
+        showEditButton: false
+    });
+    
+    // Add sections for description and specifications
+    if (itemDescription && itemDescription.trim()) {
+        specsModal.addSection({
+            id: 'description-section',
+            title: 'Ürün Açıklaması',
+            icon: 'fas fa-align-left',
+            iconColor: 'text-primary',
+            fields: [{
+                id: 'item_description',
+                label: 'Açıklama',
+                value: itemDescription,
+                colSize: 12
+            }]
+        });
+    }
+    
+    if (specifications && specifications.trim()) {
+        specsModal.addSection({
+            id: 'specifications-section',
+            title: 'Özellikler',
+            icon: 'fas fa-cogs',
+            iconColor: 'text-info',
+            fields: [{
+                id: 'specifications',
+                label: 'Teknik Özellikler',
+                value: specifications,
+                colSize: 12
+            }]
+        });
+    }
+    
+    // Render and show the modal
+    specsModal.render();
+    specsModal.show();
+    
+    // Setup cleanup on close
+    specsModal.onCloseCallback(() => {
+        setTimeout(() => {
+            cleanupBackdrops();
+        }, 300);
+    });
+}
+
+function cleanupBackdrops() {
+    // Remove all Bootstrap modal backdrops that might be lingering
+    const backdrops = document.querySelectorAll('.modal-backdrop');
+    backdrops.forEach(backdrop => {
+        backdrop.remove();
+    });
+    
+    // Remove any body classes that Bootstrap modals might have added
+    document.body.classList.remove('modal-open');
+    document.body.style.overflow = '';
+    document.body.style.paddingRight = '';
 }
 
 // Make functions globally available for onclick handlers

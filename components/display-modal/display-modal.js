@@ -86,6 +86,8 @@ export class DisplayModal {
         // Modal events
         this.modal.addEventListener('hidden.bs.modal', () => {
             this.handleClose();
+            // Clean up any lingering backdrops
+            this.cleanupBackdrops();
         });
         
         // Handle Bootstrap modal events to prevent aria-hidden conflicts
@@ -633,5 +635,20 @@ export class DisplayModal {
         this.fields.clear();
         this.sections = [];
         this.container.innerHTML = '';
+        // Clean up backdrops when destroying
+        this.cleanupBackdrops();
+    }
+    
+    cleanupBackdrops() {
+        // Remove all Bootstrap modal backdrops that might be lingering
+        const backdrops = document.querySelectorAll('.modal-backdrop');
+        backdrops.forEach(backdrop => {
+            backdrop.remove();
+        });
+        
+        // Remove any body classes that Bootstrap modals might have added
+        document.body.classList.remove('modal-open');
+        document.body.style.overflow = '';
+        document.body.style.paddingRight = '';
     }
 }

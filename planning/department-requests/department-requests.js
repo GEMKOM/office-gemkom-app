@@ -1873,6 +1873,21 @@ function prefillFilesFromDepartmentRequest(departmentRequest) {
         return;
     }
 
+    // Build a map of asset_id to item indices for quick lookup
+    const assetIdToItemIndices = new Map();
+    if (departmentRequest.items && departmentRequest.items.length > 0) {
+        departmentRequest.items.forEach((item, itemIndex) => {
+            if (item.file_asset_ids && Array.isArray(item.file_asset_ids)) {
+                item.file_asset_ids.forEach(assetId => {
+                    if (!assetIdToItemIndices.has(assetId)) {
+                        assetIdToItemIndices.set(assetId, []);
+                    }
+                    assetIdToItemIndices.get(assetId).push(itemIndex);
+                });
+            }
+        });
+    }
+
     // Add existing files to fileAttachments array
     departmentRequest.files.forEach(file => {
         // Create a file-like object with the existing file data
@@ -1885,10 +1900,27 @@ function prefillFilesFromDepartmentRequest(departmentRequest) {
             asset_id: file.asset_id
         };
         
+        // Determine attachment targets based on file_asset_ids mapping
+        const attachTo = [];
+        
+        // Check if this file's asset_id is mapped to any items
+        if (file.asset_id && assetIdToItemIndices.has(file.asset_id)) {
+            // File is mapped to specific items, add those item indices
+            const itemIndices = assetIdToItemIndices.get(file.asset_id);
+            attachTo.push(...itemIndices);
+        }
+        
+        // If file is not mapped to any items, default to 'request'
+        // If file is mapped to items, we can still allow 'request' attachment
+        // but based on the example, files seem to be item-specific, so we'll only add 'request' if no items are mapped
+        if (attachTo.length === 0) {
+            attachTo.push('request');
+        }
+        
         fileAttachments.push({
             file: fileObj,
             description: file.description || '',
-            attachTo: ['request'], // Default to request
+            attachTo: attachTo,
             isExisting: true,
             sourceAttachmentId: file.id
         });
