@@ -35,6 +35,8 @@ let deleteModal = null;
 let currentRequest = null;
 let isEditMode = false;
 let departmentRequestsFilters = null;
+// File-to-item mapping state
+let fileItemMappings = []; // Array of { file: File, attachTo: ['request' | itemIndex, ...] }
 
 // Priority options
 const priorityOptions = [
@@ -421,6 +423,8 @@ async function loadRequests() {
 function showCreateModal() {
     isEditMode = false;
     currentRequest = null;
+    // Clear file mappings
+    fileItemMappings = [];
     
     // Clear and setup the modal
     createEditModal.clearAll();
@@ -534,11 +538,20 @@ function setupCreateEditForm(request = null) {
         fields: []
     });
 
-    // Add files display section if editing (always show, even if no files)
+    // Add files mapping section (for new requests) or files display section (for editing)
     if (isEditMode && request) {
         createEditModal.addSection({
             id: 'files-display-section',
             title: 'Dosya Ekleri',
+            icon: 'fas fa-paperclip',
+            iconColor: 'text-info',
+            fields: []
+        });
+    } else {
+        // Add files mapping section for new requests
+        createEditModal.addSection({
+            id: 'files-mapping-section',
+            title: 'Dosya Eşleştirme',
             icon: 'fas fa-paperclip',
             iconColor: 'text-info',
             fields: []
@@ -554,6 +567,8 @@ function setupCreateEditForm(request = null) {
     createEditModal.onCancelCallback(() => {
         currentRequest = null;
         isEditMode = false;
+        // Clear file mappings
+        fileItemMappings = [];
     });
 
     // Render the modal first
@@ -603,6 +618,9 @@ function setupCreateEditForm(request = null) {
         // Setup files display section if editing
         if (isEditMode && request) {
             setupFilesDisplaySection(request);
+        } else {
+            // Setup files mapping section for new requests
+            setupFilesMappingSection();
         }
     }, 100);
 }
@@ -627,7 +645,7 @@ function setupFilesDisplaySection(request) {
     setTimeout(() => {
         const filesContainer = document.getElementById('existing-files-container');
         if (filesContainer) {
-            const fileAttachments = new FileAttachments('existing-files-container', {
+            const fileAttachmentsComponent = new FileAttachments('existing-files-container', {
                 title: '',
                 layout: 'grid',
                 showTitle: false,
@@ -642,10 +660,285 @@ function setupFilesDisplaySection(request) {
                 }
             });
             // Set files data (empty array if no files)
-            fileAttachments.setFiles(request.files || []);
+            fileAttachmentsComponent.setFiles(request.files || []);
         }
     }, 100);
 }
+
+function setupFilesMappingSection() {
+    const filesSection = createEditModal.container.querySelector('[data-section-id="files-mapping-section"]');
+    if (!filesSection) return;
+    
+    const fieldsContainer = filesSection.querySelector('.row.g-2');
+    if (!fieldsContainer) return;
+    
+    // Clear and add files list container
+    fieldsContainer.innerHTML = `
+        <div class="col-12">
+            <div id="files-mapping-list"></div>
+        </div>
+    `;
+    
+    // Set up file input change listener
+    const fileInput = createEditModal.container.querySelector('input[type="file"]');
+    if (fileInput) {
+        // Store reference to avoid duplicate listeners
+        if (fileInput.dataset.listenerAdded !== 'true') {
+            fileInput.dataset.listenerAdded = 'true';
+            
+            fileInput.addEventListener('change', (e) => {
+                // Get existing files from our mappings (preserve existing mappings)
+                const existingFiles = fileItemMappings.map(m => m.file);
+                
+                // Get newly selected files from the input (what user just selected)
+                const newFiles = Array.from(e.target.files || []);
+                
+                // Merge: combine existing files with new files, avoiding duplicates
+                const allFiles = [...existingFiles];
+                const newMappings = [...fileItemMappings];
+                
+                newFiles.forEach(newFile => {
+                    // Check if file is already in our list (by name, size, and lastModified)
+                    const existingIndex = existingFiles.findIndex(existingFile => 
+                        existingFile.name === newFile.name && 
+                        existingFile.size === newFile.size &&
+                        existingFile.lastModified === newFile.lastModified
+                    );
+                    
+                    if (existingIndex === -1) {
+                        // This is a new file, add it
+                        allFiles.push(newFile);
+                        newMappings.push({
+                            file: newFile,
+                            attachTo: ['request'] // Default to request
+                        });
+                    }
+                });
+                
+                // Update fileItemMappings with merged mappings
+                fileItemMappings = newMappings;
+                
+                // Update the file input with all files using DataTransfer
+                const dt = new DataTransfer();
+                allFiles.forEach(file => {
+                    dt.items.add(file);
+                });
+                e.target.files = dt.files;
+                
+                // Update the mappings list display
+                updateFilesMappingList();
+            });
+        }
+    }
+    
+    // Initial render
+    updateFilesMappingList();
+}
+
+function updateFilesMappingList() {
+    const filesListContainer = document.getElementById('files-mapping-list');
+    if (!filesListContainer) return;
+    
+    const fileInput = createEditModal.container.querySelector('input[type="file"]');
+    if (!fileInput) {
+        filesListContainer.innerHTML = '<p class="text-muted">Dosya seçimi bulunamadı</p>';
+        return;
+    }
+    
+    const uploadedFiles = Array.from(fileInput.files || []);
+    
+    if (uploadedFiles.length === 0) {
+        filesListContainer.innerHTML = '<p class="text-muted">Henüz dosya seçilmedi</p>';
+        fileItemMappings = [];
+        return;
+    }
+    
+    // Synchronize fileItemMappings with uploadedFiles
+    // Use a more robust comparison (by name, size, and lastModified) since file object references might differ
+    const newMappings = [];
+    uploadedFiles.forEach((file, index) => {
+        // Try to find existing mapping for this file by comparing file properties
+        const existingMapping = fileItemMappings.find(m => 
+            m.file.name === file.name && 
+            m.file.size === file.size &&
+            m.file.lastModified === file.lastModified
+        );
+        if (existingMapping) {
+            // Update the file reference to match the current one (in case it changed)
+            existingMapping.file = file;
+            newMappings.push(existingMapping);
+        } else {
+            // Create new mapping
+            newMappings.push({
+                file: file,
+                attachTo: ['request'] // Default to request
+            });
+        }
+    });
+    fileItemMappings = newMappings;
+    
+    // Get item rows for display
+    const itemRows = document.querySelectorAll('.item-row');
+    const itemsCount = itemRows.length;
+    
+    const filesHtml = fileItemMappings.map((mapping, fileIndex) => {
+        const file = mapping.file;
+        const fileName = file.name;
+        const fileSize = (file.size / 1024).toFixed(2) + ' KB';
+        
+        let targetsHtml = `
+            <div class="mb-2">
+                <strong>Eşleştir:</strong>
+                <div class="form-check mt-2">
+                    <input class="form-check-input" type="checkbox" 
+                           id="attach-request-${fileIndex}" 
+                           data-file-index="${fileIndex}" 
+                           data-target="request"
+                           ${mapping.attachTo.includes('request') ? 'checked' : ''}>
+                    <label class="form-check-label" for="attach-request-${fileIndex}">
+                        <i class="fas fa-file-alt me-1"></i>Talep
+                    </label>
+                </div>
+        `;
+        
+        // Add checkboxes for each item
+        for (let i = 0; i < itemsCount; i++) {
+            const itemRow = document.querySelector(`.item-row[data-index="${i}"]`);
+            if (!itemRow) continue;
+            
+            const jobNo = itemRow.querySelector('input[name="job_no"]')?.value?.trim() || '';
+            const itemDescription = itemRow.querySelector('input[name="item_description"]')?.value?.trim() || '';
+            const itemSpecifications = itemRow.querySelector('input[name="item_specifications"]')?.value?.trim() || '';
+            const itemName = itemRow.querySelector('input[name="item_name"]')?.value?.trim() || '';
+            
+            // Build display text with İş No, Ürün Açıklaması, and Özellikler
+            const displayParts = [];
+            if (jobNo) {
+                displayParts.push(`İş No: ${jobNo}`);
+            }
+            if (itemDescription) {
+                displayParts.push(`Açıklama: ${itemDescription}`);
+            }
+            if (itemSpecifications) {
+                displayParts.push(`Özellikler: ${itemSpecifications}`);
+            }
+            
+            // Fallback to item name if nothing else is available
+            const displayText = displayParts.length > 0 
+                ? displayParts.join(' | ') 
+                : (itemName || `Ürün ${i + 1}`);
+            
+            targetsHtml += `
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" 
+                           id="attach-item-${fileIndex}-${i}" 
+                           data-file-index="${fileIndex}" 
+                           data-target="${i}"
+                           ${mapping.attachTo.includes(i) ? 'checked' : ''}>
+                    <label class="form-check-label" for="attach-item-${fileIndex}-${i}" style="font-size: 0.9rem;">
+                        <i class="fas fa-box me-1"></i>${displayText}
+                    </label>
+                </div>
+            `;
+        }
+        
+        targetsHtml += `
+            </div>
+        `;
+        
+        return `
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <h6 class="mb-1">
+                                <i class="fas fa-file me-2"></i>${fileName}
+                            </h6>
+                            <small class="text-muted">${fileSize}</small>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger" onclick="removeFileMapping(${fileIndex})">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    ${targetsHtml}
+                </div>
+            </div>
+        `;
+    }).join('');
+    
+    filesListContainer.innerHTML = filesHtml || '<p class="text-muted">Henüz dosya seçilmedi</p>';
+    
+    // Add event listeners for checkboxes
+    filesListContainer.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+        checkbox.addEventListener('change', (e) => {
+            const fileIndex = parseInt(e.target.dataset.fileIndex);
+            const target = e.target.dataset.target;
+            const checked = e.target.checked;
+            updateFileAttachTo(fileIndex, target, checked);
+        });
+    });
+    
+    // Update file list when items change
+    const itemInputs = document.querySelectorAll('.item-row input, .item-row select');
+    itemInputs.forEach(input => {
+        input.addEventListener('input', () => {
+            // Debounce the update
+            clearTimeout(window.filesMappingUpdateTimeout);
+            window.filesMappingUpdateTimeout = setTimeout(() => {
+                updateFilesMappingList();
+            }, 300);
+        });
+    });
+}
+
+function updateFileAttachTo(fileIndex, target, checked) {
+    if (fileIndex < 0 || fileIndex >= fileItemMappings.length) return;
+    
+    const mapping = fileItemMappings[fileIndex];
+    const targetValue = target === 'request' ? 'request' : parseInt(target);
+    
+    if (checked) {
+        if (!mapping.attachTo.includes(targetValue)) {
+            mapping.attachTo.push(targetValue);
+        }
+    } else {
+        mapping.attachTo = mapping.attachTo.filter(t => t !== targetValue);
+    }
+    
+    // Validate that at least one target is selected
+    if (mapping.attachTo.length === 0) {
+        // Re-check the checkbox if no targets remain
+        const checkbox = document.querySelector(`input[data-file-index="${fileIndex}"][data-target="${target}"]`);
+        if (checkbox) {
+            checkbox.checked = true;
+            mapping.attachTo.push(targetValue);
+        }
+    }
+}
+
+function removeFileMapping(fileIndex) {
+    const fileInput = createEditModal.container.querySelector('input[type="file"]');
+    if (!fileInput) return;
+    
+    // Create a new FileList without the removed file
+    const dt = new DataTransfer();
+    const files = Array.from(fileInput.files);
+    files.forEach((file, index) => {
+        if (index !== fileIndex) {
+            dt.items.add(file);
+        }
+    });
+    fileInput.files = dt.files;
+    
+    // Remove from mappings
+    fileItemMappings.splice(fileIndex, 1);
+    
+    // Update the list
+    updateFilesMappingList();
+}
+
+// Make functions globally available
+window.removeFileMapping = removeFileMapping;
 
 function setupItemsSection(request = null) {
     const itemsSection = createEditModal.container.querySelector('[data-section-id="items-info"]');
@@ -779,6 +1072,15 @@ function setupItemsSection(request = null) {
             const container = document.getElementById('items-container');
             if (!container) return;
             container.innerHTML = '';
+            // Clear item references from file mappings
+            if (!isEditMode) {
+                fileItemMappings.forEach(mapping => {
+                    mapping.attachTo = mapping.attachTo.filter(t => t === 'request');
+                });
+                setTimeout(() => {
+                    updateFilesMappingList();
+                }, 100);
+            }
             showNotification('Tüm ürünler temizlendi', 'info');
         });
     }
@@ -858,6 +1160,13 @@ function addItem() {
     `;
     
     container.insertAdjacentHTML('beforeend', itemHtml);
+    
+    // Update file mapping list if it exists
+    if (!isEditMode) {
+        setTimeout(() => {
+            updateFilesMappingList();
+        }, 100);
+    }
 }
 
 function removeItem(index) {
@@ -866,6 +1175,24 @@ function removeItem(index) {
         itemRow.remove();
         // Update indices after removal
         updateItemIndices();
+        
+        // Update file mappings - remove references to this item index and adjust indices
+        if (!isEditMode) {
+            fileItemMappings.forEach(mapping => {
+                // Remove the deleted item index
+                mapping.attachTo = mapping.attachTo.filter(t => t !== index);
+                // Adjust indices greater than the removed index
+                mapping.attachTo = mapping.attachTo.map(t => {
+                    if (typeof t === 'number' && t > index) {
+                        return t - 1;
+                    }
+                    return t;
+                });
+            });
+            setTimeout(() => {
+                updateFilesMappingList();
+            }, 100);
+        }
     }
 }
 
@@ -924,6 +1251,7 @@ function updateItemIndices() {
 
     const itemRows = container.querySelectorAll('.item-row');
     itemRows.forEach((row, newIndex) => {
+        const oldIndex = parseInt(row.getAttribute('data-index') || newIndex);
         row.setAttribute('data-index', newIndex);
         
         // Update onclick handlers for buttons
@@ -936,7 +1264,26 @@ function updateItemIndices() {
         if (removeBtn) {
             removeBtn.setAttribute('onclick', `removeItem(${newIndex})`);
         }
+        
+        // Update file mappings if indices changed
+        if (!isEditMode && oldIndex !== newIndex) {
+            fileItemMappings.forEach(mapping => {
+                mapping.attachTo = mapping.attachTo.map(t => {
+                    if (typeof t === 'number' && t === oldIndex) {
+                        return newIndex;
+                    }
+                    return t;
+                });
+            });
+        }
     });
+    
+    // Update file mapping list after indices are updated
+    if (!isEditMode) {
+        setTimeout(() => {
+            updateFilesMappingList();
+        }, 100);
+    }
 }
 
 // Make functions globally available
@@ -981,6 +1328,19 @@ async function handleSaveRequest(formData) {
             throw new Error('Items required');
         }
 
+        // Build file-to-item mapping
+        // Format: { "file_index": [item_index1, item_index2, ...] }
+        const fileItemMapping = {};
+        if (!isEditMode && uploadedFiles.length > 0 && fileItemMappings.length > 0) {
+            fileItemMappings.forEach((mapping, fileIndex) => {
+                // Filter out 'request' from attachTo and only include item indices
+                const itemIndices = mapping.attachTo.filter(t => typeof t === 'number');
+                if (itemIndices.length > 0) {
+                    fileItemMapping[fileIndex.toString()] = itemIndices;
+                }
+            });
+        }
+
         // Prepare request data
         const requestData = {
             title: formData.title,
@@ -990,6 +1350,11 @@ async function handleSaveRequest(formData) {
             files: uploadedFiles,
             items: items
         };
+
+        // Add file_item_mapping if there are mappings
+        if (Object.keys(fileItemMapping).length > 0) {
+            requestData.file_item_mapping = fileItemMapping;
+        }
 
         let result;
         if (isEditMode && currentRequest && currentRequest.id) {
@@ -1010,6 +1375,8 @@ async function handleSaveRequest(formData) {
 
         // Close modal and refresh table
         createEditModal.hide();
+        // Clear file mappings
+        fileItemMappings = [];
         await loadRequests();
 
     } catch (error) {

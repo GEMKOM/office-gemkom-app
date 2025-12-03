@@ -772,6 +772,18 @@ export class ItemsManager {
                 quantity: quantity.toFixed(2)
             }));
 
+            // Collect file_asset_ids from all merged items (avoid duplicates)
+            const mergedFileAssetIds = [];
+            selectedItems.forEach(item => {
+                if (item.file_asset_ids && Array.isArray(item.file_asset_ids)) {
+                    item.file_asset_ids.forEach(fileAssetId => {
+                        if (!mergedFileAssetIds.includes(fileAssetId)) {
+                            mergedFileAssetIds.push(fileAssetId);
+                        }
+                    });
+                }
+            });
+
             const mergedItem = {
                 id: selectedItems[0].id,
                 code: selectedItems[0].code,
@@ -780,7 +792,8 @@ export class ItemsManager {
                 quantity: totalQuantity,
                 unit: selectedItems[0].unit,
                 specs: this.mergeSpecs(selectedItems.map(item => item.specs)),
-                allocations: allocations // Add allocations array
+                allocations: allocations, // Add allocations array
+                file_asset_ids: mergedFileAssetIds // Combine file asset IDs from all merged items
             };
 
             mergedItems.push(mergedItem);
@@ -1989,8 +2002,19 @@ export class ItemsManager {
                     specifications: item.specs || '',
                     quantity: 0,
                     allocations: [],
+                    file_asset_ids: [], // Initialize file asset IDs array
                     groupedIndex: groupedIndex++
                 };
+            }
+            
+            // Collect file asset IDs from this item
+            if (item.file_asset_ids && Array.isArray(item.file_asset_ids)) {
+                item.file_asset_ids.forEach(fileAssetId => {
+                    // Avoid duplicates
+                    if (!groupedItems[key].file_asset_ids.includes(fileAssetId)) {
+                        groupedItems[key].file_asset_ids.push(fileAssetId);
+                    }
+                });
             }
             
             // Check if item already has allocations (from merge)
@@ -2023,7 +2047,8 @@ export class ItemsManager {
             unit: item.unit,
             specifications: item.specifications,
             quantity: item.quantity.toFixed(2),
-            allocations: item.allocations
+            allocations: item.allocations,
+            file_asset_ids: item.file_asset_ids || [] // Include file asset IDs
         }));
         
         return {

@@ -2009,6 +2009,18 @@ async function addSelectedPlanningItems() {
             // For special item codes, move description to name and specifications to specs
             const isSpecialItemCode = planningItem.item_code && ITEM_CODE_NAMES.hasOwnProperty(planningItem.item_code);
             
+            // Extract file asset IDs from planning item files
+            const fileAssetIds = [];
+            if (planningItem.files && Array.isArray(planningItem.files)) {
+                planningItem.files.forEach(file => {
+                    // Use id or asset_id field as FileAsset ID
+                    const fileAssetId = file.id || file.asset_id;
+                    if (fileAssetId) {
+                        fileAssetIds.push(fileAssetId);
+                    }
+                });
+            }
+            
             const newItem = {
                 id: window.itemsManager ? window.itemsManager.generateItemId() : 'item_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9),
                 code: planningItem.item_code || '',
@@ -2017,7 +2029,8 @@ async function addSelectedPlanningItems() {
                 quantity: parseFloat(planningItem.quantity_to_purchase) || 1,
                 unit: planningItem.item_unit || 'adet',
                 specs: planningItem.specifications || '',
-                source_planning_request_item_id: planningItem.id // Track source
+                source_planning_request_item_id: planningItem.id, // Track source
+                file_asset_ids: fileAssetIds // Store file asset IDs
             };
             
             requestData.items.push(newItem);

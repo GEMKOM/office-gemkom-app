@@ -48,6 +48,12 @@ export async function createDepartmentRequest(requestData) {
             });
         }
         
+        // Add file-to-item mapping if provided
+        // Format: { "file_index": [item_index1, item_index2, ...] }
+        if (requestData.file_item_mapping && Object.keys(requestData.file_item_mapping).length > 0) {
+            formData.append('file_item_mapping', JSON.stringify(requestData.file_item_mapping));
+        }
+        
         const response = await authedFetch(`${backendBase}/planning/department-requests/`, {
             method: 'POST',
             body: formData
