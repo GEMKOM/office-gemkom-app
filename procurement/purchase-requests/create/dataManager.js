@@ -144,7 +144,9 @@ export class DataManager {
                                         unit: groupedItem.unit,
                                         job_no: allocation.job_no,
                                         quantity: allocation.quantity,
-                                        specs: groupedItem.specs || ''
+                                        specs: groupedItem.specifications || groupedItem.specs || '',
+                                        specifications: groupedItem.specifications || groupedItem.specs || '',
+                                        item_description: groupedItem.item_description || ''
                                     };
                                     ungroupedItems.push(separateItem);
                                 });

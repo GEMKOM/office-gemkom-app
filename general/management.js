@@ -34,6 +34,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-clock',
                 iconColor: 'warning',
                 link: '/general/overtime'
+            },
+            {
+                title: 'Departman Talepleri',
+                description: 'Departman taleplerinin oluşturulması, onay süreçleri ve takibi.',
+                icon: 'fas fa-boxes',
+                iconColor: 'info',
+                link: '/general/department-requests'
             }
         ]
     });

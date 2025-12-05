@@ -89,7 +89,8 @@ export class ItemsManager {
         document.getElementById('item-job-no').value = item.job_no || '';
         document.getElementById('item-quantity').value = item.quantity;
         document.getElementById('item-unit').value = item.unit;
-        document.getElementById('item-specs').value = item.specs || '';
+        document.getElementById('item-description').value = item.item_description || '';
+        document.getElementById('item-specs').value = item.specifications || item.specs || '';
     }
 
     saveItem() {
@@ -102,7 +103,8 @@ export class ItemsManager {
         const jobNo = document.getElementById('item-job-no').value.trim();
         const quantity = parseFloat(document.getElementById('item-quantity').value) || 0;
         const unit = document.getElementById('item-unit').value;
-        const specs = document.getElementById('item-specs').value;
+        const itemDescription = document.getElementById('item-description').value.trim();
+        const specifications = document.getElementById('item-specs').value.trim();
 
         // Validate required fields
         const errors = [];
@@ -141,7 +143,15 @@ export class ItemsManager {
             job_no: jobNo,
             quantity: quantity,
             unit: unit,
-            specs: specs
+            specs: specifications, // Keep for backward compatibility
+            item_description: itemDescription,
+            specifications: specifications,
+            // Preserve other fields if editing
+            ...(editIndex !== undefined && this.requestData.items[editIndex] ? {
+                source_planning_request_item_id: this.requestData.items[editIndex].source_planning_request_item_id,
+                file_asset_ids: this.requestData.items[editIndex].file_asset_ids,
+                allocations: this.requestData.items[editIndex].allocations
+            } : {})
         };
 
         if (editIndex !== undefined) {
@@ -735,21 +745,27 @@ export class ItemsManager {
                 return;
             }
 
-            // Check if items have the same code, name, job_no, AND specifications
+            // Check if items have the same code, name, job_no, specifications, AND item_description
             // This would cause backend problems, so we prevent merging
             const sameJobNo = selectedItems.every(item => 
                 (item.job_no || '').trim().toLowerCase() === (firstItem.job_no || '').trim().toLowerCase()
             );
-            const sameSpecs = selectedItems.every(item => 
-                (item.specs || '').trim() === (firstItem.specs || '').trim()
+            const sameSpecs = selectedItems.every(item => {
+                const itemSpecs = item.specifications || item.specs || '';
+                const firstSpecs = firstItem.specifications || firstItem.specs || '';
+                return itemSpecs.trim() === firstSpecs.trim();
+            });
+            const sameItemDescription = selectedItems.every(item => 
+                (item.item_description || '').trim() === (firstItem.item_description || '').trim()
             );
 
-            if (sameJobNo && sameSpecs) {
-                // Items have same code, name, job_no, AND specifications - this would cause backend problems
-                alert(`Kod "${firstItem.code}" için aynı malzeme adı, iş numarası ve teknik özelliklere sahip malzemeler bulundu:\n\n` +
+            if (sameJobNo && sameSpecs && sameItemDescription) {
+                // Items have same code, name, job_no, specifications, AND item_description - this would cause backend problems
+                alert(`Kod "${firstItem.code}" için aynı malzeme adı, iş numarası, teknik özellikler ve malzeme açıklamasına sahip malzemeler bulundu:\n\n` +
                       `Malzeme: ${firstItem.name}\n` +
                       `İş No: ${firstItem.job_no || 'Belirtilmemiş'}\n` +
-                      `Teknik Özellikler: ${firstItem.specs || 'Belirtilmemiş'}\n\n` +
+                      `Teknik Özellikler: ${firstItem.specifications || firstItem.specs || 'Belirtilmemiş'}\n` +
+                      `Malzeme Açıklaması: ${firstItem.item_description || 'Belirtilmemiş'}\n\n` +
                       `Bu tür malzemeler birleştirilemez çünkü backend sorunlarına neden olur.\n` +
                       `Lütfen bu malzemeleri ayrı satırlar olarak bırakın.`);
                 return;
@@ -784,6 +800,11 @@ export class ItemsManager {
                 }
             });
 
+            // Merge specifications from all items
+            const mergedSpecs = this.mergeSpecs(selectedItems.map(item => item.specifications || item.specs || ''));
+            // Use the first item's item_description (since they should be the same if mergeable)
+            const mergedItemDescription = selectedItems[0].item_description || '';
+            
             const mergedItem = {
                 id: selectedItems[0].id,
                 code: selectedItems[0].code,
@@ -791,7 +812,9 @@ export class ItemsManager {
                 job_no: '', // Will be empty since we're using allocations
                 quantity: totalQuantity,
                 unit: selectedItems[0].unit,
-                specs: this.mergeSpecs(selectedItems.map(item => item.specs)),
+                specs: mergedSpecs, // Keep for backward compatibility
+                specifications: mergedSpecs,
+                item_description: mergedItemDescription,
                 allocations: allocations, // Add allocations array
                 file_asset_ids: mergedFileAssetIds // Combine file asset IDs from all merged items
             };
@@ -890,7 +913,8 @@ export class ItemsManager {
         this.requestData.items.forEach((item, index) => {
             const row = document.createElement('tr');
             row.setAttribute('data-item-index', index);
-            const specsCell = this.formatSpecsCell(item.specs);
+            const itemDescriptionCell = this.formatDescriptionCell(item.item_description);
+            const specsCell = this.formatSpecsCell(item.specifications || item.specs);
             
             // Handle job_no display - show allocations if they exist
             let jobNoDisplay = item.job_no || '-';
@@ -907,7 +931,8 @@ export class ItemsManager {
                 <td class="editable-cell" data-item-index="${index}" data-field="job_no">${jobNoDisplay}</td>
                 <td class="editable-cell" data-item-index="${index}" data-field="quantity">${item.quantity}</td>
                 <td class="editable-cell" data-item-index="${index}" data-field="unit">${item.unit}</td>
-                <td class="editable-cell" data-item-index="${index}" data-field="specs">${specsCell}</td>
+                <td class="editable-cell" data-item-index="${index}" data-field="item_description">${itemDescriptionCell}</td>
+                <td class="editable-cell" data-item-index="${index}" data-field="specifications">${specsCell}</td>
                 <td class="action-buttons">
                     <button class="btn btn-outline-danger btn-sm" onclick="window.itemsManager.deleteItem(${index})">
                         <i class="fas fa-trash"></i>
@@ -922,6 +947,28 @@ export class ItemsManager {
     }
 
 
+
+    formatDescriptionCell(description) {
+        if (!description || description.trim() === '') {
+            return '-';
+        }
+
+        const maxLength = 50;
+        const descText = description.trim();
+        
+        if (descText.length <= maxLength) {
+            return descText;
+        }
+        
+        return `
+            <span class="specs-preview">${descText.substring(0, maxLength)}...</span>
+            <button class="btn btn-link btn-sm p-0 ms-1 view-full-specs-btn" 
+                    data-specs="${descText.replace(/"/g, '&quot;')}" 
+                    title="Tamamını görüntüle">
+                <i class="fas fa-eye"></i>
+            </button>
+        `;
+    }
 
     formatSpecsCell(specs) {
         if (!specs || specs.trim() === '') {
@@ -993,11 +1040,17 @@ export class ItemsManager {
                 const itemIndex = parseInt(this.dataset.itemIndex);
                 const field = this.dataset.field;
                 
-                // For specs field, get the actual value from the item data
+                // For specs, item_description, and specifications fields, get the actual value from the item data
                 let currentValue;
-                if (field === 'specs') {
+                if (field === 'specs' || field === 'item_description' || field === 'specifications') {
                     const item = window.itemsManager.requestData.items[itemIndex];
-                    currentValue = item && item.specs ? item.specs : '';
+                    if (field === 'specs') {
+                        currentValue = item && item.specs ? item.specs : '';
+                    } else if (field === 'item_description') {
+                        currentValue = item && item.item_description ? item.item_description : '';
+                    } else if (field === 'specifications') {
+                        currentValue = item && item.specifications ? item.specifications : (item && item.specs ? item.specs : '');
+                    }
                 } else {
                     currentValue = this.textContent.trim();
                 }
@@ -1062,7 +1115,9 @@ export class ItemsManager {
                 break;
 
             case 'specs':
-                // Create textarea for specs to handle longer text
+            case 'item_description':
+            case 'specifications':
+                // Create textarea for specs, item_description, and specifications to handle longer text
                 input = document.createElement('textarea');
                 input.className = 'form-control form-control-sm';
                 input.rows = '3';
@@ -1071,9 +1126,15 @@ export class ItemsManager {
                 input.style.maxHeight = '120px';
                 input.style.width = '100%';
                 input.style.boxSizing = 'border-box';
-                // Get the actual specs value from the item data
+                // Get the actual value from the item data
                 const item = this.requestData.items[itemIndex];
-                input.value = item && item.specs ? item.specs : '';
+                if (field === 'specs') {
+                    input.value = item && item.specs ? item.specs : '';
+                } else if (field === 'item_description') {
+                    input.value = item && item.item_description ? item.item_description : '';
+                } else if (field === 'specifications') {
+                    input.value = item && item.specifications ? item.specifications : (item && item.specs ? item.specs : '');
+                }
                 // Add editing class for specs cell
                 cell.classList.add('editing-specs');
                 break;
@@ -1167,7 +1228,7 @@ export class ItemsManager {
         try {
             // Remove editing classes
             cell.classList.remove('editing');
-            if (field === 'specs') {
+            if (field === 'specs' || field === 'item_description' || field === 'specifications') {
                 cell.classList.remove('editing-specs');
             }
             
@@ -1201,6 +1262,12 @@ export class ItemsManager {
             // Update the item
             if (field === 'quantity') {
                 item[field] = parseFloat(newValue) || 0;
+            } else if (field === 'specifications') {
+                // Update both specifications and specs for backward compatibility
+                item.specifications = newValue;
+                item.specs = newValue;
+            } else if (field === 'item_description') {
+                item.item_description = newValue;
             } else {
                 item[field] = newValue;
             }
@@ -1255,7 +1322,9 @@ export class ItemsManager {
                 return value && value.trim().length > 0;
 
             case 'specs':
-                // Specs can be empty, so just return true
+            case 'item_description':
+            case 'specifications':
+                // These fields can be empty, so just return true
                 return true;
             default:
                 return true;
@@ -1265,9 +1334,12 @@ export class ItemsManager {
     updateCellContent(cell, field, value) {
         if (field === 'quantity') {
             cell.textContent = parseFloat(value) || 0;
-        } else if (field === 'specs') {
+        } else if (field === 'specs' || field === 'specifications') {
             // Use the formatSpecsCell method to maintain the same display format
             cell.innerHTML = this.formatSpecsCell(value);
+        } else if (field === 'item_description') {
+            // Use the formatDescriptionCell method to maintain the same display format
+            cell.innerHTML = this.formatDescriptionCell(value);
         } else if (field === 'job_no') {
             cell.textContent = value || '-';
         } else {
@@ -1627,7 +1699,9 @@ export class ItemsManager {
                     job_no: this.getCellValue(row, mapping.job_no),
                     quantity: this.parseQuantity(this.getCellValue(row, mapping.quantity)),
                     unit: this.getCellValue(row, mapping.unit),
-                    specs: specs
+                    specs: specs, // Keep for backward compatibility
+                    specifications: specs, // Technical specifications
+                    item_description: '' // Empty for bulk import, can be filled manually
                 };
 
                 // Validate required fields - skip invalid rows instead of stopping
@@ -1935,9 +2009,12 @@ export class ItemsManager {
         const problematicItems = [];
         const itemGroups = {};
         
-        // Group items by code, name, job_no, and specifications
+        // Group items by code, name, job_no, specifications, and item_description
+        // Items with different item_description are considered different even if other fields match
         this.requestData.items.forEach((item, index) => {
-            const key = `${item.code}|${item.name}|${item.job_no || ''}|${item.specs || ''}`;
+            const specsValue = item.specifications || item.specs || '';
+            const itemDescriptionValue = item.item_description || '';
+            const key = `${item.code}|${item.name}|${item.job_no || ''}|${specsValue}|${itemDescriptionValue}`;
             
             if (!itemGroups[key]) {
                 itemGroups[key] = [];
@@ -1948,12 +2025,13 @@ export class ItemsManager {
         // Find groups with multiple items (problematic)
         Object.entries(itemGroups).forEach(([key, items]) => {
             if (items.length > 1) {
-                // This group has multiple items with same code, name, job_no, and specs
+                // This group has multiple items with same code, name, job_no, specifications, and item_description
                 problematicItems.push({
                     code: items[0].code,
                     name: items[0].name,
                     job_no: items[0].job_no || 'Belirtilmemiş',
-                    specs: items[0].specs || 'Belirtilmemiş',
+                    specs: items[0].specifications || items[0].specs || 'Belirtilmemiş',
+                    item_description: items[0].item_description || 'Belirtilmemiş',
                     count: items.length,
                     items: items.map(item => ({
                         index: item.originalIndex + 1, // 1-based index for display
@@ -1968,8 +2046,9 @@ export class ItemsManager {
     }
     
     /**
-     * Transform items to the new submission format where items are grouped by code, name, unit, and specifications
+     * Transform items to the new submission format where items are grouped by code, name, unit, specifications, and item_description
      * with allocations containing job_no and quantity
+     * Items with different specifications or item_description are kept separate
      */
     getFormattedItemsForSubmission() {
         // First, check for problematic items that would cause backend issues
@@ -1980,7 +2059,7 @@ export class ItemsManager {
                 mapping: [],
                 error: {
                     type: 'problematic_items',
-                    message: 'Aşağıdaki malzemeler aynı kod, ad, iş numarası ve teknik özelliklere sahip olduğu için gönderilemez:',
+                    message: 'Aşağıdaki malzemeler aynı kod, ad, iş numarası, teknik özellikler ve malzeme açıklamasına sahip olduğu için gönderilemez:',
                     items: problematicItems
                 }
             };
@@ -1990,16 +2069,21 @@ export class ItemsManager {
         const originalToGroupedMapping = [];
         let groupedIndex = 0;
         
-        // Group items by code, name, unit, and specifications to prevent merging items with different specs
+        // Group items by code, name, unit, specifications, and item_description
+        // Items with different specifications or item_description should be kept separate
         this.requestData.items.forEach((item, originalIndex) => {
-            const key = `${item.code}|${item.name}|${item.unit}|${item.specs || ''}`;
+            // Use specifications field if available, otherwise fall back to specs
+            const specsValue = item.specifications || item.specs || '';
+            const itemDescriptionValue = item.item_description || '';
+            const key = `${item.code}|${item.name}|${item.unit}|${specsValue}|${itemDescriptionValue}`;
             
             if (!groupedItems[key]) {
                 groupedItems[key] = {
                     code: item.code,
                     name: item.name,
                     unit: item.unit,
-                    specifications: item.specs || '',
+                    specifications: specsValue,
+                    item_description: itemDescriptionValue,
                     quantity: 0,
                     allocations: [],
                     file_asset_ids: [], // Initialize file asset IDs array
@@ -2046,6 +2130,7 @@ export class ItemsManager {
             name: item.name,
             unit: item.unit,
             specifications: item.specifications,
+            item_description: item.item_description,
             quantity: item.quantity.toFixed(2),
             allocations: item.allocations,
             file_asset_ids: item.file_asset_ids || [] // Include file asset IDs

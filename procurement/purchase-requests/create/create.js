@@ -281,10 +281,11 @@ async function saveDraftAsJSON() {
                 errorMessage += `   Ad: ${problematicItem.name}\n`;
                 errorMessage += `   İş No: ${problematicItem.job_no}\n`;
                 errorMessage += `   Teknik Özellikler: ${problematicItem.specs}\n`;
+                errorMessage += `   Malzeme Açıklaması: ${problematicItem.item_description}\n`;
                 errorMessage += `   Tekrarlanan satırlar: ${problematicItem.items.map(item => `Satır ${item.index} (${item.quantity} ${item.unit})`).join(', ')}\n\n`;
             });
             
-            errorMessage += 'Bu malzemeler aynı kod, ad, iş numarası ve teknik özelliklere sahip olduğu için backend sorunlarına neden olur.\n';
+            errorMessage += 'Bu malzemeler aynı kod, ad, iş numarası, teknik özellikler ve malzeme açıklamasına sahip olduğu için backend sorunlarına neden olur.\n';
             errorMessage += 'Lütfen bu malzemeleri düzenleyin veya silin.';
             
             showNotification(errorMessage, 'error');
@@ -498,7 +499,8 @@ async function loadDraftData(draft) {
             suppliers: [],
             offers: {},
             recommendations: {},
-            itemRecommendations: {}
+            itemRecommendations: {},
+            planning_request_item_ids: [] // Track selected planning request item IDs
         };
         
         // Update managers with the cleared data
@@ -560,6 +562,8 @@ async function loadDraftData(draft) {
                                 job_no: allocation.job_no,
                                 quantity: allocation.quantity,
                                 specs: groupedItem.specifications || '',
+                                specifications: groupedItem.specifications || '',
+                                item_description: groupedItem.item_description || '',
                                 originalGroupIndex: groupIndex,
                                 allocationIndex: allocationIndex
                             };
@@ -978,10 +982,11 @@ async function submitRequest() {
                 errorMessage += `   Ad: ${problematicItem.name}\n`;
                 errorMessage += `   İş No: ${problematicItem.job_no}\n`;
                 errorMessage += `   Teknik Özellikler: ${problematicItem.specs}\n`;
+                errorMessage += `   Malzeme Açıklaması: ${problematicItem.item_description}\n`;
                 errorMessage += `   Tekrarlanan satırlar: ${problematicItem.items.map(item => `Satır ${item.index} (${item.quantity} ${item.unit})`).join(', ')}\n\n`;
             });
             
-            errorMessage += 'Bu malzemeler aynı kod, ad, iş numarası ve teknik özelliklere sahip olduğu için backend sorunlarına neden olur.\n';
+            errorMessage += 'Bu malzemeler aynı kod, ad, iş numarası, teknik özellikler ve malzeme açıklamasına sahip olduğu için backend sorunlarına neden olur.\n';
             errorMessage += 'Lütfen bu malzemeleri düzenleyin veya silin.';
             
             showNotification(errorMessage, 'error');
@@ -2027,7 +2032,9 @@ async function addSelectedPlanningItems() {
                 job_no: planningItem.job_no || '',
                 quantity: parseFloat(planningItem.quantity_to_purchase) || 1,
                 unit: planningItem.item_unit || 'adet',
-                specs: planningItem.specifications || '',
+                specs: planningItem.specifications || '', // Keep for backward compatibility
+                item_description: planningItem.item_description || '', // Original item description from PlanningRequestItem
+                specifications: planningItem.specifications || '', // Technical specifications
                 source_planning_request_item_id: planningItem.id, // Track source
                 file_asset_ids: fileAssetIds // Store file asset IDs
             };
@@ -2035,6 +2042,10 @@ async function addSelectedPlanningItems() {
             requestData.items.push(newItem);
             
             // Add to planning_request_item_ids for submission
+            // Ensure planning_request_item_ids array exists
+            if (!requestData.planning_request_item_ids) {
+                requestData.planning_request_item_ids = [];
+            }
             if (!requestData.planning_request_item_ids.includes(planningItem.id)) {
                 requestData.planning_request_item_ids.push(planningItem.id);
             }
