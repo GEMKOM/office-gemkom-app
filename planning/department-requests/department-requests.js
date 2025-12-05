@@ -13,7 +13,7 @@ import {
     getCompletedDepartmentRequests,
     markDepartmentRequestTransferred
 } from '../../../apis/planning/departmentRequests.js';
-import { createPlanningRequest, getPlanningRequests, getPlanningRequest } from '../../../apis/planning/planningRequests.js';
+import { createPlanningRequest, getPlanningRequests, getPlanningRequest, markReadyForProcurement } from '../../../apis/planning/planningRequests.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 import { UNIT_CHOICES, ITEM_CODE_NAMES } from '../../../apis/constants.js';
 import {
@@ -1146,6 +1146,21 @@ async function showPlanningRequestDetailsModal(request) {
             iconColor: 'text-primary'
         });
 
+        // Helper function to format numbers for display
+        const formatNumber = (value) => {
+            if (value === null || value === undefined || value === '') {
+                return '0,00';
+            }
+            const numValue = typeof value === 'number' ? value : parseFloat(value);
+            if (isNaN(numValue)) {
+                return '0,00';
+            }
+            return numValue.toLocaleString('tr-TR', { 
+                minimumFractionDigits: 2, 
+                maximumFractionDigits: 2 
+            });
+        };
+
         // Create items table
         const itemsData = request.items.map((item, index) => ({
             id: index + 1,
@@ -1154,6 +1169,8 @@ async function showPlanningRequestDetailsModal(request) {
             description: item.item_description || '-',
             job_no: item.job_no || '-',
             quantity: item.quantity || 0,
+            quantity_from_inventory: formatNumber(item.quantity_from_inventory || 0),
+            quantity_to_purchase: formatNumber(item.quantity_to_purchase || 0),
             unit: item.item_unit || 'adet',
             priority: item.priority || 'normal',
             specifications: item.specifications || '-',
@@ -1172,7 +1189,8 @@ async function showPlanningRequestDetailsModal(request) {
                                 <th>Ürün Adı</th>
                                 <th>Ürün Açıklaması</th>
                                 <th>İş No</th>
-                                <th>Miktar</th>
+                                <th>Envanterden</th>
+                                <th>Satın Alınacak</th>
                                 <th>Birim</th>
                                 <th>Öncelik</th>
                                 <th>Özellikler</th>
@@ -1187,7 +1205,8 @@ async function showPlanningRequestDetailsModal(request) {
                                     <td>${item.name}</td>
                                     <td>${item.description}</td>
                                     <td>${item.job_no}</td>
-                                    <td>${item.quantity}</td>
+                                    <td>${item.quantity_from_inventory}</td>
+                                    <td><strong>${item.quantity_to_purchase}</strong></td>
                                     <td>${item.unit}</td>
                                     <td>${renderPriorityBadge(item.priority)}</td>
                                     <td>${item.specifications}</td>
@@ -1263,24 +1282,56 @@ async function showPlanningRequestDetailsModal(request) {
 
     // Add custom footer with export button if items exist
     const modalFooter = planningRequestDetailsModal.container.querySelector('.modal-footer');
-    if (modalFooter && request.items && request.items.length > 0) {
-        modalFooter.innerHTML = `
+    if (modalFooter) {
+        // Check if status is pending_erp_entry to show "Mark as Ready" button
+        const showMarkReadyButton = request.status === 'pending_erp_entry';
+        const showExportButton = request.items && request.items.length > 0;
+        
+        let footerButtons = `
             <div class="d-flex justify-content-end gap-2">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
                     <i class="fas fa-times me-1"></i>Kapat
                 </button>
+        `;
+        
+        if (showMarkReadyButton) {
+            footerButtons += `
+                <button type="button" class="btn btn-primary" id="mark-ready-btn" style="min-width: 160px;">
+                    <i class="fas fa-check-circle me-1"></i>Satın Alma İçin Hazır İşaretle
+                </button>
+            `;
+        }
+        
+        if (showExportButton) {
+            footerButtons += `
                 <button type="button" class="btn btn-success" id="export-planning-items-btn" style="min-width: 140px;">
                     <i class="fas fa-file-csv me-1"></i>CSV Dışa Aktar
                 </button>
-            </div>
-        `;
+            `;
+        }
+        
+        footerButtons += `</div>`;
+        
+        modalFooter.innerHTML = footerButtons;
         
         // Add event listener for export button
-        const exportBtn = modalFooter.querySelector('#export-planning-items-btn');
-        if (exportBtn) {
-            exportBtn.addEventListener('click', () => {
-                exportItemsToCSV(request);
-            });
+        if (showExportButton) {
+            const exportBtn = modalFooter.querySelector('#export-planning-items-btn');
+            if (exportBtn) {
+                exportBtn.addEventListener('click', () => {
+                    exportItemsToCSV(request);
+                });
+            }
+        }
+        
+        // Add event listener for mark ready button
+        if (showMarkReadyButton) {
+            const markReadyBtn = modalFooter.querySelector('#mark-ready-btn');
+            if (markReadyBtn) {
+                markReadyBtn.addEventListener('click', () => {
+                    showErpCodeModal(request);
+                });
+            }
         }
     }
 
@@ -1337,6 +1388,78 @@ async function showPlanningRequestDetailsModal(request) {
 
     // Show the modal
     planningRequestDetailsModal.show();
+}
+
+// Show ERP code input modal
+function showErpCodeModal(request) {
+    if (!erpCodeModal) {
+        erpCodeModal = new EditModal('erp-code-modal-container', {
+            title: 'ERP Kodu Gir',
+            icon: 'fas fa-code',
+            saveButtonText: 'Kaydet',
+            size: 'md'
+        });
+    }
+
+    // Clear previous data
+    erpCodeModal.clearAll();
+
+    // Add section with ERP code field
+    erpCodeModal.addSection({
+        title: 'ERP Kodu',
+        icon: 'fas fa-barcode',
+        iconColor: 'text-primary'
+    });
+
+    erpCodeModal.addField({
+        id: 'erp_code',
+        name: 'erp_code',
+        label: 'ERP Kodu',
+        type: 'text',
+        value: request.erp_code || '',
+        icon: 'fas fa-code',
+        required: true,
+        placeholder: 'ERP sistem kodunu girin',
+        helpText: 'Planlama talebini satın alma için hazır olarak işaretlemek için ERP kodu gereklidir.',
+        layout: 'vertical',
+        colSize: 12
+    });
+
+    // Set save callback
+    erpCodeModal.onSaveCallback(async (formData) => {
+        const erpCode = formData.erp_code?.trim();
+        
+        if (!erpCode) {
+            showNotification('ERP kodu gereklidir', 'error');
+            throw new Error('ERP kodu gereklidir'); // Throw error to prevent modal from closing
+        }
+
+        // Call API
+        const result = await markReadyForProcurement(request.id, erpCode);
+        
+        // Show success notification
+        showNotification('Planlama talebi satın alma için hazır olarak işaretlendi', 'success');
+        
+        // Close ERP code modal
+        erpCodeModal.hide();
+        
+        // Close planning request details modal
+        if (planningRequestDetailsModal) {
+            planningRequestDetailsModal.hide();
+        }
+        
+        // Reload requests
+        if (loadPendingErpEntryRequests) {
+            await loadPendingErpEntryRequests();
+        }
+        if (loadCompletedRequests) {
+            await loadCompletedRequests();
+        }
+    });
+
+    // Render and show modal
+    erpCodeModal.render();
+    erpCodeModal.show();
 }
 
 function formatDepartmentName(department) {
@@ -1415,6 +1538,8 @@ let createPlanningRequestModal = null;
 let planningRequestDetailsModal = null;
 // Export confirmation modal instance
 let exportConfirmationModal = null;
+// ERP code input modal instance
+let erpCodeModal = null;
 
 // Show create planning request modal
 // departmentRequest: Optional department request object to pre-fill the form
@@ -2150,17 +2275,14 @@ function exportItemsToCSV(createdRequest) {
     const csvLines = [];
     createdRequest.items.forEach(item => {
         const itemCode = item.item_code || '';
-        const quantity = formatNumberForExport(item.quantity);
-        const itemDescription = item.item_description || '';
-        const itemSpecifications = item.specifications || '';
-        // Combine item_description and item_specifications with | separator
-        const description = [itemDescription, itemSpecifications].filter(Boolean).join('|');
+        // Use quantity_to_purchase instead of quantity for export
+        const quantity = formatNumberForExport(item.quantity_to_purchase || item.quantity || 0);
         
         // Determine prefix: G for special item codes, S for others
         const prefix = ITEM_CODE_NAMES.hasOwnProperty(itemCode) ? 'G' : 'S';
         
-        // Format: S/G;item_code;quantity;date;description;request_number
-        const csvLine = `${prefix};${itemCode};${quantity};${formattedDate};${description};${requestNumber}`;
+        // Format: S/G;item_code;quantity;date;request_number (description column removed)
+        const csvLine = `${prefix};${itemCode};${quantity};${formattedDate};${requestNumber}`;
         csvLines.push(csvLine);
     });
 
@@ -2651,38 +2773,76 @@ function detectExcelColumnMapping(headers, dataRows = []) {
         unit: -1            // Birim → Birim
     };
 
-    // Column keywords based on user's requirements (all lowercase, normalized)
+    // Column keywords based on user's requirements (all lowercase, normalized, no spaces)
+    // These will be normalized (Turkish chars converted, spaces removed) for comparison
+    // Order matters: more specific fields (like specifications) should come before general ones (like item_description)
     const columnKeywords = {
-        item_code: ['kodu', 'kod', 'code', 'urun kodu', 'stok kodu', 'malzeme kodu', 'product code', 'item code'],
-        item_name: ['ismi', 'isim', 'name', 'urun adi', 'urun adı', 'malzeme adi', 'malzeme adı', 'product name', 'item name'],
-        job_no: ['srm.mrk.', 'srm mrk', 'srm.mrk', 'srm mrk.', 'is no', 'job no', 'job number', 'is kodu', 'work no'],
-        item_description: ['aciklama 1', 'aciklama1', 'description 1', 'urun aciklamasi', 'urun açıklaması', 'aciklama', 'description'],
-        specifications: ['aciklama 2', 'aciklama2', 'description 2', 'ozellikler', 'specifications', 'specs', 'ozellik'],
-        quantity: ['miktar', 'quantity', 'qty', 'adet', 'sayi', 'number', 'amount'],
-        unit: ['birim', 'unit', 'olcu', 'measure', 'uom', 'measurement']
+        item_code: [
+            'kodu', 'kod', 'code', 'urunkodu', 'stokkodu', 'malzemekodu', 
+            'productcode', 'itemcode', 'stokno', 'malzemekod', 'urunno'
+        ],
+        item_name: [
+            'ismi', 'isim', 'name', 'urnadi', 'urnad', 'malzemeadi', 'malzemead', 
+            'productname', 'itemname', 'urnismi', 'urnisim', 'malzemeismi', 
+            'malzemeisim', 'ad', 'adi', 'adı'
+        ],
+        job_no: [
+            'srmmrk', 'srnmrk', 'isno', 'jobno', 'jobnumber', 
+            'workno', 'isnumara', 'jobnumara', 'srnmrkno', 
+            'srnmrknumarasi', 'srnmrknumarasi', 'srnmrknumara',
+            'srmmrkno', 'srmmrknumara'
+        ],
+        // specifications comes before item_description to match "açıklama2" before "açıklama"
+        specifications: [
+            'aciklama2', 'description2', 'ozellikler', 'specifications', 
+            'specs', 'ozellik', 'specification', 'spec'
+        ],
+        item_description: [
+            'aciklama1', 'description1', 
+            'urnaciklamasi', 'urnaciklama', 'malzemeaciklamasi', 
+            'malzemeaciklama', 'productdescription', 'itemdescription',
+            'aciklama'  // Put 'aciklama' last so 'aciklama2' matches first
+        ],
+        quantity: [
+            'miktar', 'quantity', 'qty', 'adet', 'sayi', 'number', 
+            'amount', 'miktari', 'miktarı', 'adeti', 'adetı'
+        ],
+        unit: [
+            'birim', 'unit', 'olcu', 'measure', 'uom', 'measurement', 
+            'olcubirimi', 'olcubirimi', 'birimi'
+        ]
     };
 
     headers.forEach((header, index) => {
         if (!header) return;
         
-        // Normalize the header for comparison (case-insensitive, Turkish character handling)
+        // Normalize the header for comparison (case-insensitive, Turkish character handling, no spaces)
         const headerNormalized = normalizeTurkish(header.toString().trim());
         
         // Try exact matches and partial matches
+        // Process fields in order, but sort keywords by length (longest first) to prioritize specific matches
         for (const [field, keywords] of Object.entries(columnKeywords)) {
             if (mapping[field] === -1) {
-                for (const keyword of keywords) {
+                // Sort keywords by length (longest first) to match more specific ones first
+                // This ensures "açıklama2" matches before "açıklama"
+                const sortedKeywords = [...keywords].sort((a, b) => b.length - a.length);
+                
+                for (const keyword of sortedKeywords) {
                     const keywordNormalized = normalizeTurkish(keyword);
                     
-                    // Exact match (case-insensitive, Turkish normalized)
+                    // Exact match (case-insensitive, Turkish normalized, no spaces, no dots)
                     if (headerNormalized === keywordNormalized) {
                         mapping[field] = index;
                         break;
                     }
-                    // Partial match (contains keyword)
-                    if (headerNormalized.includes(keywordNormalized) || keywordNormalized.includes(headerNormalized)) {
-                        mapping[field] = index;
-                        break;
+                    // Partial match - check if header contains keyword (more strict)
+                    // Only match if header contains the full keyword, not the other way around
+                    if (headerNormalized.includes(keywordNormalized)) {
+                        // Additional check: ensure the match is meaningful (at least 3 characters)
+                        if (keywordNormalized.length >= 3) {
+                            mapping[field] = index;
+                            break;
+                        }
                     }
                 }
             }
@@ -2859,14 +3019,20 @@ function parseExcelQuantity(value) {
 
 function normalizeTurkish(str) {
     if (!str) return '';
-    // First convert to lowercase (this handles most cases)
-    let normalized = str.toString().toLowerCase();
+    let normalized = str.toString();
     
-    // Then handle Turkish-specific character normalization
-    // This ensures İ (capital I with dot) becomes 'i', and ı (lowercase i without dot) becomes 'i'
+    // Handle Turkish İ (capital I with dot) BEFORE toLowerCase
+    // İ doesn't convert properly with toLowerCase() in some contexts
     normalized = normalized
-        .replace(/ı/g, 'i')
-        .replace(/İ/g, 'i')  // Capital I with dot
+        .replace(/İ/g, 'i')  // Capital I with dot → lowercase i
+        .replace(/I/g, 'i'); // Regular capital I → lowercase i
+    
+    // Now convert to lowercase
+    normalized = normalized.toLowerCase();
+    
+    // Then handle other Turkish-specific character normalization
+    normalized = normalized
+        .replace(/ı/g, 'i')  // Lowercase i without dot → i
         .replace(/ğ/g, 'g')
         .replace(/Ğ/g, 'g')
         .replace(/ü/g, 'u')
@@ -2878,8 +3044,8 @@ function normalizeTurkish(str) {
         .replace(/ç/g, 'c')
         .replace(/Ç/g, 'c');
     
-    // Remove extra spaces
-    normalized = normalized.trim().replace(/\s+/g, ' ');
+    // Remove all whitespaces and special characters (dots, etc.) for comparison
+    normalized = normalized.replace(/\s+/g, '').replace(/\./g, '');
     
     return normalized;
 }

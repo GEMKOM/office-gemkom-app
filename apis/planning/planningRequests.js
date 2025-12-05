@@ -312,3 +312,35 @@ export async function uploadPlanningRequestAttachment(requestId, attachmentData)
     }
 }
 
+/**
+ * Mark planning request as ready for procurement after ERP entry
+ * @param {number} requestId - Planning request ID
+ * @param {string} erp_code - The ERP system code/reference for this request
+ * @returns {Promise<Object>} Response with status info
+ */
+export async function markReadyForProcurement(requestId, erp_code) {
+    try {
+        if (!erp_code || !erp_code.trim()) {
+            throw new Error('ERP kodu gereklidir');
+        }
+
+        const response = await authedFetch(`${PLANNING_BASE_URL}/requests/${requestId}/mark_ready_for_procurement/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ erp_code: erp_code.trim() })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || errorData.error || 'Planlama talebi satın alma için hazır olarak işaretlenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error marking planning request as ready for procurement:', error);
+        throw error;
+    }
+}
+
