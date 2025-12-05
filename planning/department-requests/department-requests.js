@@ -1161,6 +1161,30 @@ async function showPlanningRequestDetailsModal(request) {
             });
         };
 
+        // Helper function to render purchase request info
+        const renderPurchaseRequestInfo = (purchaseRequestInfo) => {
+            if (!purchaseRequestInfo || !Array.isArray(purchaseRequestInfo) || purchaseRequestInfo.length === 0) {
+                return '-';
+            }
+            
+            return purchaseRequestInfo.map(pr => {
+                const status = pr.status || '';
+                let badgeClass = 'status-grey'; // default
+                
+                // Map status to badge color
+                if (status === 'submitted') {
+                    badgeClass = 'status-yellow';
+                } else if (status === 'approved') {
+                    badgeClass = 'status-green';
+                } else if (status === 'rejected' || status === 'cancelled') {
+                    badgeClass = 'status-red';
+                }
+                
+                const requestNumber = pr.request_number || '-';
+                return `<span class="status-badge ${badgeClass}">${requestNumber}</span>`;
+            }).join(' ');
+        };
+
         // Create items table
         const itemsData = request.items.map((item, index) => ({
             id: index + 1,
@@ -1174,7 +1198,8 @@ async function showPlanningRequestDetailsModal(request) {
             unit: item.item_unit || 'adet',
             priority: item.priority || 'normal',
             specifications: item.specifications || '-',
-            files_count: item.files?.length || 0
+            files_count: item.files?.length || 0,
+            purchase_request_info: item.purchase_request_info || []
         }));
 
         // Add custom HTML content for the table
@@ -1194,6 +1219,7 @@ async function showPlanningRequestDetailsModal(request) {
                                 <th>Birim</th>
                                 <th>Öncelik</th>
                                 <th>Özellikler</th>
+                                <th>Satın Alma Talebi</th>
                                 <th>Dosyalar</th>
                             </tr>
                         </thead>
@@ -1210,6 +1236,7 @@ async function showPlanningRequestDetailsModal(request) {
                                     <td>${item.unit}</td>
                                     <td>${renderPriorityBadge(item.priority)}</td>
                                     <td>${item.specifications}</td>
+                                    <td>${renderPurchaseRequestInfo(item.purchase_request_info)}</td>
                                     <td>${item.files_count > 0 ? `<span class="badge bg-info">${item.files_count} dosya</span>` : '-'}</td>
                                 </tr>
                             `).join('')}
