@@ -675,6 +675,16 @@ async function loadDraftData(draft) {
             });
         }
         
+        // Restore planning_request_item_ids from draft data
+        if (draft.data && draft.data.planning_request_item_ids) {
+            requestData.planning_request_item_ids = Array.isArray(draft.data.planning_request_item_ids) 
+                ? draft.data.planning_request_item_ids 
+                : [];
+            console.log('Restored planning_request_item_ids from draft:', requestData.planning_request_item_ids);
+        } else {
+            requestData.planning_request_item_ids = [];
+        }
+        
         // Migrate supplier data from backend format to frontend format
         if (dataManager) {
             dataManager.migrateSupplierData(draft.data);
@@ -2125,7 +2135,8 @@ window.purchaseRequestApp = {
             suppliers: [],
             offers: {},
             recommendations: {},
-            itemRecommendations: {}
+            itemRecommendations: {},
+            planning_request_item_ids: []
         };
         
         // Update managers with the cleared data
@@ -2168,7 +2179,8 @@ async function clearPage() {
         suppliers: [],
         offers: {},
         recommendations: {},
-        itemRecommendations: {}
+        itemRecommendations: {},
+        planning_request_item_ids: []
     };
     
     // Update managers with the cleared data
