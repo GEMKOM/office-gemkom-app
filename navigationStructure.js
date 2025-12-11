@@ -379,6 +379,17 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Departman Talepleri',
                 icon: 'fas fa-boxes',
                 children: {}
+            },
+            '/planning/inventory': {
+                label: 'Stok',
+                icon: 'fas fa-warehouse',
+                children: {
+                    '/planning/inventory/cards': {
+                        label: 'Stok Kartları',
+                        icon: 'fas fa-boxes',
+                        children: {}
+                    }
+                }
             }
         }
     }

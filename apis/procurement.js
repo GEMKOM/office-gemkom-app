@@ -501,9 +501,22 @@ export async function searchItems(searchTerm, searchType = 'code') {
     }
 }
 
-export async function getItems() {
+export async function getItems(filters = {}) {
     try {
-        const response = await authedFetch(`${backendBase}/procurement/items/`);
+        // Build query parameters
+        const queryParams = new URLSearchParams();
+        
+        // Add all filter parameters dynamically (handles code, code__exact, code__startswith, name, name__startswith, etc.)
+        Object.keys(filters).forEach(key => {
+            const value = filters[key];
+            // Only add non-empty values
+            if (value !== null && value !== undefined && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+        
+        const url = `${backendBase}/procurement/items/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const response = await authedFetch(url);
         
         if (!response.ok) {
             const errorData = await response.json();
@@ -535,6 +548,78 @@ export async function createItem(itemData) {
         return await response.json();
     } catch (error) {
         console.error('Error creating item:', error);
+        throw error;
+    }
+}
+
+export async function updateItem(itemId, itemData) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/items/${itemId}/`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(itemData)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Malzeme güncellenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error updating item:', error);
+        throw error;
+    }
+}
+
+export async function deleteItem(itemId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/items/${itemId}/`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Malzeme silinirken hata oluştu');
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error deleting item:', error);
+        throw error;
+    }
+}
+
+export async function getItemPurchaseRequests(itemId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/items/${itemId}/purchase-requests/`);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Satın alma talepleri yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching item purchase requests:', error);
+        throw error;
+    }
+}
+
+export async function getItemPlanningRequests(itemId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/items/${itemId}/planning-requests/`);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Planlama talepleri yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching item planning requests:', error);
         throw error;
     }
 }

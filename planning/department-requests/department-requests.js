@@ -47,6 +47,7 @@ let completedTable = null;
 let departmentRequestsFilters = null;
 let planningRequestsFilters = null;
 let pendingErpEntryFilters = null;
+let loadCompletedRequests = null;
 
 // Pending ERP Entry requests state
 let pendingErpEntryCurrentPage = 1;
@@ -781,6 +782,9 @@ async function loadPlanningRequests() {
         completedTable.setLoading(false);
     }
 }
+
+// Set loadCompletedRequests to reference loadPlanningRequests
+loadCompletedRequests = loadPlanningRequests;
 
 async function loadPendingErpEntryRequests() {
     if (isPendingErpEntryLoading) return;
@@ -3752,7 +3756,6 @@ async function submitTransferRequest(requestData, requestNumber, departmentReque
         if (loadCompletedRequests) {
             await loadCompletedRequests();
         }
-        await loadPlanningRequests();
     } catch (error) {
         console.error('Error submitting transfer request:', error);
         showNotification('Talep gönderilirken hata oluştu: ' + error.message, 'error');

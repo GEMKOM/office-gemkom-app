@@ -183,7 +183,7 @@ export class TableComponent {
         // Add actions column if actions are defined
         if (this.options.actions.length > 0) {
             headers.push(`
-                <th style="width: ${this.options.actionColumnWidth}">İşlemler</th>
+                <th class="action-column" style="width: ${this.options.actionColumnWidth}">İşlemler</th>
             `);
         }
         
@@ -327,7 +327,7 @@ export class TableComponent {
         // Add actions cell
         if (this.options.actions.length > 0) {
             cells.push(`
-                <td>
+                <td class="action-column">
                     <div class="action-buttons">
                         ${this.renderActions(row, rowIndex)}
                     </div>

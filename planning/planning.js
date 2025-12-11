@@ -26,6 +26,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-boxes',
                 iconColor: 'primary',
                 link: '/planning/department-requests'
+            },
+            {
+                title: 'Stok',
+                description: 'Stok yönetimi ve stok kartları.',
+                icon: 'fas fa-warehouse',
+                iconColor: 'primary',
+                link: '/planning/inventory'
             }
         ]
     });

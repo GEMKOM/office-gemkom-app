@@ -170,6 +170,7 @@ tr[draggable="true"]:hover {
     display: flex;
     gap: 0.25rem;
     justify-content: center;
+    align-items: center;
 }
 
 .action-buttons .btn {
@@ -182,6 +183,12 @@ tr[draggable="true"]:hover {
 .action-buttons .btn:hover {
     transform: translateY(-1px);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.15);
+}
+
+/* Center align action column header and cells */
+.table th.action-column,
+.table td.action-column {
+    text-align: center;
 }
 
 /* Loading State */
