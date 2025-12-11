@@ -13,7 +13,7 @@ import {
     getCompletedDepartmentRequests,
     markDepartmentRequestTransferred
 } from '../../../apis/planning/departmentRequests.js';
-import { createPlanningRequest, getPlanningRequests, getPlanningRequest, markReadyForProcurement, updatePlanningRequest, cancelPlanningRequest as cancelPlanningRequestAPI } from '../../../apis/planning/planningRequests.js';
+import { createPlanningRequest, getPlanningRequests, getPlanningRequest, markReadyForProcurement, updatePlanningRequest, partialUpdatePlanningRequest, cancelPlanningRequest as cancelPlanningRequestAPI } from '../../../apis/planning/planningRequests.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 import { UNIT_CHOICES, ITEM_CODE_NAMES } from '../../../apis/constants.js';
 import {
@@ -1742,6 +1742,8 @@ let exportConfirmationModal = null;
 let erpCodeModal = null;
 // Cancel planning request confirmation modal instance
 let cancelPlanningRequestModal = null;
+// Transfer workflow modal instance (3-step)
+let transferWorkflowModal = null;
 
 // Show create planning request modal
 // departmentRequest: Optional department request object to pre-fill the form
@@ -2004,23 +2006,17 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 requestData.department_request_id = parseInt(departmentRequestId, 10);
             }
 
-            // Create the planning request
-            const createdRequest = await createPlanningRequest(requestData);
+            // Check if there are items to export
+            if (!items || items.length === 0) {
+                showNotification('En az bir ürün eklemeniz gerekiyor', 'warning');
+                throw new Error('No items to transfer');
+            }
 
-            // Show success notification
-            showNotification('Planlama talebi başarıyla oluşturuldu', 'success');
-
-            // Close modal
+            // Close the create planning request modal
             createPlanningRequestModal.hide();
 
-            // Refresh both tables
-            await loadRequests();
-            await loadPlanningRequests();
-
-            // Show export confirmation modal if there are items
-            if (createdRequest.items && createdRequest.items.length > 0) {
-                showExportConfirmationModal(createdRequest);
-            }
+            // Show transfer workflow modal (3-step process) BEFORE creating the planning request
+            showTransferWorkflowModal(requestData, items, departmentRequestId);
         } catch (error) {
             console.error('Error creating planning request:', error);
             if (error.message !== 'Job number required for all items' && 
@@ -2967,7 +2963,7 @@ function formatNumberForExport(value) {
 }
 
 // Export items to CSV
-function exportItemsToCSV(createdRequest) {
+function exportItemsToCSV(createdRequest, departmentRequestId = null) {
     if (!createdRequest || !createdRequest.items || createdRequest.items.length === 0) {
         showNotification('Dışa aktarılacak ürün bulunamadı', 'error');
         return;
@@ -2985,9 +2981,6 @@ function exportItemsToCSV(createdRequest) {
         }
     }
 
-    // Get request_number from the created request
-    const requestNumber = createdRequest.request_number || '';
-
     // Build CSV content
     const csvLines = [];
     createdRequest.items.forEach(item => {
@@ -2998,20 +2991,34 @@ function exportItemsToCSV(createdRequest) {
         // Determine prefix: G for special item codes, S for others
         const prefix = ITEM_CODE_NAMES.hasOwnProperty(itemCode) ? 'G' : 'S';
         
-        // Format: S/G;item_code;quantity;date;request_number (description column removed)
-        const csvLine = `${prefix};${itemCode};${quantity};${formattedDate};${requestNumber}`;
+        // Get item description and specifications
+        const itemDescription = item.item_description || '';
+        const specifications = item.specifications || item.item_specifications || '';
+        
+        // Combine description and specifications with | separator
+        const combinedDescription = [itemDescription, specifications]
+            .filter(part => part && part.trim())
+            .join('|') || '';
+        
+        // Format: S/G;item_code;quantity;date;description|specifications
+        const csvLine = `${prefix};${itemCode};${quantity};${formattedDate};${combinedDescription}`;
         csvLines.push(csvLine);
     });
 
     // Create CSV content (no headers)
     const csvContent = csvLines.join('\n');
 
+    // Determine filename - use department request ID if available, otherwise use date
+    const filename = departmentRequestId 
+        ? `planlama_talebi_urunleri_${departmentRequestId}.csv`
+        : `planlama_talebi_urunleri_${new Date().toISOString().split('T')[0]}.csv`;
+
     // Create blob and download
     const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' }); // BOM for Excel UTF-8 support
     const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
-    link.setAttribute('download', `planlama_talebi_urunleri_${requestNumber || new Date().toISOString().split('T')[0]}.csv`);
+    link.setAttribute('download', filename);
     link.style.visibility = 'hidden';
     document.body.appendChild(link);
     link.click();
@@ -3374,6 +3381,388 @@ function showExportConfirmationModal(createdRequest) {
             exportItemsToCSV(createdRequest);
         }
     });
+}
+
+// Show transfer workflow modal (3-step process)
+function showTransferWorkflowModal(requestData, items, departmentRequestId) {
+    // Get or create modal container
+    let modalContainer = document.getElementById('transfer-workflow-modal-container');
+    if (!modalContainer) {
+        modalContainer = document.createElement('div');
+        modalContainer.id = 'transfer-workflow-modal-container';
+        document.body.appendChild(modalContainer);
+    }
+
+    // Clear previous content
+    modalContainer.innerHTML = '';
+
+    const itemsCount = items?.length || 0;
+    let currentStep = 1;
+    let erpCode = '';
+    
+    // Create a temporary request object for display and export purposes
+    const tempRequest = {
+        id: 'Yeni',
+        title: requestData.title || '-',
+        items: items,
+        needed_date: requestData.needed_date || null
+    };
+
+    // Create modal HTML
+    const modalHTML = `
+        <style>
+            #transfer-workflow-modal .modal-content {
+                border-radius: 12px;
+                box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+            }
+            #transfer-workflow-modal .modal-header {
+                background: linear-gradient(135deg, #8B0000, #DC143C);
+                color: white;
+                border-radius: 12px 12px 0 0;
+                padding: 1rem 1.5rem;
+                border-bottom: none;
+            }
+            #transfer-workflow-modal .modal-header .modal-title {
+                font-weight: 600;
+                font-size: 1.1rem;
+                margin: 0;
+                display: flex;
+                align-items: center;
+            }
+            #transfer-workflow-modal .modal-header .btn-close {
+                filter: invert(1);
+                opacity: 0.8;
+            }
+            #transfer-workflow-modal .modal-header .btn-close:hover {
+                opacity: 1;
+            }
+            #transfer-workflow-modal .modal-body {
+                padding: 1.5rem;
+                background: white;
+            }
+            #transfer-workflow-modal .modal-footer {
+                background: #f8f9fa;
+                border-top: 1px solid #e9ecef;
+                border-radius: 0 0 12px 12px;
+                padding: 1rem 1.5rem;
+            }
+            #transfer-workflow-modal .btn-primary,
+            #transfer-workflow-modal .btn-info,
+            #transfer-workflow-modal .btn-success {
+                padding: 0.625rem 1.25rem;
+                font-size: 0.95rem;
+                font-weight: 500;
+            }
+            #transfer-workflow-modal .btn-primary {
+                background-color: #8B0000;
+                border-color: #8B0000;
+            }
+            #transfer-workflow-modal .btn-primary:hover {
+                background-color: #660000;
+                border-color: #660000;
+            }
+            #transfer-workflow-modal .btn-primary:focus {
+                background-color: #8B0000;
+                border-color: #8B0000;
+                box-shadow: 0 0 0 0.25rem rgba(139, 0, 0, 0.25);
+            }
+            #transfer-workflow-modal .btn-info {
+                background-color: #8B0000;
+                border-color: #8B0000;
+            }
+            #transfer-workflow-modal .btn-info:hover {
+                background-color: #660000;
+                border-color: #660000;
+            }
+            #transfer-workflow-modal .btn-info:focus {
+                background-color: #8B0000;
+                border-color: #8B0000;
+                box-shadow: 0 0 0 0.25rem rgba(139, 0, 0, 0.25);
+            }
+            #transfer-workflow-modal .btn-success {
+                background-color: #198754;
+                border-color: #198754;
+            }
+            #transfer-workflow-modal .btn-success:hover {
+                background-color: #157347;
+                border-color: #146c43;
+            }
+            #transfer-workflow-modal .btn-secondary {
+                padding: 0.625rem 1.25rem;
+                font-size: 0.95rem;
+                font-weight: 500;
+            }
+            .step-indicator {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                flex: 1;
+                position: relative;
+            }
+            .step-number {
+                width: 40px;
+                height: 40px;
+                border-radius: 50%;
+                background-color: #e9ecef;
+                color: #6c757d;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-weight: bold;
+                margin-bottom: 8px;
+                transition: all 0.3s ease;
+            }
+            .step-indicator.active .step-number {
+                background-color: #DC143C;
+                color: white;
+            }
+            .step-label {
+                font-size: 0.875rem;
+                color: #6c757d;
+                text-align: center;
+                transition: color 0.3s ease;
+            }
+            .step-indicator.active .step-label {
+                color: #DC143C;
+                font-weight: 500;
+            }
+            .step-connector {
+                flex: 1;
+                height: 2px;
+                background-color: #e9ecef;
+                margin: 0 10px;
+                margin-top: -20px;
+                transition: background-color 0.3s ease;
+            }
+            .step-connector.active {
+                background-color: #DC143C;
+            }
+            .step-content {
+                min-height: 200px;
+            }
+        </style>
+        <div class="modal fade" id="transfer-workflow-modal" tabindex="-1" aria-labelledby="transfer-workflow-modal-label" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h6 class="modal-title" id="transfer-workflow-modal-label">
+                            <i class="fas fa-exchange-alt me-2"></i>Departman Talebi Transfer İşlemi
+                        </h6>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <!-- Step Indicator -->
+                        <div class="mb-4">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <div class="step-indicator ${currentStep >= 1 ? 'active' : ''}" data-step="1">
+                                    <div class="step-number">1</div>
+                                    <div class="step-label">Excel Dışa Aktar</div>
+                                </div>
+                                <div class="step-connector ${currentStep >= 2 ? 'active' : ''}"></div>
+                                <div class="step-indicator ${currentStep >= 2 ? 'active' : ''}" data-step="2">
+                                    <div class="step-number">2</div>
+                                    <div class="step-label">ERP Kodu Gir</div>
+                                </div>
+                                <div class="step-connector ${currentStep >= 3 ? 'active' : ''}"></div>
+                                <div class="step-indicator ${currentStep >= 3 ? 'active' : ''}" data-step="3">
+                                    <div class="step-number">3</div>
+                                    <div class="step-label">Gönder</div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Step 1: Export -->
+                        <div id="step-1-content" class="step-content">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Adım 1:</strong> Excel dosyasını dışa aktarın ve ERP sistemine girin.
+                            </div>
+                            <div class="mb-3">
+                                <p><strong>Ürün Sayısı:</strong> ${itemsCount} ürün</p>
+                                <p><strong>Başlık:</strong> ${tempRequest.title || '-'}</p>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-success" id="export-workflow-btn">
+                                    <i class="fas fa-file-excel me-2"></i>Excel Dışa Aktar
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Step 2: ERP Code -->
+                        <div id="step-2-content" class="step-content" style="display: none;">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Adım 2:</strong> ERP sistemine girdikten sonra aldığınız kodu girin.
+                            </div>
+                            <div class="mb-3">
+                                <label for="erp-code-input" class="form-label">
+                                    <i class="fas fa-code me-2"></i>ERP Kodu <span class="text-danger">*</span>
+                                </label>
+                                <input type="text" class="form-control" id="erp-code-input" placeholder="ERP kodunu girin" required>
+                                <div class="form-text">Bu kod talep numarası olarak gönderilecektir.</div>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-primary" id="continue-to-step-3-btn">
+                                    <i class="fas fa-arrow-right me-2"></i>Devam Et
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: Submit -->
+                        <div id="step-3-content" class="step-content" style="display: none;">
+                            <div class="alert alert-warning">
+                                <i class="fas fa-exclamation-triangle me-2"></i>
+                                <strong>Adım 3:</strong> Talebi göndermek için onaylayın.
+                            </div>
+                            <div class="mb-3">
+                                <p><strong>Başlık:</strong> ${tempRequest.title || '-'}</p>
+                                <p><strong>ERP Kodu:</strong> <span id="erp-code-display">-</span></p>
+                                <p><strong>Ürün Sayısı:</strong> ${itemsCount} ürün</p>
+                            </div>
+                            <div class="d-flex justify-content-end">
+                                <button type="button" class="btn btn-info" id="submit-transfer-btn">
+                                    <i class="fas fa-paper-plane me-2"></i>Talebi Gönder
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-1"></i>İptal
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    modalContainer.innerHTML = modalHTML;
+
+    // Initialize Bootstrap modal
+    const modalElement = document.getElementById('transfer-workflow-modal');
+    const modal = bootstrap.Modal.getOrCreateInstance(modalElement);
+
+    // Step 1: Export button
+    const exportBtn = modalElement.querySelector('#export-workflow-btn');
+    exportBtn.addEventListener('click', () => {
+        // Export items using temporary request object with department request ID
+        exportItemsToCSV(tempRequest, departmentRequestId);
+        // Move to step 2
+        showStep(2);
+    });
+
+    // Step 2: Continue button
+    const continueBtn = modalElement.querySelector('#continue-to-step-3-btn');
+    continueBtn.addEventListener('click', () => {
+        const erpCodeInput = modalElement.querySelector('#erp-code-input');
+        const code = erpCodeInput.value.trim();
+        if (!code) {
+            showNotification('Lütfen ERP kodunu girin', 'warning');
+            return;
+        }
+        erpCode = code;
+        // Update display
+        modalElement.querySelector('#erp-code-display').textContent = erpCode;
+        // Move to step 3
+        showStep(3);
+    });
+
+    // Step 3: Submit button
+    const submitBtn = modalElement.querySelector('#submit-transfer-btn');
+    submitBtn.addEventListener('click', async () => {
+        await submitTransferRequest(requestData, erpCode, departmentRequestId, modal);
+    });
+
+    // Function to show specific step
+    function showStep(step) {
+        currentStep = step;
+        
+        // Hide all step contents
+        for (let i = 1; i <= 3; i++) {
+            const content = modalElement.querySelector(`#step-${i}-content`);
+            if (content) {
+                content.style.display = 'none';
+            }
+        }
+
+        // Show current step content
+        const currentContent = modalElement.querySelector(`#step-${step}-content`);
+        if (currentContent) {
+            currentContent.style.display = 'block';
+        }
+
+        // Update step indicators
+        const indicators = modalElement.querySelectorAll('.step-indicator');
+        indicators.forEach((indicator, index) => {
+            const stepNum = index + 1;
+            if (stepNum <= step) {
+                indicator.classList.add('active');
+            } else {
+                indicator.classList.remove('active');
+            }
+        });
+
+        // Update connectors
+        const connectors = modalElement.querySelectorAll('.step-connector');
+        connectors.forEach((connector, index) => {
+            const stepNum = index + 1;
+            if (stepNum < step) {
+                connector.classList.add('active');
+            } else {
+                connector.classList.remove('active');
+            }
+        });
+    }
+
+    // Show modal
+    modal.show();
+}
+
+// Submit transfer request
+async function submitTransferRequest(requestData, requestNumber, departmentRequestId, modal) {
+    const submitBtn = document.getElementById('submit-transfer-btn');
+    const originalContent = submitBtn ? submitBtn.innerHTML : '';
+
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gönderiliyor...';
+    }
+
+    try {
+        // Add request_number to request data
+        requestData.request_number = requestNumber;
+
+        // Create the planning request with request_number
+        const createdRequest = await createPlanningRequest(requestData);
+
+        // Mark department request as transferred
+        if (departmentRequestId) {
+            await markDepartmentRequestTransferred(departmentRequestId, {
+                request_number: requestNumber
+            });
+        }
+
+        showNotification('Talep başarıyla gönderildi', 'success');
+
+        // Close modal
+        modal.hide();
+
+        // Refresh tables
+        await loadRequests();
+        if (loadCompletedRequests) {
+            await loadCompletedRequests();
+        }
+        await loadPlanningRequests();
+    } catch (error) {
+        console.error('Error submitting transfer request:', error);
+        showNotification('Talep gönderilirken hata oluştu: ' + error.message, 'error');
+        
+        // Re-enable button on error
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = originalContent;
+        }
+    }
 }
 
 // Excel import functionality
