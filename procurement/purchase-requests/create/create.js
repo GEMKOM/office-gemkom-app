@@ -41,6 +41,33 @@ let requestData = {
     planning_request_item_ids: [] // Track selected planning request item IDs
 };
 
+/**
+ * Sync planning_request_item_ids with actual items in the list
+ * This ensures planning_request_item_ids always reflects the current state of items
+ */
+function syncPlanningRequestItemIds() {
+    if (!requestData.items || !Array.isArray(requestData.items)) {
+        requestData.planning_request_item_ids = [];
+        return;
+    }
+    
+    // Extract all source_planning_request_item_id values from items
+    const itemIds = new Set();
+    requestData.items.forEach(item => {
+        if (item && item.source_planning_request_item_id) {
+            itemIds.add(item.source_planning_request_item_id);
+        }
+    });
+    
+    // Update planning_request_item_ids to match actual items
+    requestData.planning_request_item_ids = Array.from(itemIds);
+    
+    console.log('Synced planning_request_item_ids:', requestData.planning_request_item_ids);
+}
+
+// Make sync function globally available for itemsManager and dataManager
+window.syncPlanningRequestItemIds = syncPlanningRequestItemIds;
+
 
 
 // Currency conversion rates - will be fetched from backend
@@ -675,7 +702,8 @@ async function loadDraftData(draft) {
             });
         }
         
-        // Restore planning_request_item_ids from draft data
+        // Restore planning_request_item_ids from draft data (if available)
+        // But then sync with actual items to ensure accuracy
         if (draft.data && draft.data.planning_request_item_ids) {
             requestData.planning_request_item_ids = Array.isArray(draft.data.planning_request_item_ids) 
                 ? draft.data.planning_request_item_ids 
@@ -684,6 +712,10 @@ async function loadDraftData(draft) {
         } else {
             requestData.planning_request_item_ids = [];
         }
+        
+        // Sync planning_request_item_ids with actual items after loading draft
+        // This ensures accuracy even if draft data is inconsistent
+        syncPlanningRequestItemIds();
         
         // Migrate supplier data from backend format to frontend format
         if (dataManager) {
@@ -1033,13 +1065,16 @@ async function submitRequest() {
         // Transform suppliers for backend submission
         const transformedSuppliers = transformSuppliersForSubmission(requestData.suppliers);
         
+        // Sync planning_request_item_ids with actual items before submission
+        syncPlanningRequestItemIds();
+        
         // Check if any item has job_no starting with "RM" in allocations
         const isRollingMill = formattedData.items.some(item => 
             item.allocations && item.allocations.some(allocation => 
                 allocation.job_no && allocation.job_no.toString().toUpperCase().startsWith('RM')
             )
         );
-        
+
         // Prepare data for backend
         const submitData = {
             title: requestData.title.trim(),
@@ -2051,17 +2086,12 @@ async function addSelectedPlanningItems() {
             
             requestData.items.push(newItem);
             
-            // Add to planning_request_item_ids for submission
-            // Ensure planning_request_item_ids array exists
-            if (!requestData.planning_request_item_ids) {
-                requestData.planning_request_item_ids = [];
-            }
-            if (!requestData.planning_request_item_ids.includes(planningItem.id)) {
-                requestData.planning_request_item_ids.push(planningItem.id);
-            }
-            
             addedCount++;
         }
+        
+        // Sync planning_request_item_ids with actual items after adding
+        // This ensures accuracy and removes any inconsistencies
+        syncPlanningRequestItemIds();
         
         if (addedCount > 0) {
             // Re-render items table

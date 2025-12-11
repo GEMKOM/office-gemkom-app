@@ -167,6 +167,12 @@ export class DataManager {
                     this.requestData.itemRecommendations = draftData.itemRecommendations || {};
                     this.requestData.planning_request_item_ids = draftData.planning_request_item_ids || [];
                     
+                    // Sync planning_request_item_ids with actual items after loading from localStorage
+                    // This ensures accuracy even if localStorage data is inconsistent
+                    if (window.syncPlanningRequestItemIds) {
+                        window.syncPlanningRequestItemIds();
+                    }
+                    
                     console.log('Loaded needed_date from localStorage:', this.requestData.needed_date);
                     
                     return true;

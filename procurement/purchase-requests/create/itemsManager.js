@@ -279,6 +279,13 @@ export class ItemsManager {
         }
         
         this.requestData.items.splice(index, 1);
+        
+        // Sync planning_request_item_ids with actual items after deletion
+        // This ensures accuracy even if manual cleanup missed something
+        if (window.syncPlanningRequestItemIds) {
+            window.syncPlanningRequestItemIds();
+        }
+        
         this.renderItemsTable();
         this.autoSave();
         
