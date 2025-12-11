@@ -2629,6 +2629,16 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
+function escapeHtmlAttribute(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+}
+
 // Pre-fill items from department request
 function prefillItemsFromDepartmentRequest(departmentRequest) {
     if (!departmentRequest.items || departmentRequest.items.length === 0) {
@@ -4105,7 +4115,7 @@ function processExcelDataWithMapping(dataRows, mapping, headers = []) {
                 item_name: getExcelCellValue(row, mapping.item_name),
                 job_no: getExcelCellValue(row, mapping.job_no),
                 quantity: parseExcelQuantity(getExcelCellValue(row, mapping.quantity)),
-                unit: getExcelCellValue(row, mapping.unit) || 'adet',
+                unit: normalizeUnitValue(getExcelCellValue(row, mapping.unit)),
                 item_description: getExcelCellValue(row, mapping.item_description) || '',
                 specifications: getExcelCellValue(row, mapping.specifications) || ''
             };
@@ -4168,6 +4178,30 @@ function getExcelCellValue(row, columnIndex) {
     if (columnIndex === -1 || columnIndex >= row.length) return '';
     const value = row[columnIndex];
     return value ? value.toString().trim() : '';
+}
+
+function normalizeUnitValue(unitValue) {
+    if (!unitValue) return 'adet'; // Default unit
+    
+    // Convert to lowercase and trim
+    const normalized = unitValue.toString().trim().toLowerCase();
+    
+    // Try to find exact match in UNIT_CHOICES
+    const exactMatch = UNIT_CHOICES.find(unit => unit.value === normalized);
+    if (exactMatch) {
+        return exactMatch.value;
+    }
+    
+    // Try to find match by label (case-insensitive)
+    const labelMatch = UNIT_CHOICES.find(unit => 
+        unit.label.toLowerCase() === normalized
+    );
+    if (labelMatch) {
+        return labelMatch.value;
+    }
+    
+    // If no match found, return the normalized value (will be used as-is)
+    return normalized;
 }
 
 function parseExcelQuantity(value) {
@@ -4344,27 +4378,27 @@ function importExcelItems() {
             <div class="planning-item-row mb-2" data-index="${itemIndex}">
                 <div class="row g-2">
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_code" placeholder="Ürün kodu veya ID" value="${escapeHtml(item.item_code)}" required>
+                        <input type="text" class="form-control form-control-sm" name="item_code" placeholder="Ürün kodu veya ID" value="${escapeHtmlAttribute(item.item_code)}" required>
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" value="${escapeHtml(item.item_name)}">
+                        <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" value="${escapeHtmlAttribute(item.item_name)}">
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtml(item.item_description)}">
+                        <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtmlAttribute(item.item_description)}">
                     </div>
                     <div class="col-md-1">
-                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtml(item.job_no)}" required>
+                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtmlAttribute(item.job_no)}" required>
                     </div>
                     <div class="col-md-1">
                         <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="0.01" min="0.01" value="${item.quantity}" required>
                     </div>
                     <div class="col-md-1">
                         <select class="form-control form-control-sm" name="item_unit">
-                            ${UNIT_CHOICES.map(unit => `<option value="${unit.value}" ${unit.value === item.unit ? 'selected' : ''}>${unit.label}</option>`).join('')}
+                            ${UNIT_CHOICES.map(unit => `<option value="${escapeHtmlAttribute(unit.value)}" ${unit.value === item.unit ? 'selected' : ''}>${unit.label}</option>`).join('')}
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtml(item.specifications)}">
+                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtmlAttribute(item.specifications)}">
                     </div>
                     <div class="col-md-1">
                         <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePlanningItem(${itemIndex})" title="Ürünü Kaldır">
