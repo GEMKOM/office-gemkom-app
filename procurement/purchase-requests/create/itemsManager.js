@@ -1,4 +1,6 @@
 // Items Manager Module
+import { UNIT_CHOICES } from '../../../apis/constants.js';
+
 export class ItemsManager {
     constructor(requestData, autoSave) {
         this.requestData = requestData;
@@ -1104,16 +1106,14 @@ export class ItemsManager {
                 input = document.createElement('select');
                 input.className = 'form-control form-control-sm';
                 
-                const unitOptions = [
-                    'ADET', 'KG', 'M', 'M2', 'M3', 'LITRE', 'TON', 'PAKET', 'KUTU', 'RULO', 'METRE', 'SANTIMETRE'
-                ];
-                
-                unitOptions.forEach(unit => {
+                // Use centralized UNIT_CHOICES from constants
+                UNIT_CHOICES.forEach(unitChoice => {
                     const option = document.createElement('option');
-                    option.value = unit;
-                    option.textContent = unit;
+                    option.value = unitChoice.value;
+                    option.textContent = unitChoice.label;
                     
-                    if (unit === currentValue) {
+                    // Handle case-insensitive comparison for existing values
+                    if (unitChoice.value.toLowerCase() === (currentValue || '').toLowerCase()) {
                         option.selected = true;
                     }
                     

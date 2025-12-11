@@ -15,7 +15,7 @@ import { FiltersComponent } from '../../../components/filters/filters.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
-import { ITEM_CODE_NAMES } from '../../../apis/constants.js';
+import { ITEM_CODE_NAMES, UNIT_CHOICES } from '../../../apis/constants.js';
 
 // Global state
 let headerComponent;
@@ -139,6 +139,23 @@ function calculateTotalAmountEUR() {
     return Math.round(totalAmount * 100) / 100;
 }
 
+// Initialize unit dropdown from constants
+function initializeUnitDropdown() {
+    const unitSelect = document.getElementById('item-unit');
+    if (unitSelect) {
+        // Clear existing options except the first placeholder
+        unitSelect.innerHTML = '<option value="">Birim Seçin</option>';
+        
+        // Populate from UNIT_CHOICES
+        UNIT_CHOICES.forEach(unit => {
+            const option = document.createElement('option');
+            option.value = unit.value;
+            option.textContent = unit.label;
+            unitSelect.appendChild(option);
+        });
+    }
+}
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', async () => {
     
@@ -147,6 +164,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     initNavbar();
+    
+    // Initialize unit dropdown from constants
+    initializeUnitDropdown();
     
     // Initialize data manager first and load draft data
     dataManager = new DataManager(requestData);

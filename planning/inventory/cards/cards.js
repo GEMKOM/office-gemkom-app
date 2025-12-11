@@ -7,6 +7,7 @@ import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
 import { ConfirmationModal } from '../../../../components/confirmation-modal/confirmation-modal.js';
 import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
 import { getItems, updateItem, deleteItem as deleteItemAPI, getItemPurchaseRequests, getItemPlanningRequests } from '../../../../apis/procurement.js';
+import { UNIT_CHOICES } from '../../../../apis/constants.js';
 
 // State management
 let currentPage = 1;
@@ -524,18 +525,9 @@ function editItem(item) {
     });
 
     // Map unit to lowercase for dropdown value (API might return uppercase)
-    const unitChoices = [
-        { value: 'adet', label: 'Adet' },
-        { value: 'kg', label: 'KG' },
-        { value: 'metre', label: 'Metre' },
-        { value: 'litre', label: 'Litre' },
-        { value: 'paket', label: 'Paket' },
-        { value: 'kutu', label: 'Kutu' }
-    ];
-    
-    // Find the correct unit value (handle case-insensitive matching)
+    // Use centralized UNIT_CHOICES from constants
     const currentUnit = item.unit ? item.unit.toLowerCase() : '';
-    const selectedUnitValue = unitChoices.find(choice => choice.value === currentUnit)?.value || currentUnit || '';
+    const selectedUnitValue = UNIT_CHOICES.find(choice => choice.value === currentUnit)?.value || currentUnit || '';
 
     editItemModal.addField({
         id: 'edit-item-unit',
@@ -545,7 +537,7 @@ function editItem(item) {
         placeholder: 'Birim seçin...',
         icon: 'fas fa-ruler',
         colSize: 6,
-        options: unitChoices,
+        options: UNIT_CHOICES,
         value: selectedUnitValue
     });
 

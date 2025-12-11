@@ -19,19 +19,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 description: 'Genel performans göstergeleri, önemli metrikler ve hızlı erişim panosu.',
                 icon: 'fas fa-tachometer-alt',
                 iconColor: 'primary',
-                link: '/management/dashboard',
-                features: [
-                    {
-                        label: 'Performans Metrikleri',
-                        icon: 'fas fa-chart-line',
-                        link: '/management/dashboard/metrics'
-                    },
-                    {
-                        label: 'Hızlı Raporlar',
-                        icon: 'fas fa-file-alt',
-                        link: '/management/dashboard/quick-reports'
-                    }
-                ]
+                link: '/management/dashboard'
             },
             {
                 title: 'Raporlar',

@@ -62,7 +62,8 @@ export const PREDEFINED_PROCESS_ITEMS = [
     { code: 'F024 0000 0000 000 000', name: 'CAM KÜRE KUMLAMA İŞLEMİ', unit: 'adet' },
     { code: 'F025 0000 0000 000 000', name: 'FOSFAT KAPLAMA İŞLEMİ', unit: 'adet' },
     { code: 'F026 0000 0000 000 000', name: 'GALVANİZ KAPLAMA İŞLEMİ', unit: 'adet' },
-    { code: 'F003 0083 1001 000 117', name: 'GERİLİM GİDERME İŞLEMİ', unit: 'adet' }
+    { code: 'F003 0083 1001 000 117', name: 'GERİLİM GİDERME İŞLEMİ', unit: 'adet' },
+    { code: 'F031 0000 0000 000 000', name: 'VİBRASYON İŞLEMİ', unit: 'adet' }
 ];
 
 /**

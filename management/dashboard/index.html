@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Yönetim Dashboard</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../style.css">
+    <link rel="stylesheet" href="../../components/navbar.css">
+    <link rel="stylesheet" href="../../components/menu/menu.css">
+    <link rel="stylesheet" href="../../components/statistics-cards/statistics-cards.css">
+    <link rel="icon" type="image/png" href="../../images/gemkom.png">
+    <link rel="stylesheet" href="../../pre-auth.css">
+    <style>
+        .dashboard-section {
+            margin-bottom: 2rem;
+        }
+        .section-header {
+            margin-bottom: 1.5rem;
+            padding-bottom: 0.75rem;
+            border-bottom: 2px solid var(--primary-color, #8b0000);
+        }
+        .section-title {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: var(--primary-color, #8b0000);
+            margin: 0;
+        }
+        .dashboard-card {
+            background: white;
+            border-radius: 8px;
+            padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 1.5rem;
+        }
+        .module-link {
+            color: var(--primary-color, #8b0000);
+            text-decoration: none;
+            font-weight: 500;
+        }
+        .module-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body class="pre-auth">
+    <!-- Navigation -->
+    <div id="navbar-container"></div>
+
+    <!-- Floating Elements -->
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+
+    <!-- Main Content -->
+    <div class="container mt-4 mb-5">
+        <div class="row">
+            <div class="col-12">
+                <h1 class="mb-4">
+                    <i class="fas fa-tachometer-alt me-2"></i>
+                    Yönetim Dashboard
+                </h1>
+                <p class="text-muted mb-4">Tüm modüllerin genel görünümü ve performans metrikleri</p>
+            </div>
+        </div>
+
+        <!-- Manufacturing Section -->
+        <div class="dashboard-section">
+            <div class="section-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h2 class="section-title">
+                        <i class="fas fa-industry me-2"></i>
+                        İmalat
+                    </h2>
+                    <a href="/manufacturing" class="module-link">
+                        Detaylar <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="dashboard-card">
+                <div id="manufacturing-statistics"></div>
+            </div>
+        </div>
+
+        <!-- Procurement Section -->
+        <div class="dashboard-section">
+            <div class="section-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h2 class="section-title">
+                        <i class="fas fa-shopping-cart me-2"></i>
+                        Satın Alma
+                    </h2>
+                    <a href="/procurement" class="module-link">
+                        Detaylar <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="dashboard-card">
+                <div id="procurement-statistics"></div>
+            </div>
+        </div>
+
+        <!-- Finance Section -->
+        <div class="dashboard-section">
+            <div class="section-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h2 class="section-title">
+                        <i class="fas fa-dollar-sign me-2"></i>
+                        Finans
+                    </h2>
+                    <a href="/finance" class="module-link">
+                        Detaylar <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="dashboard-card">
+                <div id="finance-statistics"></div>
+            </div>
+        </div>
+
+        <!-- Planning Section -->
+        <div class="dashboard-section">
+            <div class="section-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <h2 class="section-title">
+                        <i class="fas fa-clipboard-list me-2"></i>
+                        Planlama
+                    </h2>
+                    <a href="/planning" class="module-link">
+                        Detaylar <i class="fas fa-arrow-right ms-1"></i>
+                    </a>
+                </div>
+            </div>
+            <div class="dashboard-card">
+                <div id="planning-statistics"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer-section">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>GEMKOM</h5>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="text-light mb-0">&copy; 2024 GEMKOM. Tüm hakları saklıdır.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="dashboard.js"></script>
+</body>
+</html>
+

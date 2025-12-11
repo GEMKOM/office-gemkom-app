@@ -31,6 +31,8 @@ export const TEAM_ACCESS_CONFIG = {
     // Management team - has access to most sections
     management: {
         allowedRoutes: mergeWithBaseRoutes([
+            '/management',
+            '/management/dashboard',
             '/planning',
             '/planning/department-requests',
             '/manufacturing',
