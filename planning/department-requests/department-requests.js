@@ -13,7 +13,7 @@ import {
     getCompletedDepartmentRequests,
     markDepartmentRequestTransferred
 } from '../../../apis/planning/departmentRequests.js';
-import { createPlanningRequest, getPlanningRequests, getPlanningRequest, markReadyForProcurement } from '../../../apis/planning/planningRequests.js';
+import { createPlanningRequest, getPlanningRequests, getPlanningRequest, markReadyForProcurement, updatePlanningRequest, cancelPlanningRequest as cancelPlanningRequestAPI } from '../../../apis/planning/planningRequests.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 import { UNIT_CHOICES, ITEM_CODE_NAMES } from '../../../apis/constants.js';
 import {
@@ -262,6 +262,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-eye',
                 class: 'btn-outline-primary',
                 onClick: (row) => viewPlanningRequestDetails(row.id)
+            },
+            {
+                key: 'edit',
+                label: 'Düzenle',
+                icon: 'fas fa-edit',
+                class: 'btn-outline-success',
+                onClick: (row) => editPlanningRequest(row.id),
+                visible: (row) => row.status !== 'cancelled' && row.status !== 'converted' && row.status !== 'completed'
+            },
+            {
+                key: 'cancel',
+                label: 'İptal Et',
+                icon: 'fas fa-times-circle',
+                class: 'btn-outline-danger',
+                onClick: (row) => cancelPlanningRequest(row.id),
+                visible: (row) => row.status !== 'cancelled' && row.status !== 'converted' && row.status !== 'completed'
             }
         ],
         pagination: true,
@@ -970,6 +986,163 @@ async function viewPlanningRequestDetails(requestId) {
     }
 }
 
+// Cancel planning request
+async function cancelPlanningRequest(requestId) {
+    try {
+        // Get the request details first
+        const request = await getPlanningRequest(requestId);
+        
+        // Check if already cancelled
+        if (request.status === 'cancelled') {
+            showNotification('Bu planlama talebi zaten iptal edilmiş', 'warning');
+            return;
+        }
+        
+        // Check if converted or completed
+        if (request.status === 'converted' || request.status === 'completed') {
+            showNotification('Dönüştürülmüş veya tamamlanmış planlama talepleri iptal edilemez', 'error');
+            return;
+        }
+        
+        // Initialize cancel confirmation modal if not already created
+        if (!cancelPlanningRequestModal) {
+            cancelPlanningRequestModal = new ConfirmationModal('cancel-planning-request-modal-container', {
+                title: 'Planlama Talebi İptali',
+                icon: 'fas fa-times-circle',
+                confirmText: 'Evet, İptal Et',
+                cancelText: 'Vazgeç',
+                confirmButtonClass: 'btn-danger'
+            });
+        }
+        
+        // Build details HTML with cancellation reason input
+        const detailsHtml = `
+            <div class="row g-2 mb-3">
+                <div class="col-6">
+                    <strong>Talep No:</strong> #${request.id}
+                </div>
+                <div class="col-6">
+                    <strong>Talep Numarası:</strong> ${request.request_number || '-'}
+                </div>
+                <div class="col-12">
+                    <strong>Başlık:</strong> ${request.title || '-'}
+                </div>
+                <div class="col-6">
+                    <strong>Durum:</strong> ${renderPlanningRequestStatusBadge(request.status, request.status_label)}
+                </div>
+                <div class="col-6">
+                    <strong>Ürün Sayısı:</strong> ${request.items?.length || 0} ürün
+                </div>
+            </div>
+            <div class="row g-2">
+                <div class="col-12">
+                    <label for="cancellation-reason-input" class="form-label">
+                        <i class="fas fa-comment-alt me-1"></i>İptal Nedeni <span class="text-danger">*</span>
+                    </label>
+                    <textarea 
+                        id="cancellation-reason-input" 
+                        class="form-control" 
+                        rows="3" 
+                        placeholder="Planlama talebini neden iptal ettiğinizi açıklayın..."
+                        required></textarea>
+                    <small class="form-text text-muted">İptal nedeni zorunludur.</small>
+                </div>
+            </div>
+        `;
+        
+        // Show confirmation modal
+        cancelPlanningRequestModal.show({
+            title: 'Planlama Talebi İptali',
+            message: 'Bu planlama talebini iptal etmek istediğinizden emin misiniz?',
+            description: 'İptal edilen talepler geri alınamaz.',
+            details: detailsHtml,
+            confirmText: 'Evet, İptal Et',
+            onConfirm: async () => {
+                await confirmCancelPlanningRequest(requestId);
+            }
+        });
+    } catch (error) {
+        console.error('Error cancelling planning request:', error);
+        showNotification('Planlama talebi iptal edilirken hata oluştu: ' + error.message, 'error');
+    }
+}
+
+// Confirm cancel planning request
+async function confirmCancelPlanningRequest(requestId) {
+    const confirmBtn = cancelPlanningRequestModal?.modal?.querySelector('#confirm-action-btn');
+    const originalContent = confirmBtn ? confirmBtn.innerHTML : '';
+    
+    try {
+        // Get cancellation reason
+        const cancellationReasonInput = cancelPlanningRequestModal?.modal?.querySelector('#cancellation-reason-input');
+        const cancellationReason = cancellationReasonInput?.value?.trim() || '';
+        
+        
+        // Remove invalid class if it was added
+        if (cancellationReasonInput) {
+            cancellationReasonInput.classList.remove('is-invalid');
+        }
+        
+        // Disable button and show loading state
+        if (confirmBtn) {
+            confirmBtn.disabled = true;
+            confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>İptal ediliyor...';
+        }
+        
+        // Cancel the planning request using the dedicated endpoint
+        await cancelPlanningRequestAPI(requestId);
+        
+        // Show success notification
+        showNotification('Planlama talebi başarıyla iptal edildi', 'success');
+        
+        // Close modal
+        if (cancelPlanningRequestModal) {
+            cancelPlanningRequestModal.hide();
+        }
+        
+        // Refresh the table
+        await loadPlanningRequests();
+    } catch (error) {
+        console.error('Error confirming cancel planning request:', error);
+        showNotification('Planlama talebi iptal edilirken hata oluştu: ' + error.message, 'error');
+        
+        // Re-enable button on error
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            confirmBtn.innerHTML = originalContent;
+        }
+        
+        // Re-throw error so modal stays open
+        throw error;
+    }
+}
+
+// Edit planning request
+async function editPlanningRequest(requestId) {
+    try {
+        // Get the request details
+        const request = await getPlanningRequest(requestId);
+        
+        // Check if already cancelled
+        if (request.status === 'cancelled') {
+            showNotification('İptal edilmiş planlama talepleri düzenlenemez', 'error');
+            return;
+        }
+        
+        // Check if converted or completed
+        if (request.status === 'converted' || request.status === 'completed') {
+            showNotification('Dönüştürülmüş veya tamamlanmış planlama talepleri düzenlenemez', 'error');
+            return;
+        }
+        
+        // Show edit modal with pre-filled data
+        await showEditPlanningRequestModal(request);
+    } catch (error) {
+        console.error('Error editing planning request:', error);
+        showNotification('Planlama talebi düzenlenirken hata oluştu: ' + error.message, 'error');
+    }
+}
+
 // Show planning request details modal
 async function showPlanningRequestDetailsModal(request) {
     if (!request) return;
@@ -1567,6 +1740,8 @@ let planningRequestDetailsModal = null;
 let exportConfirmationModal = null;
 // ERP code input modal instance
 let erpCodeModal = null;
+// Cancel planning request confirmation modal instance
+let cancelPlanningRequestModal = null;
 
 // Show create planning request modal
 // departmentRequest: Optional department request object to pre-fill the form
@@ -1929,6 +2104,521 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
 
     // Show the modal
     createPlanningRequestModal.show();
+}
+
+// Show edit planning request modal
+async function showEditPlanningRequestModal(request) {
+    if (!createPlanningRequestModal) {
+        // Initialize modal if not already created
+        createPlanningRequestModal = new EditModal('create-planning-request-modal-container', {
+            title: 'Planlama Talebi Düzenle',
+            icon: 'fas fa-edit',
+            saveButtonText: 'Kaydet',
+            size: 'fullscreen'
+        });
+    }
+
+    // Clear previous form data
+    createPlanningRequestModal.clearAll();
+    // Clear file attachments
+    fileAttachments = [];
+
+    // Update modal title
+    createPlanningRequestModal.setTitle('Planlama Talebi Düzenle');
+    createPlanningRequestModal.setSaveButtonText('Kaydet');
+
+    // Store request ID for update
+    const modalContainer = createPlanningRequestModal.container;
+    let requestIdElement = modalContainer.querySelector('[data-planning-request-id]');
+    if (!requestIdElement) {
+        requestIdElement = document.createElement('div');
+        requestIdElement.setAttribute('data-planning-request-id', request.id);
+        requestIdElement.style.display = 'none';
+        modalContainer.appendChild(requestIdElement);
+    } else {
+        requestIdElement.setAttribute('data-planning-request-id', request.id);
+    }
+
+    const priorityOptions = [
+        { value: 'low', label: 'Düşük' },
+        { value: 'normal', label: 'Normal' },
+        { value: 'high', label: 'Yüksek' },
+        { value: 'urgent', label: 'Acil' }
+    ];
+
+    // Add basic information section
+    createPlanningRequestModal.addSection({
+        id: 'basic-info-section',
+        title: 'Temel Bilgiler',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'title',
+                name: 'title',
+                label: 'Başlık',
+                type: 'text',
+                placeholder: 'Planlama talebi başlığını girin',
+                value: request.title || '',
+                required: true,
+                icon: 'fas fa-heading',
+                colSize: 12,
+                help: 'Planlama talebinin başlığı (zorunlu)'
+            },
+            {
+                id: 'description',
+                name: 'description',
+                label: 'Açıklama',
+                type: 'textarea',
+                placeholder: 'Planlama talebi açıklamasını girin',
+                value: request.description || '',
+                required: false,
+                icon: 'fas fa-align-left',
+                colSize: 12,
+                rows: 4,
+                help: 'Planlama talebi hakkında detaylı açıklama (opsiyonel)'
+            }
+        ]
+    });
+
+    // Add request details section
+    createPlanningRequestModal.addSection({
+        id: 'request-details-section',
+        title: 'Talep Detayları',
+        icon: 'fas fa-clipboard-list',
+        iconColor: 'text-success',
+        fields: [
+            {
+                id: 'priority',
+                name: 'priority',
+                label: 'Öncelik',
+                type: 'dropdown',
+                value: request.priority || 'normal',
+                required: false,
+                icon: 'fas fa-exclamation-triangle',
+                colSize: 12,
+                help: 'Talebin öncelik seviyesi',
+                options: priorityOptions
+            },
+            {
+                id: 'needed_date',
+                name: 'needed_date',
+                label: 'İhtiyaç Tarihi',
+                type: 'date',
+                value: request.needed_date || '',
+                required: false,
+                icon: 'fas fa-calendar-alt',
+                colSize: 12,
+                help: 'Talebin ihtiyaç duyulduğu tarih (opsiyonel)'
+            },
+            {
+                id: 'check_inventory',
+                name: 'check_inventory',
+                label: 'Envanter Kontrolü',
+                type: 'checkbox',
+                value: request.check_inventory || false,
+                required: false,
+                icon: 'fas fa-warehouse',
+                colSize: 12,
+                help: 'Talebi envanter kontrolü için gönder'
+            }
+        ]
+    });
+
+    // Add items section (empty fields, will be populated with custom HTML)
+    createPlanningRequestModal.addSection({
+        id: 'items-info',
+        title: 'Ürün Bilgileri',
+        icon: 'fas fa-boxes',
+        iconColor: 'text-primary',
+        fields: []
+    });
+
+    // Add attachments section (empty fields, will be populated with custom HTML)
+    createPlanningRequestModal.addSection({
+        id: 'attachments-info',
+        title: 'Dosya Ekleri',
+        icon: 'fas fa-paperclip',
+        iconColor: 'text-info',
+        fields: []
+    });
+
+    // Set up save callback for update
+    createPlanningRequestModal.onSaveCallback(async (formData) => {
+        try {
+            // Collect items data from dynamic rows
+            const itemRows = document.querySelectorAll('.planning-item-row');
+            const items = [];
+            for (const row of itemRows) {
+                const itemCode = row.querySelector('input[name="item_code"]')?.value?.trim();
+                const itemId = itemCode && !isNaN(itemCode) ? parseInt(itemCode, 10) : null;
+                const itemName = row.querySelector('input[name="item_name"]')?.value?.trim();
+                const itemDescription = row.querySelector('input[name="item_description"]')?.value?.trim();
+                const itemUnit = row.querySelector('select[name="item_unit"]')?.value?.trim() || 'adet';
+                const itemQuantity = row.querySelector('input[name="item_quantity"]')?.value?.trim();
+                const jobNo = row.querySelector('input[name="job_no"]')?.value?.trim();
+                const itemSpecifications = row.querySelector('input[name="item_specifications"]')?.value?.trim();
+                
+                // Validate required fields
+                if (!jobNo) {
+                    showNotification('Tüm ürünler için iş no gereklidir', 'error');
+                    throw new Error('Job number required for all items');
+                }
+                
+                if (!itemQuantity || parseFloat(itemQuantity) <= 0) {
+                    showNotification('Tüm ürünler için geçerli miktar gereklidir', 'error');
+                    throw new Error('Valid quantity required for all items');
+                }
+
+                // Item code is required (can be numeric ID or string code)
+                if (!itemCode && !itemId) {
+                    showNotification('Tüm ürünler için ürün kodu/ID gereklidir', 'error');
+                    throw new Error('Item code/ID required for all items');
+                }
+
+                // Build item object
+                const itemData = {
+                    job_no: jobNo,
+                    quantity: parseFloat(itemQuantity)
+                };
+
+                // Add item identifier (item_id takes precedence over item_code)
+                if (itemId) {
+                    itemData.item_id = itemId;
+                } else {
+                    itemData.item_code = itemCode;
+                }
+
+                // Add optional fields
+                if (itemName) {
+                    itemData.item_name = itemName;
+                }
+                if (itemDescription) {
+                    itemData.item_description = itemDescription;
+                }
+                if (itemUnit) {
+                    itemData.item_unit = itemUnit;
+                }
+                if (itemSpecifications) {
+                    itemData.specifications = itemSpecifications;
+                }
+
+                items.push(itemData);
+            }
+
+            // Prepare files array (includes both new uploads and existing file references)
+            const files = [];
+            
+            for (const attachment of fileAttachments) {
+                // Validate that at least one target is selected
+                if (!attachment.attachTo || attachment.attachTo.length === 0) {
+                    showNotification(`"${attachment.file.name}" dosyası için en az bir hedef seçilmelidir (Talep veya ürün)`, 'error');
+                    throw new Error('File must have at least one attachment target');
+                }
+
+                // Validate item indices are within range
+                const itemIndices = attachment.attachTo.filter(t => typeof t === 'number');
+                const maxItemIndex = items.length - 1;
+                for (const index of itemIndices) {
+                    if (index < 0 || index > maxItemIndex) {
+                        showNotification(`"${attachment.file.name}" dosyası için geçersiz ürün indeksi`, 'error');
+                        throw new Error('Invalid item index in attach_to');
+                    }
+                }
+
+                // Build file object for API
+                const fileObj = {
+                    description: attachment.description || '',
+                    attach_to: attachment.attachTo
+                };
+
+                // For existing files, use source_attachment_id
+                // For new files, use file
+                if (attachment.isExisting) {
+                    fileObj.source_attachment_id = attachment.sourceAttachmentId;
+                } else {
+                    fileObj.file = attachment.file;
+                }
+
+                files.push(fileObj);
+            }
+
+            // Get request ID
+            const requestId = parseInt(modalContainer.querySelector('[data-planning-request-id]')?.dataset.planningRequestId, 10);
+            if (!requestId) {
+                throw new Error('Request ID not found');
+            }
+
+            // Prepare request data for update
+            const requestData = {
+                title: formData.title,
+                description: formData.description || '',
+                priority: formData.priority || 'normal',
+                needed_date: formData.needed_date || null,
+                items: items.length > 0 ? items : undefined,
+                files: files.length > 0 ? files : undefined
+            };
+
+            // Add check_inventory if checkbox is checked
+            if (formData.check_inventory) {
+                requestData.check_inventory = true;
+            }
+
+            // Update the planning request
+            await updatePlanningRequest(requestId, requestData);
+
+            // Show success notification
+            showNotification('Planlama talebi başarıyla güncellendi', 'success');
+
+            // Close modal
+            createPlanningRequestModal.hide();
+
+            // Refresh the table
+            await loadPlanningRequests();
+        } catch (error) {
+            console.error('Error updating planning request:', error);
+            if (error.message !== 'Job number required for all items' && 
+                error.message !== 'Valid quantity required for all items' &&
+                error.message !== 'Item code/ID or item name required') {
+                showNotification('Planlama talebi güncellenirken hata oluştu: ' + error.message, 'error');
+            }
+            throw error; // Re-throw to prevent modal from closing
+        }
+    });
+
+    // Set up cancel callback
+    createPlanningRequestModal.onCancelCallback(() => {
+        // Clear form on cancel
+        createPlanningRequestModal.clearAll();
+        // Clear file attachments
+        fileAttachments = [];
+        renderFilesList();
+        // Remove request ID
+        const requestIdElement = modalContainer.querySelector('[data-planning-request-id]');
+        if (requestIdElement) {
+            requestIdElement.remove();
+        }
+    });
+
+    // Render the modal
+    createPlanningRequestModal.render();
+
+    // Rearrange sections into two-column layout after rendering
+    setTimeout(() => {
+        const form = createPlanningRequestModal.container.querySelector('#edit-modal-form');
+        const basicInfoSection = createPlanningRequestModal.container.querySelector('[data-section-id="basic-info-section"]');
+        const requestDetailsSection = createPlanningRequestModal.container.querySelector('[data-section-id="request-details-section"]');
+        
+        if (form && basicInfoSection && requestDetailsSection) {
+            // Create a wrapper row for two-column layout
+            const wrapperRow = document.createElement('div');
+            wrapperRow.className = 'row g-3 mb-3';
+            
+            // Wrap basic info section in left column
+            const leftCol = document.createElement('div');
+            leftCol.className = 'col-md-6';
+            basicInfoSection.classList.remove('mb-3');
+            basicInfoSection.classList.add('mb-0', 'h-100');
+            leftCol.appendChild(basicInfoSection);
+            
+            // Wrap request details section in right column
+            const rightCol = document.createElement('div');
+            rightCol.className = 'col-md-6';
+            requestDetailsSection.classList.remove('mb-3');
+            requestDetailsSection.classList.add('mb-0', 'h-100');
+            rightCol.appendChild(requestDetailsSection);
+            
+            // Add columns to wrapper row
+            wrapperRow.appendChild(leftCol);
+            wrapperRow.appendChild(rightCol);
+            
+            // Insert wrapper row at the beginning of the form (before items section)
+            const itemsSection = createPlanningRequestModal.container.querySelector('[data-section-id="items-info"]');
+            if (itemsSection) {
+                form.insertBefore(wrapperRow, itemsSection);
+            } else {
+                form.insertBefore(wrapperRow, form.firstChild);
+            }
+        }
+        
+        // Setup items section with custom HTML after rendering
+        setupItemsSection();
+        setupAttachmentsSection();
+        
+        // Pre-fill items and files from planning request
+        prefillItemsFromPlanningRequest(request);
+        prefillFilesFromPlanningRequest(request);
+    }, 100);
+
+    // Show the modal
+    createPlanningRequestModal.show();
+}
+
+// Pre-fill items from planning request
+function prefillItemsFromPlanningRequest(request) {
+    if (!request.items || request.items.length === 0) {
+        return;
+    }
+
+    const container = document.getElementById('planning-items-container');
+    if (!container) {
+        return;
+    }
+
+    // Clear existing items
+    container.innerHTML = '';
+
+    // Add each item from planning request
+    request.items.forEach((item, index) => {
+        const itemCode = item.item_code || item.item_id?.toString() || '';
+        const itemName = item.item_name || '';
+        const itemDescription = item.item_description || '';
+        const itemUnit = item.item_unit || 'adet';
+        const quantity = item.quantity || 1;
+        const jobNo = item.job_no || '';
+        const specifications = item.specifications || '';
+
+        const itemHtml = `
+            <div class="planning-item-row mb-2" data-index="${index}">
+                <div class="row g-2">
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm" name="item_code" placeholder="Ürün kodu veya ID" value="${escapeHtml(itemCode)}" required>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" value="${escapeHtml(itemName)}">
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtml(itemDescription)}">
+                    </div>
+                    <div class="col-md-1">
+                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtml(jobNo)}" required>
+                    </div>
+                    <div class="col-md-1">
+                        <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="0.01" min="0.01" value="${quantity}" required>
+                    </div>
+                    <div class="col-md-1">
+                        <select class="form-control form-control-sm" name="item_unit">
+                            ${UNIT_CHOICES.map(unit => `<option value="${unit.value}" ${unit.value === itemUnit ? 'selected' : ''}>${unit.label}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtml(specifications)}">
+                    </div>
+                    <div class="col-md-1">
+                        <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePlanningItem(${index})" title="Ürünü Kaldır">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        container.insertAdjacentHTML('beforeend', itemHtml);
+
+        // Add event listener to item specifications field to update file list when description changes
+        const itemRow = container.querySelector(`.planning-item-row[data-index="${index}"]`);
+        if (itemRow) {
+            const specsInput = itemRow.querySelector('input[name="item_specifications"]');
+            if (specsInput) {
+                specsInput.dataset.hasFileListListener = 'true';
+                specsInput.addEventListener('input', () => {
+                    renderFilesList(); // Update file list to reflect new item description
+                });
+            }
+        }
+    });
+
+    // Update file list to show new items
+    renderFilesList();
+}
+
+// Pre-fill files from planning request
+function prefillFilesFromPlanningRequest(request) {
+    // Build a map of asset_id to item indices for quick lookup
+    const assetIdToItemIndices = new Map();
+    if (request.items && request.items.length > 0) {
+        request.items.forEach((item, itemIndex) => {
+            if (item.files && Array.isArray(item.files)) {
+                item.files.forEach(file => {
+                    if (file.asset_id) {
+                        if (!assetIdToItemIndices.has(file.asset_id)) {
+                            assetIdToItemIndices.set(file.asset_id, []);
+                        }
+                        assetIdToItemIndices.get(file.asset_id).push(itemIndex);
+                    }
+                });
+            }
+        });
+    }
+
+    // Add request-level files
+    if (request.files && request.files.length > 0) {
+        request.files.forEach(file => {
+            const fileObj = {
+                name: file.file_name ? file.file_name.split('/').pop() : 'Dosya',
+                size: 0,
+                type: '',
+                url: file.file_url,
+                id: file.id,
+                asset_id: file.asset_id
+            };
+            
+            // Determine attachment targets
+            const attachTo = [];
+            
+            // Check if this file's asset_id is mapped to any items
+            if (file.asset_id && assetIdToItemIndices.has(file.asset_id)) {
+                const itemIndices = assetIdToItemIndices.get(file.asset_id);
+                attachTo.push(...itemIndices);
+            } else {
+                // File is at request level
+                attachTo.push('request');
+            }
+            
+            fileAttachments.push({
+                file: fileObj,
+                description: file.description || '',
+                attachTo: attachTo,
+                isExisting: true,
+                sourceAttachmentId: file.id
+            });
+        });
+    }
+
+    // Add item-level files
+    if (request.items && request.items.length > 0) {
+        request.items.forEach((item, itemIndex) => {
+            if (item.files && item.files.length > 0) {
+                item.files.forEach(file => {
+                    // Check if this file is already added (might be shared between request and items)
+                    const alreadyAdded = fileAttachments.some(att => att.sourceAttachmentId === file.id);
+                    if (!alreadyAdded) {
+                        const fileObj = {
+                            name: file.file_name ? file.file_name.split('/').pop() : 'Dosya',
+                            size: 0,
+                            type: '',
+                            url: file.file_url,
+                            id: file.id,
+                            asset_id: file.asset_id
+                        };
+                        
+                        fileAttachments.push({
+                            file: fileObj,
+                            description: file.description || '',
+                            attachTo: [itemIndex],
+                            isExisting: true,
+                            sourceAttachmentId: file.id
+                        });
+                    }
+                });
+            }
+        });
+    }
+    
+    // Render the files list to show the existing files
+    setTimeout(() => {
+        renderFilesList();
+    }, 200);
 }
 
 // Helper function to escape HTML

@@ -191,24 +191,102 @@ export async function createPlanningRequest(requestData) {
  * Update a planning request (full update)
  * @param {number} requestId - Planning request ID
  * @param {Object} requestData - Updated planning request data
+ * @param {Array} [requestData.items] - Items array
+ * @param {Array} [requestData.files] - Files array (supports both new uploads and existing file references)
  * @returns {Promise<Object>} Updated planning request
  */
 export async function updatePlanningRequest(requestId, requestData) {
     try {
-        const response = await authedFetch(`${PLANNING_BASE_URL}/requests/${requestId}/`, {
-            method: 'PUT',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestData)
-        });
+        // Check if we have files to upload (new files require FormData)
+        const hasNewFiles = requestData.files && requestData.files.some(file => file.file && !file.source_attachment_id);
+        
+        if (hasNewFiles || (requestData.files && requestData.files.length > 0)) {
+            // Use FormData for file uploads
+            const formData = new FormData();
+            
+            // Add basic fields
+            if (requestData.title !== undefined && requestData.title !== null) {
+                formData.append('title', requestData.title);
+            }
+            if (requestData.description !== undefined && requestData.description !== null) {
+                formData.append('description', requestData.description);
+            }
+            if (requestData.needed_date !== undefined && requestData.needed_date !== null) {
+                formData.append('needed_date', requestData.needed_date);
+            }
+            if (requestData.priority !== undefined && requestData.priority !== null) {
+                formData.append('priority', requestData.priority);
+            }
+            if (requestData.check_inventory !== undefined && requestData.check_inventory !== null) {
+                formData.append('check_inventory', requestData.check_inventory);
+            }
+            
+            // Add items if provided
+            if (requestData.items && requestData.items.length > 0) {
+                formData.append('items', JSON.stringify(requestData.items));
+            }
+            
+            // Add files if provided
+            if (requestData.files && requestData.files.length > 0) {
+                requestData.files.forEach((fileData, index) => {
+                    // Either file or source_attachment_id is required
+                    if (!fileData.file && !fileData.source_attachment_id) {
+                        throw new Error(`File at index ${index} must have either 'file' or 'source_attachment_id'`);
+                    }
+                    
+                    // Cannot have both
+                    if (fileData.file && fileData.source_attachment_id) {
+                        throw new Error(`File at index ${index} cannot have both 'file' and 'source_attachment_id'`);
+                    }
+                    
+                    // Add file or source_attachment_id
+                    if (fileData.file) {
+                        formData.append(`files[${index}].file`, fileData.file);
+                    } else if (fileData.source_attachment_id) {
+                        formData.append(`files[${index}].source_attachment_id`, fileData.source_attachment_id);
+                    }
+                    
+                    // Description is optional
+                    if (fileData.description) {
+                        formData.append(`files[${index}].description`, fileData.description);
+                    }
+                    
+                    // attach_to is required and must be sent as JSON string
+                    if (!fileData.attach_to || !Array.isArray(fileData.attach_to) || fileData.attach_to.length === 0) {
+                        throw new Error(`attach_to is required for file at index ${index} and must contain at least one target`);
+                    }
+                    formData.append(`files[${index}].attach_to`, JSON.stringify(fileData.attach_to));
+                });
+            }
+            
+            const response = await authedFetch(`${PLANNING_BASE_URL}/requests/${requestId}/`, {
+                method: 'PUT',
+                body: formData
+            });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || errorData.error || 'Planlama talebi güncellenirken hata oluştu');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || errorData.error || 'Planlama talebi güncellenirken hata oluştu');
+            }
+
+            return await response.json();
+        } else {
+            // Use JSON for updates without new file uploads
+            const response = await authedFetch(`${PLANNING_BASE_URL}/requests/${requestId}/`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || errorData.error || 'Planlama talebi güncellenirken hata oluştu');
+            }
+
+            return await response.json();
         }
-
-        return await response.json();
     } catch (error) {
         console.error('Error updating planning request:', error);
         throw error;
@@ -239,6 +317,35 @@ export async function partialUpdatePlanningRequest(requestId, requestData) {
         return await response.json();
     } catch (error) {
         console.error('Error partially updating planning request:', error);
+        throw error;
+    }
+}
+
+/**
+ * Cancel a planning request
+ * @param {number} requestId - Planning request ID
+ * @param {string} cancellationReason - Reason for cancellation (required)
+ * @returns {Promise<Object>} Response with cancelled planning request
+ */
+export async function cancelPlanningRequest(requestId) {
+    try {
+
+
+        const response = await authedFetch(`${PLANNING_BASE_URL}/requests/${requestId}/cancel/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.detail || errorData.error || 'Planlama talebi iptal edilirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error cancelling planning request:', error);
         throw error;
     }
 }
