@@ -3624,7 +3624,7 @@ function showTransferWorkflowModal(requestData, items, departmentRequestId) {
                                 <p><strong>Ürün Sayısı:</strong> ${itemsCount} ürün</p>
                             </div>
                             <div class="d-flex justify-content-end">
-                                <button type="button" class="btn btn-info" id="submit-transfer-btn">
+                                <button type="button" class="btn btn-primary" id="submit-transfer-btn">
                                     <i class="fas fa-paper-plane me-2"></i>Talebi Gönder
                                 </button>
                             </div>
@@ -3838,16 +3838,66 @@ function previewExcelImport() {
 }
 
 function parseCSV(csvText) {
-    const lines = csvText.split('\n');
     const result = [];
+    const delimiter = csvText.includes(';') ? ';' : ',';
     
-    lines.forEach(line => {
-        if (line.trim()) {
-            // Handle both comma and semicolon separators
-            const values = line.includes(';') ? line.split(';') : line.split(',');
-            result.push(values.map(value => value.trim().replace(/^["']|["']$/g, '')));
+    let currentLine = [];
+    let currentField = '';
+    let insideQuotes = false;
+    let i = 0;
+    
+    while (i < csvText.length) {
+        const char = csvText[i];
+        const nextChar = i + 1 < csvText.length ? csvText[i + 1] : null;
+        
+        if (char === '"') {
+            if (insideQuotes && nextChar === '"') {
+                // Escaped quote (""), add single quote to field
+                currentField += '"';
+                i += 2; // Skip both quotes
+                continue;
+            } else {
+                // Toggle quote state
+                insideQuotes = !insideQuotes;
+                i++;
+                continue;
+            }
         }
-    });
+        
+        if (!insideQuotes && (char === delimiter || char === '\n' || char === '\r')) {
+            // End of field
+            currentLine.push(currentField.trim());
+            currentField = '';
+            
+            if (char === '\n' || (char === '\r' && nextChar === '\n')) {
+                // End of line
+                if (currentLine.length > 0 && currentLine.some(field => field.length > 0)) {
+                    result.push(currentLine);
+                }
+                currentLine = [];
+                if (char === '\r' && nextChar === '\n') {
+                    i += 2; // Skip \r\n
+                } else {
+                    i++;
+                }
+                continue;
+            }
+            i++;
+            continue;
+        }
+        
+        // Regular character
+        currentField += char;
+        i++;
+    }
+    
+    // Handle last field and line
+    if (currentField.length > 0 || currentLine.length > 0) {
+        currentLine.push(currentField.trim());
+        if (currentLine.length > 0 && currentLine.some(field => field.length > 0)) {
+            result.push(currentLine);
+        }
+    }
     
     return result;
 }
