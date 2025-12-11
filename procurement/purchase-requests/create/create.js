@@ -61,8 +61,6 @@ function syncPlanningRequestItemIds() {
     
     // Update planning_request_item_ids to match actual items
     requestData.planning_request_item_ids = Array.from(itemIds);
-    
-    console.log('Synced planning_request_item_ids:', requestData.planning_request_item_ids);
 }
 
 // Make sync function globally available for itemsManager and dataManager
@@ -350,19 +348,39 @@ async function saveDraftAsJSON() {
             )
         );
 
+        // Sync planning_request_item_ids before saving draft
+        syncPlanningRequestItemIds();
+        
         // Prepare data for backend (same format as submission)
+        // For drafts, save the original ungrouped items to preserve source_planning_request_item_id
         const submissionData = {
             title: requestData.title || 'Malzeme Satın Alma Talebi',
             description: requestData.description,
             priority: requestData.priority || 'normal',
             needed_date: requestData.needed_date || '',
-            items: formattedData.items,
+            items: formattedData.items, // Grouped items for submission format
             suppliers: transformedSuppliers,
             offers: transformedOffers,
             recommendations: transformedRecommendations,
             total_amount_eur: totalAmountEUR,
             is_rolling_mill: isRollingMill,
-            planning_request_item_ids: requestData.planning_request_item_ids || []
+            planning_request_item_ids: requestData.planning_request_item_ids || [],
+            // Store original ungrouped items to preserve source_planning_request_item_id
+            original_items: requestData.items.map(item => ({
+                ...item,
+                // Ensure all necessary fields are preserved
+                id: item.id,
+                code: item.code,
+                name: item.name,
+                job_no: item.job_no,
+                quantity: item.quantity,
+                unit: item.unit,
+                specs: item.specs,
+                specifications: item.specifications,
+                item_description: item.item_description,
+                source_planning_request_item_id: item.source_planning_request_item_id,
+                file_asset_ids: item.file_asset_ids
+            }))
         };
         
         // Prepare draft data according to the model structure
@@ -376,10 +394,6 @@ async function saveDraftAsJSON() {
         
         // Send to backend
         const result = await savePurchaseRequestDraft(draftData);
-        
-        // Log the JSON data for debugging
-        console.log('Draft Data as JSON:', JSON.stringify(draftData, null, 2));
-        console.log('Backend response:', result);
         
         showNotification('Taslak başarıyla kaydedildi!', 'success');
         
@@ -493,8 +507,6 @@ async function loadDraftRequest(draftId) {
 
 async function loadDraftData(draft) {
     try {
-        console.log('Loading draft data:', draft);
-        
         // Set flag to prevent auto-save during draft loading
         if (dataManager) {
             dataManager.isLoadingDraft = true;
@@ -510,7 +522,6 @@ async function loadDraftData(draft) {
             localStorage.removeItem('purchaseRequestSuppliers');
             localStorage.removeItem('purchaseRequestOffers');
             localStorage.removeItem('purchaseRequestRecommendations');
-            console.log('Cleared all localStorage data');
         }
         
         // Clear the current data without re-rendering
@@ -557,24 +568,30 @@ async function loadDraftData(draft) {
         requestData.priority = draft.priority || 'normal';
         requestData.needed_date = draft.needed_date || '';
         
-        console.log('Initial needed_date from draft:', draft.needed_date);
-        console.log('Initial requestData.needed_date:', requestData.needed_date);
-        
         // Load data from the JSON field
         if (draft.data) {
             // Also check if needed_date is in the data object (for backend drafts)
             if (draft.data.needed_date && !requestData.needed_date) {
                 requestData.needed_date = draft.data.needed_date;
-                console.log('Updated needed_date from draft.data:', draft.data.needed_date);
             }
             
-            // Load items and check if they need to be ungrouped
-            let items = draft.data.items || [];
+            // Load items - prefer original_items if available (preserves source_planning_request_item_id)
+            // Otherwise fall back to ungrouping the grouped items
+            let items = [];
+            let usingOriginalItems = false;
+            if (draft.data.original_items && Array.isArray(draft.data.original_items) && draft.data.original_items.length > 0) {
+                // Use original ungrouped items if available
+                items = draft.data.original_items;
+                usingOriginalItems = true;
+            } else {
+                // Fall back to grouped items and ungroup them
+                items = draft.data.items || [];
+            }
             
             // Check if items have allocations (indicating they were grouped during save)
             // If so, ungroup them back to separate items
-            if (items.length > 0 && items[0].allocations && Array.isArray(items[0].allocations)) {
-                console.log('Detected grouped items in draft, ungrouping...');
+            // Skip this if we're using original_items (they're already ungrouped)
+            if (!usingOriginalItems && items.length > 0 && items[0].allocations && Array.isArray(items[0].allocations)) {
                 const ungroupedItems = [];
                 
                 items.forEach((groupedItem, groupIndex) => {
@@ -607,13 +624,11 @@ async function loadDraftData(draft) {
                     }
                 });
                 
-                                             items = ungroupedItems;
-                 console.log('Ungrouped items:', items);
+                items = ungroupedItems;
                  
                 // If we ungrouped items, we need to handle offers and recommendations
                 // that were indexed by the grouped item indices
                 if (draft.data.offers && Object.keys(draft.data.offers).length > 0) {
-                    console.log('Handling offers for ungrouped items...');
                     const newOffers = {};
                     
                     Object.keys(draft.data.offers).forEach(supplierId => {
@@ -644,7 +659,6 @@ async function loadDraftData(draft) {
                  
                 // Handle recommendations similarly
                 if (draft.data.recommendations && Object.keys(draft.data.recommendations).length > 0) {
-                    console.log('Handling recommendations for ungrouped items...');
                     const newRecommendations = {};
                     
                     Object.keys(draft.data.recommendations).forEach(groupedIndex => {
@@ -678,6 +692,7 @@ async function loadDraftData(draft) {
                 requestData.suppliers = draft.data.suppliers || [];
              } else {
                  // No ungrouping needed, load items and data as is
+                 // If using original_items, they're already ungrouped and have source_planning_request_item_id
                  requestData.items = items;
                  requestData.suppliers = draft.data.suppliers || [];
                  requestData.offers = draft.data.offers || {};
@@ -708,7 +723,6 @@ async function loadDraftData(draft) {
             requestData.planning_request_item_ids = Array.isArray(draft.data.planning_request_item_ids) 
                 ? draft.data.planning_request_item_ids 
                 : [];
-            console.log('Restored planning_request_item_ids from draft:', requestData.planning_request_item_ids);
         } else {
             requestData.planning_request_item_ids = [];
         }
@@ -723,9 +737,6 @@ async function loadDraftData(draft) {
         }
         
         // Update managers with the loaded data
-        console.log('Final requestData.items before updating managers:', requestData.items);
-        console.log('Final requestData.suppliers before updating managers:', requestData.suppliers);
-        
         if (itemsManager) {
             itemsManager.requestData = requestData;
         }
@@ -752,17 +763,12 @@ async function loadDraftData(draft) {
         // Save the loaded draft data to localStorage as the new current state
         if (dataManager) {
             dataManager.saveDraft();
-            console.log('Saved loaded draft to localStorage as new current state');
         }
         
         // Reset the loading flag
         if (dataManager) {
             dataManager.isLoadingDraft = false;
         }
-        
-        console.log('Draft loading completed successfully');
-        console.log('Final items count:', requestData.items.length);
-        console.log('Final suppliers count:', requestData.suppliers.length);
         
     } catch (error) {
         console.error('Error loading draft data:', error);
@@ -814,9 +820,6 @@ function updateComparisonTableRates() {
 }
 
 async function renderAll() {
-    console.log('renderAll - requestData.items:', requestData.items);
-    console.log('renderAll - requestData.suppliers:', requestData.suppliers);
-    
     renderFormFields();
     itemsManager.renderItemsTable();
     
@@ -849,14 +852,11 @@ function renderFormFields() {
     const priorityField = document.getElementById('request-priority');
     const neededDateField = document.getElementById('needed-date');
     
-    console.log('renderFormFields - requestData.needed_date:', requestData.needed_date);
-    
     if (titleField) titleField.value = requestData.title || '';
     if (descriptionField) descriptionField.value = requestData.description || '';
     if (priorityField) priorityField.value = requestData.priority || 'normal';
     if (neededDateField) {
         neededDateField.value = requestData.needed_date || '';
-        console.log('Setting neededDateField.value to:', requestData.needed_date || '');
     }
 }
 
@@ -972,8 +972,6 @@ async function submitRequest() {
         );
         
         if (!validation.isValid) {
-            console.log(validation);
-            
             // Display validation errors to user
             validation.errors.forEach(error => {
                 showNotification(error, 'error');
@@ -1015,8 +1013,6 @@ async function submitRequest() {
         
         // Check for problematic items that would cause backend issues
         if (formattedData.error) {
-            console.log('Problematic items detected:', formattedData.error);
-            
             // Show detailed error message to user
             let errorMessage = formattedData.error.message + '\n\n';
             formattedData.error.items.forEach((problematicItem, index) => {
