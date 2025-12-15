@@ -117,24 +117,24 @@ export async function createPlanningRequest(requestData) {
         }
 
         // Add files if provided (new structure with attach_to)
-        // Supports both new uploads (file) and existing file references (source_attachment_id)
+        // Supports both new uploads (file) and existing file references (asset_id)
         if (requestData.files && requestData.files.length > 0) {
             requestData.files.forEach((fileData, index) => {
-                // Either file or source_attachment_id is required
-                if (!fileData.file && !fileData.source_attachment_id) {
-                    throw new Error(`File at index ${index} must have either 'file' or 'source_attachment_id'`);
+                // Either file or asset_id is required
+                if (!fileData.file && !fileData.asset_id) {
+                    throw new Error(`File at index ${index} must have either 'file' or 'asset_id'`);
                 }
                 
                 // Cannot have both
-                if (fileData.file && fileData.source_attachment_id) {
-                    throw new Error(`File at index ${index} cannot have both 'file' and 'source_attachment_id'`);
+                if (fileData.file && fileData.asset_id) {
+                    throw new Error(`File at index ${index} cannot have both 'file' and 'asset_id'`);
                 }
                 
-                // Add file or source_attachment_id
+                // Add file or asset_id
                 if (fileData.file) {
                     formData.append(`files[${index}].file`, fileData.file);
-                } else if (fileData.source_attachment_id) {
-                    formData.append(`files[${index}].source_attachment_id`, fileData.source_attachment_id);
+                } else if (fileData.asset_id) {
+                    formData.append(`files[${index}].asset_id`, fileData.asset_id);
                 }
                 
                 // Description is optional
@@ -198,7 +198,7 @@ export async function createPlanningRequest(requestData) {
 export async function updatePlanningRequest(requestId, requestData) {
     try {
         // Check if we have files to upload (new files require FormData)
-        const hasNewFiles = requestData.files && requestData.files.some(file => file.file && !file.source_attachment_id);
+        const hasNewFiles = requestData.files && requestData.files.some(file => file.file && !file.asset_id);
         
         if (hasNewFiles || (requestData.files && requestData.files.length > 0)) {
             // Use FormData for file uploads
@@ -229,21 +229,21 @@ export async function updatePlanningRequest(requestId, requestData) {
             // Add files if provided
             if (requestData.files && requestData.files.length > 0) {
                 requestData.files.forEach((fileData, index) => {
-                    // Either file or source_attachment_id is required
-                    if (!fileData.file && !fileData.source_attachment_id) {
-                        throw new Error(`File at index ${index} must have either 'file' or 'source_attachment_id'`);
+                    // Either file or asset_id is required
+                    if (!fileData.file && !fileData.asset_id) {
+                        throw new Error(`File at index ${index} must have either 'file' or 'asset_id'`);
                     }
                     
                     // Cannot have both
-                    if (fileData.file && fileData.source_attachment_id) {
-                        throw new Error(`File at index ${index} cannot have both 'file' and 'source_attachment_id'`);
+                    if (fileData.file && fileData.asset_id) {
+                        throw new Error(`File at index ${index} cannot have both 'file' and 'asset_id'`);
                     }
                     
-                    // Add file or source_attachment_id
+                    // Add file or asset_id
                     if (fileData.file) {
                         formData.append(`files[${index}].file`, fileData.file);
-                    } else if (fileData.source_attachment_id) {
-                        formData.append(`files[${index}].source_attachment_id`, fileData.source_attachment_id);
+                    } else if (fileData.asset_id) {
+                        formData.append(`files[${index}].asset_id`, fileData.asset_id);
                     }
                     
                     // Description is optional

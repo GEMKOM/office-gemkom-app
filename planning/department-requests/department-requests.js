@@ -1978,10 +1978,10 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                     attach_to: attachment.attachTo
                 };
 
-                // For existing files, use source_attachment_id
+                // For existing files, use asset_id
                 // For new files, use file
                 if (attachment.isExisting) {
-                    fileObj.source_attachment_id = attachment.sourceAttachmentId;
+                    fileObj.asset_id = attachment.assetId;
                 } else {
                     fileObj.file = attachment.file;
                 }
@@ -2332,10 +2332,10 @@ async function showEditPlanningRequestModal(request) {
                     attach_to: attachment.attachTo
                 };
 
-                // For existing files, use source_attachment_id
+                // For existing files, use asset_id
                 // For new files, use file
                 if (attachment.isExisting) {
-                    fileObj.source_attachment_id = attachment.sourceAttachmentId;
+                    fileObj.asset_id = attachment.assetId;
                 } else {
                     fileObj.file = attachment.file;
                 }
@@ -2580,7 +2580,8 @@ function prefillFilesFromPlanningRequest(request) {
                 description: file.description || '',
                 attachTo: attachTo,
                 isExisting: true,
-                sourceAttachmentId: file.id
+                sourceAttachmentId: file.id,
+                assetId: file.asset_id
             });
         });
     }
@@ -2607,7 +2608,8 @@ function prefillFilesFromPlanningRequest(request) {
                             description: file.description || '',
                             attachTo: [itemIndex],
                             isExisting: true,
-                            sourceAttachmentId: file.id
+                            sourceAttachmentId: file.id,
+                            assetId: file.asset_id
                         });
                     }
                 });
@@ -2774,7 +2776,8 @@ function prefillFilesFromDepartmentRequest(departmentRequest) {
             description: file.description || '',
             attachTo: attachTo,
             isExisting: true,
-            sourceAttachmentId: file.id
+            sourceAttachmentId: file.id,
+            assetId: file.asset_id
         });
     });
     
