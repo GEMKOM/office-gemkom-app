@@ -9,7 +9,7 @@ import { ValidationManager } from './validationManager.js';
 import { fetchCurrencyRates } from '../../../apis/formatters.js';
 import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft } from '../../../apis/procurement.js';
 import { getPlanningRequest } from '../../../apis/planning/planningRequests.js';
-import { getPlanningRequestItems, getNumberOfAvailablePlanningRequestItems, getPlanningRequestItem } from '../../../apis/planning/planningRequestItems.js';
+import { getPlanningRequestItems, getNumberOfAvailablePlanningRequestItems, getPlanningRequestItem, getPlanningRequestItemsFiles } from '../../../apis/planning/planningRequestItems.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
@@ -1139,6 +1139,7 @@ async function submitRequest() {
 let planningItemsTable = null;
 let planningItemsFilters = null;
 let selectedPlanningItems = new Set();
+let selectedPlanningItemsData = new Map(); // Map<id, full item object> to preserve info across pages
 let allPlanningItems = []; // Keep for backward compatibility, but will only contain current page items
 let planningItemsEventListenersSetup = false;
 let planningItemFilesModal = null;
@@ -1171,6 +1172,7 @@ function initializePlanningRequestItemsModal() {
         modal.addEventListener('hidden.bs.modal', () => {
             // Clear selections when modal is closed
             selectedPlanningItems.clear();
+            selectedPlanningItemsData.clear();
             if (planningItemsTable) {
                 updateSelectedItemsCount();
             }
@@ -1374,10 +1376,10 @@ function initializePlanningItemsTable() {
                 sortable: false
             },
             {
-                field: 'files',
+                field: 'files_count',
                 label: 'Dosyalar',
                 formatter: (value, row) => {
-                    const fileCount = Array.isArray(value) ? value.length : 0;
+                    const fileCount = Number(value) || 0;
                     if (fileCount === 0) return '-';
                     return `<button type="button" class="btn btn-sm btn-outline-primary view-item-files-btn" data-item-id="${row.id}" data-item-name="${row.item_name || 'Malzeme'}">
                         <i class="fas fa-paperclip me-1"></i>${fileCount} dosya
@@ -1427,10 +1429,24 @@ function setupPlanningItemsEventListeners() {
             const itemId = parseInt(e.target.dataset.itemId);
             if (e.target.checked) {
                 selectedPlanningItems.add(itemId);
+                const item = allPlanningItems.find(i => i.id === itemId);
+                if (item) {
+                    selectedPlanningItemsData.set(itemId, { ...item });
+                }
             } else {
                 selectedPlanningItems.delete(itemId);
+                selectedPlanningItemsData.delete(itemId);
             }
             updateSelectedItemsCount();
+            // Highlight row immediately
+            const row = e.target.closest('tr');
+            if (row) {
+                if (e.target.checked) {
+                    row.classList.add('table-success');
+                } else {
+                    row.classList.remove('table-success');
+                }
+            }
         }
     });
     
@@ -1449,6 +1465,19 @@ function setupPlanningItemsEventListeners() {
             const planningRequestId = parseInt(planningRequestBtn.dataset.planningRequestId);
             const requestNumber = planningRequestBtn.dataset.requestNumber;
             showPlanningRequestDetailsModal(planningRequestId, requestNumber);
+        }
+
+        // Remove from selected via summary badge
+        const removeSelectedBtn = e.target.closest('.remove-selected-item-btn');
+        if (removeSelectedBtn) {
+            const itemId = parseInt(removeSelectedBtn.dataset.itemId);
+            selectedPlanningItems.delete(itemId);
+            selectedPlanningItemsData.delete(itemId);
+            const checkbox = document.querySelector(`.planning-item-checkbox[data-item-id="${itemId}"]`);
+            if (checkbox) {
+                checkbox.checked = false;
+            }
+            updateSelectedItemsCount();
         }
     });
 }
@@ -1498,9 +1527,14 @@ async function loadPlanningRequestItems() {
         
         // Store current page items (for backward compatibility and checkbox restoration)
         allPlanningItems = items;
+
+        // Build display data: pinned selected items (from stored selection data), then current page items (excluding duplicates)
+        const pinnedItems = Array.from(selectedPlanningItemsData.values());
+        const pageItems = items.filter(item => !selectedPlanningItems.has(item.id));
+        const displayItems = [...pinnedItems, ...pageItems];
         
-        // Update table with paginated data
-        planningItemsTable.updateData(items, totalCount);
+        // Update table with paginated data + pinned items (pinned are extra rows, pagination counts stay backend-based)
+        planningItemsTable.updateData(displayItems, totalCount);
         planningItemsTable.setLoading(false);
         
         // Re-render checkboxes to reflect current selection state
@@ -1512,6 +1546,18 @@ async function loadPlanningRequestItems() {
             });
             // Update button state after checkboxes are restored
             updateSelectedItemsCount();
+            // Highlight selected rows
+            const rows = document.querySelectorAll('#planning-items-table-container tbody tr');
+            rows.forEach(row => {
+                const cb = row.querySelector('.planning-item-checkbox');
+                if (!cb) return;
+                const itemId = parseInt(cb.dataset.itemId);
+                if (selectedPlanningItems.has(itemId)) {
+                    row.classList.add('table-success');
+                } else {
+                    row.classList.remove('table-success');
+                }
+            });
         }, 100);
         
     } catch (error) {
@@ -1541,89 +1587,85 @@ function updateSelectedItemsCount() {
 }
 
 async function showPlanningItemFilesModal(itemId, itemName) {
-    // Find the item in allPlanningItems (current page)
-    let item = allPlanningItems.find(i => i.id === itemId);
-    
-    // If not found on current page, fetch it from backend
-    if (!item) {
-        try {
-            item = await getPlanningRequestItem(itemId);
-        } catch (error) {
-            console.error('Error fetching planning request item:', error);
-            showNotification('Malzeme bilgileri yüklenirken hata oluştu', 'error');
+    try {
+        const response = await getPlanningRequestItemsFiles([itemId]);
+        const itemData = response.items ? response.items.find(entry => entry.item_id === itemId) : null;
+
+        if (!itemData || !itemData.files || itemData.files.length === 0) {
+            showNotification('Bu malzeme için dosya bulunmuyor', 'info');
             return;
         }
-    }
-    
-    if (!item || !item.files || item.files.length === 0) {
-        showNotification('Bu malzeme için dosya bulunmuyor', 'info');
-        return;
-    }
-    
-    // Initialize DisplayModal if not already created
-    if (!planningItemFilesModal) {
-        // Create container element if it doesn't exist
-        let container = document.getElementById('planning-item-files-modal-container');
-        if (!container) {
-            container = document.createElement('div');
-            container.id = 'planning-item-files-modal-container';
-            document.body.appendChild(container);
+
+        const displayName = itemData.item_name || itemName || 'Malzeme';
+
+        // Initialize DisplayModal if not already created
+        if (!planningItemFilesModal) {
+            // Create container element if it doesn't exist
+            let container = document.getElementById('planning-item-files-modal-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'planning-item-files-modal-container';
+                document.body.appendChild(container);
+            }
+            
+            planningItemFilesModal = new DisplayModal('planning-item-files-modal-container', {
+                title: 'Malzeme Dosyaları',
+                icon: 'fas fa-paperclip',
+                size: 'lg',
+                showEditButton: false
+            });
         }
         
-        planningItemFilesModal = new DisplayModal('planning-item-files-modal-container', {
-            title: 'Malzeme Dosyaları',
-            icon: 'fas fa-paperclip',
-            size: 'lg',
-            showEditButton: false
-        });
-    }
-    
-    // Clear previous data
-    planningItemFilesModal.clearData();
-    
-    // Update title
-    planningItemFilesModal.setTitle(`${itemName} - Dosyalar`);
-    
-    // Add files section
-    planningItemFilesModal.addCustomSection({
-        id: 'files-section',
-        title: '',
-        customContent: `
-            <div class="row g-2">
-                <div class="col-12">
-                    <div id="planning-item-files-display-container"></div>
+        // Clear previous data
+        planningItemFilesModal.clearData();
+        
+        // Update title
+        planningItemFilesModal.setTitle(`${displayName} - Dosyalar`);
+        
+        // Add files section
+        planningItemFilesModal.addCustomSection({
+            id: 'files-section',
+            title: '',
+            customContent: `
+                <div class="row g-2">
+                    <div class="col-12">
+                        <div id="planning-item-files-display-container"></div>
+                    </div>
                 </div>
-            </div>
-        `
-    });
-    
-    // Render the modal
-    planningItemFilesModal.render();
-    
-    // Initialize FileAttachments component after modal is rendered
-    setTimeout(() => {
-        const container = document.getElementById('planning-item-files-display-container');
-        if (container) {
-            const fileAttachments = new FileAttachments('planning-item-files-display-container', {
-                title: '',
-                layout: 'grid',
-                showTitle: false,
-                onFileClick: (file) => {
-                    const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
-                    const fileExtension = fileName.split('.').pop().toLowerCase();
-                    const viewer = new FileViewer();
-                    viewer.setDownloadCallback(async () => {
-                        await viewer.downloadFile(file.file_url, fileName);
-                    });
-                    viewer.openFile(file.file_url, fileName, fileExtension);
-                }
-            });
-            fileAttachments.setFiles(item.files);
-        }
-    }, 100);
-    
-    // Show the modal
-    planningItemFilesModal.show();
+            `
+        });
+        
+        // Render the modal
+        planningItemFilesModal.render();
+        
+        // Initialize FileAttachments component after modal is rendered
+        setTimeout(() => {
+            const container = document.getElementById('planning-item-files-display-container');
+            if (container) {
+                const fileAttachments = new FileAttachments('planning-item-files-display-container', {
+                    title: '',
+                    layout: 'grid',
+                    showTitle: false,
+                    onFileClick: (file) => {
+                        const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                        const fileExtension = fileName.split('.').pop().toLowerCase();
+                        const viewer = new FileViewer();
+                        viewer.setDownloadCallback(async () => {
+                            await viewer.downloadFile(file.file_url, fileName);
+                        });
+                        viewer.openFile(file.file_url, fileName, fileExtension);
+                    }
+                });
+                fileAttachments.setFiles(itemData.files);
+            }
+        }, 100);
+        
+        // Show the modal
+        planningItemFilesModal.show();
+    } catch (error) {
+        console.error('Error fetching planning item files:', error);
+        showNotification('Malzeme dosyaları yüklenirken hata oluştu: ' + error.message, 'error');
+    }
 }
 
 async function showPlanningRequestDetailsModal(planningRequestId, requestNumber) {
@@ -1897,66 +1939,63 @@ async function downloadSelectedItemsFiles() {
     }
     
     try {
+        const itemIds = Array.from(selectedPlanningItems);
+        const itemMetaMap = new Map();
+        // First use stored selection metadata (persists across pages)
+        selectedPlanningItemsData.forEach((meta, id) => {
+            itemMetaMap.set(id, meta);
+        });
+        // Then supplement with current page data (may have newer values)
+        allPlanningItems.forEach(item => {
+            if (item && item.id && !itemMetaMap.has(item.id)) {
+                itemMetaMap.set(item.id, item);
+            }
+        });
+
+        const response = await getPlanningRequestItemsFiles(itemIds);
+        const itemsWithFiles = response.items || [];
+
         // Collect all files from selected items
         const fileMap = new Map(); // To avoid duplicates
-        
-        // Fetch items that are not on current page
-        const itemsToFetch = Array.from(selectedPlanningItems).filter(itemId => 
-            !allPlanningItems.find(i => i.id === itemId)
-        );
-        
-        // Fetch missing items from backend
-        const fetchedItems = [];
-        if (itemsToFetch.length > 0) {
-            showNotification(`${itemsToFetch.length} malzeme yükleniyor...`, 'info', 2000);
-            for (const itemId of itemsToFetch) {
-                try {
-                    const item = await getPlanningRequestItem(itemId);
-                    fetchedItems.push(item);
-                } catch (error) {
-                    console.error(`Error fetching item ${itemId}:`, error);
-                }
-            }
-        }
-        
-        // Combine current page items and fetched items
-        const allSelectedItems = [
-            ...allPlanningItems.filter(item => selectedPlanningItems.has(item.id)),
-            ...fetchedItems
-        ];
-        
-        for (const item of allSelectedItems) {
-            if (!item || !item.files || item.files.length === 0) continue;
-            
-            item.files.forEach(file => {
+
+        for (const item of itemsWithFiles) {
+            const files = Array.isArray(item.files) ? item.files : [];
+            if (files.length === 0) continue;
+
+            const meta = itemMetaMap.get(item.item_id) || {};
+            const itemName = item.item_name || meta.item_name || 'Bilinmeyen Malzeme';
+            const planningRequestNumber = meta.planning_request_number || item.planning_request_number || '';
+            const itemCode = item.item_code || meta.item_code || '';
+
+            files.forEach(file => {
                 // Use file URL as key to avoid duplicates
                 const fileKey = file.file_url || file.id;
                 if (!fileMap.has(fileKey)) {
                     fileMap.set(fileKey, {
                         ...file,
-                        itemName: item.item_name || 'Bilinmeyen Malzeme',
-                        itemCode: item.item_code || '',
-                        planningRequestNumber: item.planning_request_number || ''
+                        itemName,
+                        itemCode,
+                        planningRequestNumber
                     });
                 }
             });
         }
-        
+
         if (fileMap.size === 0) {
             showNotification('Seçilen malzemelerde dosya bulunmuyor', 'info');
             return;
         }
-        
+
         // Convert map to array
         const filesToDownload = Array.from(fileMap.values());
-        
+
         // Show notification
         showNotification(`${filesToDownload.length} dosya zip dosyasına ekleniyor...`, 'info', 3000);
-        
+
         // Create zip file
         const zip = new JSZip();
         const downloadPromises = [];
-        
+
         // Fetch and add each file to zip
         for (const file of filesToDownload) {
             try {

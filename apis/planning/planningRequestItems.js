@@ -310,3 +310,34 @@ export async function uploadPlanningRequestItemAttachment(itemId, attachmentData
     }
 }
 
+/**
+ * Get files for multiple planning request items in a single request
+ * @param {number[]} itemIds - Array of planning request item IDs (required, non-empty)
+ * @returns {Promise<Object>} Response containing items with their files
+ */
+export async function getPlanningRequestItemsFiles(itemIds = []) {
+    if (!Array.isArray(itemIds) || itemIds.length === 0) {
+        throw new Error('item_ids is required and must be a non-empty array');
+    }
+
+    try {
+        const response = await authedFetch(`${PLANNING_BASE_URL}/items/bulk_files/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ item_ids: itemIds })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Planlama talebi dosyaları yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching planning request item files:', error);
+        throw error;
+    }
+}
+
