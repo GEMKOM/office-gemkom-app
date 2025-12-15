@@ -277,7 +277,10 @@ function initializeTableComponent() {
                 field: 'needed_date',
                 label: 'İhtiyaç Tarihi',
                 sortable: true,
-                type: 'date'
+                formatter: (value) => {
+                    if (!value) return '-';
+                    return `<div style="color: #6c757d; font-weight: 500;">${formatDate(value)}</div>`;
+                }
             },
             {
                 field: 'items_count',
@@ -296,12 +299,6 @@ function initializeTableComponent() {
                 label: 'Planlama Talepleri',
                 sortable: false,
                 formatter: (value, row) => formatRequestKeys(value || row.planning_request_keys, 'planning')
-            },
-            {
-                field: 'purchase_request_keys',
-                label: 'Satın Alma Talepleri',
-                sortable: false,
-                formatter: (value, row) => formatRequestKeys(value || row.purchase_request_keys, 'purchase')
             },
             {
                 field: 'created_at',
@@ -337,6 +334,7 @@ function initializeTableComponent() {
         ],
         pagination: true,
         itemsPerPage: 20,
+        serverSidePagination: true,
         refreshable: true,
         onRefresh: loadRequests,
         onSort: (field, direction) => {
@@ -398,12 +396,6 @@ async function loadRequests() {
             requests = [];
             totalRequests = 0;
         }
-
-        // Add items_count to each request
-        requests = requests.map(request => ({
-            ...request,
-            items_count: request.items ? request.items.length : 0
-        }));
 
         // Update the table component
         requestsTable.updateData(requests, totalRequests, currentPage);
@@ -1469,14 +1461,14 @@ function showRequestDetailsModal(request) {
         });
     }
     
-    // Add purchase request keys if they exist
-    if (request.purchase_request_keys && request.purchase_request_keys.length > 0) {
-        detailsModal.addField({ 
-            label: 'Satın Alma Talepleri', 
-            value: formatRequestKeysForDetails(request.purchase_request_keys), 
-            colSize: 12 
-        });
-    }
+    // Add purchase request keys (always show, even if empty)
+    detailsModal.addField({ 
+        label: 'Satın Alma Talepleri', 
+        value: (request.purchase_request_keys && request.purchase_request_keys.length > 0) 
+            ? formatRequestKeysForDetails(request.purchase_request_keys) 
+            : '-', 
+        colSize: 12 
+    });
     
     // Add description separately if it exists
     if (request.description) {
@@ -1773,10 +1765,10 @@ function formatRequestKeys(keys, type) {
     
     const badgeClass = type === 'planning' ? 'status-blue' : 'status-green';
     const keysHtml = keys.map(key => 
-        `<span class="status-badge ${badgeClass}" style="margin-right: 0.25rem; margin-bottom: 0.25rem; display: inline-block;">${key}</span>`
+        `<span class="status-badge ${badgeClass}" style="margin-right: 0.25rem;">${key}</span>`
     ).join('');
     
-    return `<div style="display: flex; flex-wrap: wrap; gap: 0.25rem;">${keysHtml}</div>`;
+    return keysHtml;
 }
 
 function formatRequestKeysForDetails(keys) {

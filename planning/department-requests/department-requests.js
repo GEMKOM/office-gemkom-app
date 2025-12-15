@@ -169,6 +169,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         ],
         pagination: true,
         itemsPerPage: 20,
+        serverSidePagination: true,
         refreshable: true,
         onRefresh: loadRequests,
         onSort: (field, direction) => {
@@ -283,6 +284,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         ],
         pagination: true,
         itemsPerPage: 20,
+        serverSidePagination: true,
         refreshable: true,
         onRefresh: loadPlanningRequests,
         onSort: (field, direction) => {
@@ -381,6 +383,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         ],
         pagination: true,
         itemsPerPage: 20,
+        serverSidePagination: true,
         refreshable: true,
         onRefresh: loadPendingErpEntryRequests,
         onSort: (field, direction) => {
