@@ -124,7 +124,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 field: 'needed_date',
                 label: 'Talep Tarihi',
                 sortable: true,
-                type: 'date'
+                formatter: (value) => formatDate(value) || '-'
             },
             {
                 field: 'items',
@@ -230,7 +230,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 field: 'needed_date',
                 label: 'İhtiyaç Tarihi',
                 sortable: true,
-                type: 'date'
+                formatter: (value) => formatDate(value) || '-'
             },
             {
                 field: 'items',
@@ -344,7 +344,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 field: 'needed_date',
                 label: 'İhtiyaç Tarihi',
                 sortable: true,
-                type: 'date'
+                formatter: (value) => formatDate(value) || '-'
             },
             {
                 field: 'items',
@@ -2152,6 +2152,88 @@ async function showEditPlanningRequestModal(request) {
         requestIdElement.setAttribute('data-planning-request-id', request.id);
     }
 
+    // Store original request data for change tracking
+    let originalRequestDataElement = modalContainer.querySelector('[data-original-request-data]');
+    if (!originalRequestDataElement) {
+        originalRequestDataElement = document.createElement('div');
+        originalRequestDataElement.setAttribute('data-original-request-data', '');
+        originalRequestDataElement.style.display = 'none';
+        modalContainer.appendChild(originalRequestDataElement);
+    }
+    
+    // Normalize original files to match the structure we'll build for newFiles
+    // Build a map of asset_id to item indices for original files
+    const originalAssetIdToItemIndices = new Map();
+    if (request.items && request.items.length > 0) {
+        request.items.forEach((item, itemIndex) => {
+            if (item.files && Array.isArray(item.files)) {
+                item.files.forEach(file => {
+                    if (file.asset_id) {
+                        if (!originalAssetIdToItemIndices.has(file.asset_id)) {
+                            originalAssetIdToItemIndices.set(file.asset_id, []);
+                        }
+                        originalAssetIdToItemIndices.get(file.asset_id).push(itemIndex);
+                    }
+                });
+            }
+        });
+    }
+    
+    // Normalize original files to include attach_to (matching the structure we build for newFiles)
+    // We need both request-level files and item-level files
+    const normalizedOriginalFilesMap = new Map();
+    const sortAttachTo = (arr) => {
+        if (!arr || !Array.isArray(arr)) return [];
+        return [...arr].sort((a, b) => {
+            if (typeof a === 'number' && typeof b === 'number') return a - b;
+            if (typeof a === 'number') return -1;
+            if (typeof b === 'number') return 1;
+            return String(a).localeCompare(String(b));
+        });
+    };
+    const addNormalizedFile = (assetId, attachTo, description = '') => {
+        if (!assetId) return;
+        const sortedAttachTo = sortAttachTo(attachTo);
+        const key = `${assetId}-${JSON.stringify(sortedAttachTo)}`;
+        normalizedOriginalFilesMap.set(key, {
+            asset_id: assetId !== undefined && assetId !== null ? Number(assetId) : null,
+            attach_to: sortedAttachTo,
+            description: description || ''
+        });
+    };
+    // Request-level files
+    (request.files || []).forEach(file => {
+        const attachTo = [];
+        if (file.asset_id && originalAssetIdToItemIndices.has(file.asset_id)) {
+            attachTo.push(...originalAssetIdToItemIndices.get(file.asset_id));
+        } else {
+            attachTo.push('request');
+        }
+        addNormalizedFile(file.asset_id, attachTo, file.description);
+    });
+    // Item-level files
+    if (request.items && request.items.length > 0) {
+        request.items.forEach((item, itemIndex) => {
+            if (item.files && Array.isArray(item.files)) {
+                item.files.forEach(file => {
+                    addNormalizedFile(file.asset_id, [itemIndex], file.description);
+                });
+            }
+        });
+    }
+    const normalizedOriginalFiles = Array.from(normalizedOriginalFilesMap.values());
+    
+    // Store original data as JSON string
+    originalRequestDataElement.setAttribute('data-original-request-data', JSON.stringify({
+        title: request.title || '',
+        description: request.description || '',
+        priority: request.priority || 'normal',
+        needed_date: request.needed_date || null,
+        check_inventory: request.check_inventory || false,
+        items: request.items || [],
+        files: normalizedOriginalFiles
+    }));
+
     const priorityOptions = [
         { value: 'low', label: 'Düşük' },
         { value: 'normal', label: 'Normal' },
@@ -2340,9 +2422,19 @@ async function showEditPlanningRequestModal(request) {
                 }
 
                 // Build file object for API
+                // Sort attach_to array for consistent comparison (numbers first, then strings)
+                const sortedAttachTo = [...(attachment.attachTo || [])].sort((a, b) => {
+                    if (typeof a === 'number' && typeof b === 'number') {
+                        return a - b;
+                    }
+                    if (typeof a === 'number') return -1;
+                    if (typeof b === 'number') return 1;
+                    return String(a).localeCompare(String(b));
+                });
+                
                 const fileObj = {
                     description: attachment.description || '',
-                    attach_to: attachment.attachTo
+                    attach_to: sortedAttachTo
                 };
 
                 // For existing files, use asset_id
@@ -2362,23 +2454,42 @@ async function showEditPlanningRequestModal(request) {
                 throw new Error('Request ID not found');
             }
 
-            // Prepare request data for update
-            const requestData = {
+            // Get original request data
+            const originalRequestDataElement = modalContainer.querySelector('[data-original-request-data]');
+            if (!originalRequestDataElement) {
+                throw new Error('Original request data not found');
+            }
+            const originalData = JSON.parse(originalRequestDataElement.getAttribute('data-original-request-data') || '{}');
+
+            // Prepare new request data
+            const newRequestData = {
                 title: formData.title,
                 description: formData.description || '',
                 priority: formData.priority || 'normal',
                 needed_date: formData.needed_date || null,
-                items: items.length > 0 ? items : undefined,
-                files: files.length > 0 ? files : undefined
+                items: items.length > 0 ? items : [],
+                files: files.length > 0 ? files : []
             };
 
-            // Add check_inventory if checkbox is checked
-            if (formData.check_inventory) {
-                requestData.check_inventory = true;
+            // Add check_inventory
+            newRequestData.check_inventory = formData.check_inventory || false;
+
+            // Get only changed fields
+            const changedFields = getChangedFields(originalData, newRequestData);
+
+            // If files changed but items unchanged, include full items array so attach_to indices are valid
+            if (changedFields.files && !changedFields.items && items.length > 0) {
+                changedFields.items = items;
             }
 
-            // Update the planning request
-            await updatePlanningRequest(requestId, requestData);
+            // If no changes, show message and return
+            if (Object.keys(changedFields).length === 0) {
+                showNotification('Değişiklik yapılmadı', 'info');
+                return;
+            }
+
+            // Use PATCH with only changed fields
+            await partialUpdatePlanningRequest(requestId, changedFields);
 
             // Show success notification
             showNotification('Planlama talebi başarıyla güncellendi', 'success');
@@ -2410,6 +2521,11 @@ async function showEditPlanningRequestModal(request) {
         const requestIdElement = modalContainer.querySelector('[data-planning-request-id]');
         if (requestIdElement) {
             requestIdElement.remove();
+        }
+        // Remove original request data
+        const originalRequestDataElement = modalContainer.querySelector('[data-original-request-data]');
+        if (originalRequestDataElement) {
+            originalRequestDataElement.remove();
         }
     });
 
@@ -2467,6 +2583,156 @@ async function showEditPlanningRequestModal(request) {
     createPlanningRequestModal.show();
 }
 
+// Helper function to compare and get only changed fields
+function getChangedFields(originalData, newData) {
+    const changedFields = {};
+    
+    // Compare simple fields
+    if (newData.title !== undefined && newData.title !== originalData.title) {
+        changedFields.title = newData.title;
+    }
+    
+    if (newData.description !== undefined && newData.description !== (originalData.description || '')) {
+        changedFields.description = newData.description;
+    }
+    
+    if (newData.priority !== undefined && newData.priority !== (originalData.priority || 'normal')) {
+        changedFields.priority = newData.priority;
+    }
+    
+    if (newData.needed_date !== undefined) {
+        const originalDate = originalData.needed_date || null;
+        const newDate = newData.needed_date || null;
+        if (newDate !== originalDate) {
+            changedFields.needed_date = newDate;
+        }
+    }
+    
+    if (newData.check_inventory !== undefined) {
+        const originalCheck = originalData.check_inventory || false;
+        const newCheck = newData.check_inventory || false;
+        if (newCheck !== originalCheck) {
+            changedFields.check_inventory = newCheck;
+        }
+    }
+    
+    // Compare items array
+    // IMPORTANT: 
+    // - If ANY item is changed, added, or deleted, we send the ENTIRE items array
+    //   because the backend completely rewrites items when items array is provided
+    // - If NO items are changed (no additions, deletions, or modifications),
+    //   we do NOT include items in changedFields at all (don't send items array)
+    if (newData.items !== undefined) {
+        const originalItems = originalData.items || [];
+        const newItems = newData.items || [];
+        
+        // Quick check: if count changed, items definitely changed (added or deleted)
+        if (originalItems.length !== newItems.length) {
+            // Items count changed - send the ENTIRE new items array
+            changedFields.items = newItems;
+        } else if (originalItems.length > 0 || newItems.length > 0) {
+            // Same count, but need to check if any item was modified
+            // Normalize items for comparison (extract relevant fields, sort for consistent comparison)
+            const normalizeItem = (item) => ({
+                job_no: (item.job_no || '').trim(),
+                quantity: parseFloat(item.quantity) || 0,
+                item_id: item.item_id !== undefined && item.item_id !== null ? Number(item.item_id) : null,
+                item_code: (item.item_code || '').trim(),
+                item_name: (item.item_name || '').trim(),
+                item_description: (item.item_description || '').trim(),
+                item_unit: (item.item_unit || '').trim(),
+                specifications: (item.specifications || '').trim()
+            });
+            
+            const originalItemsNormalized = originalItems.map(normalizeItem)
+                .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+            
+            const newItemsNormalized = newItems.map(normalizeItem)
+                .sort((a, b) => JSON.stringify(a).localeCompare(JSON.stringify(b)));
+            
+            // Compare normalized items
+            const originalItemsStr = JSON.stringify(originalItemsNormalized);
+            const newItemsStr = JSON.stringify(newItemsNormalized);
+            
+            if (originalItemsStr !== newItemsStr) {
+                // Items have changed - send the ENTIRE new items array
+                changedFields.items = newItems;
+            }
+            // If itemsStr are equal, items haven't changed - don't include in changedFields
+        }
+        // If both arrays are empty, no change - don't include in changedFields
+    }
+    
+    // Compare files array
+    if (newData.files !== undefined) {
+        const originalFiles = originalData.files || [];
+        const newFiles = newData.files || [];
+        
+        // Check if files have changed
+        // Files are considered changed if:
+        // 1. Number of files changed
+        // 2. Any file has new upload (file property exists)
+        // 3. File attachments changed (asset_id, attach_to, description)
+        const hasNewUploads = newFiles.some(file => file.file);
+        const originalFilesCount = originalFiles.length;
+        const newFilesCount = newFiles.length;
+        
+        // If count changed, files definitely changed
+        if (originalFilesCount !== newFilesCount) {
+            changedFields.files = newFiles;
+        } else if (hasNewUploads) {
+            // If there are new uploads, files changed
+            changedFields.files = newFiles;
+        } else if (originalFilesCount > 0 || newFilesCount > 0) {
+            // Use the same sorting function for attach_to as when building newFiles
+            const sortAttachTo = (arr) => {
+                if (!arr || !Array.isArray(arr)) return arr;
+                return [...arr].sort((a, b) => {
+                    if (typeof a === 'number' && typeof b === 'number') {
+                        return a - b;
+                    }
+                    if (typeof a === 'number') return -1;
+                    if (typeof b === 'number') return 1;
+                    return String(a).localeCompare(String(b));
+                });
+            };
+            
+            // Create normalized comparison for existing files
+            // Normalize asset_id to number for consistent comparison
+            const originalFilesNormalized = originalFiles.map(file => ({
+                asset_id: file.asset_id !== undefined && file.asset_id !== null ? Number(file.asset_id) : null,
+                attach_to: file.attach_to ? JSON.stringify(sortAttachTo(file.attach_to)) : null,
+                description: (file.description || '').trim()
+            })).sort((a, b) => {
+                if (a.asset_id !== b.asset_id) {
+                    return (a.asset_id || 0) - (b.asset_id || 0);
+                }
+                return (a.attach_to || '').localeCompare(b.attach_to || '');
+            });
+            
+            const newFilesNormalized = newFiles.map(file => ({
+                asset_id: file.asset_id !== undefined && file.asset_id !== null ? Number(file.asset_id) : null,
+                attach_to: file.attach_to ? JSON.stringify(sortAttachTo(file.attach_to)) : null,
+                description: (file.description || '').trim()
+            })).sort((a, b) => {
+                if (a.asset_id !== b.asset_id) {
+                    return (a.asset_id || 0) - (b.asset_id || 0);
+                }
+                return (a.attach_to || '').localeCompare(b.attach_to || '');
+            });
+            
+            const filesChanged = JSON.stringify(originalFilesNormalized) !== JSON.stringify(newFilesNormalized);
+            
+            if (filesChanged) {
+                changedFields.files = newFiles;
+            }
+        }
+        // If both are empty, no change
+    }
+    
+    return changedFields;
+}
+
 // Pre-fill items from planning request
 function prefillItemsFromPlanningRequest(request) {
     if (!request.items || request.items.length === 0) {
@@ -2495,16 +2761,16 @@ function prefillItemsFromPlanningRequest(request) {
             <div class="planning-item-row mb-2" data-index="${index}">
                 <div class="row g-2">
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_code" placeholder="Ürün kodu veya ID" value="${escapeHtml(itemCode)}" required>
+                        <input type="text" class="form-control form-control-sm" name="item_code" placeholder="Ürün kodu veya ID" value="${escapeHtmlAttribute(itemCode)}" required>
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" value="${escapeHtml(itemName)}">
+                        <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" value="${escapeHtmlAttribute(itemName)}">
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtml(itemDescription)}">
+                        <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtmlAttribute(itemDescription)}">
                     </div>
                     <div class="col-md-1">
-                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtml(jobNo)}" required>
+                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtmlAttribute(jobNo)}" required>
                     </div>
                     <div class="col-md-1">
                         <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="0.01" min="0.01" value="${quantity}" required>
@@ -2515,7 +2781,7 @@ function prefillItemsFromPlanningRequest(request) {
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtml(specifications)}">
+                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtmlAttribute(specifications)}">
                     </div>
                     <div class="col-md-1">
                         <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePlanningItem(${index})" title="Ürünü Kaldır">
@@ -2684,16 +2950,16 @@ function prefillItemsFromDepartmentRequest(departmentRequest) {
             <div class="planning-item-row mb-2" data-index="${index}" data-source-item-index="${index}">
                 <div class="row g-2">
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_code" placeholder="Ürün kodu veya ID" value="${escapeHtml(itemCode)}" required>
+                        <input type="text" class="form-control form-control-sm" name="item_code" placeholder="Ürün kodu veya ID" value="${escapeHtmlAttribute(itemCode)}" required>
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" value="${escapeHtml(itemName)}">
+                        <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" value="${escapeHtmlAttribute(itemName)}">
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtml(itemDescription)}">
+                        <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtmlAttribute(itemDescription)}">
                     </div>
                     <div class="col-md-1">
-                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtml(jobNo)}" required>
+                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtmlAttribute(jobNo)}" required>
                     </div>
                     <div class="col-md-1">
                         <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="0.01" min="0.01" value="${quantity}" required>
@@ -2704,7 +2970,7 @@ function prefillItemsFromDepartmentRequest(departmentRequest) {
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtml(specifications)}">
+                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtmlAttribute(specifications)}">
                     </div>
                     <div class="col-md-1">
                         <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePlanningItem(${index})" title="Ürünü Kaldır">

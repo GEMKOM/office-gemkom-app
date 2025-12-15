@@ -301,20 +301,96 @@ export async function updatePlanningRequest(requestId, requestData) {
  */
 export async function partialUpdatePlanningRequest(requestId, requestData) {
     try {
-        const response = await authedFetch(`${PLANNING_BASE_URL}/requests/${requestId}/`, {
-            method: 'PATCH',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(requestData)
-        });
+        // Check if we have files to upload (new files require FormData)
+        const hasNewFiles = requestData.files && requestData.files.some(file => file.file && !file.asset_id);
+        
+        if (hasNewFiles || (requestData.files && requestData.files.length > 0)) {
+            // Use FormData for file uploads
+            const formData = new FormData();
+            
+            // Add only the fields that are provided (partial update)
+            if (requestData.title !== undefined && requestData.title !== null) {
+                formData.append('title', requestData.title);
+            }
+            if (requestData.description !== undefined && requestData.description !== null) {
+                formData.append('description', requestData.description);
+            }
+            if (requestData.needed_date !== undefined && requestData.needed_date !== null) {
+                formData.append('needed_date', requestData.needed_date);
+            }
+            if (requestData.priority !== undefined && requestData.priority !== null) {
+                formData.append('priority', requestData.priority);
+            }
+            if (requestData.check_inventory !== undefined && requestData.check_inventory !== null) {
+                formData.append('check_inventory', requestData.check_inventory);
+            }
+            
+            // Add items if provided
+            if (requestData.items !== undefined && requestData.items !== null) {
+                formData.append('items', JSON.stringify(requestData.items));
+            }
+            
+            // Add files if provided
+            if (requestData.files && requestData.files.length > 0) {
+                requestData.files.forEach((fileData, index) => {
+                    // Either file or asset_id is required
+                    if (!fileData.file && !fileData.asset_id) {
+                        throw new Error(`File at index ${index} must have either 'file' or 'asset_id'`);
+                    }
+                    
+                    // Cannot have both
+                    if (fileData.file && fileData.asset_id) {
+                        throw new Error(`File at index ${index} cannot have both 'file' and 'asset_id'`);
+                    }
+                    
+                    // Add file or asset_id
+                    if (fileData.file) {
+                        formData.append(`files[${index}].file`, fileData.file);
+                    } else if (fileData.asset_id) {
+                        formData.append(`files[${index}].asset_id`, fileData.asset_id);
+                    }
+                    
+                    // Description is optional
+                    if (fileData.description) {
+                        formData.append(`files[${index}].description`, fileData.description);
+                    }
+                    
+                    // attach_to is required and must be sent as JSON string
+                    if (!fileData.attach_to || !Array.isArray(fileData.attach_to) || fileData.attach_to.length === 0) {
+                        throw new Error(`attach_to is required for file at index ${index} and must contain at least one target`);
+                    }
+                    formData.append(`files[${index}].attach_to`, JSON.stringify(fileData.attach_to));
+                });
+            }
+            
+            const response = await authedFetch(`${PLANNING_BASE_URL}/requests/${requestId}/`, {
+                method: 'PATCH',
+                body: formData
+            });
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || errorData.error || 'Planlama talebi güncellenirken hata oluştu');
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || errorData.error || 'Planlama talebi güncellenirken hata oluştu');
+            }
+
+            return await response.json();
+        } else {
+            // Use JSON for updates without new file uploads
+            const response = await authedFetch(`${PLANNING_BASE_URL}/requests/${requestId}/`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(requestData)
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.detail || errorData.error || 'Planlama talebi güncellenirken hata oluştu');
+            }
+
+            return await response.json();
         }
-
-        return await response.json();
     } catch (error) {
         console.error('Error partially updating planning request:', error);
         throw error;
