@@ -514,6 +514,14 @@ async function initializeFiltersComponents() {
         }
     });
 
+    // Request number filter for planning requests
+    planningRequestsFilters.addTextFilter({
+        id: 'request-number-filter',
+        label: 'Talep Numarası',
+        placeholder: 'Talep numarası',
+        colSize: 2
+    });
+
     // Status filter for planning requests
     planningRequestsFilters.addDropdownFilter({
         id: 'status-filter',
@@ -579,6 +587,8 @@ async function initializeFiltersComponents() {
         type: 'number',
         colSize: 2
     });
+
+    
 
     // Initialize filters for pending ERP entry requests
     pendingErpEntryFilters = new FiltersComponent('pending-erp-entry-filters-placeholder', {
@@ -751,6 +761,9 @@ async function loadPlanningRequests() {
             }
             if (filterValues['department-request-filter'] && filterValues['department-request-filter'] !== '') {
                 filters.department_request = filterValues['department-request-filter'];
+            }
+            if (filterValues['request-number-filter'] && filterValues['request-number-filter'] !== '') {
+                filters.request_number = filterValues['request-number-filter'];
             }
         }
 
