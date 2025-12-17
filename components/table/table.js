@@ -699,7 +699,11 @@ export class TableComponent {
             const exportBtn = this.container.querySelector(`#${this.containerId}-export-btn`);
             if (exportBtn) {
                 exportBtn.addEventListener('click', () => {
-                    this.exportData('excel');
+                    if (this.options.onExport) {
+                        this.options.onExport('csv');
+                    } else {
+                        this.exportData('excel');
+                    }
                 });
             }
         }

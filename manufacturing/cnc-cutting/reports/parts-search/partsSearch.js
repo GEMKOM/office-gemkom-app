@@ -31,6 +31,20 @@ function formatDate(timestamp) {
 }
 
 /**
+ * Format timestamp to Excel-friendly date string
+ */
+function formatDateForExport(timestamp) {
+    if (!timestamp) return '-';
+    const date = new Date(timestamp);
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    return `${day}.${month}.${year} ${hours}:${minutes}`;
+}
+
+/**
  * Format weight with 3 decimal places
  */
 function formatWeight(weight) {
@@ -274,26 +288,44 @@ function handleExport(format = 'csv') {
         // Get current data
         const data = tableComponent.options.data;
         
+        console.log('Export - First raw row:', data[0]);
+        
         if (data.length === 0) {
             alert('İndirilecek veri bulunamadı.');
             return;
         }
 
-        // Prepare export data
-        const exportData = data.map(row => ({
-            'ID': row.id || '-',
-            'İş No': row.job_no || '-',
-            'Resim No': row.image_no || '-',
-            'Pozisyon No': row.position_no || '-',
-            'Ağırlık (kg)': row.weight_kg || '-',
-            'Adet': row.quantity || '-',
-            'Nesting ID': row.nesting_id || '-',
-            'Planlanan Başlangıç': row.planned_start_ms ? new Date(row.planned_start_ms).toLocaleString('tr-TR') : '-',
-            'Planlanan Bitiş': row.planned_end_ms ? new Date(row.planned_end_ms).toLocaleString('tr-TR') : '-',
-            'Tamamlanma Tarihi': row.completion_date ? new Date(row.completion_date).toLocaleString('tr-TR') : '-',
-            'Durum': row.completion_date ? 'Tamamlandı' : 'Devam Ediyor'
-        }));
+        // Prepare export data with formatted dates
+        const exportData = data.map((row, index) => {
+            const formattedRow = {
+                'ID': row.id || '-',
+                'İş No': row.job_no || '-',
+                'Resim No': row.image_no || '-',
+                'Pozisyon No': row.position_no || '-',
+                'Ağırlık (kg)': row.weight_kg || '-',
+                'Adet': row.quantity || '-',
+                'Nesting ID': row.nesting_id || '-',
+                'Planlanan Başlangıç': row.planned_start_ms ? formatDateForExport(row.planned_start_ms) : '-',
+                'Planlanan Bitiş': row.planned_end_ms ? formatDateForExport(row.planned_end_ms) : '-',
+                'Tamamlanma Tarihi': row.completion_date ? formatDateForExport(row.completion_date) : '-',
+                'Durum': row.completion_date ? 'Tamamlandı' : 'Devam Ediyor'
+            };
+            
+            // Log first row to verify formatting
+            if (index === 0) {
+                console.log('Export - First formatted row:', formattedRow);
+                console.log('Date formatting test:', {
+                    planned_start_ms: row.planned_start_ms,
+                    formatted: formatDateForExport(row.planned_start_ms)
+                });
+            }
+            
+            return formattedRow;
+        });
 
+        console.log('Export - Total rows:', exportData.length);
+        console.log('Export - Sample data (first 2 rows):', exportData.slice(0, 2));
+        
         if (format === 'csv') {
             exportToCSV(exportData, 'cnc_parca_arama');
         } else if (format === 'excel') {
@@ -315,18 +347,26 @@ function exportToCSV(data, filename) {
     // Get headers
     const headers = Object.keys(data[0]);
     
-    // Create CSV content
+    // Date columns that need special Excel formatting
+    const dateColumns = ['Planlanan Başlangıç', 'Planlanan Bitiş', 'Tamamlanma Tarihi'];
+    
+    // Create CSV content with semicolon delimiter for Turkish Excel
     let csvContent = '\uFEFF'; // UTF-8 BOM for Excel
-    csvContent += headers.join(',') + '\n';
+    csvContent += headers.join(';') + '\n';
     
     data.forEach(row => {
         const values = headers.map(header => {
             const value = row[header];
-            // Escape quotes and wrap in quotes if contains comma
             const stringValue = String(value).replace(/"/g, '""');
+            
+            // For date columns, use Excel formula format to force text
+            if (dateColumns.includes(header) && value !== '-') {
+                return `"=""${stringValue}"""`;
+            }
+            
             return `"${stringValue}"`;
         });
-        csvContent += values.join(',') + '\n';
+        csvContent += values.join(';') + '\n';
     });
 
     // Download

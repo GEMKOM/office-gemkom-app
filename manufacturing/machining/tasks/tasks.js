@@ -229,11 +229,15 @@ function initializeTableComponent() {
                 field: 'name',
                 label: 'Ad',
                 sortable: true,
+                width: '12%',
+                formatter: (value) => `<strong>${value || '-'}</strong>`
+            },
+            {
+                field: 'description',
+                label: 'Açıklama',
+                sortable: true,
                 width: '15%',
-                formatter: (value, row) => {
-                    const description = row.description ? `<br><small class="text-muted">${row.description}</small>` : '';
-                    return `<div class="task-name"><strong>${value || '-'}</strong>${description}</div>`;
-                }
+                formatter: (value) => value || '-'
             },
             {
                 field: 'job_no',
@@ -381,7 +385,7 @@ function initializeTableComponent() {
         rowAttributes: (row) => `data-task-key="${row.key}" class="data-update"`,
         // Enable cell editing
         editable: true,
-        editableColumns: ['name', 'job_no', 'image_no', 'position_no', 'quantity', 'estimated_hours', 'machine_fk', 'status'],
+        editableColumns: ['name', 'description', 'job_no', 'image_no', 'position_no', 'quantity', 'estimated_hours', 'machine_fk', 'status'],
         onEdit: async (row, field, newValue, oldValue) => {
             try {
                 // Check if value actually changed (with type normalization)
