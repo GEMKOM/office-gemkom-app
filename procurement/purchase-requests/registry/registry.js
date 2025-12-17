@@ -141,6 +141,24 @@ document.addEventListener('DOMContentLoaded', async () => {
                 type: 'date'
             },
             {
+                field: 'planning_request_keys',
+                label: 'Planlama Talepleri',
+                sortable: false,
+                formatter: (value, row) => {
+                    if (!value || !Array.isArray(value) || value.length === 0) {
+                        return '<span class="text-muted">-</span>';
+                    }
+                    
+                    const requestLinks = value.map(key => 
+                        `<a href="/planning/department-requests/?talep=${key}" target="_blank" class="btn btn-outline-info btn-sm me-1 mb-1" style="font-size: 0.75rem; padding: 0.25rem 0.5rem;">
+                            <i class="fas fa-clipboard-list me-1"></i>${key}
+                        </a>`
+                    ).join('');
+                    
+                    return `<div style="min-width: 150px;">${requestLinks}</div>`;
+                }
+            },
+            {
                 field: 'purchase_orders',
                 label: 'Satın Alma Emirleri',
                 sortable: false,
@@ -157,16 +175,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                     
                     return `<div style="min-width: 150px;">${orderLinks}</div>`;
                 }
-            },
-            {
-                field: 'approval',
-                label: 'Onay Durumu',
-                sortable: false,
-                formatter: (value, row) => `
-                    <div style="min-width: 200px; text-align: middle; vertical-align: middle;">
-                        ${getApprovalInfo(row)}
-                    </div>
-                `
             }
         ],
         actions: [
@@ -801,6 +809,18 @@ async function showRequestDetailsModal() {
         });
     }
     
+    // Add approval workflow section
+    if (currentRequest.approval && currentRequest.approval.stage_instances) {
+        const approvalHTML = renderApprovalWorkflow(currentRequest.approval);
+        displayModal.addCustomSection({
+            id: 'approval-workflow',
+            title: 'Onay Süreci',
+            icon: 'fas fa-clipboard-check',
+            iconColor: 'text-success',
+            customContent: approvalHTML
+        });
+    }
+    
     // Add rejection comments section if there are any
     const rejectionComments = getRejectionComments(currentRequest);
     if (rejectionComments.length > 0) {
@@ -1341,6 +1361,172 @@ function getRejectionComments(request) {
     });
     
     return rejectionComments;
+}
+
+function renderApprovalWorkflow(approval) {
+    if (!approval || !approval.stage_instances) {
+        return '<p class="text-muted">Onay bilgisi bulunamadı</p>';
+    }
+
+    const { stage_instances, current_stage_order, is_complete, is_rejected } = approval;
+    
+    let html = '<div class="approval-workflow">';
+    
+    // Overall status badge
+    let overallStatusBadge = '';
+    if (is_rejected) {
+        overallStatusBadge = '<span class="badge bg-danger mb-3"><i class="fas fa-times-circle me-1"></i>Reddedildi</span>';
+    } else if (is_complete) {
+        overallStatusBadge = '<span class="badge bg-success mb-3"><i class="fas fa-check-circle me-1"></i>Tamamlandı</span>';
+    } else {
+        overallStatusBadge = '<span class="badge bg-warning mb-3"><i class="fas fa-clock me-1"></i>Onay Bekliyor</span>';
+    }
+    
+    html += `<div class="mb-3">${overallStatusBadge}</div>`;
+    
+    // Render each stage
+    stage_instances.forEach((stage, index) => {
+        const isCurrentStage = stage.order === current_stage_order && !is_complete && !is_rejected;
+        const isCompleted = stage.is_complete;
+        const isRejected = stage.is_rejected;
+        const isPending = !isCompleted && !isRejected && !isCurrentStage && stage.order > current_stage_order;
+        
+        // Determine stage status and styling
+        let stageClass = 'border-secondary';
+        let stageBadge = '';
+        let stageIcon = 'fas fa-circle';
+        
+        if (isRejected) {
+            stageClass = 'border-danger';
+            stageBadge = '<span class="badge bg-danger">Reddedildi</span>';
+            stageIcon = 'fas fa-times-circle text-danger';
+        } else if (isCompleted) {
+            stageClass = 'border-success';
+            stageBadge = '<span class="badge bg-success">Tamamlandı</span>';
+            stageIcon = 'fas fa-check-circle text-success';
+        } else if (isCurrentStage) {
+            stageClass = 'border-warning';
+            stageBadge = '<span class="badge bg-warning">Mevcut Aşama</span>';
+            stageIcon = 'fas fa-hourglass-half text-warning';
+        } else if (isPending) {
+            stageClass = 'border-secondary';
+            stageBadge = '<span class="badge bg-secondary">Beklemede</span>';
+            stageIcon = 'fas fa-circle text-secondary';
+        }
+        
+        html += `
+            <div class="card mb-3 ${stageClass}" style="border-width: 2px;">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0">
+                            <i class="${stageIcon} me-2"></i>
+                            ${stage.order}. ${stage.name}
+                        </h6>
+                        ${stageBadge}
+                    </div>
+                    
+                    <div class="row mb-2">
+                        <div class="col-md-6">
+                            <small class="text-muted">Gerekli Onay Sayısı:</small>
+                            <strong class="ms-2">${stage.required_approvals}</strong>
+                        </div>
+                        <div class="col-md-6">
+                            <small class="text-muted">Onaylanan:</small>
+                            <strong class="ms-2 ${stage.approved_count >= stage.required_approvals ? 'text-success' : 'text-warning'}">${stage.approved_count}</strong>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-2">
+                        <small class="text-muted d-block mb-1">Onaylayıcılar:</small>
+                        <div class="d-flex flex-wrap gap-1">
+        `;
+        
+        // Show approvers
+        if (stage.approvers && stage.approvers.length > 0) {
+            stage.approvers.forEach(approver => {
+                // Check if this approver has made a decision
+                const decision = stage.decisions?.find(d => d.approver === approver.id);
+                let approverBadge = 'bg-light text-dark';
+                let approverIcon = 'fas fa-user';
+                
+                if (decision) {
+                    if (decision.decision === 'approve') {
+                        approverBadge = 'bg-success text-white';
+                        approverIcon = 'fas fa-check';
+                    } else if (decision.decision === 'reject') {
+                        approverBadge = 'bg-danger text-white';
+                        approverIcon = 'fas fa-times';
+                    }
+                }
+                
+                html += `
+                    <span class="badge ${approverBadge}" style="font-size: 0.85rem;">
+                        <i class="${approverIcon} me-1"></i>${approver.full_name || approver.username}
+                    </span>
+                `;
+            });
+        } else {
+            html += '<span class="text-muted">Onaylayıcı atanmamış</span>';
+        }
+        
+        html += `
+                        </div>
+                    </div>
+        `;
+        
+        // Show decisions if any
+        if (stage.decisions && stage.decisions.length > 0) {
+            html += `
+                    <div class="mt-3">
+                        <small class="text-muted d-block mb-2"><strong>Kararlar:</strong></small>
+            `;
+            
+            stage.decisions.forEach(decision => {
+                const decisionIcon = decision.decision === 'approve' ? 'fas fa-check-circle text-success' : 'fas fa-times-circle text-danger';
+                const decisionText = decision.decision === 'approve' ? 'Onayladı' : 'Reddetti';
+                const approverName = decision.approver_detail?.full_name || decision.approver_detail?.username || 'Bilinmeyen';
+                const decisionDate = decision.decided_at ? formatDateTime(decision.decided_at) : '-';
+                
+                html += `
+                        <div class="card mb-2" style="background-color: #f8f9fa;">
+                            <div class="card-body p-2">
+                                <div class="d-flex align-items-center mb-1">
+                                    <i class="${decisionIcon} me-2"></i>
+                                    <strong>${approverName}</strong>
+                                    <span class="ms-2 text-muted" style="font-size: 0.85rem;">${decisionText}</span>
+                                    <small class="ms-auto text-muted">${decisionDate}</small>
+                                </div>
+                `;
+                
+                if (decision.comment) {
+                    html += `
+                                <div class="mt-1">
+                                    <small class="text-muted">Yorum:</small>
+                                    <p class="mb-0" style="font-size: 0.9rem;">${decision.comment}</p>
+                                </div>
+                    `;
+                }
+                
+                html += `
+                            </div>
+                        </div>
+                `;
+            });
+            
+            html += `
+                    </div>
+            `;
+        }
+        
+        html += `
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    
+    return html;
 }
 
 function formatDate(dateString) {

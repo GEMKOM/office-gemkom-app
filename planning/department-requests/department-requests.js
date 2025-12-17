@@ -65,6 +65,30 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     await initNavbar();
+    
+    // Check if there's a talep parameter in the URL to directly open modal
+    const urlParams = new URLSearchParams(window.location.search);
+    const talepNo = urlParams.get('talep');
+    
+    // If talep parameter exists, skip table initialization and directly open modal
+    if (talepNo) {
+        // Set global variables for modals (with minimal setup)
+        setGlobalVariables({
+            currentRequest,
+            requests: [],
+            loadRequests: () => {},
+            loadCompletedRequests: () => {},
+            showNotification
+        });
+        
+        initializeModalComponents();
+        setupEventListeners();
+        setupModalEventListeners();
+        
+        // Try to open the modal directly
+        await openModalFromTalepNo(talepNo);
+        return; // Exit early, don't load tables
+    }
 
     // Initialize header component
     const header = new HeaderComponent({
@@ -420,8 +444,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupExcelImportListeners();
 
     // Check if there's a request parameter in the URL to open modal (after modal is initialized)
-    const urlParams = new URLSearchParams(window.location.search);
-    const requestId = urlParams.get('request');
+    const requestUrlParams = new URLSearchParams(window.location.search);
+    const requestId = requestUrlParams.get('request');
     if (requestId) {
         await openModalFromRequestId(requestId);
     }
@@ -533,6 +557,7 @@ async function initializeFiltersComponents() {
             { value: 'draft', label: 'Taslak' },
             { value: 'ready', label: 'Satın Almaya Hazır' },
             { value: 'converted', label: 'Onaya Gönderildi' },
+            { value: 'completed', label: 'Tamamlandı' },
             { value: 'cancelled', label: 'İptal Edildi' }
         ],
         placeholder: 'Durum seçin',
@@ -905,6 +930,58 @@ async function openModalFromRequestId(requestId) {
         }
     } catch (error) {
         console.error('Error opening modal from request ID:', error);
+    }
+}
+
+async function openModalFromTalepNo(talepNo) {
+    try {
+        // Try to find the planning request by request_number
+        const response = await getPlanningRequests({ request_number: talepNo });
+        
+        if (response && response.results && response.results.length > 0) {
+            // Find exact match
+            const planningRequest = response.results.find(r => r.request_number === talepNo);
+            
+            if (planningRequest) {
+                // Fetch full details and show modal
+                const fullRequest = await getPlanningRequest(planningRequest.id);
+                await showPlanningRequestDetailsModal(fullRequest);
+                
+                // Update URL to include the talep parameter
+                const url = new URL(window.location);
+                url.searchParams.set('talep', talepNo);
+                window.history.pushState({}, '', url);
+                return;
+            }
+        }
+        
+        // If not found in planning requests, try department requests
+        const deptResponse = await getApprovedDepartmentRequests({ search: talepNo });
+        
+        if (deptResponse && deptResponse.results && deptResponse.results.length > 0) {
+            const deptRequest = deptResponse.results[0];
+            currentRequest = await getDepartmentRequest(deptRequest.id);
+            
+            // Update global variables for modals
+            setGlobalVariables({
+                currentRequest,
+                requests,
+                loadRequests,
+                showNotification
+            });
+            
+            await showDepartmentRequestDetailsModal(currentRequest);
+            
+            // Keep the talep parameter in URL instead of changing to request
+            const url = new URL(window.location);
+            url.searchParams.set('talep', talepNo);
+            window.history.pushState({}, '', url);
+        } else {
+            showNotification(`Talep ${talepNo} bulunamadı`, 'error');
+        }
+    } catch (error) {
+        console.error('Error opening modal from talep no:', error);
+        showNotification(`Talep ${talepNo} açılırken hata oluştu: ${error.message}`, 'error');
     }
 }
 
@@ -1605,6 +1682,14 @@ async function showPlanningRequestDetailsModal(request) {
             });
         }
     }, 100);
+
+    // Setup close callback to clean up URL
+    planningRequestDetailsModal.onCloseCallback(() => {
+        // Remove the talep parameter from URL when modal is closed
+        const url = new URL(window.location);
+        url.searchParams.delete('talep');
+        window.history.pushState({}, '', url);
+    });
 
     // Show the modal
     planningRequestDetailsModal.show();

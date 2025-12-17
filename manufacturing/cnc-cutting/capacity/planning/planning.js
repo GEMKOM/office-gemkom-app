@@ -753,13 +753,13 @@ function initTasksTable() {
                     field: 'estimated_hours',
                     label: 'Tahmini Saat',
                     sortable: true,
-                    formatter: (value) => value ? `${value}h` : '-'
+                    formatter: (value) => value ? `${parseFloat(value).toFixed(2)}h` : '-'
                 },
                 {
                     field: 'remaining_hours',
                     label: 'Kalan Saat',
                     sortable: true,
-                    formatter: (value) => value ? `${value}h` : '-'
+                    formatter: (value) => value ? `${parseFloat(value).toFixed(2)}h` : '-'
                 },
                 {
                     field: 'planned_start_ms',
@@ -1152,13 +1152,13 @@ function renderUnplannedTasksTable(tasks) {
                     field: 'estimated_hours',
                     label: 'Tahmini Saat',
                     sortable: true,
-                    formatter: (value) => value ? `${value}h` : '-'
+                    formatter: (value) => value ? `${parseFloat(value).toFixed(2)}h` : '-'
                 },
                 {
                     field: 'remaining_hours',
                     label: 'Kalan Saat',
                     sortable: true,
-                    formatter: (value) => value ? `${value}h` : '-'
+                    formatter: (value) => value ? `${parseFloat(value).toFixed(2)}h` : '-'
                 },
                 {
                     field: 'finish_time',
@@ -1395,6 +1395,7 @@ function autoscheduleTasks() {
 // Confirm autoschedule
 async function confirmAutoschedule() {
     const criteria = document.getElementById('autoschedule-criteria').value;
+    const durationType = document.getElementById('autoschedule-duration-type').value;
     const startDateInput = document.getElementById('autoschedule-start-date').value;
     
     if (!startDateInput) {
@@ -1447,8 +1448,14 @@ async function confirmAutoschedule() {
     
     // Schedule tasks SEQUENTIALLY - each task starts where the previous one ends
     sortedTasks.forEach((task, index) => {
-        const remainingHours = task.remaining_hours || task.estimated_hours || 2;
-        const duration = remainingHours * 60 * 60 * 1000; // Convert hours to milliseconds
+        // Use selected duration type (remaining or estimated hours)
+        let hours;
+        if (durationType === 'remaining') {
+            hours = task.remaining_hours || task.estimated_hours || 2;
+        } else {
+            hours = task.estimated_hours || task.remaining_hours || 2;
+        }
+        const duration = hours * 60 * 60 * 1000; // Convert hours to milliseconds
         
         // For the first task, use the current time (which respects the start date)
         // For subsequent tasks, they start where the previous task ended

@@ -39,9 +39,10 @@ function initializeModalComponents() {
 
     // Setup modal callbacks
     departmentRequestDetailsModal.onCloseCallback(() => {
-        // Remove the request parameter from URL when modal is closed
+        // Remove the request and talep parameters from URL when modal is closed
         const url = new URL(window.location);
         url.searchParams.delete('request');
+        url.searchParams.delete('talep');
         window.history.pushState({}, '', url);
     });
 
