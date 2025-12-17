@@ -64,6 +64,9 @@ export class TableComponent {
             // Custom row attributes
             rowAttributes: null, // Function that returns attributes for each row
             
+            // Row background color
+            rowBackgroundColor: null, // Function that returns background color for each row (receives row, index)
+            
             // Drag and drop configuration
             draggable: false,
             onReorder: null, // Callback function when rows are reordered
@@ -339,14 +342,33 @@ export class TableComponent {
             `onclick="this.dispatchEvent(new CustomEvent('rowClick', {detail: {index: ${rowIndex}}}))"` : '';
         
         // Get custom row attributes if provided
-        const customAttributes = this.options.rowAttributes ? 
-            this.options.rowAttributes(row, rowIndex) : '';
+        let customAttributes = '';
+        if (this.options.rowAttributes) {
+            const attrs = this.options.rowAttributes(row, rowIndex);
+            if (typeof attrs === 'string') {
+                customAttributes = attrs;
+            } else if (typeof attrs === 'object' && attrs !== null) {
+                // Handle object format: { class: 'my-class', style: 'color: red;', 'data-id': '123' }
+                customAttributes = Object.entries(attrs)
+                    .map(([key, value]) => `${key}="${value}"`)
+                    .join(' ');
+            }
+        }
+        
+        // Apply background color if provided
+        let rowStyle = '';
+        if (this.options.rowBackgroundColor) {
+            const bgColor = this.options.rowBackgroundColor(row, rowIndex);
+            if (bgColor) {
+                rowStyle = `style="background-color: ${bgColor} !important;"`;
+            }
+        }
         
         // Add draggable attributes if drag and drop is enabled
         const draggableAttributes = this.options.draggable ? 
             `draggable="true" data-row-key="${row.key || rowIndex}"` : '';
         
-        return `<tr ${customAttributes} ${draggableAttributes} ${rowClick}>${cells.join('')}</tr>`;
+        return `<tr ${customAttributes} ${rowStyle} ${draggableAttributes} ${rowClick}>${cells.join('')}</tr>`;
     }
     
     renderActions(row, rowIndex) {

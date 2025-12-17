@@ -123,8 +123,13 @@ tr[draggable="true"]:hover {
     transition: background-color 0.2s ease;
 }
 
-.table tbody tr:hover {
+.table tbody tr:hover:not([style*="background-color"]) {
     background-color: #f8f9fa;
+}
+
+/* Hover effect for rows with custom background colors - slightly darken */
+.table tbody tr[style*="background-color"]:hover {
+    filter: brightness(0.95);
 }
 
 /* Editable Cell Styling */
@@ -254,6 +259,11 @@ tr[draggable="true"]:hover {
 .empty-state p {
     margin: 0;
     font-size: 0.9rem;
+}
+
+/* Row background color styling */
+.table tbody tr[style*="background-color"] td {
+    background-color: inherit !important;
 }
 
 /* Enhanced Pagination Styling */
@@ -714,7 +724,7 @@ tr[draggable="true"]:hover {
 }
 
 /* Table Striped */
-.table-striped tbody tr:nth-of-type(odd) {
+.table-striped tbody tr:nth-of-type(odd):not([style*="background-color"]) {
     background-color: rgba(0, 0, 0, 0.02);
 }
 

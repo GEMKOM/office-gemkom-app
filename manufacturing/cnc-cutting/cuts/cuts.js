@@ -1276,7 +1276,7 @@ function setupCreateCutForm(createCutModal) {
     // Add parts information section
     createCutModal.addSection({
         id: 'parts-info',
-        title: 'Parça Bilgileri',
+        title: 'Parça Bilgileri *',
         icon: 'fas fa-puzzle-piece',
         iconColor: 'text-success',
         fields: []
@@ -1349,7 +1349,10 @@ function setupCreateCutForm(createCutModal) {
     // Add parts table inside the Parça Bilgileri section
     const partsHtml = `
         <div class="d-flex justify-content-between align-items-center mb-2">
-            <h6 class="mb-0">Parça Listesi</h6>
+            <div>
+                <h6 class="mb-0">Parça Listesi</h6>
+                <small class="text-danger"><i class="fas fa-exclamation-circle me-1"></i>En az bir parça eklemelisiniz</small>
+            </div>
 			<div class="d-flex gap-2">
 				<button type="button" class="btn btn-sm btn-outline-primary" id="add-part-btn">
 					<i class="fas fa-plus me-1"></i>Parça Ekle
@@ -1504,6 +1507,12 @@ async function handleCreateCutSave(formData) {
                 quantity: quantity ? parseInt(quantity, 10) : null
             });
         }
+    }
+    
+    // Validate that at least one part is added
+    if (!cutData.parts_data || cutData.parts_data.length === 0) {
+        showNotification('En az bir parça eklemelisiniz', 'error');
+        return;
     }
     
     // Validate data

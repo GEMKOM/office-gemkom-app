@@ -217,6 +217,57 @@ export async function getCncParts(filters = {}) {
 }
 
 /**
+ * Search CNC parts by job_no, image_no, and position_no with partial matching
+ * @param {Object} searchParams - Search parameters
+ * @param {string} [searchParams.job_no] - Partial match on job number
+ * @param {string} [searchParams.image_no] - Partial match on image number
+ * @param {string} [searchParams.position_no] - Partial match on position number
+ * @param {number} [searchParams.page] - Page number for pagination
+ * @param {number} [searchParams.page_size] - Number of items per page
+ * @returns {Promise<Object>} Paginated response with results, count, next, and previous
+ */
+export async function searchCncParts(searchParams = {}) {
+    try {
+        // Build query parameters
+        const queryParams = new URLSearchParams();
+        Object.entries(searchParams).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                queryParams.append(key, value);
+            }
+        });
+        
+        const url = queryParams.toString() 
+            ? `${CNC_CUTTING_BASE_URL}/parts/search/?${queryParams.toString()}`
+            : `${CNC_CUTTING_BASE_URL}/parts/search/`;
+        
+        const response = await authedFetch(url);
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Failed to search CNC parts: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+        
+        const data = await response.json();
+        
+        // Handle both paginated and non-paginated responses
+        if (Array.isArray(data)) {
+            // Non-paginated response, convert to paginated format
+            return {
+                count: data.length,
+                results: data,
+                next: null,
+                previous: null
+            };
+        }
+        
+        return data;
+    } catch (error) {
+        console.error('Error searching CNC parts:', error);
+        throw error;
+    }
+}
+
+/**
  * Utility function to validate CNC part data
  * @param {Object} partData - CNC part data to validate
  * @param {boolean} isUpdate - Whether this is an update operation (optional fields)

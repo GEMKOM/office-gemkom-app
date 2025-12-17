@@ -381,6 +381,76 @@ const tasksTable = new TableComponent('tasks-table', {
 | `visible` | Function | Function to determine visibility |
 | `onClick` | Function | Click handler |
 
+### Row Background Color
+
+You can set row background colors dynamically using the `rowBackgroundColor` option. This function receives the row data and row index, and returns a CSS color value.
+
+**Example:**
+```javascript
+rowBackgroundColor: (row, index) => {
+    if (row.completion_date) {
+        return '#d4edda'; // Light green for completed items
+    }
+    if (row.priority === 'high') {
+        return '#f8d7da'; // Light red for high priority
+    }
+    if (row.status === 'warning') {
+        return '#fff3cd'; // Light yellow for warnings
+    }
+    return null; // Default color
+}
+```
+
+### Row Styling with rowAttributes
+
+You can style individual rows based on their data using the `rowAttributes` option. This function receives the row data and row index, and can return either a string of HTML attributes or an object with attribute key-value pairs.
+
+**Object Format (Recommended):**
+```javascript
+rowAttributes: (row, index) => {
+    if (row.status === 'completed') {
+        return {
+            class: 'row-completed',
+            style: 'background-color: #d4edda;',
+            'data-status': 'completed'
+        };
+    }
+    if (row.priority === 'high') {
+        return {
+            class: 'row-urgent',
+            style: 'background-color: #f8d7da;'
+        };
+    }
+    return {};
+}
+```
+
+**String Format:**
+```javascript
+rowAttributes: (row, index) => {
+    if (row.status === 'completed') {
+        return 'class="row-completed" style="background-color: #d4edda;"';
+    }
+    return '';
+}
+```
+
+**Example CSS:**
+```css
+.row-completed {
+    background-color: #d4edda !important;
+}
+
+.row-completed:hover {
+    background-color: #c3e6cb !important;
+}
+
+.row-urgent {
+    background-color: #f8d7da !important;
+    font-weight: bold;
+}
+```
+
 ### Methods
 
 | Method | Parameters | Description |
