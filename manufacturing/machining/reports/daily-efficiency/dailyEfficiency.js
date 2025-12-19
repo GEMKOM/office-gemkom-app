@@ -452,6 +452,208 @@ function setupExportWithUserColumn() {
         }
         return data;
     };
+    
+    // Override exportToExcel to apply colors to efficiency column
+    const originalExportToExcel = usersTable.exportToExcel.bind(usersTable);
+    usersTable.exportToExcel = function(data) {
+        // Try to load xlsx-js-style library for styling support
+        loadXLSXStyleLibrary().then(() => {
+            try {
+                // Find the efficiency column index (after adding user column)
+                const headers = data[0];
+                const efficiencyColumnIndex = headers.findIndex(header => header === 'Verimlilik');
+                
+                // Create workbook
+                const wb = XLSX.utils.book_new();
+                
+                // Convert data to worksheet
+                const ws = XLSX.utils.aoa_to_sheet(data);
+                
+                // Apply colors to efficiency column if found
+                if (efficiencyColumnIndex !== -1) {
+                    // Get the column letter (e.g., 0 = A, 1 = B, etc.)
+                    const columnLetter = XLSX.utils.encode_col(efficiencyColumnIndex);
+                    
+                    // Define color styles (using xlsx-js-style format)
+                    const greenStyle = {
+                        fill: {
+                            patternType: "solid",
+                            fgColor: { rgb: "C6EFCE" } // Light green background
+                        },
+                        font: {
+                            color: { rgb: "006100" }, // Dark green text
+                            bold: true
+                        }
+                    };
+                    const yellowStyle = {
+                        fill: {
+                            patternType: "solid",
+                            fgColor: { rgb: "FFEB9C" } // Light yellow background
+                        },
+                        font: {
+                            color: { rgb: "9C6500" }, // Dark yellow text
+                            bold: true
+                        }
+                    };
+                    const redStyle = {
+                        fill: {
+                            patternType: "solid",
+                            fgColor: { rgb: "FFC7CE" } // Light red background
+                        },
+                        font: {
+                            color: { rgb: "9C0006" }, // Dark red text
+                            bold: true
+                        }
+                    };
+                    
+                    // Apply styles to each row (skip header row, start from row 2)
+                    for (let rowIndex = 1; rowIndex < data.length; rowIndex++) {
+                        const cellAddress = columnLetter + (rowIndex + 1); // +1 because Excel is 1-indexed
+                        
+                        // Get the efficiency value from the original data
+                        const dataRow = this.options.data[rowIndex - 1];
+                        if (dataRow && dataRow.efficiency !== null && dataRow.efficiency !== undefined) {
+                            const efficiency = dataRow.efficiency;
+                            
+                            // Determine style based on efficiency value
+                            let style;
+                            if (efficiency >= 100) {
+                                style = greenStyle;
+                            } else if (efficiency >= 80) {
+                                style = yellowStyle;
+                            } else {
+                                style = redStyle;
+                            }
+                            
+                            // Apply the style to the cell
+                            if (!ws[cellAddress]) {
+                                ws[cellAddress] = { v: data[rowIndex][efficiencyColumnIndex] };
+                            }
+                            ws[cellAddress].s = style;
+                        }
+                    }
+                    
+                    // Set column width for better visibility
+                    if (!ws['!cols']) ws['!cols'] = [];
+                    ws['!cols'][efficiencyColumnIndex] = { wch: 12 };
+                }
+                
+                // Add worksheet to workbook
+                XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
+                
+                // Generate Excel file with cellStyles option for xlsx-js-style
+                const excelBuffer = XLSX.write(wb, { 
+                    bookType: 'xlsx', 
+                    type: 'array',
+                    cellStyles: true 
+                });
+                
+                // Create blob and download
+                const blob = new Blob([excelBuffer], { 
+                    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+                });
+                const link = document.createElement('a');
+                link.href = URL.createObjectURL(blob);
+                link.download = `${this.containerId}_${new Date().toISOString().split('T')[0]}.xlsx`;
+                link.click();
+                
+                // Clean up
+                setTimeout(() => URL.revokeObjectURL(link.href), 100);
+                
+            } catch (error) {
+                console.error('Excel export error:', error);
+                // Fallback to original export without styling
+                originalExportToExcel(data);
+            }
+        }).catch(error => {
+            console.error('Failed to load xlsx-js-style library:', error);
+            console.log('Falling back to standard export without colors');
+            // Fallback to original export without styling
+            originalExportToExcel(data);
+        });
+    };
+}
+
+// Helper function to load xlsx-js-style library
+function loadXLSXStyleLibrary() {
+    return new Promise((resolve, reject) => {
+        // Check if xlsx-js-style is already loaded by checking for a script tag
+        const existingScript = Array.from(document.querySelectorAll('script')).find(
+            script => script.src && script.src.includes('xlsx-js-style')
+        );
+        
+        if (existingScript && typeof XLSX !== 'undefined') {
+            // Library already loaded
+            resolve();
+            return;
+        }
+        
+        // Check if standard XLSX is loaded - we'll replace it with styled version
+        if (typeof XLSX !== 'undefined') {
+            // Standard XLSX is loaded, we'll load styled version which will replace it
+            console.log('Standard XLSX detected, loading xlsx-js-style...');
+        }
+        
+        // Try loading from multiple CDN sources with different versions
+        const cdnUrls = [
+            'https://cdn.jsdelivr.net/npm/xlsx-js-style@latest/dist/xlsx.min.js',
+            'https://unpkg.com/xlsx-js-style@latest/dist/xlsx.min.js',
+            'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.4.0/dist/xlsx.min.js',
+            'https://unpkg.com/xlsx-js-style@1.4.0/dist/xlsx.min.js',
+            'https://cdn.jsdelivr.net/npm/xlsx-js-style@1.3.0/dist/xlsx.min.js'
+        ];
+        
+        let currentUrlIndex = 0;
+        let attempts = 0;
+        const maxAttempts = cdnUrls.length;
+        
+        function tryLoadLibrary() {
+            if (currentUrlIndex >= cdnUrls.length) {
+                reject(new Error('Failed to load xlsx-js-style from all CDN sources'));
+                return;
+            }
+            
+            attempts++;
+            const url = cdnUrls[currentUrlIndex];
+            console.log(`Attempting to load xlsx-js-style from: ${url} (attempt ${attempts}/${maxAttempts})`);
+            
+            const script = document.createElement('script');
+            script.src = url;
+            
+            script.onload = () => {
+                // Wait a bit for the library to initialize
+                setTimeout(() => {
+                    if (typeof XLSX !== 'undefined' && XLSX.utils && XLSX.write) {
+                        console.log('xlsx-js-style library loaded successfully');
+                        resolve();
+                    } else {
+                        // Library loaded but not initialized properly, try next CDN
+                        console.warn('Library loaded but XLSX object not found, trying next CDN...');
+                        currentUrlIndex++;
+                        if (script.parentNode) {
+                            document.head.removeChild(script);
+                        }
+                        tryLoadLibrary();
+                    }
+                }, 200);
+            };
+            
+            script.onerror = (error) => {
+                console.warn(`Failed to load from ${url}, trying next CDN...`);
+                // Try next CDN
+                currentUrlIndex++;
+                if (script.parentNode) {
+                    document.head.removeChild(script);
+                }
+                tryLoadLibrary();
+            };
+            
+            // Add to document
+            document.head.appendChild(script);
+        }
+        
+        tryLoadLibrary();
+    });
 }
 
 
