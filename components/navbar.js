@@ -521,7 +521,13 @@ export function initNavbar() {
                         
 
                         
-                                                if (path.startsWith('/manufacturing/maintenance/')) {
+                                                if (path.startsWith('/manufacturing/machining/')) {
+                            // Allow navigation to machining pages
+                            navigateTo(path);
+                            return;
+                        }
+                        
+                        if (path.startsWith('/manufacturing/maintenance/')) {
                             // Allow navigation to maintenance pages
                             navigateTo(path);
                             return;
@@ -605,6 +611,12 @@ export function initNavbar() {
                 // Check if user has access to this route
                 if (!hasRouteAccess(path)) {
                     alert('Bu sayfaya erişim yetkiniz bulunmamaktadır.');
+                    return;
+                }
+                
+                if (path.startsWith('/manufacturing/machining/')) {
+                    // Allow navigation to machining pages
+                    navigateTo(path);
                     return;
                 }
                 

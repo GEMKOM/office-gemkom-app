@@ -1014,6 +1014,29 @@ function renderStatusBadge(status, statusLabel) {
     `;
 }
 
+// Normalize priority value to match backend expectations (normal, urgent, critical)
+function normalizePriorityForPlanningRequest(priority) {
+    if (!priority) return 'normal';
+    
+    const normalized = priority.toLowerCase().trim();
+    
+    // Map valid values
+    if (normalized === 'normal' || normalized === 'urgent' || normalized === 'critical') {
+        return normalized;
+    }
+    
+    // Map legacy/invalid values to valid ones
+    if (normalized === 'low') {
+        return 'normal';
+    }
+    if (normalized === 'high') {
+        return 'urgent';
+    }
+    
+    // Default to normal for any unknown values
+    return 'normal';
+}
+
 function renderPriorityBadge(priority) {
     let badgeClass = 'status-grey';
     let label = 'Normal';
@@ -1875,10 +1898,9 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
         createPlanningRequestModal.setTitle('Yeni Planlama Talebi Oluştur');
     }
     const priorityOptions = [
-        { value: 'low', label: 'Düşük' },
         { value: 'normal', label: 'Normal' },
-        { value: 'high', label: 'Yüksek' },
-        { value: 'urgent', label: 'Acil' }
+        { value: 'urgent', label: 'Acil' },
+        { value: 'critical', label: 'Kritik' }
     ];
 
     // Add basic information section
@@ -1928,7 +1950,7 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 name: 'priority',
                 label: 'Öncelik',
                 type: 'dropdown',
-                value: departmentRequest?.priority || 'normal',
+                value: normalizePriorityForPlanningRequest(departmentRequest?.priority) || 'normal',
                 required: false,
                 icon: 'fas fa-exclamation-triangle',
                 colSize: 12,
@@ -2094,7 +2116,7 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
             const requestData = {
                 title: formData.title,
                 description: formData.description || '',
-                priority: formData.priority || 'normal',
+                priority: normalizePriorityForPlanningRequest(formData.priority),
                 needed_date: formData.needed_date || null,
                 items: items.length > 0 ? items : undefined,
                 files: files.length > 0 ? files : undefined
@@ -2323,10 +2345,9 @@ async function showEditPlanningRequestModal(request) {
     }));
 
     const priorityOptions = [
-        { value: 'low', label: 'Düşük' },
         { value: 'normal', label: 'Normal' },
-        { value: 'high', label: 'Yüksek' },
-        { value: 'urgent', label: 'Acil' }
+        { value: 'urgent', label: 'Acil' },
+        { value: 'critical', label: 'Kritik' }
     ];
 
     // Add basic information section
@@ -2376,7 +2397,7 @@ async function showEditPlanningRequestModal(request) {
                 name: 'priority',
                 label: 'Öncelik',
                 type: 'dropdown',
-                value: request.priority || 'normal',
+                value: normalizePriorityForPlanningRequest(request.priority) || 'normal',
                 required: false,
                 icon: 'fas fa-exclamation-triangle',
                 colSize: 12,
@@ -2553,7 +2574,7 @@ async function showEditPlanningRequestModal(request) {
             const newRequestData = {
                 title: formData.title,
                 description: formData.description || '',
-                priority: formData.priority || 'normal',
+                priority: normalizePriorityForPlanningRequest(formData.priority),
                 needed_date: formData.needed_date || null,
                 items: items.length > 0 ? items : [],
                 files: files.length > 0 ? files : []

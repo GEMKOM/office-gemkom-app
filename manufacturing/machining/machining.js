@@ -21,10 +21,30 @@ function initMachiningModule() {
             },
             {
                 title: 'Görevler',
-                description: 'Mevcut görevleri görüntüleyin, yeni görevler oluşturun ve toplu görev yönetimi yapın.',
+                description: 'Görev yönetimi ve oluşturma işlemleri.',
                 icon: 'fas fa-tasks',
                 iconColor: 'success',
-                link: '/manufacturing/machining/tasks'
+                link: '/manufacturing/machining/tasks',
+                features: [
+                    {
+                        label: 'Görev Listesi',
+                        icon: 'fas fa-list',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/tasks/list'
+                    },
+                    {
+                        label: 'Görev Oluştur',
+                        icon: 'fas fa-plus-circle',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/tasks/create'
+                    },
+                    {
+                        label: 'Bekleyen Görevler',
+                        icon: 'fas fa-clock',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/tasks/pending'
+                    }
+                ]
             },
             {
                 title: 'Raporlar',

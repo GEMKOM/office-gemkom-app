@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Görev Oluştur</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../../style.css">
+    <link rel="stylesheet" href="../../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../../components/dropdown/dropdown.css">
+    <link rel="icon" type="image/png" href="../../../../images/gemkom.png">
+    <link rel="stylesheet" href="createTask.css">
+    <link rel="stylesheet" href="../../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../../components/filters/filters.css">
+    <link rel="stylesheet" href="../../../../components/table/table.css">
+    <link rel="stylesheet" href="../../../../components/badges/badges.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <div id="navbar-container"></div>
+
+    <!-- Main Content Section -->
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <!-- Header Component Placeholder -->
+            <div id="header-placeholder"></div>
+
+            <!-- Create Task Form Section -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="dashboard-card compact">
+                        <div class="card-header">
+                            <h6 class="card-title mb-0">
+                                <i class="fas fa-plus-circle me-2 text-primary"></i>Yeni Görev Oluştur
+                            </h6>
+                        </div>
+                        <div class="card-body">
+                            <div id="bulk-create-table-container">
+                                <!-- Bulk create table will be rendered here -->
+                            </div>
+                            <div class="bulk-create-actions mt-3">
+                                <button type="button" class="btn btn-sm btn-primary" id="create-tasks-btn">
+                                    <i class="fas fa-save me-1"></i>Görevleri Oluştur
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary ms-2" id="clear-form-btn">
+                                    <i class="fas fa-times me-1"></i>Temizle
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filters Section -->
+            <div id="filters-placeholder"></div>
+
+            <!-- Tasks Table Section -->
+            <div class="row">
+                <div class="col-12">
+                    <div id="tasks-table-container"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Created Tasks Keys Modal -->
+    <div class="modal fade" id="createdTasksModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">
+                        <i class="fas fa-check-circle me-2"></i>Görevler Başarıyla Oluşturuldu
+                    </h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="text-center mb-3">
+                        <i class="fas fa-tasks fa-3x text-success mb-3"></i>
+                        <h5>Oluşturulan Görevler</h5>
+                        <p class="text-muted">Aşağıda oluşturulan görevlerin anahtarları listelenmiştir.</p>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Görev Adı</th>
+                                    <th>TI No</th>
+                                    <th>İş No</th>
+                                </tr>
+                            </thead>
+                            <tbody id="created-tasks-table">
+                                <!-- Created tasks will be listed here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-2"></i>Kapat
+                    </button>
+                    <button type="button" class="btn btn-success" id="export-created-tasks-btn">
+                        <i class="fas fa-download me-2"></i>Excel'e Aktar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <!-- SheetJS for Excel export -->
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Header Component -->
+    <script src="../../../../components/header/header.js"></script>
+    <!-- Filters Component -->
+    <script src="../../../../components/filters/filters.js"></script>
+    <!-- Table Component -->
+    <script src="../../../../components/table/table.js"></script>
+    <script type="module" src="createTask.js"></script>
+</body>
+</html>

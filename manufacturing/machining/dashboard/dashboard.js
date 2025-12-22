@@ -815,7 +815,7 @@ function createTaskModal(task) {
         customButton.className = 'btn btn-primary';
         customButton.innerHTML = '<i class="fas fa-tasks me-1"></i>Görevler Sayfasında Aç';
         customButton.onclick = () => {
-            window.location.href = `../tasks/?filter=${task.key}`;
+            window.location.href = `../tasks/list/?filter=${task.key}`;
         };
         
         // Insert before the close button

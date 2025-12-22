@@ -70,11 +70,27 @@ export const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-chart-line',
                         children: {}
                     },
-                                         '/manufacturing/machining/tasks': {
-                         label: 'Görevler',
-                         icon: 'fas fa-tasks',
-                         children: {}
-                     },
+                    '/manufacturing/machining/tasks': {
+                        label: 'Görevler',
+                        icon: 'fas fa-tasks',
+                        children: {
+                            '/manufacturing/machining/tasks/list': {
+                                label: 'Görev Listesi',
+                                icon: 'fas fa-list',
+                                children: {}
+                            },
+                            '/manufacturing/machining/tasks/create': {
+                                label: 'Görev Oluştur',
+                                icon: 'fas fa-plus-circle',
+                                children: {}
+                            },
+                            '/manufacturing/machining/tasks/pending': {
+                                label: 'Bekleyen Görevler',
+                                icon: 'fas fa-clock',
+                                children: {}
+                            }
+                        }
+                    },
                     '/manufacturing/machining/reports': {
                         label: 'Raporlar',
                         icon: 'fas fa-chart-pie',

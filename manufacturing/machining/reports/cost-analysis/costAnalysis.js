@@ -689,7 +689,7 @@ async function showUserDetails(jobNo) {
                                             badgeClass += ' bg-secondary';
                                     }
                                     
-                                    return `<a href="/manufacturing/machining/tasks/?task=${key.key}" target="_blank" class="${badgeClass}">${key.key}</a>`;
+                                    return `<a href="/manufacturing/machining/tasks/list/?task=${key.key}" target="_blank" class="${badgeClass}">${key.key}</a>`;
                                 }).join('');
                             }
                         }

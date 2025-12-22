@@ -303,11 +303,21 @@ export async function markDepartmentRequestTransferred(requestId, data = {}) {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.detail || errorData.error || 'Talep transfer edilirken hata olu_tu');
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Talep transfer edilirken hata oluştu');
         }
 
-        return await response.json();
+        // Safely parse JSON response, return empty object if parsing fails or response is empty
+        const text = await response.text();
+        if (!text || text.trim() === '') {
+            return {};
+        }
+        try {
+            return JSON.parse(text);
+        } catch (parseError) {
+            console.warn('Response is not valid JSON, returning empty object');
+            return {};
+        }
     } catch (error) {
         console.error('Error marking department request as transferred:', error);
         throw error;

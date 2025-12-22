@@ -176,11 +176,21 @@ export async function createPlanningRequest(requestData) {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
+            const errorData = await response.json().catch(() => ({}));
             throw new Error(errorData.detail || errorData.error || 'Planlama talebi oluşturulurken hata oluştu');
         }
 
-        return await response.json();
+        // Safely parse JSON response, return empty object if parsing fails or response is empty
+        const text = await response.text();
+        if (!text || text.trim() === '') {
+            return {};
+        }
+        try {
+            return JSON.parse(text);
+        } catch (parseError) {
+            console.warn('Response is not valid JSON, returning empty object');
+            return {};
+        }
     } catch (error) {
         console.error('Error creating planning request:', error);
         throw error;

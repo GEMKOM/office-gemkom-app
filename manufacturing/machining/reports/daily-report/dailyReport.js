@@ -500,7 +500,7 @@ function showUserDetails(user) {
                         sortable: true,
                         formatter: (value) => {
                             if (!value) return '-';
-                            return `<a href="/manufacturing/machining/tasks/?task=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-primary text-decoration-none" style="cursor: pointer;">${value}</a>`;
+                            return `<a href="/manufacturing/machining/tasks/list/?task=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-primary text-decoration-none" style="cursor: pointer;">${value}</a>`;
                         }
                     },
                     {
@@ -648,7 +648,7 @@ function showUserDetails(user) {
                         sortable: true,
                         formatter: (value) => {
                             if (!value) return '-';
-                            return `<a href="/manufacturing/machining/tasks/?task=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-primary text-decoration-none" style="cursor: pointer;">${value}</a>`;
+                            return `<a href="/manufacturing/machining/tasks/list/?task=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-primary text-decoration-none" style="cursor: pointer;">${value}</a>`;
                         }
                     },
                     {
