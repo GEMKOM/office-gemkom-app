@@ -153,8 +153,8 @@ function initializeTableComponent() {
             currentPage = 1;
             await loadUsers();
         },
-        onExport: (format) => {
-            exportUsers(format);
+        onExport: async (format) => {
+            await exportUsers(format);
         },
         onSort: async (field, direction) => {
             // Reset to first page when sorting
@@ -874,8 +874,6 @@ async function createUser(formData) {
          const response = await updateUserAPI(userId, formData);
          
          if (response.ok) {
-             showNotification('Çalışan başarıyla güncellendi', 'success');
-             
              // Hide modal
              editUserModal.hide();
              
@@ -896,11 +894,9 @@ async function createUser(formData) {
 
 async function exportUsers(format) {
     try {
-        // Show loading message
-        const exportBtn = document.querySelector('#users-table-container-export');
-        if (exportBtn) {
-            exportBtn.disabled = true;
-            exportBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Dışa Aktarılıyor...';
+        // Show loading state using table component's method
+        if (usersTable) {
+            usersTable.setExportLoading(true);
         }
         
         // Get filter values
@@ -922,69 +918,32 @@ async function exportUsers(format) {
             return;
         }
         
-        // Prepare data for export (match visible columns)
-        const headers = [
-            'ID',
-            'Kullanıcı Adı',
-            'Ad',
-            'Soyad',
-            'E-posta',
-            'Takım',
-            'Görev',
-            'Çalışma Yeri'
-        ];
+        // Store current table state
+        const originalData = usersTable.options.data;
+        const originalTotal = usersTable.options.totalItems;
         
-        const exportData = [
-            headers,
-            ...allUsers.map(user => [
-                user.id ?? '',
-                user.username || '',
-                user.first_name || '',
-                user.last_name || '',
-                user.email || '',
-                user.team_label || '',
-                user.occupation_label || '',
-                user.work_location_label || ''
-            ])
-        ];
+        // Temporarily update table with all users for export
+        usersTable.options.data = allUsers;
+        usersTable.options.totalItems = allUsers.length;
         
-        // Export based on format
-        if (format === 'csv') {
-            exportToCSV(exportData, 'calisanlar');
-        } else if (format === 'excel') {
-            exportToExcel(exportData, 'calisanlar');
-        }
+        // Use table component's export functionality
+        // The table component will use its prepareExportData and exportToExcel methods
+        usersTable.exportData('excel');
+        
+        // Restore original table state
+        usersTable.options.data = originalData;
+        usersTable.options.totalItems = originalTotal;
         
     } catch (error) {
         // Error exporting users
         alert('Dışa aktarma sırasında hata oluştu');
         console.error('Export error:', error);
     } finally {
-        // Reset export button
-        const exportBtn = document.querySelector('#users-table-container-export');
-        if (exportBtn) {
-            exportBtn.disabled = false;
-            exportBtn.innerHTML = '<i class="fas fa-download me-1"></i>Dışa Aktar';
+        // Reset loading state using table component's method
+        if (usersTable) {
+            usersTable.setExportLoading(false);
         }
     }
-}
-
-function exportToCSV(data, filename) {
-    const csvContent = data.map(row => 
-        row.map(cell => `"${cell}"`).join(',')
-    ).join('\n');
-    
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-}
-
-function exportToExcel(data, filename) {
-    // For Excel export, you would need a library like SheetJS
-    // For now, we'll just show a message
-    alert('Excel export özelliği yakında eklenecek');
 }
 
 // Helper function for notifications

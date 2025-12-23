@@ -221,6 +221,17 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
+            '/manufacturing/welding': {
+                label: 'Kaynak',
+                icon: 'fas fa-fire',
+                children: {
+                    '/manufacturing/welding/time-entries': {
+                        label: 'Zaman Kayıtları',
+                        icon: 'fas fa-clock',
+                        children: {}
+                    }
+                }
+            },
 
 
         }

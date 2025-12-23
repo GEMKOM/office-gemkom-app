@@ -88,6 +88,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                         link: '/manufacturing/maintenance/fault-requests'
                     }
                 ]
+            },
+            {
+                title: 'Kaynak',
+                description: 'Kaynak işlemleri ve zaman kayıtları yönetimi.',
+                icon: 'fas fa-fire',
+                iconColor: 'danger',
+                link: '/manufacturing/welding',
+                features: [
+                    {
+                        label: 'Zaman Kayıtları',
+                        icon: 'fas fa-clock',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/welding/time-entries'
+                    }
+                ]
             }
         ]
     });
