@@ -338,6 +338,36 @@ export async function completePurchaseRequest(requestId) {
     }
 }
 
+export async function attachPlanningItemsToPurchaseRequest(requestId, planningRequestItemIds) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/purchase-requests/${requestId}/attach_planning_items/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                planning_request_item_ids: planningRequestItemIds
+            })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            // Create an error object that preserves the full error data structure
+            const error = new Error(errorData.detail || errorData.error || 'Planlama talebi öğeleri eklenirken hata oluştu');
+            // Attach the full error data for detailed error handling
+            error.errorData = errorData;
+            error.errors = errorData.errors;
+            error.note = errorData.note;
+            throw error;
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error attaching planning items to purchase request:', error);
+        throw error;
+    }
+}
+
 // Supplier API Functions
 export async function searchSuppliers(searchTerm) {
     try {

@@ -7,7 +7,7 @@ import { ComparisonTable } from '../../../components/comparison-table/comparison
 import { DataManager } from './dataManager.js';
 import { ValidationManager } from './validationManager.js';
 import { fetchCurrencyRates } from '../../../apis/formatters.js';
-import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft } from '../../../apis/procurement.js';
+import { createPurchaseRequest, submitPurchaseRequest, savePurchaseRequestDraft, getPurchaseRequestDrafts, deletePurchaseRequestDraft, getPurchaseRequestDraft, attachPlanningItemsToPurchaseRequest, getPurchaseRequests } from '../../../apis/procurement.js';
 import { getPlanningRequest } from '../../../apis/planning/planningRequests.js';
 import { getPlanningRequestItems, getNumberOfAvailablePlanningRequestItems, getPlanningRequestItem, getPlanningRequestItemsFiles } from '../../../apis/planning/planningRequestItems.js';
 import { TableComponent } from '../../../components/table/table.js';
@@ -15,6 +15,7 @@ import { FiltersComponent } from '../../../components/filters/filters.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
+import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { ITEM_CODE_NAMES, UNIT_CHOICES } from '../../../apis/constants.js';
 
 // Global state
@@ -52,10 +53,23 @@ function syncPlanningRequestItemIds() {
     }
     
     // Extract all source_planning_request_item_id values from items
+    // This includes both single source_planning_request_item_id and arrays from merged items
     const itemIds = new Set();
     requestData.items.forEach(item => {
-        if (item && item.source_planning_request_item_id) {
+        if (!item) return;
+        
+        // Add single source_planning_request_item_id (for non-merged items)
+        if (item.source_planning_request_item_id) {
             itemIds.add(item.source_planning_request_item_id);
+        }
+        
+        // Add all IDs from source_planning_request_item_ids array (for merged items)
+        if (item.source_planning_request_item_ids && Array.isArray(item.source_planning_request_item_ids)) {
+            item.source_planning_request_item_ids.forEach(id => {
+                if (id) {
+                    itemIds.add(id);
+                }
+            });
         }
     });
     
@@ -191,6 +205,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize planning request items modal
     initializePlanningRequestItemsModal();
+    
+    // Initialize attach to purchase request modal
+    initializeAttachToPurchaseRequestModal();
     
     // Now render all components with proper currency rates
     await renderAll();
@@ -399,6 +416,7 @@ async function saveDraftAsJSON() {
                 specifications: item.specifications,
                 item_description: item.item_description,
                 source_planning_request_item_id: item.source_planning_request_item_id,
+                source_planning_request_item_ids: item.source_planning_request_item_ids, // Preserve array for merged items
                 file_asset_ids: item.file_asset_ids
             }))
         };
@@ -628,6 +646,9 @@ async function loadDraftData(draft) {
                                 specs: groupedItem.specifications || '',
                                 specifications: groupedItem.specifications || '',
                                 item_description: groupedItem.item_description || '',
+                                // Preserve planning request item IDs from merged items
+                                source_planning_request_item_id: groupedItem.source_planning_request_item_id || null,
+                                source_planning_request_item_ids: groupedItem.source_planning_request_item_ids || null,
                                 originalGroupIndex: groupIndex,
                                 allocationIndex: allocationIndex
                             };
@@ -1166,6 +1187,11 @@ function initializePlanningRequestItemsModal() {
         downloadFilesBtn.addEventListener('click', () => downloadSelectedItemsFiles());
     }
     
+    const attachToPrBtn = document.getElementById('attach-to-pr-btn');
+    if (attachToPrBtn) {
+        attachToPrBtn.addEventListener('click', () => showAttachToPurchaseRequestModal());
+    }
+    
     // Initialize modal event listeners
     const modal = document.getElementById('planningRequestItemsModal');
     if (modal) {
@@ -1571,6 +1597,7 @@ function updateSelectedItemsCount() {
     const countElement = document.getElementById('selected-items-count');
     const addBtn = document.getElementById('add-selected-items-btn');
     const downloadBtn = document.getElementById('download-selected-files-btn');
+    const attachToPrBtn = document.getElementById('attach-to-pr-btn');
     
     const count = selectedPlanningItems.size;
     if (countElement) {
@@ -1583,6 +1610,9 @@ function updateSelectedItemsCount() {
         // For download button, we'll check files when actually downloading
         // since selected items might not be on current page
         downloadBtn.disabled = count === 0;
+    }
+    if (attachToPrBtn) {
+        attachToPrBtn.disabled = count === 0;
     }
 }
 
@@ -2181,24 +2211,259 @@ async function addSelectedPlanningItems() {
     }
 }
 
-function showNotification(message, type = 'info') {
+// Attach to Purchase Request Modal
+let attachToPrModal = null;
+
+function initializeAttachToPurchaseRequestModal() {
+    if (!attachToPrModal) {
+        attachToPrModal = new EditModal('attach-to-pr-modal-container', {
+            title: 'Mevcut Satın Alma Talebine Ekle',
+            icon: 'fas fa-link',
+            size: 'md',
+            saveButtonText: 'Ekle',
+            showEditButton: false
+        });
+        
+        attachToPrModal.onSaveCallback(async (formData) => {
+            await handleAttachToPurchaseRequest(formData);
+        });
+    }
+}
+
+async function showAttachToPurchaseRequestModal() {
+    if (selectedPlanningItems.size === 0) {
+        showNotification('Lütfen en az bir malzeme seçin', 'warning');
+        return;
+    }
+    
+    // Initialize modal if not already done
+    if (!attachToPrModal) {
+        initializeAttachToPurchaseRequestModal();
+    }
+    
+    // Clear and configure the modal
+    attachToPrModal.clearAll();
+    
+    attachToPrModal.addSection({
+        title: 'Satın Alma Talebi Bilgileri',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary'
+    });
+    
+    attachToPrModal.addField({
+        id: 'purchase_request_number',
+        name: 'purchase_request_number',
+        label: 'Satın Alma Talebi No',
+        type: 'text',
+        placeholder: 'PR-2025-0347',
+        required: true,
+        icon: 'fas fa-hashtag',
+        colSize: 12,
+        help: 'Satın alma talebi numarasını girin (örn: PR-2025-0347)'
+    });
+    
+    attachToPrModal.addField({
+        id: 'selected_items_info',
+        name: 'selected_items_info',
+        label: 'Seçilen Malzemeler',
+        type: 'text',
+        value: `${selectedPlanningItems.size} malzeme seçildi`,
+        icon: 'fas fa-list',
+        colSize: 12,
+        readonly: true
+    });
+    
+    attachToPrModal.render();
+    attachToPrModal.show();
+}
+
+async function handleAttachToPurchaseRequest(formData) {
+    const purchaseRequestNumber = formData.purchase_request_number?.trim();
+    
+    if (!purchaseRequestNumber) {
+        showNotification('Satın alma talebi numarası gereklidir', 'error');
+        return;
+    }
+    
+    // Validate format (basic check for PR-YYYY-####)
+    const prPattern = /^PR-\d{4}-\d+$/i;
+    if (!prPattern.test(purchaseRequestNumber)) {
+        showNotification('Geçersiz satın alma talebi numarası formatı. Format: PR-YYYY-#### (örn: PR-2025-0347)', 'error');
+        return;
+    }
+    
+    try {
+        // Show loading state
+        if (attachToPrModal) {
+            attachToPrModal.setLoading(true);
+        }
+        
+        // Search for purchase request by request_number
+        const purchaseRequest = await findPurchaseRequestByNumber(purchaseRequestNumber);
+        
+        if (!purchaseRequest) {
+            showNotification(`Satın alma talebi bulunamadı: ${purchaseRequestNumber}`, 'error');
+            if (attachToPrModal) {
+                attachToPrModal.setLoading(false);
+            }
+            return;
+        }
+        
+        // Get selected planning request item IDs
+        const planningRequestItemIds = Array.from(selectedPlanningItems);
+        
+        if (planningRequestItemIds.length === 0) {
+            showNotification('Seçilen malzeme bulunamadı', 'error');
+            if (attachToPrModal) {
+                attachToPrModal.setLoading(false);
+            }
+            return;
+        }
+        
+        // Call the attach API
+        const response = await attachPlanningItemsToPurchaseRequest(
+            purchaseRequest.id,
+            planningRequestItemIds
+        );
+        
+        // Handle response
+        if (response && response.detail) {
+            showNotification(response.detail, 'success');
+            
+            // Close modals
+            if (attachToPrModal) {
+                attachToPrModal.hide();
+            }
+            
+            const planningModal = bootstrap.Modal.getInstance(document.getElementById('planningRequestItemsModal'));
+            if (planningModal) {
+                planningModal.hide();
+            }
+            
+            // Clear selections
+            selectedPlanningItems.clear();
+            selectedPlanningItemsData.clear();
+            updateSelectedItemsCount();
+            
+            // Refresh available items count
+            loadAvailableItemsCount();
+        } else {
+            showNotification('Malzemeler başarıyla eklendi', 'success');
+            
+            // Close modals
+            if (attachToPrModal) {
+                attachToPrModal.hide();
+            }
+            
+            const planningModal = bootstrap.Modal.getInstance(document.getElementById('planningRequestItemsModal'));
+            if (planningModal) {
+                planningModal.hide();
+            }
+            
+            // Clear selections
+            selectedPlanningItems.clear();
+            selectedPlanningItemsData.clear();
+            updateSelectedItemsCount();
+            
+            // Refresh available items count
+            loadAvailableItemsCount();
+        }
+        
+    } catch (error) {
+        console.error('Error attaching items to purchase request:', error);
+        
+        // Handle detailed error messages from backend
+        let errorMessage = 'Malzemeler eklenirken hata oluştu';
+        
+        // Check if error has detailed error data attached
+        if (error.errorData) {
+            const errorData = error.errorData;
+            if (errorData.detail) {
+                errorMessage = errorData.detail;
+                // Add errors array if available
+                if (errorData.errors && Array.isArray(errorData.errors) && errorData.errors.length > 0) {
+                    errorMessage += '\n\n' + errorData.errors.join('\n');
+                }
+                // Add note if available
+                if (errorData.note) {
+                    errorMessage += '\n\n' + errorData.note;
+                }
+            }
+        } else if (error.errors && Array.isArray(error.errors)) {
+            // If errors array is directly attached
+            errorMessage = error.message || errorMessage;
+            if (error.errors.length > 0) {
+                errorMessage += '\n\n' + error.errors.join('\n');
+            }
+            if (error.note) {
+                errorMessage += '\n\n' + error.note;
+            }
+        } else if (error.message) {
+            errorMessage = error.message;
+        }
+        
+        // Show error with longer duration for detailed messages
+        const duration = errorMessage.includes('\n') ? 10000 : 5000;
+        showNotification(errorMessage, 'error', duration);
+    } finally {
+        if (attachToPrModal) {
+            attachToPrModal.setLoading(false);
+        }
+    }
+}
+
+async function findPurchaseRequestByNumber(requestNumber) {
+    try {
+        // Search for purchase request by request_number
+        const filters = {
+            request_number: requestNumber,
+            page_size: 1
+        };
+        
+        const response = await getPurchaseRequests(filters);
+        
+        // Handle paginated response
+        if (response.results && response.results.length > 0) {
+            return response.results[0];
+        }
+        
+        // Handle non-paginated response (array)
+        if (Array.isArray(response) && response.length > 0) {
+            // Find exact match
+            const exactMatch = response.find(pr => 
+                pr.request_number && pr.request_number.toUpperCase() === requestNumber.toUpperCase()
+            );
+            return exactMatch || null;
+        }
+        
+        return null;
+    } catch (error) {
+        console.error('Error finding purchase request:', error);
+        throw error;
+    }
+}
+
+function showNotification(message, type = 'info', duration = 5000) {
     // Create notification element
     const notification = document.createElement('div');
     notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
+    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px; max-width: 500px; white-space: pre-line;';
+    
+    // Handle multi-line messages
+    const messageText = typeof message === 'string' ? message : JSON.stringify(message);
     notification.innerHTML = `
-        ${message}
+        <div style="white-space: pre-line;">${messageText}</div>
         <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
     `;
     
     document.body.appendChild(notification);
     
-    // Auto-remove after 5 seconds
+    // Auto-remove after specified duration
     setTimeout(() => {
         if (notification.parentNode) {
             notification.remove();
         }
-    }, 5000);
+    }, duration);
 }
 
 

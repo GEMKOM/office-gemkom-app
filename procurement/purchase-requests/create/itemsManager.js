@@ -814,6 +814,29 @@ export class ItemsManager {
             // Use the first item's item_description (since they should be the same if mergeable)
             const mergedItemDescription = selectedItems[0].item_description || '';
             
+            // Collect all source_planning_request_item_id values from original items
+            const sourcePlanningRequestItemIds = [];
+            selectedItems.forEach(item => {
+                const originalItem = this.requestData.items[item.originalIndex];
+                if (originalItem && originalItem.source_planning_request_item_id) {
+                    // Add single source_planning_request_item_id
+                    if (!sourcePlanningRequestItemIds.includes(originalItem.source_planning_request_item_id)) {
+                        sourcePlanningRequestItemIds.push(originalItem.source_planning_request_item_id);
+                    }
+                }
+                // Also check for source_planning_request_item_ids array (from previously merged items)
+                if (originalItem && originalItem.source_planning_request_item_ids && Array.isArray(originalItem.source_planning_request_item_ids)) {
+                    originalItem.source_planning_request_item_ids.forEach(id => {
+                        if (!sourcePlanningRequestItemIds.includes(id)) {
+                            sourcePlanningRequestItemIds.push(id);
+                        }
+                    });
+                }
+            });
+            
+            // Get the first item's original data for backward compatibility
+            const firstOriginalItem = this.requestData.items[selectedItems[0].originalIndex];
+            
             const mergedItem = {
                 id: selectedItems[0].id,
                 code: selectedItems[0].code,
@@ -825,7 +848,10 @@ export class ItemsManager {
                 specifications: mergedSpecs,
                 item_description: mergedItemDescription,
                 allocations: allocations, // Add allocations array
-                file_asset_ids: mergedFileAssetIds // Combine file asset IDs from all merged items
+                file_asset_ids: mergedFileAssetIds, // Combine file asset IDs from all merged items
+                // Preserve planning request item IDs
+                source_planning_request_item_id: firstOriginalItem?.source_planning_request_item_id || null, // Keep for backward compatibility
+                source_planning_request_item_ids: sourcePlanningRequestItemIds // Store all IDs as array
             };
 
             mergedItems.push(mergedItem);
@@ -860,6 +886,12 @@ export class ItemsManager {
         this.requestData.offers = {};
 
         this.renderItemsTable();
+        
+        // Sync planning_request_item_ids after merging
+        if (window.syncPlanningRequestItemIds) {
+            window.syncPlanningRequestItemIds();
+        }
+        
         this.autoSave();
 
         // Close modal
