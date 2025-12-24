@@ -41,6 +41,9 @@ export async function authFetchUsers(page = 1, pageSize = 20, filters = {}) {
     if (filters.occupation) {
         params.append('occupation', filters.occupation);
     }
+    if (filters.is_active) {
+        params.append('is_active', filters.is_active);
+    }
     
     // Add ordering if provided
     if (filters.ordering) {

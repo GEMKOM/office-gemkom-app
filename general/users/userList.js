@@ -139,6 +139,19 @@ function initializeTableComponent() {
                 label: 'Çalışma Yeri',
                 sortable: true,
                 formatter: (value) => value || '-'
+            },
+            {
+                field: 'is_active',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value) => {
+                    if (value === true) {
+                        return '<span class="status-badge status-green">Aktif</span>';
+                    } else if (value === false) {
+                        return '<span class="status-badge status-grey">Pasif</span>';
+                    }
+                    return '<span class="text-muted">-</span>';
+                }
             }
         ],
         data: [],
@@ -302,6 +315,18 @@ function initializeFiltersComponent() {
         placeholder: 'Tüm Görevler',
         colSize: 3
     });
+
+    userFilters.addDropdownFilter({
+        id: 'is-active-filter',
+        label: 'Durum',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'true', label: 'Aktif' },
+            { value: 'false', label: 'Pasif' }
+        ],
+        placeholder: 'Tümü',
+        colSize: 3
+    });
 }
 
 // Initialize modal components
@@ -386,6 +411,9 @@ async function loadUsers() {
         if (filterValues['occupation-filter']) {
             params.append('occupation', filterValues['occupation-filter']);
         }
+        if (filterValues['is-active-filter']) {
+            params.append('is_active', filterValues['is-active-filter']);
+        }
         
         // Add ordering
         const orderingParam = currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`;
@@ -397,6 +425,7 @@ async function loadUsers() {
             team: filterValues['team-filter'] || '',
             work_location: filterValues['work-location-filter'] || '',
             occupation: filterValues['occupation-filter'] || '',
+            is_active: filterValues['is-active-filter'] || '',
             ordering: orderingParam
         });
         
@@ -645,6 +674,18 @@ function setupEventListeners() {
          ]
      });
 
+     // Add is_active checkbox
+     editUserModal.addField({
+         id: 'is_active',
+         name: 'is_active',
+         label: 'Aktif',
+         type: 'checkbox',
+         value: user.is_active !== false, // Default to true if not explicitly false
+         icon: 'fas fa-check-circle',
+         colSize: 12,
+         helpText: 'Çalışanın aktif durumu'
+     });
+
      // Render and show modal
      editUserModal.render();
      editUserModal.show();
@@ -831,6 +872,18 @@ function showCreateUserModal() {
         ]
     });
 
+    // Add is_active checkbox
+    createUserModal.addField({
+        id: 'is_active',
+        name: 'is_active',
+        label: 'Aktif',
+        type: 'checkbox',
+        value: true,
+        icon: 'fas fa-check-circle',
+        colSize: 12,
+        helpText: 'Çalışanın aktif durumu'
+    });
+
     // Render and show modal
     createUserModal.render();
     createUserModal.show();
@@ -908,6 +961,7 @@ async function exportUsers(format) {
             team: filterValues['team-filter'] || '',
             work_location: filterValues['work-location-filter'] || '',
             occupation: filterValues['occupation-filter'] || '',
+            is_active: filterValues['is-active-filter'] || '',
             ordering: currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`
         });
         

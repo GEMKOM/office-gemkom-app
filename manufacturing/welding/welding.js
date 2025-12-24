@@ -27,6 +27,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 iconColor: 'primary',
                 link: '/manufacturing/welding/time-entries',
                 features: []
+            },
+            {
+                title: 'Raporlar',
+                description: 'Kaynak zaman kayıtları analizleri ve performans raporları.',
+                icon: 'fas fa-chart-bar',
+                iconColor: 'success',
+                link: '/manufacturing/welding/reports',
+                features: [
+                    {
+                        label: 'Çalışan Çalışma Saatleri',
+                        icon: 'fas fa-user-clock',
+                        link: '/manufacturing/welding/reports/user-work-hours'
+                    }
+                ]
             }
         ]
     });

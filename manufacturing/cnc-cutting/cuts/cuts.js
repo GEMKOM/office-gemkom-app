@@ -2963,8 +2963,26 @@ function removePart(index) {
 // Show cut details modal
 async function showCutDetails(cutData) {
     try {
-        // Fetch complete task data from API
-        const taskData = await getCncTask(cutData.key);
+        // Check if we already have complete data (with parts) or need to fetch
+        let taskData;
+        
+        // If cutData is a string, it's just a key - fetch the data
+        if (typeof cutData === 'string') {
+            taskData = await getCncTask(cutData);
+        }
+        // If cutData is an object and already has parts (complete data), use it directly
+        else if (cutData && typeof cutData === 'object' && cutData.parts !== undefined) {
+            taskData = cutData;
+        }
+        // If cutData is an object with a key but no parts, fetch complete data
+        else if (cutData && typeof cutData === 'object' && cutData.key) {
+            taskData = await getCncTask(cutData.key);
+        }
+        // Fallback: try to use cutData as-is or fetch by key
+        else {
+            const cutKey = cutData?.key || cutData;
+            taskData = await getCncTask(cutKey);
+        }
         
         // Create Display Modal instance
         detailsModal = new DisplayModal('cut-details-modal-container', {

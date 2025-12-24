@@ -3,6 +3,7 @@ import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { TableComponent } from '../../../../components/table/table.js';
 import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
+import { ConfirmationModal } from '../../../../components/confirmation-modal/confirmation-modal.js';
 import { 
     fetchWeldingTimeEntries, 
     createWeldingTimeEntry, 
@@ -22,6 +23,8 @@ let isLoading = false;
 let timeEntriesFilters = null;
 let timeEntriesTable = null;
 let users = [];
+let editTimeEntryModal = null;
+let deleteTimeEntryModal = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -42,6 +45,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadUsers();
     initializeFiltersComponent();
     initializeTableComponent();
+    initializeEditModal();
+    initializeDeleteModal();
     await loadTimeEntries();
 });
 
@@ -1094,17 +1099,261 @@ async function handleBulkCreateSave(rows, columns, showModalNotification) {
     }
 }
 
-function editTimeEntry(row) {
-    // TODO: Implement edit functionality
-    showNotification('Düzenleme özelliği yakında eklenecek', 'info');
+function initializeEditModal() {
+    // Initialize edit modal
+    editTimeEntryModal = new EditModal('edit-time-entry-modal-container', {
+        title: 'Zaman Kaydı Düzenle',
+        icon: 'fas fa-edit',
+        size: 'lg',
+        showEditButton: false
+    });
+
+    // Set up save callback
+    editTimeEntryModal.onSaveCallback(async (formData) => {
+        await updateTimeEntry(formData);
+    });
 }
 
-function deleteTimeEntry(row) {
-    if (!confirm(`Bu zaman kaydını silmek istediğinize emin misiniz?`)) {
+function editTimeEntry(row) {
+    if (!row || !row.id) {
+        showNotification('Geçersiz zaman kaydı', 'error');
+        return;
+    }
+
+    // Clear and configure the edit modal
+    editTimeEntryModal.clearAll();
+    
+    // Store the entry ID for update
+    window.editingTimeEntryId = row.id;
+    
+    // Add section
+    editTimeEntryModal.addSection({
+        title: 'Zaman Kaydı Bilgileri',
+        icon: 'fas fa-clock',
+        iconColor: 'text-primary'
+    });
+
+    // Get employee ID from row data
+    let employeeId = '';
+    if (row.employee && typeof row.employee === 'object' && row.employee.id) {
+        employeeId = row.employee.id.toString();
+    } else if (row.employee_id) {
+        employeeId = row.employee_id.toString();
+    } else if (row.employee) {
+        employeeId = row.employee.toString();
+    }
+
+    // Add employee dropdown
+    editTimeEntryModal.addField({
+        id: 'employee',
+        name: 'employee',
+        label: 'Çalışan',
+        type: 'dropdown',
+        value: employeeId,
+        required: true,
+        icon: 'fas fa-user',
+        colSize: 6,
+        helpText: 'Çalışan seçin',
+        options: [
+            { value: '', label: 'Çalışan seçin...' },
+            ...users.map(user => ({
+                value: user.id ? user.id.toString() : '',
+                label: user.full_name ? `${user.full_name} (${user.username})` : 
+                       (user.first_name && user.last_name) ? `${user.first_name} ${user.last_name} (${user.username})` :
+                       user.username
+            }))
+        ]
+    });
+
+    // Add job number field
+    editTimeEntryModal.addField({
+        id: 'job_no',
+        name: 'job_no',
+        label: 'İş No',
+        type: 'text',
+        value: row.job_no || '',
+        required: true,
+        icon: 'fas fa-hashtag',
+        colSize: 6,
+        helpText: 'İş numarası'
+    });
+
+    // Add date field
+    let dateValue = '';
+    if (row.date) {
+        // Format date as YYYY-MM-DD for date input
+        const date = new Date(row.date);
+        if (!isNaN(date.getTime())) {
+            dateValue = date.toISOString().split('T')[0];
+        } else {
+            dateValue = row.date;
+        }
+    }
+
+    editTimeEntryModal.addField({
+        id: 'date',
+        name: 'date',
+        label: 'Tarih',
+        type: 'date',
+        value: dateValue,
+        required: true,
+        icon: 'fas fa-calendar',
+        colSize: 6,
+        helpText: 'Tarih seçin'
+    });
+
+    // Add hours field
+    editTimeEntryModal.addField({
+        id: 'hours',
+        name: 'hours',
+        label: 'Saat',
+        type: 'number',
+        value: row.hours || '',
+        required: true,
+        icon: 'fas fa-clock',
+        colSize: 6,
+        helpText: 'Çalışılan saat',
+        step: '0.01',
+        min: '0.01'
+    });
+
+    // Add overtime type dropdown
+    editTimeEntryModal.addField({
+        id: 'overtime_type',
+        name: 'overtime_type',
+        label: 'Mesai Tipi',
+        type: 'dropdown',
+        value: row.overtime_type || 'regular',
+        required: true,
+        icon: 'fas fa-briefcase',
+        colSize: 6,
+        helpText: 'Mesai tipi seçin',
+        options: [
+            { value: 'regular', label: 'Normal (1x)' },
+            { value: 'after_hours', label: 'Fazla Mesai (1.5x)' },
+            { value: 'holiday', label: 'Tatil (2x)' }
+        ]
+    });
+
+    // Add description field
+    editTimeEntryModal.addField({
+        id: 'description',
+        name: 'description',
+        label: 'Açıklama',
+        type: 'textarea',
+        value: row.description || '',
+        icon: 'fas fa-align-left',
+        colSize: 12,
+        helpText: 'İş açıklaması (opsiyonel)'
+    });
+
+    // Render and show modal
+    editTimeEntryModal.render();
+    editTimeEntryModal.show();
+}
+
+async function updateTimeEntry(formData) {
+    const entryId = window.editingTimeEntryId;
+    if (!entryId) {
+        showNotification('Düzenlenecek zaman kaydı bulunamadı', 'error');
         return;
     }
     
-    deleteTimeEntryAPI(row.id);
+    try {
+        // Prepare update data
+        const updateData = {
+            employee: parseInt(formData.employee),
+            job_no: formData.job_no,
+            date: formData.date,
+            hours: parseFloat(formData.hours),
+            overtime_type: formData.overtime_type || 'regular',
+            description: formData.description || ''
+        };
+
+        // Update the time entry
+        await updateWeldingTimeEntry(entryId, updateData);
+        
+        // Hide modal
+        editTimeEntryModal.hide();
+        
+        // Clear the editing entry ID
+        window.editingTimeEntryId = null;
+        
+        // Show success notification
+        showNotification('Zaman kaydı başarıyla güncellendi', 'success');
+        
+        // Reload time entries
+        await loadTimeEntries(currentPage);
+    } catch (error) {
+        console.error('Error updating time entry:', error);
+        showNotification(error.message || 'Zaman kaydı güncellenirken hata oluştu', 'error');
+    }
+}
+
+function initializeDeleteModal() {
+    // Initialize delete confirmation modal
+    deleteTimeEntryModal = new ConfirmationModal('delete-time-entry-modal-container', {
+        title: 'Zaman Kaydını Sil',
+        icon: 'fas fa-trash-alt',
+        message: 'Bu zaman kaydını silmek istediğinizden emin misiniz?',
+        confirmText: 'Evet, Sil',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-danger',
+        showCancelButton: true
+    });
+
+    // Set up delete modal callback
+    deleteTimeEntryModal.setOnConfirm(async () => {
+        const entryId = window.pendingDeleteTimeEntryId;
+        if (!entryId) {
+            showNotification('Silinecek zaman kaydı bulunamadı', 'error');
+            return;
+        }
+
+        try {
+            await deleteTimeEntryAPI(entryId);
+            deleteTimeEntryModal.hide();
+            window.pendingDeleteTimeEntryId = null;
+        } catch (error) {
+            console.error('Error deleting time entry:', error);
+            showNotification('Zaman kaydı silinirken hata oluştu: ' + error.message, 'error');
+        }
+    });
+}
+
+function deleteTimeEntry(row) {
+    if (!row || !row.id) {
+        showNotification('Geçersiz zaman kaydı', 'error');
+        return;
+    }
+
+    // Store the entry ID for deletion
+    window.pendingDeleteTimeEntryId = row.id;
+
+    // Build entry details for display
+    const employeeName = row.employee_full_name || 
+                        (row.employee && typeof row.employee === 'object' ? 
+                         (row.employee.full_name || `${row.employee.first_name || ''} ${row.employee.last_name || ''}`.trim()) : 
+                         row.employee_username || '-');
+    const jobNo = row.job_no || '-';
+    const date = row.date ? new Date(row.date).toLocaleDateString('tr-TR') : '-';
+    const hours = row.hours ? parseFloat(row.hours).toFixed(2) : '-';
+
+    // Build details HTML
+    const detailsHtml = `
+        <div class="alert alert-warning mt-3">
+            <strong>Çalışan:</strong> ${employeeName}<br>
+            <strong>İş No:</strong> ${jobNo}<br>
+            <strong>Tarih:</strong> ${date}<br>
+            <strong>Saat:</strong> ${hours}
+        </div>
+        <p class="text-muted small mt-2">Bu işlem geri alınamaz ve zaman kaydı kalıcı olarak silinecektir.</p>
+    `;
+
+    // Show the modal with details
+    deleteTimeEntryModal.show({
+        details: detailsHtml
+    });
 }
 
 async function deleteTimeEntryAPI(entryId) {

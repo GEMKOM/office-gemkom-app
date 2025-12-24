@@ -229,6 +229,22 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Zaman Kayıtları',
                         icon: 'fas fa-clock',
                         children: {}
+                    },
+                    '/manufacturing/welding/reports': {
+                        label: 'Raporlar',
+                        icon: 'fas fa-chart-bar',
+                        children: {
+                            '/manufacturing/welding/reports/user-work-hours': {
+                                label: 'Çalışan Çalışma Saatleri',
+                                icon: 'fas fa-user-clock',
+                                children: {}
+                            },
+                            '/manufacturing/welding/reports/cost-analysis': {
+                                label: 'Maliyet Analizi',
+                                icon: 'fas fa-calculator',
+                                children: {}
+                            }
+                        }
                     }
                 }
             },
