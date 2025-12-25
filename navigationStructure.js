@@ -248,6 +248,17 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
+            '/manufacturing/reports': {
+                label: 'Raporlar',
+                icon: 'fas fa-chart-pie',
+                children: {
+                    '/manufacturing/reports/combined-job-costs': {
+                        label: 'İş Maliyeti',
+                        icon: 'fas fa-calculator',
+                        children: {}
+                    }
+                }
+            }
 
 
         }

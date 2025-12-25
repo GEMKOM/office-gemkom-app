@@ -9,6 +9,7 @@ import { GanttChart } from '../../../../components/gantt/gantt.js';
 import { fetchMachines, getMachineCalendar } from '../../../../apis/machines.js';
 import { getCapacityPlanning, updateCapacityPlanning } from '../../../../apis/machining/capacityPlanning.js';
 import { formatDateTime } from '../../../../apis/formatters.js';
+import { updateTask } from '../../../../apis/tasks.js';
 
 // Global state
 let currentMachineId = null;
@@ -546,7 +547,10 @@ function initTasksTable() {
                     field: 'estimated_hours',
                     label: 'Tahmini Saat',
                     sortable: true,
-                    formatter: (value) => value ? `${value}h` : '-'
+                    formatter: (value, row) => {
+                        const displayValue = value ? `${value}h` : '-';
+                        return `<span class="editable-cell" data-field="estimated_hours" data-task-key="${row.key}">${displayValue}</span>`;
+                    }
                 },
                 {
                     field: 'remaining_hours',
@@ -597,14 +601,9 @@ function initTasksTable() {
                     sortable: false,
                     width: '100px',
                     formatter: (value, row) => `
-                        <div class="btn-group btn-group-sm">
-                            <button class="btn btn-outline-primary btn-sm" onclick="editTask('${row.key}')" title="Düzenle">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button class="btn btn-outline-danger btn-sm" onclick="removeFromPlan('${row.key}')" title="Plandan Çıkar">
-                                <i class="fas fa-times"></i>
-                            </button>
-                        </div>
+                        <button class="btn btn-outline-danger btn-sm" onclick="removeFromPlan('${row.key}')" title="Plandan Çıkar">
+                            <i class="fas fa-times"></i>
+                        </button>
                     `
                 }
             ],
@@ -647,9 +646,7 @@ function initGanttChart() {
                 }
             },
             onTaskClick: (task, event) => {
-                if (task && task.key) {
-                    editTask(task.key);
-                }
+                // Task click handler removed - no edit modal
             }
         });
     } catch (error) {
@@ -868,7 +865,11 @@ function renderUnplannedTasksTable(tasks) {
             <td><strong>${task.key}</strong></td>
             <td>${task.name}</td>
             <td>${task.job_no || '-'}</td>
-            <td>${task.estimated_hours || '-'}h</td>
+            <td>
+                <span class="editable-cell" data-field="estimated_hours" data-task-key="${task.key}">
+                    ${task.estimated_hours ? `${task.estimated_hours}h` : '-'}
+                </span>
+            </td>
             <td>${task.finish_time ? new Date(task.finish_time).toLocaleDateString('tr-TR') : '-'}</td>
             <td>
                 <button class="btn btn-success btn-sm" onclick="addToPlan('${task.key}')" title="Plana Ekle">
@@ -877,6 +878,11 @@ function renderUnplannedTasksTable(tasks) {
             </td>
         </tr>
     `).join('');
+    
+    // Setup inline editing for unplanned tasks after rendering
+    setTimeout(() => {
+        setupInlineEditing();
+    }, 100);
 }
 
 
@@ -963,26 +969,6 @@ function reorderTasks(draggedTaskKey, targetTaskKey, insertPosition = 'after') {
 
 
 
-// Edit task
-function editTask(taskKey) {
-    const task = currentTasks.find(t => t.key === taskKey);
-    if (!task) return;
-
-    // Populate modal with dates (display as local time)
-    document.getElementById('edit-task-key').value = taskKey;
-    document.getElementById('edit-start-date').value = task.planned_start_ms 
-        ? formatDateForInput(new Date(task.planned_start_ms))
-        : '';
-    document.getElementById('edit-end-date').value = task.planned_end_ms 
-        ? formatDateForInput(new Date(task.planned_end_ms))
-        : '';
-    document.getElementById('edit-plan-order').value = task.plan_order || '';
-    document.getElementById('edit-plan-locked').checked = task.plan_locked || false;
-
-    // Show modal
-    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('editTaskModal'));
-    modal.show();
-}
 
 // Add task to plan
 function addToPlan(taskKey) {
@@ -1374,35 +1360,6 @@ function setupEventListeners() {
     // Save plan button
     document.getElementById('save-plan-btn').addEventListener('click', savePlan);
     
-    // Save task changes
-    document.getElementById('save-task-changes').addEventListener('click', () => {
-        const taskKey = document.getElementById('edit-task-key').value;
-        const startDate = document.getElementById('edit-start-date').value;
-        const endDate = document.getElementById('edit-end-date').value;
-        const planOrder = document.getElementById('edit-plan-order').value;
-        const planLocked = document.getElementById('edit-plan-locked').checked;
-        
-        const task = currentTasks.find(t => t.key === taskKey);
-        if (task) {
-            // Use dates directly (no conversion needed)
-            task.planned_start_ms = startDate ? new Date(startDate).getTime() : null;
-            task.planned_end_ms = endDate ? new Date(endDate).getTime() : null;
-            
-            task.plan_order = planOrder ? parseInt(planOrder) : null;
-            task.plan_locked = planLocked;
-            
-            markTaskAsChanged(taskKey);
-            
-            const modal = bootstrap.Modal.getInstance(document.getElementById('editTaskModal'));
-            modal.hide();
-            
-            // Update the display immediately instead of reloading
-            const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
-            renderTasksTable(updatedPlannedTasks);
-            updateGanttChart(updatedPlannedTasks);
-        }
-    });
-    
     // Confirm autoschedule
     document.getElementById('confirm-autoschedule').addEventListener('click', confirmAutoschedule);
     
@@ -1539,6 +1496,28 @@ function startInlineEdit(cell, taskKey, field, currentValue) {
                 input.value = '';
             }
             break;
+        case 'estimated_hours':
+            input = document.createElement('input');
+            input.type = 'number';
+            input.className = 'form-control form-control-sm';
+            input.step = '0.1';
+            input.min = '0';
+            // Extract numeric value from "Xh" format or use empty string
+            let originalNumericValue = null;
+            if (currentValue && currentValue !== '-') {
+                const numericValue = parseFloat(currentValue.replace('h', '').trim());
+                if (!isNaN(numericValue)) {
+                    input.value = numericValue;
+                    originalNumericValue = numericValue;
+                } else {
+                    input.value = '';
+                }
+            } else {
+                input.value = '';
+            }
+            // Store original numeric value for comparison
+            input.dataset.originalValue = originalNumericValue !== null ? originalNumericValue.toString() : '';
+            break;
         default:
             input = document.createElement('input');
             input.type = 'text';
@@ -1614,6 +1593,7 @@ async function finishInlineEdit(cell, taskKey, field, newValue, originalContent)
         
         // Update the task data based on field
         let hasChanges = false;
+        let updateValue = null;
         
         switch (field) {
             case 'planned_start_ms':
@@ -1640,17 +1620,108 @@ async function finishInlineEdit(cell, taskKey, field, newValue, originalContent)
                     hasChanges = true;
                 }
                 break;
+            case 'estimated_hours':
+                // Get the original value that was in the input when editing started
+                const inputElement = cell.querySelector('input');
+                const originalInputValue = inputElement ? inputElement.dataset.originalValue : null;
+                const originalNumericValue = originalInputValue && originalInputValue !== '' ? parseFloat(originalInputValue) : null;
+                
+                // Parse the new value from input
+                const numericValue = newValue && newValue.trim() !== '' ? parseFloat(newValue) : null;
+                
+                // Normalize values for comparison (handle null, undefined, NaN)
+                const normalizedNew = (numericValue !== null && !isNaN(numericValue)) ? numericValue : null;
+                const normalizedOriginal = (originalNumericValue !== null && !isNaN(originalNumericValue)) ? originalNumericValue : null;
+                
+                // Check if value actually changed (with floating point tolerance)
+                const valuesEqual = normalizedNew === normalizedOriginal || 
+                    (normalizedNew !== null && normalizedOriginal !== null && 
+                     Math.abs(normalizedNew - normalizedOriginal) < 0.0001);
+                
+                if (valuesEqual) {
+                    // No change, restore original content and return without sending request
+                    if (cell && cell.parentNode) {
+                        cell.innerHTML = originalContent;
+                    }
+                    return;
+                }
+                
+                if (numericValue !== null && !isNaN(numericValue) && numericValue >= 0) {
+                    task.estimated_hours = numericValue;
+                    updateValue = numericValue;
+                    hasChanges = true;
+                } else if (newValue === '' || newValue === null || (newValue && newValue.trim() === '')) {
+                    // Only set to null if original value was not already null
+                    if (normalizedOriginal !== null) {
+                        task.estimated_hours = null;
+                        updateValue = null;
+                        hasChanges = true;
+                    } else {
+                        // Already null, no change
+                        if (cell && cell.parentNode) {
+                            cell.innerHTML = originalContent;
+                        }
+                        return;
+                    }
+                } else {
+                    // Invalid value, restore original content
+                    if (cell && cell.parentNode) {
+                        cell.innerHTML = originalContent;
+                    }
+                    showNotification('Geçerli bir sayı girin', 'error');
+                    return;
+                }
+                break;
         }
         
         if (hasChanges) {
-            markTaskAsChanged(taskKey);
-            
-            // Update the display immediately
-            const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
-            renderTasksTable(updatedPlannedTasks);
-            updateGanttChart(updatedPlannedTasks);
-            
-            showNotification('Görev güncellendi', 'success', 2000);
+            // For estimated_hours, send immediate update request
+            if (field === 'estimated_hours') {
+                try {
+                    const response = await updateTask(taskKey, { estimated_hours: updateValue });
+                    if (!response.ok) {
+                        throw new Error('Güncelleme başarısız');
+                    }
+                    
+                    // Update originalTasks to reflect the change (so it doesn't trigger bulk save)
+                    const originalTask = originalTasks.find(ot => ot.key === taskKey);
+                    if (originalTask) {
+                        originalTask.estimated_hours = updateValue;
+                    }
+                    
+                    // Update display with new value
+                    const displayValue = updateValue ? `${updateValue}h` : '-';
+                    if (cell && cell.parentNode) {
+                        cell.innerHTML = displayValue;
+                    }
+                    
+                    // Update both tables if needed
+                    const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
+                    renderTasksTable(updatedPlannedTasks);
+                    const updatedUnplannedTasks = currentTasks.filter(t => !t.in_plan);
+                    renderUnplannedTasksTable(updatedUnplannedTasks);
+                    
+                    showNotification('Tahmini saat güncellendi', 'success', 2000);
+                } catch (error) {
+                    showNotification('Güncelleme sırasında hata oluştu', 'error');
+                    // Restore original content on error
+                    if (cell && cell.parentNode) {
+                        cell.innerHTML = originalContent;
+                    }
+                    // Revert the change in local state
+                    task.estimated_hours = originalTasks.find(ot => ot.key === taskKey)?.estimated_hours || null;
+                }
+            } else {
+                // For other fields, use the existing bulk save mechanism
+                markTaskAsChanged(taskKey);
+                
+                // Update the display immediately
+                const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
+                renderTasksTable(updatedPlannedTasks);
+                updateGanttChart(updatedPlannedTasks);
+                
+                showNotification('Görev güncellendi', 'success', 2000);
+            }
         } else {
             // No changes, restore original content
             if (cell && cell.parentNode) {
@@ -1674,7 +1745,6 @@ async function finishInlineEdit(cell, taskKey, field, newValue, originalContent)
 }
 
 // Make functions globally available
-window.editTask = editTask;
 window.addToPlan = addToPlan;
 window.removeFromPlan = removeFromPlan;
 

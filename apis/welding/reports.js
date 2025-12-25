@@ -76,13 +76,12 @@ export async function getWeldingJobCostDetail(params) {
     }
 
     const queryParams = new URLSearchParams();
-    queryParams.append('job_no', params.job_no);
     
     if (params.ordering) {
         queryParams.append('ordering', params.ordering);
     }
 
-    const url = `${backendBase}/welding/reports/job-costs/?${queryParams.toString()}`;
+    const url = `${backendBase}/welding/reports/job-costs/${encodeURIComponent(params.job_no)}/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     const resp = await authedFetch(url);
     
     if (!resp.ok) {

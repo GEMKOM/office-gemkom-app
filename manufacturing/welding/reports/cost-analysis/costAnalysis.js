@@ -5,7 +5,6 @@ import { FiltersComponent } from '../../../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../../../components/statistics-cards/statistics-cards.js';
 import { DisplayModal } from '../../../../../components/display-modal/display-modal.js';
 import { getWeldingJobCostTotals, getWeldingJobCostDetail } from '../../../../../apis/welding/reports.js';
-import { initRouteProtection } from '../../../../../apis/routeProtection.js';
 
 // State management
 let currentPage = 1;
@@ -28,10 +27,6 @@ let jobHoursTable = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
-    if (!initRouteProtection()) {
-        return;
-    }
-
     await initNavbar();
     
     // Initialize header component
@@ -40,10 +35,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize Statistics Cards component
     costAnalysisStats = new StatisticsCards('cost-analysis-statistics', {
         cards: [
-            { title: 'En Çok Saat', value: '-', icon: 'fas fa-clock', color: 'success', id: 'most-hours-job' },
-            { title: 'En Çok Normal Saat', value: '-', icon: 'fas fa-calendar-day', color: 'primary', id: 'most-regular-hours' },
-            { title: 'En Çok Mesai Saat', value: '-', icon: 'fas fa-calendar', color: 'warning', id: 'most-overtime-hours' },
-            { title: 'En Çok Tatil Saat', value: '-', icon: 'fas fa-calendar-alt', color: 'danger', id: 'most-holiday-hours' }
+            { title: 'En Pahalı İş', value: '-', icon: 'fas fa-euro-sign', color: 'danger', id: 'most-expensive-job' },
+            { title: 'En Pahalı Saat Başı', value: '-', icon: 'fas fa-clock', color: 'warning', id: 'most-expensive-per-hour' },
+            { title: 'En Çok Mesai Maliyeti', value: '-', icon: 'fas fa-calendar', color: 'info', id: 'most-overtime-cost' },
+            { title: 'En Çok Çalışılan İş', value: '-', icon: 'fas fa-chart-bar', color: 'success', id: 'most-hours-job' }
         ],
         compact: true,
         animation: true
@@ -58,18 +53,21 @@ document.addEventListener('DOMContentLoaded', async () => {
 // Initialize Header Component
 function initHeaderComponent() {
     headerComponent = new HeaderComponent({
-        containerId: 'header-placeholder',
-        title: 'Kaynak Maliyet Analizi Raporu',
-        subtitle: 'İş numaralarına göre detaylı saat analizi ve kullanıcı bazlı detaylar. Tüm iş numaraları görüntülenir, belirli bir iş numarası için filtreleme yapabilirsiniz.',
-        icon: 'calculator',
-        showBackButton: 'block',
-        showExportButton: 'block',
-        showRefreshButton: 'block',
-        exportButtonText: 'Excel\'e Aktar',
-        refreshButtonText: 'Yenile',
-        backUrl: '/manufacturing/welding/reports',
-        onExportClick: handleExport,
-        onRefreshClick: loadJobHoursData
+        title: 'Maliyet Analizi Raporu',
+        subtitle: 'İş numaralarına göre detaylı maliyet analizi, saat başı maliyet hesaplamaları ve kullanıcı bazlı detaylar. Tüm iş numaraları görüntülenir, belirli bir iş numarası için filtreleme yapabilirsiniz.',
+        icon: 'fas fa-calculator',
+        iconColor: 'text-success',
+        showBackButton: true,
+        backButtonText: 'Raporlara Dön',
+        backButtonUrl: '../',
+        actions: [
+            {
+                text: 'Yenile',
+                icon: 'fas fa-sync-alt',
+                class: 'btn-outline-primary',
+                onclick: () => loadJobHoursData()
+            }
+        ]
     });
 }
 
@@ -117,43 +115,60 @@ function initializeTable() {
                 formatter: (value) => `<span class="fw-bold text-primary">${value}</span>`
             },
             {
-                field: 'regular_hours',
-                label: 'Normal (1x)',
+                field: 'weekday_work_hours',
+                label: 'Hafta İçi Saat',
                 sortable: true,
                 type: 'number',
-                formatter: (value) => `<span class="text-primary">${(value || 0).toFixed(2)}</span>`
+                formatter: (value) => `<span class="text-primary">${value.toFixed(1)}</span>`
             },
             {
-                field: 'after_hours',
-                label: 'Fazla Mesai (1.5x)',
+                field: 'after_hours_hours',
+                label: 'Mesai Saat',
                 sortable: true,
                 type: 'number',
-                formatter: (value) => `<span class="text-warning">${(value || 0).toFixed(2)}</span>`
+                formatter: (value) => `<span class="text-warning">${value.toFixed(1)}</span>`
             },
             {
-                field: 'holiday_hours',
-                label: 'Tatil (2x)',
+                field: 'sunday_hours',
+                label: 'Pazar Saat',
                 sortable: true,
                 type: 'number',
-                formatter: (value) => `<span class="text-danger">${(value || 0).toFixed(2)}</span>`
+                formatter: (value) => `<span class="text-danger">${value.toFixed(1)}</span>`
             },
             {
-                field: 'total_hours',
-                label: 'Toplam Saat',
+                field: 'weekday_work_cost',
+                label: 'Hafta İçi Maliyet',
                 sortable: true,
                 type: 'number',
-                formatter: (value) => `<span class="fw-bold text-success">${(value || 0).toFixed(2)}</span>`
+                formatter: (value) => `<span class="text-primary">€${value.toFixed(2)}</span>`
             },
             {
-                field: 'updated_at',
-                label: 'Son Güncelleme',
+                field: 'after_hours_cost',
+                label: 'Mesai Maliyet',
                 sortable: true,
-                type: 'date',
-                formatter: (value) => {
-                    if (!value) return '-';
-                    const date = new Date(value);
-                    return date.toLocaleDateString('tr-TR') + '<br><small class="text-muted">' + date.toLocaleTimeString('tr-TR') + '</small>';
-                }
+                type: 'number',
+                formatter: (value) => `<span class="text-warning">€${value.toFixed(2)}</span>`
+            },
+            {
+                field: 'sunday_cost',
+                label: 'Pazar Maliyet',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => `<span class="text-danger">€${value.toFixed(2)}</span>`
+            },
+            {
+                field: 'total_cost',
+                label: 'Toplam Maliyet',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => `<span class="fw-bold text-success">€${value.toFixed(2)}</span>`
+            },
+            {
+                field: 'cost_per_hour',
+                label: 'Saat Başı Maliyet',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => `<span class="fw-bold">€${value.toFixed(2)}</span>`
             },
             {
                 field: 'actions',
@@ -170,15 +185,11 @@ function initializeTable() {
         onRowClick: handleRowClick,
         onSort: handleSort,
         onPageChange: handlePageChange,
-        pagination: true,
-        itemsPerPage: 20,
-        serverSidePagination: false,
-        exportable: true,
-        refreshable: true,
-        onRefresh: loadJobHoursData,
-        onExport: handleExport,
-        emptyMessage: 'İş numarası bulunamadı',
-        emptyIcon: 'fas fa-calculator'
+        showPagination: true,
+        showSearch: false,
+        showExport: true,
+        exportFileName: 'maliyet-analizi-raporu',
+        skeletonLoading: true
     });
 }
 
@@ -197,21 +208,7 @@ function handleRowClick(rowData) {
 function handleSort(field, direction) {
     currentSortField = field;
     currentSortDirection = direction;
-    
-    // Map field names to API ordering
-    const orderingMap = {
-        'job_no': 'job_no',
-        '-job_no': '-job_no',
-        'total_hours': 'total_hours',
-        '-total_hours': '-total_hours',
-        'updated_at': 'updated_at',
-        '-updated_at': '-updated_at'
-    };
-    
-    const ordering = direction === 'desc' ? `-${field}` : field;
-    const apiOrdering = orderingMap[ordering] || orderingMap['-total_hours'];
-    
-    loadJobHoursData(apiOrdering);
+    loadJobHoursData();
 }
 
 // Handle page change
@@ -221,24 +218,18 @@ function handlePageChange(page) {
 }
 
 // Load job cost data
-async function loadJobHoursData(ordering = null) {
+async function loadJobHoursData() {
     if (isLoading) return;
     
     isLoading = true;
     
     try {
-        // Set loading state
-        if (jobHoursTable) {
-            jobHoursTable.setLoading(true);
-        }
-        
         // Get current filters
         const filters = filtersComponent ? filtersComponent.getFilterValues() : {};
         
         // Use the welding cost analysis API
         const data = await getWeldingJobCostTotals({
-            job_no: filters.job_no || undefined,
-            ordering: ordering || '-total_hours'
+            job_no: filters.job_no || undefined
         });
         
         // Process the data for display
@@ -250,17 +241,16 @@ async function loadJobHoursData(ordering = null) {
         
         // Update table
         if (jobHoursTable) {
-            jobHoursTable.setLoading(false);
-            jobHoursTable.updateData(jobHoursData, totalJobs, currentPage);
+            jobHoursTable.updateData(jobHoursData, {
+                totalItems: totalJobs,
+                currentPage: currentPage,
+                pageSize: pageSize
+            });
         }
         
     } catch (error) {
         console.error('Error loading job cost data:', error);
         showError('Veri yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin.');
-        if (jobHoursTable) {
-            jobHoursTable.setLoading(false);
-            jobHoursTable.updateData([], 0, 1);
-        }
     } finally {
         isLoading = false;
     }
@@ -269,15 +259,20 @@ async function loadJobHoursData(ordering = null) {
 // Process job cost data for display
 function processJobCostData(results) {
     return results.map(job => {
-        const hours = job.hours || {};
-        const totalHours = job.total_hours || 0;
+        const totalHours = (job.hours.regular || 0) + (job.hours.after_hours || 0) + (job.hours.holiday || 0);
+        const costPerHour = totalHours > 0 ? (job.total_cost || 0) / totalHours : 0;
         
         return {
             job_no: job.job_no,
-            regular_hours: hours.regular || 0,
-            after_hours: hours.after_hours || 0,
-            holiday_hours: hours.holiday || 0,
-            total_hours: totalHours,
+            weekday_work_hours: job.hours.regular || 0,
+            after_hours_hours: job.hours.after_hours || 0,
+            sunday_hours: job.hours.holiday || 0,
+            weekday_work_cost: job.costs.regular || 0,
+            after_hours_cost: job.costs.after_hours || 0,
+            sunday_cost: job.costs.holiday || 0,
+            total_cost: job.total_cost || 0,
+            cost_per_hour: costPerHour,
+            currency: job.currency || 'EUR',
             updated_at: job.updated_at,
             raw_data: job
         };
@@ -300,37 +295,49 @@ function updateStatistics(data) {
         return;
     }
     
-    // Find job with most total hours
-    const mostHoursJob = results.reduce((max, job) => 
-        (job.total_hours || 0) > (max.total_hours || 0) ? job : max
+    // Find most expensive job (highest total cost)
+    const mostExpensiveJob = results.reduce((max, job) => 
+        (job.total_cost || 0) > (max.total_cost || 0) ? job : max
     );
     
-    // Find job with most regular hours
-    const mostRegularHoursJob = results.reduce((max, job) => {
-        const jobRegular = (job.hours?.regular || 0);
-        const maxRegular = (max.hours?.regular || 0);
-        return jobRegular > maxRegular ? job : max;
+    // Find most expensive per hour job
+    const mostExpensivePerHourJob = results.reduce((max, job) => {
+        const totalHours = (job.hours.regular || 0) + (job.hours.after_hours || 0) + (job.hours.holiday || 0);
+        const maxHours = (max.hours.regular || 0) + (max.hours.after_hours || 0) + (max.hours.holiday || 0);
+        const jobCostPerHour = totalHours > 0 ? (job.total_cost || 0) / totalHours : 0;
+        const maxCostPerHour = maxHours > 0 ? (max.total_cost || 0) / maxHours : 0;
+        return jobCostPerHour > maxCostPerHour ? job : max;
     });
     
-    // Find job with most after_hours
-    const mostOvertimeHoursJob = results.reduce((max, job) => {
-        const jobOvertime = (job.hours?.after_hours || 0);
-        const maxOvertime = (max.hours?.after_hours || 0);
-        return jobOvertime > maxOvertime ? job : max;
+    // Find job with most overtime cost (after hours + holiday)
+    const mostOvertimeCostJob = results.reduce((max, job) => {
+        const jobOvertimeCost = (job.costs.after_hours || 0) + (job.costs.holiday || 0);
+        const maxOvertimeCost = (max.costs.after_hours || 0) + (max.costs.holiday || 0);
+        return jobOvertimeCost > maxOvertimeCost ? job : max;
     });
     
-    // Find job with most holiday hours
-    const mostHolidayHoursJob = results.reduce((max, job) => {
-        const jobHoliday = (job.hours?.holiday || 0);
-        const maxHoliday = (max.hours?.holiday || 0);
-        return jobHoliday > maxHoliday ? job : max;
+    // Find job with most total hours
+    const mostHoursJob = results.reduce((max, job) => {
+        const jobTotalHours = (job.hours.regular || 0) + (job.hours.after_hours || 0) + (job.hours.holiday || 0);
+        const maxTotalHours = (max.hours.regular || 0) + (max.hours.after_hours || 0) + (max.hours.holiday || 0);
+        return jobTotalHours > maxTotalHours ? job : max;
     });
+    
+    // Calculate values for display
+    const mostExpensivePerHourValue = (() => {
+        const totalHours = (mostExpensivePerHourJob.hours.regular || 0) + (mostExpensivePerHourJob.hours.after_hours || 0) + (mostExpensivePerHourJob.hours.holiday || 0);
+        return totalHours > 0 ? (mostExpensivePerHourJob.total_cost || 0) / totalHours : 0;
+    })();
+    
+    const mostOvertimeCostValue = (mostOvertimeCostJob.costs.after_hours || 0) + (mostOvertimeCostJob.costs.holiday || 0);
+    
+    const mostHoursValue = (mostHoursJob.hours.regular || 0) + (mostHoursJob.hours.after_hours || 0) + (mostHoursJob.hours.holiday || 0);
     
     costAnalysisStats.updateValues({
-        0: `${mostHoursJob.job_no}<br><small>${(mostHoursJob.total_hours || 0).toFixed(2)} saat</small>`,
-        1: `${mostRegularHoursJob.job_no}<br><small>${(mostRegularHoursJob.hours?.regular || 0).toFixed(2)} saat</small>`,
-        2: `${mostOvertimeHoursJob.job_no}<br><small>${(mostOvertimeHoursJob.hours?.after_hours || 0).toFixed(2)} saat</small>`,
-        3: `${mostHolidayHoursJob.job_no}<br><small>${(mostHolidayHoursJob.hours?.holiday || 0).toFixed(2)} saat</small>`
+        0: `${mostExpensiveJob.job_no}<br><small>€${(mostExpensiveJob.total_cost || 0).toFixed(2)}</small>`,
+        1: `${mostExpensivePerHourJob.job_no}<br><small>€${mostExpensivePerHourValue.toFixed(2)}/saat</small>`,
+        2: `${mostOvertimeCostJob.job_no}<br><small>€${mostOvertimeCostValue.toFixed(2)}</small>`,
+        3: `${mostHoursJob.job_no}<br><small>${mostHoursValue.toFixed(1)} saat</small>`
     });
 }
 
@@ -357,10 +364,15 @@ async function showUserDetails(jobNo) {
         });
         
         // Calculate totals
-        const totalRegularHours = users.reduce((sum, user) => sum + (user.hours?.regular || 0), 0);
-        const totalAfterHours = users.reduce((sum, user) => sum + (user.hours?.after_hours || 0), 0);
-        const totalHolidayHours = users.reduce((sum, user) => sum + (user.hours?.holiday || 0), 0);
-        const totalHours = totalRegularHours + totalAfterHours + totalHolidayHours;
+        const totalCost = users.reduce((sum, user) => sum + (user.total_cost || 0), 0);
+        const totalWeekdayHours = users.reduce((sum, user) => sum + (user.hours.regular || 0), 0);
+        const totalAfterHours = users.reduce((sum, user) => sum + (user.hours.after_hours || 0), 0);
+        const totalSundayHours = users.reduce((sum, user) => sum + (user.hours.holiday || 0), 0);
+        const totalHours = totalWeekdayHours + totalAfterHours + totalSundayHours;
+        const costPerHour = totalHours > 0 ? totalCost / totalHours : 0;
+        const totalAfterHoursCost = users.reduce((sum, user) => sum + (user.costs.after_hours || 0), 0);
+        const totalSundayCost = users.reduce((sum, user) => sum + (user.costs.holiday || 0), 0);
+        const overtimeCost = totalAfterHoursCost + totalSundayCost;
 
         // Add summary section
         modal.addSection({
@@ -377,30 +389,58 @@ async function showUserDetails(jobNo) {
                     colSize: 3
                 },
                 {
-                    id: 'total_regular_hours',
-                    label: 'Normal Saat',
-                    value: totalRegularHours,
+                    id: 'total_cost',
+                    label: 'Toplam Maliyet',
+                    value: totalCost,
+                    type: 'currency',
+                    icon: 'fas fa-euro-sign',
+                    format: (value) => `€${value.toFixed(2)}`,
+                    colSize: 3
+                },
+                {
+                    id: 'overtime_cost',
+                    label: 'Mesai Maliyeti',
+                    value: overtimeCost,
+                    type: 'currency',
+                    icon: 'fas fa-clock',
+                    format: (value) => `€${value.toFixed(2)}`,
+                    colSize: 3
+                },
+                {
+                    id: 'cost_per_hour',
+                    label: 'Saat Başı Maliyet',
+                    value: costPerHour,
+                    type: 'currency',
+                    icon: 'fas fa-calculator',
+                    format: (value) => `€${value.toFixed(2)}`,
+                    colSize: 3
+                },
+                
+                {
+                    id: 'total_weekday_hours',
+                    label: 'Hafta İçi Saat',
+                    value: totalWeekdayHours,
                     type: 'number',
                     icon: 'fas fa-calendar-day',
-                    format: (value) => `${value.toFixed(2)} saat`,
+                    format: (value) => `${value.toFixed(1)} saat`,
                     colSize: 3
                 },
                 {
                     id: 'total_after_hours',
-                    label: 'Fazla Mesai Saat',
+                    label: 'Mesai Saat',
                     value: totalAfterHours,
                     type: 'number',
                     icon: 'fas fa-clock',
-                    format: (value) => `${value.toFixed(2)} saat`,
+                    format: (value) => `${value.toFixed(1)} saat`,
                     colSize: 3
                 },
                 {
-                    id: 'total_holiday_hours',
-                    label: 'Tatil Saat',
-                    value: totalHolidayHours,
+                    id: 'total_sunday_hours',
+                    label: 'Pazar Saat',
+                    value: totalSundayHours,
                     type: 'number',
-                    icon: 'fas fa-calendar-alt',
-                    format: (value) => `${value.toFixed(2)} saat`,
+                    icon: 'fas fa-calendar',
+                    format: (value) => `${value.toFixed(1)} saat`,
                     colSize: 3
                 },
                 {
@@ -409,9 +449,9 @@ async function showUserDetails(jobNo) {
                     value: totalHours,
                     type: 'number',
                     icon: 'fas fa-clock',
-                    format: (value) => `${value.toFixed(2)} saat`,
+                    format: (value) => `${value.toFixed(1)} saat`,
                     colSize: 3
-                }
+                },
             ]
         });
         
@@ -421,10 +461,17 @@ async function showUserDetails(jobNo) {
             const userTableData = users.map(user => ({
                 user: user.user,
                 user_id: user.user_id,
-                regular_hours: user.hours?.regular || 0,
-                after_hours: user.hours?.after_hours || 0,
-                holiday_hours: user.hours?.holiday || 0,
-                total_hours: user.total_hours || 0,
+                issue_count: user.issue_count,
+                issue_keys: user.issue_keys,
+                weekday_work_hours: user.hours.regular || 0,
+                after_hours_hours: user.hours.after_hours || 0,
+                sunday_hours: user.hours.holiday || 0,
+                total_hours: (user.hours.regular || 0) + (user.hours.after_hours || 0) + (user.hours.holiday || 0),
+                weekday_work_cost: user.costs.regular || 0,
+                after_hours_cost: user.costs.after_hours || 0,
+                sunday_cost: user.costs.holiday || 0,
+                total_cost: user.total_cost || 0,
+                currency: user.currency || 'EUR',
                 updated_at: user.updated_at,
                 raw_data: user
             }));
@@ -458,56 +505,124 @@ async function showUserDetails(jobNo) {
                             `
                         },
                         {
-                            field: 'regular_hours',
-                            label: 'Normal (1x)',
+                            field: 'weekday_work_hours',
+                            label: 'Hafta İçi Saat',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `<span class="text-primary">${(value || 0).toFixed(2)}</span>`
+                            formatter: (value) => `${(value || 0).toFixed(1)}`
                         },
                         {
-                            field: 'after_hours',
-                            label: 'Fazla Mesai (1.5x)',
+                            field: 'after_hours_hours',
+                            label: 'Mesai Saat',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `<span class="text-warning">${(value || 0).toFixed(2)}</span>`
+                            formatter: (value) => `${(value || 0).toFixed(1)}`
                         },
                         {
-                            field: 'holiday_hours',
-                            label: 'Tatil (2x)',
+                            field: 'sunday_hours',
+                            label: 'Pazar Saat',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `<span class="text-danger">${(value || 0).toFixed(2)}</span>`
+                            formatter: (value) => `${(value || 0).toFixed(1)}`
                         },
                         {
                             field: 'total_hours',
                             label: 'Toplam Saat',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `<span class="fw-bold">${(value || 0).toFixed(2)}</span>`
+                            formatter: (value) => `<span class="fw-bold">${(value || 0).toFixed(1)}</span>`
                         },
                         {
-                            field: 'updated_at',
-                            label: 'Son Güncelleme',
+                            field: 'weekday_work_cost',
+                            label: 'Hafta İçi Maliyet',
                             sortable: true,
-                            type: 'date',
-                            formatter: (value) => {
-                                if (!value) return '-';
-                                const date = new Date(value);
-                                return date.toLocaleDateString('tr-TR') + '<br><small class="text-muted">' + date.toLocaleTimeString('tr-TR') + '</small>';
+                            type: 'number',
+                            formatter: (value) => `€${(value || 0).toFixed(2)}`
+                        },
+                        {
+                            field: 'after_hours_cost',
+                            label: 'Mesai Maliyet',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `€${(value || 0).toFixed(2)}`
+                        },
+                        {
+                            field: 'sunday_cost',
+                            label: 'Pazar Maliyet',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `€${(value || 0).toFixed(2)}`
+                        },
+                        {
+                            field: 'total_cost',
+                            label: 'Toplam Maliyet',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `<span class="fw-bold">€${(value || 0).toFixed(2)}</span>`
+                        },
+                        {
+                            field: 'cost_per_hour',
+                            label: 'Saat Başı Maliyet',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `<span class="fw-bold">€${(value || 0).toFixed(2)}</span>`
+                        },
+                        {
+                            field: 'issues',
+                            label: 'İş Anahtarları',
+                            sortable: false,
+                            type: 'text',
+                            formatter: (value, rowData) => {
+                                const keys = rowData.raw_data?.issues || [];
+                                
+                                if (!keys || keys.length === 0) {
+                                    return '-';
+                                }
+                                
+                                return keys.map(key => {
+                                    let badgeClass = 'badge task-key-link me-1 mb-1';
+                                    
+                                    // Set background color based on status
+                                    switch(key.status) {
+                                        case 'completed':
+                                            badgeClass += ' bg-success';
+                                            break;
+                                        case 'in_progress':
+                                            badgeClass += ' bg-primary';
+                                            break;
+                                        case 'waiting':
+                                            badgeClass += ' bg-danger';
+                                            break;
+                                        default:
+                                            badgeClass += ' bg-secondary';
+                                    }
+                                    
+                                    return `<a href="/manufacturing/welding/tasks/list/?task=${key.key}" target="_blank" class="${badgeClass}">${key.key}</a>`;
+                                }).join('');
                             }
                         }
                     ],
                     onRowClick: null,
                     onSort: null,
                     onPageChange: null,
-                    pagination: false,
-                    exportable: false,
-                    refreshable: false,
+                    showPagination: false,
+                    showSearch: false,
+                    showExport: false,
                     skeletonLoading: false
                 });
 
+                // Calculate cost per hour for each user
+                userTableData.forEach(user => {
+                    const totalHours = user.weekday_work_hours + user.after_hours_hours + user.sunday_hours;
+                    user.cost_per_hour = totalHours > 0 ? user.total_cost / totalHours : 0;
+                });
+
                 // Update table with data
-                userDetailsTable.updateData(userTableData, userTableData.length, 1);
+                userDetailsTable.updateData(userTableData, {
+                    totalItems: userTableData.length,
+                    currentPage: 1,
+                    pageSize: userTableData.length
+                });
             }, 100);
         } else {
             modal.addCustomSection({
@@ -527,21 +642,6 @@ async function showUserDetails(jobNo) {
 // Make showUserDetails globally accessible for button onclick
 window.showUserDetails = showUserDetails;
 
-// Handle export
-function handleExport() {
-    if (!jobHoursTable || !jobHoursData || jobHoursData.length === 0) {
-        showError('Dışa aktarılacak veri bulunamadı');
-        return;
-    }
-    
-    try {
-        // Use table component's export functionality
-        jobHoursTable.exportData('excel');
-    } catch (error) {
-        console.error('Export error:', error);
-        showError('Dışa aktarma sırasında hata oluştu');
-    }
-}
 
 // Export functions for external use
 window.costAnalysis = {

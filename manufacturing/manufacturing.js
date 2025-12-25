@@ -103,6 +103,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                         link: '/manufacturing/welding/time-entries'
                     }
                 ]
+            },
+            {
+                title: 'Raporlar',
+                description: 'raporlar ve analizler.',
+                icon: 'fas fa-chart-pie',
+                iconColor: 'info',
+                link: '/manufacturing/reports',
+                features: [
+                    {
+                        label: 'İş Maliyeti',
+                        icon: 'fas fa-calculator',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/reports/combined-job-costs'
+                    }
+                ]
             }
         ]
     });
