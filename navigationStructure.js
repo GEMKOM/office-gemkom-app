@@ -304,27 +304,6 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
-            '/procurement/items': {
-                label: 'Malzemeler',
-                icon: 'fas fa-boxes',
-                children: {
-                    '/procurement/items/catalog': {
-                        label: 'Malzeme Kataloğu',
-                        icon: 'fas fa-book',
-                        children: {}
-                    },
-                    '/procurement/items/inventory': {
-                        label: 'Stok Takibi',
-                        icon: 'fas fa-warehouse',
-                        children: {}
-                    },
-                    '/procurement/items/specifications': {
-                        label: 'Teknik Özellikler',
-                        icon: 'fas fa-info-circle',
-                        children: {}
-                    }
-                }
-            },
             '/procurement/reports': {
                 label: 'Raporlar',
                 icon: 'fas fa-chart-bar',

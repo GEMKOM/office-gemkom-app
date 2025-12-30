@@ -1,5 +1,5 @@
 import { initNavbar } from '../../../components/navbar.js';
-import { getRemnantPlates, createRemnantPlate, bulkCreateRemnantPlates, deleteRemnantPlate } from '../../../apis/cnc_cutting/remnants.js';
+import { getRemnantPlates, getRemnantPlateById, createRemnantPlate, updateRemnantPlate, bulkCreateRemnantPlates, deleteRemnantPlate } from '../../../apis/cnc_cutting/remnants.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
@@ -19,6 +19,7 @@ let remnantsTable = null; // Table component instance
 let currentPageSize = 20; // Current page size for pagination
 let createRemnantModal = null; // Create remnant modal instance
 let bulkCreateRemnantsModal = null; // Bulk create remnants modal instance
+let editRemnantModal = null; // Edit remnant modal instance
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -143,7 +144,15 @@ function initializeTableComponent() {
                 field: 'thickness_mm',
                 label: 'Kalınlık (mm)',
                 sortable: true,
-                width: '12%',
+                width: '10%',
+                type: 'number',
+                formatter: (value) => value ? `${value} mm` : '-'
+            },
+            {
+                field: 'thickness_mm_2',
+                label: 'Kalınlık 2 (mm)',
+                sortable: true,
+                width: '10%',
                 type: 'number',
                 formatter: (value) => value ? `${value} mm` : '-'
             },
@@ -151,7 +160,7 @@ function initializeTableComponent() {
                 field: 'dimensions',
                 label: 'Boyutlar',
                 sortable: true,
-                width: '15%',
+                width: '13%',
                 formatter: (value) => value || '-'
             },
             {
@@ -182,6 +191,14 @@ function initializeTableComponent() {
             }
         ],
         actions: [
+            {
+                key: 'edit',
+                label: 'Düzenle',
+                icon: 'fas fa-edit',
+                class: 'btn-outline-primary',
+                title: 'Düzenle',
+                onClick: (row) => showEditRemnantModal(row.id)
+            },
             {
                 key: 'delete',
                 label: 'Sil',
@@ -368,6 +385,18 @@ function showCreateRemnantModal() {
                 helpText: 'Plaka kalınlığı milimetre cinsinden'
             },
             {
+                id: 'remnant-thickness-2',
+                name: 'remnant-thickness-2',
+                label: 'Kalınlık 2 (mm)',
+                type: 'number',
+                required: false,
+                placeholder: '8.00',
+                step: '0.01',
+                min: '0.01',
+                colSize: 6,
+                helpText: 'İkinci kalınlık değeri (opsiyonel)'
+            },
+            {
                 id: 'remnant-dimensions',
                 name: 'remnant-dimensions',
                 label: 'Boyutlar',
@@ -398,6 +427,16 @@ function showCreateRemnantModal() {
                 placeholder: 'S235JR',
                 colSize: 6,
                 helpText: 'Malzeme türü'
+            },
+            {
+                id: 'remnant-heat-number',
+                name: 'remnant-heat-number',
+                label: 'Heat Number',
+                type: 'text',
+                required: false,
+                placeholder: 'Heat number',
+                colSize: 6,
+                helpText: 'Heat number (opsiyonel)'
             }
         ]
     });
@@ -410,6 +449,16 @@ function showCreateRemnantModal() {
             quantity: parseInt(formData['remnant-quantity']),
             material: formData['remnant-material'].trim()
         };
+        
+        // Add thickness_mm_2 if provided
+        if (formData['remnant-thickness-2'] && formData['remnant-thickness-2'].trim() !== '') {
+            remnantData.thickness_mm_2 = parseFloat(formData['remnant-thickness-2']).toFixed(2);
+        }
+        
+        // Add heat_number if provided
+        if (formData['remnant-heat-number'] && formData['remnant-heat-number'].trim() !== '') {
+            remnantData.heat_number = formData['remnant-heat-number'].trim();
+        }
         
         // Validate required fields
         if (!remnantData.thickness_mm || isNaN(parseFloat(remnantData.thickness_mm))) {
@@ -456,6 +505,175 @@ function showCreateRemnantModal() {
     // Render and show the modal
     createRemnantModal.render();
     createRemnantModal.show();
+}
+
+async function showEditRemnantModal(remnantId) {
+    try {
+        // Fetch the remnant plate data
+        const remnant = await getRemnantPlateById(remnantId);
+        
+        // Create Edit Modal instance for editing remnant
+        editRemnantModal = new EditModal('edit-remnant-modal-container', {
+            title: 'Fire Plaka Düzenle',
+            icon: 'fas fa-edit',
+            saveButtonText: 'Değişiklikleri Kaydet',
+            size: 'md'
+        });
+        
+        // Set up the edit remnant form
+        editRemnantModal.addSection({
+            id: 'remnant-info',
+            title: 'Plaka Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary',
+            fields: [
+                {
+                    id: 'edit-remnant-thickness',
+                    name: 'edit-remnant-thickness',
+                    label: 'Kalınlık (mm)',
+                    type: 'number',
+                    required: true,
+                    placeholder: '10.00',
+                    step: '0.01',
+                    min: '0.01',
+                    colSize: 6,
+                    helpText: 'Plaka kalınlığı milimetre cinsinden',
+                    value: remnant.thickness_mm || ''
+                },
+                {
+                    id: 'edit-remnant-thickness-2',
+                    name: 'edit-remnant-thickness-2',
+                    label: 'Kalınlık 2 (mm)',
+                    type: 'number',
+                    required: false,
+                    placeholder: '8.00',
+                    step: '0.01',
+                    min: '0.01',
+                    colSize: 6,
+                    helpText: 'İkinci kalınlık değeri (opsiyonel)',
+                    value: remnant.thickness_mm_2 || ''
+                },
+                {
+                    id: 'edit-remnant-dimensions',
+                    name: 'edit-remnant-dimensions',
+                    label: 'Boyutlar',
+                    type: 'text',
+                    required: true,
+                    placeholder: '1200x800',
+                    colSize: 6,
+                    helpText: 'Plaka boyutları (örn: 1200x800)',
+                    value: remnant.dimensions || ''
+                },
+                {
+                    id: 'edit-remnant-quantity',
+                    name: 'edit-remnant-quantity',
+                    label: 'Adet',
+                    type: 'number',
+                    required: true,
+                    placeholder: '1',
+                    min: '1',
+                    step: '1',
+                    colSize: 6,
+                    helpText: 'Plaka adedi',
+                    value: remnant.quantity || ''
+                },
+                {
+                    id: 'edit-remnant-material',
+                    name: 'edit-remnant-material',
+                    label: 'Malzeme',
+                    type: 'text',
+                    required: true,
+                    placeholder: 'S235JR',
+                    colSize: 6,
+                    helpText: 'Malzeme türü',
+                    value: remnant.material || ''
+                },
+                {
+                    id: 'edit-remnant-heat-number',
+                    name: 'edit-remnant-heat-number',
+                    label: 'Heat Number',
+                    type: 'text',
+                    required: false,
+                    placeholder: 'Heat number',
+                    colSize: 6,
+                    helpText: 'Heat number (opsiyonel)',
+                    value: remnant.heat_number || ''
+                }
+            ]
+        });
+        
+        // Set up save callback
+        editRemnantModal.onSaveCallback(async (formData) => {
+            const remnantData = {
+                thickness_mm: parseFloat(formData['edit-remnant-thickness']).toFixed(2),
+                dimensions: formData['edit-remnant-dimensions'].trim(),
+                quantity: parseInt(formData['edit-remnant-quantity']),
+                material: formData['edit-remnant-material'].trim()
+            };
+            
+            // Add thickness_mm_2 if provided
+            if (formData['edit-remnant-thickness-2'] && formData['edit-remnant-thickness-2'].trim() !== '') {
+                remnantData.thickness_mm_2 = parseFloat(formData['edit-remnant-thickness-2']).toFixed(2);
+            } else {
+                remnantData.thickness_mm_2 = null;
+            }
+            
+            // Add heat_number if provided
+            if (formData['edit-remnant-heat-number'] && formData['edit-remnant-heat-number'].trim() !== '') {
+                remnantData.heat_number = formData['edit-remnant-heat-number'].trim();
+            } else {
+                remnantData.heat_number = null;
+            }
+            
+            // Validate required fields
+            if (!remnantData.thickness_mm || isNaN(parseFloat(remnantData.thickness_mm))) {
+                showNotification('Kalınlık geçerli bir sayı olmalıdır', 'error');
+                return;
+            }
+            
+            if (!remnantData.dimensions || remnantData.dimensions.trim() === '') {
+                showNotification('Boyutlar gereklidir', 'error');
+                return;
+            }
+            
+            if (!remnantData.quantity || isNaN(remnantData.quantity) || remnantData.quantity < 1) {
+                showNotification('Adet geçerli bir sayı olmalıdır', 'error');
+                return;
+            }
+            
+            if (!remnantData.material || remnantData.material.trim() === '') {
+                showNotification('Malzeme gereklidir', 'error');
+                return;
+            }
+            
+            try {
+                await updateRemnantPlate(remnantId, remnantData);
+                showNotification('Fire plaka başarıyla güncellendi', 'success');
+                
+                // Close modal
+                const modalElement = document.querySelector('#edit-remnant-modal-container .modal');
+                if (modalElement) {
+                    const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    }
+                }
+                
+                // Refresh the remnants table
+                await loadRemnants(currentPage);
+            } catch (error) {
+                console.error('Error updating remnant plate:', error);
+                showNotification('Plaka güncellenirken hata oluştu', 'error');
+            }
+        });
+        
+        // Render and show the modal
+        editRemnantModal.render();
+        editRemnantModal.show();
+    } catch (error) {
+        console.error('Error loading remnant plate for editing:', error);
+        showNotification('Plaka bilgileri yüklenirken hata oluştu', 'error');
+    }
 }
 
 function showBulkCreateRemnantsModal() {

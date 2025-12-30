@@ -55,33 +55,6 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ]
             },
             {
-                title: 'Malzemeler',
-                description: 'Malzeme kataloğu, stok takibi ve malzeme bilgileri yönetimi.',
-                icon: 'fas fa-boxes',
-                iconColor: 'warning',
-                link: '/procurement/items',
-                features: [
-                    {
-                        label: 'Malzeme Kataloğu',
-                        icon: 'fas fa-book',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/procurement/items/catalog'
-                    },
-                    {
-                        label: 'Stok Takibi',
-                        icon: 'fas fa-warehouse',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/procurement/items/inventory'
-                    },
-                    {
-                        label: 'Teknik Özellikler',
-                        icon: 'fas fa-info-circle',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/procurement/items/specifications'
-                    }
-                ]
-            },
-            {
                 title: 'Raporlar',
                 description: 'Satın alma raporları, analizler ve performans metrikleri.',
                 icon: 'fas fa-chart-bar',

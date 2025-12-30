@@ -116,6 +116,40 @@ export async function bulkCreateRemnantPlates(remnantsData) {
 }
 
 /**
+ * Update an existing remnant plate
+ * @param {number|string} remnantId - Remnant plate ID
+ * @param {Object} remnantData - Updated remnant plate data
+ * @param {string} [remnantData.thickness_mm] - Thickness in mm
+ * @param {string} [remnantData.thickness_mm_2] - Second thickness in mm (optional)
+ * @param {string} [remnantData.dimensions] - Dimensions (e.g., "1200x800")
+ * @param {number} [remnantData.quantity] - Quantity
+ * @param {string} [remnantData.material] - Material type
+ * @param {string} [remnantData.heat_number] - Heat number (optional)
+ * @returns {Promise<Object>} Updated remnant plate
+ */
+export async function updateRemnantPlate(remnantId, remnantData) {
+    try {
+        const response = await authedFetch(`${backendBase}/cnc_cutting/remnants/${remnantId}/`, {
+            method: 'PUT',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(remnantData)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Failed to update remnant plate: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error updating remnant plate:', error);
+        throw error;
+    }
+}
+
+/**
  * Delete a remnant plate
  * @param {number|string} remnantId - Remnant plate ID to delete
  * @returns {Promise<Object>} Deletion response
