@@ -3,6 +3,7 @@ import { initNavbar } from '../../../components/navbar.js';
 import { fetchTimers } from '../../../apis/timers.js';
 import { fetchMachines } from '../../../apis/machines.js';
 import { fetchTaskById } from '../../../apis/tasks.js';
+import { getOperation } from '../../../apis/machining/operations.js';
 import { getSyncedNow } from '../../../apis/timeService.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { stopTimer } from '../../../apis/timers.js';
@@ -702,101 +703,241 @@ function updateTimerDisplays() {
 // Show task modal
 async function showTaskModal(taskKey) {
     try {
-        const task = await fetchTaskById(taskKey);
-        if (task) {
-            createTaskModal(task);
+        const operation = await getOperation(taskKey, { view: 'detail' });
+        if (operation) {
+            createTaskModal(operation);
         }
     } catch (error) {
-        console.error('Error fetching task:', error);
+        console.error('Error fetching operation:', error);
     }
 }
 
 // Create task details modal using DisplayModal component
-function createTaskModal(task) {
-    // Get current timer duration if this task is being worked on
-    const currentTimer = dashboardState.activeTimers.find(timer => timer.issue_key === task.key);
+function createTaskModal(operation) {
+    // Get current timer duration if this operation is being worked on
+    const currentTimer = dashboardState.activeTimers.find(timer => timer.issue_key === operation.key);
     const currentTimerStartTime = currentTimer ? new Date(currentTimer.start_time) : null;
     
     // Create display modal instance
     const displayModal = new DisplayModal('task-display-modal-container', {
-        title: task.key,
+        title: operation.name || operation.key,
         icon: 'fas fa-tasks',
         size: 'lg',
         showEditButton: false
     });
     
-    // Add basic information section with two items per row
+    // Add operation information section
     displayModal.addSection({
-        title: 'Görev Bilgileri',
+        title: 'Operasyon Bilgileri',
         icon: 'fas fa-info-circle',
         iconColor: 'text-primary',
         fields: [
             {
-                label: 'Görev Kodu',
-                value: task.key,
+                label: 'Operasyon Kodu',
+                value: operation.key || '-',
                 type: 'text',
                 colSize: 6
             },
             {
-                label: 'İş Emri No',
-                value: task.job_no || 'Belirtilmemiş',
+                label: 'Operasyon Adı',
+                value: operation.name || '-',
                 type: 'text',
                 colSize: 6
             },
             {
-                label: 'Resim No',
-                value: task.image_no || 'Belirtilmemiş',
-                type: 'text',
-                colSize: 6
-            },
-            {
-                label: 'Pozisyon No',
-                value: task.position_no || 'Belirtilmemiş',
-                type: 'text',
-                colSize: 6
-            },
-            {
-                label: 'Miktar',
-                value: task.quantity || 0,
+                label: 'Sıra',
+                value: operation.order || '-',
                 type: 'text',
                 colSize: 6
             },
             {
                 label: 'Makine',
-                value: task.machine_name || 'Belirtilmemiş',
+                value: operation.machine_name || '-',
                 type: 'text',
                 colSize: 6
             },
             {
-                label: 'Bitiş Tarihi',
-                value: task.finish_time ? new Date(task.finish_time).toLocaleDateString('tr-TR') : 'Belirtilmemiş',
+                label: 'Açıklama',
+                value: operation.description || '-',
+                type: 'text',
+                colSize: 12
+            }
+        ]
+    });
+    
+    // Add part information section
+    displayModal.addSection({
+        title: 'Parça Bilgileri',
+        icon: 'fas fa-cube',
+        iconColor: 'text-info',
+        fields: [
+            {
+                label: 'Parça Kodu',
+                value: operation.part_key || '-',
                 type: 'text',
                 colSize: 6
             },
             {
-                label: 'Tahmini Süre',
-                value: `${task.estimated_hours || 0} saat`,
+                label: 'Parça Adı',
+                value: operation.part_name || '-',
+                type: 'text',
+                colSize: 6
+            },
+            {
+                label: 'İş Emri No',
+                value: operation.part_job_no || '-',
+                type: 'text',
+                colSize: 6
+            },
+            {
+                label: 'Görev Kodu',
+                value: operation.part_task_key || '-',
+                type: 'text',
+                colSize: 6
+            },
+            {
+                label: 'Resim No',
+                value: operation.part_image_no || '-',
+                type: 'text',
+                colSize: 6
+            },
+            {
+                label: 'Pozisyon No',
+                value: operation.part_position_no || '-',
+                type: 'text',
+                colSize: 6
+            },
+            {
+                label: 'Miktar',
+                value: operation.part_quantity || 0,
+                type: 'text',
+                colSize: 6
+            },
+            {
+                label: 'Tamamlanma Tarihi',
+                value: operation.part_completion_date ? new Date(operation.part_completion_date).toLocaleDateString('tr-TR') : '-',
                 type: 'text',
                 colSize: 6
             }
         ]
     });
     
-    // Add time information section with two items per row
+    // Add time information section
     displayModal.addSection({
         title: 'Zaman Bilgileri',
         icon: 'fas fa-clock',
         iconColor: 'text-success',
         fields: [
             {
+                label: 'Tahmini Süre',
+                value: `${operation.estimated_hours || 0} saat`,
+                type: 'text',
+                colSize: 6
+            },
+            {
                 label: 'Harcanan Süre',
-                value: formatHoursSpent(task.total_hours_spent || 0, currentTimerStartTime),
+                value: formatHoursSpent(operation.total_hours_spent || 0, currentTimerStartTime),
                 type: 'text',
                 colSize: 6
             },
             {
                 label: 'Kalan Süre',
-                value: formatRemainingHours(task.estimated_hours || 0, task.total_hours_spent || 0, currentTimerStartTime),
+                value: formatRemainingHours(operation.estimated_hours || 0, operation.total_hours_spent || 0, currentTimerStartTime),
+                type: 'text',
+                colSize: 6
+            },
+            {
+                label: 'Durum',
+                value: operation.has_active_timer ? '<span class="badge bg-success">Aktif Timer</span>' : (operation.completion_date ? '<span class="badge bg-primary">Tamamlandı</span>' : '<span class="badge bg-warning">Beklemede</span>'),
+                type: 'html',
+                colSize: 6
+            }
+        ]
+    });
+    
+    // Add planning information section if available
+    if (operation.in_plan) {
+        displayModal.addSection({
+            title: 'Planlama Bilgileri',
+            icon: 'fas fa-calendar-alt',
+            iconColor: 'text-warning',
+            fields: [
+                {
+                    label: 'Plan Sırası',
+                    value: operation.plan_order || '-',
+                    type: 'text',
+                    colSize: 6
+                },
+                {
+                    label: 'Planlanan Başlangıç',
+                    value: operation.planned_start_ms ? new Date(operation.planned_start_ms).toLocaleString('tr-TR') : '-',
+                    type: 'text',
+                    colSize: 6
+                },
+                {
+                    label: 'Planlanan Bitiş',
+                    value: operation.planned_end_ms ? new Date(operation.planned_end_ms).toLocaleString('tr-TR') : '-',
+                    type: 'text',
+                    colSize: 6
+                },
+                {
+                    label: 'Plan Kilitli',
+                    value: operation.plan_locked ? '<span class="badge bg-danger">Evet</span>' : '<span class="badge bg-secondary">Hayır</span>',
+                    type: 'html',
+                    colSize: 6
+                }
+            ]
+        });
+    }
+    
+    // Add tools information section if available
+    if (operation.operation_tools && operation.operation_tools.length > 0) {
+        const toolsList = operation.operation_tools.map(tool => 
+            `${tool.tool_name || tool.tool_code || 'Tool'} (${tool.quantity || 1}x)`
+        ).join(', ');
+        
+        displayModal.addSection({
+            title: 'Takımlar',
+            icon: 'fas fa-wrench',
+            iconColor: 'text-secondary',
+            fields: [
+                {
+                    label: 'Kullanılan Takımlar',
+                    value: toolsList || '-',
+                    type: 'text',
+                    colSize: 12
+                }
+            ]
+        });
+    }
+    
+    // Add creation information section
+    displayModal.addSection({
+        title: 'Oluşturma Bilgileri',
+        icon: 'fas fa-user',
+        iconColor: 'text-muted',
+        fields: [
+            {
+                label: 'Oluşturan',
+                value: operation.created_by_username || '-',
+                type: 'text',
+                colSize: 6
+            },
+            {
+                label: 'Oluşturulma Tarihi',
+                value: operation.created_at ? new Date(operation.created_at).toLocaleString('tr-TR') : '-',
+                type: 'text',
+                colSize: 6
+            },
+            {
+                label: 'Tamamlayan',
+                value: operation.completed_by_username || '-',
+                type: 'text',
+                colSize: 6
+            },
+            {
+                label: 'Tamamlanma Tarihi',
+                value: operation.completion_date ? new Date(operation.completion_date).toLocaleString('tr-TR') : '-',
                 type: 'text',
                 colSize: 6
             }
@@ -815,7 +956,7 @@ function createTaskModal(task) {
         customButton.className = 'btn btn-primary';
         customButton.innerHTML = '<i class="fas fa-tasks me-1"></i>Görevler Sayfasında Aç';
         customButton.onclick = () => {
-            window.location.href = `../tasks/list/?filter=${task.key}`;
+            window.location.href = `../tasks/list/?filter=${operation.part_key || operation.key}`;
         };
         
         // Insert before the close button

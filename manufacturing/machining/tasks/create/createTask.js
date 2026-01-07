@@ -1,5 +1,6 @@
 import { initNavbar } from '../../../../components/navbar.js';
-import { fetchTasks, bulkCreateTasks } from '../../../../apis/tasks.js';
+import { getParts } from '../../../../apis/machining/parts.js';
+import { bulkCreateParts } from '../../../../apis/machining/parts.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { TableComponent } from '../../../../components/table/table.js';
@@ -24,6 +25,8 @@ const columns = [
     { key: 'image_no', label: 'Resim No', required: false },
     { key: 'position_no', label: 'Pozisyon No', required: false },
     { key: 'quantity', label: 'Adet', required: true, type: 'number' },
+    { key: 'material', label: 'Malzeme', required: false },
+    { key: 'weight_kg', label: 'Ağırlık (kg)', required: false, type: 'number' },
     { key: 'finish_time', label: 'Bitiş Tarihi', required: true, type: 'date' },
     { key: 'description', label: 'Açıklama', required: false, type: 'textarea' }
 ];
@@ -101,6 +104,8 @@ function renderBulkCreateTable() {
                 let inputAttrs = '';
                 if (col.key === 'quantity') {
                     inputAttrs = 'min="1"';
+                } else if (col.key === 'weight_kg') {
+                    inputAttrs = 'min="0" step="0.01"';
                 }
                 html += `<td><input type="${inputType}" class="form-control form-control-sm bulk-input" data-row="${i}" data-key="${col.key}" value="${row[col.key] || ''}" ${col.required ? 'required' : ''} ${inputAttrs}></td>`;
             }
@@ -264,6 +269,13 @@ async function handleBulkCreateSave() {
                 validationErrors.push(`Satır ${index + 1}: Adet 0'dan büyük olmalıdır`);
             }
         }
+        // Check weight constraints
+        if (row.weight_kg) {
+            const weight = parseFloat(row.weight_kg);
+            if (isNaN(weight) || weight < 0) {
+                validationErrors.push(`Satır ${index + 1}: Ağırlık geçerli bir pozitif sayı olmalıdır`);
+            }
+        }
     });
     
     if (validationErrors.length > 0) {
@@ -271,34 +283,35 @@ async function handleBulkCreateSave() {
         return;
     }
     
-    // Prepare payload
+    // Prepare payload for bulk create parts (without operations)
     const payload = rows.map(row => ({
         name: row.name,
         job_no: row.job_no,
         image_no: row.image_no || null,
         position_no: row.position_no || null,
         quantity: row.quantity ? parseInt(row.quantity) : null,
+        material: row.material || null,
+        weight_kg: row.weight_kg ? parseFloat(row.weight_kg) : null,
         finish_time: row.finish_time,
-        description: row.description || null
+        description: row.description || null,
+        operations: [] // Empty operations array - operations can be added later
     }));
     
     try {
-        const response = await bulkCreateTasks(payload);
+        const responseData = await bulkCreateParts(payload);
         
-        if (!response.ok) throw new Error('Görevler oluşturulamadı');
-        
-        const responseData = await response.json();
-        
-        // Check if the response contains created tasks data
-        if (responseData && Array.isArray(responseData)) {
-            // Show the created tasks modal
-            showCreatedTasksModal(responseData);
+        // Check if the response contains created parts data
+        if (responseData && responseData.parts && Array.isArray(responseData.parts)) {
+            // Show the created parts modal
+            showCreatedTasksModal(responseData.parts);
             
             // Reset form
             rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
             renderBulkCreateTable();
+            
+            showNotification(`${responseData.created || responseData.parts.length} parça başarıyla oluşturuldu!`, 'success');
         } else {
-            showNotification(`${payload.length} görev başarıyla oluşturuldu!`, 'success');
+            showNotification(`${payload.length} parça başarıyla oluşturuldu!`, 'success');
             // Reset form
             rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
             renderBulkCreateTable();
@@ -308,7 +321,7 @@ async function handleBulkCreateSave() {
         await loadTasks(1);
         
     } catch (err) {
-        console.error('Error creating tasks:', err);
+        console.error('Error creating parts:', err);
         showNotification('Hata: ' + err.message, 'error');
     }
 }
@@ -657,26 +670,21 @@ async function loadTasks(page = 1) {
     }
     
     try {
-        const queryParams = buildTaskQuery(page);
-        const response = await fetchTasks(queryParams);
+        const filters = buildTaskQuery(page);
+        const data = await getParts(filters);
         
-        if (response.ok) {
-            const data = await response.json();
-            tasks = Array.isArray(data.results) ? data.results : [];
-            totalTasks = data.count || 0;
-            currentPage = page;
-            
-            // Update table component with new data
-            if (tasksTable) {
-                tasksTable.setLoading(false);
-                tasksTable.updateData(tasks, totalTasks, currentPage);
-            }
-        } else {
-            throw new Error('Failed to load tasks');
+        tasks = Array.isArray(data.results) ? data.results : (Array.isArray(data) ? data : []);
+        totalTasks = data.count || tasks.length;
+        currentPage = page;
+        
+        // Update table component with new data
+        if (tasksTable) {
+            tasksTable.setLoading(false);
+            tasksTable.updateData(tasks, totalTasks, currentPage);
         }
     } catch (error) {
-        console.error('Error loading tasks:', error);
-        showNotification('Görevler yüklenirken hata oluştu', 'error');
+        console.error('Error loading parts:', error);
+        showNotification('Parçalar yüklenirken hata oluştu', 'error');
         tasks = [];
         totalTasks = 0;
         
@@ -691,11 +699,11 @@ async function loadTasks(page = 1) {
 }
 
 function buildTaskQuery(page = 1) {
-    const params = new URLSearchParams();
+    const filters = {};
     
     // Always filter by current user's created_by
     if (currentUser && currentUser.id) {
-        params.append('created_by', currentUser.id.toString());
+        filters.created_by = currentUser.id.toString();
     }
     
     // Get filter values from the filters component
@@ -716,49 +724,47 @@ function buildTaskQuery(page = 1) {
     if (keyFilter) {
         let key = keyFilter;
         if (/^\d+$/.test(key)) {
-            key = 'TI-' + key;
+            key = 'PT-' + key;
         }
-        params.append('key', key);
+        filters.key = key;
     }
     
-    if (nameFilter) params.append('name', nameFilter);
-    if (jobNoFilter) params.append('job_no', jobNoFilter);
-    if (imageNoFilter) params.append('image_no', imageNoFilter);
-    if (positionNoFilter) params.append('position_no', positionNoFilter);
+    if (nameFilter) filters.name = nameFilter;
+    if (jobNoFilter) filters.job_no = jobNoFilter;
+    if (imageNoFilter) filters.image_no = imageNoFilter;
+    if (positionNoFilter) filters.position_no = positionNoFilter;
     
     // Add finish time filters
     if (finishTimeFilter) {
-        params.append('finish_time', finishTimeFilter);
+        filters.finish_time = finishTimeFilter;
     }
     if (finishTimeGteFilter) {
-        // DateFilter expects date string
-        params.append('finish_time__gte', finishTimeGteFilter);
+        filters.finish_time__gte = finishTimeGteFilter;
     }
     if (finishTimeLteFilter) {
-        // DateFilter expects date string
-        params.append('finish_time__lte', finishTimeLteFilter);
+        filters.finish_time__lte = finishTimeLteFilter;
     }
     
-    // Add has_timer filter
+    // Add has_timer filter (if applicable for parts)
     if (hasTimerFilter) {
-        params.append('has_timer', 'true');
+        filters.has_timer = 'true';
     }
     
-    // Add exceeded estimated hours filter
+    // Add exceeded estimated hours filter (if applicable for parts)
     if (exceededEstimatedHoursFilter) {
-        params.append('exceeded_estimated_hours', 'true');
+        filters.exceeded_estimated_hours = 'true';
     }
     
     // Add pagination
-    params.append('page', page);
+    filters.page = page;
     const pageSize = tasksTable ? tasksTable.options.itemsPerPage : 20;
-    params.append('page_size', String(pageSize));
+    filters.page_size = pageSize;
     
     // Add ordering
     const orderingParam = currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`;
-    params.append('ordering', orderingParam);
+    filters.ordering = orderingParam;
     
-    return `?${params.toString()}`;
+    return filters;
 }
 
 function showNotification(message, type = 'info') {

@@ -54,6 +54,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ]
             },
             {
+                title: 'Talaşlı İmalat (Yeni)',
+                description: 'Yeni talaşlı imalat süreçleri yönetimi - Parça ve operasyon bazlı sistem.',
+                icon: 'fas fa-cogs',
+                iconColor: 'info',
+                link: '/manufacturing/machining_2',
+                features: [
+                    {
+                        label: 'Parçalar',
+                        icon: 'fas fa-box',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining_2/tasks'
+                    }
+                ]
+            },
+            {
                 title: 'CNC Kesim',
                 description: 'CNC kesim operasyonları, nesting dosyaları ve kesim görevleri yönetimi.',
                 icon: 'fas fa-cut',
