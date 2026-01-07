@@ -1,6 +1,6 @@
 import { initNavbar } from '../../../../components/navbar.js';
 import { fetchTasks, updateTask as updateTaskAPI } from '../../../../apis/tasks.js';
-import { fetchMachines } from '../../../../apis/machines.js';
+import { fetchMachinesDropdown } from '../../../../apis/machines.js';
 import { authFetchUsers } from '../../../../apis/users.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
@@ -130,8 +130,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadMachines() {
     try {
-        const machinesResponse = await fetchMachines(1, 100, { used_in: 'machining' });
-        machines = machinesResponse.results || machinesResponse || [];
+        machines = await fetchMachinesDropdown('machining');
         
         // Update table machine options if table exists
         if (pendingTasksTable && machines.length > 0) {

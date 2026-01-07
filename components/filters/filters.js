@@ -355,13 +355,13 @@ export class FiltersComponent {
             case 'checkbox':
                 return `
                     <div class="${colClass}">
-                        <label class="form-label small mb-1">${filter.label}</label>
+                        <label class="form-label small mb-1" style="visibility: hidden; pointer-events: none;">&nbsp;</label>
                         <div class="checkbox-container">
                             <input class="form-check-input" 
                                    type="checkbox" 
                                    id="${filter.id}" 
                                    ${filter.checked ? 'checked' : ''}>
-                            <span class="checkbox-label">${filter.label}</span>
+                            <label class="checkbox-label" for="${filter.id}">${filter.label}</label>
                         </div>
                     </div>
                 `;

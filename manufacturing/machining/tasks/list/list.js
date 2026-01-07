@@ -1,7 +1,8 @@
 import { initNavbar } from '../../../../components/navbar.js';
-import { getParts, updatePart, deletePart, createPart, updatePartOperations } from '../../../../apis/machining/parts.js';
+import { getParts, updatePart, deletePart, createPart, updatePartOperations, getPartsStats } from '../../../../apis/machining/parts.js';
 import { getOperations } from '../../../../apis/machining/operations.js';
-import { fetchMachines } from '../../../../apis/machines.js';
+import { fetchMachinesDropdown } from '../../../../apis/machines.js';
+import { authFetchUsers } from '../../../../apis/users.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
@@ -21,6 +22,7 @@ let partsStats = null;
 let partsFilters = null;
 let partsTable = null;
 let machines = [];
+let users = [];
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -42,9 +44,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize Statistics Cards component
     partsStats = new StatisticsCards('parts-statistics', {
         cards: [
-            { title: 'Tüm Parçalar', value: '0', icon: 'fas fa-list', color: 'primary', id: 'all-parts-count' },
-            { title: 'Tamamlanan', value: '0', icon: 'fas fa-check', color: 'success', id: 'completed-parts-count' },
-            { title: 'Devam Eden', value: '0', icon: 'fas fa-clock', color: 'warning', id: 'incomplete-parts-count' }
+            { 
+                title: 'Makine Atanmamış', 
+                value: '0', 
+                icon: 'fas fa-exclamation-triangle', 
+                color: 'warning', 
+                id: 'unassigned-operations-count',
+                onClick: 'handleStatCardClick(0)',
+                tooltip: 'Makine atanmamış parçaları göster'
+            },
+            { 
+                title: 'Plana Eklenmemiş', 
+                value: '0', 
+                icon: 'fas fa-calendar-times', 
+                color: 'danger', 
+                id: 'unplanned-operations-count',
+                onClick: 'handleStatCardClick(1)',
+                tooltip: 'Plana eklenmemiş parçaları göster'
+            },
+            { 
+                title: 'Operasyonsuz Parçalar', 
+                value: '0', 
+                icon: 'fas fa-inbox', 
+                color: 'secondary', 
+                id: 'parts-without-operations-count',
+                onClick: 'handleStatCardClick(2)',
+                tooltip: 'Operasyonsuz parçaları göster'
+            }
         ],
         compact: true,
         animation: true
@@ -56,11 +82,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function initializeParts() {
     try {
+        await loadUsers(); // Load users first for filters
         initializeFiltersComponent();
         initializeTableComponent();
         await loadMachines();
         await loadParts();
-        updatePartCounts();
+        await updatePartCounts();
     } catch (error) {
         console.error('Error initializing parts:', error);
         showNotification('Parçalar yüklenirken hata oluştu', 'error');
@@ -69,14 +96,38 @@ async function initializeParts() {
 
 async function loadMachines() {
     try {
-        const machinesResponse = await fetchMachines(1, 100, { used_in: 'machining' });
-        machines = machinesResponse.results || machinesResponse || [];
+        machines = await fetchMachinesDropdown('machining');
         
         // Populate modal machine dropdowns
         populateModalMachineDropdowns();
     } catch (error) {
         console.error('Error loading machines:', error);
         machines = [];
+    }
+}
+
+async function loadUsers() {
+    try {
+        const usersResponse = await authFetchUsers(1, 1000, { 
+            team: 'manufacturing',
+            ordering: 'full_name'
+        });
+        users = usersResponse.results || [];
+        
+        // Update created_by filter options if filters component is already initialized
+        if (partsFilters && users.length > 0) {
+            const userOptions = [
+                { value: '', label: 'Tüm Kullanıcılar' },
+                ...users.map(user => ({
+                    value: user.id.toString(),
+                    label: user.full_name ? `${user.full_name} (${user.username})` : user.username
+                }))
+            ];
+            partsFilters.updateFilterOptions('created-by-filter', userOptions);
+        }
+    } catch (error) {
+        console.error('Error loading users:', error);
+        users = [];
     }
 }
 
@@ -152,6 +203,45 @@ function initializeFiltersComponent() {
         placeholder: 'Tümü',
         colSize: 2
     });
+    
+    // Add created_by filter (users dropdown)
+    const userOptions = [
+        { value: '', label: 'Tüm Kullanıcılar' },
+        ...users.map(user => ({
+            value: user.id.toString(),
+            label: user.full_name ? `${user.full_name} (${user.username})` : user.username
+        }))
+    ];
+    
+    partsFilters.addDropdownFilter({
+        id: 'created-by-filter',
+        label: 'Oluşturan',
+        options: userOptions,
+        placeholder: 'Tüm Kullanıcılar',
+        colSize: 2
+    });
+    
+    // Add checkbox filters
+    partsFilters.addCheckboxFilter({
+        id: 'has-operations-filter',
+        label: 'Operasyonsuz Parçalar',
+        checked: false,
+        colSize: 3
+    });
+    
+    partsFilters.addCheckboxFilter({
+        id: 'has-unassigned-operations-filter',
+        label: 'Makine Atanmamış',
+        checked: false,
+        colSize: 3
+    });
+    
+    partsFilters.addCheckboxFilter({
+        id: 'has-unplanned-operations-filter',
+        label: 'Plana Eklenmemiş',
+        checked: false,
+        colSize: 3
+    });
 }
 
 function initializeTableComponent() {
@@ -222,8 +312,29 @@ function initializeTableComponent() {
                 field: 'weight_kg',
                 label: 'Ağırlık (kg)',
                 sortable: true,
-                width: '9%',
+                width: '8%',
+                type: 'number',
                 formatter: (value) => value ? `${parseFloat(value).toFixed(3)} kg` : '-'
+            },
+            {
+                field: 'operation_count',
+                label: 'Operasyon Sayısı',
+                sortable: true,
+                width: '8%',
+                editable: false,
+                formatter: (value) => `<span class="operation-count-badge">${value || 0}</span>`
+            },
+            {
+                field: 'incomplete_operation_count',
+                label: 'Tamamlanmamış',
+                sortable: true,
+                width: '8%',
+                editable: false,
+                formatter: (value) => {
+                    const count = value || 0;
+                    const badgeClass = count > 0 ? 'incomplete-count-badge' : 'complete-count-badge';
+                    return `<span class="${badgeClass}">${count}</span>`;
+                }
             },
             {
                 field: 'finish_time',
@@ -257,7 +368,7 @@ function initializeTableComponent() {
             {
                 key: 'view',
                 label: 'Parça Detayları',
-                icon: 'fas fa-eye',
+                icon: 'fas fa-edit',
                 class: 'btn-outline-info',
                 title: 'Parça Detayları',
                 onClick: (row) => showPartDetails(row.key)
@@ -306,7 +417,7 @@ function initializeTableComponent() {
         rowAttributes: (row) => `data-part-key="${row.key}" class="data-update"`,
         // Enable cell editing
         editable: true,
-        editableColumns: ['name', 'description', 'job_no', 'image_no', 'position_no', 'quantity', 'material', 'finish_time'],
+        editableColumns: ['name', 'description', 'job_no', 'image_no', 'position_no', 'quantity', 'material', 'weight_kg', 'finish_time'],
         onEdit: async (row, field, newValue, oldValue) => {
             try {
                 // Check if value actually changed
@@ -317,6 +428,9 @@ function initializeTableComponent() {
                 if (field === 'quantity') {
                     normalizedOld = parseFloat(oldValue) || 0;
                     normalizedNew = parseFloat(newValue) || 0;
+                } else if (field === 'weight_kg') {
+                    normalizedOld = oldValue ? parseFloat(oldValue) : null;
+                    normalizedNew = newValue ? parseFloat(newValue) : null;
                 }
                 
                 // For date fields, normalize
@@ -331,7 +445,12 @@ function initializeTableComponent() {
                 
                 // Prepare update data
                 const updateData = {};
-                updateData[field] = newValue;
+                // For weight_kg, convert to number
+                if (field === 'weight_kg') {
+                    updateData[field] = newValue ? parseFloat(newValue) : null;
+                } else {
+                    updateData[field] = newValue;
+                }
                 
                 // Call the updatePart API
                 const updatedPart = await updatePart(row.key, updateData);
@@ -392,7 +511,7 @@ async function loadParts(page = 1) {
             partsTable.updateData(parts, totalParts, currentPage);
         }
         
-        updatePartCounts();
+        await updatePartCounts();
     } catch (error) {
         console.error('Error loading parts:', error);
         showNotification('Parçalar yüklenirken hata oluştu', 'error');
@@ -420,23 +539,47 @@ function buildPartQuery(page = 1) {
     const nameFilter = filterValues['name-filter']?.trim();
     const jobNoFilter = filterValues['job-no-filter']?.trim();
     const statusFilter = filterValues['status-filter'] || '';
+    const createdByFilter = filterValues['created-by-filter'] || '';
+    
+    // Checkbox filters
+    const hasOperationsFilter = filterValues['has-operations-filter'] || false;
+    const hasUnassignedOperationsFilter = filterValues['has-unassigned-operations-filter'] || false;
+    const hasUnplannedOperationsFilter = filterValues['has-unplanned-operations-filter'] || false;
     
     if (keyFilter) {
         let key = keyFilter;
         if (/^\d+$/.test(key)) {
             key = 'PT-' + key;
         }
-        // Note: The API might need a different filter name, adjust as needed
+        filters.key = key;
     }
     
     if (nameFilter) filters.name = nameFilter;
     if (jobNoFilter) filters.job_no = jobNoFilter;
+    
+    // Add created_by filter
+    if (createdByFilter) {
+        filters.created_by = createdByFilter;
+    }
     
     // Add status filter
     if (statusFilter === 'completed') {
         filters.completion_date = 'not_null'; // This might need adjustment based on API
     } else if (statusFilter === 'incomplete') {
         filters.completion_date = 'null'; // This might need adjustment based on API
+    }
+    
+    // Add checkbox filters
+    if (hasOperationsFilter) {
+        filters.has_operations = 'false';
+    }
+    
+    if (hasUnassignedOperationsFilter) {
+        filters.has_unassigned_operations = 'true';
+    }
+    
+    if (hasUnplannedOperationsFilter) {
+        filters.has_unplanned_operations = 'true';
     }
     
     // Add pagination
@@ -451,21 +594,144 @@ function buildPartQuery(page = 1) {
     return filters;
 }
 
-function updatePartCounts() {
-    // Calculate counts from current data
-    const allCount = totalParts;
-    const completedCount = parts.filter(p => p.completion_date).length;
-    const incompleteCount = parts.filter(p => !p.completion_date).length;
-    
-    // Update statistics cards using the component
-    if (partsStats) {
-        partsStats.updateValues({
-            0: allCount.toString(),
-            1: completedCount.toString(),
-            2: incompleteCount.toString()
-        });
+async function updatePartCounts() {
+    try {
+        const stats = await getPartsStats();
+        
+        // Update statistics cards using the component
+        if (partsStats) {
+            partsStats.updateValues({
+                0: (stats.parts_with_unassigned_operations || 0).toString(),
+                1: (stats.parts_with_unplanned_operations || 0).toString(),
+                2: (stats.parts_without_operations || 0).toString()
+            });
+            
+            // Add blinking animation to cards with values > 0
+            // Use requestAnimationFrame to ensure DOM is updated after render()
+            requestAnimationFrame(() => {
+                const unassignedCount = stats.parts_with_unassigned_operations || 0;
+                const unplannedCount = stats.parts_with_unplanned_operations || 0;
+                const withoutOpsCount = stats.parts_without_operations || 0;
+                
+                // Get card elements by their IDs
+                const unassignedCard = document.getElementById('unassigned-operations-count');
+                const unplannedCard = document.getElementById('unplanned-operations-count');
+                const withoutOpsCard = document.getElementById('parts-without-operations-count');
+                
+                // Add/remove blinking classes and make clickable based on values
+                if (unassignedCard) {
+                    if (unassignedCount > 0) {
+                        unassignedCard.classList.add('blink-warning', 'clickable');
+                        unassignedCard.style.cursor = 'pointer';
+                    } else {
+                        unassignedCard.classList.remove('blink-warning', 'clickable');
+                        unassignedCard.style.cursor = 'default';
+                    }
+                }
+                
+                if (unplannedCard) {
+                    if (unplannedCount > 0) {
+                        unplannedCard.classList.add('blink-danger', 'clickable');
+                        unplannedCard.style.cursor = 'pointer';
+                    } else {
+                        unplannedCard.classList.remove('blink-danger', 'clickable');
+                        unplannedCard.style.cursor = 'default';
+                    }
+                }
+                
+                if (withoutOpsCard) {
+                    if (withoutOpsCount > 0) {
+                        withoutOpsCard.classList.add('blink-secondary', 'clickable');
+                        withoutOpsCard.style.cursor = 'pointer';
+                    } else {
+                        withoutOpsCard.classList.remove('blink-secondary', 'clickable');
+                        withoutOpsCard.style.cursor = 'default';
+                    }
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Error updating part counts:', error);
+        // Set all values to 0 on error
+        if (partsStats) {
+            partsStats.updateValues({
+                0: '0',
+                1: '0',
+                2: '0'
+            });
+            
+            // Remove blinking classes on error
+            requestAnimationFrame(() => {
+                const unassignedCard = document.getElementById('unassigned-operations-count');
+                const unplannedCard = document.getElementById('unplanned-operations-count');
+                const withoutOpsCard = document.getElementById('parts-without-operations-count');
+                
+                if (unassignedCard) {
+                    unassignedCard.classList.remove('blink-warning', 'clickable');
+                    unassignedCard.style.cursor = 'default';
+                }
+                if (unplannedCard) {
+                    unplannedCard.classList.remove('blink-danger', 'clickable');
+                    unplannedCard.style.cursor = 'default';
+                }
+                if (withoutOpsCard) {
+                    withoutOpsCard.classList.remove('blink-secondary', 'clickable');
+                    withoutOpsCard.style.cursor = 'default';
+                }
+            });
+        }
     }
 }
+
+// Handle stat card clicks to apply appropriate filters
+// Make it globally accessible for inline onclick handlers
+window.handleStatCardClick = function(cardIndex) {
+    if (!partsFilters) return;
+    
+    // Get current stats to check if card has value > 0
+    const unassignedCard = document.getElementById('unassigned-operations-count');
+    const unplannedCard = document.getElementById('unplanned-operations-count');
+    const withoutOpsCard = document.getElementById('parts-without-operations-count');
+    
+    let shouldApply = false;
+    let filterId = '';
+    
+    switch (cardIndex) {
+        case 0: // Makine Atanmamış
+            if (unassignedCard && unassignedCard.classList.contains('blink-warning')) {
+                filterId = 'has-unassigned-operations-filter';
+                shouldApply = true;
+            }
+            break;
+        case 1: // Plana Eklenmemiş
+            if (unplannedCard && unplannedCard.classList.contains('blink-danger')) {
+                filterId = 'has-unplanned-operations-filter';
+                shouldApply = true;
+            }
+            break;
+        case 2: // Operasyonsuz Parçalar
+            if (withoutOpsCard && withoutOpsCard.classList.contains('blink-secondary')) {
+                filterId = 'has-operations-filter';
+                shouldApply = true;
+            }
+            break;
+    }
+    
+    if (shouldApply && filterId) {
+        // Set the checkbox filter
+        const checkbox = document.getElementById(filterId);
+        if (checkbox) {
+            checkbox.checked = true;
+            
+            // Apply filters
+            partsFilters.applyFilters();
+            
+            // Show notification
+            const cardTitles = ['Makine Atanmamış', 'Plana Eklenmemiş', 'Operasyonsuz Parçalar'];
+            showNotification(`${cardTitles[cardIndex]} filtresi uygulandı`, 'info');
+        }
+    }
+};
 
 function setupEventListeners() {
     // Save part button
@@ -721,19 +987,20 @@ function showPartDetailsModal(part, operations = []) {
                 <table class="table table-sm table-bordered">
                     <thead class="table-light">
                         <tr>
-                            <th style="width: 6%;">Sıra</th>
-                            <th style="width: 18%;">Operasyon Adı</th>
-                            <th style="width: 15%;">Açıklama</th>
-                            <th style="width: 12%;">Makine</th>
-                            <th style="width: 10%;">Tahmini Saat</th>
-                            <th style="width: 10%;">Harcanan Saat</th>
-                            <th style="width: 8%;">Değiştirilebilir</th>
-                            <th style="width: 8%;">Durum</th>
-                            <th style="width: 8%;">İşlem</th>
+                            <th style="width: 5%;">Sıra</th>
+                            <th style="width: 15%;">Operasyon Adı</th>
+                            <th style="width: 12%;">Açıklama</th>
+                            <th style="width: 10%;">Makine</th>
+                            <th style="width: 8%;">Adet</th>
+                            <th style="width: 9%;">Tahmini Saat</th>
+                            <th style="width: 9%;">Harcanan Saat</th>
+                            <th style="width: 7%;">Değiştirilebilir</th>
+                            <th style="width: 7%;">Durum</th>
+                            <th style="width: 7%;">İşlem</th>
                         </tr>
                     </thead>
                     <tbody id="operations-detail-table-body">
-                        ${operations.length > 0 ? operations.map(op => createOperationRow(op)).join('') : '<tr class="empty-row"><td colspan="9" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>'}
+                        ${operations.length > 0 ? operations.map(op => createOperationRow(op)).join('') : '<tr class="empty-row"><td colspan="10" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -758,10 +1025,14 @@ function showPartDetailsModal(part, operations = []) {
             loadMachines().then(() => {
                 // Re-populate machine dropdowns in existing rows
                 populateMachineDropdownsInTable();
+                // Explicitly enable machine dropdowns and checkboxes for non-completed operations
+                enableEditableFieldsForNonCompletedOperations();
             });
         } else {
             // Populate machine dropdowns in existing rows
             populateMachineDropdownsInTable();
+            // Explicitly enable machine dropdowns and checkboxes for non-completed operations
+            enableEditableFieldsForNonCompletedOperations();
         }
     }, 100);
 }
@@ -772,19 +1043,72 @@ function populateMachineDropdownsInTable() {
     
     const machineSelects = tbody.querySelectorAll('.operation-machine');
     machineSelects.forEach(select => {
-        // Only update if it's empty or has default option
-        if (select.options.length <= 1) {
-            const currentValue = select.value;
-            select.innerHTML = '<option value="">Makine seçin...</option>';
-            machines.forEach(machine => {
-                const option = document.createElement('option');
-                option.value = machine.id;
-                option.textContent = machine.name;
-                if (currentValue == machine.id) {
-                    option.selected = true;
+        const row = select.closest('tr');
+        const isCompleted = row && row.querySelector('.status-badge.status-green') !== null;
+        
+        // Always populate the dropdown with all machines
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">Makine seçin...</option>';
+        machines.forEach(machine => {
+            const option = document.createElement('option');
+            option.value = machine.id;
+            option.textContent = machine.name;
+            if (currentValue == machine.id) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+        
+        // Only disable if operation is actually completed (has completion_date)
+        // Operations with hours spent but not completed should still be editable
+        if (isCompleted) {
+            select.disabled = true;
+            select.setAttribute('disabled', 'disabled');
+        } else {
+            select.disabled = false;
+            select.removeAttribute('disabled');
+        }
+        
+        // Also ensure interchangeable checkbox is enabled/disabled correctly
+        const interchangeableCheckbox = row.querySelector('.operation-interchangeable');
+        if (interchangeableCheckbox) {
+            if (isCompleted) {
+                interchangeableCheckbox.disabled = true;
+                interchangeableCheckbox.setAttribute('disabled', 'disabled');
+            } else {
+                interchangeableCheckbox.disabled = false;
+                interchangeableCheckbox.removeAttribute('disabled');
+            }
+        }
+    });
+}
+
+function enableEditableFieldsForNonCompletedOperations() {
+    const tbody = document.getElementById('operations-detail-table-body');
+    if (!tbody) return;
+    
+    const rows = tbody.querySelectorAll('tr[data-operation-key]');
+    rows.forEach(row => {
+        const operationKey = row.getAttribute('data-operation-key');
+        // Only process existing operations (not new ones)
+        if (operationKey) {
+            const isCompleted = row.querySelector('.status-badge.status-green') !== null;
+            
+            if (!isCompleted) {
+                // Enable machine dropdown
+                const machineSelect = row.querySelector('.operation-machine');
+                if (machineSelect) {
+                    machineSelect.disabled = false;
+                    machineSelect.removeAttribute('disabled');
                 }
-                select.appendChild(option);
-            });
+                
+                // Enable interchangeable checkbox
+                const interchangeableCheckbox = row.querySelector('.operation-interchangeable');
+                if (interchangeableCheckbox) {
+                    interchangeableCheckbox.disabled = false;
+                    interchangeableCheckbox.removeAttribute('disabled');
+                }
+            }
         }
     });
 }
@@ -797,13 +1121,17 @@ function createOperationRow(operation, isNew = false) {
     // Determine status based on completion_date and hours_spent (matching original tasks logic)
     let statusHtml = '';
     let isReadOnly = false;
+    // Only make read-only if operation is actually completed (has completion_date)
+    // Operations with hours spent but not completed should still be editable
     if (isCompleted) {
         statusHtml = '<span class="status-badge status-green">Tamamlandı</span>';
         isReadOnly = true;
     } else if (hoursSpent > 0) {
         statusHtml = '<span class="status-badge status-yellow">Çalışıldı</span>';
+        isReadOnly = false; // Explicitly set to false - operations with hours spent are still editable
     } else {
         statusHtml = '<span class="status-badge status-grey">Bekliyor</span>';
+        isReadOnly = false;
     }
     
     // Escape HTML for text values to prevent XSS
@@ -823,6 +1151,7 @@ function createOperationRow(operation, isNew = false) {
     const descValue = escapeHtml(operation.description || '');
     const orderValue = operation.order || '';
     const estimatedHoursValue = operation.estimated_hours || '';
+    const quantityValue = operation.quantity || '';
     
     // Build machine options HTML
     const machineOptionsHtml = machines.map(m => {
@@ -842,10 +1171,13 @@ function createOperationRow(operation, isNew = false) {
                 <textarea class="form-control form-control-sm operation-description" rows="1" ${isReadOnly ? 'readonly' : ''}>${descValue}</textarea>
             </td>
             <td>
-                <select class="form-control form-control-sm operation-machine" ${isReadOnly ? 'disabled' : ''}>
+                <select class="form-control form-control-sm operation-machine" ${isReadOnly ? 'disabled' : ''} data-operation-key="${operation.key || ''}">
                     <option value="">Makine seçin...</option>
                     ${machineOptionsHtml}
                 </select>
+            </td>
+            <td>
+                <input type="number" class="form-control form-control-sm operation-quantity" value="${quantityValue}" min="1" ${isReadOnly ? 'readonly' : ''}>
             </td>
             <td>
                 <input type="number" class="form-control form-control-sm operation-estimated-hours" value="${estimatedHoursValue}" step="0.01" min="0" ${isReadOnly ? 'readonly' : ''}>
@@ -855,7 +1187,7 @@ function createOperationRow(operation, isNew = false) {
             </td>
             <td class="text-center">
                 <div class="form-check d-flex justify-content-center">
-                    <input class="form-check-input operation-interchangeable" type="checkbox" ${operation.interchangeable ? 'checked' : ''} ${isReadOnly ? 'disabled' : ''}>
+                    <input class="form-check-input operation-interchangeable" type="checkbox" ${operation.interchangeable ? 'checked' : ''} ${isReadOnly ? '' : ''} id="interchangeable-${rowId}" data-operation-key="${operation.key || ''}">
                 </div>
             </td>
             <td class="text-center">
@@ -967,6 +1299,7 @@ function addOperationRowToTable() {
         name: '',
         description: '',
         machine_fk: null,
+        quantity: null,
         estimated_hours: null,
         interchangeable: false,
         completion_date: null,  // Explicitly set to null for new operations
@@ -1028,6 +1361,7 @@ function addOperationRowToTable() {
     const orderInput = newRow.querySelector('.operation-order');
     const nameInput = newRow.querySelector('.operation-name');
     const descTextarea = newRow.querySelector('.operation-description');
+    const quantityInput = newRow.querySelector('.operation-quantity');
     const hoursInput = newRow.querySelector('.operation-estimated-hours');
     const interchangeableCheckbox = newRow.querySelector('.operation-interchangeable');
     
@@ -1043,6 +1377,10 @@ function addOperationRowToTable() {
         descTextarea.removeAttribute('readonly');
         descTextarea.readOnly = false;
     }
+    if (quantityInput) {
+        quantityInput.removeAttribute('readonly');
+        quantityInput.readOnly = false;
+    }
     if (hoursInput) {
         hoursInput.removeAttribute('readonly');
         hoursInput.readOnly = false;
@@ -1053,7 +1391,7 @@ function addOperationRowToTable() {
     }
     
     // Ensure status shows "Bekliyor" for new rows
-    const statusCell = newRow.querySelector('td:nth-child(8)');
+    const statusCell = newRow.querySelector('td:nth-child(9)');
     if (statusCell) {
         statusCell.innerHTML = '<span class="status-badge status-grey">Bekliyor</span>';
     }
@@ -1086,7 +1424,7 @@ function updateOperationOrdersInTable() {
     
     // Show empty message if no rows
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="9" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="10" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>';
         return;
     }
     
@@ -1119,6 +1457,7 @@ async function saveOperationsChanges(part) {
         const name = row.querySelector('.operation-name')?.value?.trim();
         const description = row.querySelector('.operation-description')?.value?.trim() || null;
         const machineFk = row.querySelector('.operation-machine')?.value ? parseInt(row.querySelector('.operation-machine').value) : null;
+        const quantity = row.querySelector('.operation-quantity')?.value ? parseInt(row.querySelector('.operation-quantity').value) : null;
         const estimatedHours = row.querySelector('.operation-estimated-hours')?.value ? parseFloat(row.querySelector('.operation-estimated-hours').value) : null;
         const interchangeable = row.querySelector('.operation-interchangeable')?.checked || false;
         
@@ -1139,6 +1478,7 @@ async function saveOperationsChanges(part) {
                 description,
                 machine_fk: machineFk,
                 order,
+                quantity,
                 interchangeable,
                 estimated_hours: estimatedHours
             });
@@ -1157,6 +1497,7 @@ async function saveOperationsChanges(part) {
                     description,
                     machine_fk: machineFk,
                     order,
+                    quantity,
                     interchangeable,
                     estimated_hours: estimatedHours
                 });

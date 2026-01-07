@@ -37,6 +37,39 @@
     font-weight: 500;
 }
 
+.operation-count-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: #e7f3ff;
+    color: #0066cc;
+    border: 1px solid #b3d9ff;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.incomplete-count-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: #fff3e0;
+    color: #f57c00;
+    border: 1px solid #ffcc02;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.complete-count-badge {
+    display: inline-block;
+    padding: 0.25rem 0.5rem;
+    background: #e8f5e9;
+    color: #2e7d32;
+    border: 1px solid #81c784;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
 /* Status Badges for Parts */
 .status-badge.completed {
     background: rgba(40, 167, 69, 0.2);
@@ -132,5 +165,61 @@
 .editable-cell[data-field="status"]:hover::after,
 .editable-cell[data-field="actions"]:hover::after {
     display: none;
+}
+
+/* Blinking animation for stat cards with issues */
+@keyframes blink-warning {
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    50% {
+        opacity: 0.7;
+        box-shadow: 0 4px 25px rgba(255, 193, 7, 0.6);
+    }
+}
+
+@keyframes blink-danger {
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    50% {
+        opacity: 0.7;
+        box-shadow: 0 4px 25px rgba(220, 53, 69, 0.6);
+    }
+}
+
+@keyframes blink-secondary {
+    0%, 100% {
+        opacity: 1;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    }
+    50% {
+        opacity: 0.7;
+        box-shadow: 0 4px 25px rgba(108, 117, 125, 0.6);
+    }
+}
+
+.stat-card.blink-warning {
+    animation: blink-warning 1.5s ease-in-out infinite;
+}
+
+.stat-card.blink-danger {
+    animation: blink-danger 1.5s ease-in-out infinite;
+}
+
+.stat-card.blink-secondary {
+    animation: blink-secondary 1.5s ease-in-out infinite;
+}
+
+/* Respect reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+    .stat-card.blink-warning,
+    .stat-card.blink-danger,
+    .stat-card.blink-secondary {
+        animation: none;
+        box-shadow: 0 4px 20px rgba(255, 193, 7, 0.4);
+    }
 }
 

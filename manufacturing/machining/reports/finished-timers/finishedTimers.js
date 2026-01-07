@@ -2,7 +2,7 @@ import { initNavbar } from '../../../../components/navbar.js';
 import { ModernDropdown } from '../../../../components/dropdown/dropdown.js';
 import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
 import { TableComponent } from '../../../../components/table/table.js';
-import { fetchMachines } from '../../../../apis/machines.js';
+import { fetchMachinesDropdown } from '../../../../apis/machines.js';
 import { fetchUsers } from '../../../../apis/users.js';
 import { fetchTaskById } from '../../../../apis/tasks.js';
 import { backendBase } from '../../../../base.js';
@@ -437,8 +437,7 @@ async function initializeFinishedTimers() {
 
 async function loadMachines() {
     try {
-        const machinesResponse = await fetchMachines(1, 100, { used_in: 'machining' });
-        machines = machinesResponse.results || machinesResponse || [];
+        machines = await fetchMachinesDropdown('machining');
         
         // Update machine filter options if filters component is initialized
         if (timerFilters) {

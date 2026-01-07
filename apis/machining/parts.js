@@ -337,6 +337,33 @@ export async function updatePartOperations(partKey, updateData) {
 }
 
 /**
+ * Get parts statistics (aggregate statistics for parts and operations)
+ * GET /tasks/parts/stats/
+ * Returns ultra-efficient single-query endpoint using database-level aggregations
+ * @returns {Promise<Object>} Statistics object with:
+ *   - parts_with_unassigned_operations: Parts with at least one operation without a machine
+ *   - parts_with_unplanned_operations: Parts with at least one operation not in plan
+ *   - parts_without_operations: Parts without any operations
+ *   - total_parts: Total count of parts
+ *   - total_operations: Total count of operations
+ */
+export async function getPartsStats() {
+    try {
+        const response = await authedFetch(`${MACHINING_2_BASE_URL}/parts/stats/`);
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(`Failed to fetch parts stats: ${response.statusText} - ${JSON.stringify(errorData)}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching parts stats:', error);
+        throw error;
+    }
+}
+
+/**
  * Utility function to format part data for display
  * @param {Object} part - Part object
  * @returns {Object} Formatted part data

@@ -131,3 +131,32 @@ export async function getMachineCalendar(machineId) {
     const response = await authedFetch(`${backendBase}/machines/calendar?machine_fk=${machineId}`);
     return response.json();
 }
+
+/**
+ * Fetch machines for dropdowns (lightweight endpoint)
+ * Returns only id, name, and used_in for all active machines
+ * @param {string} [used_in] - Optional filter by used_in (e.g., 'machining')
+ * @returns {Promise<Array>} Array of machine objects with id, name, and used_in
+ */
+export async function fetchMachinesDropdown(used_in = null) {
+    try {
+        let url = `${backendBase}/machines/dropdown/`;
+        
+        if (used_in) {
+            const params = new URLSearchParams();
+            params.append('used_in', used_in);
+            url += `?${params.toString()}`;
+        }
+        
+        const response = await authedFetch(url);
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch machines dropdown');
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching machines dropdown:', error);
+        throw error;
+    }
+}
