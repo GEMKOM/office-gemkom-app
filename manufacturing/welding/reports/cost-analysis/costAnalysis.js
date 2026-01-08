@@ -353,7 +353,54 @@ async function showUserDetails(jobNo) {
     try {
         // Fetch user details for the job
         const data = await getWeldingJobCostDetail({ job_no: jobNo });
-        const users = data.results || [];
+        const entries = data.entries || [];
+        const summary = data.summary || {};
+        
+        // Aggregate entries by user
+        const userMap = new Map();
+        entries.forEach(entry => {
+            const userId = entry.employee_id || entry.employee_username;
+            if (!userMap.has(userId)) {
+                userMap.set(userId, {
+                    user_id: entry.employee_id,
+                    user: entry.employee_full_name || entry.employee_username,
+                    username: entry.employee_username,
+                    hours: { regular: 0, after_hours: 0, holiday: 0 },
+                    costs: { regular: 0, after_hours: 0, holiday: 0 },
+                    total_cost: 0,
+                    entries: []
+                });
+            }
+            
+            const userData = userMap.get(userId);
+            const overtimeType = entry.overtime_type || 'regular';
+            const hours = entry.hours || 0;
+            
+            // Map overtime_type to our structure
+            if (overtimeType === 'regular') {
+                userData.hours.regular += hours;
+            } else if (overtimeType === 'after_hours') {
+                userData.hours.after_hours += hours;
+            } else if (overtimeType === 'holiday') {
+                userData.hours.holiday += hours;
+            }
+            
+            // If cost information is available in entry, use it
+            if (entry.cost !== undefined) {
+                if (overtimeType === 'regular') {
+                    userData.costs.regular += entry.cost;
+                } else if (overtimeType === 'after_hours') {
+                    userData.costs.after_hours += entry.cost;
+                } else if (overtimeType === 'holiday') {
+                    userData.costs.holiday += entry.cost;
+                }
+                userData.total_cost += entry.cost;
+            }
+            
+            userData.entries.push(entry);
+        });
+        
+        const users = Array.from(userMap.values());
         
         // Create display modal
         const modal = new DisplayModal('user-details-modal-container', {
@@ -363,12 +410,12 @@ async function showUserDetails(jobNo) {
             showEditButton: false
         });
         
-        // Calculate totals
+        // Calculate totals from aggregated users or use summary if available
         const totalCost = users.reduce((sum, user) => sum + (user.total_cost || 0), 0);
-        const totalWeekdayHours = users.reduce((sum, user) => sum + (user.hours.regular || 0), 0);
-        const totalAfterHours = users.reduce((sum, user) => sum + (user.hours.after_hours || 0), 0);
-        const totalSundayHours = users.reduce((sum, user) => sum + (user.hours.holiday || 0), 0);
-        const totalHours = totalWeekdayHours + totalAfterHours + totalSundayHours;
+        const totalWeekdayHours = summary.breakdown_by_type?.regular || users.reduce((sum, user) => sum + (user.hours.regular || 0), 0);
+        const totalAfterHours = summary.breakdown_by_type?.after_hours || users.reduce((sum, user) => sum + (user.hours.after_hours || 0), 0);
+        const totalSundayHours = summary.breakdown_by_type?.holiday || users.reduce((sum, user) => sum + (user.hours.holiday || 0), 0);
+        const totalHours = summary.total_hours || totalWeekdayHours + totalAfterHours + totalSundayHours;
         const costPerHour = totalHours > 0 ? totalCost / totalHours : 0;
         const totalAfterHoursCost = users.reduce((sum, user) => sum + (user.costs.after_hours || 0), 0);
         const totalSundayCost = users.reduce((sum, user) => sum + (user.costs.holiday || 0), 0);
@@ -461,8 +508,7 @@ async function showUserDetails(jobNo) {
             const userTableData = users.map(user => ({
                 user: user.user,
                 user_id: user.user_id,
-                issue_count: user.issue_count,
-                issue_keys: user.issue_keys,
+                username: user.username,
                 weekday_work_hours: user.hours.regular || 0,
                 after_hours_hours: user.hours.after_hours || 0,
                 sunday_hours: user.hours.holiday || 0,
@@ -471,8 +517,7 @@ async function showUserDetails(jobNo) {
                 after_hours_cost: user.costs.after_hours || 0,
                 sunday_cost: user.costs.holiday || 0,
                 total_cost: user.total_cost || 0,
-                currency: user.currency || 'EUR',
-                updated_at: user.updated_at,
+                currency: 'EUR',
                 raw_data: user
             }));
 
@@ -573,31 +618,22 @@ async function showUserDetails(jobNo) {
                             sortable: false,
                             type: 'text',
                             formatter: (value, rowData) => {
-                                const keys = rowData.raw_data?.issues || [];
+                                // Check if entries have issue information
+                                const entries = rowData.raw_data?.entries || [];
+                                const issueKeys = new Set();
                                 
-                                if (!keys || keys.length === 0) {
+                                entries.forEach(entry => {
+                                    if (entry.issue_key) {
+                                        issueKeys.add(entry.issue_key);
+                                    }
+                                });
+                                
+                                if (issueKeys.size === 0) {
                                     return '-';
                                 }
                                 
-                                return keys.map(key => {
-                                    let badgeClass = 'badge task-key-link me-1 mb-1';
-                                    
-                                    // Set background color based on status
-                                    switch(key.status) {
-                                        case 'completed':
-                                            badgeClass += ' bg-success';
-                                            break;
-                                        case 'in_progress':
-                                            badgeClass += ' bg-primary';
-                                            break;
-                                        case 'waiting':
-                                            badgeClass += ' bg-danger';
-                                            break;
-                                        default:
-                                            badgeClass += ' bg-secondary';
-                                    }
-                                    
-                                    return `<a href="/manufacturing/welding/tasks/list/?task=${key.key}" target="_blank" class="${badgeClass}">${key.key}</a>`;
+                                return Array.from(issueKeys).map(key => {
+                                    return `<a href="/manufacturing/welding/tasks/list/?task=${key}" target="_blank" class="badge task-key-link me-1 mb-1 bg-primary">${key}</a>`;
                                 }).join('');
                             }
                         }

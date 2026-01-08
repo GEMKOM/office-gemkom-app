@@ -64,11 +64,10 @@ export async function getWeldingJobCostTotals(params = {}) {
 }
 
 /**
- * Get welding job cost details by job number (per-user breakdown)
+ * Get welding job entries by job number
  * @param {Object} params - Query parameters
- * @param {string} params.job_no - Required. Job number (exact or partial match)
- * @param {string} params.ordering - Optional. Ordering field (user, -user, total_hours, -total_hours, updated_at, -updated_at)
- * @returns {Promise<Object>} Report data with count and results
+ * @param {string} params.job_no - Required. Job number
+ * @returns {Promise<Object>} Report data with job_no, summary, and entries
  */
 export async function getWeldingJobCostDetail(params) {
     if (!params.job_no) {
@@ -76,12 +75,9 @@ export async function getWeldingJobCostDetail(params) {
     }
 
     const queryParams = new URLSearchParams();
-    
-    if (params.ordering) {
-        queryParams.append('ordering', params.ordering);
-    }
+    queryParams.append('job_no', params.job_no);
 
-    const url = `${backendBase}/welding/reports/job-costs/${encodeURIComponent(params.job_no)}/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const url = `${backendBase}/welding/reports/job-entries/?${queryParams.toString()}`;
     const resp = await authedFetch(url);
     
     if (!resp.ok) {
