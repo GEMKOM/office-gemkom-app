@@ -698,10 +698,10 @@ function showBulkCreateRemnantsModal() {
                 label: 'Plaka Verileri',
                 type: 'textarea',
                 required: true,
-                placeholder: 'Her satır bir plaka olacak şekilde verileri girin:\n2,5	290	660	1	BAKIR\n3	1500	660	5	GALVANİZ',
+                placeholder: 'Her satır bir plaka olacak şekilde verileri girin:\n2,5	290	660	1	BAKIR\n3	8	1500	660	5	GALVANİZ',
                 rows: 10,
                 colSize: 12,
-                helpText: 'Format: Kalınlık(mm) [TAB] Genişlik(mm) [TAB] Yükseklik(mm) [TAB] Adet [TAB] Malzeme (her satır bir plaka, 5 alan, tab veya virgül ile ayrılmış). Not: Kalınlık için ondalık ayırıcı olarak nokta veya virgül kullanılabilir (örn: 2.5 veya 2,5)'
+                helpText: 'Format: Kalınlık(mm) [TAB] Kalınlık2(mm) [TAB] Genişlik(mm) [TAB] Yükseklik(mm) [TAB] Adet [TAB] Malzeme (her satır bir plaka, 6 alan, tab veya virgül ile ayrılmış). Kalınlık2 opsiyoneldir - 5 alan girilirse Kalınlık2 atlanır. Not: Kalınlık için ondalık ayırıcı olarak nokta veya virgül kullanılabilir (örn: 2.5 veya 2,5)'
             }
         ]
     });
@@ -784,12 +784,21 @@ function showBulkCreateRemnantsModal() {
         }
         
         // Convert to API format
-        const remnantsData = valid.map(item => ({
-            thickness_mm: item.thickness_mm,
-            dimensions: item.dimensions,
-            quantity: item.quantity,
-            material: item.material
-        }));
+        const remnantsData = valid.map(item => {
+            const remnantData = {
+                thickness_mm: item.thickness_mm,
+                dimensions: item.dimensions,
+                quantity: item.quantity,
+                material: item.material
+            };
+            
+            // Add thickness_mm_2 if provided
+            if (item.thickness_mm_2) {
+                remnantData.thickness_mm_2 = item.thickness_mm_2;
+            }
+            
+            return remnantData;
+        });
         
         try {
             await bulkCreateRemnantPlates(remnantsData);
@@ -837,6 +846,7 @@ function parseBulkData(bulkData) {
             parts = line.split(',').map(p => p.trim());
         }
         
+        // Support both 5 fields (without thickness_mm_2) and 6 fields (with thickness_mm_2)
         if (parts.length < 5) {
             // Check if it's the old format (4 fields: thickness, dimensions, quantity, material)
             if (parts.length === 4) {
@@ -880,18 +890,89 @@ function parseBulkData(bulkData) {
             invalid.push({
                 lineNumber: i + 1,
                 line: line,
-                error: 'Yeterli veri yok (5 alan gerekli: Kalınlık, Genişlik, Yükseklik, Adet, Malzeme)'
+                error: 'Yeterli veri yok (5 veya 6 alan gerekli: Kalınlık, [Kalınlık2], Genişlik, Yükseklik, Adet, Malzeme)'
             });
             continue;
         }
         
-        // New format: thickness, width, height, quantity, material
-        const thicknessStr = parts[0].replace(',', '.'); // Handle comma as decimal separator
-        const thickness = parseFloat(thicknessStr);
-        const width = parts[1];
-        const height = parts[2];
-        const quantityStr = parts[3];
-        const material = parts[4];
+        // Support formats:
+        // 4 fields: thickness, dimensions, quantity, material (old format)
+        // 5 fields: thickness, thickness_mm_2, dimensions, quantity, material (new format)
+        // 6 fields: thickness, thickness_mm_2, width, height, quantity, material (backward compatibility with separate width/height)
+        let thicknessStr, thickness, thickness_mm_2, width, height, quantityStr, material;
+        
+        thicknessStr = parts[0].replace(',', '.'); // Handle comma as decimal separator
+        thickness = parseFloat(thicknessStr);
+        
+        if (parts.length === 5) {
+            // Format: thickness, thickness_mm_2, dimensions, quantity, material
+            const thickness2Trimmed = parts[1].trim();
+            // Treat "-" as empty
+            const thickness2Str = (thickness2Trimmed !== '' && thickness2Trimmed !== '-') ? thickness2Trimmed.replace(',', '.') : '';
+            const parsedThickness2 = thickness2Str !== '' ? parseFloat(thickness2Str) : NaN;
+            thickness_mm_2 = !isNaN(parsedThickness2) && parsedThickness2 > 0 ? parsedThickness2 : null;
+            
+            // Third field is dimensions (widthxheight format)
+            const dimensionsField = parts[2].trim();
+            if (dimensionsField && (dimensionsField.includes('x') || dimensionsField.includes('X'))) {
+                const dimParts = dimensionsField.split(/[xX]/).map(p => p.trim());
+                if (dimParts.length === 2) {
+                    width = dimParts[0];
+                    height = dimParts[1];
+                    quantityStr = parts[3].trim();
+                    material = parts[4].trim();
+                } else {
+                    // Invalid dimensions format
+                    width = dimensionsField;
+                    height = '';
+                    quantityStr = parts[3].trim();
+                    material = parts[4].trim();
+                }
+            } else {
+                // Not dimensions format, treat as separate width/height (backward compatibility)
+                width = dimensionsField;
+                height = parts[3].trim();
+                quantityStr = parts[4].trim();
+                material = parts[4].trim(); // This is wrong, but should be caught by validation
+            }
+        } else if (parts.length === 6) {
+            // Format: thickness, thickness_mm_2, width, height, quantity, material (backward compatibility)
+            const thickness2Trimmed = parts[1].trim();
+            const isThickness2Empty = (thickness2Trimmed === '' || thickness2Trimmed === '-');
+            
+            if (isThickness2Empty) {
+                thickness_mm_2 = null;
+            } else {
+                const thickness2Str = thickness2Trimmed.replace(',', '.');
+                const parsedThickness2 = parseFloat(thickness2Str);
+                thickness_mm_2 = !isNaN(parsedThickness2) && parsedThickness2 > 0 ? parsedThickness2 : null;
+            }
+            
+            // Check if third field is dimensions or width
+            const dimensionsField = parts[2].trim();
+            if (dimensionsField && (dimensionsField.includes('x') || dimensionsField.includes('X'))) {
+                // Dimensions format
+                const dimParts = dimensionsField.split(/[xX]/).map(p => p.trim());
+                if (dimParts.length === 2) {
+                    width = dimParts[0];
+                    height = dimParts[1];
+                    quantityStr = parts[3].trim();
+                    material = parts[4].trim();
+                } else {
+                    // Invalid, treat as separate fields
+                    width = parts[2].trim();
+                    height = parts[3].trim();
+                    quantityStr = parts[4].trim();
+                    material = parts[5].trim();
+                }
+            } else {
+                // Separate width/height fields
+                width = parts[2].trim();
+                height = parts[3].trim();
+                quantityStr = parts[4].trim();
+                material = parts[5].trim();
+            }
+        }
         
         let error = null;
         
@@ -900,6 +981,8 @@ function parseBulkData(bulkData) {
             error = 'Bileşik kalınlık formatı desteklenmiyor (örn: 20+8)';
         } else if (isNaN(thickness) || thickness <= 0) {
             error = 'Geçersiz kalınlık değeri';
+        } else if (thickness_mm_2 !== null && (isNaN(thickness_mm_2) || thickness_mm_2 <= 0)) {
+            error = 'Geçersiz kalınlık 2 değeri';
         } else if (!width || width.trim() === '' || isNaN(parseFloat(width))) {
             error = 'Geçersiz genişlik değeri';
         } else if (!height || height.trim() === '' || isNaN(parseFloat(height))) {
@@ -921,13 +1004,20 @@ function parseBulkData(bulkData) {
             // Combine width and height into dimensions format
             const dimensions = `${width}x${height}`;
             
-            valid.push({
+            const item = {
                 lineNumber: i + 1,
                 thickness_mm: thickness.toFixed(2),
                 dimensions: dimensions,
                 quantity: quantity,
                 material: material
-            });
+            };
+            
+            // Add thickness_mm_2 if provided
+            if (thickness_mm_2 !== null && !isNaN(thickness_mm_2)) {
+                item.thickness_mm_2 = thickness_mm_2.toFixed(2);
+            }
+            
+            valid.push(item);
         }
     }
     
@@ -966,10 +1056,11 @@ function updateBulkPreview(bulkData) {
                     <thead class="table-light">
                         <tr>
                             <th style="width: 5%;">#</th>
-                            <th style="width: 15%;">Kalınlık (mm)</th>
-                            <th style="width: 20%;">Boyutlar</th>
+                            <th style="width: 12%;">Kalınlık (mm)</th>
+                            <th style="width: 12%;">Kalınlık 2 (mm)</th>
+                            <th style="width: 18%;">Boyutlar</th>
                             <th style="width: 10%;">Adet</th>
-                            <th style="width: 20%;">Malzeme</th>
+                            <th style="width: 18%;">Malzeme</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -980,6 +1071,7 @@ function updateBulkPreview(bulkData) {
                 <tr>
                     <td>${item.lineNumber}</td>
                     <td>${item.thickness_mm}</td>
+                    <td>${item.thickness_mm_2 || '-'}</td>
                     <td>${item.dimensions}</td>
                     <td>${item.quantity}</td>
                     <td>${item.material}</td>

@@ -60,6 +60,7 @@ let currentEditTask = null; // Current task being edited
 let currentPageSize = 20; // Current page size for pagination
 let statusChangeModal = null; // Status change confirmation modal instance
 let selectedRemnantPlate = null; // Selected remnant plate for create cut
+let quantityUsed = 1; // Quantity of remnant plate to use (default 1)
 let selectRemnantModal = null; // Modal for selecting remnant plate
 let remnantFilters = null; // Filters component for remnant selection
 let remnantSelectionTable = null; // Table component for remnant selection
@@ -1126,6 +1127,7 @@ function showCreateCutModal() {
 function setupCreateCutForm(createCutModal) {
     // Reset selected remnant plate
     selectedRemnantPlate = null;
+    quantityUsed = 1; // Reset to default
     
     // Add remnant plate selection section at the top
     createCutModal.addSection({
@@ -1304,7 +1306,7 @@ function setupCreateCutForm(createCutModal) {
             if (fieldsContainer) {
                 const remnantHtml = `
                     <div class="col-12">
-                        <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
                             <div>
                                 <button type="button" class="btn btn-outline-info" id="select-remnant-btn">
                                     <i class="fas fa-layer-group me-2"></i>Fire Plaka Seç
@@ -1319,6 +1321,11 @@ function setupCreateCutForm(createCutModal) {
                                     <i class="fas fa-times"></i>
                                 </button>
                             </div>
+                        </div>
+                        <div id="quantity-used-container" style="display: none;" class="mb-2">
+                            <label for="quantity-used-input" class="form-label">Kullanılacak Adet</label>
+                            <input type="number" id="quantity-used-input" class="form-control" min="1" step="1" value="1" placeholder="1">
+                            <small class="form-text text-muted">Bu plakadan kaç adet kullanılacak (varsayılan: 1)</small>
                         </div>
                     </div>
                 `;
@@ -1337,7 +1344,16 @@ function setupCreateCutForm(createCutModal) {
                 if (clearBtn) {
                     clearBtn.addEventListener('click', () => {
                         selectedRemnantPlate = null;
+                        quantityUsed = 1;
                         updateSelectedRemnantDisplay();
+                    });
+                }
+                
+                // Add event listener for quantity used input
+                const quantityUsedInput = createCutModal.container.querySelector('#quantity-used-input');
+                if (quantityUsedInput) {
+                    quantityUsedInput.addEventListener('change', (e) => {
+                        quantityUsed = parseInt(e.target.value) || 1;
                     });
                 }
                 
@@ -1484,7 +1500,8 @@ async function handleCreateCutSave(formData) {
         quantity: formData['cut-quantity'] ? parseInt(formData['cut-quantity']) : null,
         files: uploadedFiles,
         parts_data: [],
-        selected_plate: selectedRemnantPlate ? selectedRemnantPlate.id : null
+        selected_plate: selectedRemnantPlate ? selectedRemnantPlate.id : null,
+        quantity_used: selectedRemnantPlate ? quantityUsed : null
     };
     
     
@@ -1599,6 +1616,9 @@ async function setupEditCutForm(editCutModal, cut) {
     } else {
         selectedRemnantPlate = null;
     }
+    
+    // Load quantity_used if it exists, otherwise default to 1
+    quantityUsed = cut.quantity_used !== undefined && cut.quantity_used !== null ? parseInt(cut.quantity_used) : 1;
     
     // Add remnant plate selection section at the top
     editCutModal.addSection({
@@ -1753,7 +1773,7 @@ async function setupEditCutForm(editCutModal, cut) {
             if (fieldsContainer) {
                 const remnantHtml = `
                     <div class="col-12">
-                        <div class="d-flex justify-content-between align-items-center">
+                        <div class="d-flex justify-content-between align-items-center mb-3">
                             <div>
                                 <button type="button" class="btn btn-outline-info" id="select-remnant-btn-edit">
                                     <i class="fas fa-layer-group me-2"></i>Fire Plaka Seç
@@ -1768,6 +1788,11 @@ async function setupEditCutForm(editCutModal, cut) {
                                     <i class="fas fa-times"></i>
                                 </button>
                             </div>
+                        </div>
+                        <div id="quantity-used-container-edit" style="display: none;" class="mb-2">
+                            <label for="quantity-used-input-edit" class="form-label">Kullanılacak Adet</label>
+                            <input type="number" id="quantity-used-input-edit" class="form-control" min="1" step="1" value="${quantityUsed}" placeholder="1">
+                            <small class="form-text text-muted">Bu plakadan kaç adet kullanılacak (varsayılan: 1)</small>
                         </div>
                     </div>
                 `;
@@ -1786,7 +1811,16 @@ async function setupEditCutForm(editCutModal, cut) {
                 if (clearBtn) {
                     clearBtn.addEventListener('click', () => {
                         selectedRemnantPlate = null;
+                        quantityUsed = 1;
                         updateSelectedRemnantDisplayEdit();
+                    });
+                }
+                
+                // Add event listener for quantity used input
+                const quantityUsedInput = editCutModal.container.querySelector('#quantity-used-input-edit');
+                if (quantityUsedInput) {
+                    quantityUsedInput.addEventListener('change', (e) => {
+                        quantityUsed = parseInt(e.target.value) || 1;
                     });
                 }
                 
@@ -2813,7 +2847,8 @@ async function handleEditCutSave(formData, cutKey) {
         machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
         estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null,
         quantity: formData['cut-quantity'] ? parseInt(formData['cut-quantity']) : null,
-        selected_plate: selectedRemnantPlate ? selectedRemnantPlate.id : null
+        selected_plate: selectedRemnantPlate ? selectedRemnantPlate.id : null,
+        quantity_used: selectedRemnantPlate ? quantityUsed : null
     };
     
     
@@ -3392,12 +3427,22 @@ function updateSelectedRemnantDisplay() {
     const info = createCutModal.container.querySelector('#selected-remnant-info');
     const selectBtn = createCutModal.container.querySelector('#select-remnant-btn');
     const badge = createCutModal.container.querySelector('#selected-remnant-badge');
+    const quantityContainer = createCutModal.container.querySelector('#quantity-used-container');
+    const quantityInput = createCutModal.container.querySelector('#quantity-used-input');
     
     if (display && info && selectBtn) {
         if (selectedRemnantPlate) {
             display.style.display = 'block';
             info.textContent = `ID: ${selectedRemnantPlate.id}`;
             selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Fire Plaka Değiştir';
+            
+            // Show quantity used input
+            if (quantityContainer) {
+                quantityContainer.style.display = 'block';
+            }
+            if (quantityInput) {
+                quantityInput.value = quantityUsed;
+            }
             
             // Add click handler to badge if it exists
             if (badge) {
@@ -3411,6 +3456,11 @@ function updateSelectedRemnantDisplay() {
         } else {
             display.style.display = 'none';
             selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Fire Plaka Seç';
+            
+            // Hide quantity used input
+            if (quantityContainer) {
+                quantityContainer.style.display = 'none';
+            }
         }
     }
 }
@@ -3422,12 +3472,22 @@ function updateSelectedRemnantDisplayEdit() {
     const info = editCutModal.container.querySelector('#selected-remnant-info-edit');
     const selectBtn = editCutModal.container.querySelector('#select-remnant-btn-edit');
     const badge = editCutModal.container.querySelector('#selected-remnant-badge-edit');
+    const quantityContainer = editCutModal.container.querySelector('#quantity-used-container-edit');
+    const quantityInput = editCutModal.container.querySelector('#quantity-used-input-edit');
     
     if (display && info && selectBtn) {
         if (selectedRemnantPlate) {
             display.style.display = 'block';
             info.textContent = `ID: ${selectedRemnantPlate.id}`;
             selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Fire Plaka Değiştir';
+            
+            // Show quantity used input
+            if (quantityContainer) {
+                quantityContainer.style.display = 'block';
+            }
+            if (quantityInput) {
+                quantityInput.value = quantityUsed;
+            }
             
             // Add click handler to badge if it exists
             if (badge) {
@@ -3441,6 +3501,11 @@ function updateSelectedRemnantDisplayEdit() {
         } else {
             display.style.display = 'none';
             selectBtn.innerHTML = '<i class="fas fa-layer-group me-2"></i>Fire Plaka Seç';
+            
+            // Hide quantity used input
+            if (quantityContainer) {
+                quantityContainer.style.display = 'none';
+            }
         }
     }
 }
@@ -3696,6 +3761,8 @@ function initializeRemnantSelectionTable() {
                 title: 'Bu plakayı seç',
                 onClick: (row) => {
                     selectedRemnantPlate = row;
+                    // Reset quantity_used to 1 when selecting a new plate
+                    quantityUsed = 1;
                     updateSelectedRemnantDisplay();
                     updateSelectedRemnantDisplayEdit();
                     

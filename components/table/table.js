@@ -1101,6 +1101,10 @@ export class TableComponent {
                     if (col.type === 'boolean') {
                         return value ? 'Evet' : 'Hayır';
                     } else if (col.type === 'number' || (typeof value === 'number' && !isNaN(value))) {
+                        // Check if value is null or undefined before formatting
+                        if (value === null || value === undefined || isNaN(value)) {
+                            return '-';
+                        }
                         // Format numbers with comma as decimal separator (Turkish locale)
                         return value.toLocaleString('tr-TR', { 
                             minimumFractionDigits: 2, 
@@ -1110,13 +1114,16 @@ export class TableComponent {
                         // Use formatter but strip HTML tags
                         const formatted = col.formatter(value, row);
                         const stripped = this.stripHtmlTags(formatted);
-                        // Check if the stripped value is a number and format it
-                        const numValue = parseFloat(stripped.replace(/[^\d,.-]/g, '').replace(',', '.'));
-                        if (!isNaN(numValue) && stripped.match(/[\d,.-]/)) {
-                            return numValue.toLocaleString('tr-TR', { 
-                                minimumFractionDigits: 2, 
-                                maximumFractionDigits: 2 
-                            });
+                        // Only try to parse as number if column is explicitly marked as type 'number'
+                        // This prevents parsing strings like "1160x6000" or "ST37" as numbers
+                        if (col.type === 'number') {
+                            const numValue = parseFloat(stripped.replace(/[^\d,.-]/g, '').replace(',', '.'));
+                            if (!isNaN(numValue) && stripped.match(/[\d,.-]/)) {
+                                return numValue.toLocaleString('tr-TR', { 
+                                    minimumFractionDigits: 2, 
+                                    maximumFractionDigits: 2 
+                                });
+                            }
                         }
                         return stripped;
                     } else {

@@ -109,6 +109,11 @@ export async function createCncTask(taskData) {
             formData.append('selected_plate', taskData.selected_plate);
         }
         
+        // Add quantity_used if provided
+        if (taskData.quantity_used !== undefined && taskData.quantity_used !== null) {
+            formData.append('quantity_used', taskData.quantity_used);
+        }
+        
         // Add files if provided
         if (taskData.files && taskData.files.length > 0) {
             taskData.files.forEach(file => {
@@ -168,6 +173,11 @@ export async function updateCncTask(taskId, taskData) {
         // Always include selected_plate when defined (even if null) to allow removal
         if (taskData.selected_plate !== undefined) {
             formData.append('selected_plate', taskData.selected_plate === null ? '' : taskData.selected_plate);
+        }
+        
+        // Add quantity_used if provided
+        if (taskData.quantity_used !== undefined && taskData.quantity_used !== null) {
+            formData.append('quantity_used', taskData.quantity_used);
         }
         
         // Add nesting file if provided
