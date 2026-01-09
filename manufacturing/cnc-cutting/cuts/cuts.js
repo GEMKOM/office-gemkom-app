@@ -1325,7 +1325,8 @@ function setupCreateCutForm(createCutModal) {
                         <div id="quantity-used-container" style="display: none;" class="mb-2">
                             <label for="quantity-used-input" class="form-label">Kullanılacak Adet</label>
                             <input type="number" id="quantity-used-input" class="form-control" min="1" step="1" value="1" placeholder="1">
-                            <small class="form-text text-muted">Bu plakadan kaç adet kullanılacak (varsayılan: 1)</small>
+                            <small class="form-text text-muted" id="quantity-used-help-text">Bu plakadan kaç adet kullanılacak (varsayılan: 1)</small>
+                            <div class="invalid-feedback" id="quantity-used-error" style="display: none;"></div>
                         </div>
                     </div>
                 `;
@@ -1363,7 +1364,10 @@ function setupCreateCutForm(createCutModal) {
                 const quantityUsedInput = createCutModal.container.querySelector('#quantity-used-input');
                 if (quantityUsedInput) {
                     quantityUsedInput.addEventListener('change', (e) => {
-                        quantityUsed = parseInt(e.target.value) || 1;
+                        validateQuantityUsed(quantityUsedInput, 'quantity-used-error', 'quantity-used-help-text');
+                    });
+                    quantityUsedInput.addEventListener('input', (e) => {
+                        validateQuantityUsed(quantityUsedInput, 'quantity-used-error', 'quantity-used-help-text');
                     });
                 }
                 
@@ -1802,7 +1806,8 @@ async function setupEditCutForm(editCutModal, cut) {
                         <div id="quantity-used-container-edit" style="display: none;" class="mb-2">
                             <label for="quantity-used-input-edit" class="form-label">Kullanılacak Adet</label>
                             <input type="number" id="quantity-used-input-edit" class="form-control" min="1" step="1" value="${quantityUsed}" placeholder="1">
-                            <small class="form-text text-muted">Bu plakadan kaç adet kullanılacak (varsayılan: 1)</small>
+                            <small class="form-text text-muted" id="quantity-used-help-text-edit">Bu plakadan kaç adet kullanılacak (varsayılan: 1)</small>
+                            <div class="invalid-feedback" id="quantity-used-error-edit" style="display: none;"></div>
                         </div>
                     </div>
                 `;
@@ -1840,7 +1845,10 @@ async function setupEditCutForm(editCutModal, cut) {
                 const quantityUsedInput = editCutModal.container.querySelector('#quantity-used-input-edit');
                 if (quantityUsedInput) {
                     quantityUsedInput.addEventListener('change', (e) => {
-                        quantityUsed = parseInt(e.target.value) || 1;
+                        validateQuantityUsed(quantityUsedInput, 'quantity-used-error-edit', 'quantity-used-help-text-edit');
+                    });
+                    quantityUsedInput.addEventListener('input', (e) => {
+                        validateQuantityUsed(quantityUsedInput, 'quantity-used-error-edit', 'quantity-used-help-text-edit');
                     });
                 }
                 
@@ -3440,6 +3448,40 @@ window.deletePart = deletePart;
 window.deleteFile = deleteFile;
 window.viewFile = viewFile;
 window.downloadFile = downloadFile;
+
+function validateQuantityUsed(inputElement, errorElementId, helpTextElementId) {
+    if (!selectedRemnantPlate || !inputElement) return;
+    
+    const enteredValue = parseInt(inputElement.value) || 0;
+    const availableQuantity = selectedRemnantPlate.available_quantity !== undefined && selectedRemnantPlate.available_quantity !== null 
+        ? parseInt(selectedRemnantPlate.available_quantity) 
+        : null;
+    
+    const errorElement = inputElement.closest('.mb-2')?.querySelector(`#${errorElementId}`);
+    
+    if (availableQuantity !== null && enteredValue > availableQuantity) {
+        // Show error and reset to max
+        quantityUsed = availableQuantity;
+        inputElement.value = availableQuantity;
+        inputElement.classList.add('is-invalid');
+        
+        if (errorElement) {
+            errorElement.textContent = `Maksimum ${availableQuantity} adet kullanılabilir`;
+            errorElement.style.display = 'block';
+        }
+        
+        showNotification(`Maksimum ${availableQuantity} adet kullanılabilir`, 'warning');
+    } else {
+        // Valid value
+        quantityUsed = enteredValue >= 1 ? enteredValue : 1;
+        inputElement.classList.remove('is-invalid');
+        
+        if (errorElement) {
+            errorElement.style.display = 'none';
+        }
+    }
+}
+
 function updateSelectedRemnantDisplay() {
     if (!createCutModal || !createCutModal.container) return;
     
@@ -3461,7 +3503,32 @@ function updateSelectedRemnantDisplay() {
                 quantityContainer.style.display = 'block';
             }
             if (quantityInput) {
+                const availableQuantity = selectedRemnantPlate.available_quantity !== undefined && selectedRemnantPlate.available_quantity !== null 
+                    ? parseInt(selectedRemnantPlate.available_quantity) 
+                    : null;
+                
+                // Set max attribute based on available_quantity
+                if (availableQuantity !== null) {
+                    quantityInput.setAttribute('max', availableQuantity);
+                    // Ensure quantityUsed doesn't exceed available_quantity
+                    if (quantityUsed > availableQuantity) {
+                        quantityUsed = availableQuantity;
+                    }
+                } else {
+                    quantityInput.removeAttribute('max');
+                }
+                
                 quantityInput.value = quantityUsed;
+                
+                // Update help text
+                const helpText = createCutModal.container.querySelector('#quantity-used-help-text');
+                if (helpText) {
+                    if (availableQuantity !== null) {
+                        helpText.textContent = `Bu plakadan kaç adet kullanılacak (Maksimum: ${availableQuantity})`;
+                    } else {
+                        helpText.textContent = 'Bu plakadan kaç adet kullanılacak (varsayılan: 1)';
+                    }
+                }
             }
             
             // Add click handler to badge if it exists
@@ -3506,7 +3573,32 @@ function updateSelectedRemnantDisplayEdit() {
                 quantityContainer.style.display = 'block';
             }
             if (quantityInput) {
+                const availableQuantity = selectedRemnantPlate.available_quantity !== undefined && selectedRemnantPlate.available_quantity !== null 
+                    ? parseInt(selectedRemnantPlate.available_quantity) 
+                    : null;
+                
+                // Set max attribute based on available_quantity
+                if (availableQuantity !== null) {
+                    quantityInput.setAttribute('max', availableQuantity);
+                    // Ensure quantityUsed doesn't exceed available_quantity
+                    if (quantityUsed > availableQuantity) {
+                        quantityUsed = availableQuantity;
+                    }
+                } else {
+                    quantityInput.removeAttribute('max');
+                }
+                
                 quantityInput.value = quantityUsed;
+                
+                // Update help text
+                const helpText = editCutModal.container.querySelector('#quantity-used-help-text-edit');
+                if (helpText) {
+                    if (availableQuantity !== null) {
+                        helpText.textContent = `Bu plakadan kaç adet kullanılacak (Maksimum: ${availableQuantity})`;
+                    } else {
+                        helpText.textContent = 'Bu plakadan kaç adet kullanılacak (varsayılan: 1)';
+                    }
+                }
             }
             
             // Add click handler to badge if it exists
@@ -3793,12 +3885,12 @@ function initializeRemnantSelectionTable() {
                 formatter: (value) => value || '-'
             },
             {
-                field: 'quantity',
+                field: 'available_quantity',
                 label: 'Adet',
                 sortable: true,
                 width: '10%',
                 type: 'number',
-                formatter: (value) => value ? `${value}` : '-'
+                formatter: (value) => value !== undefined && value !== null ? `${value}` : '-'
             },
             {
                 field: 'material',
@@ -3817,8 +3909,11 @@ function initializeRemnantSelectionTable() {
                 title: 'Bu plakayı seç',
                 onClick: (row) => {
                     selectedRemnantPlate = row;
-                    // Reset quantity_used to 1 when selecting a new plate
-                    quantityUsed = 1;
+                    // Reset quantity_used to 1 when selecting a new plate, but ensure it doesn't exceed available_quantity
+                    const availableQuantity = row.available_quantity !== undefined && row.available_quantity !== null 
+                        ? parseInt(row.available_quantity) 
+                        : null;
+                    quantityUsed = availableQuantity !== null && availableQuantity < 1 ? availableQuantity : 1;
                     updateSelectedRemnantDisplay();
                     updateSelectedRemnantDisplayEdit();
                     
