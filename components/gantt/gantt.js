@@ -34,7 +34,6 @@ class GanttChart {
 
         // Validate that defaultPeriod is in availableViews
         if (!this.options.availableViews.includes(this.options.defaultPeriod)) {
-            console.warn(`Default period '${this.options.defaultPeriod}' is not in availableViews. Using first available view: '${this.options.availableViews[0]}'`);
             this.options.defaultPeriod = this.options.availableViews[0];
         }
 
@@ -146,7 +145,6 @@ class GanttChart {
     setPeriod(period) {
         // Validate that the period is available
         if (!this.options.availableViews.includes(period)) {
-            console.warn(`Period '${period}' is not in availableViews. Available views: ${this.options.availableViews.join(', ')}`);
             return;
         }
 
@@ -229,7 +227,6 @@ class GanttChart {
     updateCurrentPeriodIndicator() {
         const periodElement = this.container.querySelector('#gantt-current-period');
         if (!periodElement) {
-            console.log('Period element not found in container:', this.container);
             return;
         }
         
@@ -268,8 +265,6 @@ class GanttChart {
         const periodLabelSpan = periodElement.querySelector('.period-label');
         if (periodLabelSpan) {
             periodLabelSpan.textContent = periodLabel;
-        } else {
-            console.log('Period label span not found');
         }
     }
 
@@ -335,14 +330,11 @@ class GanttChart {
             // If no machine calendar, use basic weekend filtering
             return this.hasWorkingDaysBasic(taskStart, taskEnd);
         });
-        
-        console.log(`Filtered ${this.tasks.length} tasks for current view period`);
     }
 
     showSkeletonLoading() {
         const chartContainer = this.container.querySelector('#gantt-chart');
         if (!chartContainer) {
-            console.error('Chart container not found');
             return;
         }
 
@@ -461,13 +453,7 @@ class GanttChart {
         const chartContainer = this.container.querySelector('#gantt-chart');
         const dateOverlay = this.container.querySelector('#gantt-date-overlay');
         
-        console.log('GanttChart.renderChart() called');
-        console.log('Tasks:', this.tasks);
-        console.log('Current period:', this.currentPeriod);
-        console.log('Current date:', this.currentDate);
-        
         if (!chartContainer) {
-            console.error('Chart container not found');
             return;
         }
 
@@ -475,7 +461,6 @@ class GanttChart {
 
         // Always calculate view range and create timeline structure
         this.calculateViewRange();
-        console.log('View range:', this.viewStart, 'to', this.viewEnd);
 
         // Handle tasks (if any)
         let sortedTasks = [];
@@ -484,11 +469,7 @@ class GanttChart {
         if (this.tasks.length > 0) {
             // Sort tasks by plan_order
             sortedTasks = [...this.tasks].sort((a, b) => (a.plan_order || 0) - (b.plan_order || 0));
-            console.log('Sorted tasks:', sortedTasks);
             visibleTasks = sortedTasks;
-            console.log('Visible tasks:', visibleTasks);
-        } else {
-            console.log('No tasks available');
         }
 
         // Generate timeline header
@@ -578,11 +559,6 @@ class GanttChart {
             
             // Note: Day view scroll position is set later in the method
         }
-        
-        // Debug: Log the generated HTML structure
-        console.log('Generated HTML structure:', chartContainer.innerHTML);
-        console.log('Timeline header length:', timelineHeader.length);
-        console.log('Task bars count:', visibleTasks.length);
 
         // Update the period indicator in the header
         this.updateCurrentPeriodIndicator();
@@ -596,8 +572,6 @@ class GanttChart {
         this.bindTaskEvents();
         
         // Note: Scroll position for day view is now handled in setTasks() when data is loaded
-        
-        console.log('Chart rendered successfully');
     }
 
     // Centralized width calculation method
@@ -672,8 +646,6 @@ class GanttChart {
                 this.viewEnd = new Date(date.getFullYear(), 11, 31, 23, 59, 59, 999);
                 break;
         }
-        
-        console.log(`View range for ${this.currentPeriod} based on date:`, this.viewStart, 'to', this.viewEnd);
     }
 
     generateTimelineHeader() {
@@ -735,7 +707,6 @@ class GanttChart {
                 // Daily view for current month - fit in visible area
                 const totalDaysInMonth = new Date(this.viewStart.getFullYear(), this.viewStart.getMonth() + 1, 0).getDate();
                 const monthDayWidth = this.calculateCellWidth();
-                console.log('totalDaysInMonth', totalDaysInMonth);
                 for (let i = 0; i < totalDaysInMonth; i++) {
                     const currentDate = new Date(this.viewStart.getFullYear(), this.viewStart.getMonth(), i + 1);
                     

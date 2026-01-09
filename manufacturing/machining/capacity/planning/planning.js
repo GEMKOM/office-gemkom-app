@@ -23,6 +23,7 @@ let isLoadingTasks = false;
 let ganttChart = null;
 let machineCalendar = null;
 let isInlineEditing = false; // Flag to prevent multiple simultaneous inline edits
+let inlineEditingSetup = false; // Track if event delegation is already set up
 
 // Change tracking for efficient submissions
 let originalTasks = []; // Store original state for comparison
@@ -506,7 +507,11 @@ function initTasksTable() {
             title: 'Planlanmış Operasyonlar',
             icon: 'tasks',
             iconColor: 'text-success',
-            rowAttributes: (row, rowIndex) => `data-task-key="${row.key}"`,
+            rowAttributes: (row, rowIndex) => {
+                const baseAttr = `data-task-key="${row.key}"`;
+                const unplannedAttr = !row.in_plan ? ' data-unplanned="true"' : '';
+                return baseAttr + unplannedAttr;
+            },
             skeleton: true,
             skeletonRows: 5,
             columns: [
@@ -576,11 +581,18 @@ function initTasksTable() {
                     label: 'İşlemler',
                     sortable: false,
                     width: '100px',
-                    formatter: (value, row) => `
-                        <button class="btn btn-outline-danger btn-sm" onclick="removeFromPlan('${row.key}')" title="Plandan Çıkar">
-                            <i class="fas fa-times"></i>
-                        </button>
-                    `
+                    formatter: (value, row) => {
+                        // Only show remove button for planned tasks
+                        if (row.in_plan) {
+                            return `
+                                <button class="btn btn-outline-danger btn-sm" onclick="removeFromPlan('${row.key}')" title="Plandan Çıkar">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            `;
+                        }
+                        // For unplanned tasks, show nothing or a placeholder
+                        return '<span class="text-muted">-</span>';
+                    }
                 }
             ],
             sortable: true,
@@ -787,13 +799,18 @@ async function loadMachineTasks(machineId) {
         // Initialize change tracking with original state
         resetChangeTracking();
         
-        // Separate planned and unplanned tasks
-        const planned = tasks.filter(task => task.in_plan);
-        const unplanned = tasks.filter(task => !task.in_plan);
+        // Separate planned and unplanned tasks (optimize with single pass)
+        const planned = [];
+        const unplanned = [];
+        tasks.forEach(task => {
+            if (task.in_plan) {
+                planned.push(task);
+            } else {
+                unplanned.push(task);
+            }
+        });
         
-        
-        renderTasksTable(planned);
-        renderUnplannedTasksTable(unplanned);
+        renderTasksTable(planned, unplanned);
         updateGanttChart(planned);
         
     } catch (error) {
@@ -802,92 +819,91 @@ async function loadMachineTasks(machineId) {
 }
 
 // Render tasks table
-function renderTasksTable(tasks) {
+function renderTasksTable(plannedTasks, unplannedTasks = []) {
     if (!tasksTable) {
         return;
     }
 
     // Turn off loading state
     tasksTable.setLoading(false);
-    // Sort tasks by plan_order
-    const sortedTasks = [...tasks].sort((a, b) => (a.plan_order || 0) - (b.plan_order || 0));
+    // Sort planned tasks by plan_order
+    const sortedPlannedTasks = [...plannedTasks].sort((a, b) => (a.plan_order || 0) - (b.plan_order || 0));
+    
+    // Combine planned and unplanned tasks (unplanned at the bottom)
+    const allTasks = [...sortedPlannedTasks, ...unplannedTasks];
 
     // Update the table with new data
-    tasksTable.updateData(sortedTasks);
-    // Setup inline editing after table is updated
-    setTimeout(() => {
-        setupInlineEditing();
-    }, 100);
-}
-
-// Render unplanned tasks table
-function renderUnplannedTasksTable(tasks) {
-    const tbody = document.getElementById('unplanned-operations-table-body');
-    if (!tbody) return;
-
-    if (tasks.length === 0) {
-        tbody.innerHTML = `
-            <tr>
-                <td colspan="5" class="text-center text-muted">
-                    <i class="fas fa-check-circle me-2"></i>
-                    Tüm operasyonlar planlanmış
-                </td>
-            </tr>
-        `;
-        return;
-    }
-
-    tbody.innerHTML = tasks.map(task => {
-        const operationName = task.name ? ` <span class="text-muted">(${task.name})</span>` : '';
-        return `
-        <tr class="unplanned-task-row" data-task-key="${task.key}">
-            <td><strong>${task.key}</strong>${operationName}</td>
-            <td>${task.part_name || '-'}</td>
-            <td>
-                <span class="editable-cell" data-field="estimated_hours" data-task-key="${task.key}">
-                    ${task.estimated_hours ? `${task.estimated_hours}h` : '-'}
-                </span>
-            </td>
-            <td>
-                <button class="btn btn-success btn-sm" onclick="addToPlan('${task.key}')" title="Plana Ekle">
-                    <i class="fas fa-plus"></i>
-                </button>
-            </td>
-        </tr>
-    `;
-    }).join('');
+    tasksTable.updateData(allTasks);
     
-    // Setup inline editing for unplanned tasks after rendering
-    setTimeout(() => {
-        setupInlineEditing();
-    }, 100);
+    // Setup inline editing once using event delegation (more efficient)
+    if (!inlineEditingSetup) {
+        setupInlineEditingDelegation();
+        inlineEditingSetup = true;
+    }
+    
+    // Use requestAnimationFrame for efficient DOM updates
+    requestAnimationFrame(() => {
+        // Mark unplanned task rows with colored background using CSS classes instead of inline styles
+        const tableBody = tasksTable.container.querySelector('tbody');
+        if (tableBody) {
+            const tableRows = tableBody.querySelectorAll('tr');
+            const plannedCount = sortedPlannedTasks.length;
+            
+            // Use DocumentFragment for batch DOM updates
+            tableRows.forEach((row, index) => {
+                const isUnplanned = row.getAttribute('data-unplanned') === 'true' || index >= plannedCount;
+                if (isUnplanned) {
+                    row.classList.add('unplanned-task-row');
+                    row.style.backgroundColor = '#fff3cd'; // Light yellow/warning color
+                } else {
+                    row.classList.remove('unplanned-task-row');
+                    row.style.backgroundColor = '';
+                }
+            });
+        }
+    });
+}
+
+// Render unplanned tasks table (deprecated - now included in main table)
+function renderUnplannedTasksTable(tasks) {
+    // This function is no longer used, but kept for compatibility
+    // Unplanned tasks are now displayed in the main table
 }
 
 
-// Update Gantt chart with tasks
+// Update Gantt chart with tasks (debounced for performance)
+let ganttUpdateTimeout = null;
 function updateGanttChart(tasks) {
     if (!ganttChart) {
         return;
     }
 
-    // Transform tasks to match the Gantt component's expected format
-    const transformedTasks = tasks.map(task => ({
-        id: task.key,
-        title: task.name,
-        name: task.name,
-        key: task.key,
-        ti_number: task.key, // Add TI number for gantt display
-        planned_start_ms: task.planned_start_ms,
-        planned_end_ms: task.planned_end_ms,
-        plan_order: task.plan_order,
-        plan_locked: task.plan_locked
-    }));
-    // Pass machine calendar to Gantt chart for working hours display
-    if (machineCalendar) {
-        ganttChart.setMachineCalendar(machineCalendar);
+    // Debounce Gantt chart updates to avoid excessive re-renders
+    if (ganttUpdateTimeout) {
+        clearTimeout(ganttUpdateTimeout);
     }
     
-    ganttChart.setTasks(transformedTasks);
+    ganttUpdateTimeout = setTimeout(() => {
+        // Transform tasks to match the Gantt component's expected format
+        const transformedTasks = tasks.map(task => ({
+            id: task.key,
+            title: task.name,
+            name: task.name,
+            key: task.key,
+            ti_number: task.key, // Add TI number for gantt display
+            planned_start_ms: task.planned_start_ms,
+            planned_end_ms: task.planned_end_ms,
+            plan_order: task.plan_order,
+            plan_locked: task.plan_locked
+        }));
+        // Pass machine calendar to Gantt chart for working hours display
+        if (machineCalendar) {
+            ganttChart.setMachineCalendar(machineCalendar);
+        }
+        
+        ganttChart.setTasks(transformedTasks);
+        ganttUpdateTimeout = null;
+    }, 150); // Debounce by 150ms
 }
 
 // Reorder tasks and update plan_order
@@ -897,48 +913,76 @@ function reorderTasks(draggedTaskKey, targetTaskKey, insertPosition = 'after') {
     
     if (!draggedTask || !targetTask) return;
     
-    // Get all planned tasks sorted by current order
-    const plannedTasks = currentTasks.filter(t => t.in_plan).sort((a, b) => (a.plan_order || 0) - (b.plan_order || 0));
+    // Optimize: Pre-separate tasks to avoid multiple filters
+    const plannedTasks = [];
+    const unplannedTasks = [];
+    currentTasks.forEach(task => {
+        if (task.in_plan) {
+            plannedTasks.push(task);
+        } else {
+            unplannedTasks.push(task);
+        }
+    });
     
-    // Find indices
-    const draggedIndex = plannedTasks.findIndex(t => t.key === draggedTaskKey);
-    const targetIndex = plannedTasks.findIndex(t => t.key === targetTaskKey);
+    // Sort planned tasks by plan_order
+    plannedTasks.sort((a, b) => (a.plan_order || 0) - (b.plan_order || 0));
+    
+    // Combine for finding indices
+    const allTasks = [...plannedTasks, ...unplannedTasks];
+    
+    // Find indices in the combined array
+    const draggedIndex = allTasks.findIndex(t => t.key === draggedTaskKey);
+    const targetIndex = allTasks.findIndex(t => t.key === targetTaskKey);
     
     if (draggedIndex === -1 || targetIndex === -1) return;
     
+    // If dragging an unplanned task, add it to plan
+    if (!draggedTask.in_plan) {
+        draggedTask.in_plan = true;
+        draggedTask.plan_locked = false;
+        markTaskAsChanged(draggedTaskKey);
+    }
+    
     // Remove dragged task from array
-    plannedTasks.splice(draggedIndex, 1);
+    allTasks.splice(draggedIndex, 1);
     
     // Calculate new index based on insert position
     let newIndex;
     if (insertPosition === 'before') {
-        // Insert before the target task
         newIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
     } else {
-        // Insert after the target task (default behavior)
-        newIndex = draggedIndex < targetIndex ? targetIndex - 1 : targetIndex;
+        newIndex = draggedIndex < targetIndex ? targetIndex : targetIndex + 1;
     }
     
     // Ensure newIndex is within bounds
-    newIndex = Math.max(0, Math.min(newIndex, plannedTasks.length));
+    newIndex = Math.max(0, Math.min(newIndex, allTasks.length));
     
     // Insert at new position
-    plannedTasks.splice(newIndex, 0, draggedTask);
+    allTasks.splice(newIndex, 0, draggedTask);
     
-    // Update plan_order for all tasks in the original currentTasks array
-    plannedTasks.forEach((task, index) => {
-        task.plan_order = index + 1;
-        // Also update the task in the original currentTasks array
-        const originalTask = currentTasks.find(t => t.key === task.key);
-        if (originalTask) {
-            originalTask.plan_order = index + 1;
-            markTaskAsChanged(task.key);
+    // Update plan_order for all planned tasks in a single pass
+    const changedKeys = new Set();
+    allTasks.forEach((task, index) => {
+        if (task.in_plan) {
+            const oldOrder = task.plan_order;
+            task.plan_order = index + 1;
+            
+            // Only mark as changed if order actually changed
+            if (oldOrder !== task.plan_order) {
+                changedKeys.add(task.key);
+            }
         }
     });
     
-    // Re-render the table and Gantt chart
-    const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
-    renderTasksTable(updatedPlannedTasks);
+    // Mark changed tasks in batch
+    changedKeys.forEach(key => markTaskAsChanged(key));
+    
+    // Re-separate for rendering (more efficient than filtering)
+    const updatedPlannedTasks = allTasks.filter(t => t.in_plan);
+    const updatedUnplannedTasks = allTasks.filter(t => !t.in_plan);
+    
+    // Re-render the table and Gantt chart with all tasks
+    renderTasksTable(updatedPlannedTasks, updatedUnplannedTasks);
     updateGanttChart(updatedPlannedTasks);
 }
 
@@ -966,9 +1010,9 @@ function addToPlan(taskKey) {
     
     // Update the display immediately
     const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
-    renderTasksTable(updatedPlannedTasks);
+    const updatedUnplannedTasks = currentTasks.filter(t => !t.in_plan);
+    renderTasksTable(updatedPlannedTasks, updatedUnplannedTasks);
     updateGanttChart(updatedPlannedTasks);
-    renderUnplannedTasksTable(currentTasks.filter(t => !t.in_plan));
     
     showNotification('Operasyon plana eklendi', 'success', 2000);
 }
@@ -989,9 +1033,9 @@ function removeFromPlan(taskKey) {
     
     // Update the display immediately
     const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
-    renderTasksTable(updatedPlannedTasks);
+    const updatedUnplannedTasks = currentTasks.filter(t => !t.in_plan);
+    renderTasksTable(updatedPlannedTasks, updatedUnplannedTasks);
     updateGanttChart(updatedPlannedTasks);
-    renderUnplannedTasksTable(currentTasks.filter(t => !t.in_plan));
     
     showNotification('Operasyon plandan çıkarıldı', 'info', 2000);
 }
@@ -1051,6 +1095,24 @@ async function confirmAutoschedule() {
         return;
     }
 
+    // Include all tasks (both planned and unplanned) for scheduling
+    // First, automatically add all unplanned tasks to plan
+    const unplannedTasks = currentTasks.filter(task => !task.in_plan);
+    if (unplannedTasks.length > 0) {
+        const plannedTasks = currentTasks.filter(task => task.in_plan);
+        const maxOrder = Math.max(...plannedTasks.map(t => t.plan_order || 0), 0);
+        
+        unplannedTasks.forEach((task, index) => {
+            task.in_plan = true;
+            task.plan_order = maxOrder + index + 1;
+            task.plan_locked = false;
+            task.planned_start_ms = null;
+            task.planned_end_ms = null;
+            markTaskAsChanged(task.key);
+        });
+    }
+    
+    // Now get all tasks (all should be in plan now)
     const tasksToSchedule = currentTasks.filter(task => task.in_plan);
     
     if (tasksToSchedule.length === 0) {
@@ -1110,8 +1172,10 @@ async function confirmAutoschedule() {
     modal.hide();
     
     // Update display (frontend only)
+    // All tasks should be in plan now after autoschedule
     const plannedTasks = currentTasks.filter(t => t.in_plan);
-    renderTasksTable(plannedTasks);
+    const remainingUnplannedTasks = currentTasks.filter(t => !t.in_plan);
+    renderTasksTable(plannedTasks, remainingUnplannedTasks);
     updateGanttChart(plannedTasks);
     
     showNotification('Operasyonlar otomatik olarak planlandı', 'success');
@@ -1119,13 +1183,30 @@ async function confirmAutoschedule() {
 
 // Save plan
 async function savePlan() {
-    if (!hasUnsavedChanges) {
-        showNotification('Kaydedilecek değişiklik bulunmuyor', 'info');
-        return;
-    }
-
     try {
-        // Get only the changed tasks
+        // Automatically add all unplanned tasks to the plan before saving
+        const unplannedTasks = currentTasks.filter(t => !t.in_plan);
+        
+        if (unplannedTasks.length > 0) {
+            // Find next available order
+            const plannedTasks = currentTasks.filter(t => t.in_plan);
+            const maxOrder = Math.max(...plannedTasks.map(t => t.plan_order || 0), 0);
+            
+            // Add all unplanned tasks to plan
+            unplannedTasks.forEach((task, index) => {
+                task.in_plan = true;
+                task.plan_order = maxOrder + index + 1;
+                task.plan_locked = false;
+                // Don't set any dates initially - they should be empty
+                task.planned_start_ms = null;
+                task.planned_end_ms = null;
+                markTaskAsChanged(task.key);
+            });
+            
+            showNotification(`${unplannedTasks.length} planlanmamış operasyon plana eklendi`, 'info', 3000);
+        }
+        
+        // Get all changed tasks (including newly added unplanned tasks)
         const changedTasks = getChangedTasks();
         
         if (changedTasks.length === 0) {
@@ -1169,6 +1250,12 @@ async function savePlan() {
         });
         
         const result = await bulkSaveOperationsPlanning(updateData);
+        
+        // Reload tasks to get updated state
+        if (currentMachineId) {
+            await loadMachineTasks(currentMachineId);
+        }
+        
         // Reset change tracking after successful save
         resetChangeTracking();
         showNotification('Plan başarıyla kaydedildi', 'success');
@@ -1284,20 +1371,6 @@ function updateMachineTaskCount(machineId, count) {
 
 // Setup event listeners
 function setupEventListeners() {
-    // Toggle unplanned tasks
-    document.getElementById('toggle-unplanned').addEventListener('click', () => {
-        const section = document.getElementById('unplanned-operations-section');
-        const button = document.getElementById('toggle-unplanned');
-        
-        if (section.style.display === 'none') {
-            section.style.display = 'block';
-            button.innerHTML = '<i class="fas fa-eye-slash me-1"></i>Planlanmamış Operasyonları Gizle';
-        } else {
-            section.style.display = 'none';
-            button.innerHTML = '<i class="fas fa-eye me-1"></i>Planlanmamış Operasyonlar';
-        }
-    });
-    
     // Autoschedule button
     document.getElementById('autoschedule-btn').addEventListener('click', autoscheduleTasks);
     
@@ -1362,34 +1435,47 @@ function showNotification(message, type = 'info', timeout = 5000) {
     }, timeout);
 }
 
-// Setup inline editing for editable cells
-function setupInlineEditing() {
-    const editableCells = document.querySelectorAll('.editable-cell');
+// Setup inline editing using event delegation (more efficient for large datasets)
+function setupInlineEditingDelegation() {
+    // Use event delegation on the table container instead of individual listeners
+    const tableContainer = tasksTable?.container;
+    if (!tableContainer) return;
     
-    editableCells.forEach(cell => {
-        cell.addEventListener('click', function(e) {
-            // Don't trigger if clicking on action buttons
-            if (e.target.closest('.action-buttons')) {
-                return;
-            }
-            
-            // Skip if already editing globally
-            if (isInlineEditing) {
-                return;
-            }
-            
-            const taskKey = this.dataset.taskKey;
-            const field = this.dataset.field;
-            const currentValue = this.textContent.trim();
-            
-            // Skip if already editing this cell
-            if (this.querySelector('input')) {
-                return;
-            }
-            
-            startInlineEdit(this, taskKey, field, currentValue);
-        });
-    });
+    // Remove any existing listener to avoid duplicates
+    tableContainer.removeEventListener('click', handleEditableCellClick);
+    
+    // Add single event listener using delegation
+    tableContainer.addEventListener('click', handleEditableCellClick);
+}
+
+// Event handler for editable cell clicks (used with event delegation)
+function handleEditableCellClick(e) {
+    // Find the closest editable cell
+    const cell = e.target.closest('.editable-cell');
+    if (!cell) return;
+    
+    // Don't trigger if clicking on action buttons
+    if (e.target.closest('.action-buttons')) {
+        return;
+    }
+    
+    // Skip if already editing globally
+    if (isInlineEditing) {
+        return;
+    }
+    
+    const taskKey = cell.dataset.taskKey;
+    const field = cell.dataset.field;
+    if (!taskKey || !field) return;
+    
+    const currentValue = cell.textContent.trim();
+    
+    // Skip if already editing this cell
+    if (cell.querySelector('input')) {
+        return;
+    }
+    
+    startInlineEdit(cell, taskKey, field, currentValue);
 }
 
 function startInlineEdit(cell, taskKey, field, currentValue) {
@@ -1629,17 +1715,12 @@ async function finishInlineEdit(cell, taskKey, field, newValue, originalContent)
                         originalTask.estimated_hours = updateValue;
                     }
                     
-                    // Update display with new value
+                    // Update display efficiently - only re-render if needed
+                    // For estimated_hours updates, we can update the cell directly without full re-render
                     const displayValue = updateValue ? `${updateValue}h` : '-';
                     if (cell && cell.parentNode) {
                         cell.innerHTML = displayValue;
                     }
-                    
-                    // Update both tables if needed
-                    const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
-                    renderTasksTable(updatedPlannedTasks);
-                    const updatedUnplannedTasks = currentTasks.filter(t => !t.in_plan);
-                    renderUnplannedTasksTable(updatedUnplannedTasks);
                     
                     showNotification('Tahmini saat güncellendi', 'success', 2000);
                 } catch (error) {
@@ -1655,10 +1736,22 @@ async function finishInlineEdit(cell, taskKey, field, newValue, originalContent)
                 // For other fields, use the existing bulk save mechanism
                 markTaskAsChanged(taskKey);
                 
-                // Update the display immediately
-                const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
-                renderTasksTable(updatedPlannedTasks);
-                updateGanttChart(updatedPlannedTasks);
+                // For date fields, update the cell directly without full table re-render
+                if (field === 'planned_start_ms' || field === 'planned_end_ms') {
+                    const displayValue = newValue ? formatDateTime(new Date(newValue).toISOString()) : '-';
+                    if (cell && cell.parentNode) {
+                        cell.innerHTML = `<div class="created-date">${displayValue}</div>`;
+                    }
+                    // Update Gantt chart only (more efficient than full table re-render)
+                    const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
+                    updateGanttChart(updatedPlannedTasks);
+                } else {
+                    // For other fields, update display
+                    const updatedPlannedTasks = currentTasks.filter(t => t.in_plan);
+                    const updatedUnplannedTasks = currentTasks.filter(t => !t.in_plan);
+                    renderTasksTable(updatedPlannedTasks, updatedUnplannedTasks);
+                    updateGanttChart(updatedPlannedTasks);
+                }
                 
                 showNotification('Operasyon güncellendi', 'success', 2000);
             }
@@ -1685,7 +1778,6 @@ async function finishInlineEdit(cell, taskKey, field, newValue, originalContent)
 }
 
 // Make functions globally available
-window.addToPlan = addToPlan;
 window.removeFromPlan = removeFromPlan;
 
 // Initialize when DOM is loaded
