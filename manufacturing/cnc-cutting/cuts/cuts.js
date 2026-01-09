@@ -1335,7 +1335,17 @@ function setupCreateCutForm(createCutModal) {
                 const selectBtn = createCutModal.container.querySelector('#select-remnant-btn');
                 if (selectBtn) {
                     selectBtn.addEventListener('click', () => {
-                        showSelectRemnantModal();
+                        // Get values from cut form fields
+                        const thickness = createCutModal.container.querySelector('#cut-thickness')?.value?.trim();
+                        const material = createCutModal.container.querySelector('#cut-material')?.value?.trim();
+                        const dimensions = createCutModal.container.querySelector('#cut-dimensions')?.value?.trim();
+                        
+                        // Pass filter values to modal
+                        showSelectRemnantModal({
+                            thickness: thickness || null,
+                            material: material || null,
+                            dimensions: dimensions || null
+                        });
                     });
                 }
                 
@@ -1802,7 +1812,17 @@ async function setupEditCutForm(editCutModal, cut) {
                 const selectBtn = editCutModal.container.querySelector('#select-remnant-btn-edit');
                 if (selectBtn) {
                     selectBtn.addEventListener('click', () => {
-                        showSelectRemnantModal();
+                        // Get values from cut form fields
+                        const thickness = editCutModal.container.querySelector('#cut-thickness')?.value?.trim();
+                        const material = editCutModal.container.querySelector('#cut-material')?.value?.trim();
+                        const dimensions = editCutModal.container.querySelector('#cut-dimensions')?.value?.trim();
+                        
+                        // Pass filter values to modal
+                        showSelectRemnantModal({
+                            thickness: thickness || null,
+                            material: material || null,
+                            dimensions: dimensions || null
+                        });
                     });
                 }
                 
@@ -3603,7 +3623,7 @@ async function showRemnantDetailsModal(remnantId) {
     }
 }
 
-function showSelectRemnantModal() {
+function showSelectRemnantModal(initialFilters = {}) {
     // Create modal for selecting remnant plate
     selectRemnantModal = new EditModal('select-remnant-modal-container', {
         title: 'Fire Plaka Seç',
@@ -3637,15 +3657,22 @@ function showSelectRemnantModal() {
     
     // Initialize filters and table after render
     setTimeout(() => {
-        initializeRemnantSelectionFilters();
+        initializeRemnantSelectionFilters(initialFilters);
         initializeRemnantSelectionTable();
+        
+        // If initial filters were provided, apply them automatically
+        if (initialFilters && (initialFilters.thickness || initialFilters.material || initialFilters.dimensions)) {
+            setTimeout(() => {
+                applyInitialFilters(initialFilters);
+            }, 200);
+        }
     }, 100);
     
     // Show the modal
     selectRemnantModal.show();
 }
 
-function initializeRemnantSelectionFilters() {
+function initializeRemnantSelectionFilters(initialFilters = {}) {
     const filterSection = selectRemnantModal.container.querySelector('[data-section-id="remnant-filters"]');
     if (!filterSection) return;
     
@@ -3677,22 +3704,51 @@ function initializeRemnantSelectionFilters() {
         id: 'remnant-thickness-mm-filter',
         label: 'Kalınlık (mm)',
         placeholder: 'örn. 10',
-        colSize: 2
+        colSize: 2,
+        value: initialFilters.thickness || ''
     });
     
     remnantFilters.addTextFilter({
         id: 'remnant-dimensions-filter',
         label: 'Boyutlar',
         placeholder: 'örn. 1200x800',
-        colSize: 2
+        colSize: 2,
+        value: initialFilters.dimensions || ''
     });
     
     remnantFilters.addTextFilter({
         id: 'remnant-material-filter',
         label: 'Malzeme',
         placeholder: 'Malzeme türü',
-        colSize: 2
+        colSize: 2,
+        value: initialFilters.material || ''
     });
+}
+
+function applyInitialFilters(initialFilters) {
+    if (!remnantFilters) return;
+    
+    // Build filter values object
+    const filterValues = {};
+    if (initialFilters.thickness) {
+        filterValues['remnant-thickness-mm-filter'] = initialFilters.thickness;
+    }
+    if (initialFilters.dimensions) {
+        filterValues['remnant-dimensions-filter'] = initialFilters.dimensions;
+    }
+    if (initialFilters.material) {
+        filterValues['remnant-material-filter'] = initialFilters.material;
+    }
+    
+    // Set filter values using FiltersComponent method
+    if (Object.keys(filterValues).length > 0) {
+        remnantFilters.setFilterValues(filterValues);
+        
+        // Automatically apply filters to load matching plates
+        setTimeout(() => {
+            loadRemnantSelectionTable(1);
+        }, 150);
+    }
 }
 
 function initializeRemnantSelectionTable() {
