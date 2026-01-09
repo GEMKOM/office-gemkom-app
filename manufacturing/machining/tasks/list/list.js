@@ -191,6 +191,20 @@ function initializeFiltersComponent() {
         colSize: 2
     });
 
+    partsFilters.addTextFilter({
+        id: 'image-no-filter',
+        label: 'Resim No',
+        placeholder: 'Resim numarası',
+        colSize: 2
+    });
+
+    partsFilters.addTextFilter({
+        id: 'position-no-filter',
+        label: 'Pozisyon No',
+        placeholder: 'Pozisyon numarası',
+        colSize: 2
+    });
+
     // Add dropdown filters
     partsFilters.addDropdownFilter({
         id: 'status-filter',
@@ -256,7 +270,11 @@ function initializeTableComponent() {
                 label: 'Parça No',
                 sortable: true,
                 width: '10%',
-                formatter: (value) => `<span class="part-key">${value || '-'}</span>`
+                formatter: (value, row) => {
+                    const partKey = value || '-';
+                    const taskKey = row?.task_key ? ` (${row.task_key})` : '';
+                    return `<span class="part-key">${partKey}${taskKey}</span>`;
+                }
             },
             {
                 field: 'name',
@@ -268,7 +286,7 @@ function initializeTableComponent() {
             {
                 field: 'description',
                 label: 'Açıklama',
-                sortable: true,
+                sortable: false,
                 width: '15%',
                 formatter: (value) => value || '-'
             },
@@ -282,21 +300,21 @@ function initializeTableComponent() {
             {
                 field: 'image_no',
                 label: 'Resim No',
-                sortable: true,
+                sortable: false,
                 width: '10%',
                 formatter: (value) => value || '-'
             },
             {
                 field: 'position_no',
                 label: 'Poz No',
-                sortable: true,
+                sortable: false,
                 width: '10%',
                 formatter: (value) => value || '-'
             },
             {
                 field: 'quantity',
                 label: 'Adet',
-                sortable: true,
+                sortable: false,
                 width: '8%',
                 type: 'number',
                 formatter: (value) => `<span class="quantity-badge">${value || 0}</span>`
@@ -304,14 +322,14 @@ function initializeTableComponent() {
             {
                 field: 'material',
                 label: 'Malzeme',
-                sortable: true,
+                sortable: false,
                 width: '9%',
                 formatter: (value) => value || '-'
             },
             {
                 field: 'weight_kg',
                 label: 'Ağırlık (kg)',
-                sortable: true,
+                sortable: false,
                 width: '8%',
                 type: 'number',
                 formatter: (value) => value ? `${parseFloat(value).toFixed(3)} kg` : '-'
@@ -319,7 +337,7 @@ function initializeTableComponent() {
             {
                 field: 'operation_count',
                 label: 'Operasyon Sayısı',
-                sortable: true,
+                sortable: false,
                 width: '8%',
                 editable: false,
                 formatter: (value) => `<span class="operation-count-badge">${value || 0}</span>`
@@ -327,7 +345,7 @@ function initializeTableComponent() {
             {
                 field: 'incomplete_operation_count',
                 label: 'Tamamlanmamış',
-                sortable: true,
+                sortable: false,
                 width: '8%',
                 editable: false,
                 formatter: (value) => {
@@ -538,6 +556,8 @@ function buildPartQuery(page = 1) {
     const keyFilter = filterValues['key-filter']?.trim();
     const nameFilter = filterValues['name-filter']?.trim();
     const jobNoFilter = filterValues['job-no-filter']?.trim();
+    const imageNoFilter = filterValues['image-no-filter']?.trim();
+    const positionNoFilter = filterValues['position-no-filter']?.trim();
     const statusFilter = filterValues['status-filter'] || '';
     const createdByFilter = filterValues['created-by-filter'] || '';
     
@@ -556,6 +576,8 @@ function buildPartQuery(page = 1) {
     
     if (nameFilter) filters.name = nameFilter;
     if (jobNoFilter) filters.job_no = jobNoFilter;
+    if (imageNoFilter) filters.image_no = imageNoFilter;
+    if (positionNoFilter) filters.position_no = positionNoFilter;
     
     // Add created_by filter
     if (createdByFilter) {
@@ -914,7 +936,8 @@ async function savePart() {
         const createdPart = await createPart(partData);
         
         if (createdPart) {
-            showNotification('Parça başarıyla oluşturuldu', 'success');
+            const partKey = createdPart.key || '-';
+            showNotification(`Parça başarıyla oluşturuldu: ${partKey}`, 'success');
             const modalElement = document.getElementById('createPartModal');
             if (modalElement) {
                 const modalInstance = bootstrap.Modal.getInstance(modalElement);
