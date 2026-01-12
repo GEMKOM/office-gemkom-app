@@ -1,6 +1,6 @@
 import { initNavbar } from '../../../../components/navbar.js';
 import { getParts, updatePart, deletePart, createPart, updatePartOperations, getPartsStats } from '../../../../apis/machining/parts.js';
-import { getOperations } from '../../../../apis/machining/operations.js';
+import { getOperations, markOperationCompleted, unmarkOperationCompleted } from '../../../../apis/machining/operations.js';
 import { fetchMachinesDropdown } from '../../../../apis/machines.js';
 import { authFetchUsers } from '../../../../apis/users.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
@@ -1212,6 +1212,25 @@ function createOperationRow(operation, isNew = false) {
             </td>
             <td class="text-center">
                 ${statusHtml}
+                ${operation.key ? `
+                    <div class="mt-2">
+                        ${isCompleted ? `
+                            <button type="button" class="btn btn-sm btn-outline-warning toggle-completion-btn" 
+                                    data-operation-key="${operation.key}" 
+                                    data-action="uncomplete"
+                                    title="Tamamlanmamış olarak işaretle">
+                                <i class="fas fa-undo me-1"></i>Geri Al
+                            </button>
+                        ` : `
+                            <button type="button" class="btn btn-sm btn-outline-success toggle-completion-btn" 
+                                    data-operation-key="${operation.key}" 
+                                    data-action="complete"
+                                    title="Tamamlandı olarak işaretle">
+                                <i class="fas fa-check me-1"></i>Tamamla
+                            </button>
+                        `}
+                    </div>
+                ` : ''}
             </td>
             <td class="text-center">
                 ${!isReadOnly ? `
@@ -1276,6 +1295,17 @@ function setupOperationsDetailEventListeners(part) {
     
     // Add event listeners for order changes to re-sort rows
     setupOrderChangeListeners();
+    
+    // Add event listeners for completion toggle buttons
+    document.querySelectorAll('.toggle-completion-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const operationKey = e.target.closest('.toggle-completion-btn').getAttribute('data-operation-key');
+            const action = e.target.closest('.toggle-completion-btn').getAttribute('data-action');
+            if (operationKey) {
+                await toggleOperationCompletion(operationKey, action === 'complete', part);
+            }
+        });
+    });
 }
 
 function setupOrderChangeListeners() {
@@ -1681,6 +1711,29 @@ async function saveOperationsChanges(part) {
     }
 }
 
+
+async function toggleOperationCompletion(operationKey, markAsCompleted, part) {
+    try {
+        let result;
+        if (markAsCompleted) {
+            result = await markOperationCompleted(operationKey);
+            showNotification('Operasyon tamamlandı olarak işaretlendi', 'success');
+        } else {
+            result = await unmarkOperationCompleted(operationKey);
+            showNotification('Operasyon tamamlanmamış olarak işaretlendi', 'info');
+        }
+        
+        if (result) {
+            // Reload operations to reflect the change
+            await showPartDetails(part.key);
+            // Also reload the parts list to update status
+            await loadParts(currentPage);
+        }
+    } catch (error) {
+        console.error('Error toggling operation completion:', error);
+        showNotification('Operasyon durumu değiştirilirken hata oluştu: ' + (error.message || 'Bilinmeyen hata'), 'error');
+    }
+}
 
 window.deletePartConfirm = function(partKey) {
     // Find the part to get its name
