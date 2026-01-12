@@ -83,11 +83,6 @@ export const NAVIGATION_STRUCTURE = {
                                 label: 'Görev Oluştur',
                                 icon: 'fas fa-plus-circle',
                                 children: {}
-                            },
-                            '/manufacturing/machining/tasks/pending': {
-                                label: 'Bekleyen Görevler',
-                                icon: 'fas fa-clock',
-                                children: {}
                             }
                         }
                     },

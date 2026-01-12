@@ -37,12 +37,6 @@ function initMachiningModule() {
                         icon: 'fas fa-plus-circle',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/machining/tasks/create'
-                    },
-                    {
-                        label: 'Bekleyen Görevler',
-                        icon: 'fas fa-clock',
-                        iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/manufacturing/machining/tasks/pending'
                     }
                 ]
             },

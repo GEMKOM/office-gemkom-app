@@ -586,9 +586,9 @@ function buildPartQuery(page = 1) {
     
     // Add status filter
     if (statusFilter === 'completed') {
-        filters.completion_date = 'not_null'; // This might need adjustment based on API
+        filters.completion_date__isnull = 'false';
     } else if (statusFilter === 'incomplete') {
-        filters.completion_date = 'null'; // This might need adjustment based on API
+        filters.completion_date__isnull = 'true';
     }
     
     // Add checkbox filters
@@ -1010,11 +1010,10 @@ function showPartDetailsModal(part, operations = []) {
                 <table class="table table-sm table-bordered">
                     <thead class="table-light">
                         <tr>
-                            <th style="width: 5%;">Sıra</th>
+                            <th style="width: 12%;">Key</th>
                             <th style="width: 15%;">Operasyon Adı</th>
                             <th style="width: 12%;">Açıklama</th>
                             <th style="width: 10%;">Makine</th>
-                            <th style="width: 8%;">Adet</th>
                             <th style="width: 9%;">Tahmini Saat</th>
                             <th style="width: 9%;">Harcanan Saat</th>
                             <th style="width: 7%;">Değiştirilebilir</th>
@@ -1023,7 +1022,7 @@ function showPartDetailsModal(part, operations = []) {
                         </tr>
                     </thead>
                     <tbody id="operations-detail-table-body">
-                        ${operations.length > 0 ? operations.map(op => createOperationRow(op)).join('') : '<tr class="empty-row"><td colspan="10" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>'}
+                        ${operations.length > 0 ? operations.map(op => createOperationRow(op)).join('') : '<tr class="empty-row"><td colspan="9" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>'}
                     </tbody>
                 </table>
             </div>
@@ -1174,7 +1173,7 @@ function createOperationRow(operation, isNew = false) {
     const descValue = escapeHtml(operation.description || '');
     const orderValue = operation.order || '';
     const estimatedHoursValue = operation.estimated_hours || '';
-    const quantityValue = operation.quantity || '';
+    const keyValue = escapeHtml(operation.key || '');
     
     // Build machine options HTML
     const machineOptionsHtml = machines.map(m => {
@@ -1185,7 +1184,8 @@ function createOperationRow(operation, isNew = false) {
     return `
         <tr data-operation-key="${operation.key || ''}" data-is-new="${isNew}" data-row-id="${rowId}">
             <td>
-                <input type="number" class="form-control form-control-sm operation-order" value="${orderValue}" min="1" ${isReadOnly ? 'readonly' : ''}>
+                <span class="operation-key-display">${keyValue || '-'}</span>
+                <input type="hidden" class="operation-order" value="${orderValue}">
             </td>
             <td>
                 <input type="text" class="form-control form-control-sm operation-name" value="${nameValue}" ${isReadOnly ? 'readonly' : ''}>
@@ -1198,9 +1198,6 @@ function createOperationRow(operation, isNew = false) {
                     <option value="">Makine seçin...</option>
                     ${machineOptionsHtml}
                 </select>
-            </td>
-            <td>
-                <input type="number" class="form-control form-control-sm operation-quantity" value="${quantityValue}" min="1" ${isReadOnly ? 'readonly' : ''}>
             </td>
             <td>
                 <input type="number" class="form-control form-control-sm operation-estimated-hours" value="${estimatedHoursValue}" step="0.01" min="0" ${isReadOnly ? 'readonly' : ''}>
@@ -1218,9 +1215,17 @@ function createOperationRow(operation, isNew = false) {
             </td>
             <td class="text-center">
                 ${!isReadOnly ? `
-                    <button type="button" class="btn btn-sm btn-outline-danger remove-operation-row-btn" title="Kaldır">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <div class="btn-group" role="group">
+                        <button type="button" class="btn btn-sm btn-outline-secondary move-up-btn" title="Yukarı Taşı">
+                            <i class="fas fa-arrow-up"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary move-down-btn" title="Aşağı Taşı">
+                            <i class="fas fa-arrow-down"></i>
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-danger remove-operation-row-btn" title="Kaldır">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
                 ` : '-'}
             </td>
         </tr>
@@ -1249,6 +1254,26 @@ function setupOperationsDetailEventListeners(part) {
         });
     });
     
+    // Move up buttons
+    document.querySelectorAll('.move-up-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const row = e.target.closest('tr');
+            if (row) {
+                moveOperationUp(row);
+            }
+        });
+    });
+    
+    // Move down buttons
+    document.querySelectorAll('.move-down-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const row = e.target.closest('tr');
+            if (row) {
+                moveOperationDown(row);
+            }
+        });
+    });
+    
     // Add event listeners for order changes to re-sort rows
     setupOrderChangeListeners();
 }
@@ -1267,6 +1292,88 @@ function setupOrderChangeListeners() {
             }, 300);
         }
     });
+}
+
+function moveOperationUp(row) {
+    const tbody = row.parentNode;
+    if (!tbody) return;
+    
+    const rows = Array.from(tbody.querySelectorAll('tr:not(.empty-row)'));
+    const currentIndex = rows.indexOf(row);
+    
+    if (currentIndex <= 0) return; // Already at the top
+    
+    const previousRow = rows[currentIndex - 1];
+    const currentOrder = parseInt(row.querySelector('.operation-order')?.value) || 0;
+    const previousOrder = parseInt(previousRow.querySelector('.operation-order')?.value) || 0;
+    
+    // Swap order values
+    row.querySelector('.operation-order').value = previousOrder;
+    previousRow.querySelector('.operation-order').value = currentOrder;
+    
+    // Swap rows in DOM
+    tbody.insertBefore(row, previousRow);
+    
+    // Re-setup event listeners for the moved rows
+    setupMoveButtonsForRow(row);
+    setupMoveButtonsForRow(previousRow);
+}
+
+function moveOperationDown(row) {
+    const tbody = row.parentNode;
+    if (!tbody) return;
+    
+    const rows = Array.from(tbody.querySelectorAll('tr:not(.empty-row)'));
+    const currentIndex = rows.indexOf(row);
+    
+    if (currentIndex >= rows.length - 1) return; // Already at the bottom
+    
+    const nextRow = rows[currentIndex + 1];
+    const currentOrder = parseInt(row.querySelector('.operation-order')?.value) || 0;
+    const nextOrder = parseInt(nextRow.querySelector('.operation-order')?.value) || 0;
+    
+    // Swap order values
+    row.querySelector('.operation-order').value = nextOrder;
+    nextRow.querySelector('.operation-order').value = currentOrder;
+    
+    // Swap rows in DOM - insert current row after next row
+    if (nextRow.nextSibling) {
+        tbody.insertBefore(row, nextRow.nextSibling);
+    } else {
+        tbody.appendChild(row);
+    }
+    
+    // Re-setup event listeners for the moved rows
+    setupMoveButtonsForRow(row);
+    setupMoveButtonsForRow(nextRow);
+}
+
+function setupMoveButtonsForRow(row) {
+    // Remove existing listeners by cloning the buttons
+    const moveUpBtn = row.querySelector('.move-up-btn');
+    const moveDownBtn = row.querySelector('.move-down-btn');
+    
+    if (moveUpBtn) {
+        const newMoveUpBtn = moveUpBtn.cloneNode(true);
+        moveUpBtn.parentNode.replaceChild(newMoveUpBtn, moveUpBtn);
+        newMoveUpBtn.addEventListener('click', (e) => {
+            const row = e.target.closest('tr');
+            if (row) {
+                moveOperationUp(row);
+            }
+        });
+    }
+    
+    if (moveDownBtn) {
+        const newMoveDownBtn = moveDownBtn.cloneNode(true);
+        moveDownBtn.parentNode.replaceChild(newMoveDownBtn, moveDownBtn);
+        newMoveDownBtn.addEventListener('click', (e) => {
+            const row = e.target.closest('tr');
+            if (row) {
+                moveOperationDown(row);
+            }
+        });
+    }
 }
 
 function sortRowsByOrder() {
@@ -1318,11 +1425,11 @@ function addOperationRowToTable() {
     // Create new operation object with unique row ID
     const rowId = `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const newOperation = {
+        key: `Yeni-${Date.now()}`,
         order: maxOrder + 1,
         name: '',
         description: '',
         machine_fk: null,
-        quantity: null,
         estimated_hours: null,
         interchangeable: false,
         completion_date: null,  // Explicitly set to null for new operations
@@ -1381,17 +1488,11 @@ function addOperationRowToTable() {
     }
     
     // Explicitly enable all input fields for new rows (remove readonly/disabled attributes)
-    const orderInput = newRow.querySelector('.operation-order');
     const nameInput = newRow.querySelector('.operation-name');
     const descTextarea = newRow.querySelector('.operation-description');
-    const quantityInput = newRow.querySelector('.operation-quantity');
     const hoursInput = newRow.querySelector('.operation-estimated-hours');
     const interchangeableCheckbox = newRow.querySelector('.operation-interchangeable');
     
-    if (orderInput) {
-        orderInput.removeAttribute('readonly');
-        orderInput.readOnly = false;
-    }
     if (nameInput) {
         nameInput.removeAttribute('readonly');
         nameInput.readOnly = false;
@@ -1399,10 +1500,6 @@ function addOperationRowToTable() {
     if (descTextarea) {
         descTextarea.removeAttribute('readonly');
         descTextarea.readOnly = false;
-    }
-    if (quantityInput) {
-        quantityInput.removeAttribute('readonly');
-        quantityInput.readOnly = false;
     }
     if (hoursInput) {
         hoursInput.removeAttribute('readonly');
@@ -1414,7 +1511,7 @@ function addOperationRowToTable() {
     }
     
     // Ensure status shows "Bekliyor" for new rows
-    const statusCell = newRow.querySelector('td:nth-child(9)');
+    const statusCell = newRow.querySelector('td:nth-child(8)');
     if (statusCell) {
         statusCell.innerHTML = '<span class="status-badge status-grey">Bekliyor</span>';
     }
@@ -1422,7 +1519,7 @@ function addOperationRowToTable() {
     // Sort rows after adding new row to maintain order
     sortRowsByOrder();
     
-    // Setup event listener for remove button
+    // Setup event listeners for buttons
     const removeBtn = newRow.querySelector('.remove-operation-row-btn');
     if (removeBtn) {
         removeBtn.addEventListener('click', (e) => {
@@ -1432,6 +1529,28 @@ function addOperationRowToTable() {
             if (row) {
                 row.remove();
                 updateOperationOrdersInTable();
+            }
+        });
+    }
+    
+    // Setup move up button
+    const moveUpBtn = newRow.querySelector('.move-up-btn');
+    if (moveUpBtn) {
+        moveUpBtn.addEventListener('click', (e) => {
+            const row = e.target.closest('tr');
+            if (row) {
+                moveOperationUp(row);
+            }
+        });
+    }
+    
+    // Setup move down button
+    const moveDownBtn = newRow.querySelector('.move-down-btn');
+    if (moveDownBtn) {
+        moveDownBtn.addEventListener('click', (e) => {
+            const row = e.target.closest('tr');
+            if (row) {
+                moveOperationDown(row);
             }
         });
     }
@@ -1447,7 +1566,7 @@ function updateOperationOrdersInTable() {
     
     // Show empty message if no rows
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="10" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="9" class="text-center text-muted">Henüz operasyon eklenmemiş</td></tr>';
         return;
     }
     
@@ -1480,7 +1599,6 @@ async function saveOperationsChanges(part) {
         const name = row.querySelector('.operation-name')?.value?.trim();
         const description = row.querySelector('.operation-description')?.value?.trim() || null;
         const machineFk = row.querySelector('.operation-machine')?.value ? parseInt(row.querySelector('.operation-machine').value) : null;
-        const quantity = row.querySelector('.operation-quantity')?.value ? parseInt(row.querySelector('.operation-quantity').value) : null;
         const estimatedHours = row.querySelector('.operation-estimated-hours')?.value ? parseFloat(row.querySelector('.operation-estimated-hours').value) : null;
         const interchangeable = row.querySelector('.operation-interchangeable')?.checked || false;
         
@@ -1501,7 +1619,6 @@ async function saveOperationsChanges(part) {
                 description,
                 machine_fk: machineFk,
                 order,
-                quantity,
                 interchangeable,
                 estimated_hours: estimatedHours
             });
@@ -1520,7 +1637,6 @@ async function saveOperationsChanges(part) {
                     description,
                     machine_fk: machineFk,
                     order,
-                    quantity,
                     interchangeable,
                     estimated_hours: estimatedHours
                 });

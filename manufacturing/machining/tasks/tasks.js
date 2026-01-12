@@ -25,13 +25,6 @@ function initTasksModule() {
                 icon: 'fas fa-plus-circle',
                 iconColor: 'primary',
                 link: '/manufacturing/machining/tasks/create'
-            },
-            {
-                title: 'Bekleyen Görevler',
-                description: 'Makine atanmamış bekleyen görevleri görüntüleyin.',
-                icon: 'fas fa-clock',
-                iconColor: 'warning',
-                link: '/manufacturing/machining/tasks/pending'
             }
         ]
     });
