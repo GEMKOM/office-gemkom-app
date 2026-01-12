@@ -792,7 +792,11 @@ async function loadMachineCalendar(machineId) {
 // Load operations for selected machine
 async function loadMachineTasks(machineId) {
     try {
-        const response = await getOperations({ machine_fk: machineId });
+        // Always filter for incomplete operations only (completion_date is null)
+        const response = await getOperations({ 
+            machine_fk: machineId,
+            completion_date__isnull: 'true'
+        });
         const tasks = Array.isArray(response) ? response : (response.results || []);
         currentTasks = tasks;
         

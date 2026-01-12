@@ -1,7 +1,7 @@
 import { guardRoute, getUser, isAdmin } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { fetchMachineFaults, createMaintenanceRequest, deleteMaintenanceRequest } from '../../../apis/maintenance.js';
-import { fetchMachines } from '../../../apis/machines.js';
+import { fetchMachinesDropdown } from '../../../apis/machines.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
@@ -427,8 +427,7 @@ function initializeViewFaultModal() {
 
 async function loadMachinesForModal() {
     try {
-        const response = await fetchMachines(1, 1000, {"compact": true});
-        const machines = response.results || response;
+        const machines = await fetchMachinesDropdown();
         
         const machineOptions = machines.map(machine => ({
             value: machine.id.toString(),
