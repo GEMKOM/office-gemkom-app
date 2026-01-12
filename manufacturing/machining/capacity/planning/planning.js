@@ -6,7 +6,7 @@ import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { TableComponent } from '../../../../components/table/table.js';
 import { GanttChart } from '../../../../components/gantt/gantt.js';
-import { fetchMachines, getMachineCalendar } from '../../../../apis/machines.js';
+import { fetchMachinesDropdown, getMachineCalendar } from '../../../../apis/machines.js';
 import { getOperations, bulkSaveOperationsPlanning, updateOperation } from '../../../../apis/machining/operations.js';
 import { formatDateTime } from '../../../../apis/formatters.js';
 
@@ -474,7 +474,6 @@ function initMachinesTable() {
                     sortable: true,
                     formatter: (value, row) => `
                         <div class="d-flex align-items-center">
-                            <span class="currency-badge me-2" style="flex-shrink: 0;">${row.tasks_count || 0}</span>
                             <span class="machine-name" style="font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${value}</span>
                         </div>
                     `
@@ -549,6 +548,18 @@ function initTasksTable() {
                     }
                 },
                 {
+                    field: 'remaining_hours',
+                    label: 'Kalan Saat',
+                    sortable: true,
+                    formatter: (value, row) => {
+                        const estimatedHours = row.estimated_hours || 0;
+                        const totalHoursSpent = row.total_hours_spent || 0;
+                        const remainingHours = estimatedHours - totalHoursSpent;
+                        const displayValue = remainingHours > 0 ? `${remainingHours.toFixed(2)}h` : '0h';
+                        return `<span>${displayValue}</span>`;
+                    }
+                },
+                {
                     field: 'planned_start_ms',
                     label: 'Planlanan Başlangıç',
                     sortable: true,
@@ -565,16 +576,6 @@ function initTasksTable() {
                         if (!value) return '<span class="editable-cell" data-field="planned_end_ms" data-task-key="' + row.key + '">-</span>';
                         return `<span class="editable-cell" data-field="planned_end_ms" data-task-key="${row.key}"><div class="created-date">${formatDateTime(new Date(value).toISOString())}</div></span>`;
                     }
-                },
-                {
-                    field: 'plan_locked',
-                    label: 'Durum',
-                    sortable: true,
-                    formatter: (value) => `
-                        <span class="badge ${value ? 'bg-warning' : 'bg-success'}">
-                            ${value ? 'Kilitli' : 'Aktif'}
-                        </span>
-                    `
                 },
                 {
                     field: 'actions',
@@ -647,9 +648,8 @@ async function loadMachines() {
         if (machinesTable) {
             machinesTable.setLoading(true);
         }
-        const response = await fetchMachines(1, 100, { used_in: 'machining' });
+        machines = await fetchMachinesDropdown('machining');
         
-        machines = response.results || response;
         // Handle case where no machines are returned
         if (!machines || !Array.isArray(machines)) {
             machines = [];
@@ -665,9 +665,8 @@ async function loadMachines() {
             ];
         }
         
-        // Use tasks_count from API response (don't override it)
-        // Sort machines by task count (most to least)
-        machines = machines.sort((a, b) => (b.tasks_count || 0) - (a.tasks_count || 0));
+        // Sort machines by name (alphabetically)
+        machines = machines.sort((a, b) => (a.name || '').localeCompare(b.name || ''));
         
         if (machinesTable) {
             // Update the table's internal state first
@@ -1141,7 +1140,10 @@ async function confirmAutoschedule() {
     
     // Schedule tasks SEQUENTIALLY - each task starts where the previous one ends
     sortedTasks.forEach((task, index) => {
-        const remainingHours = task.estimated_hours || 2;
+        // Calculate remaining hours: estimated_hours - total_hours_spent
+        const estimatedHours = task.estimated_hours || 0;
+        const totalHoursSpent = task.total_hours_spent || 0;
+        const remainingHours = Math.max(0, estimatedHours - totalHoursSpent) || 2; // Use at least 2 hours if remaining is 0 or negative
         const duration = remainingHours * 60 * 60 * 1000; // Convert hours to milliseconds
         
         // For the first task, use the current time (which respects the start date)
