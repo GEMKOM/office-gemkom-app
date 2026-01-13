@@ -59,6 +59,7 @@ let filesTable = null; // Files table instance
 let currentEditTask = null; // Current task being edited
 let currentPageSize = 20; // Current page size for pagination
 let statusChangeModal = null; // Status change confirmation modal instance
+let partsReplaceModal = null; // Parts replace confirmation modal instance
 let selectedRemnantPlate = null; // Selected remnant plate for create cut
 let quantityUsed = 1; // Quantity of remnant plate to use (default 1)
 let selectRemnantModal = null; // Modal for selecting remnant plate
@@ -2024,9 +2025,16 @@ async function initializePartsTable(cut) {
     setTimeout(() => {
         const cardActions = document.querySelector('#parts-table-container .card-actions');
         if (cardActions) {
+            // Remove existing add button if present to avoid duplicates
+            const existingAddButton = cardActions.querySelector('button[data-parts-add-button]');
+            if (existingAddButton) {
+                existingAddButton.remove();
+            }
+            
             const addButton = document.createElement('button');
             addButton.type = 'button';
             addButton.className = 'btn btn-sm btn-success';
+            addButton.setAttribute('data-parts-add-button', 'true');
             addButton.innerHTML = '<i class="fas fa-plus me-1"></i>Parça Ekle';
             addButton.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -2040,13 +2048,19 @@ async function initializePartsTable(cut) {
         const togglePasteBtn = editCutModal.container.querySelector('#toggle-paste-section-edit');
         const pasteSection = editCutModal.container.querySelector('#paste-section-edit');
         if (togglePasteBtn && pasteSection) {
-            togglePasteBtn.addEventListener('click', () => {
+            // Remove existing listener if present
+            if (togglePasteBtn._togglePasteHandler) {
+                togglePasteBtn.removeEventListener('click', togglePasteBtn._togglePasteHandler);
+            }
+            const togglePasteHandler = () => {
                 const isHidden = pasteSection.style.display === 'none';
                 pasteSection.style.display = isHidden ? 'block' : 'none';
                 togglePasteBtn.innerHTML = isHidden 
                     ? '<i class="fas fa-chevron-up me-1"></i>Gizle'
                     : '<i class="fas fa-paste me-1"></i>Toplu Yapıştır';
-            });
+            };
+            togglePasteBtn._togglePasteHandler = togglePasteHandler;
+            togglePasteBtn.addEventListener('click', togglePasteHandler);
         }
         
         // Add event listener for preview button
@@ -2057,10 +2071,17 @@ async function initializePartsTable(cut) {
         const previewTableBody = editCutModal.container.querySelector('#preview-table-body-edit');
         const previewCount = editCutModal.container.querySelector('#preview-count-edit');
         
-        let currentParsedParts = null; // Store parsed parts for confirmation
+        // Use a shared variable to store parsed parts (persists across re-initializations)
+        if (!window._currentParsedParts) {
+            window._currentParsedParts = null;
+        }
         
         if (previewPasteBtn && bulkPasteInput && previewSection && previewTableBody) {
-            previewPasteBtn.addEventListener('click', (e) => {
+            // Remove existing listener if present
+            if (previewPasteBtn._previewPasteHandler) {
+                previewPasteBtn.removeEventListener('click', previewPasteBtn._previewPasteHandler);
+            }
+            const previewPasteHandler = (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 const text = bulkPasteInput.value;
@@ -2074,12 +2095,12 @@ async function initializePartsTable(cut) {
                     showNotification('Yapıştırılan veriler ayrıştırılamadı', 'warning');
                     previewSection.style.display = 'none';
                     parsePasteBtn.style.display = 'none';
-                    currentParsedParts = null;
+                    window._currentParsedParts = null;
                     return;
                 }
                 
                 // Store parsed parts
-                currentParsedParts = parsed;
+                window._currentParsedParts = parsed;
                 
                 // Show preview
                 previewTableBody.innerHTML = '';
@@ -2101,17 +2122,35 @@ async function initializePartsTable(cut) {
                 
                 previewSection.style.display = 'block';
                 parsePasteBtn.style.display = 'inline-block';
-            });
+            };
+            previewPasteBtn._previewPasteHandler = previewPasteHandler;
+            previewPasteBtn.addEventListener('click', previewPasteHandler);
         }
         
         // Add event listener for bulk paste in edit modal
         if (parsePasteBtn && bulkPasteInput) {
-            parsePasteBtn.addEventListener('click', async (e) => {
+            // Remove existing listener if present
+            if (parsePasteBtn._parsePasteHandler) {
+                parsePasteBtn.removeEventListener('click', parsePasteBtn._parsePasteHandler);
+            }
+            
+            // Flag to prevent concurrent bulk delete operations
+            if (!parsePasteBtn._isProcessing) {
+                parsePasteBtn._isProcessing = false;
+            }
+            
+            const parsePasteHandler = async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
                 
+                // Prevent concurrent operations
+                if (parsePasteBtn._isProcessing) {
+                    showNotification('İşlem devam ediyor, lütfen bekleyin...', 'warning');
+                    return;
+                }
+                
                 // Use the previewed parts if available, otherwise parse again
-                let parsed = currentParsedParts;
+                let parsed = window._currentParsedParts;
                 if (!parsed || parsed.length === 0) {
                     const text = bulkPasteInput.value;
                     if (!text || text.trim() === '') {
@@ -2234,15 +2273,29 @@ async function initializePartsTable(cut) {
                 }
                 
                 // Confirm replacement using ConfirmationModal
-                let partsReplaceModal = new ConfirmationModal('parts-replace-confirm-modal-container', {
-                    title: 'Parçaları Değiştir',
-                    icon: 'fas fa-exchange-alt',
-                    message: 'Tüm mevcut parçalar silinecek ve yeni parçalar eklenecek',
-                    description: `${parsed.length} yeni parça eklenecek. Bu işlem geri alınamaz.`,
-                    confirmText: 'Evet, Değiştir',
-                    cancelText: 'İptal',
-                    confirmButtonClass: 'btn-warning'
-                });
+                // Reuse existing modal instance to prevent multiple instances
+                if (!partsReplaceModal) {
+                    partsReplaceModal = new ConfirmationModal('parts-replace-confirm-modal-container', {
+                        title: 'Parçaları Değiştir',
+                        icon: 'fas fa-exchange-alt',
+                        message: 'Tüm mevcut parçalar silinecek ve yeni parçalar eklenecek',
+                        description: '', // Will be set dynamically
+                        confirmText: 'Evet, Değiştir',
+                        cancelText: 'İptal',
+                        confirmButtonClass: 'btn-warning'
+                    });
+                }
+                
+                // Update description with current parsed parts count
+                const partsCount = parsed.length;
+                
+                // Ensure any existing modal is hidden before showing a new one
+                if (partsReplaceModal && partsReplaceModal.modal) {
+                    const existingModalInstance = bootstrap.Modal.getInstance(partsReplaceModal.modal);
+                    if (existingModalInstance && existingModalInstance._isShown) {
+                        existingModalInstance.hide();
+                    }
+                }
                 
                 // Unlock scroll when confirmation modal is hidden
                 const unlockScroll = () => {
@@ -2290,8 +2343,25 @@ async function initializePartsTable(cut) {
                     confirmationModalElement.addEventListener('hidden.bs.modal', unlockScroll, { once: true });
                 }
                 
+                // Double-check processing flag before showing modal
+                if (parsePasteBtn._isProcessing) {
+                    showNotification('İşlem devam ediyor, lütfen bekleyin...', 'warning');
+                    unlockScroll();
+                    return;
+                }
+                
                 partsReplaceModal.show({
+                    description: `${partsCount} yeni parça eklenecek. Bu işlem geri alınamaz.`,
                     onConfirm: async () => {
+                        // Additional safeguard: Check processing flag again in case of rapid clicks
+                        if (parsePasteBtn._isProcessing) {
+                            console.warn('Bulk delete already in progress, ignoring duplicate confirmation');
+                            return;
+                        }
+                        
+                        // Set processing flag to prevent concurrent operations
+                        parsePasteBtn._isProcessing = true;
+                        
                         try {
                             // Show loading
                             parsePasteBtn.disabled = true;
@@ -2303,6 +2373,17 @@ async function initializePartsTable(cut) {
                                 showNotification('Görev bilgisi bulunamadı', 'error');
                                 parsePasteBtn.disabled = false;
                                 parsePasteBtn.innerHTML = '<i class="fas fa-magic me-1"></i>Yapıştırılanı Ayrıştır ve Ekle';
+                                parsePasteBtn._isProcessing = false;
+                                return;
+                            }
+                            
+                            // Verify we still have parsed parts before proceeding
+                            const partsToCreate = window._currentParsedParts || parsed;
+                            if (!partsToCreate || partsToCreate.length === 0) {
+                                showNotification('Parça verisi bulunamadı', 'error');
+                                parsePasteBtn.disabled = false;
+                                parsePasteBtn.innerHTML = '<i class="fas fa-magic me-1"></i>Yapıştırılanı Ayrıştır ve Ekle';
+                                parsePasteBtn._isProcessing = false;
                                 return;
                             }
                             
@@ -2327,8 +2408,8 @@ async function initializePartsTable(cut) {
                                 }
                             }
                             
-                            // Prepare parts data for bulk create
-                            const partsData = parsed.map(p => ({
+                            // Prepare parts data for bulk create (use stored parsed parts)
+                            const partsData = partsToCreate.map(p => ({
                                 cnc_task: taskKey,
                                 job_no: p.job_no || '',
                                 image_no: p.image_no || '',
@@ -2355,8 +2436,9 @@ async function initializePartsTable(cut) {
                                 errorCount = partsData.length;
                             }
                             
-                            // Clear the textarea
+                            // Clear the textarea and parsed parts
                             bulkPasteInput.value = '';
+                            window._currentParsedParts = null;
                             
                             // Refresh the parts table
                             const updatedTask = await getCncTask(taskKey);
@@ -2374,16 +2456,20 @@ async function initializePartsTable(cut) {
                         } finally {
                             parsePasteBtn.disabled = false;
                             parsePasteBtn.innerHTML = '<i class="fas fa-magic me-1"></i>Yapıştırılanı Ayrıştır ve Ekle';
+                            parsePasteBtn._isProcessing = false;
                             // Unlock scroll after operation completes
                             unlockScroll();
                         }
                     },
                     onCancel: () => {
-                        // User cancelled, unlock scroll
+                        // User cancelled, unlock scroll and reset processing flag
+                        parsePasteBtn._isProcessing = false;
                         unlockScroll();
                     }
                 });
-            });
+            };
+            parsePasteBtn._parsePasteHandler = parsePasteHandler;
+            parsePasteBtn.addEventListener('click', parsePasteHandler);
         }
     }, 100);
 }
