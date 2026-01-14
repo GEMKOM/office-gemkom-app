@@ -17,8 +17,7 @@ import {
     getCncPart, 
     getCncParts,
     validateCncPartData,
-    bulkCreateCncParts,
-    bulkDeleteCncParts
+    bulkCreateCncParts
 } from '../../../apis/cnc_cutting/parts.js';
 import { 
     deleteCncFile, 
@@ -2276,13 +2275,13 @@ async function initializePartsTable(cut) {
                 // Reuse existing modal instance to prevent multiple instances
                 if (!partsReplaceModal) {
                     partsReplaceModal = new ConfirmationModal('parts-replace-confirm-modal-container', {
-                        title: 'Parçaları Değiştir',
-                        icon: 'fas fa-exchange-alt',
-                        message: 'Tüm mevcut parçalar silinecek ve yeni parçalar eklenecek',
+                        title: 'Parçaları Güncelle',
+                        icon: 'fas fa-sync-alt',
+                        message: 'Mevcut parçalar güncellenecek ve yeni parçalar eklenecek',
                         description: '', // Will be set dynamically
-                        confirmText: 'Evet, Değiştir',
+                        confirmText: 'Evet, Güncelle',
                         cancelText: 'İptal',
-                        confirmButtonClass: 'btn-warning'
+                        confirmButtonClass: 'btn-primary'
                     });
                 }
                 
@@ -2351,11 +2350,11 @@ async function initializePartsTable(cut) {
                 }
                 
                 partsReplaceModal.show({
-                    description: `${partsCount} yeni parça eklenecek. Bu işlem geri alınamaz.`,
+                    description: `${partsCount} parça güncellenecek/eklenecek. Mevcut parçalar korunacak.`,
                     onConfirm: async () => {
                         // Additional safeguard: Check processing flag again in case of rapid clicks
                         if (parsePasteBtn._isProcessing) {
-                            console.warn('Bulk delete already in progress, ignoring duplicate confirmation');
+                            console.warn('Parts update already in progress, ignoring duplicate confirmation');
                             return;
                         }
                         
@@ -2378,8 +2377,8 @@ async function initializePartsTable(cut) {
                             }
                             
                             // Verify we still have parsed parts before proceeding
-                            const partsToCreate = window._currentParsedParts || parsed;
-                            if (!partsToCreate || partsToCreate.length === 0) {
+                            const parsedParts = window._currentParsedParts || parsed;
+                            if (!parsedParts || parsedParts.length === 0) {
                                 showNotification('Parça verisi bulunamadı', 'error');
                                 parsePasteBtn.disabled = false;
                                 parsePasteBtn.innerHTML = '<i class="fas fa-magic me-1"></i>Yapıştırılanı Ayrıştır ve Ekle';
@@ -2390,26 +2389,8 @@ async function initializePartsTable(cut) {
                             const existingParts = await getCncParts({ cnc_task: taskKey });
                             const partsArray = Array.isArray(existingParts) ? existingParts : (existingParts.results || []);
                             
-                            // Bulk delete all existing parts
-                            if (partsArray.length > 0) {
-                                const partIds = partsArray.map(part => part.id);
-                                try {
-                                    await bulkDeleteCncParts(partIds);
-                                } catch (error) {
-                                    console.error('Error bulk deleting parts:', error);
-                                    // Fallback to individual deletion if bulk delete fails
-                                    for (const part of partsArray) {
-                                        try {
-                                            await deleteCncPart(part.id);
-                                        } catch (deleteError) {
-                                            console.error(`Error deleting part ${part.id}:`, deleteError);
-                                        }
-                                    }
-                                }
-                            }
-                            
-                            // Prepare parts data for bulk create (use stored parsed parts)
-                            const partsData = partsToCreate.map(p => ({
+                            // Prepare parts data from parsed parts
+                            const partsData = parsedParts.map(p => ({
                                 cnc_task: taskKey,
                                 job_no: p.job_no || '',
                                 image_no: p.image_no || '',
@@ -2418,23 +2399,75 @@ async function initializePartsTable(cut) {
                                 quantity: p.quantity || null
                             }));
                             
-                            // Bulk create new parts
-                            let successCount = 0;
-                            let errorCount = 0;
-                            try {
-                                const createdParts = await bulkCreateCncParts(partsData);
-                                // Handle both array and object response
-                                if (Array.isArray(createdParts)) {
-                                    successCount = createdParts.length;
-                                } else if (createdParts.results && Array.isArray(createdParts.results)) {
-                                    successCount = createdParts.results.length;
+                            // Match existing parts with new parts by job_no, image_no, and position_no
+                            // Create a map for quick lookup of existing parts
+                            const existingPartsMap = new Map();
+                            partsArray.forEach(part => {
+                                const key = `${part.job_no || ''}_${part.image_no || ''}_${part.position_no || ''}`;
+                                existingPartsMap.set(key, part);
+                            });
+                            
+                            // Separate parts into updates and creates
+                            const partsToUpdate = [];
+                            const partsToCreate = [];
+                            
+                            partsData.forEach(newPart => {
+                                const key = `${newPart.job_no || ''}_${newPart.image_no || ''}_${newPart.position_no || ''}`;
+                                const existingPart = existingPartsMap.get(key);
+                                
+                                if (existingPart) {
+                                    // Part exists, prepare for update
+                                    partsToUpdate.push({
+                                        id: existingPart.id,
+                                        data: {
+                                            job_no: newPart.job_no,
+                                            image_no: newPart.image_no,
+                                            position_no: newPart.position_no,
+                                            weight_kg: newPart.weight_kg,
+                                            quantity: newPart.quantity
+                                        }
+                                    });
                                 } else {
-                                    successCount = partsData.length;
+                                    // New part, prepare for create
+                                    partsToCreate.push(newPart);
                                 }
-                            } catch (error) {
-                                console.error('Error bulk creating parts:', error);
-                                errorCount = partsData.length;
+                            });
+                            
+                            // Update existing parts
+                            let updateCount = 0;
+                            let updateErrorCount = 0;
+                            for (const partUpdate of partsToUpdate) {
+                                try {
+                                    await updateCncPart(partUpdate.id, partUpdate.data);
+                                    updateCount++;
+                                } catch (error) {
+                                    console.error(`Error updating part ${partUpdate.id}:`, error);
+                                    updateErrorCount++;
+                                }
                             }
+                            
+                            // Create new parts
+                            let createCount = 0;
+                            let createErrorCount = 0;
+                            if (partsToCreate.length > 0) {
+                                try {
+                                    const createdParts = await bulkCreateCncParts(partsToCreate);
+                                    // Handle both array and object response
+                                    if (Array.isArray(createdParts)) {
+                                        createCount = createdParts.length;
+                                    } else if (createdParts.results && Array.isArray(createdParts.results)) {
+                                        createCount = createdParts.results.length;
+                                    } else {
+                                        createCount = partsToCreate.length;
+                                    }
+                                } catch (error) {
+                                    console.error('Error bulk creating parts:', error);
+                                    createErrorCount = partsToCreate.length;
+                                }
+                            }
+                            
+                            const successCount = updateCount + createCount;
+                            const errorCount = updateErrorCount + createErrorCount;
                             
                             // Clear the textarea and parsed parts
                             bulkPasteInput.value = '';
@@ -2445,14 +2478,25 @@ async function initializePartsTable(cut) {
                             await initializePartsTable(updatedTask);
                             
                             // Show success message
+                            const messages = [];
+                            if (updateCount > 0) {
+                                messages.push(`${updateCount} parça güncellendi`);
+                            }
+                            if (createCount > 0) {
+                                messages.push(`${createCount} parça eklendi`);
+                            }
+                            if (errorCount > 0) {
+                                messages.push(`${errorCount} parça işlenirken hata oluştu`);
+                            }
+                            
                             if (errorCount === 0) {
-                                showNotification(`${successCount} parça başarıyla değiştirildi`, 'success');
+                                showNotification(messages.join(', '), 'success');
                             } else {
-                                showNotification(`${successCount} parça eklendi, ${errorCount} parça eklenirken hata oluştu`, 'warning');
+                                showNotification(messages.join(', '), 'warning');
                             }
                         } catch (error) {
-                            console.error('Error replacing parts:', error);
-                            showNotification('Parçalar değiştirilirken hata oluştu', 'error');
+                            console.error('Error updating parts:', error);
+                            showNotification('Parçalar güncellenirken hata oluştu', 'error');
                         } finally {
                             parsePasteBtn.disabled = false;
                             parsePasteBtn.innerHTML = '<i class="fas fa-magic me-1"></i>Yapıştırılanı Ayrıştır ve Ekle';
