@@ -134,6 +134,27 @@ function initTables() {
                 label: 'Görev',
                 sortable: false,
                 formatter: (value, row) => {
+                    // Check if timer is non-productive
+                    if (row.timer_type && row.timer_type !== 'productive') {
+                        // Display downtime reason name (non-clickable)
+                        return `
+                            <div style="
+                                padding: 0.5rem;
+                                border-radius: 6px;
+                            ">
+                                <div class="fw-bold" style="
+                                    color: #6c757d;
+                                    font-weight: 600;
+                                    font-size: 0.9rem;
+                                ">
+                                    <i class="fas fa-exclamation-triangle me-1" style="color: #dc3545;"></i>
+                                    ${row.downtime_reason_name || 'Bilinmeyen Neden'}
+                                </div>
+                            </div>
+                        `;
+                    }
+                    
+                    // Productive timer - display clickable task
                     return `
                         <div class="clickable-task" style="
                             cursor: pointer;
@@ -278,7 +299,16 @@ function initTables() {
             await refreshActiveTimers();
         },
         skeleton: true,
-        skeletonRows: 5
+        skeletonRows: 5,
+        rowAttributes: (row) => {
+            // Add red border and background for non-productive timers
+            if (row.timer_type && row.timer_type !== 'productive') {
+                return {
+                    style: 'border: 2px solid #dc3545; background-color: rgba(220, 53, 69, 0.05);'
+                };
+            }
+            return {};
+        }
     });
     
     // Machines Table
@@ -508,7 +538,9 @@ function updateActiveTimersTable() {
             duration: duration,
             start_time: timer.start_time,
             estimated_hours: timer.estimated_hours,
-            task_total_hours: timer.task_total_hours
+            task_total_hours: timer.task_total_hours,
+            timer_type: timer.timer_type,
+            downtime_reason_name: timer.downtime_reason_name
         };
     });
     
@@ -561,7 +593,7 @@ function setupTableEventListeners() {
             return;
         }
         
-        // Handle task click to show modal
+        // Handle task click to show modal (only for productive timers)
         const taskCell = e.target.closest('.clickable-task');
         if (taskCell) {
             const taskKey = taskCell.getAttribute('data-task-key');
