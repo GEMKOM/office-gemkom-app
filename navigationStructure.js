@@ -420,5 +420,27 @@ export const NAVIGATION_STRUCTURE = {
                 }
             }
         }
+    },
+    '/sales': {
+        label: 'Satış',
+        icon: 'fas fa-handshake',
+        children: {
+            '/sales/customers': {
+                label: 'Müşteriler',
+                icon: 'fas fa-users',
+                children: {}
+            }
+        }
+    },
+    '/projects': {
+        label: 'Projeler',
+        icon: 'fas fa-project-diagram',
+        children: {
+            '/projects/project-tracking': {
+                label: 'Proje Takibi',
+                icon: 'fas fa-tasks',
+                children: {}
+            }
+        }
     }
 };

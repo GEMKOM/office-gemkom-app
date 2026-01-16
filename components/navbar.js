@@ -581,6 +581,18 @@ export function initNavbar() {
                     return;
                 }
                 
+                if (path.startsWith('/sales/')) {
+                    // Allow navigation to sales pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                if (path.startsWith('/projects/')) {
+                    // Allow navigation to projects pages
+                    navigateTo(path);
+                    return;
+                }
+                
                 
                 
                 navigateTo(path);
@@ -670,6 +682,18 @@ export function initNavbar() {
                 
                 if (path.startsWith('/planning/')) {
                     // Allow navigation to planning pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                if (path.startsWith('/sales/')) {
+                    // Allow navigation to sales pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                if (path.startsWith('/projects/')) {
+                    // Allow navigation to projects pages
                     navigateTo(path);
                     return;
                 }
