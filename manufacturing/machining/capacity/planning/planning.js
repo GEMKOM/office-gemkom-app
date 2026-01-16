@@ -539,6 +539,12 @@ function initTasksTable() {
                     formatter: (value) => value || '-'
                 },
                 {
+                    field: 'part_job_no',
+                    label: 'İş No',
+                    sortable: true,
+                    formatter: (value) => value || '-'
+                },
+                {
                     field: 'estimated_hours',
                     label: 'Tahmini Saat',
                     sortable: true,
