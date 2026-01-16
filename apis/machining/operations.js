@@ -367,3 +367,35 @@ export function formatOperationForDisplay(operation) {
     };
 }
 
+/**
+ * Create manual time entry for an operation
+ * @param {Object} timeData - Manual time entry data
+ * @param {string} timeData.task_key - Operation key (required)
+ * @param {number} timeData.machine_fk - Machine ID (required)
+ * @param {number} timeData.start_time - Start timestamp in milliseconds (required)
+ * @param {number} timeData.finish_time - Finish timestamp in milliseconds (required)
+ * @param {string} [timeData.comment] - Optional comment
+ * @returns {Promise<Object>} Response with timer ID on success
+ */
+export async function createManualTimeEntry(timeData) {
+    try {
+        const response = await authedFetch(`${backendBase}/machining/manual-time/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(timeData)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            const errorMessage = errorData.error || errorData.message || response.statusText;
+            throw new Error(errorMessage);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error creating manual time entry:', error);
+        throw error;
+    }
+}

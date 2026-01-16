@@ -1,6 +1,6 @@
 import { initNavbar } from '../../../../components/navbar.js';
 import { getParts, updatePart, deletePart, createPart, updatePartOperations, getPartsStats } from '../../../../apis/machining/parts.js';
-import { getOperations, markOperationCompleted, unmarkOperationCompleted } from '../../../../apis/machining/operations.js';
+import { getOperations, markOperationCompleted, unmarkOperationCompleted, createManualTimeEntry } from '../../../../apis/machining/operations.js';
 import { fetchMachinesDropdown } from '../../../../apis/machines.js';
 import { authFetchUsers } from '../../../../apis/users.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
@@ -797,6 +797,11 @@ function setupEventListeners() {
             showNotification('Parça silinirken hata oluştu', 'error');
         }
     });
+    
+    // Save manual time entry button
+    document.getElementById('save-manual-time-btn')?.addEventListener('click', () => {
+        saveManualTimeEntry();
+    });
 }
 
 function showCreatePartModal() {
@@ -1233,8 +1238,16 @@ function createOperationRow(operation, isNew = false) {
                 ` : ''}
             </td>
             <td class="text-center">
+                ${operation.key ? `
+                    <button type="button" class="btn btn-sm btn-outline-info manual-time-btn" 
+                            data-operation-key="${operation.key}" 
+                            data-operation-machine="${operation.machine_fk || ''}"
+                            title="Manuel Zaman Girişi">
+                        <i class="fas fa-clock me-1"></i>Manuel Zaman
+                    </button>
+                ` : ''}
                 ${!isReadOnly ? `
-                    <div class="btn-group" role="group">
+                    <div class="btn-group mt-1" role="group">
                         <button type="button" class="btn btn-sm btn-outline-secondary move-up-btn" title="Yukarı Taşı">
                             <i class="fas fa-arrow-up"></i>
                         </button>
@@ -1245,7 +1258,7 @@ function createOperationRow(operation, isNew = false) {
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
-                ` : '-'}
+                ` : ''}
             </td>
         </tr>
     `;
@@ -1303,6 +1316,17 @@ function setupOperationsDetailEventListeners(part) {
             const action = e.target.closest('.toggle-completion-btn').getAttribute('data-action');
             if (operationKey) {
                 await toggleOperationCompletion(operationKey, action === 'complete', part);
+            }
+        });
+    });
+    
+    // Add event listeners for manual time entry buttons
+    document.querySelectorAll('.manual-time-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const operationKey = e.target.closest('.manual-time-btn').getAttribute('data-operation-key');
+            const machineFk = e.target.closest('.manual-time-btn').getAttribute('data-operation-machine');
+            if (operationKey) {
+                showManualTimeModal(operationKey, machineFk);
             }
         });
     });
@@ -1752,6 +1776,135 @@ window.deletePartConfirm = function(partKey) {
     const deleteModal = bootstrap.Modal.getOrCreateInstance(document.getElementById('deleteConfirmModal'));
     deleteModal.show();
 };
+
+function showManualTimeModal(operationKey, machineFk = '') {
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('manualTimeModal'));
+    
+    // Set operation key
+    document.getElementById('manual-time-operation-key').value = operationKey;
+    
+    // Populate machine dropdown
+    const machineSelect = document.getElementById('manual-time-machine');
+    machineSelect.innerHTML = '<option value="">Makine seçin...</option>';
+    machines.forEach(machine => {
+        const option = document.createElement('option');
+        option.value = machine.id;
+        option.textContent = machine.name;
+        if (machineFk && machine.id == machineFk) {
+            option.selected = true;
+        }
+        machineSelect.appendChild(option);
+    });
+    
+    // Reset form
+    document.getElementById('manual-time-form').reset();
+    document.getElementById('manual-time-operation-key').value = operationKey;
+    if (machineFk) {
+        machineSelect.value = machineFk;
+    }
+    
+    // Set default times (current time for finish, 1 hour before for start)
+    const now = new Date();
+    const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+    
+    // Format for datetime-local input (YYYY-MM-DDTHH:mm)
+    const formatDateTimeLocal = (date) => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const hours = String(date.getHours()).padStart(2, '0');
+        const minutes = String(date.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    };
+    
+    document.getElementById('manual-time-start').value = formatDateTimeLocal(oneHourAgo);
+    document.getElementById('manual-time-finish').value = formatDateTimeLocal(now);
+    
+    modal.show();
+}
+
+async function saveManualTimeEntry() {
+    const form = document.getElementById('manual-time-form');
+    if (!form.checkValidity()) {
+        form.reportValidity();
+        return;
+    }
+    
+    const operationKey = document.getElementById('manual-time-operation-key').value;
+    const machineFk = parseInt(document.getElementById('manual-time-machine').value);
+    const startTime = document.getElementById('manual-time-start').value;
+    const finishTime = document.getElementById('manual-time-finish').value;
+    const comment = document.getElementById('manual-time-comment').value.trim();
+    
+    // Validate that finish time is after start time
+    if (new Date(finishTime) <= new Date(startTime)) {
+        showNotification('Bitiş zamanı başlangıç zamanından sonra olmalıdır', 'error');
+        return;
+    }
+    
+    // Convert datetime-local to milliseconds timestamp
+    const startTimestamp = new Date(startTime).getTime();
+    const finishTimestamp = new Date(finishTime).getTime();
+    
+    const timeData = {
+        task_key: operationKey,
+        machine_fk: machineFk,
+        start_time: startTimestamp,
+        finish_time: finishTimestamp
+    };
+    
+    if (comment) {
+        timeData.comment = comment;
+    }
+    
+    try {
+        const saveBtn = document.getElementById('save-manual-time-btn');
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Kaydediliyor...';
+        
+        const result = await createManualTimeEntry(timeData);
+        
+        if (result && result.id) {
+            showNotification('Manuel zaman girişi başarıyla oluşturuldu', 'success');
+            
+            // Close modal
+            const modalElement = document.getElementById('manualTimeModal');
+            const modalInstance = bootstrap.Modal.getInstance(modalElement);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            
+            // Reload operations to show updated hours
+            if (window.currentPartDetails && window.currentPartDetails.part) {
+                await showPartDetails(window.currentPartDetails.part.key);
+            }
+        } else {
+            throw new Error('Unexpected response format');
+        }
+    } catch (error) {
+        console.error('Error saving manual time entry:', error);
+        
+        // Handle specific error responses
+        let errorMessage = 'Manuel zaman girişi kaydedilirken hata oluştu';
+        if (error.message) {
+            if (error.message.includes('overlap') || error.message.includes('overlaps')) {
+                errorMessage = 'Bu makine için belirtilen zaman aralığında başka bir zamanlayıcı mevcut. Lütfen farklı bir zaman aralığı seçin.';
+            } else if (error.message.includes('not found') || error.message.includes('Operation not found')) {
+                errorMessage = 'Operasyon bulunamadı';
+            } else if (error.message.includes('Invalid timestamp')) {
+                errorMessage = 'Geçersiz zaman formatı';
+            } else {
+                errorMessage = error.message;
+            }
+        }
+        
+        showNotification(errorMessage, 'error');
+    } finally {
+        const saveBtn = document.getElementById('save-manual-time-btn');
+        saveBtn.disabled = false;
+        saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Kaydet';
+    }
+}
 
 function showNotification(message, type = 'info') {
     // Remove existing notifications

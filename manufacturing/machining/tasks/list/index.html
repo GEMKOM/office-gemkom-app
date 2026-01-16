@@ -250,6 +250,61 @@
     <!-- Display Modal Container -->
     <div id="display-modal-container"></div>
 
+    <!-- Manual Time Entry Modal -->
+    <div class="modal fade" id="manualTimeModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-clock me-2"></i>Manuel Zaman Girişi
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="manual-time-form">
+                        <input type="hidden" id="manual-time-operation-key">
+                        <div class="mb-3">
+                            <label for="manual-time-machine" class="form-label">
+                                Makine <span class="text-danger">*</span>
+                            </label>
+                            <select class="form-control" id="manual-time-machine" required>
+                                <option value="">Makine seçin...</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="manual-time-start" class="form-label">
+                                Başlangıç Zamanı <span class="text-danger">*</span>
+                            </label>
+                            <input type="datetime-local" class="form-control" id="manual-time-start" required>
+                            <div class="form-text">Operasyonun başladığı tarih ve saat</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="manual-time-finish" class="form-label">
+                                Bitiş Zamanı <span class="text-danger">*</span>
+                            </label>
+                            <input type="datetime-local" class="form-control" id="manual-time-finish" required>
+                            <div class="form-text">Operasyonun bittiği tarih ve saat</div>
+                        </div>
+                        <div class="mb-3">
+                            <label for="manual-time-comment" class="form-label">
+                                Açıklama
+                            </label>
+                            <textarea class="form-control" id="manual-time-comment" rows="3" placeholder="Opsiyonel açıklama..."></textarea>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>İptal
+                    </button>
+                    <button type="button" class="btn btn-primary" id="save-manual-time-btn">
+                        <i class="fas fa-save me-1"></i>Kaydet
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- SheetJS for Excel export -->
