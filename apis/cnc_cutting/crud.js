@@ -104,9 +104,9 @@ export async function createCncTask(taskData) {
             formData.append('quantity', taskData.quantity);
         }
         
-        // Add selected_plate if provided
-        if (taskData.selected_plate !== undefined && taskData.selected_plate !== null) {
-            formData.append('selected_plate', taskData.selected_plate);
+        // Add selected_plate_id if provided
+        if (taskData.selected_plate_id !== undefined && taskData.selected_plate_id !== null) {
+            formData.append('selected_plate_id', taskData.selected_plate_id);
         }
         
         // Add quantity_used if provided
@@ -170,9 +170,9 @@ export async function updateCncTask(taskId, taskData) {
         if (taskData.machine_fk !== undefined && taskData.machine_fk !== null) formData.append('machine_fk', taskData.machine_fk);
         if (taskData.estimated_hours !== undefined && taskData.estimated_hours !== null) formData.append('estimated_hours', taskData.estimated_hours);
         if (taskData.quantity !== undefined && taskData.quantity !== null) formData.append('quantity', taskData.quantity);
-        // Always include selected_plate when defined (even if null) to allow removal
-        if (taskData.selected_plate !== undefined) {
-            formData.append('selected_plate', taskData.selected_plate === null ? '' : taskData.selected_plate);
+        // Always include selected_plate_id when defined (even if null) to allow removal
+        if (taskData.selected_plate_id !== undefined) {
+            formData.append('selected_plate_id', taskData.selected_plate_id === null ? '' : taskData.selected_plate_id);
         }
         
         // Add quantity_used if provided

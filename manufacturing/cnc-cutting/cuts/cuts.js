@@ -40,9 +40,9 @@ import { getRemnantPlates, getRemnantPlateById } from '../../../apis/cnc_cutting
 // State management
 let currentPage = 1;
 let currentFilter = 'all';
-let currentOrdering = 'key';
+let currentOrdering = '-key';
 let currentSortField = 'key';
-let currentSortDirection = 'asc';
+let currentSortDirection = 'desc';
 let cuts = [];
 let machines = [];
 let totalCuts = 0;
@@ -1514,7 +1514,7 @@ async function handleCreateCutSave(formData) {
         quantity: formData['cut-quantity'] ? parseInt(formData['cut-quantity']) : null,
         files: uploadedFiles,
         parts_data: [],
-        selected_plate: selectedRemnantPlate ? selectedRemnantPlate.id : null,
+        selected_plate_id: selectedRemnantPlate ? selectedRemnantPlate.id : null,
         quantity_used: selectedRemnantPlate ? quantityUsed : null
     };
     
@@ -1612,13 +1612,15 @@ async function setupEditCutForm(editCutModal, cut) {
     
     // Load existing selected remnant plate if it exists
     // Handle both object and ID cases
-    if (cut.selected_plate) {
-        if (typeof cut.selected_plate === 'object' && cut.selected_plate.id) {
-            selectedRemnantPlate = cut.selected_plate;
-        } else if (typeof cut.selected_plate === 'number' || typeof cut.selected_plate === 'string') {
+    // Check selected_plate_id first (new field name), then fallback to selected_plate for backward compatibility
+    const plateField = cut.selected_plate_id || cut.selected_plate;
+    if (plateField) {
+        if (typeof plateField === 'object' && plateField.id) {
+            selectedRemnantPlate = plateField;
+        } else if (typeof plateField === 'number' || typeof plateField === 'string') {
             // If it's just an ID, create a minimal object with just the ID
             // Full details will be available if user clicks to change the remnant
-            selectedRemnantPlate = { id: cut.selected_plate, dimensions: '-', material: '-' };
+            selectedRemnantPlate = { id: plateField, dimensions: '-', material: '-' };
         }
     } else if (cut.remnant_plate) {
         // Fallback to remnant_plate field
@@ -3005,7 +3007,7 @@ async function handleEditCutSave(formData, cutKey) {
         machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
         estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null,
         quantity: formData['cut-quantity'] ? parseInt(formData['cut-quantity']) : null,
-        selected_plate: selectedRemnantPlate ? selectedRemnantPlate.id : null,
+        selected_plate_id: selectedRemnantPlate ? selectedRemnantPlate.id : null,
         quantity_used: selectedRemnantPlate ? quantityUsed : null
     };
     

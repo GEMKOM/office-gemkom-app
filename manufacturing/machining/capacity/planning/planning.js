@@ -414,7 +414,7 @@ function initHeader() {
         containerId: 'header-placeholder',
         showBackButton: 'block',
         showRefreshButton: 'none',
-        backUrl: '/manufacturing/machining_2/capacity/'
+        backUrl: '/manufacturing/machining/capacity/'
     });
 }
 

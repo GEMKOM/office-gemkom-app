@@ -37,7 +37,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         showCreateButton: 'block',
         showBulkCreateButton: 'none',
         createButtonText: '      Yeni Parça',
-        onBackClick: () => window.location.href = '/manufacturing/machining_2/tasks/',
+        onBackClick: () => window.location.href = '/manufacturing/machining/tasks/',
         onCreateClick: () => showCreatePartModal()
     });
     
