@@ -13,7 +13,9 @@ const BASE_GENERAL_ROUTES = [
     '/general/overtime',
     '/general/overtime/pending',
     '/general/overtime/registry',
-    '/general/overtime/users'
+    '/general/overtime/users',
+    '/projects',
+    '/projects/project-tracking'
 ];
 
 // Helper function to merge base routes with team-specific routes
@@ -213,6 +215,15 @@ export const TEAM_ACCESS_CONFIG = {
             '/procurement/reports/suppliers'
         ]),
         allowedSections: ['finance', 'procurement_reports', 'general', 'general_overtime']
+    },
+    
+    // Sales team - access to sales and customer management
+    sales: {
+        allowedRoutes: mergeWithBaseRoutes([
+            '/sales',
+            '/sales/customers'
+        ]),
+        allowedSections: ['sales', 'general', 'general_overtime']
     },
     
     // IT team - access to IT systems and inventory
