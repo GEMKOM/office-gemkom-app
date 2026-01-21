@@ -28,6 +28,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/planning/department-requests'
             },
             {
+                title: 'Görev Şablonları',
+                description: 'Departman görev şablonlarını yönetin ve oluşturun.',
+                icon: 'fas fa-tasks',
+                iconColor: 'primary',
+                link: '/planning/task-templates'
+            },
+            {
                 title: 'Stok',
                 description: 'Stok yönetimi ve stok kartları.',
                 icon: 'fas fa-warehouse',

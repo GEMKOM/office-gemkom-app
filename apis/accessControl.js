@@ -37,6 +37,7 @@ export const TEAM_ACCESS_CONFIG = {
             '/management/dashboard',
             '/planning',
             '/planning/department-requests',
+            '/planning/task-templates',
             '/manufacturing',
             '/manufacturing/machining',
             '/manufacturing/machining/dashboard',
@@ -187,6 +188,7 @@ export const TEAM_ACCESS_CONFIG = {
         allowedRoutes: mergeWithBaseRoutes([
             '/planning',
             '/planning/department-requests',
+            '/planning/task-templates',
             '/manufacturing',
             '/manufacturing/machining',
             '/manufacturing/machining/capacity',

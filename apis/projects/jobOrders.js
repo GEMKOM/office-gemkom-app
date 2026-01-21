@@ -458,3 +458,88 @@ export const PRIORITY_OPTIONS = [
     { value: 'high', label: 'Yüksek' },
     { value: 'urgent', label: 'Acil' }
 ];
+
+/**
+ * Apply task template to job order
+ * @param {string} jobNo - Job order number
+ * @param {Object} options - Options
+ * @param {number} options.template_id - Template ID (required)
+ * @returns {Promise<Object>} Response with status, message, and created tasks
+ */
+export async function applyTemplateToJobOrder(jobNo, options) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${jobNo}/apply_template/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(options)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error applying template to job order ${jobNo}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Get department tasks for a job order
+ * @param {string} jobNo - Job order number
+ * @param {Object} additionalOptions - Additional query parameters for filtering tasks
+ * @returns {Promise<Object>} Paginated response with department tasks for the job order
+ */
+export async function getJobOrderDepartmentTasks(jobNo, additionalOptions = {}) {
+    try {
+        const queryParams = new URLSearchParams();
+        queryParams.append('job_order', jobNo);
+        
+        // Add additional query parameters if provided
+        if (additionalOptions.department) {
+            queryParams.append('department', additionalOptions.department);
+        }
+        if (additionalOptions.department__in) {
+            queryParams.append('department__in', additionalOptions.department__in);
+        }
+        if (additionalOptions.status) {
+            queryParams.append('status', additionalOptions.status);
+        }
+        if (additionalOptions.status__in) {
+            queryParams.append('status__in', additionalOptions.status__in);
+        }
+        if (additionalOptions.assigned_to !== undefined && additionalOptions.assigned_to !== null) {
+            queryParams.append('assigned_to', additionalOptions.assigned_to.toString());
+        }
+        if (additionalOptions.parent__isnull !== undefined && additionalOptions.parent__isnull !== null) {
+            queryParams.append('parent__isnull', additionalOptions.parent__isnull.toString());
+        }
+        if (additionalOptions.main_only !== undefined) {
+            queryParams.append('main_only', additionalOptions.main_only.toString());
+        }
+        if (additionalOptions.ordering) {
+            queryParams.append('ordering', additionalOptions.ordering);
+        }
+        if (additionalOptions.page) {
+            queryParams.append('page', additionalOptions.page.toString());
+        }
+
+        const url = `${backendBase}/projects/job-orders/${jobNo}/department_tasks/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+        const response = await authedFetch(url);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error fetching department tasks for job order ${jobNo}:`, error);
+        throw error;
+    }
+}

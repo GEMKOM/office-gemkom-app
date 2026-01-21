@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Görev Şablonları</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../style.css">
+    <link rel="stylesheet" href="../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../components/table/table.css">
+    <link rel="stylesheet" href="../../../components/filters/filters.css">
+    <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
+    <!-- Modal Components -->
+    <link rel="stylesheet" href="../../../components/display-modal/display-modal.css">
+    <link rel="stylesheet" href="../../../components/confirmation-modal/confirmation-modal.css">
+    <link rel="stylesheet" href="../../../components/edit-modal/edit-modal.css">
+    <link rel="icon" type="image/png" href="../../../images/gemkom.png">
+    <style>
+        /* Ensure add item modal (EditModal) appears above manage items modal (DisplayModal) */
+        #add-item-modal-container .modal {
+            z-index: 1060 !important;
+        }
+        #add-item-modal-container .modal-backdrop {
+            z-index: 1059 !important;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <div id="navbar-container"></div>
+
+    <!-- Main Content Section -->
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <!-- Header Component Placeholder -->
+            <div id="header-placeholder"></div>
+
+            <!-- Filters Section -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div id="filters-placeholder"></div>
+                </div>
+            </div>
+
+            <!-- Table Section -->
+            <div class="row">
+                <div class="col-12">
+                    <div id="templates-table-container"></div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Modal Component Containers -->
+    <div id="create-template-modal-container"></div>
+    <div id="edit-template-modal-container"></div>
+    <div id="delete-template-modal-container"></div>
+    <div id="add-item-modal-container"></div>
+    <div id="manage-items-modal-container"></div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Component Scripts -->
+    <script type="module" src="../../../components/header/header.js"></script>
+    <script type="module" src="../../../components/table/table.js"></script>
+    <script type="module" src="../../../components/filters/filters.js"></script>
+    <script type="module" src="../../../components/display-modal/display-modal.js"></script>
+    <script type="module" src="../../../components/confirmation-modal/confirmation-modal.js"></script>
+    <script type="module" src="../../../components/edit-modal/edit-modal.js"></script>
+    <script type="module" src="../../../components/dropdown/dropdown.js"></script>
+    <script type="module" src="task-templates.js"></script>
+</body>
+</html>

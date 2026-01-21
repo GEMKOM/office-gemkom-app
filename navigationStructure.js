@@ -408,6 +408,11 @@ export const NAVIGATION_STRUCTURE = {
                 icon: 'fas fa-boxes',
                 children: {}
             },
+            '/planning/task-templates': {
+                label: 'Görev Şablonları',
+                icon: 'fas fa-tasks',
+                children: {}
+            },
             '/planning/inventory': {
                 label: 'Stok',
                 icon: 'fas fa-warehouse',
