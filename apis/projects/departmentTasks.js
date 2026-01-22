@@ -145,6 +145,46 @@ export async function createDepartmentTask(taskData) {
 }
 
 /**
+ * Bulk create department tasks
+ * @param {Object} bulkData - Bulk creation data
+ * @param {string|number} bulkData.job_order - Job order number or ID (required, e.g., "254-01" or 1)
+ * @param {Array<Object>} bulkData.tasks - Array of task data objects (required)
+ * @param {string} bulkData.tasks[].department - Department code (required): design, planning, procurement, manufacturing, painting, logistics
+ * @param {string} [bulkData.tasks[].title] - Task title
+ * @param {string} [bulkData.tasks[].description] - Description
+ * @param {number} [bulkData.tasks[].sequence] - Sequence number
+ * @param {string} [bulkData.tasks[].target_start_date] - Target start date (YYYY-MM-DD)
+ * @param {string} [bulkData.tasks[].target_completion_date] - Target completion date (YYYY-MM-DD)
+ * @param {number} [bulkData.tasks[].assigned_to] - Assigned user ID
+ * @param {Array<number>} [bulkData.tasks[].depends_on] - Array of task IDs this task depends on
+ * @param {number} [bulkData.tasks[].parent] - Parent task ID (for subtasks)
+ * @param {string} [bulkData.tasks[].notes] - Notes
+ * @returns {Promise<Object>} Response with status, message, and created tasks
+ */
+export async function bulkCreateDepartmentTasks(bulkData) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/department-tasks/bulk_create/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(bulkData)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Error bulk creating department tasks:', error);
+        throw error;
+    }
+}
+
+/**
  * Update department task (PUT - full update)
  * @param {number} taskId - Task ID
  * @param {Object} taskData - Complete task data

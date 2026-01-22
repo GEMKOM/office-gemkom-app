@@ -33,6 +33,7 @@ import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { parsePartsFromText } from './partsPasteParser.js';
+import { showNotification } from '../../../components/notification/notification.js';
 import { markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { getRemnantPlates, getRemnantPlateById } from '../../../apis/cnc_cutting/remnants.js';
@@ -3054,35 +3055,6 @@ async function handleEditCutSave(formData, cutKey) {
     }
 }
 
-function showNotification(message, type = 'info') {
-    // Remove existing notifications
-    document.querySelectorAll('.notification').forEach(n => n.remove());
-    
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.className = `notification alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show`;
-    notification.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.animation = 'slideOutRight 0.3s ease-out';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
-                }
-            }, 300);
-        }
-    }, 5000);
-    
-    // Return the notification element for manual removal
-    return notification;
-}
 
 // Add part to form
 function addPart() {

@@ -2,6 +2,8 @@
  * Reusable Table Component
  * Supports customizable columns, actions, and editable functionality
  */
+import { showNotification } from '../notification/notification.js';
+
 export class TableComponent {
     constructor(containerId, options = {}) {
         this.containerId = containerId;
@@ -1347,8 +1349,4 @@ export class TableComponent {
     }
 }
 
-// Helper function for notifications (if not already available)
-function showNotification(message, type = 'info') {
-    // You can implement your own notification system here
-    console.log(`${type.toUpperCase()}: ${message}`);
-}
+// showNotification is imported from notification component

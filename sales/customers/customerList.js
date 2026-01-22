@@ -15,6 +15,7 @@ import { StatisticsCards } from '../../components/statistics-cards/statistics-ca
 import { TableComponent } from '../../components/table/table.js';
 import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { EditModal } from '../../components/edit-modal/edit-modal.js';
+import { showNotification } from '../../components/notification/notification.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 
 // State management
@@ -1062,9 +1063,3 @@ async function exportCustomers(format) {
 }
 
 // Helper function for notifications
-function showNotification(message, type = 'info') {
-    // You can implement your own notification system here
-    
-    // Simple alert for now
-    alert(`${type.toUpperCase()}: ${message}`);
-}

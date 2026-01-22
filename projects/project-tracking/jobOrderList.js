@@ -13,9 +13,12 @@ import {
     getJobOrderHierarchy,
     getStatusChoices,
     getPriorityChoices,
+    applyTemplateToJobOrder,
     STATUS_OPTIONS,
     PRIORITY_OPTIONS
 } from '../../apis/projects/jobOrders.js';
+import { createDepartmentTask, bulkCreateDepartmentTasks, getDepartmentChoices as getDepartmentTaskChoices } from '../../apis/projects/departmentTasks.js';
+import { listTaskTemplates, getTaskTemplateById } from '../../apis/projects/taskTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
 import { CURRENCY_OPTIONS } from '../../apis/projects/customers.js';
 import { HeaderComponent } from '../../components/header/header.js';
@@ -25,6 +28,7 @@ import { TableComponent } from '../../components/table/table.js';
 import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { EditModal } from '../../components/edit-modal/edit-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
+import { showNotification } from '../../components/notification/notification.js';
 
 // State management
 let currentPage = 1;
@@ -47,6 +51,9 @@ let childrenCache = new Map(); // Cache children data by parent job_no
 let createJobOrderModal = null;
 let editJobOrderModal = null;
 let deleteJobOrderModal = null;
+let addDepartmentTaskModal = null;
+let createDepartmentTaskModal = null;
+let viewJobOrderModal = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -148,6 +155,16 @@ async function loadCustomers() {
 function initializeTableComponent() {
     jobOrdersTable = new TableComponent('job-orders-table-container', {
         title: 'İş Emri Listesi',
+        rowAttributes: (row, rowIndex) => {
+            // Handle department tasks row
+            if (row._isDepartmentTasksRow) {
+                return {
+                    class: 'department-tasks-row',
+                    'data-parent-job-no': row._parentJobNo
+                };
+            }
+            return null;
+        },
         columns: [
             {
                 field: 'job_no',
@@ -187,7 +204,8 @@ function initializeTableComponent() {
                 field: 'parent',
                 label: 'Ana İş',
                 sortable: false,
-                formatter: (value) => {
+                formatter: (value, row) => {
+                    if (row._isDepartmentTasksRow) return '';
                     if (!value) return '<span class="text-muted">-</span>';
                     return `<span class="badge bg-light text-dark">${value}</span>`;
                 }
@@ -196,13 +214,17 @@ function initializeTableComponent() {
                 field: 'title',
                 label: 'Başlık',
                 sortable: true,
-                formatter: (value) => value || '-'
+                formatter: (value, row) => {
+                    if (row._isDepartmentTasksRow) return '';
+                    return value || '-';
+                }
             },
             {
                 field: 'customer_name',
                 label: 'Müşteri',
                 sortable: false,
                 formatter: (value, row) => {
+                    if (row._isDepartmentTasksRow) return '';
                     if (value) {
                         return `${value} <small class="text-muted">(${row.customer_code || ''})</small>`;
                     }
@@ -214,6 +236,7 @@ function initializeTableComponent() {
                 label: 'Durum',
                 sortable: true,
                 formatter: (value, row) => {
+                    if (row._isDepartmentTasksRow) return '';
                     const status = row.status;
                     if (status === 'active') {
                         return '<span class="status-badge status-green">Aktif</span>';
@@ -234,6 +257,7 @@ function initializeTableComponent() {
                 label: 'Öncelik',
                 sortable: true,
                 formatter: (value, row) => {
+                    if (row._isDepartmentTasksRow) return '';
                     const priority = row.priority;
                     if (priority === 'urgent') {
                         return '<span class="badge bg-danger">Acil</span>';
@@ -366,6 +390,16 @@ function initializeTableComponent() {
                 class: 'btn-outline-success',
                 onClick: (row) => {
                     showCreateChildJobOrderModal(row.job_no);
+                },
+                visible: (row) => row.status !== 'completed' && row.status !== 'cancelled'
+            },
+            {
+                key: 'add-department-task',
+                label: 'Görev Ekle',
+                icon: 'fas fa-tasks',
+                class: 'btn-outline-primary',
+                onClick: (row) => {
+                    showAddDepartmentTaskModal(row.job_no);
                 },
                 visible: (row) => row.status !== 'completed' && row.status !== 'cancelled'
             },
@@ -529,6 +563,30 @@ function initializeModalComponents() {
         title: 'İş Emri Silme Onayı',
         icon: 'fas fa-exclamation-triangle',
         size: 'md',
+        showEditButton: false
+    });
+
+    // Add Department Task Modal (selection modal)
+    addDepartmentTaskModal = new EditModal('add-department-task-modal-container', {
+        title: 'Departman Görevi Ekle',
+        icon: 'fas fa-tasks',
+        size: 'md',
+        showEditButton: false
+    });
+
+    // Create Department Task Modal (manual creation)
+    createDepartmentTaskModal = new EditModal('create-department-task-modal-container', {
+        title: 'Yeni Departman Görevi Oluştur',
+        icon: 'fas fa-plus-circle',
+        size: 'lg',
+        showEditButton: false
+    });
+
+    // View Job Order Modal
+    viewJobOrderModal = new DisplayModal('view-job-order-modal-container', {
+        title: 'İş Emri Detayları',
+        icon: 'fas fa-info-circle',
+        size: 'xl',
         showEditButton: false
     });
 
@@ -995,86 +1053,344 @@ window.viewJobOrder = async function(jobNo) {
     try {
         const jobOrder = await getJobOrderByJobNo(jobNo);
         
-        // Create a detailed view modal
-        const modal = document.createElement('div');
-        modal.className = 'modal fade';
-        modal.innerHTML = `
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">
-                            <i class="fas fa-info-circle me-2"></i>İş Emri Detayları
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <strong>İş Emri No:</strong> ${jobOrder.job_no}
-                            </div>
-                            <div class="col-md-6">
-                                <strong>Durum:</strong> ${jobOrder.status_display}
-                            </div>
-                        </div>
-                        <div class="row mb-3">
-                            <div class="col-12">
-                                <strong>Başlık:</strong> ${jobOrder.title}
-                            </div>
-                        </div>
-                        ${jobOrder.description ? `
-                        <div class="row mb-3">
-                            <div class="col-12">
-                                <strong>Açıklama:</strong><br>
-                                ${jobOrder.description}
-                            </div>
-                        </div>
-                        ` : ''}
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <strong>Müşteri:</strong> ${jobOrder.customer_name} (${jobOrder.customer_code})
-                            </div>
-                            <div class="col-md-6">
-                                <strong>Öncelik:</strong> ${jobOrder.priority_display}
-                            </div>
-                        </div>
-                        ${jobOrder.parent ? `
-                        <div class="row mb-3">
-                            <div class="col-12">
-                                <strong>Ana İş:</strong> ${jobOrder.parent} - ${jobOrder.parent_title || ''}
-                            </div>
-                        </div>
-                        ` : ''}
-                        ${jobOrder.children && jobOrder.children.length > 0 ? `
-                        <div class="row mb-3">
-                            <div class="col-12">
-                                <strong>Alt İşler (${jobOrder.children.length}):</strong>
-                                <ul class="mt-2">
-                                    ${jobOrder.children.map(child => `
-                                        <li>${child.job_no} - ${child.title} (${child.status_display}, %${child.completion_percentage})</li>
-                                    `).join('')}
-                                </ul>
-                            </div>
-                        </div>
-                        ` : ''}
-                        <div class="row mb-3">
-                            <div class="col-md-6">
-                                <strong>Tamamlanma:</strong> ${jobOrder.completion_percentage}%
-                            </div>
-                            <div class="col-md-6">
-                                <strong>Hedef Tarih:</strong> ${jobOrder.target_completion_date ? new Date(jobOrder.target_completion_date).toLocaleDateString('tr-TR') : '-'}
-                            </div>
-                        </div>
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
-                    </div>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        const bsModal = new bootstrap.Modal(modal);
-        bsModal.show();
-        modal.addEventListener('hidden.bs.modal', () => modal.remove());
+        // Clear and configure the view modal
+        viewJobOrderModal.clearData();
+        viewJobOrderModal.setTitle(`İş Emri Detayları: ${jobOrder.job_no}`);
+        
+        // Basic Information Section - All fields consolidated here
+        viewJobOrderModal.addSection({
+            title: 'Temel Bilgiler',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary'
+        });
+        
+        // Helper functions for badge classes
+        const getStatusBadgeClass = (status) => {
+            switch (status) {
+                case 'active': return 'status-green';
+                case 'draft': return 'status-grey';
+                case 'on_hold': return 'status-yellow';
+                case 'completed': return 'status-blue';
+                case 'cancelled': return 'status-red';
+                default: return 'status-grey';
+            }
+        };
+        
+        const getPriorityBadgeClass = (priority) => {
+            switch (priority) {
+                case 'urgent': return 'status-red';
+                case 'high': return 'status-yellow';
+                case 'normal': return 'status-blue';
+                case 'low': return 'status-grey';
+                default: return 'status-grey';
+            }
+        };
+        
+        // Row 1: job_no, title, customer
+        viewJobOrderModal.addField({
+            id: 'job_no',
+            label: 'İş Emri No',
+            type: 'text',
+            value: jobOrder.job_no || '-',
+            icon: 'fas fa-barcode',
+            colSize: 4
+        });
+        
+        viewJobOrderModal.addField({
+            id: 'title',
+            label: 'Başlık',
+            type: 'text',
+            value: jobOrder.title || '-',
+            icon: 'fas fa-heading',
+            colSize: 4
+        });
+        
+        viewJobOrderModal.addField({
+            id: 'customer',
+            label: 'Müşteri',
+            type: 'text',
+            value: jobOrder.customer_name ? `${jobOrder.customer_name} (${jobOrder.customer_code || ''})` : '-',
+            icon: 'fas fa-users',
+            colSize: 4
+        });
+        
+        // Row 2: status, priority, customer_order_no
+        viewJobOrderModal.addField({
+            id: 'status',
+            label: 'Durum',
+            type: 'text',
+            value: jobOrder.status_display || '-',
+            icon: 'fas fa-tasks',
+            colSize: 4
+        });
+        
+        viewJobOrderModal.addField({
+            id: 'priority',
+            label: 'Öncelik',
+            type: 'text',
+            value: jobOrder.priority_display || '-',
+            icon: 'fas fa-exclamation-triangle',
+            colSize: 4
+        });
+        
+        viewJobOrderModal.addField({
+            id: 'customer_order_no',
+            label: 'Müşteri Sipariş No',
+            type: 'text',
+            value: jobOrder.customer_order_no || '-',
+            icon: 'fas fa-file-invoice',
+            colSize: 4
+        });
+        
+        // Row 3: date fields
+        viewJobOrderModal.addField({
+            id: 'target_completion_date',
+            label: 'Hedef Tamamlanma Tarihi',
+            type: 'date',
+            value: jobOrder.target_completion_date || null,
+            icon: 'fas fa-calendar-check',
+            colSize: 4
+        });
+        
+        viewJobOrderModal.addField({
+            id: 'started_at',
+            label: 'Başlangıç Tarihi',
+            type: 'datetime',
+            value: jobOrder.started_at || null,
+            icon: 'fas fa-play-circle',
+            colSize: 4
+        });
+        
+        viewJobOrderModal.addField({
+            id: 'completed_at',
+            label: 'Tamamlanma Tarihi',
+            type: 'datetime',
+            value: jobOrder.completed_at || null,
+            icon: 'fas fa-check-circle',
+            colSize: 4
+        });
+        
+        // Row 4: completion_percentage
+        viewJobOrderModal.addField({
+            id: 'completion_percentage',
+            label: 'Tamamlanma Oranı',
+            type: 'percentage',
+            value: jobOrder.completion_percentage ? parseFloat(jobOrder.completion_percentage) : 0,
+            icon: 'fas fa-percentage',
+            colSize: 4
+        });
+        
+        if (jobOrder.description) {
+            viewJobOrderModal.addField({
+                id: 'description',
+                label: 'Açıklama',
+                type: 'text',
+                value: jobOrder.description,
+                icon: 'fas fa-align-left',
+                colSize: 12
+            });
+        }
+        
+        if (jobOrder.parent) {
+            viewJobOrderModal.addField({
+                id: 'parent',
+                label: 'Ana İş',
+                type: 'text',
+                value: `${jobOrder.parent}${jobOrder.parent_title ? ' - ' + jobOrder.parent_title : ''}`,
+                icon: 'fas fa-level-up-alt',
+                colSize: 4
+            });
+        }
+        
+        if (jobOrder.estimated_cost || jobOrder.total_cost) {
+            viewJobOrderModal.addField({
+                id: 'estimated_cost',
+                label: 'Tahmini Maliyet',
+                type: 'currency',
+                value: jobOrder.estimated_cost ? parseFloat(jobOrder.estimated_cost) : 0,
+                icon: 'fas fa-calculator',
+                colSize: 4
+            });
+            
+            viewJobOrderModal.addField({
+                id: 'total_cost',
+                label: 'Toplam Maliyet',
+                type: 'currency',
+                value: jobOrder.total_cost ? parseFloat(jobOrder.total_cost) : 0,
+                icon: 'fas fa-money-bill-wave',
+                colSize: 4
+            });
+        }
+        
+        // Department Tasks Section - Most Important (no title, table will have title)
+        viewJobOrderModal.addCustomSection({
+            id: 'department-tasks-section',
+            customContent: `<div id="department-tasks-table-container"></div>`
+        });
+        
+        // Metadata Section
+        viewJobOrderModal.addSection({
+            title: 'Sistem Bilgileri',
+            icon: 'fas fa-info',
+            iconColor: 'text-secondary'
+        });
+        
+        viewJobOrderModal.addField({
+            id: 'created_at',
+            label: 'Oluşturulma Tarihi',
+            type: 'datetime',
+            value: jobOrder.created_at || null,
+            icon: 'fas fa-calendar-plus',
+            colSize: 6
+        });
+        
+        viewJobOrderModal.addField({
+            id: 'created_by',
+            label: 'Oluşturan',
+            type: 'text',
+            value: jobOrder.created_by_name || '-',
+            icon: 'fas fa-user',
+            colSize: 6
+        });
+        
+        viewJobOrderModal.addField({
+            id: 'updated_at',
+            label: 'Güncellenme Tarihi',
+            type: 'datetime',
+            value: jobOrder.updated_at || null,
+            icon: 'fas fa-calendar-edit',
+            colSize: 6
+        });
+        
+        if (jobOrder.completed_by_name) {
+            viewJobOrderModal.addField({
+                id: 'completed_by',
+                label: 'Tamamlayan',
+                type: 'text',
+                value: jobOrder.completed_by_name,
+                icon: 'fas fa-user-check',
+                colSize: 6
+            });
+        }
+        
+        // Render the modal
+        viewJobOrderModal.render();
+        
+        // Update fields with HTML content (status and priority badges)
+        const statusField = viewJobOrderModal.content.querySelector('[data-field-id="status"] .field-value');
+        if (statusField && jobOrder.status_display && jobOrder.status_display !== '-') {
+            const statusBadgeClass = getStatusBadgeClass(jobOrder.status);
+            statusField.innerHTML = `<span class="status-badge ${statusBadgeClass}">${jobOrder.status_display}</span>`;
+        }
+        
+        const priorityField = viewJobOrderModal.content.querySelector('[data-field-id="priority"] .field-value');
+        if (priorityField && jobOrder.priority_display && jobOrder.priority_display !== '-') {
+            const priorityBadgeClass = getPriorityBadgeClass(jobOrder.priority);
+            priorityField.innerHTML = `<span class="status-badge ${priorityBadgeClass}">${jobOrder.priority_display}</span>`;
+        }
+        
+        // Initialize department tasks table after modal is rendered
+        const departmentTasksContainer = viewJobOrderModal.content.querySelector('#department-tasks-table-container');
+        if (departmentTasksContainer && jobOrder.department_tasks && jobOrder.department_tasks.length > 0) {
+            // Helper function for department task status badges
+            const getDepartmentTaskStatusBadgeClass = (status) => {
+                switch (status) {
+                    case 'completed': return 'status-green';
+                    case 'in_progress': return 'status-blue';
+                    case 'pending': return 'status-yellow';
+                    case 'blocked': return 'status-red';
+                    case 'skipped': return 'status-grey';
+                    default: return 'status-grey';
+                }
+            };
+            
+            const departmentTasksTable = new TableComponent('department-tasks-table-container', {
+                title: 'Departman Görevleri',
+                icon: 'fas fa-tasks',
+                iconColor: 'text-primary',
+                columns: [
+                    {
+                        field: 'sequence',
+                        label: 'Sıra',
+                        sortable: true,
+                        formatter: (value) => value || '-'
+                    },
+                    {
+                        field: 'department_display',
+                        label: 'Departman',
+                        sortable: true,
+                        formatter: (value) => value || '-'
+                    },
+                    {
+                        field: 'title',
+                        label: 'Başlık',
+                        sortable: true,
+                        formatter: (value) => value || '-'
+                    },
+                    {
+                        field: 'status_display',
+                        label: 'Durum',
+                        sortable: true,
+                        formatter: (value, row) => {
+                            if (!value || value === '-') return '-';
+                            const status = row.status;
+                            const badgeClass = getDepartmentTaskStatusBadgeClass(status);
+                            return `<span class="status-badge ${badgeClass}">${value}</span>`;
+                        }
+                    },
+                    {
+                        field: 'assigned_to_name',
+                        label: 'Atanan',
+                        sortable: false,
+                        formatter: (value) => value || '-'
+                    },
+                    {
+                        field: 'target_completion_date',
+                        label: 'Hedef Tarih',
+                        sortable: true,
+                        type: 'date',
+                        formatter: (value) => {
+                            if (!value) return '-';
+                            const date = new Date(value);
+                            return date.toLocaleDateString('tr-TR', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                            });
+                        }
+                    },
+                    {
+                        field: 'completed_at',
+                        label: 'Tamamlanma Tarihi',
+                        sortable: true,
+                        type: 'datetime',
+                        formatter: (value) => {
+                            if (!value) return '-';
+                            const date = new Date(value);
+                            return date.toLocaleDateString('tr-TR', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                            });
+                        }
+                    }
+                ],
+                data: jobOrder.department_tasks || [],
+                sortable: true,
+                pagination: false,
+                exportable: false,
+                refreshable: false,
+                small: true,
+                striped: true,
+                emptyMessage: 'Departman görevi bulunamadı',
+                emptyIcon: 'fas fa-tasks'
+            });
+        } else if (departmentTasksContainer) {
+            departmentTasksContainer.innerHTML = '<p class="text-muted text-center py-3">Henüz departman görevi bulunmamaktadır.</p>';
+        }
+        
+        // Show the modal
+        viewJobOrderModal.show();
     } catch (error) {
         console.error('Error viewing job order:', error);
         showNotification('İş emri bilgileri yüklenirken hata oluştu', 'error');
@@ -1242,25 +1558,6 @@ window.showCreateChildJobOrderModal = function(parentJobNo) {
         icon: 'fas fa-calendar-check',
         colSize: 6,
         helpText: 'Hedef tamamlanma tarihi'
-    });
-
-    // Note: Customer is inherited from parent, so we don't show it
-    createJobOrderModal.addSection({
-        title: 'Bilgi',
-        icon: 'fas fa-info',
-        iconColor: 'text-success'
-    });
-
-    createJobOrderModal.addField({
-        id: 'info',
-        name: 'info',
-        label: 'Not',
-        type: 'text',
-        value: `Müşteri bilgisi otomatik olarak ana iş emrinden (${parentJob.customer_name}) alınacaktır.`,
-        icon: 'fas fa-info-circle',
-        colSize: 12,
-        helpText: 'Müşteri bilgisi otomatik alınır',
-        disabled: true
     });
 
     // Store parent job no for form submission
@@ -1972,7 +2269,579 @@ async function exportJobOrders(format) {
     }
 }
 
-// Helper function for notifications
-function showNotification(message, type = 'info') {
-    alert(`${type.toUpperCase()}: ${message}`);
+
+// Show modal to add department tasks with optional template
+window.showAddDepartmentTaskModal = async function(jobNo) {
+    try {
+        // Load department choices and templates
+        let departmentChoices = [];
+        let templates = [];
+        
+        try {
+            departmentChoices = await getDepartmentTaskChoices();
+        } catch (error) {
+            console.error('Error loading department choices:', error);
+            showNotification('Departman seçenekleri yüklenirken hata oluştu', 'error');
+            return;
+        }
+        
+        try {
+            const templatesResponse = await listTaskTemplates({ is_active: true });
+            templates = templatesResponse.results || [];
+        } catch (error) {
+            console.error('Error loading templates:', error);
+        }
+        
+        // Clear and configure the modal
+        addDepartmentTaskModal.clearAll();
+        
+        // Add template selection section
+        addDepartmentTaskModal.addSection({
+            id: 'template-section',
+            title: 'Şablon Seçimi (İsteğe Bağlı)',
+            icon: 'fas fa-file-alt',
+            iconColor: 'text-info'
+        });
+        
+        addDepartmentTaskModal.addField({
+            id: 'template_id',
+            name: 'template_id',
+            label: 'Şablon',
+            type: 'dropdown',
+            placeholder: 'Şablon seçin (isteğe bağlı)...',
+            required: false,
+            icon: 'fas fa-file-alt',
+            colSize: 12,
+            helpText: 'Şablon seçin ve "Şablon Görevlerini Ekle" butonuna tıklayın',
+            options: [
+                { value: '', label: 'Şablon Seçilmedi' },
+                ...templates.map(t => ({
+                    value: t.id.toString(),
+                    label: `${t.name}${t.is_default ? ' (Varsayılan)' : ''}`
+                }))
+            ]
+        });
+        
+        // Add tasks section (will add custom content after render)
+        addDepartmentTaskModal.addSection({
+            id: 'tasks-section',
+            title: 'Görevler',
+            icon: 'fas fa-tasks',
+            iconColor: 'text-primary'
+        });
+        
+        // Store data for later use
+        window.currentJobNoForTask = jobNo;
+        window.departmentChoicesForTasks = departmentChoices;
+        window.tasksList = []; // Array to store tasks: { department, title, sequence, description, ... }
+        
+        // Set up save callback
+        addDepartmentTaskModal.onSave = null;
+        addDepartmentTaskModal.onSaveCallback(async (formData) => {
+            if (window.tasksList.length === 0) {
+                showNotification('En az bir görev eklemelisiniz', 'error');
+                return;
+            }
+            
+            try {
+                // Get job order to retrieve ID
+                let jobOrderId = jobNo;
+                try {
+                    const jobOrder = await getJobOrderByJobNo(jobNo);
+                    if (jobOrder && jobOrder.id) {
+                        jobOrderId = jobOrder.id;
+                    }
+                } catch (error) {
+                    console.warn('Could not fetch job order ID, using job_no:', error);
+                    // Continue with job_no, backend might accept it
+                }
+                
+                // Prepare bulk data
+                const bulkData = {
+                    job_order: jobOrderId,
+                    tasks: window.tasksList.map(task => ({
+                        department: task.department,
+                        title: task.title || '',
+                        sequence: task.sequence ? parseInt(task.sequence) : null,
+                        description: task.description || '',
+                        target_start_date: task.target_start_date || null,
+                        target_completion_date: task.target_completion_date || null,
+                        notes: task.notes || null
+                    }))
+                };
+                
+                // Remove null/empty values
+                bulkData.tasks = bulkData.tasks.map(task => {
+                    const cleaned = {};
+                    Object.keys(task).forEach(key => {
+                        if (task[key] !== null && task[key] !== '') {
+                            cleaned[key] = task[key];
+                        }
+                    });
+                    return cleaned;
+                });
+                
+                // Call bulk create
+                const response = await bulkCreateDepartmentTasks(bulkData);
+                
+                // Close modal
+                addDepartmentTaskModal.hide();
+                
+                // Show success message
+                const message = response.message || `${response.tasks?.length || window.tasksList.length} görev başarıyla oluşturuldu.`;
+                showNotification(message, 'success');
+            } catch (error) {
+                console.error('Error bulk creating tasks:', error);
+                let errorMessage = 'Görevler oluşturulurken hata oluştu';
+                try {
+                    const errorData = JSON.parse(error.message);
+                    if (typeof errorData === 'object') {
+                        if (errorData.errors) {
+                            errorMessage = `Hatalar: ${JSON.stringify(errorData.errors)}`;
+                        } else {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        }
+                    }
+                } catch (e) {}
+                showNotification(errorMessage, 'error');
+            }
+        });
+        
+        // Render modal
+        addDepartmentTaskModal.render();
+        
+        // Add button to template section - similar to Görev Ekle button
+        const templateSection = addDepartmentTaskModal.form.querySelector('[data-section-id="template-section"]');
+        if (templateSection) {
+            const fieldsContainer = templateSection.querySelector('.row');
+            if (fieldsContainer) {
+                // Add button container similar to Görev Ekle button structure
+                const buttonCol = document.createElement('div');
+                buttonCol.className = 'col-12';
+                buttonCol.innerHTML = `
+                    <div class="d-flex justify-content-end mb-3">
+                        <button type="button" class="btn btn-sm btn-success" id="add-template-items-btn">
+                            <i class="fas fa-plus me-1"></i>Şablon Görevlerini Ekle
+                        </button>
+                    </div>
+                `;
+                fieldsContainer.appendChild(buttonCol);
+            }
+        }
+        
+        // Add custom tasks table HTML after rendering
+        const tasksSection = addDepartmentTaskModal.form.querySelector('[data-section-id="tasks-section"]');
+        if (tasksSection) {
+            const fieldsContainer = tasksSection.querySelector('.row');
+            if (fieldsContainer) {
+                fieldsContainer.innerHTML = `
+                    <div class="col-12">
+                        <div id="tasks-container" class="mt-3">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <h6 class="mb-0">Görev Listesi</h6>
+                                <button type="button" class="btn btn-sm btn-primary" id="add-task-btn">
+                                    <i class="fas fa-plus me-1"></i>Görev Ekle
+                                </button>
+                            </div>
+                            <div id="tasks-table-container">
+                                <p class="text-muted text-center py-3">Henüz görev eklenmedi. Şablon seçin veya manuel görev ekleyin.</p>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+        }
+        
+        // Button is always visible, no need for show/hide logic
+        
+        // Setup add template items button
+        const addTemplateItemsBtn = addDepartmentTaskModal.container.querySelector('#add-template-items-btn');
+        if (addTemplateItemsBtn) {
+            addTemplateItemsBtn.addEventListener('click', async () => {
+                // Use getFormData to properly get dropdown value
+                const formData = addDepartmentTaskModal.getFormData();
+                const templateId = formData.template_id;
+                
+                if (!templateId || templateId === '' || templateId === null) {
+                    showNotification('Lütfen önce bir şablon seçin', 'warning');
+                    return;
+                }
+                
+                try {
+                    // Fetch template with items
+                    const template = await getTaskTemplateById(parseInt(templateId));
+                    
+                    if (template.items && template.items.length > 0) {
+                        // Add template items to the tasks list (append, don't replace)
+                        const newTasks = template.items.map(item => ({
+                            department: item.department,
+                            title: item.title || '',
+                            sequence: item.sequence || (window.tasksList.length + 1),
+                            description: item.description || '',
+                            fromTemplate: true
+                        }));
+                        
+                        // Append to existing list
+                        window.tasksList = [...window.tasksList, ...newTasks];
+                        
+                        // Update sequences to be sequential
+                        window.tasksList.forEach((task, index) => {
+                            if (!task.sequence) {
+                                task.sequence = index + 1;
+                            }
+                        });
+                        
+                        renderTasksTable();
+                        showNotification(`${newTasks.length} görev şablondan eklendi`, 'success');
+                    } else {
+                        showNotification('Seçilen şablonda görev bulunamadı', 'warning');
+                    }
+                } catch (error) {
+                    console.error('Error loading template:', error);
+                    showNotification('Şablon yüklenirken hata oluştu', 'error');
+                }
+            });
+        }
+        
+        // Setup add task button
+        const addTaskBtn = addDepartmentTaskModal.container.querySelector('#add-task-btn');
+        if (addTaskBtn) {
+            addTaskBtn.addEventListener('click', () => {
+                addNewTask();
+            });
+        }
+        
+        // Initial render
+        renderTasksTable();
+        
+        addDepartmentTaskModal.show();
+    } catch (error) {
+        console.error('Error showing add department task modal:', error);
+        showNotification('Görev ekleme modalı açılırken hata oluştu', 'error');
+    }
+};
+
+// Render tasks table
+function renderTasksTable() {
+    const container = document.getElementById('tasks-table-container');
+    if (!container) return;
+    
+    if (window.tasksList.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center py-3">Henüz görev eklenmedi. Şablon seçin veya manuel görev ekleyin.</p>';
+        return;
+    }
+    
+    const tableHtml = `
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered">
+                <thead>
+                    <tr>
+                        <th style="width: 60px;">Sıra</th>
+                        <th>Departman</th>
+                        <th>Başlık</th>
+                        <th style="width: 100px;">İşlemler</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${window.tasksList.map((task, index) => `
+                        <tr data-task-index="${index}">
+                            <td>
+                                <input type="number" class="form-control form-control-sm task-sequence" 
+                                       value="${task.sequence || index + 1}" 
+                                       data-index="${index}" 
+                                       style="width: 60px;">
+                            </td>
+                            <td>
+                                <select class="form-select form-select-sm task-department" 
+                                        data-index="${index}">
+                                    ${window.departmentChoicesForTasks.map(dept => 
+                                        `<option value="${dept.value}" ${task.department === dept.value ? 'selected' : ''}>${dept.label}</option>`
+                                    ).join('')}
+                                </select>
+                            </td>
+                            <td>
+                                <input type="text" class="form-control form-control-sm task-title" 
+                                       value="${escapeHtml(task.title || '')}" 
+                                       placeholder="Görev başlığı"
+                                       data-index="${index}">
+                            </td>
+                            <td>
+                                <button type="button" class="btn btn-sm btn-outline-danger remove-task-btn" 
+                                        data-index="${index}">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+    
+    container.innerHTML = tableHtml;
+    
+    // Attach event listeners
+    container.querySelectorAll('.task-sequence').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            window.tasksList[index].sequence = e.target.value ? parseInt(e.target.value) : null;
+        });
+    });
+    
+    container.querySelectorAll('.task-department').forEach(select => {
+        select.addEventListener('change', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            window.tasksList[index].department = e.target.value;
+        });
+    });
+    
+    container.querySelectorAll('.task-title').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            window.tasksList[index].title = e.target.value;
+        });
+    });
+    
+    container.querySelectorAll('.remove-task-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const index = parseInt(e.target.closest('.remove-task-btn').dataset.index);
+            window.tasksList.splice(index, 1);
+            renderTasksTable();
+        });
+    });
+}
+
+// Add new task
+function addNewTask() {
+    if (!window.tasksList) {
+        window.tasksList = [];
+    }
+    
+    const newTask = {
+        department: window.departmentChoicesForTasks[0]?.value || '',
+        title: '',
+        sequence: window.tasksList.length + 1,
+        description: '',
+        fromTemplate: false
+    };
+    
+    window.tasksList.push(newTask);
+    renderTasksTable();
+}
+
+// Helper function to escape HTML
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+// Show manual department task creation modal
+window.showCreateDepartmentTaskModal = async function(jobNo) {
+    try {
+        // Load department choices
+        let departmentChoices = [];
+        try {
+            departmentChoices = await getDepartmentTaskChoices();
+        } catch (error) {
+            console.error('Error loading department choices:', error);
+            showNotification('Departman seçenekleri yüklenirken hata oluştu', 'error');
+            return;
+        }
+        
+        // Clear and configure the modal
+        createDepartmentTaskModal.clearAll();
+        
+        // Add Basic Information section
+        createDepartmentTaskModal.addSection({
+            title: 'Görev Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary'
+        });
+        
+        createDepartmentTaskModal.addField({
+            id: 'job_order',
+            name: 'job_order',
+            label: 'İş Emri No',
+            type: 'text',
+            value: jobNo,
+            required: true,
+            icon: 'fas fa-barcode',
+            colSize: 6,
+            disabled: true
+        });
+        
+        createDepartmentTaskModal.addField({
+            id: 'department',
+            name: 'department',
+            label: 'Departman',
+            type: 'dropdown',
+            placeholder: 'Departman seçin...',
+            required: true,
+            icon: 'fas fa-building',
+            colSize: 6,
+            helpText: 'Görevin atanacağı departman',
+            options: departmentChoices.map(d => ({
+                value: d.value,
+                label: d.label
+            }))
+        });
+        
+        createDepartmentTaskModal.addField({
+            id: 'title',
+            name: 'title',
+            label: 'Başlık',
+            type: 'text',
+            placeholder: 'Görev başlığını girin',
+            required: true,
+            icon: 'fas fa-heading',
+            colSize: 12,
+            helpText: 'Görev başlığı'
+        });
+        
+        createDepartmentTaskModal.addField({
+            id: 'description',
+            name: 'description',
+            label: 'Açıklama',
+            type: 'textarea',
+            placeholder: 'Detaylı açıklama',
+            icon: 'fas fa-align-left',
+            colSize: 12,
+            helpText: 'Görev açıklaması'
+        });
+        
+        // Add Dates section
+        createDepartmentTaskModal.addSection({
+            title: 'Tarih Bilgileri',
+            icon: 'fas fa-calendar',
+            iconColor: 'text-success'
+        });
+        
+        createDepartmentTaskModal.addField({
+            id: 'target_start_date',
+            name: 'target_start_date',
+            label: 'Hedef Başlangıç Tarihi',
+            type: 'date',
+            icon: 'fas fa-calendar-alt',
+            colSize: 6,
+            helpText: 'Hedef başlangıç tarihi'
+        });
+        
+        createDepartmentTaskModal.addField({
+            id: 'target_completion_date',
+            name: 'target_completion_date',
+            label: 'Hedef Bitiş Tarihi',
+            type: 'date',
+            icon: 'fas fa-calendar-check',
+            colSize: 6,
+            helpText: 'Hedef bitiş tarihi'
+        });
+        
+        // Add Additional Information section
+        createDepartmentTaskModal.addSection({
+            title: 'Ek Bilgiler',
+            icon: 'fas fa-info',
+            iconColor: 'text-info'
+        });
+        
+        createDepartmentTaskModal.addField({
+            id: 'sequence',
+            name: 'sequence',
+            label: 'Sıra',
+            type: 'number',
+            placeholder: '0',
+            icon: 'fas fa-sort-numeric-up',
+            colSize: 6,
+            helpText: 'Görev sırası'
+        });
+        
+        createDepartmentTaskModal.addField({
+            id: 'notes',
+            name: 'notes',
+            label: 'Notlar',
+            type: 'textarea',
+            placeholder: 'Ek notlar',
+            icon: 'fas fa-sticky-note',
+            colSize: 12,
+            helpText: 'Ek notlar'
+        });
+        
+        // Set up save callback
+        createDepartmentTaskModal.onSave = null;
+        createDepartmentTaskModal.onSaveCallback(async (formData) => {
+            try {
+                // Prepare task data
+                const taskData = {
+                    job_order: jobNo,
+                    department: formData.department,
+                    title: formData.title,
+                    description: formData.description || '',
+                    target_start_date: formData.target_start_date || null,
+                    target_completion_date: formData.target_completion_date || null,
+                    sequence: formData.sequence ? parseInt(formData.sequence) : null,
+                    notes: formData.notes || ''
+                };
+                
+                // Remove null/empty values
+                Object.keys(taskData).forEach(key => {
+                    if (taskData[key] === null || taskData[key] === '') {
+                        delete taskData[key];
+                    }
+                });
+                
+                // Create the task
+                await createDepartmentTask(taskData);
+                
+                // Close modal
+                createDepartmentTaskModal.hide();
+                
+                showNotification('Görev başarıyla oluşturuldu', 'success');
+            } catch (error) {
+                console.error('Error creating department task:', error);
+                let errorMessage = 'Görev oluşturulurken hata oluştu';
+                try {
+                    const errorData = JSON.parse(error.message);
+                    if (typeof errorData === 'object') {
+                        const errors = Object.values(errorData).flat();
+                        errorMessage = errors.join(', ') || errorMessage;
+                    }
+                } catch (e) {}
+                showNotification(errorMessage, 'error');
+            }
+        });
+        
+        // Render and show modal
+        createDepartmentTaskModal.render();
+        createDepartmentTaskModal.show();
+    } catch (error) {
+        console.error('Error showing create department task modal:', error);
+        showNotification('Görev oluşturma modalı açılırken hata oluştu', 'error');
+    }
+};
+
+// Apply template to job order
+async function applyTemplateToJobOrderHandler(jobNo, templateId) {
+    try {
+        // Show loading
+        addDepartmentTaskModal.hide();
+        
+        // Apply template
+        const response = await applyTemplateToJobOrder(jobNo, { template_id: templateId });
+        
+        // Show success message
+        const message = response.message || `Şablon başarıyla uygulandı. ${response.created_tasks?.length || 0} görev oluşturuldu.`;
+        showNotification(message, 'success');
+    } catch (error) {
+        console.error('Error applying template:', error);
+        let errorMessage = 'Şablon uygulanırken hata oluştu';
+        try {
+            const errorData = JSON.parse(error.message);
+            if (typeof errorData === 'object') {
+                const errors = Object.values(errorData).flat();
+                errorMessage = errors.join(', ') || errorMessage;
+            }
+        } catch (e) {}
+        showNotification(errorMessage, 'error');
+    }
 }

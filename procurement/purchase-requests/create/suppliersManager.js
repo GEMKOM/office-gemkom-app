@@ -1,5 +1,6 @@
 import { getSuppliers, getPaymentTerms } from '../../../apis/procurement.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
+import { showNotification } from '../../../components/notification/notification.js';
 
 // Suppliers Manager Module
 export class SuppliersManager {
@@ -714,23 +715,8 @@ export class SuppliersManager {
     }
 
     showNotification(message, type = 'info') {
-        // Create notification element
-        const notification = document.createElement('div');
-        notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-        notification.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.remove();
-            }
-        }, 5000);
+        // Use the centralized notification component
+        showNotification(message, type);
     }
 
     // Offer Modal Methods
@@ -991,25 +977,5 @@ export class SuppliersManager {
 
         // Close modal
         bootstrap.Modal.getInstance(document.getElementById('offerModal')).hide();
-    }
-
-    showNotification(message, type = 'info') {
-        // Create notification element
-        const notification = document.createElement('div');
-        notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-        notification.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        // Auto-remove after 5 seconds
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.remove();
-            }
-        }, 5000);
     }
 }

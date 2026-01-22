@@ -19,6 +19,7 @@ import {
     DEPARTMENT_OPTIONS
 } from '../../../apis/projects/taskTemplates.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
+import { showNotification } from '../../../components/notification/notification.js';
 
 // State management
 let currentPage = 1;
@@ -923,25 +924,3 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-function showNotification(message, type = 'info') {
-    // Simple notification - you can replace this with your notification system
-    const alertClass = {
-        'success': 'alert-success',
-        'error': 'alert-danger',
-        'warning': 'alert-warning',
-        'info': 'alert-info'
-    }[type] || 'alert-info';
-
-    const alert = document.createElement('div');
-    alert.className = `alert ${alertClass} alert-dismissible fade show position-fixed top-0 end-0 m-3`;
-    alert.style.zIndex = '9999';
-    alert.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    document.body.appendChild(alert);
-
-    setTimeout(() => {
-        alert.remove();
-    }, 5000);
-}

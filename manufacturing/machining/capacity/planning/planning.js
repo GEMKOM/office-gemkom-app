@@ -9,6 +9,7 @@ import { GanttChart } from '../../../../components/gantt/gantt.js';
 import { fetchMachinesDropdown, getMachineCalendar } from '../../../../apis/machines.js';
 import { getOperations, bulkSaveOperationsPlanning, updateOperation } from '../../../../apis/machining/operations.js';
 import { formatDateTime } from '../../../../apis/formatters.js';
+import { showNotification } from '../../../../components/notification/notification.js';
 
 // Global state
 let currentMachineId = null;
@@ -1394,58 +1395,6 @@ function setupEventListeners() {
     
 }
 
-// Show notification
-function showNotification(message, type = 'info', timeout = 5000) {
-    // Remove existing notifications
-    const existingNotifications = document.querySelectorAll('.custom-notification');
-    existingNotifications.forEach(notification => notification.remove());
-    
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.className = `custom-notification alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-    notification.style.cssText = `
-        top: 20px;
-        right: 20px;
-        z-index: 9999;
-        min-width: 350px;
-        backdrop-filter: blur(15px);
-        border: 1px solid rgba(255, 255, 255, 0.3);
-        border-radius: 15px;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-        animation: slideInRight 0.5s ease-out;
-    `;
-    
-    const iconClass = type === 'error' ? 'exclamation-triangle' : 
-                     type === 'success' ? 'check-circle' : 
-                     type === 'warning' ? 'exclamation-circle' : 'info-circle';
-    
-    notification.innerHTML = `
-        <div class="d-flex align-items-center">
-            <i class="fas fa-${iconClass} me-3" style="font-size: 1.2rem;"></i>
-            <div class="flex-grow-1">
-                <strong>${type === 'error' ? 'Hata' : type === 'success' ? 'Başarılı' : type === 'warning' ? 'Uyarı' : 'Bilgi'}</strong>
-                <br>
-                <span>${message}</span>
-            </div>
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        </div>
-    `;
-    
-    // Add to page
-    document.body.appendChild(notification);
-    
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.animation = 'slideOutRight 0.5s ease-out';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
-                }
-            }, 500);
-        }
-    }, timeout);
-}
 
 // Setup inline editing using event delegation (more efficient for large datasets)
 function setupInlineEditingDelegation() {

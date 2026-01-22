@@ -5,6 +5,7 @@ import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
+import { showNotification } from '../../../components/notification/notification.js';
 
 // State management
 let currentPage = 1;
@@ -1167,11 +1168,4 @@ window.deleteRemnant = function(remnantId) {
 };
 
 // Helper function to show notifications (if available in the global scope)
-function showNotification(message, type = 'info') {
-    if (typeof window.showNotification === 'function') {
-        window.showNotification(message, type);
-    } else {
-        console.log(`[${type.toUpperCase()}] ${message}`);
-    }
-}
 

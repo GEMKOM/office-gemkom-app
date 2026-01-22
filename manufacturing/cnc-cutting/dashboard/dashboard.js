@@ -12,6 +12,7 @@ import { TableComponent } from '../../../components/table/table.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { formatDurationFromMs, formatWeeksFromHours, formatHoursSpent, formatRemainingHours } from '../../../apis/formatters.js';
+import { showNotification } from '../../../components/notification/notification.js';
 
 // ============================================================================
 // STATE MANAGEMENT
@@ -910,32 +911,6 @@ function previewFile(fileUrl, fileName, fileExtension) {
 }
 
 // Show notification function (same as in cuts.js)
-function showNotification(message, type = 'info') {
-    // Remove existing notifications
-    document.querySelectorAll('.notification').forEach(n => n.remove());
-    
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.className = `notification alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show`;
-    notification.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.animation = 'slideOutRight 0.3s ease-out';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
-                }
-            }, 300);
-        }
-    }, 5000);
-    
     // Return the notification element for manual removal
     return notification;
 }

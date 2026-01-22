@@ -12,6 +12,7 @@ import {
     bulkCreateWeldingTimeEntries
 } from '../../../../apis/welding/crud.js';
 import { authFetchUsers } from '../../../../apis/users.js';
+import { showNotification } from '../../../../components/notification/notification.js';
 
 // State management
 let currentPage = 1;
@@ -1367,29 +1368,4 @@ async function deleteTimeEntryAPI(entryId) {
     }
 }
 
-function showNotification(message, type = 'info') {
-    document.querySelectorAll('.notification').forEach(n => n.remove());
-    
-    const notification = document.createElement('div');
-    notification.className = `notification alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show`;
-    notification.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.style.animation = 'slideOutRight 0.3s ease-out';
-            setTimeout(() => {
-                if (notification.parentNode) {
-                    notification.remove();
-                }
-            }, 300);
-        }
-    }, 5000);
-    
-    return notification;
-}
 

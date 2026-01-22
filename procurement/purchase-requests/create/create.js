@@ -17,6 +17,7 @@ import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { ITEM_CODE_NAMES, UNIT_CHOICES } from '../../../apis/constants.js';
+import { showNotification } from '../../../components/notification/notification.js';
 
 // Global state
 let headerComponent;
@@ -2443,27 +2444,6 @@ async function findPurchaseRequestByNumber(requestNumber) {
     }
 }
 
-function showNotification(message, type = 'info', duration = 5000) {
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-    notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px; max-width: 500px; white-space: pre-line;';
-    
-    // Handle multi-line messages
-    const messageText = typeof message === 'string' ? message : JSON.stringify(message);
-    notification.innerHTML = `
-        <div style="white-space: pre-line;">${messageText}</div>
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    
-    document.body.appendChild(notification);
-    
-    // Auto-remove after specified duration
-    setTimeout(() => {
-        if (notification.parentNode) {
-            notification.remove();
-        }
-    }, duration);
 }
 
 

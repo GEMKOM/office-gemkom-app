@@ -9,6 +9,7 @@ import { TableComponent } from '../../components/table/table.js';
 import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { EditModal } from '../../components/edit-modal/edit-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
+import { showNotification } from '../../components/notification/notification.js';
 
 // State management
 let currentPage = 1;
@@ -1001,11 +1002,5 @@ async function exportUsers(format) {
 }
 
 // Helper function for notifications
-function showNotification(message, type = 'info') {
-    // You can implement your own notification system here
-    
-    // Simple alert for now
-    alert(`${type.toUpperCase()}: ${message}`);
-} 
 
 // Loading state is now handled by TableComponent 

@@ -40,6 +40,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-warehouse',
                 iconColor: 'primary',
                 link: '/planning/inventory'
+            },
+            {
+                title: 'Projeler',
+                description: 'Planlama departmanı görevlerini görüntüleyin ve yönetin.',
+                icon: 'fas fa-project-diagram',
+                iconColor: 'primary',
+                link: '/planning/projects'
             }
         ]
     });

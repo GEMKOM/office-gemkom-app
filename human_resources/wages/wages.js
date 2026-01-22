@@ -20,6 +20,7 @@ import {
     getCurrencyInfo
 } from '../../apis/hr.js';
 import { authFetchUsers, fetchTeams } from '../../apis/users.js';
+import { showNotification } from '../../components/notification/notification.js';
 
 class WagesManager {
     constructor() {
@@ -930,23 +931,8 @@ class WagesManager {
     }
 
     showNotification(message, type = 'info') {
-        // Simple notification implementation
-        const notification = document.createElement('div');
-        notification.className = `alert alert-${type === 'error' ? 'danger' : type} alert-dismissible fade show position-fixed`;
-        notification.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-        notification.innerHTML = `
-            ${message}
-            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-        `;
-        
-        document.body.appendChild(notification);
-        
-        // Auto remove after 5 seconds
-        setTimeout(() => {
-            if (notification.parentNode) {
-                notification.parentNode.removeChild(notification);
-            }
-        }, 5000);
+        // Use the centralized notification component
+        showNotification(message, type);
     }
 }
 
