@@ -2444,8 +2444,6 @@ async function findPurchaseRequestByNumber(requestNumber) {
     }
 }
 
-}
-
 
 // Export functions for potential external use
 window.purchaseRequestApp = {
