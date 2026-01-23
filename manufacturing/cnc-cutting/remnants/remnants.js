@@ -64,8 +64,8 @@ async function initializeRemnants() {
     initializeTableComponent();
     // Set default filter value for assigned filter
     setTimeout(() => {
-        if (remnantFilters && remnantFilters.dropdowns) {
-            const assignedDropdown = remnantFilters.dropdowns.get('assigned-filter');
+        if (remnantsFilters && remnantsFilters.dropdowns) {
+            const assignedDropdown = remnantsFilters.dropdowns.get('assigned-filter');
             if (assignedDropdown) {
                 assignedDropdown.setValue('unassigned');
             }

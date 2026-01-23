@@ -910,11 +910,6 @@ function previewFile(fileUrl, fileName, fileExtension) {
     fileViewer.openFile(fileUrl, fileName, fileExtension);
 }
 
-// Show notification function (same as in cuts.js)
-    // Return the notification element for manual removal
-    return notification;
-}
-
 // ============================================================================
 // CLEANUP
 // ============================================================================

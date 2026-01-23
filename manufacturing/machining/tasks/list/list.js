@@ -1906,6 +1906,3 @@ async function saveManualTimeEntry() {
         saveBtn.innerHTML = '<i class="fas fa-save me-1"></i>Kaydet';
     }
 }
-
-        if (notification.parentNode) {
-
