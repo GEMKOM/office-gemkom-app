@@ -1,7 +1,6 @@
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
-import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
@@ -13,8 +12,7 @@ import {
     getDepartmentTaskById,
     startDepartmentTask,
     completeDepartmentTask,
-    blockDepartmentTask,
-    unblockDepartmentTask,
+    uncompleteDepartmentTask,
     skipDepartmentTask,
     patchDepartmentTask,
     createDepartmentTask,
@@ -23,11 +21,11 @@ import {
     STATUS_OPTIONS,
     DEPARTMENT_OPTIONS
 } from '../../../apis/projects/departmentTasks.js';
-import { fetchAllUsers } from '../../../apis/users.js';
+import { authFetchUsers } from '../../../apis/users.js';
 
 // State management
 let currentPage = 1;
-let currentStatusFilter = 'pending,in_progress,blocked'; // Default: show active tasks
+let currentStatusFilter = 'pending,in_progress'; // Default: show active tasks
 let currentFilters = {};
 let tasks = [];
 let totalTasks = 0;
@@ -35,12 +33,13 @@ let isLoading = false;
 let statusOptions = STATUS_OPTIONS;
 let departmentOptions = DEPARTMENT_OPTIONS;
 let users = [];
+let expandedRows = new Set(); // Track expanded rows by task ID
+let subtasksCache = new Map(); // Cache subtasks data by parent task ID
+let expandButtonHandler = null; // Event handler for expand buttons
 
 // Component instances
-let tasksStats = null;
 let tasksFilters = null;
 let tasksTable = null;
-let blockTaskModal = null;
 let confirmationModal = null;
 let taskDetailsModal = null;
 let editTaskModal = null;
@@ -48,6 +47,27 @@ let addSubtaskModal = null;
 
 // Department constant
 const DEPARTMENT = 'planning';
+
+// Status color mapping to ensure consistency with CSS classes
+const STATUS_COLOR_MAP = {
+    'pending': 'yellow',
+    'in_progress': 'blue',
+    'blocked': 'red',
+    'completed': 'green',
+    'skipped': 'grey'
+};
+
+// Normalize status colors to match CSS classes
+function normalizeStatusColors(statusOptions) {
+    return statusOptions.map(status => {
+        // If status has a color, use the mapped color, otherwise use the color from map
+        const normalizedColor = STATUS_COLOR_MAP[status.value] || status.color || 'grey';
+        return {
+            ...status,
+            color: normalizedColor
+        };
+    });
+}
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -82,9 +102,13 @@ async function initializeComponents() {
     try {
         // Load status and department options from API
         try {
-            statusOptions = await getStatusChoices();
+            const apiStatusOptions = await getStatusChoices();
+            // Normalize status colors to match CSS classes
+            statusOptions = normalizeStatusColors(apiStatusOptions);
         } catch (error) {
             console.warn('Could not fetch status choices, using defaults:', error);
+            // Ensure default options have correct colors
+            statusOptions = normalizeStatusColors(STATUS_OPTIONS);
         }
 
         try {
@@ -93,14 +117,14 @@ async function initializeComponents() {
             console.warn('Could not fetch department choices, using defaults:', error);
         }
 
-        // Load users for assignment filter
+        // Load users for assignment filter (only planning team)
         try {
-            users = await fetchAllUsers();
+            const usersResponse = await authFetchUsers(1, 10000, { team: 'planning' });
+            users = usersResponse.results || [];
         } catch (error) {
             console.warn('Could not fetch users:', error);
         }
 
-        initializeStatisticsCards();
         initializeFiltersComponent();
         initializeTableComponent();
         initializeModalComponents();
@@ -108,20 +132,6 @@ async function initializeComponents() {
         console.error('Error initializing components:', error);
         showNotification('Bileşenler yüklenirken hata oluştu', 'error');
     }
-}
-
-function initializeStatisticsCards() {
-    tasksStats = new StatisticsCards('tasks-statistics', {
-        cards: [
-            { title: 'Toplam Görev', value: '0', icon: 'fas fa-tasks', color: 'primary', id: 'total-tasks-count' },
-            { title: 'Bekleyen', value: '0', icon: 'fas fa-clock', color: 'warning', id: 'pending-tasks-count' },
-            { title: 'Devam Ediyor', value: '0', icon: 'fas fa-spinner', color: 'info', id: 'in-progress-tasks-count' },
-            { title: 'Engellendi', value: '0', icon: 'fas fa-ban', color: 'danger', id: 'blocked-tasks-count' },
-            { title: 'Tamamlandı', value: '0', icon: 'fas fa-check-circle', color: 'success', id: 'completed-tasks-count' }
-        ],
-        compact: true,
-        animation: true
-    });
 }
 
 function initializeFiltersComponent() {
@@ -133,7 +143,7 @@ function initializeFiltersComponent() {
         },
         onClear: () => {
             currentPage = 1;
-            currentStatusFilter = 'pending,in_progress,blocked';
+            currentStatusFilter = '';
             currentFilters = {};
             loadTasks();
             showNotification('Filtreler temizlendi', 'info');
@@ -146,7 +156,7 @@ function initializeFiltersComponent() {
     // Status filter (multi-select via dropdown)
     const statusFilterOptions = [
         { value: '', label: 'Tümü' },
-        { value: 'pending,in_progress,blocked', label: 'Aktif Görevler' },
+        { value: 'pending,in_progress', label: 'Aktif Görevler' },
         ...statusOptions.map(s => ({ value: s.value, label: s.label }))
     ];
 
@@ -155,7 +165,7 @@ function initializeFiltersComponent() {
         label: 'Durum',
         options: statusFilterOptions,
         placeholder: 'Durum seçin',
-        value: 'pending,in_progress,blocked',
+        value: 'pending,in_progress',
         colSize: 2
     });
 
@@ -207,6 +217,16 @@ function initializeFiltersComponent() {
 function initializeTableComponent() {
     tasksTable = new TableComponent('tasks-table-container', {
         title: 'Görev Listesi',
+        rowAttributes: (row, rowIndex) => {
+            // Style subtasks differently
+            if (row.parent) {
+                return {
+                    class: 'subtask-row',
+                    'data-parent-id': row.parent
+                };
+            }
+            return null;
+        },
         columns: [
             {
                 field: 'job_order',
@@ -214,15 +234,50 @@ function initializeTableComponent() {
                 sortable: true,
                 formatter: (value, row) => {
                     if (!value) return '-';
-                    const jobOrderTitle = row.job_order_title ? ` - ${row.job_order_title}` : '';
-                    return `<strong>${value}</strong>${jobOrderTitle}`;
+                    
+                    // Check if task has subtasks (check both subtasks_count and subtasks array)
+                    const subtasksCount = row.subtasks_count || (row.subtasks ? row.subtasks.length : 0);
+                    const hasSubtasks = subtasksCount > 0;
+                    const isExpanded = expandedRows.has(row.id);
+                    const isSubtask = !!row.parent;
+                    
+                    // Add indentation for subtasks
+                    const indent = isSubtask ? 30 : 0;
+                    const prefix = isSubtask ? '<i class="fas fa-level-down-alt text-muted me-1"></i>' : '';
+                    
+                    // Expand/collapse button for tasks with subtasks
+                    let expandButton = '';
+                    if (hasSubtasks && !isSubtask) {
+                        const expandIcon = isExpanded ? 'fa-chevron-down' : 'fa-chevron-right';
+                        expandButton = `
+                            <button type="button" 
+                                    class="btn btn-sm btn-link p-0 me-2 expand-toggle-btn" 
+                                    data-task-id="${row.id}"
+                                    style="width: 20px; height: 20px; line-height: 1; border: none; background: none;"
+                                    title="${isExpanded ? 'Daralt' : 'Genişlet'}">
+                                <i class="fas ${expandIcon} text-primary"></i>
+                            </button>
+                        `;
+                    } else if (!isSubtask) {
+                        // Add spacing for rows without subtasks to align with expandable rows
+                        expandButton = '<span class="me-2" style="display: inline-block; width: 20px;"></span>';
+                    }
+                    
+                    // Make job_order a clickable link
+                    const jobOrderLink = `<a href="/projects/project-tracking/?job_no=${encodeURIComponent(value)}" class="text-decoration-none"><strong>${value}</strong></a>`;
+                    
+                    return `<div style="padding-left: ${indent}px;">${expandButton}${prefix}${jobOrderLink}</div>`;
                 }
             },
             {
                 field: 'title',
                 label: 'Görev Başlığı',
                 sortable: true,
-                formatter: (value) => value || '-'
+                formatter: (value, row) => {
+                    const isSubtask = !!row.parent;
+                    const indent = isSubtask ? 30 : 0;
+                    return `<div style="padding-left: ${indent}px;">${value || '-'}</div>`;
+                }
             },
             {
                 field: 'status',
@@ -232,17 +287,6 @@ function initializeTableComponent() {
                     const status = statusOptions.find(s => s.value === value) || { label: value, color: 'grey' };
                     const colorClass = `status-${status.color}`;
                     return `<span class="status-badge ${colorClass}">${status.label}</span>`;
-                }
-            },
-            {
-                field: 'is_blocked',
-                label: 'Engel',
-                sortable: false,
-                formatter: (value) => {
-                    if (value) {
-                        return '<span class="status-badge status-red">Engellendi</span>';
-                    }
-                    return '-';
                 }
             },
             {
@@ -325,6 +369,14 @@ function initializeTableComponent() {
                 onClick: (row) => showEditTaskModal(row.id)
             },
             {
+                key: 'add-subtask',
+                label: 'Alt Görev Ekle',
+                icon: 'fas fa-plus-circle',
+                class: 'btn-outline-info',
+                onClick: (row) => showAddSubtaskModal(row.id),
+                visible: (row) => !row.parent // Only show for main tasks (not subtasks)
+            },
+            {
                 key: 'start',
                 label: 'Başlat',
                 icon: 'fas fa-play',
@@ -341,20 +393,12 @@ function initializeTableComponent() {
                 visible: (row) => row.status === 'in_progress'
             },
             {
-                key: 'block',
-                label: 'Engelle',
-                icon: 'fas fa-ban',
-                class: 'btn-outline-danger',
-                onClick: (row) => showBlockTaskModal(row.id),
-                visible: (row) => row.status === 'in_progress'
-            },
-            {
-                key: 'unblock',
-                label: 'Engeli Kaldır',
-                icon: 'fas fa-unlock',
+                key: 'uncomplete',
+                label: 'Tamamlanmayı Geri Al',
+                icon: 'fas fa-undo',
                 class: 'btn-outline-warning',
-                onClick: (row) => handleUnblockTask(row.id),
-                visible: (row) => row.status === 'blocked'
+                onClick: (row) => handleUncompleteTask(row.id),
+                visible: (row) => row.status === 'completed'
             },
             {
                 key: 'skip',
@@ -371,50 +415,6 @@ function initializeTableComponent() {
 }
 
 function initializeModalComponents() {
-    // Block task modal (for entering reason)
-    blockTaskModal = new EditModal('block-task-modal-container', {
-        title: 'Görevi Engelle',
-        icon: 'fas fa-ban',
-        size: 'md',
-        showEditButton: false
-    });
-
-    blockTaskModal.onSaveCallback(async (formData) => {
-        const taskId = window.pendingBlockTaskId;
-        if (!taskId) return;
-
-        const reason = formData.blocker_reason;
-        if (!reason || reason.trim() === '') {
-            showNotification('Engel nedeni gereklidir', 'error');
-            return;
-        }
-
-        try {
-            await blockDepartmentTask(taskId, { reason: reason.trim() });
-            showNotification('Görev engellendi', 'success');
-            blockTaskModal.hide();
-            window.pendingBlockTaskId = null;
-            await loadTasks();
-        } catch (error) {
-            console.error('Error blocking task:', error);
-            let errorMessage = 'Görev engellenirken hata oluştu';
-            try {
-                if (error.message) {
-                    const errorData = JSON.parse(error.message);
-                    if (typeof errorData === 'object') {
-                        const errors = Object.values(errorData).flat();
-                        errorMessage = errors.join(', ') || errorMessage;
-                    } else {
-                        errorMessage = error.message;
-                    }
-                }
-            } catch (e) {
-                // If parsing fails, use default message
-            }
-            showNotification(errorMessage, 'error');
-        }
-    });
-
     // Confirmation modal
     confirmationModal = new ConfirmationModal('confirmation-modal-container', {
         title: 'Onay',
@@ -448,7 +448,7 @@ function initializeModalComponents() {
             // Prepare update data
             const updateData = {};
 
-            if (formData.title !== undefined) updateData.title = formData.title;
+            // Title, job_order, and sequence cannot be changed, so don't include them in update
             if (formData.description !== undefined) updateData.description = formData.description || null;
             if (formData.assigned_to !== undefined) {
                 updateData.assigned_to = formData.assigned_to === '' || formData.assigned_to === null ? null : parseInt(formData.assigned_to);
@@ -458,9 +458,6 @@ function initializeModalComponents() {
             }
             if (formData.target_completion_date !== undefined) {
                 updateData.target_completion_date = formData.target_completion_date || null;
-            }
-            if (formData.sequence !== undefined) {
-                updateData.sequence = formData.sequence ? parseInt(formData.sequence) : null;
             }
             if (formData.notes !== undefined) updateData.notes = formData.notes || null;
 
@@ -524,7 +521,19 @@ function initializeModalComponents() {
             await createDepartmentTask(subtaskData);
             showNotification('Alt görev eklendi', 'success');
             addSubtaskModal.hide();
+            const parentTaskId = window.pendingSubtaskParentId;
             window.pendingSubtaskParentId = null;
+            
+            // Clear subtasks cache for parent to force refresh
+            if (parentTaskId && subtasksCache.has(parentTaskId)) {
+                subtasksCache.delete(parentTaskId);
+            }
+            
+            // If parent was expanded, refresh subtasks
+            if (parentTaskId && expandedRows.has(parentTaskId)) {
+                await fetchTaskSubtasks(parentTaskId);
+            }
+            
             await loadTasks();
         } catch (error) {
             console.error('Error creating subtask:', error);
@@ -568,16 +577,15 @@ async function loadTasks() {
         };
 
         // Status filter
-        if (filterValues['status-filter']) {
+        // Only apply status filter if a value is selected (not empty string for "Tümü")
+        if (filterValues['status-filter'] && filterValues['status-filter'].trim() !== '') {
             if (filterValues['status-filter'].includes(',')) {
                 options.status__in = filterValues['status-filter'];
             } else {
                 options.status = filterValues['status-filter'];
             }
-        } else {
-            // Default: show active tasks
-            options.status__in = 'pending,in_progress,blocked';
         }
+        // If "Tümü" is selected (empty string), don't add any status filter
 
         // Search filter
         if (filterValues['search-filter']) {
@@ -611,15 +619,24 @@ async function loadTasks() {
         const response = await listDepartmentTasks(options);
 
         // Extract tasks and total count from response
-        tasks = response.results || [];
+        const mainTasks = response.results || [];
         totalTasks = response.count || 0;
+
+        // Store main tasks separately for quick access during expand/collapse
+        tasks = mainTasks;
+
+        // Merge expanded subtasks into display data
+        const dataToDisplay = mergeExpandedSubtasks(mainTasks);
 
         // Update table data with pagination info
         if (tasksTable) {
-            tasksTable.updateData(tasks, totalTasks, currentPage);
+            tasksTable.updateData(dataToDisplay, totalTasks, currentPage);
         }
 
-        updateStatistics();
+        // Setup expand button listeners after table is updated
+        setTimeout(() => {
+            setupExpandButtonListeners();
+        }, 50);
 
     } catch (error) {
         console.error('Error loading tasks:', error);
@@ -637,26 +654,124 @@ async function loadTasks() {
     }
 }
 
-function updateStatistics() {
-    try {
-        const totalCount = totalTasks;
-        const pendingCount = tasks.filter(t => t.status === 'pending').length;
-        const inProgressCount = tasks.filter(t => t.status === 'in_progress').length;
-        const blockedCount = tasks.filter(t => t.status === 'blocked' || t.is_blocked).length;
-        const completedCount = tasks.filter(t => t.status === 'completed').length;
-
-        // Update statistics cards
-        if (tasksStats) {
-            tasksStats.updateValues({
-                0: totalCount.toString(),
-                1: pendingCount.toString(),
-                2: inProgressCount.toString(),
-                3: blockedCount.toString(),
-                4: completedCount.toString()
+// Merge expanded subtasks into the main tasks array
+function mergeExpandedSubtasks(mainTasks) {
+    const merged = [];
+    
+    mainTasks.forEach(task => {
+        merged.push(task);
+        
+        // If this task is expanded, add its subtasks
+        if (expandedRows.has(task.id) && subtasksCache.has(task.id)) {
+            const subtasks = subtasksCache.get(task.id);
+            subtasks.forEach(subtask => {
+                merged.push(subtask);
             });
         }
+    });
+    
+    return merged;
+}
+
+// Update table data without showing loading state (for expand/collapse operations)
+function updateTableDataOnly() {
+    if (!tasksTable) return;
+    
+    // Merge expanded subtasks into display data
+    const dataToDisplay = mergeExpandedSubtasks(tasks);
+    
+    // Update table data without loading state
+    tasksTable.updateData(dataToDisplay, totalTasks, currentPage);
+    
+    // Setup expand button listeners after table is updated
+    setTimeout(() => {
+        setupExpandButtonListeners();
+    }, 50);
+}
+
+// Setup event listeners for expand/collapse buttons using event delegation
+function setupExpandButtonListeners() {
+    if (!tasksTable || !tasksTable.container) {
+        // Table not ready yet, try again later
+        setTimeout(setupExpandButtonListeners, 100);
+        return;
+    }
+    
+    // Remove existing handler if any
+    if (expandButtonHandler) {
+        tasksTable.container.removeEventListener('click', expandButtonHandler);
+    }
+    
+    // Create the handler function
+    expandButtonHandler = async (e) => {
+        // Check if the clicked element is an expand button or inside one
+        const expandButton = e.target.closest('.expand-toggle-btn');
+        if (!expandButton) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const taskId = parseInt(expandButton.getAttribute('data-task-id'));
+        if (!taskId) {
+            console.warn('Expand button missing data-task-id attribute');
+            return;
+        }
+        
+        const isExpanded = expandedRows.has(taskId);
+        
+        if (isExpanded) {
+            // Collapse: remove from expanded set
+            expandedRows.delete(taskId);
+            // Update table without loading state
+            updateTableDataOnly();
+        } else {
+            // Expand: fetch subtasks if not cached
+            if (!subtasksCache.has(taskId)) {
+                try {
+                    // Show loading state on button
+                    const icon = expandButton.querySelector('i');
+                    if (icon) {
+                        icon.className = 'fas fa-spinner fa-spin text-primary';
+                    }
+                    
+                    await fetchTaskSubtasks(taskId);
+                } catch (error) {
+                    console.error(`Error fetching subtasks for task ${taskId}:`, error);
+                    showNotification('Alt görevler yüklenirken hata oluştu', 'error');
+                    // Restore icon on error
+                    const icon = expandButton.querySelector('i');
+                    if (icon) {
+                        icon.className = 'fas fa-chevron-right text-primary';
+                    }
+                    return;
+                }
+            }
+            expandedRows.add(taskId);
+            // Update table without loading state
+            updateTableDataOnly();
+        }
+    };
+    
+    // Attach the event listener to the container (which persists across renders)
+    tasksTable.container.addEventListener('click', expandButtonHandler);
+}
+
+// Fetch subtasks for a specific task
+async function fetchTaskSubtasks(taskId) {
+    try {
+        // Fetch tasks with parent filter
+        const response = await listDepartmentTasks({
+            department: DEPARTMENT,
+            parent: taskId,
+            ordering: 'sequence'
+        });
+        
+        const subtasks = response.results || [];
+        subtasksCache.set(taskId, subtasks);
     } catch (error) {
-        console.error('Error updating statistics:', error);
+        console.error(`Error fetching subtasks for task ${taskId}:`, error);
+        subtasksCache.set(taskId, []);
+        throw error;
     }
 }
 
@@ -736,24 +851,6 @@ async function viewTaskDetails(taskId) {
                 value: new Date(task.target_completion_date).toLocaleDateString('tr-TR'),
                 icon: 'fas fa-calendar',
                 colSize: 6
-            });
-        }
-
-        if (task.is_blocked && task.blocker_reason) {
-            taskDetailsModal.addSection({
-                title: 'Engel Bilgisi',
-                icon: 'fas fa-ban',
-                iconColor: 'text-danger'
-            });
-
-            taskDetailsModal.addField({
-                id: 'task-blocker-reason',
-                name: 'blocker_reason',
-                label: 'Engel Nedeni',
-                type: 'textarea',
-                value: task.blocker_reason,
-                icon: 'fas fa-exclamation-triangle',
-                colSize: 12
             });
         }
 
@@ -874,15 +971,28 @@ async function showEditTaskModal(taskId) {
         });
 
         editTaskModal.addField({
+            id: 'edit-job-order',
+            name: 'job_order',
+            label: 'İş Emri',
+            type: 'text',
+            value: task.job_order ? `${task.job_order} - ${task.job_order_title || ''}` : '-',
+            readonly: true,
+            icon: 'fas fa-file-invoice',
+            colSize: 6,
+            helpText: 'İş emri (değiştirilemez)'
+        });
+
+        editTaskModal.addField({
             id: 'edit-title',
             name: 'title',
             label: 'Başlık',
             type: 'text',
             value: task.title || '',
             required: true,
+            readonly: true,
             icon: 'fas fa-heading',
-            colSize: 12,
-            helpText: 'Görev başlığı'
+            colSize: 6,
+            helpText: 'Görev başlığı (değiştirilemez)'
         });
 
         editTaskModal.addField({
@@ -928,9 +1038,10 @@ async function showEditTaskModal(taskId) {
             type: 'number',
             value: task.sequence || '',
             min: 0,
+            readonly: true,
             icon: 'fas fa-sort-numeric-up',
             colSize: 6,
-            helpText: 'Görev sırası'
+            helpText: 'Görev sırası (değiştirilemez)'
         });
 
         editTaskModal.addField({
@@ -1102,46 +1213,19 @@ async function handleCompleteTask(taskId) {
     });
 }
 
-function showBlockTaskModal(taskId) {
-    window.pendingBlockTaskId = taskId;
-
-    blockTaskModal.clearAll();
-
-    blockTaskModal.addSection({
-        title: 'Görevi Engelle',
-        icon: 'fas fa-ban',
-        iconColor: 'text-danger'
-    });
-
-    blockTaskModal.addField({
-        id: 'blocker_reason',
-        name: 'blocker_reason',
-        label: 'Engel Nedeni',
-        type: 'textarea',
-        placeholder: 'Görevin engellenme nedenini açıklayın...',
-        required: true,
-        icon: 'fas fa-exclamation-triangle',
-        colSize: 12,
-        helpText: 'Görevin neden engellendiğini detaylı olarak açıklayın'
-    });
-
-    blockTaskModal.render();
-    blockTaskModal.show();
-}
-
-async function handleUnblockTask(taskId) {
+async function handleUncompleteTask(taskId) {
     confirmationModal.show({
-        message: 'Bu görevin engelini kaldırmak istediğinize emin misiniz?',
-        confirmText: 'Evet, Engeli Kaldır',
+        message: 'Bu görevin tamamlanma durumunu geri almak istediğinize emin misiniz?',
+        confirmText: 'Evet, Geri Al',
         onConfirm: async () => {
             try {
-                await unblockDepartmentTask(taskId);
-                showNotification('Görev engeli kaldırıldı', 'success');
+                await uncompleteDepartmentTask(taskId);
+                showNotification('Görev tamamlanma durumu geri alındı', 'success');
                 confirmationModal.hide();
                 await loadTasks();
             } catch (error) {
-                console.error('Error unblocking task:', error);
-                let errorMessage = 'Görev engeli kaldırılırken hata oluştu';
+                console.error('Error uncompleting task:', error);
+                let errorMessage = 'Görev tamamlanma durumu geri alınırken hata oluştu';
                 try {
                     if (error.message) {
                         const errorData = JSON.parse(error.message);
@@ -1160,6 +1244,7 @@ async function handleUnblockTask(taskId) {
         }
     });
 }
+
 
 async function handleSkipTask(taskId) {
     confirmationModal.show({
@@ -1211,15 +1296,15 @@ async function exportTasks(format) {
         };
 
         // Apply same filters as current view
-        if (filterValues['status-filter']) {
+        // Only apply status filter if a value is selected (not empty string for "Tümü")
+        if (filterValues['status-filter'] && filterValues['status-filter'].trim() !== '') {
             if (filterValues['status-filter'].includes(',')) {
                 options.status__in = filterValues['status-filter'];
             } else {
                 options.status = filterValues['status-filter'];
             }
-        } else {
-            options.status__in = 'pending,in_progress,blocked';
         }
+        // If "Tümü" is selected (empty string), don't add any status filter
 
         if (filterValues['search-filter']) {
             options.search = filterValues['search-filter'];

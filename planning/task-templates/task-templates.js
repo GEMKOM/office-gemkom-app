@@ -787,10 +787,13 @@ function showManageItemsModal(template, items) {
                 const newAddBtn = addBtnHeader.cloneNode(true);
                 addBtnHeader.parentNode.replaceChild(newAddBtn, addBtnHeader);
                 
-                newAddBtn.addEventListener('click', (e) => {
+                newAddBtn.addEventListener('click', async (e) => {
                     e.preventDefault();
                     e.stopPropagation();
-                    openAddItemModal(template.id, items);
+                    // Reload items to ensure we have the latest list including newly added items
+                    const freshItems = await getTemplateItems(template.id);
+                    currentTemplateItems = freshItems;
+                    openAddItemModal(template.id, freshItems);
                 });
             }
         }

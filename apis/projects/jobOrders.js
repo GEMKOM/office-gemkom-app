@@ -102,7 +102,9 @@ export async function getJobOrderByJobNo(jobNo) {
 /**
  * Create a new job order
  * @param {Object} jobOrderData - Job order data
- * @param {string} jobOrderData.job_no - Job order number (required)
+ * @param {string} jobOrderData.job_no - Job order number (required). 
+ *   For root jobs: should be constructed as "{customer_code}-{extension}" (e.g., "CUST01-01").
+ *   For child jobs: should be constructed as "{parent_job_no}-{extension}" (e.g., "CUST01-01-01").
  * @param {string} jobOrderData.title - Job order title (required)
  * @param {string} [jobOrderData.description] - Description
  * @param {number} [jobOrderData.customer] - Customer ID (required unless parent is set)

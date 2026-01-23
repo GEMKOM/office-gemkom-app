@@ -50,6 +50,9 @@ export async function listDepartmentTasks(options = {}) {
         if (options.assigned_to__isnull !== undefined && options.assigned_to__isnull !== null) {
             queryParams.append('assigned_to__isnull', options.assigned_to__isnull.toString());
         }
+        if (options.parent !== undefined && options.parent !== null) {
+            queryParams.append('parent', options.parent.toString());
+        }
         if (options.parent__isnull !== undefined && options.parent__isnull !== null) {
             queryParams.append('parent__isnull', options.parent__isnull.toString());
         }
@@ -323,6 +326,37 @@ export async function completeDepartmentTask(taskId) {
 }
 
 /**
+ * Uncomplete task (completed → in_progress)
+ * Task must be in completed status
+ * Clears completed_at and completed_by
+ * If subtask, parent auto-completion is reverted
+ * If job order was auto-completed, it reverts to active
+ * @param {number} taskId - Task ID
+ * @returns {Promise<Object>} Response with status, message, and task
+ */
+export async function uncompleteDepartmentTask(taskId) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/department-tasks/${taskId}/uncomplete/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error uncompleting department task ${taskId}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Block task (pending/in_progress → blocked)
  * @param {number} taskId - Task ID
  * @param {Object} [options] - Optional parameters
@@ -551,11 +585,11 @@ export async function searchDepartmentTasks(searchTerm, additionalOptions = {}) 
  * Status options (static fallback if API is unavailable)
  */
 export const STATUS_OPTIONS = [
-    { value: 'pending', label: 'Bekliyor', color: 'gray' },
+    { value: 'pending', label: 'Bekliyor', color: 'yellow' },
     { value: 'in_progress', label: 'Devam Ediyor', color: 'blue' },
     { value: 'blocked', label: 'Engellendi', color: 'red' },
     { value: 'completed', label: 'Tamamlandı', color: 'green' },
-    { value: 'skipped', label: 'Atlandı', color: 'gray' },
+    { value: 'skipped', label: 'Atlandı', color: 'grey' },
 ];
 
 /**

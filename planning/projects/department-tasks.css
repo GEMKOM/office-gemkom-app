@@ -1,0 +1,24 @@
+/* Department Tasks Page Styles */
+
+/* Subtask row styling */
+.subtask-row {
+    background-color: #f8f9fa;
+}
+
+.subtask-row:hover {
+    background-color: #e9ecef;
+}
+
+/* Expand button styling */
+.expand-toggle-btn {
+    transition: transform 0.2s ease;
+}
+
+.expand-toggle-btn:hover {
+    transform: scale(1.1);
+}
+
+.expand-toggle-btn:focus {
+    box-shadow: none;
+    outline: none;
+}

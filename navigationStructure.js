@@ -423,6 +423,11 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     }
                 }
+            },
+            '/planning/projects': {
+                label: 'Projeler',
+                icon: 'fas fa-project-diagram',
+                children: {}
             }
         }
     },

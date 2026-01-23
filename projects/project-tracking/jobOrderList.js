@@ -14,10 +14,11 @@ import {
     getStatusChoices,
     getPriorityChoices,
     applyTemplateToJobOrder,
+    getChildJobOrders,
     STATUS_OPTIONS,
     PRIORITY_OPTIONS
 } from '../../apis/projects/jobOrders.js';
-import { createDepartmentTask, bulkCreateDepartmentTasks, getDepartmentChoices as getDepartmentTaskChoices } from '../../apis/projects/departmentTasks.js';
+import { createDepartmentTask, bulkCreateDepartmentTasks, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks } from '../../apis/projects/departmentTasks.js';
 import { listTaskTemplates, getTaskTemplateById } from '../../apis/projects/taskTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
 import { CURRENCY_OPTIONS } from '../../apis/projects/customers.js';
@@ -27,6 +28,7 @@ import { StatisticsCards } from '../../components/statistics-cards/statistics-ca
 import { TableComponent } from '../../components/table/table.js';
 import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { EditModal } from '../../components/edit-modal/edit-modal.js';
+import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
 
@@ -54,6 +56,7 @@ let deleteJobOrderModal = null;
 let addDepartmentTaskModal = null;
 let createDepartmentTaskModal = null;
 let viewJobOrderModal = null;
+let confirmationModal = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -106,8 +109,18 @@ async function initializeJobOrders() {
         // Setup expand button listeners (will be ready when table is rendered)
         setupExpandButtonListeners();
         
-        await loadJobOrders();
-        updateJobOrderCounts();
+        // Check for job_no parameter in URL to open modal directly
+        const urlParams = new URLSearchParams(window.location.search);
+        const jobNo = urlParams.get('job_no');
+        
+        if (jobNo) {
+            // Open modal directly without loading other data first
+            await viewJobOrder(jobNo);
+        } else {
+            // Load page normally
+            await loadJobOrders();
+            updateJobOrderCounts();
+        }
     } catch (error) {
         console.error('Error initializing job orders:', error);
         showNotification('İş emirleri yüklenirken hata oluştu', 'error');
@@ -156,48 +169,173 @@ function initializeTableComponent() {
     jobOrdersTable = new TableComponent('job-orders-table-container', {
         title: 'İş Emri Listesi',
         rowAttributes: (row, rowIndex) => {
+            const attributes = {};
+            
             // Handle department tasks row
             if (row._isDepartmentTasksRow) {
-                return {
-                    class: 'department-tasks-row',
-                    'data-parent-job-no': row._parentJobNo
-                };
+                attributes.class = 'department-tasks-row';
+                attributes['data-parent-job-no'] = row._parentJobNo;
+                return attributes;
             }
-            return null;
+            
+            // Check target_completion_date for highlighting
+            if (row.target_completion_date) {
+                const today = new Date();
+                today.setHours(0, 0, 0, 0);
+                
+                const completionDate = new Date(row.target_completion_date);
+                completionDate.setHours(0, 0, 0, 0);
+                
+                const daysRemaining = Math.ceil((completionDate - today) / (1000 * 60 * 60 * 24));
+                
+                // Red: past due (earlier than today)
+                if (completionDate < today) {
+                    attributes.class = (attributes.class ? attributes.class + ' ' : '') + 'job-order-past-due';
+                }
+                // Yellow: 1 week or less remaining
+                else if (daysRemaining <= 7 && daysRemaining >= 0) {
+                    attributes.class = (attributes.class ? attributes.class + ' ' : '') + 'job-order-due-soon';
+                }
+            }
+            
+            return Object.keys(attributes).length > 0 ? attributes : null;
         },
         columns: [
+            {
+                field: '_expand',
+                label: '',
+                sortable: false,
+                width: '80px',
+                formatter: (value, row) => {
+                    const hasChildren = row.children_count && row.children_count > 0;
+                    const isExpanded = expandedRows.has(row.job_no);
+                    
+                    // Calculate hierarchy level (0 = root, 1 = child, 2 = grandchild, etc.)
+                    const hierarchyLevel = row.hierarchy_level || 0;
+                    
+                    // Constants for consistent spacing
+                    const LEVEL_WIDTH = 20; // Width per hierarchy level
+                    const LINE_THICKNESS = 2; // Thickness of tree lines
+                    const LINE_COLOR = '#cbd5e0';
+                    const BUTTON_SIZE = 24;
+                    
+                    // Calculate positions
+                    const buttonLeftPosition = hierarchyLevel * LEVEL_WIDTH;
+                    
+                    // Generate tree lines with absolute positioning for consistency
+                    let treeLinesHtml = '';
+                    if (hierarchyLevel > 0) {
+                        for (let i = 0; i < hierarchyLevel; i++) {
+                            const isLastLevel = i === hierarchyLevel - 1;
+                            const lineLeft = i * LEVEL_WIDTH + (LEVEL_WIDTH / 2) - (LINE_THICKNESS / 2);
+                            
+                            if (!isLastLevel) {
+                                // Vertical line through the level
+                                treeLinesHtml += `
+                                    <div style="
+                                        position: absolute;
+                                        left: ${lineLeft}px;
+                                        top: 0;
+                                        bottom: 0;
+                                        width: ${LINE_THICKNESS}px;
+                                        background: ${LINE_COLOR};
+                                    "></div>
+                                `;
+                            } else {
+                                // Last level: L-shaped connector
+                                // Vertical line (top half)
+                                treeLinesHtml += `
+                                    <div style="
+                                        position: absolute;
+                                        left: ${lineLeft}px;
+                                        top: 0;
+                                        height: 50%;
+                                        width: ${LINE_THICKNESS}px;
+                                        background: ${LINE_COLOR};
+                                    "></div>
+                                `;
+                                // Horizontal line
+                                treeLinesHtml += `
+                                    <div style="
+                                        position: absolute;
+                                        left: ${lineLeft}px;
+                                        top: 50%;
+                                        width: ${LEVEL_WIDTH / 2}px;
+                                        height: ${LINE_THICKNESS}px;
+                                        background: ${LINE_COLOR};
+                                        transform: translateY(-50%);
+                                    "></div>
+                                `;
+                            }
+                        }
+                    }
+                    
+                    // Expand/collapse button for rows with children
+                    let expandButton = '';
+                    if (hasChildren) {
+                        const expandIcon = isExpanded ? 'fa-minus' : 'fa-plus';
+                        const buttonClass = isExpanded ? 'expanded' : 'collapsed';
+                        expandButton = `
+                            <button type="button" 
+                                    class="btn btn-sm expand-toggle-btn ${buttonClass}" 
+                                    data-job-no="${row.job_no}"
+                                    style="
+                                        position: absolute;
+                                        left: ${buttonLeftPosition}px;
+                                        top: 50%;
+                                        transform: translateY(-50%);
+                                        width: ${BUTTON_SIZE}px;
+                                        height: ${BUTTON_SIZE}px;
+                                        padding: 0;
+                                        border-radius: 4px;
+                                        border: 1.5px solid #0d6efd;
+                                        background: ${isExpanded ? '#0d6efd' : '#ffffff'};
+                                        color: ${isExpanded ? '#ffffff' : '#0d6efd'};
+                                        display: inline-flex;
+                                        align-items: center;
+                                        justify-content: center;
+                                        transition: all 0.2s ease;
+                                        cursor: pointer;
+                                        z-index: 1;
+                                    "
+                                    onmouseover="this.style.transform='translateY(-50%) scale(1.1)'; this.style.boxShadow='0 2px 4px rgba(13,110,253,0.3)';"
+                                    onmouseout="this.style.transform='translateY(-50%) scale(1)'; this.style.boxShadow='none';"
+                                    title="${isExpanded ? 'Daralt' : 'Genişlet'}">
+                                <i class="fas ${expandIcon}" style="font-size: 10px;"></i>
+                            </button>
+                        `;
+                    }
+                    
+                    return `
+                        <div style="
+                            position: relative;
+                            width: 100%;
+                            height: 40px;
+                            min-height: 40px;
+                        ">
+                            ${treeLinesHtml}
+                            ${expandButton}
+                        </div>
+                    `;
+                }
+            },
             {
                 field: 'job_no',
                 label: 'İş Emri No',
                 sortable: true,
                 formatter: (value, row) => {
-                    const hasChildren = row.children_count && row.children_count > 0;
-                    const isExpanded = expandedRows.has(row.job_no);
                     const isChild = !!row.parent;
                     
-                    // Add indentation for child jobs
-                    const indent = isChild ? 30 : 0;
-                    const prefix = isChild ? '<i class="fas fa-level-down-alt text-muted me-1"></i>' : '';
+                    // Calculate hierarchy level (0 = root, 1 = child, 2 = grandchild, etc.)
+                    const hierarchyLevel = row.hierarchy_level || (isChild ? 1 : 0);
                     
-                    // Expand/collapse button for rows with children
-                    let expandButton = '';
-                    if (hasChildren && !isChild) {
-                        const expandIcon = isExpanded ? 'fa-chevron-down' : 'fa-chevron-right';
-                        expandButton = `
-                            <button type="button" 
-                                    class="btn btn-sm btn-link p-0 me-2 expand-toggle-btn" 
-                                    data-job-no="${row.job_no}"
-                                    style="width: 20px; height: 20px; line-height: 1; border: none; background: none;"
-                                    title="${isExpanded ? 'Daralt' : 'Genişlet'}">
-                                <i class="fas ${expandIcon} text-primary"></i>
-                            </button>
-                        `;
-                    } else if (!isChild) {
-                        // Add spacing for rows without children to align with expandable rows
-                        expandButton = '<span class="me-2" style="display: inline-block; width: 20px;"></span>';
-                    }
+                    // Job number with hierarchy styling - lighter color for child jobs
+                    const jobNoStyle = hierarchyLevel > 0 ? 'color: #6c757d; font-weight: 500;' : 'font-weight: 600;';
+                    const jobNoDisplay = hierarchyLevel > 0 
+                        ? `<span style="${jobNoStyle}">${value || '-'}</span>` 
+                        : `<strong style="${jobNoStyle}">${value || '-'}</strong>`;
                     
-                    return `<div style="padding-left: ${indent}px;">${expandButton}${prefix}<strong>${value || '-'}</strong></div>`;
+                    return jobNoDisplay;
                 }
             },
             {
@@ -259,16 +397,17 @@ function initializeTableComponent() {
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     const priority = row.priority;
-                    if (priority === 'urgent') {
-                        return '<span class="badge bg-danger">Acil</span>';
-                    } else if (priority === 'high') {
-                        return '<span class="badge bg-warning">Yüksek</span>';
-                    } else if (priority === 'normal') {
-                        return '<span class="badge bg-info">Normal</span>';
-                    } else if (priority === 'low') {
-                        return '<span class="badge bg-secondary">Düşük</span>';
-                    }
-                    return value || '-';
+                    const getPriorityBadgeClass = (priority) => {
+                        switch (priority) {
+                            case 'urgent': return 'status-red';
+                            case 'high': return 'status-yellow';
+                            case 'normal': return 'status-blue';
+                            case 'low': return 'status-grey';
+                            default: return 'status-grey';
+                        }
+                    };
+                    const badgeClass = getPriorityBadgeClass(priority);
+                    return `<span class="status-badge ${badgeClass}">${value || '-'}</span>`;
                 }
             },
             {
@@ -291,16 +430,54 @@ function initializeTableComponent() {
                 label: 'Tamamlanma',
                 sortable: false,
                 formatter: (value) => {
-                    if (!value) return '-';
-                    const percentage = parseFloat(value);
-                    const color = percentage >= 100 ? 'success' : percentage >= 50 ? 'info' : 'warning';
+                    if (!value && value !== 0) return '-';
+                    const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
+                    
+                    // Determine color based on percentage
+                    let colorClass = 'bg-success';
+                    let barColor = '#10b981'; // green
+                    if (percentage === 0) {
+                        colorClass = 'bg-secondary';
+                        barColor = '#6b7280'; // grey
+                    } else if (percentage < 25) {
+                        colorClass = 'bg-danger';
+                        barColor = '#ef4444'; // red
+                    } else if (percentage < 50) {
+                        colorClass = 'bg-warning';
+                        barColor = '#f59e0b'; // yellow/orange
+                    } else if (percentage < 75) {
+                        colorClass = 'bg-info';
+                        barColor = '#3b82f6'; // blue
+                    } else if (percentage < 100) {
+                        colorClass = 'bg-success';
+                        barColor = '#10b981'; // green
+                    } else {
+                        colorClass = 'bg-success';
+                        barColor = '#059669'; // darker green for 100%
+                    }
+                    
+                    // Determine text color based on percentage (for contrast)
+                    const textColor = percentage > 50 ? '#ffffff' : '#1f2937';
+                    const textShadow = percentage > 50 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none';
+                    
                     return `
-                        <div class="progress" style="height: 20px;">
-                            <div class="progress-bar bg-${color}" role="progressbar" 
-                                 style="width: ${percentage}%" 
-                                 aria-valuenow="${percentage}" 
-                                 aria-valuemin="0" 
-                                 aria-valuemax="100">
+                        <div style="position: relative; width: 100%;">
+                            <div class="progress" style="height: 24px; border-radius: 6px; background-color: #e5e7eb; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                                <div class="progress-bar ${colorClass}" 
+                                     role="progressbar" 
+                                     style="width: ${percentage}%; 
+                                            background: linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%);
+                                            border-radius: 6px;
+                                            transition: width 0.6s ease;
+                                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);" 
+                                     aria-valuenow="${percentage}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                </div>
+                            </div>
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                                        font-weight: 600; font-size: 0.75rem; color: ${textColor}; 
+                                        text-shadow: ${textShadow}; pointer-events: none; white-space: nowrap; z-index: 1;">
                                 ${percentage.toFixed(1)}%
                             </div>
                         </div>
@@ -311,9 +488,20 @@ function initializeTableComponent() {
                 field: 'children_count',
                 label: 'Alt İşler',
                 sortable: false,
-                formatter: (value) => {
+                formatter: (value, row) => {
+                    if (row._isDepartmentTasksRow) return '';
                     if (!value || value === 0) return '-';
-                    return `<span class="badge bg-secondary">${value}</span>`;
+                    return `<span class="status-badge status-grey">${value}</span>`;
+                }
+            },
+            {
+                field: 'department_tasks_count',
+                label: 'Görevler',
+                sortable: false,
+                formatter: (value, row) => {
+                    if (row._isDepartmentTasksRow) return '';
+                    if (!value || value === 0) return '-';
+                    return `<span class="status-badge status-blue">${value}</span>`;
                 }
             },
             {
@@ -570,7 +758,7 @@ function initializeModalComponents() {
     addDepartmentTaskModal = new EditModal('add-department-task-modal-container', {
         title: 'Departman Görevi Ekle',
         icon: 'fas fa-tasks',
-        size: 'md',
+        size: 'xl',
         showEditButton: false
     });
 
@@ -588,6 +776,27 @@ function initializeModalComponents() {
         icon: 'fas fa-info-circle',
         size: 'xl',
         showEditButton: false
+    });
+
+    // Confirmation Modal
+    confirmationModal = new ConfirmationModal('confirmation-modal-container', {
+        title: 'Onay',
+        icon: 'fas fa-exclamation-triangle',
+        confirmText: 'Evet',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-primary'
+    });
+
+    // Set up close callback to clean up URL
+    viewJobOrderModal.onCloseCallback(() => {
+        // Remove job_no parameter from URL
+        const url = new URL(window.location);
+        url.searchParams.delete('job_no');
+        window.history.replaceState({}, '', url);
+        
+        // Load the page properly after modal is closed
+        loadJobOrders();
+        updateJobOrderCounts();
     });
 
     // Set up modal callbacks
@@ -705,21 +914,21 @@ async function loadJobOrders() {
     }
 }
 
-// Merge expanded children into the job orders array
-function mergeExpandedChildren(rootOrders) {
+// Merge expanded children into the job orders array (recursive for nested children)
+function mergeExpandedChildren(rootOrders, level = 0) {
     const merged = [];
     
     rootOrders.forEach(rootOrder => {
+        // Set hierarchy level
+        rootOrder.hierarchy_level = level;
         merged.push(rootOrder);
         
         // If this row is expanded, add its children
         if (expandedRows.has(rootOrder.job_no)) {
             const children = childrenCache.get(rootOrder.job_no) || [];
-            children.forEach(child => {
-                // Mark as child for proper formatting
-                child.hierarchy_level = 1;
-                merged.push(child);
-            });
+            // Recursively merge children (for grandchildren, etc.)
+            const childRows = mergeExpandedChildren(children, level + 1);
+            merged.push(...childRows);
         }
     });
     
@@ -797,30 +1006,29 @@ function setupExpandButtonListeners() {
             // Update table without loading state
             updateTableDataOnly();
         } else {
-            // Expand: fetch children if not cached
-            if (!childrenCache.has(jobNo)) {
-                try {
-                    // Show loading state on button
-                    const icon = expandButton.querySelector('i');
-                    if (icon) {
-                        icon.className = 'fas fa-spinner fa-spin text-primary';
-                    }
-                    
-                    await fetchJobOrderChildren(jobNo);
-                } catch (error) {
-                    console.error(`Error fetching children for ${jobNo}:`, error);
-                    showNotification('Alt işler yüklenirken hata oluştu', 'error');
-                    // Restore icon on error
-                    const icon = expandButton.querySelector('i');
-                    if (icon) {
-                        icon.className = 'fas fa-chevron-right text-primary';
-                    }
-                    return;
+            // Expand: always fetch children to get latest updates
+            try {
+                // Show loading state on button
+                const icon = expandButton.querySelector('i');
+                if (icon) {
+                    icon.className = 'fas fa-spinner fa-spin text-primary';
                 }
+                
+                await fetchJobOrderChildren(jobNo);
+                
+                expandedRows.add(jobNo);
+                // Update table without loading state
+                updateTableDataOnly();
+            } catch (error) {
+                console.error(`Error fetching children for ${jobNo}:`, error);
+                showNotification('Alt işler yüklenirken hata oluştu', 'error');
+                // Restore icon on error
+                const icon = expandButton.querySelector('i');
+                if (icon) {
+                    icon.className = 'fas fa-chevron-right text-primary';
+                }
+                return;
             }
-            expandedRows.add(jobNo);
-            // Update table without loading state
-            updateTableDataOnly();
         }
     };
     
@@ -1021,24 +1229,10 @@ window.editJobOrder = async function(jobNo) {
             type: 'number',
             value: jobOrder.estimated_cost || '',
             icon: 'fas fa-calculator',
-            colSize: 6,
+            colSize: 12,
             helpText: 'Tahmini maliyet'
         });
 
-        editJobOrderModal.addField({
-            id: 'cost_currency',
-            name: 'cost_currency',
-            label: 'Para Birimi',
-            type: 'dropdown',
-            value: jobOrder.cost_currency || 'TRY',
-            icon: 'fas fa-coins',
-            colSize: 6,
-            helpText: 'Maliyet para birimi',
-            options: CURRENCY_OPTIONS.map(c => ({
-                value: c.value,
-                label: c.label
-            }))
-        });
 
         // Render and show modal
         editJobOrderModal.render();
@@ -1053,16 +1247,23 @@ window.viewJobOrder = async function(jobNo) {
     try {
         const jobOrder = await getJobOrderByJobNo(jobNo);
         
+        // Fetch children if they exist
+        let children = [];
+        if (jobOrder.children && Array.isArray(jobOrder.children)) {
+            children = jobOrder.children;
+        } else if (jobOrder.children_count > 0) {
+            // Fetch children if count > 0 but not in response
+            try {
+                const childrenResponse = await getChildJobOrders(jobNo);
+                children = childrenResponse.results || [];
+            } catch (error) {
+                console.warn('Could not fetch children:', error);
+            }
+        }
+        
         // Clear and configure the view modal
         viewJobOrderModal.clearData();
         viewJobOrderModal.setTitle(`İş Emri Detayları: ${jobOrder.job_no}`);
-        
-        // Basic Information Section - All fields consolidated here
-        viewJobOrderModal.addSection({
-            title: 'Temel Bilgiler',
-            icon: 'fas fa-info-circle',
-            iconColor: 'text-primary'
-        });
         
         // Helper functions for badge classes
         const getStatusBadgeClass = (status) => {
@@ -1086,307 +1287,432 @@ window.viewJobOrder = async function(jobNo) {
             }
         };
         
-        // Row 1: job_no, title, customer
-        viewJobOrderModal.addField({
-            id: 'job_no',
-            label: 'İş Emri No',
-            type: 'text',
-            value: jobOrder.job_no || '-',
-            icon: 'fas fa-barcode',
-            colSize: 4
-        });
-        
-        viewJobOrderModal.addField({
-            id: 'title',
-            label: 'Başlık',
-            type: 'text',
-            value: jobOrder.title || '-',
-            icon: 'fas fa-heading',
-            colSize: 4
-        });
-        
-        viewJobOrderModal.addField({
-            id: 'customer',
-            label: 'Müşteri',
-            type: 'text',
-            value: jobOrder.customer_name ? `${jobOrder.customer_name} (${jobOrder.customer_code || ''})` : '-',
-            icon: 'fas fa-users',
-            colSize: 4
-        });
-        
-        // Row 2: status, priority, customer_order_no
-        viewJobOrderModal.addField({
-            id: 'status',
-            label: 'Durum',
-            type: 'text',
-            value: jobOrder.status_display || '-',
-            icon: 'fas fa-tasks',
-            colSize: 4
-        });
-        
-        viewJobOrderModal.addField({
-            id: 'priority',
-            label: 'Öncelik',
-            type: 'text',
-            value: jobOrder.priority_display || '-',
-            icon: 'fas fa-exclamation-triangle',
-            colSize: 4
-        });
-        
-        viewJobOrderModal.addField({
-            id: 'customer_order_no',
-            label: 'Müşteri Sipariş No',
-            type: 'text',
-            value: jobOrder.customer_order_no || '-',
-            icon: 'fas fa-file-invoice',
-            colSize: 4
-        });
-        
-        // Row 3: date fields
-        viewJobOrderModal.addField({
-            id: 'target_completion_date',
-            label: 'Hedef Tamamlanma Tarihi',
-            type: 'date',
-            value: jobOrder.target_completion_date || null,
-            icon: 'fas fa-calendar-check',
-            colSize: 4
-        });
-        
-        viewJobOrderModal.addField({
-            id: 'started_at',
-            label: 'Başlangıç Tarihi',
-            type: 'datetime',
-            value: jobOrder.started_at || null,
-            icon: 'fas fa-play-circle',
-            colSize: 4
-        });
-        
-        viewJobOrderModal.addField({
-            id: 'completed_at',
-            label: 'Tamamlanma Tarihi',
-            type: 'datetime',
-            value: jobOrder.completed_at || null,
-            icon: 'fas fa-check-circle',
-            colSize: 4
-        });
-        
-        // Row 4: completion_percentage
-        viewJobOrderModal.addField({
-            id: 'completion_percentage',
-            label: 'Tamamlanma Oranı',
-            type: 'percentage',
-            value: jobOrder.completion_percentage ? parseFloat(jobOrder.completion_percentage) : 0,
-            icon: 'fas fa-percentage',
-            colSize: 4
-        });
-        
-        if (jobOrder.description) {
-            viewJobOrderModal.addField({
-                id: 'description',
-                label: 'Açıklama',
-                type: 'text',
-                value: jobOrder.description,
-                icon: 'fas fa-align-left',
-                colSize: 12
+        // Format date helper
+        const formatDate = (dateString) => {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleDateString('tr-TR', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
             });
-        }
+        };
         
-        if (jobOrder.parent) {
-            viewJobOrderModal.addField({
-                id: 'parent',
-                label: 'Ana İş',
-                type: 'text',
-                value: `${jobOrder.parent}${jobOrder.parent_title ? ' - ' + jobOrder.parent_title : ''}`,
-                icon: 'fas fa-level-up-alt',
-                colSize: 4
+        const formatDateTime = (dateString) => {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleString('tr-TR', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
             });
-        }
+        };
         
-        if (jobOrder.estimated_cost || jobOrder.total_cost) {
-            viewJobOrderModal.addField({
-                id: 'estimated_cost',
-                label: 'Tahmini Maliyet',
-                type: 'currency',
-                value: jobOrder.estimated_cost ? parseFloat(jobOrder.estimated_cost) : 0,
-                icon: 'fas fa-calculator',
-                colSize: 4
-            });
-            
-            viewJobOrderModal.addField({
-                id: 'total_cost',
-                label: 'Toplam Maliyet',
-                type: 'currency',
-                value: jobOrder.total_cost ? parseFloat(jobOrder.total_cost) : 0,
-                icon: 'fas fa-money-bill-wave',
-                colSize: 4
-            });
-        }
+        // Format currency helper
+        const formatCurrency = (value, currency = 'TRY') => {
+            if (!value) return '-';
+            const numValue = parseFloat(value);
+            const currencySymbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '₺';
+            return `${currencySymbol} ${numValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+        };
         
-        // Department Tasks Section - Most Important (no title, table will have title)
+        // Build sidebar HTML with Temel Bilgiler and Sistem Bilgileri
+        const sidebarHtml = `
+            <div class="job-order-sidebar" style="background: #f8f9fa; padding: 20px; border-right: 1px solid #dee2e6; height: 100%; overflow-y: auto;">
+                <!-- Temel Bilgiler Section -->
+                <div class="sidebar-section mb-4">
+                    <h6 class="mb-3 d-flex align-items-center">
+                        <i class="fas fa-info-circle me-2 text-primary"></i>
+                        Temel Bilgiler
+                    </h6>
+                    <div class="sidebar-fields">
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-barcode me-1"></i>İş Emri No
+                            </label>
+                            <div class="field-value fw-medium">${jobOrder.job_no || '-'}</div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-heading me-1"></i>Başlık
+                            </label>
+                            <div class="field-value">${jobOrder.title || '-'}</div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-users me-1"></i>Müşteri
+                            </label>
+                            <div class="field-value">${jobOrder.customer_name ? `${jobOrder.customer_name}${jobOrder.customer_code ? ' (' + jobOrder.customer_code + ')' : ''}` : '-'}</div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-tasks me-1"></i>Durum
+                            </label>
+                            <div class="field-value">
+                                ${jobOrder.status_display ? `<span class="status-badge ${getStatusBadgeClass(jobOrder.status)}">${jobOrder.status_display}</span>` : '-'}
+                            </div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-exclamation-triangle me-1"></i>Öncelik
+                            </label>
+                            <div class="field-value">
+                                ${jobOrder.priority_display ? `<span class="status-badge ${getPriorityBadgeClass(jobOrder.priority)}">${jobOrder.priority_display}</span>` : '-'}
+                            </div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-file-invoice me-1"></i>Müşteri Sipariş No
+                            </label>
+                            <div class="field-value">${jobOrder.customer_order_no || '-'}</div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-calendar-check me-1"></i>Hedef Tamamlanma
+                            </label>
+                            <div class="field-value">${formatDate(jobOrder.target_completion_date)}</div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-play-circle me-1"></i>Başlangıç Tarihi
+                            </label>
+                            <div class="field-value">${formatDateTime(jobOrder.started_at)}</div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-check-circle me-1"></i>Tamamlanma Tarihi
+                            </label>
+                            <div class="field-value">${formatDateTime(jobOrder.completed_at)}</div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-percentage me-1"></i>Tamamlanma Oranı
+                            </label>
+                            <div class="field-value">
+                                ${jobOrder.completion_percentage ? `${parseFloat(jobOrder.completion_percentage)}%` : '0%'}
+                            </div>
+                        </div>
+                        ${jobOrder.description ? `
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-align-left me-1"></i>Açıklama
+                            </label>
+                            <div class="field-value">${jobOrder.description}</div>
+                        </div>
+                        ` : ''}
+                        ${jobOrder.parent ? `
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-level-up-alt me-1"></i>Ana İş
+                            </label>
+                            <div class="field-value">${jobOrder.parent}${jobOrder.parent_title ? ' - ' + jobOrder.parent_title : ''}</div>
+                        </div>
+                        ` : ''}
+                        ${(jobOrder.estimated_cost || jobOrder.total_cost) ? `
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-calculator me-1"></i>Tahmini Maliyet
+                            </label>
+                            <div class="field-value">${formatCurrency(jobOrder.estimated_cost, jobOrder.cost_currency)}</div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-money-bill-wave me-1"></i>Toplam Maliyet
+                            </label>
+                            <div class="field-value">${formatCurrency(jobOrder.total_cost, jobOrder.cost_currency)}</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                <!-- Sistem Bilgileri Section -->
+                <div class="sidebar-section">
+                    <h6 class="mb-3 d-flex align-items-center">
+                        <i class="fas fa-info me-2 text-secondary"></i>
+                        Sistem Bilgileri
+                    </h6>
+                    <div class="sidebar-fields">
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-calendar-plus me-1"></i>Oluşturulma Tarihi
+                            </label>
+                            <div class="field-value">${formatDateTime(jobOrder.created_at)}</div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-user me-1"></i>Oluşturan
+                            </label>
+                            <div class="field-value">${jobOrder.created_by_name || '-'}</div>
+                        </div>
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-calendar-edit me-1"></i>Güncellenme Tarihi
+                            </label>
+                            <div class="field-value">${formatDateTime(jobOrder.updated_at)}</div>
+                        </div>
+                        ${jobOrder.completed_by_name ? `
+                        <div class="field-item mb-3">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-user-check me-1"></i>Tamamlayan
+                            </label>
+                            <div class="field-value">${jobOrder.completed_by_name}</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Build main content HTML
+        const mainContentHtml = `
+            <div class="job-order-main-content" style="padding: 20px; height: 100%; overflow-y: auto;">
+                <!-- Children Table -->
+                ${children.length > 0 ? `
+                <div class="content-section mb-4" id="children-section">
+                    <div id="children-table-container"></div>
+                </div>
+                ` : ''}
+                
+                <!-- Department Tasks Table -->
+                ${jobOrder.department_tasks && jobOrder.department_tasks.length > 0 ? `
+                <div class="content-section mb-4" id="department-tasks-section">
+                    <div id="department-tasks-table-container"></div>
+                </div>
+                ` : ''}
+                
+                <!-- Files Section -->
+                <div class="content-section" id="files-section">
+                    <div id="files-container"></div>
+                </div>
+            </div>
+        `;
+        
+        // Create custom layout with sidebar and main content
+        const layoutHtml = `
+            <div class="row g-0" style="height: calc(100vh - 200px);">
+                <div class="col-md-4" style="max-height: 100%;">
+                    ${sidebarHtml}
+                </div>
+                <div class="col-md-8" style="max-height: 100%;">
+                    ${mainContentHtml}
+                </div>
+            </div>
+        `;
+        
+        // Add custom section with the layout
         viewJobOrderModal.addCustomSection({
-            id: 'department-tasks-section',
-            customContent: `<div id="department-tasks-table-container"></div>`
+            id: 'job-order-details-layout',
+            customContent: layoutHtml
         });
-        
-        // Metadata Section
-        viewJobOrderModal.addSection({
-            title: 'Sistem Bilgileri',
-            icon: 'fas fa-info',
-            iconColor: 'text-secondary'
-        });
-        
-        viewJobOrderModal.addField({
-            id: 'created_at',
-            label: 'Oluşturulma Tarihi',
-            type: 'datetime',
-            value: jobOrder.created_at || null,
-            icon: 'fas fa-calendar-plus',
-            colSize: 6
-        });
-        
-        viewJobOrderModal.addField({
-            id: 'created_by',
-            label: 'Oluşturan',
-            type: 'text',
-            value: jobOrder.created_by_name || '-',
-            icon: 'fas fa-user',
-            colSize: 6
-        });
-        
-        viewJobOrderModal.addField({
-            id: 'updated_at',
-            label: 'Güncellenme Tarihi',
-            type: 'datetime',
-            value: jobOrder.updated_at || null,
-            icon: 'fas fa-calendar-edit',
-            colSize: 6
-        });
-        
-        if (jobOrder.completed_by_name) {
-            viewJobOrderModal.addField({
-                id: 'completed_by',
-                label: 'Tamamlayan',
-                type: 'text',
-                value: jobOrder.completed_by_name,
-                icon: 'fas fa-user-check',
-                colSize: 6
-            });
-        }
         
         // Render the modal
         viewJobOrderModal.render();
         
-        // Update fields with HTML content (status and priority badges)
-        const statusField = viewJobOrderModal.content.querySelector('[data-field-id="status"] .field-value');
-        if (statusField && jobOrder.status_display && jobOrder.status_display !== '-') {
-            const statusBadgeClass = getStatusBadgeClass(jobOrder.status);
-            statusField.innerHTML = `<span class="status-badge ${statusBadgeClass}">${jobOrder.status_display}</span>`;
+        // Initialize children table
+        if (children.length > 0) {
+            const childrenContainer = viewJobOrderModal.content.querySelector('#children-table-container');
+            if (childrenContainer) {
+                const childrenTable = new TableComponent('children-table-container', {
+                    title: 'Alt İş Emirleri',
+                    icon: 'fas fa-sitemap',
+                    iconColor: 'text-primary',
+                    columns: [
+                        {
+                            field: 'job_no',
+                            label: 'İş Emri No',
+                            sortable: true,
+                            formatter: (value) => `<strong>${value || '-'}</strong>`
+                        },
+                        {
+                            field: 'title',
+                            label: 'Başlık',
+                            sortable: true,
+                            formatter: (value) => value || '-'
+                        },
+                        {
+                            field: 'status_display',
+                            label: 'Durum',
+                            sortable: true,
+                            formatter: (value, row) => {
+                                if (!value || value === '-') return '-';
+                                const badgeClass = getStatusBadgeClass(row.status);
+                                return `<span class="status-badge ${badgeClass}">${value}</span>`;
+                            }
+                        },
+                        {
+                            field: 'priority_display',
+                            label: 'Öncelik',
+                            sortable: true,
+                            formatter: (value, row) => {
+                                if (!value || value === '-') return '-';
+                                const badgeClass = getPriorityBadgeClass(row.priority);
+                                return `<span class="status-badge ${badgeClass}">${value}</span>`;
+                            }
+                        },
+                        {
+                            field: 'completion_percentage',
+                            label: 'Tamamlanma',
+                            sortable: true,
+                            formatter: (value) => value ? `${parseFloat(value)}%` : '0%'
+                        }
+                    ],
+                    data: children,
+                    sortable: true,
+                    pagination: false,
+                    exportable: false,
+                    refreshable: false,
+                    small: true,
+                    striped: true,
+                    emptyMessage: 'Alt iş emri bulunamadı',
+                    emptyIcon: 'fas fa-sitemap',
+                    actions: [
+                        {
+                            key: 'view',
+                            label: 'Detay',
+                            icon: 'fas fa-eye',
+                            class: 'btn-outline-info',
+                            onClick: (row) => {
+                                viewJobOrderModal.hide();
+                                viewJobOrder(row.job_no);
+                            }
+                        }
+                    ]
+                });
+            }
         }
         
-        const priorityField = viewJobOrderModal.content.querySelector('[data-field-id="priority"] .field-value');
-        if (priorityField && jobOrder.priority_display && jobOrder.priority_display !== '-') {
-            const priorityBadgeClass = getPriorityBadgeClass(jobOrder.priority);
-            priorityField.innerHTML = `<span class="status-badge ${priorityBadgeClass}">${jobOrder.priority_display}</span>`;
-        }
-        
-        // Initialize department tasks table after modal is rendered
-        const departmentTasksContainer = viewJobOrderModal.content.querySelector('#department-tasks-table-container');
-        if (departmentTasksContainer && jobOrder.department_tasks && jobOrder.department_tasks.length > 0) {
-            // Helper function for department task status badges
-            const getDepartmentTaskStatusBadgeClass = (status) => {
-                switch (status) {
-                    case 'completed': return 'status-green';
-                    case 'in_progress': return 'status-blue';
-                    case 'pending': return 'status-yellow';
-                    case 'blocked': return 'status-red';
-                    case 'skipped': return 'status-grey';
-                    default: return 'status-grey';
-                }
-            };
-            
-            const departmentTasksTable = new TableComponent('department-tasks-table-container', {
-                title: 'Departman Görevleri',
-                icon: 'fas fa-tasks',
-                iconColor: 'text-primary',
-                columns: [
-                    {
-                        field: 'sequence',
-                        label: 'Sıra',
-                        sortable: true,
-                        formatter: (value) => value || '-'
-                    },
-                    {
-                        field: 'department_display',
-                        label: 'Departman',
-                        sortable: true,
-                        formatter: (value) => value || '-'
-                    },
-                    {
-                        field: 'title',
-                        label: 'Başlık',
-                        sortable: true,
-                        formatter: (value) => value || '-'
-                    },
-                    {
-                        field: 'status_display',
-                        label: 'Durum',
-                        sortable: true,
-                        formatter: (value, row) => {
-                            if (!value || value === '-') return '-';
-                            const status = row.status;
-                            const badgeClass = getDepartmentTaskStatusBadgeClass(status);
-                            return `<span class="status-badge ${badgeClass}">${value}</span>`;
-                        }
-                    },
-                    {
-                        field: 'assigned_to_name',
-                        label: 'Atanan',
-                        sortable: false,
-                        formatter: (value) => value || '-'
-                    },
-                    {
-                        field: 'target_completion_date',
-                        label: 'Hedef Tarih',
-                        sortable: true,
-                        type: 'date',
-                        formatter: (value) => {
-                            if (!value) return '-';
-                            const date = new Date(value);
-                            return date.toLocaleDateString('tr-TR', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric'
-                            });
-                        }
-                    },
-                    {
-                        field: 'completed_at',
-                        label: 'Tamamlanma Tarihi',
-                        sortable: true,
-                        type: 'datetime',
-                        formatter: (value) => {
-                            if (!value) return '-';
-                            const date = new Date(value);
-                            return date.toLocaleDateString('tr-TR', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric'
-                            });
-                        }
+        // Initialize department tasks table
+        if (jobOrder.department_tasks && jobOrder.department_tasks.length > 0) {
+            const departmentTasksContainer = viewJobOrderModal.content.querySelector('#department-tasks-table-container');
+            if (departmentTasksContainer) {
+                const getDepartmentTaskStatusBadgeClass = (status) => {
+                    switch (status) {
+                        case 'completed': return 'status-green';
+                        case 'in_progress': return 'status-blue';
+                        case 'pending': return 'status-yellow';
+                        case 'blocked': return 'status-red';
+                        case 'skipped': return 'status-grey';
+                        default: return 'status-grey';
                     }
-                ],
-                data: jobOrder.department_tasks || [],
-                sortable: true,
-                pagination: false,
-                exportable: false,
-                refreshable: false,
-                small: true,
-                striped: true,
-                emptyMessage: 'Departman görevi bulunamadı',
-                emptyIcon: 'fas fa-tasks'
-            });
-        } else if (departmentTasksContainer) {
-            departmentTasksContainer.innerHTML = '<p class="text-muted text-center py-3">Henüz departman görevi bulunmamaktadır.</p>';
+                };
+                
+                const departmentTasksTable = new TableComponent('department-tasks-table-container', {
+                    title: 'Departman Görevleri',
+                    icon: 'fas fa-tasks',
+                    iconColor: 'text-primary',
+                    columns: [
+                        {
+                            field: 'sequence',
+                            label: 'Sıra',
+                            sortable: true,
+                            formatter: (value) => value || '-'
+                        },
+                        {
+                            field: 'department_display',
+                            label: 'Departman',
+                            sortable: true,
+                            formatter: (value) => value || '-'
+                        },
+                        {
+                            field: 'title',
+                            label: 'Başlık',
+                            sortable: true,
+                            formatter: (value) => value || '-'
+                        },
+                        {
+                            field: 'status_display',
+                            label: 'Durum',
+                            sortable: true,
+                            formatter: (value, row) => {
+                                if (!value || value === '-') return '-';
+                                const status = row.status;
+                                const badgeClass = getDepartmentTaskStatusBadgeClass(status);
+                                return `<span class="status-badge ${badgeClass}">${value}</span>`;
+                            }
+                        },
+                        {
+                            field: 'assigned_to_name',
+                            label: 'Atanan',
+                            sortable: false,
+                            formatter: (value) => value || '-'
+                        },
+                        {
+                            field: 'target_completion_date',
+                            label: 'Hedef Tarih',
+                            sortable: true,
+                            type: 'date',
+                            formatter: (value) => formatDate(value)
+                        },
+                        {
+                            field: 'completed_at',
+                            label: 'Tamamlanma Tarihi',
+                            sortable: true,
+                            type: 'datetime',
+                            formatter: (value) => formatDate(value)
+                        }
+                    ],
+                    data: jobOrder.department_tasks || [],
+                    sortable: true,
+                    pagination: false,
+                    exportable: false,
+                    refreshable: false,
+                    small: true,
+                    striped: true,
+                    emptyMessage: 'Departman görevi bulunamadı',
+                    emptyIcon: 'fas fa-tasks'
+                });
+            }
+        }
+        
+        // Initialize file attachments
+        const filesContainer = viewJobOrderModal.content.querySelector('#files-container');
+        if (filesContainer) {
+            // Import FileAttachments dynamically
+            const { FileAttachments } = await import('../../components/file-attachments/file-attachments.js');
+            // FileViewer is available globally as window.fileViewer
+            
+            const files = jobOrder.files || jobOrder.attachments || [];
+            
+            if (files.length > 0) {
+                const fileAttachments = new FileAttachments('files-container', {
+                    title: 'Dosyalar',
+                    titleIcon: 'fas fa-paperclip',
+                    titleIconColor: 'text-primary',
+                    layout: 'grid',
+                    onFileClick: (file) => {
+                        const fileName = file.file_name || file.name || file.filename || 'Dosya';
+                        const fileExtension = fileName.split('.').pop().toLowerCase();
+                        const fileUrl = file.file_url || file.url || file.file;
+                        
+                        if (fileUrl && window.fileViewer) {
+                            window.fileViewer.openFile(fileUrl, fileName, fileExtension);
+                        }
+                    },
+                    onDownloadClick: (fileUrl, fileName) => {
+                        const link = document.createElement('a');
+                        link.href = fileUrl;
+                        link.download = fileName;
+                        link.target = '_blank';
+                        document.body.appendChild(link);
+                        link.click();
+                        document.body.removeChild(link);
+                    }
+                });
+                
+                fileAttachments.setFiles(files);
+            } else {
+                filesContainer.innerHTML = '<p class="text-muted text-center py-3">Henüz dosya eklenmemiş.</p>';
+            }
+        }
+        
+        // Update URL with job_no parameter (only if not already set)
+        const url = new URL(window.location);
+        const currentJobNo = url.searchParams.get('job_no');
+        if (currentJobNo !== jobNo) {
+            url.searchParams.set('job_no', jobNo);
+            window.history.pushState({}, '', url);
         }
         
         // Show the modal
@@ -1462,14 +1788,38 @@ function renderHierarchyTree(node, level = 0) {
     return html;
 }
 
-window.showCreateChildJobOrderModal = function(parentJobNo) {
+window.showCreateChildJobOrderModal = async function(parentJobNo) {
     if (customers.length === 0) {
         showNotification('Müşteri verileri yükleniyor, lütfen bekleyin...', 'warning');
         return;
     }
 
     // Find parent job order to get customer info
-    const parentJob = jobOrders.find(j => j.job_no === parentJobNo);
+    // First check main jobOrders array
+    let parentJob = jobOrders.find(j => j.job_no === parentJobNo);
+    
+    // If not found, check childrenCache (for grandchildren)
+    if (!parentJob) {
+        for (const [parentJobNoKey, children] of childrenCache.entries()) {
+            const child = children.find(j => j.job_no === parentJobNo);
+            if (child) {
+                parentJob = child;
+                break;
+            }
+        }
+    }
+    
+    // If still not found, fetch from API
+    if (!parentJob) {
+        try {
+            parentJob = await getJobOrderByJobNo(parentJobNo);
+        } catch (error) {
+            console.error('Error fetching parent job order:', error);
+            showNotification('Ana iş emri bulunamadı', 'error');
+            return;
+        }
+    }
+    
     if (!parentJob) {
         showNotification('Ana iş emri bulunamadı', 'error');
         return;
@@ -1649,32 +1999,35 @@ window.showCreateChildJobOrderModal = function(parentJobNo) {
 };
 
 window.startJobOrder = async function(jobNo) {
-    if (!confirm(`İş emri ${jobNo} başlatılsın mı?`)) {
-        return;
-    }
-    
-    try {
-        const response = await startJobOrderAPI(jobNo);
-        if (response && response.status === 'success') {
-            showNotification(response.message || 'İş emri başlatıldı', 'success');
-            await loadJobOrders();
-        } else {
-            throw new Error('İş emri başlatılamadı');
-        }
-    } catch (error) {
-        console.error('Error starting job order:', error);
-        let errorMessage = 'İş emri başlatılırken hata oluştu';
-        try {
-            if (error.message) {
-                const errorData = JSON.parse(error.message);
-                if (typeof errorData === 'object') {
-                    const errors = Object.values(errorData).flat();
-                    errorMessage = errors.join(', ') || errorMessage;
+    confirmationModal.show({
+        title: 'İş Emri Başlatma',
+        message: `İş emri ${jobNo} başlatılsın mı?`,
+        confirmText: 'Başlat',
+        onConfirm: async () => {
+            try {
+                const response = await startJobOrderAPI(jobNo);
+                if (response && response.status === 'success') {
+                    showNotification(response.message || 'İş emri başlatıldı', 'success');
+                    await loadJobOrders();
+                } else {
+                    throw new Error('İş emri başlatılamadı');
                 }
+            } catch (error) {
+                console.error('Error starting job order:', error);
+                let errorMessage = 'İş emri başlatılırken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        }
+                    }
+                } catch (e) {}
+                showNotification(errorMessage, 'error');
             }
-        } catch (e) {}
-        showNotification(errorMessage, 'error');
-    }
+        }
+    });
 };
 
 window.completeJobOrder = async function(jobNo) {
@@ -1820,11 +2173,9 @@ function showCreateJobOrderModal() {
         required: true,
         icon: 'fas fa-users',
         colSize: 6,
-        helpText: 'Müşteri seçin',
-        options: customers.map(c => ({
-            value: c.id.toString(),
-            label: `${c.code} - ${c.name}`
-        }))
+        helpText: 'Müşteri seçin (arama yapabilirsiniz)',
+        searchable: true, // Enable search
+        options: [] // Empty initially, will be loaded async
     });
 
     // Add Basic Information section
@@ -1928,24 +2279,8 @@ function showCreateJobOrderModal() {
         type: 'number',
         placeholder: 'Tahmini maliyet',
         icon: 'fas fa-calculator',
-        colSize: 6,
+        colSize: 12,
         helpText: 'Tahmini maliyet'
-    });
-
-    createJobOrderModal.addField({
-        id: 'cost_currency',
-        name: 'cost_currency',
-        label: 'Para Birimi',
-        type: 'dropdown',
-        placeholder: 'Para birimi seçin...',
-        value: 'TRY',
-        icon: 'fas fa-coins',
-        colSize: 6,
-        helpText: 'Maliyet para birimi',
-        options: CURRENCY_OPTIONS.map(c => ({
-            value: c.value,
-            label: c.label
-        }))
     });
 
     // Render and show modal
@@ -2025,9 +2360,153 @@ function showCreateJobOrderModal() {
         }
     };
     
-    // Set up customer dropdown change listener
+    // Set up async customer dropdown with search and pagination
+    const setupAsyncCustomerDropdown = async () => {
+        // Find the dropdown container created by EditModal
+        const dropdownContainer = createJobOrderModal.container.querySelector('#dropdown-customer');
+        if (!dropdownContainer) {
+            // Retry after a short delay if container not found
+            setTimeout(setupAsyncCustomerDropdown, 100);
+            return;
+        }
+
+        // Get the existing ModernDropdown instance from EditModal
+        const existingDropdown = createJobOrderModal.dropdowns.get('customer');
+        if (!existingDropdown) {
+            setTimeout(setupAsyncCustomerDropdown, 100);
+            return;
+        }
+
+        let currentPage = 1;
+        let hasMore = true;
+        let isLoading = false;
+        let searchTimeout = null;
+        let allLoadedCustomers = [];
+        let currentSearchTerm = '';
+
+        // Function to load customers from API
+        const loadCustomers = async (page = 1, search = '', append = false) => {
+            if (isLoading) return;
+            isLoading = true;
+
+            try {
+                const response = await listCustomers({
+                    page: page,
+                    search: search || undefined,
+                    is_active: true,
+                    ordering: 'code',
+                    page_size: 20
+                });
+
+                const newCustomers = response.results || [];
+                
+                if (append) {
+                    allLoadedCustomers = [...allLoadedCustomers, ...newCustomers];
+                } else {
+                    allLoadedCustomers = newCustomers;
+                }
+
+                // Convert to dropdown items
+                const items = allLoadedCustomers.map(c => ({
+                    value: c.id.toString(),
+                    text: `${c.code} - ${c.name}`
+                }));
+
+                // Update dropdown items
+                if (append) {
+                    // Append new items - get current items from dropdown
+                    const currentItems = existingDropdown.items || [];
+                    existingDropdown.setItems([...currentItems, ...items]);
+                } else {
+                    // Replace items
+                    existingDropdown.setItems(items);
+                }
+
+                // Check if there are more pages
+                hasMore = !!response.next;
+                currentPage = page;
+
+            } catch (error) {
+                console.error('Error loading customers:', error);
+                showNotification('Müşteriler yüklenirken hata oluştu', 'error');
+            } finally {
+                isLoading = false;
+            }
+        };
+
+        // Enable search on the dropdown
+        if (existingDropdown.searchInput) {
+            // Override the default filterItems to use API search instead
+            const originalFilter = existingDropdown.filterItems.bind(existingDropdown);
+            
+            existingDropdown.searchInput.addEventListener('input', (e) => {
+                const searchTerm = e.target.value.trim();
+                currentSearchTerm = searchTerm;
+
+                // Clear existing timeout
+                if (searchTimeout) {
+                    clearTimeout(searchTimeout);
+                }
+
+                // Only send request if 3 or more characters are entered
+                if (searchTerm.length >= 3) {
+                    // Debounce search (500ms)
+                    searchTimeout = setTimeout(async () => {
+                        currentPage = 1;
+                        hasMore = true;
+                        allLoadedCustomers = [];
+                        await loadCustomers(1, searchTerm, false);
+                    }, 500);
+                } else if (searchTerm.length === 0) {
+                    // If search is cleared, reload initial page
+                    searchTimeout = setTimeout(async () => {
+                        currentPage = 1;
+                        hasMore = true;
+                        allLoadedCustomers = [];
+                        await loadCustomers(1, '', false);
+                    }, 500);
+                } else {
+                    // If less than 3 characters, clear the dropdown items
+                    existingDropdown.setItems([]);
+                }
+            });
+        }
+
+        // Infinite scroll pagination
+        const itemsContainer = existingDropdown.itemsContainer;
+        if (itemsContainer) {
+            itemsContainer.addEventListener('scroll', async () => {
+                const scrollTop = itemsContainer.scrollTop;
+                const scrollHeight = itemsContainer.scrollHeight;
+                const clientHeight = itemsContainer.clientHeight;
+
+                // Load next page when scrolled near bottom (within 50px)
+                if (scrollTop + clientHeight >= scrollHeight - 50 && hasMore && !isLoading) {
+                    await loadCustomers(currentPage + 1, currentSearchTerm, true);
+                }
+            });
+        }
+
+        // Initial load
+        await loadCustomers(1, '', false);
+
+        // Handle customer selection
+        dropdownContainer.addEventListener('dropdown:select', (e) => {
+            const customerId = e.detail.value;
+            if (customerId) {
+                const customer = allLoadedCustomers.find(c => c.id.toString() === customerId);
+                if (customer && customer.code) {
+                    window.selectedCustomerCode = customer.code;
+                    updateJobNoField(customer.code);
+                }
+            }
+        });
+    };
+
+    // Set up customer dropdown change listener (legacy - keeping for compatibility)
     const setupCustomerListener = () => {
-        // Find the dropdown container by ID (EditModal creates it as dropdown-{fieldId})
+        // This is now handled by setupAsyncCustomerDropdown
+        // Keeping this function for any other dropdowns that might need it
         const dropdownContainer = createJobOrderModal.container.querySelector('#dropdown-customer');
         if (dropdownContainer) {
             // Listen to dropdown:select event
@@ -2064,14 +2543,14 @@ function showCreateJobOrderModal() {
     
     // Use requestAnimationFrame to ensure DOM is ready
     requestAnimationFrame(() => {
-        setupCustomerListener();
+        setupAsyncCustomerDropdown();
     });
     
     // Also set up after modal is shown
     const modalElement = createJobOrderModal.container.querySelector('#editModal');
     if (modalElement) {
         const handleShown = () => {
-            setupCustomerListener();
+            setupAsyncCustomerDropdown();
             modalElement.removeEventListener('shown.bs.modal', handleShown);
         };
         modalElement.addEventListener('shown.bs.modal', handleShown);
@@ -2095,14 +2574,36 @@ async function createJobOrder(formData) {
             window.creatingChildForParent = null; // Clear the flag
         } else {
             // For root jobs, combine customer code with extension for job_no
-            if (formData.job_no_extension && window.selectedCustomerCode) {
-                formData.job_no = window.selectedCustomerCode + '-' + formData.job_no_extension;
-                delete formData.job_no_extension; // Remove the extension field
+            // First, ensure we have the customer code
+            let customerCode = window.selectedCustomerCode;
+            
+            // If customer code is not set, try to get it from the customer ID
+            if (!customerCode && formData.customer) {
+                const customerId = parseInt(formData.customer);
+                const customer = customers.find(c => c.id === customerId);
+                if (customer && customer.code) {
+                    customerCode = customer.code;
+                }
             }
+            
+            // Validate that we have both customer code and extension
+            if (!customerCode) {
+                throw new Error('Müşteri kodu bulunamadı. Lütfen müşteri seçtiğinizden emin olun.');
+            }
+            
+            if (!formData.job_no_extension || formData.job_no_extension.trim() === '') {
+                throw new Error('İş emri uzantısı gereklidir.');
+            }
+            
+            // Combine customer code with extension for job_no
+            formData.job_no = customerCode + '-' + formData.job_no_extension.trim();
+            delete formData.job_no_extension; // Remove the extension field
+            
             // Convert customer string to number if needed
             if (formData.customer) {
                 formData.customer = parseInt(formData.customer);
             }
+            
             // Clear the selected customer code
             window.selectedCustomerCode = null;
         }
@@ -2276,6 +2777,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
         // Load department choices and templates
         let departmentChoices = [];
         let templates = [];
+        let existingTasks = [];
         
         try {
             departmentChoices = await getDepartmentTaskChoices();
@@ -2292,8 +2794,22 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
             console.error('Error loading templates:', error);
         }
         
+        // Fetch existing department tasks for this job order to populate depends_on dropdown
+        try {
+            const tasksResponse = await listDepartmentTasks({ 
+                job_order: jobNo,
+                page: 1
+            });
+            existingTasks = tasksResponse.results || [];
+        } catch (error) {
+            console.error('Error loading existing tasks:', error);
+        }
+        
         // Clear and configure the modal
         addDepartmentTaskModal.clearAll();
+        
+        // Store existing tasks for use in dropdowns
+        window.existingTasksForJobOrder = existingTasks;
         
         // Add template selection section
         addDepartmentTaskModal.addSection({
@@ -2333,7 +2849,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
         // Store data for later use
         window.currentJobNoForTask = jobNo;
         window.departmentChoicesForTasks = departmentChoices;
-        window.tasksList = []; // Array to store tasks: { department, title, sequence, description, ... }
+        window.tasksList = []; // Array to store tasks: { department, sequence, description, depends_on, ... }
         
         // Set up save callback
         addDepartmentTaskModal.onSave = null;
@@ -2357,23 +2873,48 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                 }
                 
                 // Prepare bulk data
+                // First, create tasks without depends_on to get their IDs
                 const bulkData = {
                     job_order: jobOrderId,
-                    tasks: window.tasksList.map(task => ({
-                        department: task.department,
-                        title: task.title || '',
-                        sequence: task.sequence ? parseInt(task.sequence) : null,
-                        description: task.description || '',
-                        target_start_date: task.target_start_date || null,
-                        target_completion_date: task.target_completion_date || null,
-                        notes: task.notes || null
-                    }))
+                    tasks: window.tasksList.map((task, taskIndex) => {
+                        const taskData = {
+                            department: task.department,
+                            sequence: task.sequence ? parseInt(task.sequence) : null,
+                            description: task.description || '',
+                            target_start_date: task.target_start_date || null,
+                            target_completion_date: task.target_completion_date || null,
+                            notes: task.notes || null
+                        };
+                        
+                        // Process depends_on: these are indices referencing other items in tasksList
+                        // The backend should handle sequence-based dependencies or we need to resolve after creation
+                        if (task.depends_on && Array.isArray(task.depends_on) && task.depends_on.length > 0) {
+                            // Filter to only include valid indices
+                            const validDeps = task.depends_on.filter(depId => {
+                                return typeof depId === 'number' && depId < window.tasksList.length;
+                            });
+                            
+                            // For now, we'll send empty depends_on and let the backend handle it
+                            // Or we could send sequence numbers if backend supports it
+                            // The depends_on will need to be resolved after tasks are created
+                            // For now, store for potential future resolution
+                            if (validDeps.length > 0) {
+                                taskData._dependsOnIndices = validDeps;
+                            }
+                        }
+                        
+                        return taskData;
+                    })
                 };
                 
-                // Remove null/empty values
+                // Remove null/empty values and temporary fields
                 bulkData.tasks = bulkData.tasks.map(task => {
                     const cleaned = {};
                     Object.keys(task).forEach(key => {
+                        // Skip temporary fields starting with _
+                        if (key.startsWith('_')) {
+                            return;
+                        }
                         if (task[key] !== null && task[key] !== '') {
                             cleaned[key] = task[key];
                         }
@@ -2383,6 +2924,10 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                 
                 // Call bulk create
                 const response = await bulkCreateDepartmentTasks(bulkData);
+                
+                // Note: Dependencies between new tasks (indices) are not resolved here
+                // The backend should handle sequence-based dependencies, or we'd need
+                // to update tasks after creation with their new IDs
                 
                 // Close modal
                 addDepartmentTaskModal.hide();
@@ -2473,14 +3018,38 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                     const template = await getTaskTemplateById(parseInt(templateId));
                     
                     if (template.items && template.items.length > 0) {
-                        // Add template items to the tasks list (append, don't replace)
-                        const newTasks = template.items.map(item => ({
-                            department: item.department,
-                            title: item.title || '',
-                            sequence: item.sequence || (window.tasksList.length + 1),
-                            description: item.description || '',
-                            fromTemplate: true
-                        }));
+                        // Create a map from template item ID to tasksList index
+                        const templateItemIdToIndex = new Map();
+                        
+                        // First pass: add all tasks and create mapping
+                        const newTasks = template.items.map((item, itemIndex) => {
+                            const actualIndex = window.tasksList.length + itemIndex;
+                            templateItemIdToIndex.set(item.id, actualIndex);
+                            
+                            return {
+                                department: item.department,
+                                department_display: item.department_display,
+                                sequence: item.sequence || (window.tasksList.length + itemIndex + 1),
+                                description: item.description || '',
+                                depends_on: item.depends_on || [],
+                                fromTemplate: true,
+                                templateItemId: item.id // Store original template item ID for mapping
+                            };
+                        });
+                        
+                        // Second pass: map depends_on template item IDs to tasksList indices
+                        newTasks.forEach((task, taskIndex) => {
+                            if (task.depends_on && Array.isArray(task.depends_on) && task.depends_on.length > 0) {
+                                // Map template item IDs to tasksList indices
+                                task.depends_on = task.depends_on.map(templateItemId => {
+                                    if (templateItemIdToIndex.has(templateItemId)) {
+                                        return templateItemIdToIndex.get(templateItemId);
+                                    }
+                                    // If not found in template, it might be an existing task ID
+                                    return templateItemId;
+                                });
+                            }
+                        });
                         
                         // Append to existing list
                         window.tasksList = [...window.tasksList, ...newTasks];
@@ -2491,6 +3060,12 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                                 task.sequence = index + 1;
                             }
                         });
+                        
+                        // Clean up old dropdowns before re-rendering
+                        if (window.taskDependsOnDropdowns) {
+                            window.taskDependsOnDropdowns.forEach(dropdown => dropdown.destroy());
+                            window.taskDependsOnDropdowns.clear();
+                        }
                         
                         renderTasksTable();
                         showNotification(`${newTasks.length} görev şablondan eklendi`, 'success');
@@ -2539,12 +3114,13 @@ function renderTasksTable() {
                     <tr>
                         <th style="width: 60px;">Sıra</th>
                         <th>Departman</th>
-                        <th>Başlık</th>
+                        <th style="width: 200px;">Bağımlılıklar</th>
                         <th style="width: 100px;">İşlemler</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${window.tasksList.map((task, index) => `
+                    ${window.tasksList.map((task, index) => {
+                        return `
                         <tr data-task-index="${index}">
                             <td>
                                 <input type="number" class="form-control form-control-sm task-sequence" 
@@ -2561,10 +3137,7 @@ function renderTasksTable() {
                                 </select>
                             </td>
                             <td>
-                                <input type="text" class="form-control form-control-sm task-title" 
-                                       value="${escapeHtml(task.title || '')}" 
-                                       placeholder="Görev başlığı"
-                                       data-index="${index}">
+                                <div id="depends-on-dropdown-${index}" class="depends-on-dropdown-container" data-index="${index}"></div>
                             </td>
                             <td>
                                 <button type="button" class="btn btn-sm btn-outline-danger remove-task-btn" 
@@ -2573,7 +3146,8 @@ function renderTasksTable() {
                                 </button>
                             </td>
                         </tr>
-                    `).join('')}
+                    `;
+                    }).join('')}
                 </tbody>
             </table>
         </div>
@@ -2596,16 +3170,90 @@ function renderTasksTable() {
         });
     });
     
-    container.querySelectorAll('.task-title').forEach(input => {
-        input.addEventListener('change', (e) => {
-            const index = parseInt(e.target.dataset.index);
-            window.tasksList[index].title = e.target.value;
+    // Initialize multiselect dropdowns for depends_on
+    container.querySelectorAll('.depends-on-dropdown-container').forEach(container => {
+        const index = parseInt(container.dataset.index);
+        const task = window.tasksList[index];
+        
+        // Only show items from tasksList (items being added), not existing tasks
+        // The depends_on in template items reference other template items, so we only need to show those
+        const dropdownOptions = [];
+        const seenValues = new Set(); // Track to avoid duplicates
+        
+        // Add tasks being added (excluding current task)
+        window.tasksList.forEach((t, idx) => {
+            if (idx !== index) {
+                const value = `new_${idx}`;
+                if (!seenValues.has(value)) {
+                    const deptLabel = window.departmentChoicesForTasks.find(d => d.value === t.department)?.label || t.department_display || t.department;
+                    const displayText = `${deptLabel} (Sıra: ${t.sequence || idx + 1})`;
+                    dropdownOptions.push({
+                        value: value,
+                        text: displayText
+                    });
+                    seenValues.add(value);
+                }
+            }
+        });
+        
+        // Initialize ModernDropdown
+        const dropdown = new ModernDropdown(container, {
+            placeholder: 'Bağımlılık seçin...',
+            multiple: true,
+            searchable: true
+        });
+        
+        dropdown.setItems(dropdownOptions);
+        
+        // Map depends_on IDs to dropdown values
+        // Since we only show items from tasksList, we only need to map indices
+        let selectedValues = [];
+        if (task.depends_on && Array.isArray(task.depends_on) && task.depends_on.length > 0) {
+            selectedValues = task.depends_on.map(depId => {
+                // Check if it's a tasksList index (for template items that were mapped)
+                if (typeof depId === 'number' && depId < window.tasksList.length && depId !== index) {
+                    return `new_${depId}`;
+                }
+                return null;
+            }).filter(v => v !== null);
+        }
+        
+        if (selectedValues.length > 0) {
+            dropdown.setValue(selectedValues);
+        }
+        
+        // Store dropdown reference
+        if (!window.taskDependsOnDropdowns) {
+            window.taskDependsOnDropdowns = new Map();
+        }
+        window.taskDependsOnDropdowns.set(index, dropdown);
+        
+        // Listen for changes
+        container.addEventListener('dropdown:select', (e) => {
+            const selectedValues = dropdown.getValue();
+            // Convert dropdown values back to indices (only new tasks are shown)
+            task.depends_on = selectedValues.map(val => {
+                if (val.startsWith('new_')) {
+                    const idx = parseInt(val.replace('new_', ''));
+                    // Store the index - these reference other items in tasksList
+                    return idx;
+                }
+                return null;
+            }).filter(id => id !== null);
         });
     });
     
     container.querySelectorAll('.remove-task-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const index = parseInt(e.target.closest('.remove-task-btn').dataset.index);
+            
+            // Clean up dropdown if it exists
+            if (window.taskDependsOnDropdowns && window.taskDependsOnDropdowns.has(index)) {
+                const dropdown = window.taskDependsOnDropdowns.get(index);
+                dropdown.destroy();
+                window.taskDependsOnDropdowns.delete(index);
+            }
+            
             window.tasksList.splice(index, 1);
             renderTasksTable();
         });
@@ -2620,13 +3268,20 @@ function addNewTask() {
     
     const newTask = {
         department: window.departmentChoicesForTasks[0]?.value || '',
-        title: '',
         sequence: window.tasksList.length + 1,
         description: '',
+        depends_on: [],
         fromTemplate: false
     };
     
     window.tasksList.push(newTask);
+    
+    // Clean up old dropdowns before re-rendering
+    if (window.taskDependsOnDropdowns) {
+        window.taskDependsOnDropdowns.forEach(dropdown => dropdown.destroy());
+        window.taskDependsOnDropdowns.clear();
+    }
+    
     renderTasksTable();
 }
 
