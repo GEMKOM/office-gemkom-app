@@ -18,7 +18,7 @@ import {
     STATUS_OPTIONS,
     PRIORITY_OPTIONS
 } from '../../apis/projects/jobOrders.js';
-import { createDepartmentTask, bulkCreateDepartmentTasks, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks } from '../../apis/projects/departmentTasks.js';
+import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks } from '../../apis/projects/departmentTasks.js';
 import { listTaskTemplates, getTaskTemplateById } from '../../apis/projects/taskTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
 import { CURRENCY_OPTIONS } from '../../apis/projects/customers.js';
@@ -2886,20 +2886,27 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                             notes: task.notes || null
                         };
                         
-                        // Process depends_on: these are indices referencing other items in tasksList
-                        // The backend should handle sequence-based dependencies or we need to resolve after creation
+                        // Process depends_on: values are indices into tasksList (new tasks in batch) or
+                        // existing department task IDs. The API expects task IDs.
+                        // - Existing task IDs: include in depends_on in the bulk payload (or merge into PATCH when we also have indices).
+                        // - Indices (new tasks): we don't have IDs yet; save and resolve after create, then PATCH.
+                        const existingTaskIds = (window.existingTasksForJobOrder || []).map(t => t.id);
                         if (task.depends_on && Array.isArray(task.depends_on) && task.depends_on.length > 0) {
-                            // Filter to only include valid indices
-                            const validDeps = task.depends_on.filter(depId => {
-                                return typeof depId === 'number' && depId < window.tasksList.length;
-                            });
-                            
-                            // For now, we'll send empty depends_on and let the backend handle it
-                            // Or we could send sequence numbers if backend supports it
-                            // The depends_on will need to be resolved after tasks are created
-                            // For now, store for potential future resolution
-                            if (validDeps.length > 0) {
-                                taskData._dependsOnIndices = validDeps;
+                            const existingIds = [];
+                            const indicesToResolve = [];
+                            for (const dep of task.depends_on) {
+                                if (typeof dep === 'number' && dep >= 0 && dep < window.tasksList.length && dep !== taskIndex) {
+                                    indicesToResolve.push(dep);
+                                } else if (typeof dep === 'number' && existingTaskIds.includes(dep)) {
+                                    existingIds.push(dep);
+                                }
+                            }
+                            if (indicesToResolve.length > 0) {
+                                taskData._dependsOnIndices = indicesToResolve;
+                                if (existingIds.length > 0) taskData._existingDepIds = existingIds;
+                                // Do not set depends_on here; we'll PATCH with combined existing + resolved after create.
+                            } else if (existingIds.length > 0) {
+                                taskData.depends_on = existingIds;
                             }
                         }
                         
@@ -2907,14 +2914,15 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                     })
                 };
                 
-                // Remove null/empty values and temporary fields
+                // Capture dependency indices and existing IDs before cleaning (used when resolving after bulk create)
+                const dependsOnIndicesByTask = bulkData.tasks.map(t => t._dependsOnIndices || []);
+                const dependsOnExistingIdsByTask = bulkData.tasks.map(t => t._existingDepIds || []);
+                
+                // Remove null/empty values and temporary fields (strips _dependsOnIndices from payload)
                 bulkData.tasks = bulkData.tasks.map(task => {
                     const cleaned = {};
                     Object.keys(task).forEach(key => {
-                        // Skip temporary fields starting with _
-                        if (key.startsWith('_')) {
-                            return;
-                        }
+                        if (key.startsWith('_')) return;
                         if (task[key] !== null && task[key] !== '') {
                             cleaned[key] = task[key];
                         }
@@ -2924,10 +2932,21 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                 
                 // Call bulk create
                 const response = await bulkCreateDepartmentTasks(bulkData);
+                const created = response.tasks || [];
                 
-                // Note: Dependencies between new tasks (indices) are not resolved here
-                // The backend should handle sequence-based dependencies, or we'd need
-                // to update tasks after creation with their new IDs
+                // Resolve depends_on for tasks that depend on other new tasks in this batch:
+                // indices in dependsOnIndicesByTask refer to positions in created[]; map to IDs and PATCH.
+                // Merge with any existing task IDs (dependsOnExistingIdsByTask) for the same task.
+                for (let i = 0; i < dependsOnIndicesByTask.length; i++) {
+                    const indices = dependsOnIndicesByTask[i];
+                    const existingIds = dependsOnExistingIdsByTask[i] || [];
+                    if ((indices.length === 0 && existingIds.length === 0) || !created[i]?.id) continue;
+                    const resolvedIds = indices.map(idx => created[idx]?.id).filter(Boolean);
+                    const depIds = [...existingIds, ...resolvedIds];
+                    if (depIds.length > 0) {
+                        await patchDepartmentTask(created[i].id, { depends_on: depIds });
+                    }
+                }
                 
                 // Close modal
                 addDepartmentTaskModal.hide();
