@@ -452,5 +452,16 @@ export const NAVIGATION_STRUCTURE = {
                 children: {}
             }
         }
+    },
+    '/design': {
+        label: 'Dizayn',
+        icon: 'fas fa-drafting-compass',
+        children: {
+            '/design/projects': {
+                label: 'Projeler',
+                icon: 'fas fa-project-diagram',
+                children: {}
+            }
+        }
     }
 };

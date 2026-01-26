@@ -255,6 +255,15 @@ export const TEAM_ACCESS_CONFIG = {
         allowedSections: ['human_resources', 'general', 'general_overtime']
     },
     
+    // Design team - access to design and related areas
+    design: {
+        allowedRoutes: mergeWithBaseRoutes([
+            '/design',
+            '/design/projects'
+        ]),
+        allowedSections: ['design', 'general', 'general_overtime']
+    },
+    
     // Default/other teams - minimal access
     other: {
         allowedRoutes: mergeWithBaseRoutes([]),

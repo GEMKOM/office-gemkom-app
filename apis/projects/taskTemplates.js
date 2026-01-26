@@ -271,6 +271,38 @@ export async function removeTemplateItem(templateId, itemId) {
 }
 
 /**
+ * Add child item to a template item
+ * @param {number} templateId - Template ID
+ * @param {number} itemId - Parent template item ID
+ * @param {Object} childData - Child item data
+ * @param {string} childData.title - Child task title (required)
+ * @param {number} [childData.sequence] - Sequence number
+ * @returns {Promise<Object>} Created child item object
+ */
+export async function addTemplateItemChild(templateId, itemId, childData) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/task-templates/${templateId}/items/${itemId}/children/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(childData)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error adding child item to template item ${itemId} in template ${templateId}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Get department choices for task templates
  * @returns {Promise<Array>} Array of department options with value and label
  */

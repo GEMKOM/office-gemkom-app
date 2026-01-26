@@ -15,6 +15,7 @@ import {
     getTemplateItems,
     addTemplateItem,
     removeTemplateItem,
+    addTemplateItemChild,
     getDepartmentChoices,
     DEPARTMENT_OPTIONS
 } from '../../../apis/projects/taskTemplates.js';
@@ -36,6 +37,7 @@ let editTemplateModal = null;
 let deleteTemplateModal = null;
 let manageItemsModal = null;
 let addItemModal = null;
+let addChildItemModal = null;
 
 // Current template being managed
 let currentTemplate = null;
@@ -309,10 +311,18 @@ function initializeModalComponents() {
 
     // Add item modal
     addItemModal = new EditModal('add-item-modal-container', {
-        title: 'Görev Ekle',
+        title: 'Ana Görev Ekle',
         icon: 'fas fa-plus-circle',
         saveButtonText: 'Görev Ekle',
         size: 'lg'
+    });
+
+    // Add child item modal
+    addChildItemModal = new EditModal('add-child-item-modal-container', {
+        title: 'Alt Görev Ekle',
+        icon: 'fas fa-plus-circle',
+        saveButtonText: 'Alt Görev Ekle',
+        size: 'md'
     });
 
     // Manage items modal
@@ -549,14 +559,19 @@ async function refreshManageItemsModal() {
     if (!currentTemplate || !manageItemsModal) return;
     
     try {
-        const items = await getTemplateItems(currentTemplate.id);
-        currentTemplateItems = items;
+        const template = await getTaskTemplateById(currentTemplate.id);
+        currentTemplate = template;
+        currentTemplateItems = template.items || [];
         
-        // Update table data if table exists
+        // If table exists, update it; otherwise re-render the modal
         if (manageItemsModal.itemsTable) {
-            const sortedItems = [...items].sort((a, b) => a.sequence - b.sequence);
-            const tableData = sortedItems.map((item, index) => {
-                const deptLabel = departmentOptions.find(d => d.value === item.department)?.label || item.department;
+            // Prepare updated table data
+            const items = template.items || [];
+            const mainItems = items.filter(item => item.parent === null).sort((a, b) => a.sequence - b.sequence);
+            const tableData = [];
+            
+            mainItems.forEach((item) => {
+                const deptLabel = departmentOptions.find(d => d.value === item.department)?.label || item.department_display || item.department;
                 const dependsOn = item.depends_on && item.depends_on.length > 0 
                     ? item.depends_on.map(id => {
                         const depItem = items.find(i => i.id === id);
@@ -564,28 +579,53 @@ async function refreshManageItemsModal() {
                     }).join(', ')
                     : '-';
                 
-                return {
+                // Add main item
+                tableData.push({
                     id: item.id,
-                    index: index + 1,
+                    itemId: item.id,
+                    isMainItem: true,
+                    isChildItem: false,
+                    sequence: item.sequence,
                     department: item.department,
                     department_display: deptLabel,
                     title: item.title,
-                    sequence: item.sequence,
-                    depends_on: dependsOn
-                };
+                    depends_on: dependsOn,
+                    children_count: item.children_count || 0,
+                    children: item.children || []
+                });
+                
+                // Add child items
+                if (item.children && item.children.length > 0) {
+                    item.children.forEach((child) => {
+                        tableData.push({
+                            id: child.id,
+                            itemId: child.id,
+                            parentId: item.id,
+                            isMainItem: false,
+                            isChildItem: true,
+                            sequence: child.sequence,
+                            department: child.department || item.department,
+                            department_display: child.department_display || deptLabel,
+                            title: child.title,
+                            depends_on: '-',
+                            children_count: 0,
+                            children: []
+                        });
+                    });
+                }
             });
             
             manageItemsModal.itemsTable.updateData(tableData, tableData.length);
         } else {
-            // If table doesn't exist, re-render the modal
-            showManageItemsModal(currentTemplate, items);
+            // Re-render the modal with updated data
+            showManageItemsModal(template, template.items || []);
         }
     } catch (error) {
         console.error('Error refreshing items:', error);
     }
 }
 
-// Show manage items modal using DisplayModal and TableComponent
+// Show manage items modal using DisplayModal with hierarchical display
 function showManageItemsModal(template, items) {
     // Ensure modal is initialized - reinitialize if needed
     if (!manageItemsModal) {
@@ -606,74 +646,8 @@ function showManageItemsModal(template, items) {
     // Update modal title with template name
     manageItemsModal.setTitle(`${escapeHtml(template.name)} - Görev Yönetimi`);
     
-    // Prepare table data
-    const sortedItems = [...items].sort((a, b) => a.sequence - b.sequence);
-    const tableData = sortedItems.map((item, index) => {
-        const deptLabel = departmentOptions.find(d => d.value === item.department)?.label || item.department;
-        const dependsOn = item.depends_on && item.depends_on.length > 0 
-            ? item.depends_on.map(id => {
-                const depItem = items.find(i => i.id === id);
-                return depItem ? depItem.title : id;
-            }).join(', ')
-            : '-';
-        
-        return {
-            id: item.id,
-            index: index + 1,
-            department: item.department,
-            department_display: deptLabel,
-            title: item.title,
-            sequence: item.sequence,
-            depends_on: dependsOn
-        };
-    });
-
-    // Define table columns
-    const tableColumns = [
-        {
-            field: 'index',
-            label: '#',
-            sortable: false,
-            formatter: (value) => `<span class="badge bg-secondary">${value}</span>`
-        },
-        {
-            field: 'department_display',
-            label: 'Departman',
-            sortable: true,
-            formatter: (value, row) => `<span class="badge bg-secondary">${escapeHtml(value)}</span>`
-        },
-        {
-            field: 'title',
-            label: 'Başlık',
-            sortable: true,
-            formatter: (value) => `<strong>${escapeHtml(value)}</strong>`
-        },
-        {
-            field: 'sequence',
-            label: 'Sıra',
-            sortable: true,
-            formatter: (value) => `<small class="text-muted">${value}</small>`
-        },
-        {
-            field: 'depends_on',
-            label: 'Bağımlılıklar',
-            sortable: false,
-            formatter: (value) => value === '-' ? '<span class="text-muted">-</span>' : `<small class="text-muted">${escapeHtml(value)}</small>`
-        }
-    ];
-
-    // Define table actions
-    const tableActions = [
-        {
-            key: 'delete',
-            label: 'Sil',
-            icon: 'fas fa-trash',
-            class: 'btn-outline-danger',
-            onClick: async (row) => {
-                await removeItem(row.id);
-            }
-        }
-    ];
+    // Filter only main items (parent === null)
+    const mainItems = items.filter(item => item.parent === null).sort((a, b) => a.sequence - b.sequence);
 
     const statusBadge = template.is_active
         ? '<span class="status-badge completed">Aktif</span>'
@@ -705,8 +679,12 @@ function showManageItemsModal(template, items) {
                         <td>${defaultBadge}</td>
                     </tr>
                     <tr>
-                        <th>Görev Sayısı</th>
-                        <td><span class="badge bg-secondary">${items.length}</span></td>
+                        <th>Ana Görev Sayısı</th>
+                        <td><span class="badge bg-secondary">${mainItems.length}</span></td>
+                    </tr>
+                    <tr>
+                        <th>Toplam Görev Sayısı</th>
+                        <td><span class="badge bg-info">${items.length}</span> (${mainItems.length} ana + ${items.length - mainItems.length} alt görev)</td>
                     </tr>
                     <tr>
                         <th>Oluşturulma Tarihi</th>
@@ -721,11 +699,58 @@ function showManageItemsModal(template, items) {
         </div>
     `;
 
+    // Prepare table data - flatten hierarchy for display
+    const tableData = [];
+    mainItems.forEach((item) => {
+        const deptLabel = departmentOptions.find(d => d.value === item.department)?.label || item.department_display || item.department;
+        const dependsOn = item.depends_on && item.depends_on.length > 0 
+            ? item.depends_on.map(id => {
+                const depItem = items.find(i => i.id === id);
+                return depItem ? depItem.title : id;
+            }).join(', ')
+            : '-';
+        
+        // Add main item
+        tableData.push({
+            id: item.id,
+            itemId: item.id,
+            isMainItem: true,
+            isChildItem: false,
+            sequence: item.sequence,
+            department: item.department,
+            department_display: deptLabel,
+            title: item.title,
+            depends_on: dependsOn,
+            children_count: item.children_count || 0,
+            children: item.children || []
+        });
+        
+        // Add child items
+        if (item.children && item.children.length > 0) {
+            item.children.forEach((child) => {
+                tableData.push({
+                    id: child.id,
+                    itemId: child.id,
+                    parentId: item.id,
+                    isMainItem: false,
+                    isChildItem: true,
+                    sequence: child.sequence,
+                    department: child.department || item.department,
+                    department_display: child.department_display || deptLabel,
+                    title: child.title,
+                    depends_on: '-',
+                    children_count: 0,
+                    children: []
+                });
+            });
+        }
+    });
+
     // Create custom content with table and add button
     const customContent = `
         <div class="d-flex justify-content-end mb-3">
             <button type="button" class="btn btn-sm btn-primary" id="add-item-btn-header">
-                <i class="fas fa-plus me-1"></i>Görev Ekle
+                <i class="fas fa-plus me-1"></i>Ana Görev Ekle
             </button>
         </div>
         <div id="items-table-container"></div>
@@ -741,28 +766,130 @@ function showManageItemsModal(template, items) {
             customContent: templateInfoContent
         })
         .addCustomSection({
-            title: null,
+            title: 'Görevler',
+            icon: 'fas fa-tasks',
+            iconColor: 'text-primary',
             customContent: customContent
         })
         .render()
         .show();
 
-    // Initialize table after modal is shown
+    // Setup event listeners and table after modal is shown
     setTimeout(() => {
-        // Destroy existing table if it exists
-        if (manageItemsModal.itemsTable) {
-            try {
-                manageItemsModal.itemsTable.destroy();
-            } catch (e) {
-                console.warn('Error destroying existing table:', e);
-            }
+        // Setup add main item button
+        const addBtnHeader = document.getElementById('add-item-btn-header');
+        if (addBtnHeader) {
+            const newAddBtn = addBtnHeader.cloneNode(true);
+            addBtnHeader.parentNode.replaceChild(newAddBtn, addBtnHeader);
+            
+            newAddBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const template = await getTaskTemplateById(currentTemplate.id);
+                openAddItemModal(template.id, template.items || []);
+            });
         }
 
+        // Initialize table component
         const tableContainer = document.getElementById('items-table-container');
         if (tableContainer) {
-            // Clear container first
-            tableContainer.innerHTML = '';
-            
+            // Destroy existing table if it exists
+            if (manageItemsModal.itemsTable) {
+                try {
+                    manageItemsModal.itemsTable.destroy();
+                } catch (e) {
+                    console.warn('Error destroying existing table:', e);
+                }
+            }
+
+            // Define table columns
+            const tableColumns = [
+                {
+                    field: 'sequence',
+                    label: 'Sıra',
+                    sortable: true,
+                    width: '80px',
+                    formatter: (value, row) => {
+                        if (row.isChildItem) {
+                            return `<span class="text-muted">↳</span>`;
+                        }
+                        return `<span class="badge bg-secondary">${value}</span>`;
+                    }
+                },
+                {
+                    field: 'department_display',
+                    label: 'Departman',
+                    sortable: true,
+                    width: '150px',
+                    formatter: (value, row) => {
+                        return `<span class="status-badge status-blue">${escapeHtml(value)}</span>`;
+                    }
+                },
+                {
+                    field: 'title',
+                    label: 'Başlık',
+                    sortable: true,
+                    formatter: (value, row) => {
+                        const indent = row.isChildItem ? '<span class="ms-3"></span>' : '';
+                        const titleHtml = `<strong>${escapeHtml(value)}</strong>`;
+                        return `${indent}${titleHtml}`;
+                    }
+                },
+                {
+                    field: 'children_count',
+                    label: 'Alt Görevler',
+                    sortable: false,
+                    width: '120px',
+                    formatter: (value, row) => {
+                        if (row.isChildItem) {
+                            return '<span class="text-muted">-</span>';
+                        }
+                        if (value > 0) {
+                            return `<span class="status-badge status-green">${value} alt görev</span>`;
+                        }
+                        return '<span class="text-muted">-</span>';
+                    }
+                },
+                {
+                    field: 'depends_on',
+                    label: 'Bağımlılıklar',
+                    sortable: false,
+                    width: '200px',
+                    formatter: (value, row) => {
+                        if (row.isChildItem) {
+                            return '<span class="text-muted">-</span>';
+                        }
+                        return value === '-' ? '<span class="text-muted">-</span>' : `<small class="text-muted">${escapeHtml(value)}</small>`;
+                    }
+                }
+            ];
+
+            // Define table actions
+            const tableActions = [
+                {
+                    key: 'add_child',
+                    label: 'Alt Görev Ekle',
+                    icon: 'fas fa-plus',
+                    class: 'btn-outline-primary',
+                    onClick: (row) => {
+                        if (!row.isChildItem) {
+                            openAddChildItemModal(currentTemplate.id, row.itemId);
+                        }
+                    },
+                    visible: (row) => !row.isChildItem
+                },
+                {
+                    key: 'delete',
+                    label: 'Sil',
+                    icon: 'fas fa-trash',
+                    class: 'btn-outline-danger',
+                    onClick: (row) => {
+                        removeItem(row.itemId);
+                    }
+                }
+            ];
+
+            // Create table component
             const itemsTable = new TableComponent('items-table-container', {
                 title: 'Şablon Görevleri',
                 columns: tableColumns,
@@ -773,41 +900,38 @@ function showManageItemsModal(template, items) {
                 striped: true,
                 bordered: true,
                 small: true,
-                emptyMessage: 'Henüz görev eklenmemiş.',
-                emptyIcon: 'fas fa-tasks'
+                emptyMessage: 'Henüz ana görev eklenmemiş.',
+                emptyIcon: 'fas fa-tasks',
+                rowAttributes: (row) => {
+                    if (row.isChildItem) {
+                        return {
+                            class: 'table-light',
+                            'data-parent-id': row.parentId,
+                            'data-item-id': row.itemId
+                        };
+                    }
+                    return {
+                        'data-item-id': row.itemId
+                    };
+                }
             });
 
             // Store table reference for refresh
             manageItemsModal.itemsTable = itemsTable;
-            
-            // Setup add item button (already in the HTML, just need to attach event)
-            const addBtnHeader = document.getElementById('add-item-btn-header');
-            if (addBtnHeader) {
-                // Remove existing listeners by cloning
-                const newAddBtn = addBtnHeader.cloneNode(true);
-                addBtnHeader.parentNode.replaceChild(newAddBtn, addBtnHeader);
-                
-                newAddBtn.addEventListener('click', async (e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    // Reload items to ensure we have the latest list including newly added items
-                    const freshItems = await getTemplateItems(template.id);
-                    currentTemplateItems = freshItems;
-                    openAddItemModal(template.id, freshItems);
-                });
-            }
         }
     }, 150);
 }
 
 
-// Open add item modal
+// Open add item modal (for main items only)
 function openAddItemModal(templateId, existingItems) {
-    // Prepare dependency options for dropdown
-    const dependencyOptions = existingItems.map(item => ({
-        value: item.id,
-        label: item.title
-    }));
+    // Prepare dependency options for dropdown (only main items, no children)
+    const dependencyOptions = existingItems
+        .filter(item => item.parent === null) // Only main items can be dependencies
+        .map(item => ({
+            value: item.id,
+            label: item.title
+        }));
 
     // Clear all sections and fields first
     addItemModal.clearAll();
@@ -821,7 +945,7 @@ function openAddItemModal(templateId, existingItems) {
     
     addItemModal
         .addSection({
-            title: 'Görev Bilgileri',
+            title: 'Ana Görev Bilgileri',
             icon: 'fas fa-info-circle',
             iconColor: 'text-primary',
             fields: [
@@ -834,17 +958,8 @@ function openAddItemModal(templateId, existingItems) {
                     required: true,
                     icon: 'fas fa-building',
                     options: departmentOptions,
-                    colSize: 12
-                },
-                {
-                    id: 'title',
-                    name: 'title',
-                    label: 'Başlık',
-                    type: 'text',
-                    placeholder: 'Görev başlığı...',
-                    required: true,
-                    icon: 'fas fa-heading',
-                    colSize: 12
+                    colSize: 12,
+                    help: 'Başlık otomatik olarak departman adından oluşturulacak'
                 },
                 {
                     id: 'sequence',
@@ -852,7 +967,7 @@ function openAddItemModal(templateId, existingItems) {
                     label: 'Sıra',
                     type: 'number',
                     placeholder: 'Sıra numarası',
-                    value: existingItems.length + 1,
+                    value: existingItems.filter(item => item.parent === null).length + 1,
                     min: 1,
                     icon: 'fas fa-sort-numeric-up',
                     colSize: 6
@@ -866,7 +981,7 @@ function openAddItemModal(templateId, existingItems) {
                     multiple: true,
                     searchable: true,
                     options: dependencyOptions,
-                    help: 'Bu görevin başlaması için tamamlanması gereken görevler',
+                    help: 'Bu görevin başlaması için tamamlanması gereken ana görevler',
                     colSize: 12
                 }
             ]
@@ -879,13 +994,13 @@ function openAddItemModal(templateId, existingItems) {
             addItemModal.setLoading(true);
             const itemData = {
                 department: formData.department,
-                title: formData.title,
-                sequence: parseInt(formData.sequence) || currentExistingItems.length + 1,
+                // title is auto-filled by backend from department
+                sequence: parseInt(formData.sequence) || currentExistingItems.filter(item => item.parent === null).length + 1,
                 depends_on: formData.depends_on ? (Array.isArray(formData.depends_on) ? formData.depends_on : [formData.depends_on]).map(id => parseInt(id)) : []
             };
             await addTemplateItem(currentTemplateId, itemData);
             addItemModal.hide();
-            showNotification('Görev başarıyla eklendi', 'success');
+            showNotification('Ana görev başarıyla eklendi', 'success');
             
             // Reload items and refresh the manage items modal
             await refreshManageItemsModal();
@@ -901,9 +1016,98 @@ function openAddItemModal(templateId, existingItems) {
     addItemModal.show();
 }
 
+// Open add child item modal
+function openAddChildItemModal(templateId, parentItemId) {
+    // Get parent item to show department info
+    const parentItem = currentTemplateItems.find(item => item.id === parentItemId);
+    if (!parentItem) {
+        showNotification('Ana görev bulunamadı', 'error');
+        return;
+    }
+
+    // Get existing children to determine next sequence
+    const existingChildren = parentItem.children || [];
+    const nextSequence = existingChildren.length > 0 
+        ? Math.max(...existingChildren.map(c => c.sequence || 0)) + 1
+        : 1;
+
+    // Clear all sections and fields first
+    addChildItemModal.clearAll();
+    
+    // Clear any existing callback first to prevent conflicts
+    addChildItemModal.onSave = null;
+    
+    addChildItemModal
+        .addSection({
+            title: 'Alt Görev Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary',
+            fields: [
+                {
+                    id: 'parent_info',
+                    name: 'parent_info',
+                    label: 'Ana Görev',
+                    type: 'text',
+                    value: `${parentItem.department_display || parentItem.department} - ${parentItem.title}`,
+                    disabled: true,
+                    icon: 'fas fa-folder',
+                    colSize: 12,
+                    help: 'Alt görev otomatik olarak bu ana göreve bağlanacak'
+                },
+                {
+                    id: 'title',
+                    name: 'title',
+                    label: 'Alt Görev Başlığı',
+                    type: 'text',
+                    placeholder: 'Örn: Malzeme Listesi, İş Programı...',
+                    required: true,
+                    icon: 'fas fa-heading',
+                    colSize: 12
+                },
+                {
+                    id: 'sequence',
+                    name: 'sequence',
+                    label: 'Sıra',
+                    type: 'number',
+                    placeholder: 'Sıra numarası',
+                    value: nextSequence,
+                    min: 1,
+                    icon: 'fas fa-sort-numeric-up',
+                    colSize: 6
+                }
+            ]
+        })
+        .render();
+    
+    // Set save callback AFTER rendering but BEFORE showing to ensure it's ready
+    addChildItemModal.onSaveCallback(async (formData) => {
+        try {
+            addChildItemModal.setLoading(true);
+            const childData = {
+                title: formData.title,
+                sequence: parseInt(formData.sequence) || nextSequence
+            };
+            await addTemplateItemChild(templateId, parentItemId, childData);
+            addChildItemModal.hide();
+            showNotification('Alt görev başarıyla eklendi', 'success');
+            
+            // Reload items and refresh the manage items modal
+            await refreshManageItemsModal();
+        } catch (error) {
+            console.error('Error adding child item:', error);
+            showNotification('Alt görev eklenirken bir hata oluştu', 'error');
+        } finally {
+            addChildItemModal.setLoading(false);
+        }
+    });
+    
+    // Show modal after callback is set
+    addChildItemModal.show();
+}
+
 // Remove item
 async function removeItem(itemId) {
-    if (!confirm('Bu görevi silmek istediğinizden emin misiniz?')) {
+    if (!confirm('Bu görevi silmek istediğinizden emin misiniz? Alt görevler de silinecektir.')) {
         return;
     }
 

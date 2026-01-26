@@ -593,6 +593,12 @@ export function initNavbar() {
                     return;
                 }
                 
+                if (path.startsWith('/design/')) {
+                    // Allow navigation to design pages
+                    navigateTo(path);
+                    return;
+                }
+                
                 
                 
                 navigateTo(path);
@@ -694,6 +700,12 @@ export function initNavbar() {
                 
                 if (path.startsWith('/projects/')) {
                     // Allow navigation to projects pages
+                    navigateTo(path);
+                    return;
+                }
+                
+                if (path.startsWith('/design/')) {
+                    // Allow navigation to design pages
                     navigateTo(path);
                     return;
                 }

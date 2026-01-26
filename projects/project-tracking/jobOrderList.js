@@ -2872,54 +2872,52 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                     // Continue with job_no, backend might accept it
                 }
                 
-                // Prepare bulk data
-                // First, create tasks without depends_on to get their IDs
-                const bulkData = {
-                    job_order: jobOrderId,
-                    tasks: window.tasksList.map((task, taskIndex) => {
-                        const taskData = {
-                            department: task.department,
-                            sequence: task.sequence ? parseInt(task.sequence) : null,
-                            description: task.description || '',
-                            target_start_date: task.target_start_date || null,
-                            target_completion_date: task.target_completion_date || null,
-                            notes: task.notes || null
-                        };
-                        
-                        // Process depends_on: values are indices into tasksList (new tasks in batch) or
-                        // existing department task IDs. The API expects task IDs.
-                        // - Existing task IDs: include in depends_on in the bulk payload (or merge into PATCH when we also have indices).
-                        // - Indices (new tasks): we don't have IDs yet; save and resolve after create, then PATCH.
-                        const existingTaskIds = (window.existingTasksForJobOrder || []).map(t => t.id);
-                        if (task.depends_on && Array.isArray(task.depends_on) && task.depends_on.length > 0) {
-                            const existingIds = [];
-                            const indicesToResolve = [];
-                            for (const dep of task.depends_on) {
-                                if (typeof dep === 'number' && dep >= 0 && dep < window.tasksList.length && dep !== taskIndex) {
-                                    indicesToResolve.push(dep);
-                                } else if (typeof dep === 'number' && existingTaskIds.includes(dep)) {
-                                    existingIds.push(dep);
-                                }
-                            }
-                            if (indicesToResolve.length > 0) {
-                                taskData._dependsOnIndices = indicesToResolve;
-                                if (existingIds.length > 0) taskData._existingDepIds = existingIds;
-                                // Do not set depends_on here; we'll PATCH with combined existing + resolved after create.
-                            } else if (existingIds.length > 0) {
-                                taskData.depends_on = existingIds;
+                // Separate main tasks and child tasks
+                const mainTasks = window.tasksList.filter(task => !task.isChildTask);
+                const childTasks = window.tasksList.filter(task => task.isChildTask);
+                
+                // Step 1: Create main tasks first
+                const mainTasksData = mainTasks.map((task, taskIndex) => {
+                    const taskData = {
+                        department: task.department,
+                        sequence: task.sequence ? parseInt(task.sequence) : null,
+                        description: task.description || '',
+                        target_start_date: task.target_start_date || null,
+                        target_completion_date: task.target_completion_date || null,
+                        notes: task.notes || null
+                    };
+                    
+                    // Process depends_on: values are indices into mainTasks (new tasks in batch) or
+                    // existing department task IDs. The API expects task IDs.
+                    const existingTaskIds = (window.existingTasksForJobOrder || []).map(t => t.id);
+                    if (task.depends_on && Array.isArray(task.depends_on) && task.depends_on.length > 0) {
+                        const existingIds = [];
+                        const indicesToResolve = [];
+                        for (const dep of task.depends_on) {
+                            // Check if it's an index in mainTasks
+                            const mainTaskIndex = mainTasks.findIndex((t, idx) => {
+                                // Check if dep matches the index in the original tasksList
+                                return window.tasksList.indexOf(t) === dep;
+                            });
+                            if (mainTaskIndex >= 0 && mainTaskIndex !== taskIndex) {
+                                indicesToResolve.push(mainTaskIndex);
+                            } else if (typeof dep === 'number' && existingTaskIds.includes(dep)) {
+                                existingIds.push(dep);
                             }
                         }
-                        
-                        return taskData;
-                    })
-                };
+                        if (indicesToResolve.length > 0) {
+                            taskData._dependsOnIndices = indicesToResolve;
+                            if (existingIds.length > 0) taskData._existingDepIds = existingIds;
+                        } else if (existingIds.length > 0) {
+                            taskData.depends_on = existingIds;
+                        }
+                    }
+                    
+                    return taskData;
+                });
                 
-                // Capture dependency indices and existing IDs before cleaning (used when resolving after bulk create)
-                const dependsOnIndicesByTask = bulkData.tasks.map(t => t._dependsOnIndices || []);
-                const dependsOnExistingIdsByTask = bulkData.tasks.map(t => t._existingDepIds || []);
-                
-                // Remove null/empty values and temporary fields (strips _dependsOnIndices from payload)
-                bulkData.tasks = bulkData.tasks.map(task => {
+                // Clean main tasks data
+                const cleanedMainTasks = mainTasksData.map(task => {
                     const cleaned = {};
                     Object.keys(task).forEach(key => {
                         if (key.startsWith('_')) return;
@@ -2930,23 +2928,87 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                     return cleaned;
                 });
                 
-                // Call bulk create
-                const response = await bulkCreateDepartmentTasks(bulkData);
-                const created = response.tasks || [];
-                
-                // Resolve depends_on for tasks that depend on other new tasks in this batch:
-                // indices in dependsOnIndicesByTask refer to positions in created[]; map to IDs and PATCH.
-                // Merge with any existing task IDs (dependsOnExistingIdsByTask) for the same task.
-                for (let i = 0; i < dependsOnIndicesByTask.length; i++) {
-                    const indices = dependsOnIndicesByTask[i];
-                    const existingIds = dependsOnExistingIdsByTask[i] || [];
-                    if ((indices.length === 0 && existingIds.length === 0) || !created[i]?.id) continue;
-                    const resolvedIds = indices.map(idx => created[idx]?.id).filter(Boolean);
-                    const depIds = [...existingIds, ...resolvedIds];
-                    if (depIds.length > 0) {
-                        await patchDepartmentTask(created[i].id, { depends_on: depIds });
+                // Create main tasks
+                let createdMainTasks = [];
+                if (cleanedMainTasks.length > 0) {
+                    const mainBulkData = {
+                        job_order: jobOrderId,
+                        tasks: cleanedMainTasks
+                    };
+                    const mainResponse = await bulkCreateDepartmentTasks(mainBulkData);
+                    createdMainTasks = mainResponse.tasks || [];
+                    
+                    // Resolve depends_on for main tasks
+                    const dependsOnIndicesByTask = mainTasksData.map(t => t._dependsOnIndices || []);
+                    const dependsOnExistingIdsByTask = mainTasksData.map(t => t._existingDepIds || []);
+                    
+                    for (let i = 0; i < dependsOnIndicesByTask.length; i++) {
+                        const indices = dependsOnIndicesByTask[i];
+                        const existingIds = dependsOnExistingIdsByTask[i] || [];
+                        if ((indices.length === 0 && existingIds.length === 0) || !createdMainTasks[i]?.id) continue;
+                        const resolvedIds = indices.map(idx => createdMainTasks[idx]?.id).filter(Boolean);
+                        const depIds = [...existingIds, ...resolvedIds];
+                        if (depIds.length > 0) {
+                            await patchDepartmentTask(createdMainTasks[i].id, { depends_on: depIds });
+                        }
                     }
                 }
+                
+                // Step 2: Create child tasks with parent references
+                // Map parentTaskIndex to created main task IDs
+                const parentIndexToIdMap = new Map();
+                mainTasks.forEach((mainTask, mainIndex) => {
+                    const originalIndex = window.tasksList.indexOf(mainTask);
+                    if (createdMainTasks[mainIndex]?.id) {
+                        parentIndexToIdMap.set(originalIndex, createdMainTasks[mainIndex].id);
+                    }
+                });
+                
+                let createdChildTasks = [];
+                if (childTasks.length > 0) {
+                    const childTasksData = childTasks.map((childTask) => {
+                        const taskData = {
+                            department: childTask.department,
+                            sequence: childTask.sequence ? parseInt(childTask.sequence) : null,
+                            description: childTask.description || '',
+                            target_start_date: childTask.target_start_date || null,
+                            target_completion_date: childTask.target_completion_date || null,
+                            notes: childTask.notes || null
+                        };
+                        
+                        // Set parent if available
+                        if (childTask.parentTaskIndex !== undefined && parentIndexToIdMap.has(childTask.parentTaskIndex)) {
+                            taskData.parent = parentIndexToIdMap.get(childTask.parentTaskIndex);
+                        }
+                        
+                        return taskData;
+                    });
+                    
+                    // Clean child tasks data
+                    const cleanedChildTasks = childTasksData.map(task => {
+                        const cleaned = {};
+                        Object.keys(task).forEach(key => {
+                            if (task[key] !== null && task[key] !== '') {
+                                cleaned[key] = task[key];
+                            }
+                        });
+                        return cleaned;
+                    });
+                    
+                    if (cleanedChildTasks.length > 0) {
+                        const childBulkData = {
+                            job_order: jobOrderId,
+                            tasks: cleanedChildTasks
+                        };
+                        const childResponse = await bulkCreateDepartmentTasks(childBulkData);
+                        createdChildTasks = childResponse.tasks || [];
+                    }
+                }
+                
+                const response = {
+                    tasks: [...createdMainTasks, ...createdChildTasks],
+                    message: `${createdMainTasks.length} ana görev ve ${createdChildTasks.length} alt görev başarıyla oluşturuldu.`
+                };
                 
                 // Close modal
                 addDepartmentTaskModal.hide();
@@ -3037,11 +3099,19 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                     const template = await getTaskTemplateById(parseInt(templateId));
                     
                     if (template.items && template.items.length > 0) {
-                        // Create a map from template item ID to tasksList index
+                        // Filter only main items (parent === null)
+                        const mainItems = template.items.filter(item => item.parent === null);
+                        
+                        if (mainItems.length === 0) {
+                            showNotification('Seçilen şablonda ana görev bulunamadı', 'warning');
+                            return;
+                        }
+                        
+                        // Create a map from template item ID to tasksList index (for main items only)
                         const templateItemIdToIndex = new Map();
                         
-                        // First pass: add all tasks and create mapping
-                        const newTasks = template.items.map((item, itemIndex) => {
+                        // First pass: add only main tasks and create mapping
+                        const newMainTasks = mainItems.map((item, itemIndex) => {
                             const actualIndex = window.tasksList.length + itemIndex;
                             templateItemIdToIndex.set(item.id, actualIndex);
                             
@@ -3052,14 +3122,16 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                                 description: item.description || '',
                                 depends_on: item.depends_on || [],
                                 fromTemplate: true,
-                                templateItemId: item.id // Store original template item ID for mapping
+                                templateItemId: item.id, // Store original template item ID for mapping
+                                children: item.children || [], // Store children for later processing
+                                isMainTask: true // Mark as main task
                             };
                         });
                         
-                        // Second pass: map depends_on template item IDs to tasksList indices
-                        newTasks.forEach((task, taskIndex) => {
+                        // Second pass: map depends_on template item IDs to tasksList indices (only main items)
+                        newMainTasks.forEach((task, taskIndex) => {
                             if (task.depends_on && Array.isArray(task.depends_on) && task.depends_on.length > 0) {
-                                // Map template item IDs to tasksList indices
+                                // Map template item IDs to tasksList indices (only for main items)
                                 task.depends_on = task.depends_on.map(templateItemId => {
                                     if (templateItemIdToIndex.has(templateItemId)) {
                                         return templateItemIdToIndex.get(templateItemId);
@@ -3070,13 +3142,36 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                             }
                         });
                         
-                        // Append to existing list
-                        window.tasksList = [...window.tasksList, ...newTasks];
+                        // Third pass: add child tasks as separate entries with parent reference
+                        const newChildTasks = [];
+                        newMainTasks.forEach((mainTask, mainIndex) => {
+                            if (mainTask.children && mainTask.children.length > 0) {
+                                mainTask.children.forEach((child, childIndex) => {
+                                    const childTaskIndex = window.tasksList.length + newMainTasks.length + newChildTasks.length;
+                                    newChildTasks.push({
+                                        department: child.department || mainTask.department,
+                                        department_display: child.department_display || mainTask.department_display,
+                                        sequence: child.sequence || (childIndex + 1),
+                                        description: '',
+                                        depends_on: [],
+                                        fromTemplate: true,
+                                        templateItemId: child.id,
+                                        parentTemplateItemId: mainTask.templateItemId, // Reference to parent template item
+                                        parentTaskIndex: window.tasksList.length + mainIndex, // Reference to parent in tasksList
+                                        isChildTask: true // Mark as child task
+                                    });
+                                });
+                            }
+                        });
                         
-                        // Update sequences to be sequential
+                        // Append main tasks first, then child tasks
+                        window.tasksList = [...window.tasksList, ...newMainTasks, ...newChildTasks];
+                        
+                        // Update sequences to be sequential for main tasks
+                        let mainSequence = 1;
                         window.tasksList.forEach((task, index) => {
-                            if (!task.sequence) {
-                                task.sequence = index + 1;
+                            if (task.isMainTask && !task.sequence) {
+                                task.sequence = mainSequence++;
                             }
                         });
                         
@@ -3087,7 +3182,8 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                         }
                         
                         renderTasksTable();
-                        showNotification(`${newTasks.length} görev şablondan eklendi`, 'success');
+                        const totalTasks = newMainTasks.length + newChildTasks.length;
+                        showNotification(`${newMainTasks.length} ana görev ve ${newChildTasks.length} alt görev şablondan eklendi`, 'success');
                     } else {
                         showNotification('Seçilen şablonda görev bulunamadı', 'warning');
                     }
@@ -3139,24 +3235,30 @@ function renderTasksTable() {
                 </thead>
                 <tbody>
                     ${window.tasksList.map((task, index) => {
+                        const isChildTask = task.isChildTask || false;
+                        const indentClass = isChildTask ? 'ps-4' : '';
+                        const childIndicator = isChildTask ? '<span class="text-muted me-1">↳</span>' : '';
                         return `
-                        <tr data-task-index="${index}">
-                            <td>
+                        <tr data-task-index="${index}" ${isChildTask ? 'class="table-light"' : ''}>
+                            <td class="${indentClass}">
+                                ${childIndicator}
                                 <input type="number" class="form-control form-control-sm task-sequence" 
                                        value="${task.sequence || index + 1}" 
                                        data-index="${index}" 
-                                       style="width: 60px;">
+                                       style="width: 60px;"
+                                       ${isChildTask ? 'readonly' : ''}>
                             </td>
                             <td>
                                 <select class="form-select form-select-sm task-department" 
-                                        data-index="${index}">
+                                        data-index="${index}"
+                                        ${isChildTask ? 'disabled' : ''}>
                                     ${window.departmentChoicesForTasks.map(dept => 
                                         `<option value="${dept.value}" ${task.department === dept.value ? 'selected' : ''}>${dept.label}</option>`
                                     ).join('')}
                                 </select>
                             </td>
                             <td>
-                                <div id="depends-on-dropdown-${index}" class="depends-on-dropdown-container" data-index="${index}"></div>
+                                ${isChildTask ? '<span class="text-muted">Alt görev - bağımlılık yok</span>' : `<div id="depends-on-dropdown-${index}" class="depends-on-dropdown-container" data-index="${index}"></div>`}
                             </td>
                             <td>
                                 <button type="button" class="btn btn-sm btn-outline-danger remove-task-btn" 
@@ -3189,7 +3291,7 @@ function renderTasksTable() {
         });
     });
     
-    // Initialize multiselect dropdowns for depends_on
+    // Initialize multiselect dropdowns for depends_on (only for main tasks)
     container.querySelectorAll('.depends-on-dropdown-container').forEach(container => {
         const index = parseInt(container.dataset.index);
         const task = window.tasksList[index];
@@ -3199,9 +3301,9 @@ function renderTasksTable() {
         const dropdownOptions = [];
         const seenValues = new Set(); // Track to avoid duplicates
         
-        // Add tasks being added (excluding current task)
+        // Add tasks being added (excluding current task and child tasks - only main tasks can be dependencies)
         window.tasksList.forEach((t, idx) => {
-            if (idx !== index) {
+            if (idx !== index && !t.isChildTask) {
                 const value = `new_${idx}`;
                 if (!seenValues.has(value)) {
                     const deptLabel = window.departmentChoicesForTasks.find(d => d.value === t.department)?.label || t.department_display || t.department;
@@ -3279,7 +3381,7 @@ function renderTasksTable() {
     });
 }
 
-// Add new task
+// Add new task (main task only)
 function addNewTask() {
     if (!window.tasksList) {
         window.tasksList = [];
@@ -3287,10 +3389,11 @@ function addNewTask() {
     
     const newTask = {
         department: window.departmentChoicesForTasks[0]?.value || '',
-        sequence: window.tasksList.length + 1,
+        sequence: window.tasksList.filter(t => !t.isChildTask).length + 1,
         description: '',
         depends_on: [],
-        fromTemplate: false
+        fromTemplate: false,
+        isMainTask: true
     };
     
     window.tasksList.push(newTask);
