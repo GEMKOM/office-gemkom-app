@@ -14,6 +14,7 @@ import {
     deleteTaskTemplate,
     getTemplateItems,
     addTemplateItem,
+    updateTemplateItem,
     removeTemplateItem,
     addTemplateItemChild,
     getDepartmentChoices,
@@ -589,6 +590,7 @@ async function refreshManageItemsModal() {
                     department: item.department,
                     department_display: deptLabel,
                     title: item.title,
+                    weight: item.weight || 10,
                     depends_on: dependsOn,
                     children_count: item.children_count || 0,
                     children: item.children || []
@@ -607,6 +609,7 @@ async function refreshManageItemsModal() {
                             department: child.department || item.department,
                             department_display: child.department_display || deptLabel,
                             title: child.title,
+                            weight: child.weight || 10,
                             depends_on: '-',
                             children_count: 0,
                             children: []
@@ -720,6 +723,7 @@ function showManageItemsModal(template, items) {
             department: item.department,
             department_display: deptLabel,
             title: item.title,
+            weight: item.weight || 10,
             depends_on: dependsOn,
             children_count: item.children_count || 0,
             children: item.children || []
@@ -738,6 +742,7 @@ function showManageItemsModal(template, items) {
                     department: child.department || item.department,
                     department_display: child.department_display || deptLabel,
                     title: child.title,
+                    weight: child.weight || 10,
                     depends_on: '-',
                     children_count: 0,
                     children: []
@@ -836,6 +841,25 @@ function showManageItemsModal(template, items) {
                     }
                 },
                 {
+                    field: 'weight',
+                    label: 'Ağırlık',
+                    sortable: true,
+                    width: '100px',
+                    type: 'number',
+                    editable: true,
+                    validate: (value) => {
+                        const numValue = parseInt(value);
+                        if (isNaN(numValue) || numValue < 1 || numValue > 100) {
+                            return 'Ağırlık 1-100 arasında olmalıdır';
+                        }
+                        return true;
+                    },
+                    formatter: (value, row) => {
+                        const weight = value || 10;
+                        return `<span class="badge bg-secondary">${weight}</span>`;
+                    }
+                },
+                {
                     field: 'children_count',
                     label: 'Alt Görevler',
                     sortable: false,
@@ -902,6 +926,42 @@ function showManageItemsModal(template, items) {
                 small: true,
                 emptyMessage: 'Henüz ana görev eklenmemiş.',
                 emptyIcon: 'fas fa-tasks',
+                editable: true,
+                editableColumns: ['weight'],
+                onEdit: async (row, field, newValue, oldValue) => {
+                    if (field !== 'weight') {
+                        return false;
+                    }
+                    
+                    try {
+                        const weight = parseInt(newValue);
+                        if (isNaN(weight) || weight < 1 || weight > 100) {
+                            showNotification('Ağırlık 1-100 arasında olmalıdır', 'error');
+                            return false;
+                        }
+                        
+                        // Update via API
+                        await updateTemplateItem(currentTemplate.id, row.itemId, { weight: weight });
+                        
+                        // Update local data
+                        row.weight = weight;
+                        
+                        showNotification('Ağırlık başarıyla güncellendi', 'success');
+                        return true;
+                    } catch (error) {
+                        console.error('Error updating weight:', error);
+                        let errorMessage = 'Ağırlık güncellenirken bir hata oluştu';
+                        try {
+                            const errorData = JSON.parse(error.message);
+                            if (typeof errorData === 'object') {
+                                const errors = Object.values(errorData).flat();
+                                errorMessage = errors.join(', ') || errorMessage;
+                            }
+                        } catch (e) {}
+                        showNotification(errorMessage, 'error');
+                        return false;
+                    }
+                },
                 rowAttributes: (row) => {
                     if (row.isChildItem) {
                         return {
@@ -973,6 +1033,19 @@ function openAddItemModal(templateId, existingItems) {
                     colSize: 6
                 },
                 {
+                    id: 'weight',
+                    name: 'weight',
+                    label: 'Ağırlık',
+                    type: 'number',
+                    placeholder: 'Ağırlık (1-100)',
+                    value: 10,
+                    min: 1,
+                    max: 100,
+                    icon: 'fas fa-weight',
+                    colSize: 6,
+                    help: 'Tamamlanma yüzdesi hesaplamasında kullanılır (1-100)'
+                },
+                {
                     id: 'depends_on',
                     name: 'depends_on',
                     label: 'Bağımlılıklar',
@@ -996,6 +1069,7 @@ function openAddItemModal(templateId, existingItems) {
                 department: formData.department,
                 // title is auto-filled by backend from department
                 sequence: parseInt(formData.sequence) || currentExistingItems.filter(item => item.parent === null).length + 1,
+                weight: formData.weight ? parseInt(formData.weight) : 10,
                 depends_on: formData.depends_on ? (Array.isArray(formData.depends_on) ? formData.depends_on : [formData.depends_on]).map(id => parseInt(id)) : []
             };
             await addTemplateItem(currentTemplateId, itemData);
@@ -1074,6 +1148,19 @@ function openAddChildItemModal(templateId, parentItemId) {
                     min: 1,
                     icon: 'fas fa-sort-numeric-up',
                     colSize: 6
+                },
+                {
+                    id: 'weight',
+                    name: 'weight',
+                    label: 'Ağırlık',
+                    type: 'number',
+                    placeholder: 'Ağırlık (1-100)',
+                    value: 10,
+                    min: 1,
+                    max: 100,
+                    icon: 'fas fa-weight',
+                    colSize: 6,
+                    help: 'Tamamlanma yüzdesi hesaplamasında kullanılır (1-100)'
                 }
             ]
         })
@@ -1085,7 +1172,8 @@ function openAddChildItemModal(templateId, parentItemId) {
             addChildItemModal.setLoading(true);
             const childData = {
                 title: formData.title,
-                sequence: parseInt(formData.sequence) || nextSequence
+                sequence: parseInt(formData.sequence) || nextSequence,
+                weight: formData.weight ? parseInt(formData.weight) : 10
             };
             await addTemplateItemChild(templateId, parentItemId, childData);
             addChildItemModal.hide();

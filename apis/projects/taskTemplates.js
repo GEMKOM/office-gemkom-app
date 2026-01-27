@@ -244,6 +244,39 @@ export async function addTemplateItem(templateId, itemData) {
 }
 
 /**
+ * Update template item (PATCH)
+ * @param {number} templateId - Template ID
+ * @param {number} itemId - Template item ID
+ * @param {Object} itemData - Partial template item data
+ * @param {number} [itemData.weight] - Weight (1-100)
+ * @param {number} [itemData.sequence] - Sequence number
+ * @param {Array<number>} [itemData.depends_on] - Array of template item IDs this item depends on
+ * @returns {Promise<Object>} Updated template item object
+ */
+export async function updateTemplateItem(templateId, itemId, itemData) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/task-templates/${templateId}/items/${itemId}/`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(itemData)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error updating item ${itemId} in template ${templateId}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Remove item from template
  * @param {number} templateId - Template ID
  * @param {number} itemId - Template item ID
