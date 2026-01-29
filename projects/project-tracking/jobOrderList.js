@@ -866,15 +866,16 @@ async function loadJobOrders() {
             options.root_only = true;
         }
         
+        // Clear caches so we always show fresh data (multi-user safe)
+        childrenCache.clear();
+        expandedRows.clear();
+        
         // Call API
         const response = await listJobOrders(options);
         
         // Extract job orders and total count from response
         let rootOrders = response.results || [];
         totalJobOrders = response.count || 0;
-        
-        // Cache root orders for quick access during expand/collapse
-        rootOrdersCache = [...rootOrders];
         
         // Only merge expanded children if we're showing root-only orders
         // If showing all orders, children are already in the list
@@ -935,9 +936,6 @@ function mergeExpandedChildren(rootOrders, level = 0) {
     return merged;
 }
 
-// Store root orders separately for quick access during expand/collapse
-let rootOrdersCache = [];
-
 // Update table data without showing loading state (for expand/collapse operations)
 function updateTableDataOnly() {
     if (!jobOrdersTable) return;
@@ -951,9 +949,8 @@ function updateTableDataOnly() {
         // If showing all orders, use current jobOrders as-is
         dataToDisplay = jobOrders;
     } else {
-        // Use cached root orders and merge expanded children
-        // If rootOrdersCache is empty, extract root orders from current jobOrders
-        const rootOrders = rootOrdersCache.length > 0 ? rootOrdersCache : jobOrders.filter(j => !j.parent);
+        // Derive root orders from current jobOrders and merge expanded children
+        const rootOrders = jobOrders.filter(j => !j.parent);
         dataToDisplay = mergeExpandedChildren(rootOrders);
     }
     
@@ -2859,6 +2856,23 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                 return;
             }
             
+            // Sync current table input values into tasksList (in case user saved without blurring)
+            const container = document.getElementById('tasks-table-container');
+            if (container) {
+                container.querySelectorAll('.task-title').forEach(input => {
+                    const index = parseInt(input.dataset.index);
+                    if (!isNaN(index) && window.tasksList[index]) window.tasksList[index].title = input.value || '';
+                });
+                container.querySelectorAll('.task-sequence').forEach(input => {
+                    const index = parseInt(input.dataset.index);
+                    if (!isNaN(index) && window.tasksList[index]) window.tasksList[index].sequence = input.value ? parseInt(input.value) : null;
+                });
+                container.querySelectorAll('.task-department').forEach(select => {
+                    const index = parseInt(select.dataset.index);
+                    if (!isNaN(index) && window.tasksList[index]) window.tasksList[index].department = select.value || '';
+                });
+            }
+            
             try {
                 // Get job order to retrieve ID
                 let jobOrderId = jobNo;
@@ -2880,6 +2894,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                 const mainTasksData = mainTasks.map((task, taskIndex) => {
                     const taskData = {
                         department: task.department,
+                        title: task.title || 'Yeni Görev',
                         sequence: task.sequence ? parseInt(task.sequence) : null,
                         description: task.description || '',
                         target_start_date: task.target_start_date || null,
@@ -2916,15 +2931,18 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                     return taskData;
                 });
                 
-                // Clean main tasks data
-                const cleanedMainTasks = mainTasksData.map(task => {
+                // Clean main tasks data (ensure required: department, title)
+                const cleanedMainTasks = mainTasksData.map((task, taskIndex) => {
                     const cleaned = {};
                     Object.keys(task).forEach(key => {
                         if (key.startsWith('_')) return;
-                        if (task[key] !== null && task[key] !== '') {
-                            cleaned[key] = task[key];
+                        const val = task[key];
+                        if (val !== null && val !== undefined && val !== '') {
+                            cleaned[key] = val;
                         }
                     });
+                    if (!cleaned.title) cleaned.title = 'Yeni Görev';
+                    if (!cleaned.department && mainTasks[taskIndex]) cleaned.department = mainTasks[taskIndex].department || '';
                     return cleaned;
                 });
                 
@@ -2936,7 +2954,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                         tasks: cleanedMainTasks
                     };
                     const mainResponse = await bulkCreateDepartmentTasks(mainBulkData);
-                    createdMainTasks = mainResponse.tasks || [];
+                    createdMainTasks = mainResponse.tasks || mainResponse.created_tasks || [];
                     
                     // Resolve depends_on for main tasks
                     const dependsOnIndicesByTask = mainTasksData.map(t => t._dependsOnIndices || []);
@@ -2969,6 +2987,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                     const childTasksData = childTasks.map((childTask) => {
                         const taskData = {
                             department: childTask.department,
+                            title: childTask.title || 'Alt görev',
                             sequence: childTask.sequence ? parseInt(childTask.sequence) : null,
                             description: childTask.description || '',
                             target_start_date: childTask.target_start_date || null,
@@ -2984,14 +3003,17 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                         return taskData;
                     });
                     
-                    // Clean child tasks data
-                    const cleanedChildTasks = childTasksData.map(task => {
+                    // Clean child tasks data (ensure required: department, title)
+                    const cleanedChildTasks = childTasksData.map((task, taskIndex) => {
                         const cleaned = {};
                         Object.keys(task).forEach(key => {
-                            if (task[key] !== null && task[key] !== '') {
-                                cleaned[key] = task[key];
+                            const val = task[key];
+                            if (val !== null && val !== undefined && val !== '') {
+                                cleaned[key] = val;
                             }
                         });
+                        if (!cleaned.title) cleaned.title = 'Alt görev';
+                        if (!cleaned.department && childTasks[taskIndex]) cleaned.department = childTasks[taskIndex].department || '';
                         return cleaned;
                     });
                     
@@ -3001,7 +3023,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                             tasks: cleanedChildTasks
                         };
                         const childResponse = await bulkCreateDepartmentTasks(childBulkData);
-                        createdChildTasks = childResponse.tasks || [];
+                        createdChildTasks = childResponse.tasks || childResponse.created_tasks || [];
                     }
                 }
                 
@@ -3095,7 +3117,16 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                 }
                 
                 try {
-                    // Fetch template with items
+                    // Fetch template with items and job order (for main task titles)
+                    const jobNo = window.currentJobNoForTask;
+                    let jobOrderTitle = '';
+                    if (jobNo) {
+                        try {
+                            const jobOrder = await getJobOrderByJobNo(jobNo);
+                            if (jobOrder && jobOrder.title) jobOrderTitle = jobOrder.title;
+                        } catch (e) { /* use template title fallback */ }
+                    }
+                    
                     const template = await getTaskTemplateById(parseInt(templateId));
                     
                     if (template.items && template.items.length > 0) {
@@ -3110,7 +3141,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                         // Create a map from template item ID to tasksList index (for main items only)
                         const templateItemIdToIndex = new Map();
                         
-                        // First pass: add only main tasks and create mapping
+                        // First pass: add only main tasks and create mapping (main tasks use job order title)
                         const newMainTasks = mainItems.map((item, itemIndex) => {
                             const actualIndex = window.tasksList.length + itemIndex;
                             templateItemIdToIndex.set(item.id, actualIndex);
@@ -3118,6 +3149,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                             return {
                                 department: item.department,
                                 department_display: item.department_display,
+                                title: jobOrderTitle || item.title || '',
                                 sequence: item.sequence || (window.tasksList.length + itemIndex + 1),
                                 description: item.description || '',
                                 depends_on: item.depends_on || [],
@@ -3151,8 +3183,9 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                                     newChildTasks.push({
                                         department: child.department || mainTask.department,
                                         department_display: child.department_display || mainTask.department_display,
+                                        title: child.title || '',
                                         sequence: child.sequence || (childIndex + 1),
-                                        description: '',
+                                        description: child.description || '',
                                         depends_on: [],
                                         fromTemplate: true,
                                         templateItemId: child.id,
@@ -3212,6 +3245,23 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
     }
 };
 
+// Build display order: main tasks with their children interleaved (hierarchy order)
+function getTasksDisplayOrder() {
+    const mainTasks = window.tasksList.filter(t => !t.isChildTask);
+    const childTasks = window.tasksList.filter(t => t.isChildTask);
+    const displayIndices = [];
+    mainTasks.forEach(mainTask => {
+        const mainIdx = window.tasksList.indexOf(mainTask);
+        displayIndices.push(mainIdx);
+        childTasks.forEach(child => {
+            if (child.parentTaskIndex === mainIdx) {
+                displayIndices.push(window.tasksList.indexOf(child));
+            }
+        });
+    });
+    return displayIndices;
+}
+
 // Render tasks table
 function renderTasksTable() {
     const container = document.getElementById('tasks-table-container');
@@ -3222,35 +3272,47 @@ function renderTasksTable() {
         return;
     }
     
+    const displayIndices = getTasksDisplayOrder();
+    
     const tableHtml = `
         <div class="table-responsive">
             <table class="table table-sm table-bordered">
                 <thead>
                     <tr>
                         <th style="width: 60px;">Sıra</th>
+                        <th>Başlık</th>
                         <th>Departman</th>
                         <th style="width: 200px;">Bağımlılıklar</th>
                         <th style="width: 100px;">İşlemler</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${window.tasksList.map((task, index) => {
+                    ${displayIndices.map((actualIndex) => {
+                        const task = window.tasksList[actualIndex];
                         const isChildTask = task.isChildTask || false;
                         const indentClass = isChildTask ? 'ps-4' : '';
                         const childIndicator = isChildTask ? '<span class="text-muted me-1">↳</span>' : '';
+                        const titleValue = (task.title || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                         return `
-                        <tr data-task-index="${index}" ${isChildTask ? 'class="table-light"' : ''}>
+                        <tr data-task-index="${actualIndex}" ${isChildTask ? 'class="table-light"' : ''}>
                             <td class="${indentClass}">
                                 ${childIndicator}
                                 <input type="number" class="form-control form-control-sm task-sequence" 
-                                       value="${task.sequence || index + 1}" 
-                                       data-index="${index}" 
+                                       value="${task.sequence || actualIndex + 1}" 
+                                       data-index="${actualIndex}" 
                                        style="width: 60px;"
                                        ${isChildTask ? 'readonly' : ''}>
                             </td>
+                            <td class="${indentClass}">
+                                ${childIndicator}
+                                <input type="text" class="form-control form-control-sm task-title" 
+                                       value="${titleValue}" 
+                                       data-index="${actualIndex}" 
+                                       placeholder="${isChildTask ? 'Alt görev başlığı' : 'Görev başlığı'}">
+                            </td>
                             <td>
                                 <select class="form-select form-select-sm task-department" 
-                                        data-index="${index}"
+                                        data-index="${actualIndex}"
                                         ${isChildTask ? 'disabled' : ''}>
                                     ${window.departmentChoicesForTasks.map(dept => 
                                         `<option value="${dept.value}" ${task.department === dept.value ? 'selected' : ''}>${dept.label}</option>`
@@ -3258,11 +3320,11 @@ function renderTasksTable() {
                                 </select>
                             </td>
                             <td>
-                                ${isChildTask ? '<span class="text-muted">Alt görev - bağımlılık yok</span>' : `<div id="depends-on-dropdown-${index}" class="depends-on-dropdown-container" data-index="${index}"></div>`}
+                                ${isChildTask ? '<span class="text-muted">Alt görev - bağımlılık yok</span>' : `<div id="depends-on-dropdown-${actualIndex}" class="depends-on-dropdown-container" data-index="${actualIndex}"></div>`}
                             </td>
                             <td>
                                 <button type="button" class="btn btn-sm btn-outline-danger remove-task-btn" 
-                                        data-index="${index}">
+                                        data-index="${actualIndex}">
                                     <i class="fas fa-trash"></i>
                                 </button>
                             </td>
@@ -3281,6 +3343,17 @@ function renderTasksTable() {
         input.addEventListener('change', (e) => {
             const index = parseInt(e.target.dataset.index);
             window.tasksList[index].sequence = e.target.value ? parseInt(e.target.value) : null;
+        });
+    });
+    
+    container.querySelectorAll('.task-title').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            window.tasksList[index].title = e.target.value || '';
+        });
+        input.addEventListener('blur', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            window.tasksList[index].title = e.target.value || '';
         });
     });
     
@@ -3307,7 +3380,7 @@ function renderTasksTable() {
                 const value = `new_${idx}`;
                 if (!seenValues.has(value)) {
                     const deptLabel = window.departmentChoicesForTasks.find(d => d.value === t.department)?.label || t.department_display || t.department;
-                    const displayText = `${deptLabel} (Sıra: ${t.sequence || idx + 1})`;
+                    const displayText = (t.title ? `${t.title} — ` : '') + `${deptLabel} (Sıra: ${t.sequence || idx + 1})`;
                     dropdownOptions.push({
                         value: value,
                         text: displayText
@@ -3367,15 +3440,41 @@ function renderTasksTable() {
     container.querySelectorAll('.remove-task-btn').forEach(btn => {
         btn.addEventListener('click', (e) => {
             const index = parseInt(e.target.closest('.remove-task-btn').dataset.index);
+            const task = window.tasksList[index];
             
-            // Clean up dropdown if it exists
-            if (window.taskDependsOnDropdowns && window.taskDependsOnDropdowns.has(index)) {
-                const dropdown = window.taskDependsOnDropdowns.get(index);
-                dropdown.destroy();
-                window.taskDependsOnDropdowns.delete(index);
+            // Collect indices to remove: this task and, if main task, all its children
+            const indicesToRemove = [index];
+            if (task && !task.isChildTask) {
+                window.tasksList.forEach((t, idx) => {
+                    if (t.isChildTask && t.parentTaskIndex === index) indicesToRemove.push(idx);
+                });
             }
+            // Store parent task object references for children (before splice) so we can re-bind indices after
+            const childToParentObject = new Map();
+            window.tasksList.forEach((t, idx) => {
+                if (t.isChildTask && typeof t.parentTaskIndex === 'number' && !indicesToRemove.includes(idx)) {
+                    const parentTask = window.tasksList[t.parentTaskIndex];
+                    if (parentTask && !indicesToRemove.includes(t.parentTaskIndex)) {
+                        childToParentObject.set(t, parentTask);
+                    }
+                }
+            });
+            // Sort descending so splicing doesn't shift indices
+            indicesToRemove.sort((a, b) => b - a);
             
-            window.tasksList.splice(index, 1);
+            indicesToRemove.forEach(idx => {
+                if (window.taskDependsOnDropdowns && window.taskDependsOnDropdowns.has(idx)) {
+                    const dropdown = window.taskDependsOnDropdowns.get(idx);
+                    dropdown.destroy();
+                    window.taskDependsOnDropdowns.delete(idx);
+                }
+                window.tasksList.splice(idx, 1);
+            });
+            // Re-bind parentTaskIndex for remaining child tasks
+            childToParentObject.forEach((parentTask, childTask) => {
+                const newParentIdx = window.tasksList.indexOf(parentTask);
+                if (newParentIdx >= 0) childTask.parentTaskIndex = newParentIdx;
+            });
             renderTasksTable();
         });
     });
@@ -3389,6 +3488,7 @@ function addNewTask() {
     
     const newTask = {
         department: window.departmentChoicesForTasks[0]?.value || '',
+        title: 'Yeni Görev',
         sequence: window.tasksList.filter(t => !t.isChildTask).length + 1,
         description: '',
         depends_on: [],

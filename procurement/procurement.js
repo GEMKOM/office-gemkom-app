@@ -21,6 +21,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         subtitle: 'Tedarik süreçlerinizi yönetin ve optimize edin',
         cards: [
             {
+                title: 'Projeler',
+                description: 'Satın alma departmanı görevlerini görüntüleyin ve yönetin.',
+                icon: 'fas fa-project-diagram',
+                iconColor: 'primary',
+                link: '/procurement/projects'
+            },
+            {
                 title: 'Tedarikçiler',
                 description: 'Tedarikçi bilgileri, performans takibi ve tedarikçi değerlendirme yönetimi.',
                 icon: 'fas fa-handshake',

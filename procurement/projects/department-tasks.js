@@ -10,10 +10,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
 
     await initDepartmentTasksPage({
-        department: 'design',
-        backUrl: '/design/',
-        pageTitle: 'Dizayn Departmanı Görevleri',
+        department: 'procurement',
+        backUrl: '/procurement/',
+        pageTitle: 'Satın Alma Departmanı Görevleri',
         subtitle: 'Görevleri görüntüleyin, başlatın ve yönetin',
-        userTeam: 'design'
+        userTeam: 'procurement'
     });
 });

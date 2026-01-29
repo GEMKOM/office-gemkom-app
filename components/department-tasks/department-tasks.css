@@ -1,0 +1,30 @@
+/* Department Tasks Component Styles */
+
+/* Subtask row styling */
+.subtask-row {
+    background-color: #f8f9fa;
+}
+
+.subtask-row:hover {
+    background-color: #e9ecef;
+}
+
+/* Expand/collapse column (same style as project-tracking) */
+.expand-toggle-btn {
+    transition: all 0.2s ease;
+}
+
+.expand-toggle-btn:focus {
+    box-shadow: none;
+    outline: none;
+}
+
+.expand-toggle-btn.collapsed {
+    background: #ffffff !important;
+    color: #0d6efd !important;
+}
+
+.expand-toggle-btn.expanded {
+    background: #0d6efd !important;
+    color: #ffffff !important;
+}

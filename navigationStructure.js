@@ -262,6 +262,11 @@ export const NAVIGATION_STRUCTURE = {
         label: 'Satın Alma',
         icon: 'fas fa-shopping-cart',
         children: {
+            '/procurement/projects': {
+                label: 'Projeler',
+                icon: 'fas fa-project-diagram',
+                children: {}
+            },
             '/procurement/suppliers': {
                 label: 'Tedarikçiler',
                 icon: 'fas fa-handshake',
