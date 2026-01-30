@@ -2108,13 +2108,15 @@ export class ItemsManager {
         const originalToGroupedMapping = [];
         let groupedIndex = 0;
         
-        // Group items by code, name, unit, specifications, and item_description
-        // Items with different specifications or item_description should be kept separate
+        // Group items by code, name, unit, specifications, item_description, and planning_request_item_id
+        // Items with different specifications, item_description, or planning_request_item_id should be kept separate
         this.requestData.items.forEach((item, originalIndex) => {
             // Use specifications field if available, otherwise fall back to specs
             const specsValue = item.specifications || item.specs || '';
             const itemDescriptionValue = item.item_description || '';
-            const key = `${item.code}|${item.name}|${item.unit}|${specsValue}|${itemDescriptionValue}`;
+            const planningRequestItemId = item.source_planning_request_item_id || null;
+            // Include planning_request_item_id in grouping key to prevent grouping items from different planning requests
+            const key = `${item.code}|${item.name}|${item.unit}|${specsValue}|${itemDescriptionValue}|${planningRequestItemId}`;
             
             if (!groupedItems[key]) {
                 groupedItems[key] = {
@@ -2126,6 +2128,7 @@ export class ItemsManager {
                     quantity: 0,
                     allocations: [],
                     file_asset_ids: [], // Initialize file asset IDs array
+                    planning_request_item_id: planningRequestItemId, // Include planning_request_item_id for linking
                     groupedIndex: groupedIndex++
                 };
             }
@@ -2172,7 +2175,8 @@ export class ItemsManager {
             item_description: item.item_description,
             quantity: item.quantity.toFixed(2),
             allocations: item.allocations,
-            file_asset_ids: item.file_asset_ids || [] // Include file asset IDs
+            file_asset_ids: item.file_asset_ids || [], // Include file asset IDs
+            planning_request_item_id: item.planning_request_item_id || null // Include planning_request_item_id for linking
         }));
         
         return {

@@ -21,6 +21,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         subtitle: 'İmalat süreçlerinizi yönetin ve optimize edin',
         cards: [
             {
+                title: 'Projeler',
+                description: 'İmalat departmanı görevlerini görüntüleyin ve yönetin.',
+                icon: 'fas fa-project-diagram',
+                iconColor: 'primary',
+                link: '/manufacturing/projects'
+            },
+            {
                 title: 'Talaşlı İmalat',
                 description: 'CNC işlemleri, torna, freze ve diğer talaşlı imalat süreçleri yönetimi.',
                 icon: 'fas fa-cog',
@@ -61,16 +68,34 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/manufacturing/cnc-cutting',
                 features: [
                     {
+                        label: 'Dashboard',
+                        icon: 'fas fa-chart-line',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/cnc-cutting/dashboard'
+                    },
+                    {
                         label: 'Kesimler',
                         icon: 'fas fa-scissors',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/cnc-cutting/cuts'
                     },
                     {
+                        label: 'Fire Plakalar',
+                        icon: 'fas fa-layer-group',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/cnc-cutting/remnants'
+                    },
+                    {
                         label: 'Raporlar',
                         icon: 'fas fa-chart-bar',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/cnc-cutting/reports'
+                    },
+                    {
+                        label: 'Kapasite Yönetimi',
+                        icon: 'fas fa-industry',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/cnc-cutting/capacity'
                     }
                 ]
             },
@@ -86,6 +111,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         icon: 'fas fa-exclamation-triangle',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/maintenance/fault-requests'
+                    },
+                    {
+                        label: 'Raporlar',
+                        icon: 'fas fa-chart-bar',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/maintenance/reports'
                     }
                 ]
             },
@@ -101,6 +132,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         icon: 'fas fa-clock',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/welding/time-entries'
+                    },
+                    {
+                        label: 'Raporlar',
+                        icon: 'fas fa-chart-bar',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/welding/reports'
                     }
                 ]
             },

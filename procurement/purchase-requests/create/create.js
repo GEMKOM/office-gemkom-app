@@ -1162,6 +1162,7 @@ let planningItemsTable = null;
 let planningItemsFilters = null;
 let selectedPlanningItems = new Set();
 let selectedPlanningItemsData = new Map(); // Map<id, full item object> to preserve info across pages
+let selectedPlanningItemQuantities = new Map(); // Map<id, selected quantity> for partial conversion
 let allPlanningItems = []; // Keep for backward compatibility, but will only contain current page items
 let planningItemsEventListenersSetup = false;
 let planningItemFilesModal = null;
@@ -1253,6 +1254,7 @@ async function showPlanningRequestItemsModal() {
     
     // Reset selections
     selectedPlanningItems.clear();
+    selectedPlanningItemQuantities.clear();
     updateSelectedItemsCount();
     
     // Reset pagination to first page
@@ -1383,9 +1385,65 @@ function initializePlanningItemsTable() {
             },
             {
                 field: 'quantity_to_purchase',
-                label: 'Miktar',
-                formatter: (value) => value || '-',
+                label: 'Toplam İhtiyaç',
+                formatter: (value, row) => {
+                    const qty = value || 0;
+                    const unit = row.item_unit || 'adet';
+                    return `${qty} ${unit}`;
+                },
                 sortable: true
+            },
+            {
+                field: 'quantity_remaining_for_purchase',
+                label: 'Kalan Miktar',
+                formatter: (value, row) => {
+                    const qty = value || 0;
+                    const unit = row.item_unit || 'adet';
+                    return `<strong>${qty} ${unit}</strong>`;
+                },
+                sortable: true
+            },
+            {
+                field: 'status',
+                label: 'Durum',
+                formatter: (value, row) => {
+                    if (row.is_converted) {
+                        return '<span class="status-badge status-green">Tamamen Dönüştürüldü</span>';
+                    } else if (row.is_partially_converted) {
+                        return '<span class="status-badge status-yellow">Kısmen Dönüştürüldü</span>';
+                    } else {
+                        return '<span class="status-badge status-grey">Başlanmadı</span>';
+                    }
+                },
+                sortable: false
+            },
+            {
+                field: 'selected_quantity',
+                label: 'Seçilecek Miktar',
+                formatter: (value, row) => {
+                    const maxQty = row.quantity_remaining_for_purchase || 0;
+                    const selectedQty = selectedPlanningItemQuantities.get(row.id) || '';
+                    const unit = row.item_unit || 'adet';
+                    if (maxQty <= 0) {
+                        return '<span class="text-muted">Mevcut değil</span>';
+                    }
+                    return `
+                        <div class="input-group input-group-sm">
+                            <input type="number" 
+                                   class="form-control planning-quantity-input" 
+                                   data-item-id="${row.id}"
+                                   min="0" 
+                                   max="${maxQty}" 
+                                   step="0.01"
+                                   value="${selectedQty}"
+                                   placeholder="0"
+                                   style="max-width: 120px;">
+                            <span class="input-group-text">${unit}</span>
+                        </div>
+                        <small class="text-muted d-block mt-1">Max: ${maxQty}</small>
+                    `;
+                },
+                sortable: false
             },
             {
                 field: 'item_unit',
@@ -1456,13 +1514,27 @@ function setupPlanningItemsEventListeners() {
             const itemId = parseInt(e.target.dataset.itemId);
             if (e.target.checked) {
                 selectedPlanningItems.add(itemId);
-                const item = allPlanningItems.find(i => i.id === itemId);
+                const item = allPlanningItems.find(i => i.id === itemId) || 
+                           Array.from(selectedPlanningItemsData.values()).find(i => i.id === itemId);
                 if (item) {
                     selectedPlanningItemsData.set(itemId, { ...item });
+                    // If no quantity is set, default to remaining quantity
+                    if (!selectedPlanningItemQuantities.has(itemId)) {
+                        const maxQty = item.quantity_remaining_for_purchase || item.quantity_to_purchase || 0;
+                        if (maxQty > 0) {
+                            selectedPlanningItemQuantities.set(itemId, maxQty);
+                            // Update the input field if it exists
+                            const qtyInput = document.querySelector(`.planning-quantity-input[data-item-id="${itemId}"]`);
+                            if (qtyInput) {
+                                qtyInput.value = maxQty;
+                            }
+                        }
+                    }
                 }
             } else {
                 selectedPlanningItems.delete(itemId);
                 selectedPlanningItemsData.delete(itemId);
+                selectedPlanningItemQuantities.delete(itemId);
             }
             updateSelectedItemsCount();
             // Highlight row immediately
@@ -1474,6 +1546,53 @@ function setupPlanningItemsEventListeners() {
                     row.classList.remove('table-success');
                 }
             }
+        }
+        
+        // Handle quantity input changes
+        if (e.target.classList.contains('planning-quantity-input')) {
+            const itemId = parseInt(e.target.dataset.itemId);
+            const item = allPlanningItems.find(i => i.id === itemId) || 
+                        Array.from(selectedPlanningItemsData.values()).find(i => i.id === itemId);
+            
+            if (!item) return;
+            
+            const maxQty = item.quantity_remaining_for_purchase || item.quantity_to_purchase || 0;
+            let qty = parseFloat(e.target.value) || 0;
+            
+            // Clamp quantity to valid range
+            qty = Math.min(Math.max(0, qty), maxQty);
+            e.target.value = qty;
+            
+            if (qty > 0) {
+                // Auto-select checkbox if quantity is entered
+                if (!selectedPlanningItems.has(itemId)) {
+                    selectedPlanningItems.add(itemId);
+                    selectedPlanningItemsData.set(itemId, { ...item });
+                    const checkbox = document.querySelector(`.planning-item-checkbox[data-item-id="${itemId}"]`);
+                    if (checkbox) {
+                        checkbox.checked = true;
+                        const row = checkbox.closest('tr');
+                        if (row) {
+                            row.classList.add('table-success');
+                        }
+                    }
+                }
+                selectedPlanningItemQuantities.set(itemId, qty);
+            } else {
+                // If quantity is 0, deselect
+                selectedPlanningItems.delete(itemId);
+                selectedPlanningItemsData.delete(itemId);
+                selectedPlanningItemQuantities.delete(itemId);
+                const checkbox = document.querySelector(`.planning-item-checkbox[data-item-id="${itemId}"]`);
+                if (checkbox) {
+                    checkbox.checked = false;
+                    const row = checkbox.closest('tr');
+                    if (row) {
+                        row.classList.remove('table-success');
+                    }
+                }
+            }
+            updateSelectedItemsCount();
         }
     });
     
@@ -1500,9 +1619,14 @@ function setupPlanningItemsEventListeners() {
             const itemId = parseInt(removeSelectedBtn.dataset.itemId);
             selectedPlanningItems.delete(itemId);
             selectedPlanningItemsData.delete(itemId);
+            selectedPlanningItemQuantities.delete(itemId);
             const checkbox = document.querySelector(`.planning-item-checkbox[data-item-id="${itemId}"]`);
             if (checkbox) {
                 checkbox.checked = false;
+            }
+            const qtyInput = document.querySelector(`.planning-quantity-input[data-item-id="${itemId}"]`);
+            if (qtyInput) {
+                qtyInput.value = '';
             }
             updateSelectedItemsCount();
         }
@@ -1519,6 +1643,7 @@ async function loadPlanningRequestItems() {
         const filterValues = planningItemsFilters ? planningItemsFilters.getFilterValues() : {};
         
         // Build backend filter parameters
+        // Backend filter should now properly handle partially converted items
         const filters = {
             available_for_procurement: true,
             page: planningItemsCurrentPage,
@@ -1549,8 +1674,17 @@ async function loadPlanningRequestItems() {
         const itemsResponse = await getPlanningRequestItems(filters);
         
         // Extract results and count from paginated response
-        const items = itemsResponse.results || [];
+        let items = itemsResponse.results || [];
         const totalCount = itemsResponse.count || items.length;
+        
+        // Filter to only show items available for purchase (frontend safety check)
+        // Show items if they have remaining quantity OR if is_available_for_purchase is explicitly true
+        // This ensures partially converted items are still visible
+        items = items.filter(item => {
+            const hasRemaining = (item.quantity_remaining_for_purchase || 0) > 0;
+            const isAvailable = item.is_available_for_purchase !== false;
+            return hasRemaining || isAvailable;
+        });
         
         // Store current page items (for backward compatibility and checkbox restoration)
         allPlanningItems = items;
@@ -1564,13 +1698,24 @@ async function loadPlanningRequestItems() {
         planningItemsTable.updateData(displayItems, totalCount);
         planningItemsTable.setLoading(false);
         
-        // Re-render checkboxes to reflect current selection state
+        // Re-render checkboxes and quantity inputs to reflect current selection state
         setTimeout(() => {
             const checkboxes = document.querySelectorAll('.planning-item-checkbox');
             checkboxes.forEach(cb => {
                 const itemId = parseInt(cb.dataset.itemId);
                 cb.checked = selectedPlanningItems.has(itemId);
             });
+            
+            // Restore quantity inputs
+            const qtyInputs = document.querySelectorAll('.planning-quantity-input');
+            qtyInputs.forEach(input => {
+                const itemId = parseInt(input.dataset.itemId);
+                const qty = selectedPlanningItemQuantities.get(itemId);
+                if (qty !== undefined) {
+                    input.value = qty;
+                }
+            });
+            
             // Update button state after checkboxes are restored
             updateSelectedItemsCount();
             // Highlight selected rows
@@ -2101,12 +2246,31 @@ async function addSelectedPlanningItems() {
         return;
     }
     
+    // Validate that all selected items have valid quantities
+    const invalidItems = [];
+    for (const itemId of selectedPlanningItems) {
+        const qty = selectedPlanningItemQuantities.get(itemId);
+        if (!qty || qty <= 0) {
+            const item = allPlanningItems.find(i => i.id === itemId) || 
+                        Array.from(selectedPlanningItemsData.values()).find(i => i.id === itemId);
+            if (item) {
+                invalidItems.push(item.item_code || item.item_name || `ID: ${itemId}`);
+            }
+        }
+    }
+    
+    if (invalidItems.length > 0) {
+        showNotification(`Lütfen şu malzemeler için geçerli bir miktar girin: ${invalidItems.join(', ')}`, 'warning');
+        return;
+    }
+    
     try {
         let addedCount = 0;
         
         // Fetch items that are not on current page
         const itemsToFetch = Array.from(selectedPlanningItems).filter(itemId => 
-            !allPlanningItems.find(i => i.id === itemId)
+            !allPlanningItems.find(i => i.id === itemId) &&
+            !Array.from(selectedPlanningItemsData.values()).find(i => i.id === itemId)
         );
         
         // Fetch missing items from backend
@@ -2117,6 +2281,10 @@ async function addSelectedPlanningItems() {
                 try {
                     const item = await getPlanningRequestItem(itemId);
                     fetchedItems.push(item);
+                    // Store in selectedPlanningItemsData if not already there
+                    if (!selectedPlanningItemsData.has(itemId)) {
+                        selectedPlanningItemsData.set(itemId, item);
+                    }
                 } catch (error) {
                     console.error(`Error fetching item ${itemId}:`, error);
                 }
@@ -2126,11 +2294,30 @@ async function addSelectedPlanningItems() {
         // Combine current page items and fetched items
         const allSelectedItems = [
             ...allPlanningItems.filter(item => selectedPlanningItems.has(item.id)),
-            ...fetchedItems
+            ...fetchedItems,
+            ...Array.from(selectedPlanningItemsData.values()).filter(item => 
+                selectedPlanningItems.has(item.id) && 
+                !allPlanningItems.find(i => i.id === item.id) &&
+                !fetchedItems.find(i => i.id === item.id)
+            )
         ];
         
         for (const planningItem of allSelectedItems) {
             if (!planningItem) continue;
+            
+            // Get selected quantity (partial conversion support)
+            const selectedQuantity = selectedPlanningItemQuantities.get(planningItem.id);
+            if (!selectedQuantity || selectedQuantity <= 0) {
+                console.warn(`Skipping item ${planningItem.id}: no valid quantity selected`);
+                continue;
+            }
+            
+            // Validate quantity doesn't exceed remaining
+            const maxQty = planningItem.quantity_remaining_for_purchase || planningItem.quantity_to_purchase || 0;
+            if (selectedQuantity > maxQty) {
+                showNotification(`${planningItem.item_code || planningItem.item_name} için seçilen miktar (${selectedQuantity}) kalan miktarı (${maxQty}) aşıyor`, 'warning');
+                continue;
+            }
             
             // Check if item is already added (by planning_request_item_id)
             const existingItem = requestData.items.find(item => 
@@ -2161,12 +2348,12 @@ async function addSelectedPlanningItems() {
                 code: planningItem.item_code || '',
                 name: isSpecialItemCode ? (planningItem.item_description || '') : (planningItem.item_name || ''),
                 job_no: planningItem.job_no || '',
-                quantity: parseFloat(planningItem.quantity_to_purchase) || 1,
+                quantity: parseFloat(selectedQuantity), // Use selected quantity instead of full quantity_to_purchase
                 unit: planningItem.item_unit || 'adet',
                 specs: planningItem.specifications || '', // Keep for backward compatibility
                 item_description: planningItem.item_description || '', // Original item description from PlanningRequestItem
                 specifications: planningItem.specifications || '', // Technical specifications
-                source_planning_request_item_id: planningItem.id, // Track source
+                source_planning_request_item_id: planningItem.id, // Track source for linking
                 file_asset_ids: fileAssetIds // Store file asset IDs
             };
             

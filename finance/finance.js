@@ -30,7 +30,21 @@ document.addEventListener('DOMContentLoaded', async function() {
                 description: 'Finansal analizler, maliyet raporları ve performans metrikleri.',
                 icon: 'fas fa-chart-bar',
                 iconColor: 'info',
-                link: '/finance/reports'
+                link: '/finance/reports',
+                features: [
+                    {
+                        label: 'Yönetici Özeti',
+                        icon: 'fas fa-chart-pie',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/finance/reports/executive-overview'
+                    },
+                    {
+                        label: 'Proje Raporu',
+                        icon: 'fas fa-chart-line',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/finance/reports/projects'
+                    }
+                ]
             }
         ]
     });

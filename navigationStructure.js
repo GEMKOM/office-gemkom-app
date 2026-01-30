@@ -57,6 +57,60 @@ export const NAVIGATION_STRUCTURE = {
             }
         }
     },
+    '/projects': {
+        label: 'Projeler',
+        icon: 'fas fa-project-diagram',
+        children: {
+            '/projects/project-tracking': {
+                label: 'Proje Takibi',
+                icon: 'fas fa-tasks',
+                children: {}
+            }
+        }
+    },
+    '/design': {
+        label: 'Dizayn',
+        icon: 'fas fa-drafting-compass',
+        children: {
+            '/design/projects': {
+                label: 'Projeler',
+                icon: 'fas fa-project-diagram',
+                children: {}
+            }
+        }
+    },
+    '/planning': {
+        label: 'Planlama',
+        icon: 'fas fa-calendar-alt',
+        children: {
+            '/planning/department-requests': {
+                label: 'Departman Talepleri',
+                icon: 'fas fa-boxes',
+                children: {}
+            },
+            '/planning/task-templates': {
+                label: 'Görev Şablonları',
+                icon: 'fas fa-tasks',
+                children: {}
+            },
+            '/planning/inventory': {
+                label: 'Stok',
+                icon: 'fas fa-warehouse',
+                children: {
+                    '/planning/inventory/cards': {
+                        label: 'Stok Kartları',
+                        icon: 'fas fa-boxes',
+                        children: {}
+                    }
+                }
+            },
+            '/planning/projects': {
+                label: 'Projeler',
+                icon: 'fas fa-project-diagram',
+                children: {}
+            }
+        }
+    },
     '/manufacturing': {
         label: 'İmalat',
         icon: 'fas fa-industry',
@@ -253,9 +307,25 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     }
                 }
+            },
+            '/manufacturing/projects': {
+                label: 'Projeler',
+                icon: 'fas fa-project-diagram',
+                children: {}
             }
 
 
+        }
+    },
+    '/logistics': {
+        label: 'Lojistik',
+        icon: 'fas fa-truck',
+        children: {
+            '/logistics/projects': {
+                label: 'Projeler',
+                icon: 'fas fa-project-diagram',
+                children: {}
+            }
         }
     },
     '/procurement': {
@@ -327,7 +397,6 @@ export const NAVIGATION_STRUCTURE = {
             }
         }
     },
-
     '/finance': {
         label: 'Finans',
         icon: 'fas fa-dollar-sign',
@@ -383,6 +452,17 @@ export const NAVIGATION_STRUCTURE = {
             }
         }
     },
+    '/sales': {
+        label: 'Satış',
+        icon: 'fas fa-handshake',
+        children: {
+            '/sales/customers': {
+                label: 'Müşteriler',
+                icon: 'fas fa-users',
+                children: {}
+            }
+        }
+    },
     '/management': {
         label: 'Yönetim',
         icon: 'fas fa-chart-line',
@@ -400,71 +480,6 @@ export const NAVIGATION_STRUCTURE = {
             '/management/analytics': {
                 label: 'Analitik',
                 icon: 'fas fa-chart-pie',
-                children: {}
-            }
-        }
-    },
-    '/planning': {
-        label: 'Planlama',
-        icon: 'fas fa-calendar-alt',
-        children: {
-            '/planning/department-requests': {
-                label: 'Departman Talepleri',
-                icon: 'fas fa-boxes',
-                children: {}
-            },
-            '/planning/task-templates': {
-                label: 'Görev Şablonları',
-                icon: 'fas fa-tasks',
-                children: {}
-            },
-            '/planning/inventory': {
-                label: 'Stok',
-                icon: 'fas fa-warehouse',
-                children: {
-                    '/planning/inventory/cards': {
-                        label: 'Stok Kartları',
-                        icon: 'fas fa-boxes',
-                        children: {}
-                    }
-                }
-            },
-            '/planning/projects': {
-                label: 'Projeler',
-                icon: 'fas fa-project-diagram',
-                children: {}
-            }
-        }
-    },
-    '/sales': {
-        label: 'Satış',
-        icon: 'fas fa-handshake',
-        children: {
-            '/sales/customers': {
-                label: 'Müşteriler',
-                icon: 'fas fa-users',
-                children: {}
-            }
-        }
-    },
-    '/projects': {
-        label: 'Projeler',
-        icon: 'fas fa-project-diagram',
-        children: {
-            '/projects/project-tracking': {
-                label: 'Proje Takibi',
-                icon: 'fas fa-tasks',
-                children: {}
-            }
-        }
-    },
-    '/design': {
-        label: 'Dizayn',
-        icon: 'fas fa-drafting-compass',
-        children: {
-            '/design/projects': {
-                label: 'Projeler',
-                icon: 'fas fa-project-diagram',
                 children: {}
             }
         }

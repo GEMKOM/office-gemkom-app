@@ -58,6 +58,13 @@ async function handleITPage() {
                         link: '/it/inventory'
                     }
                 ]
+            },
+            {
+                title: 'Şifre Sıfırlama Talepleri',
+                description: 'Kullanıcı şifre sıfırlama taleplerini yönetin ve işleme alın.',
+                icon: 'fas fa-key',
+                iconColor: 'warning',
+                link: '/it/password-resets'
             }
         ];
 

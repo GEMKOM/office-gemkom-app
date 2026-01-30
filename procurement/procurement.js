@@ -32,7 +32,21 @@ document.addEventListener('DOMContentLoaded', async () => {
                 description: 'Tedarikçi bilgileri, performans takibi ve tedarikçi değerlendirme yönetimi.',
                 icon: 'fas fa-handshake',
                 iconColor: 'primary',
-                link: '/procurement/suppliers'
+                link: '/procurement/suppliers',
+                features: [
+                    {
+                        label: 'Tedarikçi Listesi',
+                        icon: 'fas fa-list',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/procurement/suppliers/list'
+                    },
+                    {
+                        label: 'Ödeme Koşulları',
+                        icon: 'fas fa-credit-card',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/procurement/suppliers/payment-terms'
+                    }
+                ]
             },
             {
                 title: 'Satın Alma Talepleri',
@@ -54,10 +68,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                         link: '/procurement/purchase-requests/pending'
                     },
                     {
-                        label: 'Onaylanan Talepler',
-                        icon: 'fas fa-check-circle',
+                        label: 'Kayıt Defteri',
+                        icon: 'fas fa-archive',
                         iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/procurement/purchase-requests/approved'
+                        link: '/procurement/purchase-requests/registry'
                     }
                 ]
             },
@@ -69,22 +83,22 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/procurement/reports',
                 features: [
                     {
-                        label: 'Satın Alma Analizi',
-                        icon: 'fas fa-chart-line',
+                        label: 'Ürün Raporu',
+                        icon: 'fas fa-chart-bar',
                         iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/procurement/reports/purchase-analysis'
+                        link: '/procurement/reports/items'
                     },
                     {
-                        label: 'Tedarikçi Performansı',
+                        label: 'Tedarikçi Raporu',
                         icon: 'fas fa-chart-pie',
                         iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/procurement/reports/supplier-performance'
+                        link: '/procurement/reports/suppliers'
                     },
                     {
-                        label: 'Maliyet Analizi',
-                        icon: 'fas fa-dollar-sign',
+                        label: 'Personel Raporu',
+                        icon: 'fas fa-users',
                         iconColor: 'rgba(139, 0, 0, 1)',
-                        link: '/procurement/reports/cost-analysis'
+                        link: '/procurement/reports/staff'
                     }
                 ]
             }

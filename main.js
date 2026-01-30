@@ -52,6 +52,75 @@ async function handleLandingPage() {
                             icon: 'fas fa-clock',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/general/overtime'
+                        },
+                        {
+                            label: 'Departman Talepleri',
+                            icon: 'fas fa-boxes',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/general/department-requests'
+                        }
+                    ]
+                },
+                {
+                    title: 'Projeler',
+                    description: 'Proje takibi ve yönetim işlemlerinizi gerçekleştirin.',
+                    icon: 'fas fa-project-diagram',
+                    iconColor: 'primary',
+                    link: '/projects',
+                    features: [
+                        {
+                            label: 'Proje Takibi',
+                            icon: 'fas fa-tasks',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/projects/project-tracking'
+                        }
+                    ]
+                },
+                {
+                    title: 'Dizayn',
+                    description: 'Dizayn süreçlerinizi yönetin ve optimize edin.',
+                    icon: 'fas fa-drafting-compass',
+                    iconColor: 'dark',
+                    link: '/design',
+                    features: [
+                        {
+                            label: 'Projeler',
+                            icon: 'fas fa-project-diagram',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/design/projects'
+                        }
+                    ]
+                },
+                {
+                    title: 'Planlama',
+                    description: 'Planlama süreçlerini yönetin, stok takibi yapın ve görev şablonlarını oluşturun.',
+                    icon: 'fas fa-calendar-alt',
+                    iconColor: 'info',
+                    link: '/planning',
+                    features: [
+                        {
+                            label: 'Departman Talepleri',
+                            icon: 'fas fa-boxes',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/planning/department-requests'
+                        },
+                        {
+                            label: 'Görev Şablonları',
+                            icon: 'fas fa-tasks',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/planning/task-templates'
+                        },
+                        {
+                            label: 'Stok',
+                            icon: 'fas fa-warehouse',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/planning/inventory'
+                        },
+                        {
+                            label: 'Projeler',
+                            icon: 'fas fa-project-diagram',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/planning/projects'
                         }
                     ]
                 },
@@ -79,6 +148,21 @@ async function handleLandingPage() {
                             icon: 'fas fa-wrench',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/manufacturing/maintenance'
+                        }
+                    ]
+                },
+                {
+                    title: 'Lojistik',
+                    description: 'Lojistik süreçlerini yönetin, sevkiyat takibi yapın ve depo yönetimini optimize edin.',
+                    icon: 'fas fa-truck',
+                    iconColor: 'warning',
+                    link: '/logistics',
+                    features: [
+                        {
+                            label: 'Projeler',
+                            icon: 'fas fa-project-diagram',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/logistics/projects'
                         }
                     ]
                 },
@@ -151,6 +235,48 @@ async function handleLandingPage() {
                             icon: 'fas fa-money-bill-wave',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/human_resources/wages'
+                        }
+                    ]
+                },
+                {
+                    title: 'Satış',
+                    description: 'Müşteri yönetimi ve satış işlemlerini gerçekleştirin.',
+                    icon: 'fas fa-handshake',
+                    iconColor: 'success',
+                    link: '/sales',
+                    features: [
+                        {
+                            label: 'Müşteriler',
+                            icon: 'fas fa-users',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/sales/customers'
+                        }
+                    ]
+                },
+                {
+                    title: 'Yönetim',
+                    description: 'Şirket yönetimi ve analitik işlemlerinizi gerçekleştirin.',
+                    icon: 'fas fa-chart-line',
+                    iconColor: 'warning',
+                    link: '/management',
+                    features: [
+                        {
+                            label: 'Dashboard',
+                            icon: 'fas fa-tachometer-alt',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/management/dashboard'
+                        },
+                        {
+                            label: 'Raporlar',
+                            icon: 'fas fa-chart-bar',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/management/reports'
+                        },
+                        {
+                            label: 'Analitik',
+                            icon: 'fas fa-chart-pie',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/management/analytics'
                         }
                     ]
                 }

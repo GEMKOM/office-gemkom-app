@@ -26,48 +26,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 description: 'Detaylı analiz raporları, performans değerlendirmeleri ve trend analizleri.',
                 icon: 'fas fa-chart-bar',
                 iconColor: 'success',
-                link: '/management/reports',
-                features: [
-                    {
-                        label: 'Finansal Raporlar',
-                        icon: 'fas fa-dollar-sign',
-                        link: '/management/reports/financial'
-                    },
-                    {
-                        label: 'Operasyonel Raporlar',
-                        icon: 'fas fa-cogs',
-                        link: '/management/reports/operational'
-                    },
-                    {
-                        label: 'Personel Raporları',
-                        icon: 'fas fa-users',
-                        link: '/management/reports/personnel'
-                    }
-                ]
+                link: '/management/reports'
             },
             {
                 title: 'Analitik',
                 description: 'Gelişmiş veri analizi, tahminleme modelleri ve stratejik öngörüler.',
                 icon: 'fas fa-chart-pie',
                 iconColor: 'warning',
-                link: '/management/analytics',
-                features: [
-                    {
-                        label: 'Veri Görselleştirme',
-                        icon: 'fas fa-chart-area',
-                        link: '/management/analytics/visualization'
-                    },
-                    {
-                        label: 'Tahminleme',
-                        icon: 'fas fa-crystal-ball',
-                        link: '/management/analytics/forecasting'
-                    },
-                    {
-                        label: 'Karşılaştırma Analizi',
-                        icon: 'fas fa-balance-scale',
-                        link: '/management/analytics/comparison'
-                    }
-                ]
+                link: '/management/analytics'
             }
         ]
     });
