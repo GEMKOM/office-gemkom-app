@@ -522,7 +522,10 @@ export async function markReadyForProcurement(requestId, erp_code) {
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ erp_code: erp_code.trim() })
+            body: JSON.stringify({ 
+                erp_code: erp_code.trim(),
+                request_number: erp_code.trim()
+            })
         });
 
         if (!response.ok) {

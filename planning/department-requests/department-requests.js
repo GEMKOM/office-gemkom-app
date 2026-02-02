@@ -1913,10 +1913,10 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 label: 'İhtiyaç Tarihi',
                 type: 'date',
                 value: departmentRequest?.needed_date || '',
-                required: false,
+                required: true,
                 icon: 'fas fa-calendar-alt',
                 colSize: 12,
-                help: 'Talebin ihtiyaç duyulduğu tarih (opsiyonel)'
+                help: 'Talebin ihtiyaç duyulduğu tarih (zorunlu)'
             },
             {
                 id: 'check_inventory',
@@ -2062,12 +2062,18 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 files.push(fileObj);
             }
 
+            // Validate needed_date is required
+            if (!formData.needed_date || !formData.needed_date.trim()) {
+                showNotification('İhtiyaç tarihi gereklidir', 'error');
+                throw new Error('Needed date is required');
+            }
+
             // Prepare request data
             const requestData = {
                 title: formData.title,
                 description: formData.description || '',
                 priority: normalizePriorityForPlanningRequest(formData.priority),
-                needed_date: formData.needed_date || null,
+                needed_date: formData.needed_date,
                 items: items.length > 0 ? items : undefined,
                 files: files.length > 0 ? files : undefined
             };
@@ -3951,10 +3957,10 @@ function showTransferWorkflowModal(requestData, items, departmentRequestId) {
                             </div>
                             <div class="mb-3">
                                 <label for="erp-code-input" class="form-label">
-                                    <i class="fas fa-code me-2"></i>ERP Kodu <span class="text-danger">*</span>
+                                    <i class="fas fa-code me-2"></i>ERP Kodu ${requestData.check_inventory ? '' : '<span class="text-danger">*</span>'}
                                 </label>
-                                <input type="text" class="form-control" id="erp-code-input" placeholder="ERP kodunu girin" required>
-                                <div class="form-text">Bu kod talep numarası olarak gönderilecektir.</div>
+                                <input type="text" class="form-control" id="erp-code-input" placeholder="ERP kodunu girin" ${requestData.check_inventory ? '' : 'required'}>
+                                <div class="form-text">Bu kod talep numarası olarak gönderilecektir.${requestData.check_inventory ? ' (Envanter kontrolü seçildiği için opsiyonel)' : ''}</div>
                             </div>
                             <div class="d-flex justify-content-end">
                                 <button type="button" class="btn btn-primary" id="continue-to-step-3-btn">
@@ -4011,13 +4017,14 @@ function showTransferWorkflowModal(requestData, items, departmentRequestId) {
     continueBtn.addEventListener('click', () => {
         const erpCodeInput = modalElement.querySelector('#erp-code-input');
         const code = erpCodeInput.value.trim();
-        if (!code) {
+        // Only validate if check_inventory is not selected
+        if (!requestData.check_inventory && !code) {
             showNotification('Lütfen ERP kodunu girin', 'warning');
             return;
         }
         erpCode = code;
         // Update display
-        modalElement.querySelector('#erp-code-display').textContent = erpCode;
+        modalElement.querySelector('#erp-code-display').textContent = erpCode || '-';
         // Move to step 3
         showStep(3);
     });
@@ -4084,10 +4091,12 @@ async function submitTransferRequest(requestData, requestNumber, departmentReque
     }
 
     try {
-        // Add request_number to request data
-        requestData.request_number = requestNumber;
+        // Add request_number to request data only if provided
+        if (requestNumber) {
+            requestData.request_number = requestNumber;
+        }
 
-        // Create the planning request with request_number
+        // Create the planning request with request_number (if provided)
         const createdRequest = await createPlanningRequest(requestData);
 
         // Mark department request as transferred
