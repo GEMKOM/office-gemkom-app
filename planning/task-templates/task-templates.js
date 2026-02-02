@@ -39,6 +39,7 @@ let deleteTemplateModal = null;
 let manageItemsModal = null;
 let addItemModal = null;
 let addChildItemModal = null;
+let editItemModal = null;
 
 // Current template being managed
 let currentTemplate = null;
@@ -324,6 +325,14 @@ function initializeModalComponents() {
         icon: 'fas fa-plus-circle',
         saveButtonText: 'Alt Görev Ekle',
         size: 'md'
+    });
+
+    // Edit item modal
+    editItemModal = new EditModal('edit-item-modal-container', {
+        title: 'Görev Düzenle',
+        icon: 'fas fa-edit',
+        saveButtonText: 'Değişiklikleri Kaydet',
+        size: 'lg'
     });
 
     // Manage items modal
@@ -891,6 +900,18 @@ function showManageItemsModal(template, items) {
             // Define table actions
             const tableActions = [
                 {
+                    key: 'edit',
+                    label: 'Düzenle',
+                    icon: 'fas fa-edit',
+                    class: 'btn-outline-primary',
+                    onClick: (row) => {
+                        if (!row.isChildItem) {
+                            openEditItemModal(currentTemplate.id, row.itemId, tableData);
+                        }
+                    },
+                    visible: (row) => !row.isChildItem
+                },
+                {
                     key: 'add_child',
                     label: 'Alt Görev Ekle',
                     icon: 'fas fa-plus',
@@ -1088,6 +1109,146 @@ function openAddItemModal(templateId, existingItems) {
     
     // Show modal after callback is set
     addItemModal.show();
+}
+
+// Open edit item modal (for main items only)
+async function openEditItemModal(templateId, itemId, tableData) {
+    try {
+        // Get the current template to access all items
+        const template = await getTaskTemplateById(templateId);
+        const existingItems = template.items || [];
+        
+        // Find the item to edit
+        const itemToEdit = existingItems.find(item => item.id === itemId);
+        if (!itemToEdit) {
+            showNotification('Görev bulunamadı', 'error');
+            return;
+        }
+        
+        // Prepare dependency options for dropdown (only main items, excluding current item)
+        const dependencyOptions = existingItems
+            .filter(item => item.parent === null && item.id !== itemId) // Only main items, exclude current item
+            .map(item => ({
+                value: item.id,
+                label: item.title
+            }));
+
+        // Clear all sections and fields first
+        editItemModal.clearAll();
+        
+        // Clear any existing callback first to prevent conflicts
+        editItemModal.onSave = null;
+        
+        // Store templateId and itemId for use in callback
+        const currentTemplateId = templateId;
+        const currentItemId = itemId;
+        
+        editItemModal
+            .addSection({
+                title: 'Görev Bilgileri',
+                icon: 'fas fa-info-circle',
+                iconColor: 'text-primary',
+                fields: [
+                    {
+                        id: 'department',
+                        name: 'department',
+                        label: 'Departman',
+                        type: 'text',
+                        value: departmentOptions.find(d => d.value === itemToEdit.department)?.label || itemToEdit.department_display || itemToEdit.department,
+                        readonly: true,
+                        icon: 'fas fa-building',
+                        colSize: 12,
+                        help: 'Departman değiştirilemez'
+                    },
+                    {
+                        id: 'title',
+                        name: 'title',
+                        label: 'Başlık',
+                        type: 'text',
+                        value: itemToEdit.title,
+                        readonly: true,
+                        icon: 'fas fa-heading',
+                        colSize: 12,
+                        help: 'Başlık değiştirilemez'
+                    },
+                    {
+                        id: 'sequence',
+                        name: 'sequence',
+                        label: 'Sıra',
+                        type: 'number',
+                        placeholder: 'Sıra numarası',
+                        value: itemToEdit.sequence || 1,
+                        min: 1,
+                        icon: 'fas fa-sort-numeric-up',
+                        colSize: 6
+                    },
+                    {
+                        id: 'weight',
+                        name: 'weight',
+                        label: 'Ağırlık',
+                        type: 'number',
+                        placeholder: 'Ağırlık (1-100)',
+                        value: itemToEdit.weight || 10,
+                        min: 1,
+                        max: 100,
+                        icon: 'fas fa-weight',
+                        colSize: 6,
+                        help: 'Tamamlanma yüzdesi hesaplamasında kullanılır (1-100)'
+                    },
+                    {
+                        id: 'depends_on',
+                        name: 'depends_on',
+                        label: 'Bağımlılıklar',
+                        type: 'dropdown',
+                        placeholder: 'Bağımlılık seçin...',
+                        multiple: true,
+                        searchable: true,
+                        options: dependencyOptions,
+                        value: itemToEdit.depends_on || [],
+                        help: 'Bu görevin başlaması için tamamlanması gereken ana görevler',
+                        colSize: 12
+                    }
+                ]
+            })
+            .render();
+        
+        // Set save callback AFTER rendering but BEFORE showing to ensure it's ready
+        editItemModal.onSaveCallback(async (formData) => {
+            try {
+                editItemModal.setLoading(true);
+                const itemData = {
+                    sequence: parseInt(formData.sequence) || itemToEdit.sequence,
+                    weight: formData.weight ? parseInt(formData.weight) : 10,
+                    depends_on: formData.depends_on ? (Array.isArray(formData.depends_on) ? formData.depends_on : [formData.depends_on]).map(id => parseInt(id)) : []
+                };
+                await updateTemplateItem(currentTemplateId, currentItemId, itemData);
+                editItemModal.hide();
+                showNotification('Görev başarıyla güncellendi', 'success');
+                
+                // Reload items and refresh the manage items modal
+                await refreshManageItemsModal();
+            } catch (error) {
+                console.error('Error updating item:', error);
+                let errorMessage = 'Görev güncellenirken bir hata oluştu';
+                try {
+                    const errorData = JSON.parse(error.message);
+                    if (typeof errorData === 'object') {
+                        const errors = Object.values(errorData).flat();
+                        errorMessage = errors.join(', ') || errorMessage;
+                    }
+                } catch (e) {}
+                showNotification(errorMessage, 'error');
+            } finally {
+                editItemModal.setLoading(false);
+            }
+        });
+        
+        // Show modal after callback is set
+        editItemModal.show();
+    } catch (error) {
+        console.error('Error opening edit item modal:', error);
+        showNotification('Görev bilgileri yüklenirken bir hata oluştu', 'error');
+    }
 }
 
 // Open add child item modal

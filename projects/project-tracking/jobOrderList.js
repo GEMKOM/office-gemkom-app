@@ -1601,22 +1601,96 @@ window.viewJobOrder = async function(jobNo) {
                     iconColor: 'text-primary',
                     columns: [
                         {
-                            field: 'sequence',
-                            label: 'Sıra',
-                            sortable: true,
-                            formatter: (value) => value || '-'
-                        },
-                        {
                             field: 'department_display',
                             label: 'Departman',
                             sortable: true,
-                            formatter: (value) => value || '-'
+                            formatter: (value, row) => {
+                                if (!value || value === '-') return '-';
+                                
+                                // Map department values to their project page URLs
+                                const departmentUrlMap = {
+                                    'manufacturing': '/manufacturing/projects/',
+                                    'design': '/design/projects/',
+                                    'planning': '/planning/projects/',
+                                    'procurement': '/procurement/projects/',
+                                    'logistics': '/logistics/projects/',
+                                    'painting': '/painting/projects/'
+                                };
+                                
+                                const department = row.department || '';
+                                const taskId = row.id;
+                                const departmentUrl = departmentUrlMap[department];
+                                
+                                // If we have a valid department URL and task ID, make it clickable
+                                if (departmentUrl && taskId) {
+                                    const url = `${departmentUrl}?task=${encodeURIComponent(taskId)}`;
+                                    // Escape quotes in URL for HTML attribute
+                                    const escapedUrl = url.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                                    return `<span class="department-link" data-href="${escapedUrl}" style="font-weight: 700; color: #0d6efd; text-decoration: none; cursor: pointer; user-select: none;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">${value}</span>`;
+                                }
+                                
+                                // Otherwise, just show bold text
+                                return `<strong>${value}</strong>`;
+                            }
                         },
                         {
-                            field: 'title',
-                            label: 'Başlık',
+                            field: 'completion_percentage',
+                            label: 'Tamamlanma',
                             sortable: true,
-                            formatter: (value) => value || '-'
+                            formatter: (value) => {
+                                if (!value && value !== 0) return '-';
+                                const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
+                                
+                                // Determine color based on percentage
+                                let colorClass = 'bg-success';
+                                let barColor = '#10b981'; // green
+                                if (percentage === 0) {
+                                    colorClass = 'bg-secondary';
+                                    barColor = '#6b7280'; // grey
+                                } else if (percentage < 25) {
+                                    colorClass = 'bg-danger';
+                                    barColor = '#ef4444'; // red
+                                } else if (percentage < 50) {
+                                    colorClass = 'bg-warning';
+                                    barColor = '#f59e0b'; // yellow/orange
+                                } else if (percentage < 75) {
+                                    colorClass = 'bg-info';
+                                    barColor = '#3b82f6'; // blue
+                                } else if (percentage < 100) {
+                                    colorClass = 'bg-success';
+                                    barColor = '#10b981'; // green
+                                } else {
+                                    colorClass = 'bg-success';
+                                    barColor = '#059669'; // darker green for 100%
+                                }
+                                
+                                // Determine text color based on percentage (for contrast)
+                                const textColor = percentage > 50 ? '#ffffff' : '#1f2937';
+                                const textShadow = percentage > 50 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none';
+                                
+                                return `
+                                    <div style="position: relative; width: 100%;">
+                                        <div class="progress" style="height: 24px; border-radius: 6px; background-color: #e5e7eb; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                                            <div class="progress-bar ${colorClass}" 
+                                                 role="progressbar" 
+                                                 style="width: ${percentage}%; 
+                                                        background: linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%);
+                                                        border-radius: 6px;
+                                                        transition: width 0.6s ease;
+                                                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);" 
+                                                 aria-valuenow="${percentage}" 
+                                                 aria-valuemin="0" 
+                                                 aria-valuemax="100">
+                                            </div>
+                                        </div>
+                                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                                                    font-weight: 600; font-size: 0.75rem; color: ${textColor}; 
+                                                    text-shadow: ${textShadow}; pointer-events: none; white-space: nowrap; z-index: 1;">
+                                            ${percentage.toFixed(1)}%
+                                        </div>
+                                    </div>
+                                `;
+                            }
                         },
                         {
                             field: 'status_display',
@@ -1660,6 +1734,24 @@ window.viewJobOrder = async function(jobNo) {
                     emptyMessage: 'Departman görevi bulunamadı',
                     emptyIcon: 'fas fa-tasks'
                 });
+                
+                // Add click event delegation for department links after table is rendered
+                setTimeout(() => {
+                    const tableContainer = document.getElementById('department-tasks-table-container');
+                    if (tableContainer) {
+                        tableContainer.addEventListener('click', (e) => {
+                            const departmentLink = e.target.closest('.department-link');
+                            if (departmentLink) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                const url = departmentLink.getAttribute('data-href');
+                                if (url) {
+                                    window.location.href = url;
+                                }
+                            }
+                        });
+                    }
+                }, 200);
             }
         }
         

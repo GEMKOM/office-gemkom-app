@@ -203,6 +203,7 @@ window.addEventListener('fileViewerClosed', () => {
 async function initializeCuts() {
     try {
         initializeFiltersComponent();
+        applyUrlFilters(); // Apply filters from URL parameters
         initializeTableComponent();
         
         // Initialize status change confirmation modal
@@ -219,7 +220,14 @@ async function initializeCuts() {
         // Set up status toggle listeners once (uses document-level delegation)
         setupStatusToggleListeners();
         
-        await loadCuts();
+        // Check if we should load cuts or if URL filters will trigger it
+        const urlParams = new URLSearchParams(window.location.search);
+        const cutParam = urlParams.get('cut');
+        // If cut parameter exists, URL filters will trigger loadCuts
+        // Otherwise, load cuts normally
+        if (!cutParam) {
+            await loadCuts();
+        }
         updateCutCounts();
     } catch (error) {
         console.error('Error initializing cuts:', error);
@@ -255,6 +263,20 @@ function initializeFiltersComponent() {
             // Optional: Handle individual filter changes
             console.log(`Filter ${filterId} changed to:`, value);
         }
+    });
+
+    cutsFilters.addTextFilter({
+        id: 'key-filter',
+        label: 'Kesim No',
+        placeholder: 'CNC-623',
+        colSize: 2
+    });
+
+    cutsFilters.addTextFilter({
+        id: 'name-filter',
+        label: 'Kesim Adı',
+        placeholder: 'Kesim adı',
+        colSize: 2
     });
 
     cutsFilters.addTextFilter({
@@ -307,6 +329,59 @@ function initializeFiltersComponent() {
             ...machines.map(machine => ({ value: machine.id.toString(), label: machine.name }))
         ];
         cutsFilters.updateFilterOptions('machine-name-filter', machineOptions);
+    }
+}
+
+// Apply filters from URL parameters
+function applyUrlFilters() {
+    if (!cutsFilters) return false;
+    
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // Map URL parameter names to filter IDs
+        const paramToFilterMap = {
+            'cut': 'key-filter',
+            'key': 'key-filter',
+            'name': 'name-filter',
+            'nesting_id': 'nesting-id-filter',
+            'nesting-id': 'nesting-id-filter',
+            'material': 'material-filter',
+            'thickness_mm': 'thickness-mm-filter',
+            'thickness-mm': 'thickness-mm-filter',
+            'machine_fk': 'machine-name-filter',
+            'machine-name': 'machine-name-filter',
+            'status': 'status-filter'
+        };
+        
+        // Build filter values object
+        const filterValues = {};
+        let hasFilters = false;
+        
+        for (const [paramName, paramValue] of urlParams.entries()) {
+            const filterId = paramToFilterMap[paramName];
+            if (filterId) {
+                hasFilters = true;
+                filterValues[filterId] = paramValue;
+            }
+        }
+        
+        // Apply filters if any were found
+        if (hasFilters && Object.keys(filterValues).length > 0) {
+            cutsFilters.setFilterValues(filterValues);
+            // Trigger apply to load cuts with filters
+            setTimeout(() => {
+                if (cutsFilters) {
+                    cutsFilters.applyFilters();
+                }
+            }, 100);
+            // Return true to indicate filters were applied from URL
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Error applying URL filters:', error);
+        return false;
     }
 }
 

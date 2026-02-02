@@ -70,6 +70,7 @@ export async function initDepartmentTasksPage(config) {
     let users = [];
     let expandedRows = new Set();
     let subtasksCache = new Map();
+    let taskHierarchyMap = new Map(); // Track hierarchy levels for each task
     let expandButtonHandler = null;
 
     // Component instances
@@ -155,9 +156,46 @@ async function initializeComponents() {
         initializeFiltersComponent();
         initializeTableComponent();
         initializeModalComponents();
+        
+        // Check for task parameter in URL to open modal directly
+        setupUrlHandlers();
     } catch (error) {
         console.error('Error initializing components:', error);
         showNotification('Bileşenler yüklenirken hata oluştu', 'error');
+    }
+}
+
+function setupUrlHandlers() {
+    // Check URL on initial load
+    checkUrlAndOpenModal();
+    
+    // Handle browser back/forward buttons
+    window.addEventListener('popstate', () => {
+        checkUrlAndOpenModal();
+    });
+}
+
+async function checkUrlAndOpenModal() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const taskParam = urlParams.get('task');
+    
+    if (taskParam) {
+        try {
+            // Fetch task data and open modal
+            await viewTaskDetails(taskParam);
+        } catch (error) {
+            console.error('Error opening modal from URL:', error);
+            showNotification('Modal açılırken hata oluştu', 'error');
+            // Clean up URL if task not found
+            const url = new URL(window.location);
+            url.searchParams.delete('task');
+            window.history.replaceState({}, '', url);
+        }
+    } else {
+        // Close any open modals if no task parameter
+        if (taskDetailsModal) {
+            taskDetailsModal.hide();
+        }
     }
 }
 
@@ -269,9 +307,18 @@ function initializeTableComponent() {
                 width: '80px',
                 formatter: (value, row) => {
                     const subtasksCount = row.subtasks_count || (row.subtasks ? row.subtasks.length : 0);
-                    const hasChildren = subtasksCount > 0 && !row.parent;
-                    const isExpanded = expandedRows.has(row.id);
-                    const hierarchyLevel = row.parent ? 1 : 0;
+                    const hasChildren = subtasksCount > 0; // Show expand button for any task with subtasks
+                    // Check expanded state with both ID formats
+                    const isExpanded = expandedRows.has(row.id) || 
+                                     (typeof row.id === 'number' && expandedRows.has(String(row.id))) ||
+                                     (typeof row.id === 'string' && !isNaN(row.id) && expandedRows.has(parseInt(row.id)));
+                    
+                    // Get hierarchy level from map (calculated in mergeExpandedSubtasks)
+                    let hierarchyLevel = taskHierarchyMap.get(row.id);
+                    if (hierarchyLevel === undefined) {
+                        // Fallback: calculate on the fly if not in map
+                        hierarchyLevel = row.parent ? calculateTaskHierarchyLevel(row, tasks, subtasksCache) : 0;
+                    }
 
                     const LEVEL_WIDTH = 20;
                     const LINE_THICKNESS = 2;
@@ -279,14 +326,35 @@ function initializeTableComponent() {
                     const BUTTON_SIZE = 24;
                     const buttonLeftPosition = hierarchyLevel * LEVEL_WIDTH;
 
+                    // Build tree lines for all hierarchy levels
                     let treeLinesHtml = '';
                     if (hierarchyLevel > 0) {
-                        const i = 0;
-                        const isLastLevel = true;
-                        const lineLeft = (LEVEL_WIDTH / 2) - (LINE_THICKNESS / 2);
+                        // Draw vertical lines for all ancestor levels
+                        for (let level = 0; level < hierarchyLevel; level++) {
+                            const lineLeft = (level * LEVEL_WIDTH) + (LEVEL_WIDTH / 2) - (LINE_THICKNESS / 2);
+                            
+                            // Vertical line (from top to middle) for each ancestor level
+                            treeLinesHtml += `
+                                <div style="position: absolute; left: ${lineLeft}px; top: 0; height: 50%; width: ${LINE_THICKNESS}px; background: ${LINE_COLOR};"></div>
+                            `;
+                            
+                            // Horizontal line for levels before the last one
+                            if (level < hierarchyLevel - 1) {
+                                const levelCenter = (level * LEVEL_WIDTH) + (LEVEL_WIDTH / 2);
+                                const nextLevelCenter = ((level + 1) * LEVEL_WIDTH) + (LEVEL_WIDTH / 2);
+                                const horizontalWidth = nextLevelCenter - levelCenter;
+                                treeLinesHtml += `
+                                    <div style="position: absolute; left: ${levelCenter}px; top: 50%; width: ${horizontalWidth}px; height: ${LINE_THICKNESS}px; background: ${LINE_COLOR}; transform: translateY(-50%);"></div>
+                                `;
+                            }
+                        }
+                        
+                        // Draw horizontal line for the last level (connects to button)
+                        const lastLevelCenter = ((hierarchyLevel - 1) * LEVEL_WIDTH) + (LEVEL_WIDTH / 2);
+                        const buttonLeft = hierarchyLevel * LEVEL_WIDTH;
+                        const horizontalWidth = buttonLeft - lastLevelCenter;
                         treeLinesHtml += `
-                            <div style="position: absolute; left: ${lineLeft}px; top: 0; height: 50%; width: ${LINE_THICKNESS}px; background: ${LINE_COLOR};"></div>
-                            <div style="position: absolute; left: ${lineLeft}px; top: 50%; width: ${LEVEL_WIDTH / 2}px; height: ${LINE_THICKNESS}px; background: ${LINE_COLOR}; transform: translateY(-50%);"></div>
+                            <div style="position: absolute; left: ${lastLevelCenter}px; top: 50%; width: ${horizontalWidth}px; height: ${LINE_THICKNESS}px; background: ${LINE_COLOR}; transform: translateY(-50%);"></div>
                         `;
                     }
 
@@ -322,6 +390,34 @@ function initializeTableComponent() {
                     const isSubtask = !!row.parent;
                     const indent = isSubtask ? 30 : 0;
                     const prefix = isSubtask ? '<i class="fas fa-level-down-alt text-muted me-1"></i>' : '';
+                    
+                    // Special case: if type is machining_part, show key link to machining tasks
+                    if (row.type === 'machining_part') {
+                        // Try to get key from various possible locations
+                        let key = row.key || (row.machining_data && row.machining_data.key);
+                        
+                        if (key) {
+                            // Make the key clickable, opening in a new tab
+                            const keyUrl = `/manufacturing/machining/tasks/list/?key=${encodeURIComponent(key)}`;
+                            const keyLink = `<a href="${keyUrl}" target="_blank" rel="noopener noreferrer" class="text-decoration-none" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); text-decoration: none; display: inline-block; white-space: nowrap; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='rgba(13, 110, 253, 0.2)'; this.style.textDecoration='underline';" onmouseout="this.style.background='rgba(13, 110, 253, 0.1)'; this.style.textDecoration='none';">${key}</a>`;
+                            return `<div style="padding-left: ${indent}px;">${prefix}${keyLink}</div>`;
+                        }
+                    }
+                    
+                    // Special case: if type is cnc_part, show key link to CNC cutting
+                    if (row.type === 'cnc_part') {
+                        // Try to get key from cnc_data
+                        let key = (row.cnc_data && row.cnc_data.cnc_task_key) || row.key;
+                        
+                        if (key) {
+                            // Make the key clickable, opening in a new tab
+                            const keyUrl = `/manufacturing/cnc-cutting/cuts/?cut=${encodeURIComponent(key)}`;
+                            const keyLink = `<a href="${keyUrl}" target="_blank" rel="noopener noreferrer" class="text-decoration-none" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); text-decoration: none; display: inline-block; white-space: nowrap; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='rgba(13, 110, 253, 0.2)'; this.style.textDecoration='underline';" onmouseout="this.style.background='rgba(13, 110, 253, 0.1)'; this.style.textDecoration='none';">${key}</a>`;
+                            return `<div style="padding-left: ${indent}px;">${prefix}${keyLink}</div>`;
+                        }
+                    }
+                    
+                    // Default: show job order link to project tracking
                     const jobOrderLink = `<a href="/projects/project-tracking/?job_no=${encodeURIComponent(value)}" class="text-decoration-none"><strong>${value}</strong></a>`;
                     return `<div style="padding-left: ${indent}px;">${prefix}${jobOrderLink}</div>`;
                 }
@@ -370,13 +466,71 @@ function initializeTableComponent() {
                 }
             },
             {
+                field: 'completion_percentage',
+                label: 'Tamamlanma',
+                sortable: false,
+                formatter: (value) => {
+                    if (!value && value !== 0) return '<div class="text-center">-</div>';
+                    const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
+                    
+                    // Determine color based on percentage
+                    let colorClass = 'bg-success';
+                    let barColor = '#10b981'; // green
+                    if (percentage === 0) {
+                        colorClass = 'bg-secondary';
+                        barColor = '#6b7280'; // grey
+                    } else if (percentage < 25) {
+                        colorClass = 'bg-danger';
+                        barColor = '#ef4444'; // red
+                    } else if (percentage < 50) {
+                        colorClass = 'bg-warning';
+                        barColor = '#f59e0b'; // yellow/orange
+                    } else if (percentage < 75) {
+                        colorClass = 'bg-info';
+                        barColor = '#3b82f6'; // blue
+                    } else if (percentage < 100) {
+                        colorClass = 'bg-success';
+                        barColor = '#10b981'; // green
+                    } else {
+                        colorClass = 'bg-success';
+                        barColor = '#059669'; // darker green for 100%
+                    }
+                    
+                    // Determine text color based on percentage (for contrast)
+                    const textColor = percentage > 50 ? '#ffffff' : '#1f2937';
+                    const textShadow = percentage > 50 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none';
+                    
+                    return `
+                        <div class="text-center" style="position: relative; width: 100%;">
+                            <div class="progress" style="height: 24px; border-radius: 6px; background-color: #e5e7eb; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                                <div class="progress-bar ${colorClass}" 
+                                     role="progressbar" 
+                                     style="width: ${percentage}%; 
+                                            background: linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%);
+                                            border-radius: 6px;
+                                            transition: width 0.6s ease;
+                                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);" 
+                                     aria-valuenow="${percentage}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                </div>
+                            </div>
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                                        font-weight: 600; font-size: 0.75rem; color: ${textColor}; 
+                                        text-shadow: ${textShadow}; pointer-events: none; white-space: nowrap; z-index: 1;">
+                                ${percentage.toFixed(1)}%
+                            </div>
+                        </div>
+                    `;
+                }
+            },
+            {
                 field: 'subtasks_count',
                 label: 'Alt Görevler',
                 sortable: false,
-                formatter: (value, row) => {
-                    if (!value || value === 0) return '-';
-                    const completed = row.subtasks ? row.subtasks.filter(s => s.status === 'completed').length : 0;
-                    return `${completed}/${value}`;
+                formatter: (value) => {
+                    if (!value || value === 0) return '<div class="text-center">-</div>';
+                    return `<div class="text-center">${value.toString()}</div>`;
                 }
             }
         ],
@@ -412,14 +566,16 @@ function initializeTableComponent() {
                 label: 'Detay',
                 icon: 'fas fa-eye',
                 class: 'btn-outline-info',
-                onClick: (row) => viewTaskDetails(row.id)
+                onClick: (row) => viewTaskDetails(row.id),
+                visible: (row) => row.type !== 'machining_part' && row.type !== 'cnc_part'
             },
             {
                 key: 'edit',
                 label: 'Düzenle',
                 icon: 'fas fa-edit',
                 class: 'btn-outline-primary',
-                onClick: (row) => showEditTaskModal(row.id)
+                onClick: (row) => showEditTaskModal(row.id),
+                visible: (row) => row.type !== 'machining_part' && row.type !== 'cnc_part'
             },
             {
                 key: 'add-subtask',
@@ -427,7 +583,7 @@ function initializeTableComponent() {
                 icon: 'fas fa-plus-circle',
                 class: 'btn-outline-info',
                 onClick: (row) => showAddSubtaskModal(row.id),
-                visible: (row) => !row.parent // Only show for main tasks (not subtasks)
+                visible: (row) => !row.parent && row.type !== 'machining_part' && row.type !== 'cnc_part' // Only show for main tasks (not subtasks) and not for machining/cnc parts
             },
             {
                 key: 'start',
@@ -435,7 +591,7 @@ function initializeTableComponent() {
                 icon: 'fas fa-play',
                 class: 'btn-outline-success',
                 onClick: (row) => handleStartTask(row.id),
-                visible: (row) => row.status === 'pending' && row.can_start
+                visible: (row) => row.status === 'pending' && row.can_start && row.type !== 'machining_part' && row.type !== 'cnc_part'
             },
             {
                 key: 'complete',
@@ -443,7 +599,7 @@ function initializeTableComponent() {
                 icon: 'fas fa-check',
                 class: 'btn-outline-success',
                 onClick: (row) => handleCompleteTask(row.id),
-                visible: (row) => row.status === 'in_progress'
+                visible: (row) => row.status === 'in_progress' && row.type !== 'machining_part' && row.type !== 'cnc_part'
             },
             {
                 key: 'uncomplete',
@@ -451,7 +607,7 @@ function initializeTableComponent() {
                 icon: 'fas fa-undo',
                 class: 'btn-outline-warning',
                 onClick: (row) => handleUncompleteTask(row.id),
-                visible: (row) => row.status === 'completed'
+                visible: (row) => row.status === 'completed' && row.type !== 'machining_part' && row.type !== 'cnc_part'
             },
             {
                 key: 'skip',
@@ -459,7 +615,7 @@ function initializeTableComponent() {
                 icon: 'fas fa-forward',
                 class: 'btn-outline-secondary',
                 onClick: (row) => handleSkipTask(row.id),
-                visible: (row) => row.status === 'pending'
+                visible: (row) => row.status === 'pending' && row.type !== 'machining_part' && row.type !== 'cnc_part'
             }
         ],
         emptyMessage: 'Görev bulunamadı',
@@ -483,6 +639,16 @@ function initializeModalComponents() {
         icon: 'fas fa-info-circle',
         size: 'lg',
         showEditButton: false
+    });
+    
+    // Handle URL cleanup when modal is closed
+    taskDetailsModal.onCloseCallback(() => {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.get('task')) {
+            const url = new URL(window.location);
+            url.searchParams.delete('task');
+            window.history.replaceState({}, '', url);
+        }
     });
 
     // Edit task modal
@@ -619,6 +785,7 @@ async function loadTasks() {
         // Clear caches so we always show fresh data (multi-user safe)
         subtasksCache.clear();
         expandedRows.clear();
+        taskHierarchyMap.clear();
 
         isLoading = true;
         if (tasksTable) {
@@ -717,20 +884,70 @@ async function loadTasks() {
     }
 }
 
-// Merge expanded subtasks into the main tasks array
+// Calculate hierarchy level for a task based on its parent chain
+function calculateTaskHierarchyLevel(task, mainTasks, subtasksCache) {
+    if (!task.parent) {
+        return 0;
+    }
+    
+    // Check if parent is in main tasks (level 0)
+    const parentInMain = mainTasks.find(t => t.id === task.parent);
+    if (parentInMain) {
+        return 1;
+    }
+    
+    // Search in cached subtasks recursively
+    for (const [parentId, subtasks] of subtasksCache.entries()) {
+        const parentTask = subtasks.find(st => st.id === task.parent);
+        if (parentTask) {
+            // Found parent, calculate its level + 1
+            return calculateTaskHierarchyLevel(parentTask, mainTasks, subtasksCache) + 1;
+        }
+    }
+    
+    // Default: assume it's a direct child (level 1)
+    return 1;
+}
+
+// Recursively merge expanded subtasks into the main tasks array
 function mergeExpandedSubtasks(mainTasks) {
     const merged = [];
     
-    mainTasks.forEach(task => {
+    // Clear hierarchy map before recalculating
+    taskHierarchyMap.clear();
+    
+    function addTaskAndChildren(task, level = 0) {
+        // Store hierarchy level
+        taskHierarchyMap.set(task.id, level);
+        
         merged.push(task);
         
-        // If this task is expanded, add its subtasks
-        if (expandedRows.has(task.id) && subtasksCache.has(task.id)) {
-            const subtasks = subtasksCache.get(task.id);
+        // If this task is expanded, add its subtasks recursively
+        // Check both the task ID and try numeric conversion if it's a string
+        const taskId = task.id;
+        const isExpanded = expandedRows.has(taskId) || 
+                          (typeof taskId === 'string' && !isNaN(taskId) && expandedRows.has(parseInt(taskId))) ||
+                          (typeof taskId === 'number' && expandedRows.has(String(taskId)));
+        
+        let subtasks = null;
+        if (subtasksCache.has(taskId)) {
+            subtasks = subtasksCache.get(taskId);
+        } else if (typeof taskId === 'string' && !isNaN(taskId) && subtasksCache.has(parseInt(taskId))) {
+            subtasks = subtasksCache.get(parseInt(taskId));
+        } else if (typeof taskId === 'number' && subtasksCache.has(String(taskId))) {
+            subtasks = subtasksCache.get(String(taskId));
+        }
+        
+        if (isExpanded && subtasks && subtasks.length > 0) {
             subtasks.forEach(subtask => {
-                merged.push(subtask);
+                const subtaskLevel = level + 1;
+                addTaskAndChildren(subtask, subtaskLevel);
             });
         }
+    }
+    
+    mainTasks.forEach(task => {
+        addTaskAndChildren(task, 0);
     });
     
     return merged;
@@ -774,17 +991,29 @@ function setupExpandButtonListeners() {
         e.preventDefault();
         e.stopPropagation();
         
-        const taskId = parseInt(expandButton.getAttribute('data-task-id'));
-        if (!taskId) {
+        const taskIdAttr = expandButton.getAttribute('data-task-id');
+        if (!taskIdAttr) {
             console.warn('Expand button missing data-task-id attribute');
             return;
         }
         
-        const isExpanded = expandedRows.has(taskId);
+        // Handle both numeric and string IDs (e.g., 96 or "cnc-part-1722")
+        const taskId = isNaN(taskIdAttr) ? taskIdAttr : parseInt(taskIdAttr);
+        const numericTaskId = typeof taskId === 'string' && !isNaN(taskId) ? parseInt(taskId) : taskId;
+        
+        // Check expanded state (try both formats)
+        const isExpanded = expandedRows.has(taskId) || 
+                          (typeof taskId === 'number' && expandedRows.has(String(taskId))) ||
+                          (typeof taskId === 'string' && !isNaN(taskId) && expandedRows.has(parseInt(taskId)));
         
         if (isExpanded) {
-            // Collapse: remove from expanded set
+            // Collapse: remove from expanded set (both formats)
             expandedRows.delete(taskId);
+            if (typeof taskId === 'number') {
+                expandedRows.delete(String(taskId));
+            } else if (typeof taskId === 'string' && !isNaN(taskId)) {
+                expandedRows.delete(parseInt(taskId));
+            }
             // Update table without loading state
             updateTableDataOnly();
         } else {
@@ -796,9 +1025,10 @@ function setupExpandButtonListeners() {
                     icon.className = 'fas fa-spinner fa-spin text-primary';
                 }
                 
-                await fetchTaskSubtasks(taskId);
+                // Use numeric ID for API call if it's a numeric string
+                await fetchTaskSubtasks(numericTaskId);
             } catch (error) {
-                console.error(`Error fetching subtasks for task ${taskId}:`, error);
+                console.error(`Error fetching subtasks for task ${numericTaskId}:`, error);
                 showNotification('Alt görevler yüklenirken hata oluştu', 'error');
                 // Restore icon on error
                 const icon = expandButton.querySelector('i');
@@ -807,7 +1037,13 @@ function setupExpandButtonListeners() {
                 }
                 return;
             }
+            // Store expanded state with both formats
             expandedRows.add(taskId);
+            if (typeof taskId === 'number') {
+                expandedRows.add(String(taskId));
+            } else if (typeof taskId === 'string' && !isNaN(taskId)) {
+                expandedRows.add(parseInt(taskId));
+            }
             // Update table without loading state
             updateTableDataOnly();
         }
@@ -828,10 +1064,21 @@ async function fetchTaskSubtasks(taskId) {
         });
         
         const subtasks = response.results || [];
+        // Store with both ID formats for flexibility
         subtasksCache.set(taskId, subtasks);
+        if (typeof taskId === 'number') {
+            subtasksCache.set(String(taskId), subtasks);
+        } else if (typeof taskId === 'string' && !isNaN(taskId)) {
+            subtasksCache.set(parseInt(taskId), subtasks);
+        }
     } catch (error) {
         console.error(`Error fetching subtasks for task ${taskId}:`, error);
         subtasksCache.set(taskId, []);
+        if (typeof taskId === 'number') {
+            subtasksCache.set(String(taskId), []);
+        } else if (typeof taskId === 'string' && !isNaN(taskId)) {
+            subtasksCache.set(parseInt(taskId), []);
+        }
         throw error;
     }
 }
@@ -1009,6 +1256,11 @@ async function viewTaskDetails(taskId) {
                 }
             }, 100);
         }
+        
+        // Update URL to include the task ID
+        const url = new URL(window.location);
+        url.searchParams.set('task', taskId);
+        window.history.pushState({}, '', url);
         
         taskDetailsModal.show();
     } catch (error) {

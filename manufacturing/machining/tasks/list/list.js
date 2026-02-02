@@ -85,9 +85,14 @@ async function initializeParts() {
     try {
         await loadUsers(); // Load users first for filters
         initializeFiltersComponent();
+        const urlFiltersApplied = applyUrlFilters(); // Apply filters from URL parameters
         initializeTableComponent();
         await loadMachines();
-        await loadParts();
+        // If URL filters were applied, they will trigger loadParts via onApply callback
+        // Otherwise, load parts normally
+        if (!urlFiltersApplied) {
+            await loadParts();
+        }
         await updatePartCounts();
     } catch (error) {
         console.error('Error initializing parts:', error);
@@ -257,6 +262,71 @@ function initializeFiltersComponent() {
         checked: false,
         colSize: 3
     });
+}
+
+// Apply filters from URL parameters
+function applyUrlFilters() {
+    if (!partsFilters) return false;
+    
+    try {
+        const urlParams = new URLSearchParams(window.location.search);
+        
+        // Map URL parameter names to filter IDs
+        const paramToFilterMap = {
+            'key': 'key-filter',
+            'name': 'name-filter',
+            'job_no': 'job-no-filter',
+            'job-no': 'job-no-filter', // Support both formats
+            'image_no': 'image-no-filter',
+            'image-no': 'image-no-filter',
+            'position_no': 'position-no-filter',
+            'position-no': 'position-no-filter',
+            'status': 'status-filter',
+            'created_by': 'created-by-filter',
+            'created-by': 'created-by-filter',
+            'has_operations': 'has-operations-filter',
+            'has-operations': 'has-operations-filter',
+            'has_unassigned_operations': 'has-unassigned-operations-filter',
+            'has-unassigned-operations': 'has-unassigned-operations-filter',
+            'has_unplanned_operations': 'has-unplanned-operations-filter',
+            'has-unplanned-operations': 'has-unplanned-operations-filter'
+        };
+        
+        // Build filter values object
+        const filterValues = {};
+        let hasFilters = false;
+        
+        for (const [paramName, paramValue] of urlParams.entries()) {
+            const filterId = paramToFilterMap[paramName];
+            if (filterId) {
+                hasFilters = true;
+                // Handle checkbox filters (boolean values)
+                if (filterId.includes('has-')) {
+                    filterValues[filterId] = paramValue === 'true' || paramValue === '1';
+                } else {
+                    // Handle text and dropdown filters
+                    filterValues[filterId] = paramValue;
+                }
+            }
+        }
+        
+        // Apply filters if any were found
+        if (hasFilters && Object.keys(filterValues).length > 0) {
+            partsFilters.setFilterValues(filterValues);
+            // Trigger apply to load parts with filters
+            setTimeout(() => {
+                if (partsFilters) {
+                    partsFilters.applyFilters();
+                }
+            }, 100);
+            // Return true to indicate filters were applied from URL
+            return true;
+        }
+        return false;
+    } catch (error) {
+        console.error('Error applying URL filters:', error);
+        return false;
+    }
 }
 
 function initializeTableComponent() {

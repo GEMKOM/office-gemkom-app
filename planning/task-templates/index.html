@@ -35,6 +35,13 @@
         #add-child-item-modal-container .modal-backdrop {
             z-index: 1069 !important;
         }
+        /* Ensure edit item modal appears above manage items modal */
+        #edit-item-modal-container .modal {
+            z-index: 1070 !important;
+        }
+        #edit-item-modal-container .modal-backdrop {
+            z-index: 1069 !important;
+        }
     </style>
 </head>
 <body>
@@ -69,6 +76,7 @@
     <div id="delete-template-modal-container"></div>
     <div id="add-item-modal-container"></div>
     <div id="add-child-item-modal-container"></div>
+    <div id="edit-item-modal-container"></div>
     <div id="manage-items-modal-container"></div>
 
     <!-- Bootstrap JS -->
