@@ -20,6 +20,7 @@ export class DisplayModal {
         this.content = null;
         this.sections = [];
         this.fields = new Map();
+        this.tabs = [];
         this.isLoading = false;
         this.onEdit = null;
         this.onClose = null;
@@ -171,16 +172,127 @@ export class DisplayModal {
         return this;
     }
     
+    // Add a tab to the modal
+    addTab(tabConfig) {
+        const tab = {
+            id: tabConfig.id || `tab-${Date.now()}`,
+            label: tabConfig.label || 'Tab',
+            icon: tabConfig.icon || '',
+            iconColor: tabConfig.iconColor || 'text-primary',
+            content: tabConfig.content || '',
+            active: tabConfig.active || false,
+            sections: tabConfig.sections || [],
+            customContent: tabConfig.customContent || '',
+            ...tabConfig
+        };
+        
+        this.tabs.push(tab);
+        return this;
+    }
+    
+    // Set tabs mode - when enabled, sections will be rendered as tabs
+    setTabsMode(enabled) {
+        this.tabsMode = enabled;
+        return this;
+    }
+    
     // Render the modal with all sections and fields
     render() {
         this.content.innerHTML = '';
         
-        this.sections.forEach(section => {
-            const sectionElement = this.createSectionElement(section);
-            this.content.appendChild(sectionElement);
-        });
+        // If tabs are defined, render tabs
+        if (this.tabs.length > 0) {
+            const tabsElement = this.createTabsElement();
+            this.content.appendChild(tabsElement);
+        } else {
+            // Otherwise render sections normally
+            this.sections.forEach(section => {
+                const sectionElement = this.createSectionElement(section);
+                this.content.appendChild(sectionElement);
+            });
+        }
         
         return this;
+    }
+    
+    createTabsElement() {
+        const tabsContainer = document.createElement('div');
+        tabsContainer.className = 'display-modal-tabs-container';
+        
+        // Create tab navigation
+        const tabNav = document.createElement('ul');
+        tabNav.className = 'nav nav-tabs mb-3';
+        tabNav.setAttribute('role', 'tablist');
+        
+        // Create tab content container
+        const tabContent = document.createElement('div');
+        tabContent.className = 'tab-content';
+        tabContent.id = 'display-modal-tab-content';
+        
+        // Determine which tab should be active (first active tab, or first tab if none specified)
+        let activeTabId = null;
+        const activeTab = this.tabs.find(tab => tab.active);
+        if (activeTab) {
+            activeTabId = activeTab.id;
+        } else if (this.tabs.length > 0) {
+            activeTabId = this.tabs[0].id;
+        }
+        
+        // Create tab nav items and tab panes
+        this.tabs.forEach((tab, index) => {
+            const isActive = tab.id === activeTabId;
+            
+            // Create nav item
+            const navItem = document.createElement('li');
+            navItem.className = 'nav-item';
+            navItem.setAttribute('role', 'presentation');
+            
+            const navLink = document.createElement('button');
+            navLink.className = `nav-link ${isActive ? 'active' : ''}`;
+            navLink.id = `tab-${tab.id}-nav`;
+            navLink.setAttribute('data-bs-toggle', 'tab');
+            navLink.setAttribute('data-bs-target', `#tab-${tab.id}-pane`);
+            navLink.setAttribute('type', 'button');
+            navLink.setAttribute('role', 'tab');
+            navLink.setAttribute('aria-controls', `tab-${tab.id}-pane`);
+            navLink.setAttribute('aria-selected', isActive ? 'true' : 'false');
+            
+            // Add icon if provided
+            if (tab.icon) {
+                navLink.innerHTML = `<i class="${tab.icon} me-2 ${tab.iconColor || ''}"></i>${tab.label}`;
+            } else {
+                navLink.textContent = tab.label;
+            }
+            
+            navItem.appendChild(navLink);
+            tabNav.appendChild(navItem);
+            
+            // Create tab pane
+            const tabPane = document.createElement('div');
+            tabPane.className = `tab-pane fade ${isActive ? 'show active' : ''}`;
+            tabPane.id = `tab-${tab.id}-pane`;
+            tabPane.setAttribute('role', 'tabpanel');
+            tabPane.setAttribute('aria-labelledby', `tab-${tab.id}-nav`);
+            
+            // Add content to tab pane
+            if (tab.customContent) {
+                tabPane.innerHTML = tab.customContent;
+            } else if (tab.sections && tab.sections.length > 0) {
+                tab.sections.forEach(section => {
+                    const sectionElement = this.createSectionElement(section);
+                    tabPane.appendChild(sectionElement);
+                });
+            } else if (tab.content) {
+                tabPane.innerHTML = tab.content;
+            }
+            
+            tabContent.appendChild(tabPane);
+        });
+        
+        tabsContainer.appendChild(tabNav);
+        tabsContainer.appendChild(tabContent);
+        
+        return tabsContainer;
     }
     
     createSectionElement(section) {
@@ -334,6 +446,14 @@ export class DisplayModal {
             link.href = `mailto:${field.value}`;
             link.textContent = field.value;
             valueDiv.appendChild(link);
+        } else if (field.format && typeof field.format === 'function') {
+            const formattedValue = field.format(displayValue);
+            // Check if formatted value contains HTML tags
+            if (formattedValue.includes('<') && formattedValue.includes('>')) {
+                valueDiv.innerHTML = formattedValue;
+            } else {
+                valueDiv.textContent = formattedValue;
+            }
         } else {
             valueDiv.textContent = displayValue;
         }
@@ -581,6 +701,9 @@ export class DisplayModal {
         
         // Clear sections
         this.sections = [];
+        
+        // Clear tabs
+        this.tabs = [];
         
         // Clear content
         if (this.content) {

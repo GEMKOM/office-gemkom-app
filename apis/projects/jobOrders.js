@@ -545,3 +545,45 @@ export async function getJobOrderDepartmentTasks(jobNo, additionalOptions = {}) 
         throw error;
     }
 }
+
+/**
+ * Get children (sub job orders) for a job order
+ * @param {string} jobNo - Job order number
+ * @returns {Promise<Array>} Array of child job orders
+ */
+export async function getJobOrderChildren(jobNo) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${jobNo}/children/`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error fetching children for job order ${jobNo}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Get files/attachments for a job order
+ * @param {string} jobNo - Job order number
+ * @returns {Promise<Array>} Array of file/attachment objects
+ */
+export async function getJobOrderFiles(jobNo) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${jobNo}/files/`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error fetching files for job order ${jobNo}:`, error);
+        throw error;
+    }
+}

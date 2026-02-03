@@ -365,3 +365,102 @@
     color: #155724;
     opacity: 1;
 }
+
+/* Tabs Styling */
+.display-modal-container .display-modal-tabs-container {
+    width: 100%;
+}
+
+.display-modal-container .display-modal-tabs-container .nav-tabs {
+    border-bottom: 2px solid #e9ecef;
+    margin-bottom: 1.5rem;
+}
+
+.display-modal-container .display-modal-tabs-container .nav-tabs .nav-item {
+    margin-bottom: -2px;
+}
+
+.display-modal-container .display-modal-tabs-container .nav-tabs .nav-link {
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #6c757d !important;
+    padding: 0.75rem 1.25rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    background: transparent !important;
+    cursor: pointer;
+    font-size: 0.95rem;
+    text-align: left;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.display-modal-container .display-modal-tabs-container .nav-tabs .nav-link[type="button"] {
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    appearance: none;
+    border: none;
+    outline: none;
+}
+
+.display-modal-container .display-modal-tabs-container .nav-tabs .nav-link:hover {
+    border-bottom-color: #dee2e6;
+    color: #495057 !important;
+    background: #f8f9fa !important;
+}
+
+.display-modal-container .display-modal-tabs-container .nav-tabs .nav-link.active {
+    color: #0d6efd !important;
+    border-bottom-color: #DC143C;
+    background: transparent !important;
+    font-weight: 600;
+}
+
+.display-modal-container .display-modal-tabs-container .nav-tabs .nav-link i {
+    font-size: 0.9rem;
+    color: inherit;
+}
+
+.display-modal-container .display-modal-tabs-container .nav-tabs .nav-link.active i {
+    color: #DC143C;
+}
+
+.display-modal-container .display-modal-tabs-container .tab-content {
+    min-height: 200px;
+}
+
+.display-modal-container .display-modal-tabs-container .tab-pane {
+    padding: 0;
+}
+
+/* Field styling in tabs */
+.display-modal-container .display-modal-tabs-container .field-label {
+    font-weight: 500;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    display: flex;
+    align-items: center;
+    font-size: 0.9rem;
+}
+
+.display-modal-container .display-modal-tabs-container .field-label i {
+    margin-right: 0.5rem;
+    font-size: 0.8rem;
+    color: #6c757d;
+}
+
+.display-modal-container .display-modal-tabs-container .field-value {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    line-height: 1.5;
+    color: #2c3e50;
+    background-color: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 0.375rem;
+    min-height: 2.5rem;
+    display: flex;
+    align-items: center;
+    word-break: break-word;
+    margin-bottom: 1rem;
+}

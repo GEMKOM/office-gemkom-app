@@ -15,6 +15,9 @@ import {
     getPriorityChoices,
     applyTemplateToJobOrder,
     getChildJobOrders,
+    getJobOrderDepartmentTasks,
+    getJobOrderChildren,
+    getJobOrderFiles,
     STATUS_OPTIONS,
     PRIORITY_OPTIONS
 } from '../../apis/projects/jobOrders.js';
@@ -22,6 +25,19 @@ import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, g
 import { listTaskTemplates, getTaskTemplateById } from '../../apis/projects/taskTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
 import { CURRENCY_OPTIONS } from '../../apis/projects/customers.js';
+import {
+    listTopics,
+    getTopic,
+    createTopic,
+    updateTopic,
+    deleteTopic,
+    getTopicComments,
+    uploadTopicAttachment,
+    createComment,
+    updateComment,
+    deleteComment,
+    uploadCommentAttachment
+} from '../../apis/projects/topics.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
@@ -31,6 +47,9 @@ import { EditModal } from '../../components/edit-modal/edit-modal.js';
 import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
+import { backendBase } from '../../base.js';
+import { fetchAllUsers } from '../../apis/users.js';
+import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
 
 // State management
 let currentPage = 1;
@@ -109,18 +128,57 @@ async function initializeJobOrders() {
         // Setup expand button listeners (will be ready when table is rendered)
         setupExpandButtonListeners();
         
-        // Check for job_no parameter in URL to open modal directly
+        // Check for deep-link parameters in URL to open modals directly
         const urlParams = new URLSearchParams(window.location.search);
         const jobNo = urlParams.get('job_no');
+        const topicIdParam = urlParams.get('topic_id');
         
         if (jobNo) {
-            // Open modal directly without loading other data first
+            // Open job order modal directly without loading other data first
             await viewJobOrder(jobNo);
-        } else {
-            // Load page normally
-            await loadJobOrders();
-            updateJobOrderCounts();
+
+            // If topic_id exists, open topic detail modal on top
+            if (topicIdParam) {
+                const topicId = parseInt(topicIdParam, 10);
+                if (!Number.isNaN(topicId)) {
+                    setTimeout(() => {
+                        viewTopicDetail(topicId, jobNo);
+                    }, 200);
+                }
+            }
+            return;
         }
+
+        if (topicIdParam) {
+            // Open topic detail modal (and its job order) directly from email link
+            const topicId = parseInt(topicIdParam, 10);
+            if (!Number.isNaN(topicId)) {
+                try {
+                    const topic = await getTopic(topicId);
+                    const inferredJobNo = topic.job_order || topic.job_order_no || null;
+
+                    if (inferredJobNo) {
+                        await viewJobOrder(inferredJobNo);
+                        setTimeout(() => {
+                            viewTopicDetail(topicId, inferredJobNo);
+                        }, 200);
+                        return;
+                    }
+
+                    // Fallback: show topic modal even if job order cannot be inferred
+                    await viewTopicDetail(topicId, null);
+                    return;
+                } catch (error) {
+                    console.error('Error opening topic from deep link:', error);
+                    showNotification('Tartışma detayı açılırken hata oluştu', 'error');
+                    // Fall through to normal load
+                }
+            }
+        }
+
+        // Load page normally
+        await loadJobOrders();
+        updateJobOrderCounts();
     } catch (error) {
         console.error('Error initializing job orders:', error);
         showNotification('İş emirleri yüklenirken hata oluştu', 'error');
@@ -787,11 +845,22 @@ function initializeModalComponents() {
         confirmButtonClass: 'btn-primary'
     });
 
-    // Set up close callback to clean up URL
+    // Set up close callback to clean up URL and clear cache
     viewJobOrderModal.onCloseCallback(() => {
-        // Remove job_no parameter from URL
+        // Clear tab cache when modal closes
+        jobOrderTabCache = {
+            jobNo: null,
+            jobOrder: null,
+            departmentTasks: null,
+            children: null,
+            files: null,
+            topics: null
+        };
+        
+        // Remove deep-link parameters from URL
         const url = new URL(window.location);
         url.searchParams.delete('job_no');
+        url.searchParams.delete('topic_id');
         window.history.replaceState({}, '', url);
         
         // Load the page properly after modal is closed
@@ -1240,23 +1309,31 @@ window.editJobOrder = async function(jobNo) {
     }
 };
 
+// Cache for tab data (cleared when modal closes)
+let jobOrderTabCache = {
+    jobNo: null,
+    jobOrder: null,
+    departmentTasks: null,
+    children: null,
+    files: null,
+    topics: null
+};
+
 window.viewJobOrder = async function(jobNo) {
     try {
-        const jobOrder = await getJobOrderByJobNo(jobNo);
+        // Clear cache for new job order
+        jobOrderTabCache = {
+            jobNo: jobNo,
+            jobOrder: null,
+            departmentTasks: null,
+            children: null,
+            files: null,
+            topics: null
+        };
         
-        // Fetch children if they exist
-        let children = [];
-        if (jobOrder.children && Array.isArray(jobOrder.children)) {
-            children = jobOrder.children;
-        } else if (jobOrder.children_count > 0) {
-            // Fetch children if count > 0 but not in response
-            try {
-                const childrenResponse = await getChildJobOrders(jobNo);
-                children = childrenResponse.results || [];
-            } catch (error) {
-                console.warn('Could not fetch children:', error);
-            }
-        }
+        // Fetch only basic job order data
+        const jobOrder = await getJobOrderByJobNo(jobNo);
+        jobOrderTabCache.jobOrder = jobOrder;
         
         // Clear and configure the view modal
         viewJobOrderModal.clearData();
@@ -1315,35 +1392,35 @@ window.viewJobOrder = async function(jobNo) {
             return `${currencySymbol} ${numValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         };
         
-        // Build sidebar HTML with Temel Bilgiler and Sistem Bilgileri
-        const sidebarHtml = `
-            <div class="job-order-sidebar" style="background: #f8f9fa; padding: 20px; border-right: 1px solid #dee2e6; height: 100%; overflow-y: auto;">
+        // Build Temel Bilgiler tab content
+        const temelBilgilerHtml = `
+            <div style="padding: 20px;">
                 <!-- Temel Bilgiler Section -->
-                <div class="sidebar-section mb-4">
+                <div class="mb-4">
                     <h6 class="mb-3 d-flex align-items-center">
                         <i class="fas fa-info-circle me-2 text-primary"></i>
                         Temel Bilgiler
                     </h6>
-                    <div class="sidebar-fields">
-                        <div class="field-item mb-3">
+                    <div class="row g-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-barcode me-1"></i>İş Emri No
                             </label>
                             <div class="field-value fw-medium">${jobOrder.job_no || '-'}</div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-heading me-1"></i>Başlık
                             </label>
                             <div class="field-value">${jobOrder.title || '-'}</div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-users me-1"></i>Müşteri
                             </label>
                             <div class="field-value">${jobOrder.customer_name ? `${jobOrder.customer_name}${jobOrder.customer_code ? ' (' + jobOrder.customer_code + ')' : ''}` : '-'}</div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-tasks me-1"></i>Durum
                             </label>
@@ -1351,7 +1428,7 @@ window.viewJobOrder = async function(jobNo) {
                                 ${jobOrder.status_display ? `<span class="status-badge ${getStatusBadgeClass(jobOrder.status)}">${jobOrder.status_display}</span>` : '-'}
                             </div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-exclamation-triangle me-1"></i>Öncelik
                             </label>
@@ -1359,31 +1436,31 @@ window.viewJobOrder = async function(jobNo) {
                                 ${jobOrder.priority_display ? `<span class="status-badge ${getPriorityBadgeClass(jobOrder.priority)}">${jobOrder.priority_display}</span>` : '-'}
                             </div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-file-invoice me-1"></i>Müşteri Sipariş No
                             </label>
                             <div class="field-value">${jobOrder.customer_order_no || '-'}</div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-calendar-check me-1"></i>Hedef Tamamlanma
                             </label>
                             <div class="field-value">${formatDate(jobOrder.target_completion_date)}</div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-play-circle me-1"></i>Başlangıç Tarihi
                             </label>
                             <div class="field-value">${formatDateTime(jobOrder.started_at)}</div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-check-circle me-1"></i>Tamamlanma Tarihi
                             </label>
                             <div class="field-value">${formatDateTime(jobOrder.completed_at)}</div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-percentage me-1"></i>Tamamlanma Oranı
                             </label>
@@ -1392,7 +1469,7 @@ window.viewJobOrder = async function(jobNo) {
                             </div>
                         </div>
                         ${jobOrder.description ? `
-                        <div class="field-item mb-3">
+                        <div class="col-12">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-align-left me-1"></i>Açıklama
                             </label>
@@ -1400,7 +1477,7 @@ window.viewJobOrder = async function(jobNo) {
                         </div>
                         ` : ''}
                         ${jobOrder.parent ? `
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-level-up-alt me-1"></i>Ana İş
                             </label>
@@ -1408,13 +1485,13 @@ window.viewJobOrder = async function(jobNo) {
                         </div>
                         ` : ''}
                         ${(jobOrder.estimated_cost || jobOrder.total_cost) ? `
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-calculator me-1"></i>Tahmini Maliyet
                             </label>
                             <div class="field-value">${formatCurrency(jobOrder.estimated_cost, jobOrder.cost_currency)}</div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-money-bill-wave me-1"></i>Toplam Maliyet
                             </label>
@@ -1425,32 +1502,32 @@ window.viewJobOrder = async function(jobNo) {
                 </div>
                 
                 <!-- Sistem Bilgileri Section -->
-                <div class="sidebar-section">
+                <div>
                     <h6 class="mb-3 d-flex align-items-center">
                         <i class="fas fa-info me-2 text-secondary"></i>
                         Sistem Bilgileri
                     </h6>
-                    <div class="sidebar-fields">
-                        <div class="field-item mb-3">
+                    <div class="row g-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-calendar-plus me-1"></i>Oluşturulma Tarihi
                             </label>
                             <div class="field-value">${formatDateTime(jobOrder.created_at)}</div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-user me-1"></i>Oluşturan
                             </label>
                             <div class="field-value">${jobOrder.created_by_name || '-'}</div>
                         </div>
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-calendar-edit me-1"></i>Güncellenme Tarihi
                             </label>
                             <div class="field-value">${formatDateTime(jobOrder.updated_at)}</div>
                         </div>
                         ${jobOrder.completed_by_name ? `
-                        <div class="field-item mb-3">
+                        <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-user-check me-1"></i>Tamamlayan
                             </label>
@@ -1462,339 +1539,65 @@ window.viewJobOrder = async function(jobNo) {
             </div>
         `;
         
-        // Build main content HTML
-        const mainContentHtml = `
-            <div class="job-order-main-content" style="padding: 20px; height: 100%; overflow-y: auto;">
-                <!-- Children Table -->
-                ${children.length > 0 ? `
-                <div class="content-section mb-4" id="children-section">
-                    <div id="children-table-container"></div>
-                </div>
-                ` : ''}
-                
-                <!-- Department Tasks Table -->
-                ${jobOrder.department_tasks && jobOrder.department_tasks.length > 0 ? `
-                <div class="content-section mb-4" id="department-tasks-section">
-                    <div id="department-tasks-table-container"></div>
-                </div>
-                ` : ''}
-                
-                <!-- Files Section -->
-                <div class="content-section" id="files-section">
-                    <div id="files-container"></div>
-                </div>
-            </div>
-        `;
+        // Add tabs to modal
+        viewJobOrderModal.addTab({
+            id: 'temel-bilgiler',
+            label: 'Temel Bilgiler',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary',
+            customContent: temelBilgilerHtml,
+            active: true
+        });
         
-        // Create custom layout with sidebar and main content
-        const layoutHtml = `
-            <div class="row g-0" style="height: calc(100vh - 200px);">
-                <div class="col-md-4" style="max-height: 100%;">
-                    ${sidebarHtml}
-                </div>
-                <div class="col-md-8" style="max-height: 100%;">
-                    ${mainContentHtml}
-                </div>
-            </div>
-        `;
+        // Add Departman Görevleri tab (only if count > 0)
+        if (jobOrder.department_tasks_count && jobOrder.department_tasks_count > 0) {
+            viewJobOrderModal.addTab({
+                id: 'departman-gorevleri',
+                label: 'Departman Görevleri',
+                icon: 'fas fa-tasks',
+                iconColor: 'text-primary',
+                customContent: '<div id="department-tasks-table-container"></div>'
+            });
+        }
         
-        // Add custom section with the layout
-        viewJobOrderModal.addCustomSection({
-            id: 'job-order-details-layout',
-            customContent: layoutHtml
+        // Add Alt Görevler tab (only if count > 0)
+        if (jobOrder.children_count && jobOrder.children_count > 0) {
+            viewJobOrderModal.addTab({
+                id: 'alt-gorevler',
+                label: 'Alt Görevler',
+                icon: 'fas fa-sitemap',
+                iconColor: 'text-primary',
+                customContent: '<div id="children-table-container"></div>'
+            });
+        }
+        
+        // Add Files tab
+        viewJobOrderModal.addTab({
+            id: 'dosyalar',
+            label: 'Dosyalar',
+            icon: 'fas fa-paperclip',
+            iconColor: 'text-primary',
+            customContent: '<div id="files-container"></div>'
+        });
+        
+        // Add Topics tab
+        viewJobOrderModal.addTab({
+            id: 'topics',
+            label: 'Tartışmalar',
+            icon: 'fas fa-comments',
+            iconColor: 'text-primary',
+            customContent: '<div id="topics-container" style="padding: 20px;"></div>'
         });
         
         // Render the modal
         viewJobOrderModal.render();
         
-        // Initialize children table
-        if (children.length > 0) {
-            const childrenContainer = viewJobOrderModal.content.querySelector('#children-table-container');
-            if (childrenContainer) {
-                const childrenTable = new TableComponent('children-table-container', {
-                    title: 'Alt İş Emirleri',
-                    icon: 'fas fa-sitemap',
-                    iconColor: 'text-primary',
-                    columns: [
-                        {
-                            field: 'job_no',
-                            label: 'İş Emri No',
-                            sortable: true,
-                            formatter: (value) => `<strong>${value || '-'}</strong>`
-                        },
-                        {
-                            field: 'title',
-                            label: 'Başlık',
-                            sortable: true,
-                            formatter: (value) => value || '-'
-                        },
-                        {
-                            field: 'status_display',
-                            label: 'Durum',
-                            sortable: true,
-                            formatter: (value, row) => {
-                                if (!value || value === '-') return '-';
-                                const badgeClass = getStatusBadgeClass(row.status);
-                                return `<span class="status-badge ${badgeClass}">${value}</span>`;
-                            }
-                        },
-                        {
-                            field: 'priority_display',
-                            label: 'Öncelik',
-                            sortable: true,
-                            formatter: (value, row) => {
-                                if (!value || value === '-') return '-';
-                                const badgeClass = getPriorityBadgeClass(row.priority);
-                                return `<span class="status-badge ${badgeClass}">${value}</span>`;
-                            }
-                        },
-                        {
-                            field: 'completion_percentage',
-                            label: 'Tamamlanma',
-                            sortable: true,
-                            formatter: (value) => value ? `${parseFloat(value)}%` : '0%'
-                        }
-                    ],
-                    data: children,
-                    sortable: true,
-                    pagination: false,
-                    exportable: false,
-                    refreshable: false,
-                    small: true,
-                    striped: true,
-                    emptyMessage: 'Alt iş emri bulunamadı',
-                    emptyIcon: 'fas fa-sitemap',
-                    actions: [
-                        {
-                            key: 'view',
-                            label: 'Detay',
-                            icon: 'fas fa-eye',
-                            class: 'btn-outline-info',
-                            onClick: (row) => {
-                                viewJobOrderModal.hide();
-                                viewJobOrder(row.job_no);
-                            }
-                        }
-                    ]
-                });
-            }
-        }
+        // Set up tab click handlers for lazy loading
+        setTimeout(() => {
+            setupTabClickHandlers(jobNo, getStatusBadgeClass, getPriorityBadgeClass, formatDate);
+        }, 100);
         
-        // Initialize department tasks table
-        if (jobOrder.department_tasks && jobOrder.department_tasks.length > 0) {
-            const departmentTasksContainer = viewJobOrderModal.content.querySelector('#department-tasks-table-container');
-            if (departmentTasksContainer) {
-                const getDepartmentTaskStatusBadgeClass = (status) => {
-                    switch (status) {
-                        case 'completed': return 'status-green';
-                        case 'in_progress': return 'status-blue';
-                        case 'pending': return 'status-yellow';
-                        case 'blocked': return 'status-red';
-                        case 'skipped': return 'status-grey';
-                        default: return 'status-grey';
-                    }
-                };
-                
-                const departmentTasksTable = new TableComponent('department-tasks-table-container', {
-                    title: 'Departman Görevleri',
-                    icon: 'fas fa-tasks',
-                    iconColor: 'text-primary',
-                    columns: [
-                        {
-                            field: 'department_display',
-                            label: 'Departman',
-                            sortable: true,
-                            formatter: (value, row) => {
-                                if (!value || value === '-') return '-';
-                                
-                                // Map department values to their project page URLs
-                                const departmentUrlMap = {
-                                    'manufacturing': '/manufacturing/projects/',
-                                    'design': '/design/projects/',
-                                    'planning': '/planning/projects/',
-                                    'procurement': '/procurement/projects/',
-                                    'logistics': '/logistics/projects/',
-                                    'painting': '/painting/projects/'
-                                };
-                                
-                                const department = row.department || '';
-                                const taskId = row.id;
-                                const departmentUrl = departmentUrlMap[department];
-                                
-                                // If we have a valid department URL and task ID, make it clickable
-                                if (departmentUrl && taskId) {
-                                    const url = `${departmentUrl}?task=${encodeURIComponent(taskId)}`;
-                                    // Escape quotes in URL for HTML attribute
-                                    const escapedUrl = url.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-                                    return `<span class="department-link" data-href="${escapedUrl}" style="font-weight: 700; color: #0d6efd; text-decoration: none; cursor: pointer; user-select: none;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">${value}</span>`;
-                                }
-                                
-                                // Otherwise, just show bold text
-                                return `<strong>${value}</strong>`;
-                            }
-                        },
-                        {
-                            field: 'completion_percentage',
-                            label: 'Tamamlanma',
-                            sortable: true,
-                            formatter: (value) => {
-                                if (!value && value !== 0) return '-';
-                                const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
-                                
-                                // Determine color based on percentage
-                                let colorClass = 'bg-success';
-                                let barColor = '#10b981'; // green
-                                if (percentage === 0) {
-                                    colorClass = 'bg-secondary';
-                                    barColor = '#6b7280'; // grey
-                                } else if (percentage < 25) {
-                                    colorClass = 'bg-danger';
-                                    barColor = '#ef4444'; // red
-                                } else if (percentage < 50) {
-                                    colorClass = 'bg-warning';
-                                    barColor = '#f59e0b'; // yellow/orange
-                                } else if (percentage < 75) {
-                                    colorClass = 'bg-info';
-                                    barColor = '#3b82f6'; // blue
-                                } else if (percentage < 100) {
-                                    colorClass = 'bg-success';
-                                    barColor = '#10b981'; // green
-                                } else {
-                                    colorClass = 'bg-success';
-                                    barColor = '#059669'; // darker green for 100%
-                                }
-                                
-                                // Determine text color based on percentage (for contrast)
-                                const textColor = percentage > 50 ? '#ffffff' : '#1f2937';
-                                const textShadow = percentage > 50 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none';
-                                
-                                return `
-                                    <div style="position: relative; width: 100%;">
-                                        <div class="progress" style="height: 24px; border-radius: 6px; background-color: #e5e7eb; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
-                                            <div class="progress-bar ${colorClass}" 
-                                                 role="progressbar" 
-                                                 style="width: ${percentage}%; 
-                                                        background: linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%);
-                                                        border-radius: 6px;
-                                                        transition: width 0.6s ease;
-                                                        box-shadow: 0 2px 4px rgba(0,0,0,0.1);" 
-                                                 aria-valuenow="${percentage}" 
-                                                 aria-valuemin="0" 
-                                                 aria-valuemax="100">
-                                            </div>
-                                        </div>
-                                        <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-                                                    font-weight: 600; font-size: 0.75rem; color: ${textColor}; 
-                                                    text-shadow: ${textShadow}; pointer-events: none; white-space: nowrap; z-index: 1;">
-                                            ${percentage.toFixed(1)}%
-                                        </div>
-                                    </div>
-                                `;
-                            }
-                        },
-                        {
-                            field: 'status_display',
-                            label: 'Durum',
-                            sortable: true,
-                            formatter: (value, row) => {
-                                if (!value || value === '-') return '-';
-                                const status = row.status;
-                                const badgeClass = getDepartmentTaskStatusBadgeClass(status);
-                                return `<span class="status-badge ${badgeClass}">${value}</span>`;
-                            }
-                        },
-                        {
-                            field: 'assigned_to_name',
-                            label: 'Atanan',
-                            sortable: false,
-                            formatter: (value) => value || '-'
-                        },
-                        {
-                            field: 'target_completion_date',
-                            label: 'Hedef Tarih',
-                            sortable: true,
-                            type: 'date',
-                            formatter: (value) => formatDate(value)
-                        },
-                        {
-                            field: 'completed_at',
-                            label: 'Tamamlanma Tarihi',
-                            sortable: true,
-                            type: 'datetime',
-                            formatter: (value) => formatDate(value)
-                        }
-                    ],
-                    data: jobOrder.department_tasks || [],
-                    sortable: true,
-                    pagination: false,
-                    exportable: false,
-                    refreshable: false,
-                    small: true,
-                    striped: true,
-                    emptyMessage: 'Departman görevi bulunamadı',
-                    emptyIcon: 'fas fa-tasks'
-                });
-                
-                // Add click event delegation for department links after table is rendered
-                setTimeout(() => {
-                    const tableContainer = document.getElementById('department-tasks-table-container');
-                    if (tableContainer) {
-                        tableContainer.addEventListener('click', (e) => {
-                            const departmentLink = e.target.closest('.department-link');
-                            if (departmentLink) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                const url = departmentLink.getAttribute('data-href');
-                                if (url) {
-                                    window.location.href = url;
-                                }
-                            }
-                        });
-                    }
-                }, 200);
-            }
-        }
-        
-        // Initialize file attachments
-        const filesContainer = viewJobOrderModal.content.querySelector('#files-container');
-        if (filesContainer) {
-            // Import FileAttachments dynamically
-            const { FileAttachments } = await import('../../components/file-attachments/file-attachments.js');
-            // FileViewer is available globally as window.fileViewer
-            
-            const files = jobOrder.files || jobOrder.attachments || [];
-            
-            if (files.length > 0) {
-                const fileAttachments = new FileAttachments('files-container', {
-                    title: 'Dosyalar',
-                    titleIcon: 'fas fa-paperclip',
-                    titleIconColor: 'text-primary',
-                    layout: 'grid',
-                    onFileClick: (file) => {
-                        const fileName = file.file_name || file.name || file.filename || 'Dosya';
-                        const fileExtension = fileName.split('.').pop().toLowerCase();
-                        const fileUrl = file.file_url || file.url || file.file;
-                        
-                        if (fileUrl && window.fileViewer) {
-                            window.fileViewer.openFile(fileUrl, fileName, fileExtension);
-                        }
-                    },
-                    onDownloadClick: (fileUrl, fileName) => {
-                        const link = document.createElement('a');
-                        link.href = fileUrl;
-                        link.download = fileName;
-                        link.target = '_blank';
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                    }
-                });
-                
-                fileAttachments.setFiles(files);
-            } else {
-                filesContainer.innerHTML = '<p class="text-muted text-center py-3">Henüz dosya eklenmemiş.</p>';
-            }
-        }
+        // Data will be loaded on tab click (lazy loading)
         
         // Update URL with job_no parameter (only if not already set)
         const url = new URL(window.location);
@@ -1811,6 +1614,1617 @@ window.viewJobOrder = async function(jobNo) {
         showNotification('İş emri bilgileri yüklenirken hata oluştu', 'error');
     }
 };
+
+// Setup tab click handlers for lazy loading
+function setupTabClickHandlers(jobNo, getStatusBadgeClass, getPriorityBadgeClass, formatDate) {
+    const modal = viewJobOrderModal.modal;
+    if (!modal) return;
+    
+    // Listen for Bootstrap tab events on tab buttons
+    const tabButtons = modal.querySelectorAll('[data-bs-toggle="tab"]');
+    tabButtons.forEach(button => {
+        button.addEventListener('shown.bs.tab', async (e) => {
+            const targetTab = e.target;
+            const tabId = targetTab.getAttribute('data-bs-target');
+            
+            if (!tabId) return;
+            
+            const match = tabId.match(/#tab-(.+)-pane/);
+            if (!match) return;
+            
+            const tabName = match[1];
+            
+            switch (tabName) {
+                case 'departman-gorevleri':
+                    await loadDepartmentTasksTab(jobNo, getStatusBadgeClass, formatDate);
+                    break;
+                case 'alt-gorevler':
+                    await loadChildrenTab(jobNo, getStatusBadgeClass, getPriorityBadgeClass);
+                    break;
+                case 'dosyalar':
+                    await loadFilesTab(jobNo);
+                    break;
+                case 'topics':
+                    await loadTopicsTab(jobNo);
+                    break;
+            }
+        });
+    });
+}
+
+// Load Department Tasks Tab
+async function loadDepartmentTasksTab(jobNo, getStatusBadgeClass, formatDate) {
+    // Check cache first
+    if (jobOrderTabCache.departmentTasks !== null) {
+        renderDepartmentTasksTable(jobOrderTabCache.departmentTasks, getStatusBadgeClass, formatDate);
+        return;
+    }
+    
+    const container = viewJobOrderModal.content.querySelector('#department-tasks-table-container');
+    if (!container) return;
+    
+    // Show loading state
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
+    
+    try {
+        const response = await getJobOrderDepartmentTasks(jobNo);
+        const tasks = extractResultsFromResponse(response);
+        
+        // Cache the data
+        jobOrderTabCache.departmentTasks = tasks;
+        
+        // Render the table
+        renderDepartmentTasksTable(tasks, getStatusBadgeClass, formatDate);
+    } catch (error) {
+        console.error('Error loading department tasks:', error);
+        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Departman görevleri yüklenirken hata oluştu.</div>';
+    }
+}
+
+// Render Department Tasks Table
+function renderDepartmentTasksTable(tasks, getStatusBadgeClass, formatDate) {
+    const container = viewJobOrderModal.content.querySelector('#department-tasks-table-container');
+    if (!container) return;
+    
+    if (tasks.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center py-3">Departman görevi bulunamadı.</p>';
+        return;
+    }
+    
+    const getDepartmentTaskStatusBadgeClass = (status) => {
+        switch (status) {
+            case 'completed': return 'status-green';
+            case 'in_progress': return 'status-blue';
+            case 'pending': return 'status-yellow';
+            case 'blocked': return 'status-red';
+            case 'skipped': return 'status-grey';
+            default: return 'status-grey';
+        }
+    };
+    
+    const departmentTasksTable = new TableComponent('department-tasks-table-container', {
+        title: 'Departman Görevleri',
+        icon: 'fas fa-tasks',
+        iconColor: 'text-primary',
+        columns: [
+            {
+                field: 'department_display',
+                label: 'Departman',
+                sortable: true,
+                formatter: (value, row) => {
+                    if (!value || value === '-') return '-';
+                    
+                    const departmentUrlMap = {
+                        'manufacturing': '/manufacturing/projects/',
+                        'design': '/design/projects/',
+                        'planning': '/planning/projects/',
+                        'procurement': '/procurement/projects/',
+                        'logistics': '/logistics/projects/',
+                        'painting': '/painting/projects/'
+                    };
+                    
+                    const department = row.department || '';
+                    const taskId = row.id;
+                    const departmentUrl = departmentUrlMap[department];
+                    
+                    if (departmentUrl && taskId) {
+                        const url = `${departmentUrl}?task=${encodeURIComponent(taskId)}`;
+                        const escapedUrl = url.replace(/'/g, "&#39;").replace(/"/g, "&quot;");
+                        return `<span class="department-link" data-href="${escapedUrl}" style="font-weight: 700; color: #0d6efd; text-decoration: none; cursor: pointer; user-select: none;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">${value}</span>`;
+                    }
+                    
+                    return `<strong>${value}</strong>`;
+                }
+            },
+            {
+                field: 'completion_percentage',
+                label: 'Tamamlanma',
+                sortable: true,
+                formatter: (value) => {
+                    if (!value && value !== 0) return '-';
+                    const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
+                    
+                    let colorClass = 'bg-success';
+                    let barColor = '#10b981';
+                    if (percentage === 0) {
+                        colorClass = 'bg-secondary';
+                        barColor = '#6b7280';
+                    } else if (percentage < 25) {
+                        colorClass = 'bg-danger';
+                        barColor = '#ef4444';
+                    } else if (percentage < 50) {
+                        colorClass = 'bg-warning';
+                        barColor = '#f59e0b';
+                    } else if (percentage < 75) {
+                        colorClass = 'bg-info';
+                        barColor = '#3b82f6';
+                    } else if (percentage < 100) {
+                        colorClass = 'bg-success';
+                        barColor = '#10b981';
+                    } else {
+                        colorClass = 'bg-success';
+                        barColor = '#059669';
+                    }
+                    
+                    const textColor = percentage > 50 ? '#ffffff' : '#1f2937';
+                    const textShadow = percentage > 50 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none';
+                    
+                    return `
+                        <div style="position: relative; width: 100%;">
+                            <div class="progress" style="height: 24px; border-radius: 6px; background-color: #e5e7eb; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                                <div class="progress-bar ${colorClass}" 
+                                     role="progressbar" 
+                                     style="width: ${percentage}%; 
+                                            background: linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%);
+                                            border-radius: 6px;
+                                            transition: width 0.6s ease;
+                                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);" 
+                                     aria-valuenow="${percentage}" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                </div>
+                            </div>
+                            <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                                        font-weight: 600; font-size: 0.75rem; color: ${textColor}; 
+                                        text-shadow: ${textShadow}; pointer-events: none; white-space: nowrap; z-index: 1;">
+                                ${percentage.toFixed(1)}%
+                            </div>
+                        </div>
+                    `;
+                }
+            },
+            {
+                field: 'status_display',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value, row) => {
+                    if (!value || value === '-') return '-';
+                    const status = row.status;
+                    const badgeClass = getDepartmentTaskStatusBadgeClass(status);
+                    return `<span class="status-badge ${badgeClass}">${value}</span>`;
+                }
+            },
+            {
+                field: 'assigned_to_name',
+                label: 'Atanan',
+                sortable: false,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'target_completion_date',
+                label: 'Hedef Tarih',
+                sortable: true,
+                type: 'date',
+                formatter: (value) => formatDate(value)
+            },
+            {
+                field: 'completed_at',
+                label: 'Tamamlanma Tarihi',
+                sortable: true,
+                type: 'datetime',
+                formatter: (value) => formatDate(value)
+            }
+        ],
+        data: tasks,
+        sortable: true,
+        pagination: false,
+        exportable: false,
+        refreshable: false,
+        small: true,
+        striped: true,
+        emptyMessage: 'Departman görevi bulunamadı',
+        emptyIcon: 'fas fa-tasks'
+    });
+    
+    // Add click event delegation for department links
+    setTimeout(() => {
+        const tableContainer = document.getElementById('department-tasks-table-container');
+        if (tableContainer) {
+            tableContainer.addEventListener('click', (e) => {
+                const departmentLink = e.target.closest('.department-link');
+                if (departmentLink) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const url = departmentLink.getAttribute('data-href');
+                    if (url) {
+                        window.location.href = url;
+                    }
+                }
+            });
+        }
+    }, 200);
+}
+
+// Load Children Tab
+async function loadChildrenTab(jobNo, getStatusBadgeClass, getPriorityBadgeClass) {
+    // Check cache first
+    if (jobOrderTabCache.children !== null) {
+        renderChildrenTable(jobOrderTabCache.children, getStatusBadgeClass, getPriorityBadgeClass);
+        return;
+    }
+    
+    const container = viewJobOrderModal.content.querySelector('#children-table-container');
+    if (!container) return;
+    
+    // Show loading state
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
+    
+    try {
+        const children = await getJobOrderChildren(jobNo);
+        
+        // Cache the data
+        jobOrderTabCache.children = children;
+        
+        // Render the table
+        renderChildrenTable(children, getStatusBadgeClass, getPriorityBadgeClass);
+    } catch (error) {
+        console.error('Error loading children:', error);
+        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Alt iş emirleri yüklenirken hata oluştu.</div>';
+    }
+}
+
+// Render Children Table
+function renderChildrenTable(children, getStatusBadgeClass, getPriorityBadgeClass) {
+    const container = viewJobOrderModal.content.querySelector('#children-table-container');
+    if (!container) return;
+    
+    if (children.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center py-3">Alt iş emri bulunamadı.</p>';
+        return;
+    }
+    
+    const childrenTable = new TableComponent('children-table-container', {
+        title: 'Alt İş Emirleri',
+        icon: 'fas fa-sitemap',
+        iconColor: 'text-primary',
+        columns: [
+            {
+                field: 'job_no',
+                label: 'İş Emri No',
+                sortable: true,
+                formatter: (value) => `<strong>${value || '-'}</strong>`
+            },
+            {
+                field: 'title',
+                label: 'Başlık',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'status_display',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value, row) => {
+                    if (!value || value === '-') return '-';
+                    const badgeClass = getStatusBadgeClass(row.status);
+                    return `<span class="status-badge ${badgeClass}">${value}</span>`;
+                }
+            },
+            {
+                field: 'priority_display',
+                label: 'Öncelik',
+                sortable: true,
+                formatter: (value, row) => {
+                    if (!value || value === '-') return '-';
+                    const badgeClass = getPriorityBadgeClass(row.priority);
+                    return `<span class="status-badge ${badgeClass}">${value}</span>`;
+                }
+            },
+            {
+                field: 'completion_percentage',
+                label: 'Tamamlanma',
+                sortable: true,
+                formatter: (value) => value ? `${parseFloat(value)}%` : '0%'
+            }
+        ],
+        data: children,
+        sortable: true,
+        pagination: false,
+        exportable: false,
+        refreshable: false,
+        small: true,
+        striped: true,
+        emptyMessage: 'Alt iş emri bulunamadı',
+        emptyIcon: 'fas fa-sitemap',
+        actions: [
+            {
+                key: 'view',
+                label: 'Detay',
+                icon: 'fas fa-eye',
+                class: 'btn-outline-info',
+                onClick: (row) => {
+                    viewJobOrderModal.hide();
+                    viewJobOrder(row.job_no);
+                }
+            }
+        ]
+    });
+}
+
+// Load Files Tab
+async function loadFilesTab(jobNo) {
+    // Check cache first
+    if (jobOrderTabCache.files !== null) {
+        renderFilesTab(jobOrderTabCache.files);
+        return;
+    }
+    
+    const container = viewJobOrderModal.content.querySelector('#files-container');
+    if (!container) return;
+    
+    // Show loading state
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
+    
+    try {
+        const files = await getJobOrderFiles(jobNo);
+        
+        // Cache the data
+        jobOrderTabCache.files = files;
+        
+        // Render the files
+        renderFilesTab(files);
+    } catch (error) {
+        console.error('Error loading files:', error);
+        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Dosyalar yüklenirken hata oluştu.</div>';
+    }
+}
+
+// Render Files Tab
+async function renderFilesTab(files) {
+    const container = viewJobOrderModal.content.querySelector('#files-container');
+    if (!container) return;
+    
+    if (files.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center py-3">Henüz dosya eklenmemiş.</p>';
+        return;
+    }
+    
+    const { FileAttachments } = await import('../../components/file-attachments/file-attachments.js');
+    
+    const fileAttachments = new FileAttachments('files-container', {
+        title: 'Dosyalar',
+        titleIcon: 'fas fa-paperclip',
+        titleIconColor: 'text-primary',
+        layout: 'grid',
+        onFileClick: async (file) => {
+            const fileName = file.file_name || 'Dosya';
+            const fileExtension = file.file_extension || (fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '');
+            const fileUrl = file.file_url;
+            
+            if (!fileUrl) {
+                console.error('File URL is missing');
+                return;
+            }
+            
+            let viewer = window.fileViewer;
+            if (!viewer) {
+                try {
+                    const { FileViewer } = await import('../../components/file-viewer/file-viewer.js');
+                    viewer = new FileViewer();
+                    viewer.setDownloadCallback(async () => {
+                        await viewer.downloadFile(fileUrl, fileName);
+                    });
+                } catch (error) {
+                    console.error('Error loading FileViewer:', error);
+                    showNotification('Dosya görüntüleyici yüklenemedi', 'error');
+                    return;
+                }
+            }
+            
+            if (viewer) {
+                viewer.openFile(fileUrl, fileName, fileExtension);
+            }
+        },
+        onDownloadClick: async (fileUrl, fileName) => {
+            try {
+                const response = await fetch(fileUrl);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = fileName;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+                window.URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('Error downloading file:', error);
+                const link = document.createElement('a');
+                link.href = fileUrl;
+                link.download = fileName;
+                link.target = '_blank';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+    });
+    
+    // Map files to FileAttachments format
+    const mappedFiles = files.map(file => ({
+        file_url: file.file_url || file.url || file.file || '',
+        file_name: file.name || file.file_name || 'Dosya',
+        uploaded_at: file.uploaded_at,
+        uploaded_by_username: file.uploaded_by || 'Bilinmeyen'
+    }));
+    
+    fileAttachments.setFiles(mappedFiles);
+}
+
+// Load Topics Tab
+async function loadTopicsTab(jobNo) {
+    // Check cache first
+    if (jobOrderTabCache.topics !== null) {
+        const container = viewJobOrderModal.content.querySelector('#topics-container');
+        if (container) {
+            renderTopicsUI(container, jobOrderTabCache.topics, jobNo);
+        }
+        return;
+    }
+    
+    const container = viewJobOrderModal.content.querySelector('#topics-container');
+    if (!container) return;
+    
+    // Show loading state
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
+    
+    try {
+        const response = await listTopics({ job_order: jobNo, ordering: '-created_at' });
+        const topics = extractResultsFromResponse(response);
+        
+        // Cache the data
+        jobOrderTabCache.topics = topics;
+        
+        // Render topics UI
+        renderTopicsUI(container, topics, jobNo);
+    } catch (error) {
+        console.error('Error loading topics:', error);
+        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Tartışmalar yüklenirken hata oluştu.</div>';
+    }
+}
+
+// Initialize Topics Tab (kept for backward compatibility, but now uses loadTopicsTab)
+async function initializeTopicsTab(jobNo) {
+    await loadTopicsTab(jobNo);
+}
+
+// Render Topics UI
+function renderTopicsUI(container, topics, jobNo) {
+    const getPriorityBadgeClass = (priority) => {
+        switch (priority) {
+            case 'urgent': return 'status-red';
+            case 'high': return 'status-yellow';
+            case 'normal': return 'status-blue';
+            case 'low': return 'status-grey';
+            default: return 'status-grey';
+        }
+    };
+    
+    const formatDateTime = (dateString) => {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        return date.toLocaleString('tr-TR', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+    
+    const formatDate = (dateString) => {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        return date.toLocaleDateString('tr-TR', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric'
+        });
+    };
+    
+    container.innerHTML = `
+        <div class="topics-section">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0">
+                    <i class="fas fa-comments me-2 text-primary"></i>
+                    Tartışmalar (${topics.length})
+                </h6>
+                <button class="btn btn-sm btn-primary" id="create-topic-btn">
+                    <i class="fas fa-plus me-1"></i>Yeni Tartışma
+                </button>
+            </div>
+            
+            <div id="topics-list">
+                ${topics.length === 0 ? `
+                    <div class="text-center py-5 text-muted">
+                        <i class="fas fa-comments fa-3x mb-3"></i>
+                        <p>Henüz tartışma yok.</p>
+                    </div>
+                ` : topics.map(topic => `
+                    <div class="topic-item card mb-3" data-topic-id="${topic.id}">
+                        <div class="card-body">
+                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                <div class="flex-grow-1">
+                                    <h6 class="mb-1">
+                                        <a href="#" class="topic-link text-decoration-none" data-topic-id="${topic.id}">
+                                            ${topic.title || 'Başlıksız'}
+                                        </a>
+                                    </h6>
+                                    <div class="text-muted small">
+                                        <span class="status-badge ${getPriorityBadgeClass(topic.priority)} me-2">${topic.priority_display || topic.priority}</span>
+                                        <span>${topic.created_by_name || 'Bilinmeyen'}</span>
+                                        <span class="mx-1">•</span>
+                                        <span>${formatDateTime(topic.created_at)}</span>
+                                        ${topic.comment_count > 0 ? `
+                                            <span class="mx-1">•</span>
+                                            <span><i class="fas fa-comments me-1"></i>${topic.comment_count} yorum</span>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        </div>
+    `;
+    
+    // Attach event listeners
+    const createTopicBtn = container.querySelector('#create-topic-btn');
+    if (createTopicBtn) {
+        createTopicBtn.addEventListener('click', () => {
+            showCreateTopicModal(jobNo);
+        });
+    }
+    
+    const topicLinks = container.querySelectorAll('.topic-link');
+    topicLinks.forEach(link => {
+        link.addEventListener('click', (e) => {
+            e.preventDefault();
+            const topicId = parseInt(link.getAttribute('data-topic-id'));
+            if (topicId) {
+                viewTopicDetail(topicId, jobNo);
+            }
+        });
+    });
+}
+
+// Helper functions for mentions (reusable)
+function getUserInitials(name) {
+    if (!name) return '?';
+    const parts = name.trim().split(' ');
+    if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+}
+
+function getAvatarColor(name) {
+    if (!name) return '#6c757d';
+    const colors = [
+        '#0052CC', '#0065FF', '#0747A6', '#00875A', '#36B37E',
+        '#FF5630', '#FFAB00', '#FF991F', '#6554C0', '#8777D9',
+        '#00B8D9', '#00C7E6', '#DE350B', '#FF8F73', '#253858'
+    ];
+    let hash = 0;
+    for (let i = 0; i < name.length; i++) {
+        hash = name.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return colors[Math.abs(hash) % colors.length];
+}
+
+// Initialize @mention functionality for any textarea
+function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
+    let allUsers = [];
+    let mentionStartPos = -1;
+    let selectedSuggestionIndex = -1;
+    
+    // Load users for @mentions
+    (async () => {
+        try {
+            allUsers = await fetchAllUsers();
+        } catch (error) {
+            console.error('Error loading users for mentions:', error);
+        }
+    })();
+    
+    // Handle @mention detection
+    textarea.addEventListener('input', (e) => {
+        const text = e.target.value;
+        const cursorPos = e.target.selectionStart;
+        const textBeforeCursor = text.substring(0, cursorPos);
+        
+        // Check if we're typing after @
+        const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+        
+        if (mentionMatch) {
+            const query = mentionMatch[1].toLowerCase();
+            mentionStartPos = cursorPos - query.length - 1; // -1 for @
+            
+            // Filter users based on query
+            const filteredUsers = allUsers.filter(user => {
+                const username = (user.username || '').toLowerCase();
+                const fullName = (user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || '').toLowerCase();
+                return username.includes(query) || fullName.includes(query);
+            }).slice(0, 10); // Limit to 10 suggestions
+            
+            if (filteredUsers.length > 0) {
+                selectedSuggestionIndex = -1;
+                renderMentionSuggestions(filteredUsers, query, mentionSuggestionsContainer, textarea);
+            } else {
+                hideMentionSuggestions(mentionSuggestionsContainer);
+            }
+        } else {
+            hideMentionSuggestions(mentionSuggestionsContainer);
+        }
+    });
+    
+    // Handle keyboard navigation in suggestions
+    textarea.addEventListener('keydown', (e) => {
+        if (mentionSuggestionsContainer.style.display === 'none') return;
+        
+        const suggestionItems = mentionSuggestionsContainer.querySelectorAll('.mention-suggestion-item');
+        if (suggestionItems.length === 0) return;
+        
+        if (e.key === 'ArrowDown') {
+            e.preventDefault();
+            selectedSuggestionIndex = Math.min(selectedSuggestionIndex + 1, suggestionItems.length - 1);
+            updateSuggestionSelection(suggestionItems);
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault();
+            selectedSuggestionIndex = Math.max(selectedSuggestionIndex - 1, -1);
+            updateSuggestionSelection(suggestionItems);
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+            if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < suggestionItems.length) {
+                e.preventDefault();
+                const selectedItem = suggestionItems[selectedSuggestionIndex];
+                const username = selectedItem.dataset.username;
+                insertMention(username, textarea, mentionStartPos);
+                hideMentionSuggestions(mentionSuggestionsContainer);
+            }
+        } else if (e.key === 'Escape') {
+            hideMentionSuggestions(mentionSuggestionsContainer);
+        }
+    });
+    
+    // Hide suggestions when clicking outside
+    const clickHandler = (e) => {
+        if (!textarea.contains(e.target) && !mentionSuggestionsContainer.contains(e.target)) {
+            hideMentionSuggestions(mentionSuggestionsContainer);
+        }
+    };
+    document.addEventListener('click', clickHandler);
+    
+    function renderMentionSuggestions(users, query, container, textarea) {
+        container.innerHTML = users.map((user, index) => {
+            const username = user.username || '';
+            const fullName = user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || username;
+            const initials = getUserInitials(fullName);
+            const avatarColor = getAvatarColor(fullName);
+            
+            return `
+                <div class="mention-suggestion-item ${index === 0 ? 'selected' : ''}" 
+                     data-username="${username}" 
+                     data-full-name="${fullName}"
+                     style="cursor: pointer; padding: 8px 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e1e5e9;">
+                    <div class="mention-avatar" style="width: 24px; height: 24px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; flex-shrink: 0;">
+                        ${initials}
+                    </div>
+                    <div class="flex-grow-1">
+                        <div style="font-weight: 500; color: #172b4d; font-size: 14px;">${fullName}</div>
+                        <div style="font-size: 12px; color: #6c757d;">@${username}</div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+        
+        container.style.display = 'block';
+        
+        // Add click handlers
+        container.querySelectorAll('.mention-suggestion-item').forEach((item, index) => {
+            item.addEventListener('click', () => {
+                const username = item.dataset.username;
+                insertMention(username, textarea, mentionStartPos);
+                hideMentionSuggestions(container);
+            });
+            
+            item.addEventListener('mouseenter', () => {
+                selectedSuggestionIndex = index;
+                updateSuggestionSelection(container.querySelectorAll('.mention-suggestion-item'));
+            });
+        });
+    }
+    
+    function updateSuggestionSelection(items) {
+        items.forEach((item, index) => {
+            if (index === selectedSuggestionIndex) {
+                item.style.backgroundColor = '#e3fcef';
+                item.classList.add('selected');
+            } else {
+                item.style.backgroundColor = '';
+                item.classList.remove('selected');
+            }
+        });
+    }
+    
+    function insertMention(username, textarea, startPos) {
+        const text = textarea.value;
+        const beforeMention = text.substring(0, startPos);
+        const afterMention = text.substring(textarea.selectionStart);
+        const newText = beforeMention + `@${username} ` + afterMention;
+        
+        textarea.value = newText;
+        const newCursorPos = startPos + username.length + 2; // +2 for @ and space
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+        textarea.focus();
+    }
+    
+    function hideMentionSuggestions(container) {
+        container.style.display = 'none';
+        selectedSuggestionIndex = -1;
+    }
+}
+
+// View Topic Detail
+async function viewTopicDetail(topicId, jobNo) {
+    try {
+        const [topic, comments] = await Promise.all([
+            getTopic(topicId),
+            getTopicComments(topicId)
+        ]);
+
+        // Keep URL in sync so topic detail can be shared via email
+        const resolvedJobNo = jobNo || topic.job_order || topic.job_order_no || null;
+        {
+            const url = new URL(window.location);
+            if (resolvedJobNo) {
+                url.searchParams.set('job_no', resolvedJobNo);
+            }
+            url.searchParams.set('topic_id', topicId.toString());
+            window.history.pushState({}, '', url);
+        }
+        
+        // Create detail modal
+        const detailModal = new DisplayModal('topic-detail-modal-container', {
+            title: `Tartışma: ${topic.title}`,
+            icon: 'fas fa-comments',
+            size: 'lg',
+            showEditButton: false
+        });
+
+        // Remove topic_id from URL when the topic modal is closed (keep job_no)
+        detailModal.onCloseCallback(() => {
+            const url = new URL(window.location);
+            url.searchParams.delete('topic_id');
+            window.history.replaceState({}, '', url);
+        });
+        
+        const getPriorityBadgeClass = (priority) => {
+            switch (priority) {
+                case 'urgent': return 'status-red';
+                case 'high': return 'status-yellow';
+                case 'normal': return 'status-blue';
+                case 'low': return 'status-grey';
+                default: return 'status-grey';
+            }
+        };
+        
+        const formatDateTime = (dateString) => {
+            if (!dateString) return '-';
+            const date = new Date(dateString);
+            return date.toLocaleString('tr-TR', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+        };
+        
+        // Format content with @mentions - enhanced version
+        const formatContent = (content, mentionedUsers = []) => {
+            if (!content) return '';
+            let formatted = content;
+            
+            // Create a map of username to user data for quick lookup
+            const userMap = {};
+            if (mentionedUsers && Array.isArray(mentionedUsers)) {
+                mentionedUsers.forEach(user => {
+                    if (user.username) {
+                        userMap[user.username] = user;
+                    }
+                });
+            }
+            
+            // Replace @mentions with styled badges
+            formatted = formatted.replace(/@(\w+)/g, (match, username) => {
+                const user = userMap[username];
+                const displayName = user ? (user.full_name || user.username) : username;
+                return `<span class="mention-badge" data-username="${username}">@${displayName}</span>`;
+            });
+            
+            // Preserve line breaks
+            formatted = formatted.replace(/\n/g, '<br>');
+            
+            return formatted;
+        };
+        
+        
+        detailModal.addSection({
+            title: 'Tartışma Detayı',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary',
+            fields: [
+                {
+                    id: 'topic_title',
+                    label: 'Başlık',
+                    value: topic.title,
+                    icon: 'fas fa-heading',
+                    colSize: 12,
+                    layout: 'horizontal'
+                },
+                {
+                    id: 'topic_priority',
+                    label: 'Öncelik',
+                    value: topic.priority_display,
+                    icon: 'fas fa-exclamation-triangle',
+                    colSize: 12,
+                    layout: 'horizontal',
+                    format: (value) => `<span class="status-badge ${getPriorityBadgeClass(topic.priority)}">${value}</span>`
+                },
+                {
+                    id: 'topic_created_by',
+                    label: 'Oluşturan',
+                    value: topic.created_by_name,
+                    icon: 'fas fa-user',
+                    colSize: 12,
+                    layout: 'horizontal'
+                },
+                {
+                    id: 'topic_created_at',
+                    label: 'Oluşturulma',
+                    value: formatDateTime(topic.created_at),
+                    icon: 'fas fa-calendar',
+                    colSize: 12,
+                    layout: 'horizontal'
+                }
+            ]
+        });
+        
+        detailModal.addCustomSection({
+            id: 'topic-content',
+            customContent: `
+                <div class="mb-3">
+                    <h6 class="mb-2"><i class="fas fa-align-left me-2"></i>İçerik</h6>
+                    <div class="p-3 bg-light rounded" style="line-height: 1.6;">${formatContent(topic.content, topic.mentioned_users_data || [])}</div>
+                </div>
+            `
+        });
+        
+        if (topic.attachments_data && topic.attachments_data.length > 0) {
+            detailModal.addCustomSection({
+                id: 'topic-attachments',
+                customContent: `
+                    <div class="mb-3">
+                        <div id="topic-attachments-container"></div>
+                    </div>
+                `
+            });
+        }
+        
+        detailModal.addCustomSection({
+            id: 'topic-comments',
+            customContent: `
+                <div class="mb-3">
+                    <h6 class="mb-3">
+                        <i class="fas fa-comments me-2"></i>Yorumlar (${comments.length})
+                    </h6>
+                    <div id="comments-list" class="mb-4">
+                        ${comments.length === 0 ? '<p class="text-muted text-center py-4">Henüz yorum yok.</p>' : comments.map(comment => {
+                            const initials = getUserInitials(comment.created_by_name);
+                            const avatarColor = getAvatarColor(comment.created_by_name);
+                            return `
+                            <div class="comment-item mb-3 pb-3 border-bottom">
+                                <div class="d-flex gap-3">
+                                    <div class="comment-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0;">
+                                        ${initials}
+                                    </div>
+                                    <div class="flex-grow-1">
+                                        <div class="d-flex align-items-center gap-2 mb-1">
+                                            <span class="fw-medium" style="color: #172b4d;">${comment.created_by_name}</span>
+                                            <span class="text-muted small">${formatDateTime(comment.created_at)}</span>
+                                            ${comment.is_edited ? '<span class="text-muted small"><i class="fas fa-edit me-1"></i>Düzenlendi</span>' : ''}
+                                        </div>
+                                        <div class="comment-content" style="color: #172b4d; line-height: 1.6; margin-bottom: 8px;">
+                                            ${formatContent(comment.content, comment.mentioned_users_data || [])}
+                                        </div>
+                                        ${comment.attachments_data && comment.attachments_data.length > 0 ? `
+                                            <div class="mt-2" id="comment-attachments-${comment.id}"></div>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                        }).join('')}
+                    </div>
+                    <div class="border-top pt-3">
+                        <div class="d-flex gap-3">
+                            <div class="comment-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: #0052CC; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0;">
+                                <i class="fas fa-user"></i>
+                            </div>
+                            <div class="flex-grow-1">
+                                <div class="position-relative">
+                                    <textarea id="new-comment-text" class="form-control mb-2" rows="3" placeholder="Yorum yazın... (@ile kullanıcı etiketleyin)" style="resize: vertical;"></textarea>
+                                    <div id="mention-suggestions" class="mention-suggestions" style="display: none;"></div>
+                                </div>
+                                <div class="mb-2">
+                                    <label class="form-label small">
+                                        <i class="fas fa-paperclip me-1"></i>Dosyalar (Opsiyonel)
+                                    </label>
+                                    <input type="file" class="form-control form-control-sm" id="comment-files-input" multiple>
+                                    <div id="comment-files-preview" class="mt-1"></div>
+                                </div>
+                                <button class="btn btn-sm btn-primary" id="add-comment-btn" data-topic-id="${topicId}">
+                                    <i class="fas fa-paper-plane me-1"></i>Yorum Ekle
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `
+        });
+        
+        detailModal.render();
+        detailModal.show();
+        
+        // Initialize FileAttachments for topic attachments
+        setTimeout(async () => {
+            const topicAttachmentsContainer = document.getElementById('topic-attachments-container');
+            if (topicAttachmentsContainer && topic.attachments_data && topic.attachments_data.length > 0) {
+                const { FileAttachments } = await import('../../components/file-attachments/file-attachments.js');
+                
+                // Map API response to FileAttachments format
+                const mappedFiles = topic.attachments_data.map(att => {
+                    // Use file_url from API response (already a full URL with signed parameters)
+                    const fileUrl = att.file_url || att.file || '';
+                    return {
+                        file_url: fileUrl,
+                        file_name: att.name || 'Dosya',
+                        uploaded_at: att.uploaded_at,
+                        uploaded_by_username: att.uploaded_by || 'Bilinmeyen'
+                    };
+                });
+                
+                const fileAttachments = new FileAttachments('topic-attachments-container', {
+                    title: 'Ekler',
+                    titleIcon: 'fas fa-paperclip',
+                    titleIconColor: 'text-primary',
+                    layout: 'grid',
+                    onFileClick: async (file) => {
+                        const fileName = file.file_name || 'Dosya';
+                        // Use file_extension from file object if available (FileAttachments already extracts it)
+                        const fileExtension = file.file_extension || (fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '');
+                        const fileUrl = file.file_url;
+                        
+                        if (!fileUrl) {
+                            console.error('File URL is missing');
+                            return;
+                        }
+                        
+                        // Wait for fileViewer to be available or import it
+                        let viewer = window.fileViewer;
+                        if (!viewer) {
+                            try {
+                                const { FileViewer } = await import('../../components/file-viewer/file-viewer.js');
+                                viewer = new FileViewer();
+                                // Set download callback for authenticated URLs
+                                viewer.setDownloadCallback(async () => {
+                                    await viewer.downloadFile(fileUrl, fileName);
+                                });
+                            } catch (error) {
+                                console.error('Error loading FileViewer:', error);
+                                showNotification('Dosya görüntüleyici yüklenemedi', 'error');
+                                return;
+                            }
+                        }
+                        
+                        if (viewer) {
+                            viewer.openFile(fileUrl, fileName, fileExtension);
+                        }
+                    },
+                    onDownloadClick: async (fileUrl, fileName) => {
+                        try {
+                            // For signed URLs, fetch as blob and download
+                            const response = await fetch(fileUrl);
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            const blob = await response.blob();
+                            const url = window.URL.createObjectURL(blob);
+                            const link = document.createElement('a');
+                            link.href = url;
+                            link.download = fileName;
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                            window.URL.revokeObjectURL(url);
+                        } catch (error) {
+                            console.error('Error downloading file:', error);
+                            // Fallback to direct link
+                            const link = document.createElement('a');
+                            link.href = fileUrl;
+                            link.download = fileName;
+                            link.target = '_blank';
+                            document.body.appendChild(link);
+                            link.click();
+                            document.body.removeChild(link);
+                        }
+                    }
+                });
+                
+                fileAttachments.setFiles(mappedFiles);
+            }
+            
+            // Initialize FileAttachments for comment attachments
+            comments.forEach(comment => {
+                if (comment.attachments_data && comment.attachments_data.length > 0) {
+                    const commentAttachmentsContainer = document.getElementById(`comment-attachments-${comment.id}`);
+                    if (commentAttachmentsContainer) {
+                        (async () => {
+                            const { FileAttachments } = await import('../../components/file-attachments/file-attachments.js');
+                            
+                            // Map API response to FileAttachments format
+                            const mappedFiles = comment.attachments_data.map(att => {
+                                // Use file_url from API response (already a full URL with signed parameters)
+                                const fileUrl = att.file_url || att.file || '';
+                                return {
+                                    file_url: fileUrl,
+                                    file_name: att.name || 'Dosya',
+                                    uploaded_at: att.uploaded_at,
+                                    uploaded_by_username: att.uploaded_by || 'Bilinmeyen'
+                                };
+                            });
+                            
+                            const fileAttachments = new FileAttachments(`comment-attachments-${comment.id}`, {
+                                title: '',
+                                showTitle: false,
+                                layout: 'list',
+                                maxThumbnailSize: 50,
+                                onFileClick: async (file) => {
+                                    const fileName = file.file_name || 'Dosya';
+                                    // Use file_extension from file object if available (FileAttachments already extracts it)
+                                    const fileExtension = file.file_extension || (fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '');
+                                    const fileUrl = file.file_url;
+                                    
+                                    if (!fileUrl) {
+                                        console.error('File URL is missing');
+                                        return;
+                                    }
+                                    
+                                    // Wait for fileViewer to be available or import it
+                                    let viewer = window.fileViewer;
+                                    if (!viewer) {
+                                        try {
+                                            const { FileViewer } = await import('../../components/file-viewer/file-viewer.js');
+                                            viewer = new FileViewer();
+                                            // Set download callback for authenticated URLs
+                                            viewer.setDownloadCallback(async () => {
+                                                await viewer.downloadFile(fileUrl, fileName);
+                                            });
+                                        } catch (error) {
+                                            console.error('Error loading FileViewer:', error);
+                                            showNotification('Dosya görüntüleyici yüklenemedi', 'error');
+                                            return;
+                                        }
+                                    }
+                                    
+                                    if (viewer) {
+                                        viewer.openFile(fileUrl, fileName, fileExtension);
+                                    }
+                                },
+                                onDownloadClick: async (fileUrl, fileName) => {
+                                    try {
+                                        // For signed URLs, fetch as blob and download
+                                        const response = await fetch(fileUrl);
+                                        if (!response.ok) {
+                                            throw new Error(`HTTP error! status: ${response.status}`);
+                                        }
+                                        const blob = await response.blob();
+                                        const url = window.URL.createObjectURL(blob);
+                                        const link = document.createElement('a');
+                                        link.href = url;
+                                        link.download = fileName;
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                        window.URL.revokeObjectURL(url);
+                                    } catch (error) {
+                                        console.error('Error downloading file:', error);
+                                        // Fallback to direct link
+                                        const link = document.createElement('a');
+                                        link.href = fileUrl;
+                                        link.download = fileName;
+                                        link.target = '_blank';
+                                        document.body.appendChild(link);
+                                        link.click();
+                                        document.body.removeChild(link);
+                                    }
+                                }
+                            });
+                            
+                            fileAttachments.setFiles(mappedFiles);
+                        })();
+                    }
+                }
+            });
+        }, 100);
+        
+        // Initialize @mention functionality for comments
+        const commentTextarea = document.getElementById('new-comment-text');
+        const mentionSuggestions = document.getElementById('mention-suggestions');
+        
+        if (commentTextarea && mentionSuggestions) {
+            initializeMentionFunctionality(commentTextarea, mentionSuggestions);
+        }
+        
+        // Handle file selection preview for comments
+        const commentFileInput = document.getElementById('comment-files-input');
+        const commentFilePreview = document.getElementById('comment-files-preview');
+        
+        if (commentFileInput) {
+            const updateCommentFilePreview = () => {
+                const files = Array.from(commentFileInput.files);
+                if (files.length > 0) {
+                    commentFilePreview.innerHTML = `
+                        <div class="d-flex flex-wrap gap-2">
+                            ${files.map((file, index) => `
+                                <span class="badge bg-secondary d-flex align-items-center gap-1">
+                                    <i class="fas fa-file me-1"></i>${file.name}
+                                    <button type="button" class="btn-close btn-close-white btn-sm" data-file-index="${index}" style="font-size: 0.7rem;"></button>
+                                </span>
+                            `).join('')}
+                        </div>
+                    `;
+                    
+                    // Handle remove file buttons
+                    commentFilePreview.querySelectorAll('.btn-close').forEach(btn => {
+                        btn.addEventListener('click', () => {
+                            const index = parseInt(btn.getAttribute('data-file-index'));
+                            const dt = new DataTransfer();
+                            const currentFiles = Array.from(commentFileInput.files);
+                            currentFiles.forEach((f, i) => {
+                                if (i !== index) dt.items.add(f);
+                            });
+                            commentFileInput.files = dt.files;
+                            updateCommentFilePreview();
+                        });
+                    });
+                } else {
+                    commentFilePreview.innerHTML = '';
+                }
+            };
+            
+            commentFileInput.addEventListener('change', updateCommentFilePreview);
+        }
+        
+        // Add comment button
+        const addCommentBtn = document.getElementById('add-comment-btn');
+        if (addCommentBtn) {
+            addCommentBtn.addEventListener('click', async () => {
+                const commentText = document.getElementById('new-comment-text').value.trim();
+                if (!commentText) {
+                    showNotification('Lütfen yorum metni girin', 'error');
+                    return;
+                }
+                
+                try {
+                    // Create comment first and get the response with ID
+                    const commentResponse = await createComment({
+                        topic: topicId,
+                        content: commentText
+                    });
+                    
+                    // Extract comment ID from response
+                    const commentId = commentResponse.id;
+                    if (!commentId) {
+                        throw new Error('Comment ID not found in response');
+                    }
+                    
+                    // Upload files if any, using the comment ID from response
+                    const files = commentFileInput ? Array.from(commentFileInput.files) : [];
+                    if (files.length > 0) {
+                        try {
+                            // Upload files one by one
+                            for (const file of files) {
+                                await uploadCommentAttachment(commentId, file);
+                            }
+                        } catch (fileError) {
+                            console.error('Error uploading files:', fileError);
+                            showNotification('Yorum eklendi ancak bazı dosyalar yüklenemedi', 'warning');
+                        }
+                    }
+                    
+                    showNotification('Yorum başarıyla eklendi', 'success');
+                    
+                    // Clear the textarea and file input
+                    if (commentTextarea) {
+                        commentTextarea.value = '';
+                    }
+                    if (commentFileInput) {
+                        commentFileInput.value = '';
+                        if (commentFilePreview) {
+                            commentFilePreview.innerHTML = '';
+                        }
+                    }
+                    
+                    // Refresh comments in the modal
+                    try {
+                        const [updatedTopic, updatedComments] = await Promise.all([
+                            getTopic(topicId),
+                            getTopicComments(topicId)
+                        ]);
+                        
+                        // Update comments list
+                        const commentsList = document.getElementById('comments-list');
+                        if (commentsList) {
+                            if (updatedComments.length === 0) {
+                                commentsList.innerHTML = '<p class="text-muted text-center py-4">Henüz yorum yok.</p>';
+                            } else {
+                                commentsList.innerHTML = updatedComments.map(comment => {
+                                    const initials = getUserInitials(comment.created_by_name);
+                                    const avatarColor = getAvatarColor(comment.created_by_name);
+                                    return `
+                                    <div class="comment-item mb-3 pb-3 border-bottom">
+                                        <div class="d-flex gap-3">
+                                            <div class="comment-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0;">
+                                                ${initials}
+                                            </div>
+                                            <div class="flex-grow-1">
+                                                <div class="d-flex align-items-center gap-2 mb-1">
+                                                    <span class="fw-medium" style="color: #172b4d;">${comment.created_by_name}</span>
+                                                    <span class="text-muted small">${formatDateTime(comment.created_at)}</span>
+                                                    ${comment.is_edited ? '<span class="text-muted small"><i class="fas fa-edit me-1"></i>Düzenlendi</span>' : ''}
+                                                </div>
+                                                <div class="comment-content" style="color: #172b4d; line-height: 1.6; margin-bottom: 8px;">
+                                                    ${formatContent(comment.content, comment.mentioned_users_data || [])}
+                                                </div>
+                                                ${comment.attachments_data && comment.attachments_data.length > 0 ? `
+                                                    <div class="mt-2" id="comment-attachments-${comment.id}"></div>
+                                                ` : ''}
+                                            </div>
+                                        </div>
+                                    </div>
+                                `;
+                                }).join('');
+                                
+                                // Re-initialize FileAttachments for comment attachments
+                                setTimeout(async () => {
+                                    updatedComments.forEach(comment => {
+                                        if (comment.attachments_data && comment.attachments_data.length > 0) {
+                                            const commentAttachmentsContainer = document.getElementById(`comment-attachments-${comment.id}`);
+                                            if (commentAttachmentsContainer) {
+                                                (async () => {
+                                                    const { FileAttachments } = await import('../../components/file-attachments/file-attachments.js');
+                                                    
+                                                    const mappedFiles = comment.attachments_data.map(att => {
+                                                        let fileUrl = att.file;
+                                                        if (fileUrl && !fileUrl.startsWith('http')) {
+                                                            fileUrl = fileUrl.startsWith('/') ? `${backendBase}${fileUrl}` : `${backendBase}/${fileUrl}`;
+                                                        }
+                                                        return {
+                                                            file_url: fileUrl || '',
+                                                            file_name: att.name || 'Dosya',
+                                                            uploaded_at: att.uploaded_at,
+                                                            uploaded_by_username: att.uploaded_by || 'Bilinmeyen'
+                                                        };
+                                                    });
+                                                    
+                                                    const fileAttachments = new FileAttachments(`comment-attachments-${comment.id}`, {
+                                                        title: '',
+                                                        showTitle: false,
+                                                        layout: 'list',
+                                                        maxThumbnailSize: 50,
+                                                        onFileClick: async (file) => {
+                                                            const fileName = file.file_name || 'Dosya';
+                                                            // Use file_extension from file object if available (FileAttachments already extracts it)
+                                                            const fileExtension = file.file_extension || (fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '');
+                                                            const fileUrl = file.file_url;
+                                                            
+                                                            if (!fileUrl) {
+                                                                console.error('File URL is missing');
+                                                                return;
+                                                            }
+                                                            
+                                                            // Wait for fileViewer to be available or import it
+                                                            let viewer = window.fileViewer;
+                                                            if (!viewer) {
+                                                                try {
+                                                                    const { FileViewer } = await import('../../components/file-viewer/file-viewer.js');
+                                                                    viewer = new FileViewer();
+                                                                    // Set download callback for authenticated URLs
+                                                                    viewer.setDownloadCallback(async () => {
+                                                                        await viewer.downloadFile(fileUrl, fileName);
+                                                                    });
+                                                                } catch (error) {
+                                                                    console.error('Error loading FileViewer:', error);
+                                                                    showNotification('Dosya görüntüleyici yüklenemedi', 'error');
+                                                                    return;
+                                                                }
+                                                            }
+                                                            
+                                                            if (viewer) {
+                                                                viewer.openFile(fileUrl, fileName, fileExtension);
+                                                            }
+                                                        },
+                                                        onDownloadClick: async (fileUrl, fileName) => {
+                                                            try {
+                                                                // For signed URLs, fetch as blob and download
+                                                                const response = await fetch(fileUrl);
+                                                                if (!response.ok) {
+                                                                    throw new Error(`HTTP error! status: ${response.status}`);
+                                                                }
+                                                                const blob = await response.blob();
+                                                                const url = window.URL.createObjectURL(blob);
+                                                                const link = document.createElement('a');
+                                                                link.href = url;
+                                                                link.download = fileName;
+                                                                document.body.appendChild(link);
+                                                                link.click();
+                                                                document.body.removeChild(link);
+                                                                window.URL.revokeObjectURL(url);
+                                                            } catch (error) {
+                                                                console.error('Error downloading file:', error);
+                                                                // Fallback to direct link
+                                                                const link = document.createElement('a');
+                                                                link.href = fileUrl;
+                                                                link.download = fileName;
+                                                                link.target = '_blank';
+                                                                document.body.appendChild(link);
+                                                                link.click();
+                                                                document.body.removeChild(link);
+                                                            }
+                                                        }
+                                                    });
+                                                    
+                                                    fileAttachments.setFiles(mappedFiles);
+                                                })();
+                                            }
+                                        }
+                                    });
+                                }, 100);
+                            }
+                            
+                            // Update comment count in header
+                            const commentsHeader = detailModal.content.querySelector('h6');
+                            if (commentsHeader) {
+                                commentsHeader.innerHTML = `<i class="fas fa-comments me-2"></i>Yorumlar (${updatedComments.length})`;
+                            }
+                        }
+                    } catch (refreshError) {
+                        console.error('Error refreshing comments:', refreshError);
+                    }
+                    
+                    // Refresh topics list (but keep modal open)
+                    setTimeout(() => {
+                        initializeTopicsTab(jobNo);
+                    }, 100);
+                } catch (error) {
+                    console.error('Error adding comment:', error);
+                    showNotification('Yorum eklenirken hata oluştu', 'error');
+                }
+            });
+        }
+    } catch (error) {
+        console.error('Error viewing topic detail:', error);
+        showNotification('Tartışma detayları yüklenirken hata oluştu', 'error');
+    }
+}
+
+// Show Create Topic Modal
+function showCreateTopicModal(jobNo) {
+    const createModal = new EditModal('create-topic-modal-container', {
+        title: 'Yeni Tartışma Oluştur',
+        icon: 'fas fa-plus-circle',
+        size: 'lg',
+        showEditButton: false
+    });
+    
+    createModal.addSection({
+        title: 'Tartışma Bilgileri',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary'
+    });
+    
+    createModal.addField({
+        id: 'title',
+        name: 'title',
+        label: 'Başlık',
+        type: 'text',
+        required: true,
+        icon: 'fas fa-heading',
+        colSize: 12,
+        helpText: 'Tartışma başlığı'
+    });
+    
+    createModal.addField({
+        id: 'content',
+        name: 'content',
+        label: 'İçerik',
+        type: 'textarea',
+        required: true,
+        icon: 'fas fa-align-left',
+        colSize: 12,
+        helpText: 'Tartışma içeriği (@ile kullanıcı etiketleyin)',
+        rows: 5
+    });
+    
+    createModal.addField({
+        id: 'priority',
+        name: 'priority',
+        label: 'Öncelik',
+        type: 'select',
+        required: true,
+        icon: 'fas fa-exclamation-triangle',
+        colSize: 12,
+        options: [
+            { value: 'low', label: 'Düşük' },
+            { value: 'normal', label: 'Normal' },
+            { value: 'high', label: 'Yüksek' },
+            { value: 'urgent', label: 'Acil' }
+        ],
+        value: 'normal'
+    });
+    
+    createModal.render();
+    
+    // Add @mention functionality to content textarea
+    setTimeout(() => {
+        const contentTextarea = document.getElementById('content');
+        if (contentTextarea) {
+            // Wrap textarea in a relative container for mention suggestions
+            const textareaContainer = contentTextarea.parentElement;
+            if (textareaContainer && !textareaContainer.querySelector('.mention-suggestions')) {
+                const mentionSuggestions = document.createElement('div');
+                mentionSuggestions.id = 'topic-mention-suggestions';
+                mentionSuggestions.className = 'mention-suggestions';
+                mentionSuggestions.style.display = 'none';
+                textareaContainer.style.position = 'relative';
+                textareaContainer.appendChild(mentionSuggestions);
+                
+                // Initialize mention functionality
+                initializeMentionFunctionality(contentTextarea, mentionSuggestions);
+            }
+        }
+    }, 100);
+    
+    // Add file upload section after rendering
+    const form = createModal.form;
+    const fileUploadSection = document.createElement('div');
+    fileUploadSection.className = 'mb-3';
+    fileUploadSection.innerHTML = `
+        <label class="form-label">
+            <i class="fas fa-paperclip me-2"></i>Dosyalar (Opsiyonel)
+        </label>
+        <input type="file" class="form-control" id="topic-files-input" multiple>
+        <div id="topic-files-preview" class="mt-2"></div>
+        <small class="text-muted">Birden fazla dosya seçebilirsiniz.</small>
+    `;
+    form.appendChild(fileUploadSection);
+    
+    // Handle file selection preview
+    const fileInput = fileUploadSection.querySelector('#topic-files-input');
+    const filePreview = fileUploadSection.querySelector('#topic-files-preview');
+    
+    const updateFilePreview = () => {
+        const files = Array.from(fileInput.files);
+        if (files.length > 0) {
+            filePreview.innerHTML = `
+                <div class="d-flex flex-wrap gap-2">
+                    ${files.map((file, index) => `
+                        <span class="badge bg-secondary d-flex align-items-center gap-1">
+                            <i class="fas fa-file me-1"></i>${file.name}
+                            <button type="button" class="btn-close btn-close-white btn-sm" data-file-index="${index}" style="font-size: 0.7rem;"></button>
+                        </span>
+                    `).join('')}
+                </div>
+            `;
+            
+            // Handle remove file buttons
+            filePreview.querySelectorAll('.btn-close').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const index = parseInt(btn.getAttribute('data-file-index'));
+                    const dt = new DataTransfer();
+                    const currentFiles = Array.from(fileInput.files);
+                    currentFiles.forEach((f, i) => {
+                        if (i !== index) dt.items.add(f);
+                    });
+                    fileInput.files = dt.files;
+                    updateFilePreview();
+                });
+            });
+        } else {
+            filePreview.innerHTML = '';
+        }
+    };
+    
+    fileInput.addEventListener('change', updateFilePreview);
+    
+    createModal.onSaveCallback(async (data) => {
+        try {
+            // Create topic first and get the response with ID
+            const topicResponse = await createTopic({
+                job_order: jobNo,
+                title: data.title,
+                content: data.content,
+                priority: data.priority
+            });
+            
+            // Extract topic ID from response
+            const topicId = topicResponse.id;
+            if (!topicId) {
+                throw new Error('Topic ID not found in response');
+            }
+            
+            // Upload files if any, using the topic ID from response
+            const files = Array.from(fileInput.files);
+            if (files.length > 0) {
+                try {
+                    // Upload files one by one
+                    for (const file of files) {
+                        await uploadTopicAttachment(topicId, file);
+                    }
+                } catch (fileError) {
+                    console.error('Error uploading files:', fileError);
+                    showNotification('Tartışma oluşturuldu ancak bazı dosyalar yüklenemedi', 'warning');
+                }
+            }
+            
+            createModal.hide();
+            showNotification('Tartışma başarıyla oluşturuldu', 'success');
+            
+            // Refresh topics
+            setTimeout(() => {
+                initializeTopicsTab(jobNo);
+            }, 100);
+        } catch (error) {
+            console.error('Error creating topic:', error);
+            let errorMessage = 'Tartışma oluşturulurken hata oluştu';
+            try {
+                const errorData = JSON.parse(error.message);
+                if (typeof errorData === 'object') {
+                    const errors = Object.values(errorData).flat();
+                    errorMessage = errors.join(', ') || errorMessage;
+                }
+            } catch (e) {}
+            showNotification(errorMessage, 'error');
+        }
+    });
+    
+    createModal.show();
+}
 
 window.viewJobOrderHierarchy = async function(jobNo) {
     try {
