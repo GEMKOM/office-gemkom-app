@@ -146,19 +146,41 @@ export class DataManager {
                                         quantity: allocation.quantity,
                                         specs: groupedItem.specifications || groupedItem.specs || '',
                                         specifications: groupedItem.specifications || groupedItem.specs || '',
-                                        item_description: groupedItem.item_description || ''
+                                        item_description: groupedItem.item_description || '',
+                                        // Preserve planning request item link fields across older formats
+                                        source_planning_request_item_id: groupedItem.source_planning_request_item_id || groupedItem.planning_request_item_id || null,
+                                        source_planning_request_item_ids: groupedItem.source_planning_request_item_ids || groupedItem.planning_request_item_ids || null
                                     };
                                     ungroupedItems.push(separateItem);
                                 });
                             } else {
                                 // This is already a separate item
-                                ungroupedItems.push(groupedItem);
+                                const normalizedItem = { ...groupedItem };
+                                if (!normalizedItem.source_planning_request_item_id && normalizedItem.planning_request_item_id) {
+                                    normalizedItem.source_planning_request_item_id = normalizedItem.planning_request_item_id;
+                                }
+                                if (!normalizedItem.source_planning_request_item_ids && normalizedItem.planning_request_item_ids) {
+                                    normalizedItem.source_planning_request_item_ids = normalizedItem.planning_request_item_ids;
+                                }
+                                ungroupedItems.push(normalizedItem);
                             }
                         });
                         
                         items = ungroupedItems;
                         console.log('Ungrouped items from localStorage:', items);
                     }
+                    
+                    // Normalize planning request item link field names (in case of older/local drafts)
+                    items = (items || []).map(item => {
+                        if (!item) return item;
+                        if (!item.source_planning_request_item_id && item.planning_request_item_id) {
+                            item.source_planning_request_item_id = item.planning_request_item_id;
+                        }
+                        if (!item.source_planning_request_item_ids && item.planning_request_item_ids) {
+                            item.source_planning_request_item_ids = item.planning_request_item_ids;
+                        }
+                        return item;
+                    });
                     
                     this.requestData.items = items;
                     this.requestData.suppliers = draftData.suppliers || [];

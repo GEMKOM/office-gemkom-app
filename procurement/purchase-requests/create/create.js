@@ -63,10 +63,24 @@ function syncPlanningRequestItemIds() {
         if (item.source_planning_request_item_id) {
             itemIds.add(item.source_planning_request_item_id);
         }
+
+        // Backward compatibility: some drafts/store formats may use planning_request_item_id
+        if (item.planning_request_item_id) {
+            itemIds.add(item.planning_request_item_id);
+        }
         
         // Add all IDs from source_planning_request_item_ids array (for merged items)
         if (item.source_planning_request_item_ids && Array.isArray(item.source_planning_request_item_ids)) {
             item.source_planning_request_item_ids.forEach(id => {
+                if (id) {
+                    itemIds.add(id);
+                }
+            });
+        }
+
+        // Backward compatibility: some drafts/store formats may use planning_request_item_ids array
+        if (item.planning_request_item_ids && Array.isArray(item.planning_request_item_ids)) {
+            item.planning_request_item_ids.forEach(id => {
                 if (id) {
                     itemIds.add(id);
                 }
@@ -648,8 +662,8 @@ async function loadDraftData(draft) {
                                 specifications: groupedItem.specifications || '',
                                 item_description: groupedItem.item_description || '',
                                 // Preserve planning request item IDs from merged items
-                                source_planning_request_item_id: groupedItem.source_planning_request_item_id || null,
-                                source_planning_request_item_ids: groupedItem.source_planning_request_item_ids || null,
+                                source_planning_request_item_id: groupedItem.source_planning_request_item_id || groupedItem.planning_request_item_id || null,
+                                source_planning_request_item_ids: groupedItem.source_planning_request_item_ids || groupedItem.planning_request_item_ids || null,
                                 originalGroupIndex: groupIndex,
                                 allocationIndex: allocationIndex
                             };
@@ -659,6 +673,9 @@ async function loadDraftData(draft) {
                         // This is already a separate item
                         const separateItem = {
                             ...groupedItem,
+                            // Normalize planning request item link field names (older drafts/backends)
+                            source_planning_request_item_id: groupedItem.source_planning_request_item_id || groupedItem.planning_request_item_id || null,
+                            source_planning_request_item_ids: groupedItem.source_planning_request_item_ids || groupedItem.planning_request_item_ids || null,
                             originalGroupIndex: groupIndex,
                             allocationIndex: 0
                         };
@@ -735,7 +752,17 @@ async function loadDraftData(draft) {
              } else {
                  // No ungrouping needed, load items and data as is
                  // If using original_items, they're already ungrouped and have source_planning_request_item_id
-                 requestData.items = items;
+                 // Normalize planning request item link field names (for older drafts/backends)
+                 requestData.items = (items || []).map(item => {
+                     if (!item) return item;
+                     if (!item.source_planning_request_item_id && item.planning_request_item_id) {
+                         item.source_planning_request_item_id = item.planning_request_item_id;
+                     }
+                     if (!item.source_planning_request_item_ids && item.planning_request_item_ids) {
+                         item.source_planning_request_item_ids = item.planning_request_item_ids;
+                     }
+                     return item;
+                 });
                  requestData.suppliers = draft.data.suppliers || [];
                  requestData.offers = draft.data.offers || {};
                  requestData.recommendations = draft.data.recommendations || {};
@@ -762,9 +789,14 @@ async function loadDraftData(draft) {
         // Restore planning_request_item_ids from draft data (if available)
         // But then sync with actual items to ensure accuracy
         if (draft.data && draft.data.planning_request_item_ids) {
-            requestData.planning_request_item_ids = Array.isArray(draft.data.planning_request_item_ids) 
-                ? draft.data.planning_request_item_ids 
-                : [];
+            if (Array.isArray(draft.data.planning_request_item_ids)) {
+                requestData.planning_request_item_ids = draft.data.planning_request_item_ids;
+            } else if (typeof draft.data.planning_request_item_ids === 'object') {
+                // Support object/map formats by extracting keys
+                requestData.planning_request_item_ids = Object.keys(draft.data.planning_request_item_ids);
+            } else {
+                requestData.planning_request_item_ids = [];
+            }
         } else {
             requestData.planning_request_item_ids = [];
         }

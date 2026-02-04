@@ -684,11 +684,13 @@ export class SuppliersManager {
                 title: this.requestData.title,
                 description: this.requestData.description,
                 priority: this.requestData.priority,
+                needed_date: this.requestData.needed_date,
                 items: this.requestData.items,
                 suppliers: this.requestData.suppliers,
                 offers: this.requestData.offers,
                 recommendations: this.requestData.recommendations,
                 itemRecommendations: this.requestData.itemRecommendations,
+                planning_request_item_ids: this.requestData.planning_request_item_ids || [],
                 timestamp: new Date().toISOString()
             };
             
