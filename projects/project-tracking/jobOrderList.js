@@ -48,6 +48,7 @@ import { ConfirmationModal } from '../../components/confirmation-modal/confirmat
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { backendBase } from '../../base.js';
+import { listDrawingReleases, getCurrentRelease, requestRevision } from '../../apis/projects/design.js';
 import { fetchAllUsers } from '../../apis/users.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
 
@@ -76,6 +77,7 @@ let addDepartmentTaskModal = null;
 let createDepartmentTaskModal = null;
 let viewJobOrderModal = null;
 let confirmationModal = null;
+let requestRevisionModal = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -845,6 +847,61 @@ function initializeModalComponents() {
         confirmButtonClass: 'btn-primary'
     });
 
+    // Request Revision Modal
+    requestRevisionModal = new EditModal('request-revision-modal-container', {
+        title: 'Revizyon İste',
+        icon: 'fas fa-edit',
+        size: 'lg',
+        showEditButton: false
+    });
+
+    requestRevisionModal.onSaveCallback(async (formData) => {
+        const releaseId = window.pendingRevisionReleaseId;
+        if (!releaseId) return;
+
+        try {
+            if (!formData.reason || !formData.reason.trim()) {
+                showNotification('Revizyon nedeni gereklidir', 'error');
+                return;
+            }
+
+            await requestRevision(releaseId, {
+                reason: formData.reason.trim()
+            });
+
+            showNotification('Revizyon isteği gönderildi', 'success');
+            requestRevisionModal.hide();
+            window.pendingRevisionReleaseId = null;
+            
+            // Reload drawing releases tab
+            const jobNo = window.pendingRevisionJobNo;
+            if (jobNo) {
+                // Clear cache and reload
+                jobOrderTabCache.drawingReleases = null;
+                jobOrderTabCache.currentRelease = null;
+                jobOrderTabCache.drawingReleasesJobNo = null;
+                await loadDrawingReleasesTab(jobNo);
+            }
+        } catch (error) {
+            console.error('Error requesting revision:', error);
+            let errorMessage = 'Revizyon isteği gönderilirken hata oluştu';
+            try {
+                if (error.message) {
+                    const errorData = JSON.parse(error.message);
+                    if (typeof errorData === 'object') {
+                        const errors = Object.values(errorData).flat();
+                        errorMessage = errors.join(', ') || errorMessage;
+                    } else {
+                        errorMessage = error.message;
+                    }
+                }
+            } catch (e) {
+                // If parsing fails, use default message
+            }
+            showNotification(errorMessage, 'error');
+        }
+    });
+
     // Set up close callback to clean up URL and clear cache
     viewJobOrderModal.onCloseCallback(() => {
         // Clear tab cache when modal closes
@@ -854,7 +911,10 @@ function initializeModalComponents() {
             departmentTasks: null,
             children: null,
             files: null,
-            topics: null
+            topics: null,
+            drawingReleases: null,
+            currentRelease: null,
+            drawingReleasesJobNo: null
         };
         
         // Remove deep-link parameters from URL
@@ -1316,7 +1376,10 @@ let jobOrderTabCache = {
     departmentTasks: null,
     children: null,
     files: null,
-    topics: null
+    topics: null,
+    drawingReleases: null,
+    currentRelease: null,
+    drawingReleasesJobNo: null
 };
 
 window.viewJobOrder = async function(jobNo) {
@@ -1328,7 +1391,10 @@ window.viewJobOrder = async function(jobNo) {
             departmentTasks: null,
             children: null,
             files: null,
-            topics: null
+            topics: null,
+            drawingReleases: null,
+            currentRelease: null,
+            drawingReleasesJobNo: null
         };
         
         // Fetch only basic job order data
@@ -1589,6 +1655,17 @@ window.viewJobOrder = async function(jobNo) {
             customContent: '<div id="topics-container" style="padding: 20px;"></div>'
         });
         
+        // Add Teknik Çizimler tab (only for root job orders)
+        if (!jobOrder.parent) {
+            viewJobOrderModal.addTab({
+                id: 'teknik-cizimler',
+                label: 'Teknik Çizimler',
+                icon: 'fas fa-drafting-compass',
+                iconColor: 'text-primary',
+                customContent: '<div id="drawing-releases-container" style="padding: 20px;"></div>'
+            });
+        }
+        
         // Render the modal
         viewJobOrderModal.render();
         
@@ -1646,6 +1723,9 @@ function setupTabClickHandlers(jobNo, getStatusBadgeClass, getPriorityBadgeClass
                     break;
                 case 'topics':
                     await loadTopicsTab(jobNo);
+                    break;
+                case 'teknik-cizimler':
+                    await loadDrawingReleasesTab(jobNo);
                     break;
             }
         });
@@ -2109,6 +2189,187 @@ async function loadTopicsTab(jobNo) {
 // Initialize Topics Tab (kept for backward compatibility, but now uses loadTopicsTab)
 async function initializeTopicsTab(jobNo) {
     await loadTopicsTab(jobNo);
+}
+
+// Load Drawing Releases Tab
+async function loadDrawingReleasesTab(jobNo) {
+    const container = document.getElementById('drawing-releases-container');
+    if (!container) return;
+    
+    // Check cache
+    if (jobOrderTabCache.drawingReleases && jobOrderTabCache.drawingReleasesJobNo === jobNo) {
+        renderDrawingReleasesUI(container, jobOrderTabCache.drawingReleases, jobNo);
+        return;
+    }
+    
+    // Show loading state
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
+    
+    try {
+        const response = await listDrawingReleases(jobNo);
+        const releases = extractResultsFromResponse(response);
+        const currentRelease = await getCurrentRelease(jobNo);
+        
+        // Cache the data
+        jobOrderTabCache.drawingReleases = releases;
+        jobOrderTabCache.currentRelease = currentRelease;
+        jobOrderTabCache.drawingReleasesJobNo = jobNo;
+        
+        // Render drawing releases UI
+        renderDrawingReleasesUI(container, releases, jobNo, currentRelease);
+    } catch (error) {
+        console.error('Error loading drawing releases:', error);
+        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Teknik çizimler yüklenirken hata oluştu.</div>';
+    }
+}
+
+// Render Drawing Releases UI
+function renderDrawingReleasesUI(container, releases, jobNo, currentRelease = null) {
+    const formatDateTime = (dateString) => {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        return date.toLocaleString('tr-TR', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+    
+    const getStatusBadge = (status) => {
+        const statusMap = {
+            'released': { label: 'Yayınlandı', class: 'status-green' },
+            'in_revision': { label: 'Revizyonda', class: 'status-yellow' },
+            'pending_revision': { label: 'Revizyon Bekliyor', class: 'status-blue' }
+        };
+        const statusInfo = statusMap[status] || { label: status, class: 'status-grey' };
+        return `<span class="status-badge ${statusInfo.class}">${statusInfo.label}</span>`;
+    };
+    
+    let html = '<div class="drawing-releases-section">';
+    
+    // Current Release Section
+    if (currentRelease) {
+        html += `
+            <div class="card mb-4">
+                <div class="card-header">
+                    <h6 class="mb-0"><i class="fas fa-star me-2"></i>Aktif Yayın</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p><strong>Revizyon:</strong> ${currentRelease.revision_code || '-'} (Rev. ${currentRelease.revision_number || '-'})</p>
+                            <p><strong>Durum:</strong> ${getStatusBadge(currentRelease.status)}</p>
+                            <p><strong>Klasör Yolu:</strong> ${currentRelease.folder_path || '-'}</p>
+                        </div>
+                        <div class="col-md-6">
+                            <p><strong>Yayınlayan:</strong> ${currentRelease.released_by_name || '-'}</p>
+                            <p><strong>Yayın Tarihi:</strong> ${formatDateTime(currentRelease.released_at)}</p>
+                            <p><strong>Hardcopy Sayısı:</strong> ${currentRelease.hardcopy_count || 0}</p>
+                        </div>
+                    </div>
+                    ${currentRelease.changelog ? `<div class="mt-3"><strong>Değişiklik Günlüğü:</strong><pre class="bg-light p-2 rounded">${currentRelease.changelog}</pre></div>` : ''}
+                    ${currentRelease.status === 'released' ? `
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-sm btn-outline-primary request-revision-btn" data-release-id="${currentRelease.id}">
+                                <i class="fas fa-edit me-1"></i>Revizyon İste
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    }
+    
+    // All Releases List
+    html += `
+        <div class="card">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-list me-2"></i>Tüm Yayınlar (${releases.length || 0})</h6>
+            </div>
+            <div class="card-body">
+    `;
+    
+    if (!releases || releases.length === 0) {
+        html += '<div class="alert alert-info"><i class="fas fa-info-circle me-2"></i>Henüz teknik çizim yayını bulunmamaktadır.</div>';
+    } else {
+        html += '<div class="table-responsive"><table class="table table-hover">';
+        html += `
+            <thead>
+                <tr>
+                    <th>Revizyon</th>
+                    <th>Durum</th>
+                    <th>Yayınlayan</th>
+                    <th>Yayın Tarihi</th>
+                    <th>Hardcopy</th>
+                </tr>
+            </thead>
+            <tbody>
+        `;
+        
+        releases.forEach(release => {
+            const isCurrent = currentRelease && release.id === currentRelease.id;
+            html += `
+                <tr ${isCurrent ? 'style="background-color: #f8f9fa;"' : ''}>
+                    <td><strong>${release.revision_code || '-'}</strong> (Rev. ${release.revision_number || '-'})</td>
+                    <td>${getStatusBadge(release.status)}</td>
+                    <td>${release.released_by_name || '-'}</td>
+                    <td>${formatDateTime(release.released_at)}</td>
+                    <td>${release.hardcopy_count || 0}</td>
+                </tr>
+            `;
+        });
+        
+        html += '</tbody></table></div>';
+    }
+    
+    html += '</div></div></div>';
+    
+    container.innerHTML = html;
+    
+    // Add event listeners for request revision buttons
+    container.querySelectorAll('.request-revision-btn').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            const releaseId = parseInt(e.target.closest('.request-revision-btn').getAttribute('data-release-id'));
+            showRequestRevisionModal(releaseId, jobNo);
+        });
+    });
+}
+
+// Show Request Revision Modal
+async function showRequestRevisionModal(releaseId, jobNo) {
+    if (!requestRevisionModal) {
+        showNotification('Revizyon modalı başlatılamadı', 'error');
+        return;
+    }
+
+    window.pendingRevisionReleaseId = releaseId;
+    window.pendingRevisionJobNo = jobNo;
+
+    requestRevisionModal.clearAll();
+
+    requestRevisionModal.addSection({
+        title: 'Revizyon İsteği',
+        icon: 'fas fa-edit',
+        iconColor: 'text-warning'
+    });
+
+    requestRevisionModal.addField({
+        id: 'revision-reason',
+        name: 'reason',
+        label: 'Revizyon Nedeni',
+        type: 'textarea',
+        value: '',
+        required: true,
+        placeholder: 'Revizyon nedenini açıklayın...',
+        icon: 'fas fa-comment',
+        colSize: 12,
+        helpText: 'Revizyon nedenini detaylı olarak açıklayın'
+    });
+
+    requestRevisionModal.render();
+    requestRevisionModal.show();
 }
 
 // Render Topics UI
