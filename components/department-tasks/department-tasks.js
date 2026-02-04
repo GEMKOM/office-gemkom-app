@@ -22,6 +22,7 @@ import {
     DEPARTMENT_OPTIONS
 } from '../../apis/projects/departmentTasks.js';
 import { authFetchUsers } from '../../apis/users.js';
+import { createRelease } from '../../apis/projects/design.js';
 
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
@@ -80,6 +81,7 @@ export async function initDepartmentTasksPage(config) {
     let taskDetailsModal = null;
     let editTaskModal = null;
     let addSubtaskModal = null;
+    let createReleaseModal = null;
 
 // Status color mapping to ensure consistency with CSS classes
 const STATUS_COLOR_MAP = {
@@ -156,6 +158,11 @@ async function initializeComponents() {
         initializeFiltersComponent();
         initializeTableComponent();
         initializeModalComponents();
+        
+        // Initialize release modal for design department
+        if (department === 'design') {
+            initializeReleaseModal();
+        }
         
         // Check for task parameter in URL to open modal directly
         setupUrlHandlers();
@@ -756,6 +763,82 @@ function initializeModalComponents() {
         } catch (error) {
             console.error('Error creating subtask:', error);
             let errorMessage = 'Alt görev eklenirken hata oluştu';
+            try {
+                if (error.message) {
+                    const errorData = JSON.parse(error.message);
+                    if (typeof errorData === 'object') {
+                        const errors = Object.values(errorData).flat();
+                        errorMessage = errors.join(', ') || errorMessage;
+                    } else {
+                        errorMessage = error.message;
+                    }
+                }
+            } catch (e) {
+                // If parsing fails, use default message
+            }
+            showNotification(errorMessage, 'error');
+        }
+    });
+}
+
+function initializeReleaseModal() {
+    // Create release modal
+    createReleaseModal = new EditModal('create-release-modal-container', {
+        title: 'Teknik Çizim Yayını Oluştur',
+        icon: 'fas fa-file-export',
+        size: 'lg',
+        showEditButton: false
+    });
+
+    createReleaseModal.onSaveCallback(async (formData) => {
+        const taskId = window.pendingReleaseTaskId;
+        if (!taskId) return;
+
+        try {
+            // Get task to get job_order
+            const task = await getDepartmentTaskById(taskId);
+            
+            if (!task.job_order) {
+                showNotification('İş emri bulunamadı', 'error');
+                return;
+            }
+
+            // Prepare release data
+            const releaseData = {
+                job_order: task.job_order,
+                folder_path: formData.folder_path || '',
+                changelog: formData.changelog ? formData.changelog.trim() : '',
+                revision_code: formData.revision_code || '',
+            };
+
+            // Auto complete design task checkbox (defaults to true if not provided)
+            releaseData.auto_complete_design_task = formData.auto_complete_design_task !== false;
+
+            // Optional fields
+            if (formData.hardcopy_count !== undefined && formData.hardcopy_count !== null && formData.hardcopy_count !== '') {
+                const hardcopyCount = parseInt(formData.hardcopy_count);
+                if (!isNaN(hardcopyCount)) {
+                    releaseData.hardcopy_count = hardcopyCount;
+                }
+            }
+
+            // Validate required fields
+            if (!releaseData.folder_path.trim()) {
+                showNotification('Klasör yolu gereklidir', 'error');
+                return;
+            }
+
+            // Create release
+            await createRelease(releaseData);
+            showNotification('Teknik çizim yayını oluşturuldu', 'success');
+            createReleaseModal.hide();
+            window.pendingReleaseTaskId = null;
+            
+            // Reload tasks to reflect the completion
+            await loadTasks();
+        } catch (error) {
+            console.error('Error creating release:', error);
+            let errorMessage = 'Yayın oluşturulurken hata oluştu';
             try {
                 if (error.message) {
                     const errorData = JSON.parse(error.message);
@@ -1495,35 +1578,153 @@ async function handleStartTask(taskId) {
 }
 
 async function handleCompleteTask(taskId) {
-    confirmationModal.show({
-        message: 'Bu görevi tamamlamak istediğinize emin misiniz?',
-        confirmText: 'Evet, Tamamla',
-        onConfirm: async () => {
-            try {
-                await completeDepartmentTask(taskId);
-                showNotification('Görev tamamlandı', 'success');
-                confirmationModal.hide();
-                await loadTasks();
-            } catch (error) {
-                console.error('Error completing task:', error);
-                let errorMessage = 'Görev tamamlanırken hata oluştu';
+    // For design department, show release creation modal instead of simple completion
+    if (department === 'design') {
+        await showCreateReleaseModal(taskId);
+    } else {
+        // For other departments, use the standard completion flow
+        confirmationModal.show({
+            message: 'Bu görevi tamamlamak istediğinize emin misiniz?',
+            confirmText: 'Evet, Tamamla',
+            onConfirm: async () => {
                 try {
-                    if (error.message) {
-                        const errorData = JSON.parse(error.message);
-                        if (typeof errorData === 'object') {
-                            const errors = Object.values(errorData).flat();
-                            errorMessage = errors.join(', ') || errorMessage;
-                        } else {
-                            errorMessage = error.message;
+                    await completeDepartmentTask(taskId);
+                    showNotification('Görev tamamlandı', 'success');
+                    confirmationModal.hide();
+                    await loadTasks();
+                } catch (error) {
+                    console.error('Error completing task:', error);
+                    let errorMessage = 'Görev tamamlanırken hata oluştu';
+                    try {
+                        if (error.message) {
+                            const errorData = JSON.parse(error.message);
+                            if (typeof errorData === 'object') {
+                                const errors = Object.values(errorData).flat();
+                                errorMessage = errors.join(', ') || errorMessage;
+                            } else {
+                                errorMessage = error.message;
+                            }
                         }
+                    } catch (e) {
+                        // If parsing fails, use default message
                     }
-                } catch (e) {
-                    // If parsing fails, use default message
+                    showNotification(errorMessage, 'error');
                 }
-                showNotification(errorMessage, 'error');
             }
+        });
+    }
+}
+
+async function showCreateReleaseModal(taskId) {
+    try {
+        if (!createReleaseModal) {
+            showNotification('Yayın modalı başlatılamadı', 'error');
+            return;
         }
-    });
+
+        const task = await getDepartmentTaskById(taskId);
+        
+        if (!task.job_order) {
+            showNotification('İş emri bulunamadı', 'error');
+            return;
+        }
+
+        window.pendingReleaseTaskId = taskId;
+        
+        createReleaseModal.clearAll();
+
+        createReleaseModal.addSection({
+            title: 'Yayın Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary'
+        });
+
+        createReleaseModal.addField({
+            id: 'release-job-order',
+            name: 'job_order',
+            label: 'İş Emri',
+            type: 'text',
+            value: task.job_order ? `${task.job_order} - ${task.job_order_title || ''}` : '-',
+            readonly: true,
+            icon: 'fas fa-file-invoice',
+            colSize: 12,
+            helpText: 'İş emri (değiştirilemez)'
+        });
+
+        createReleaseModal.addField({
+            id: 'release-folder-path',
+            name: 'folder_path',
+            label: 'Klasör Yolu',
+            type: 'text',
+            value: '',
+            required: true,
+            placeholder: 'C:\\CVSPDM\\CVS\\009_KAPTAN\\EAF\\009_34_EBT_PANEL\\PDF',
+            icon: 'fas fa-folder',
+            colSize: 12,
+            helpText: 'Ağ klasör yolu (maksimum 500 karakter)'
+        });
+
+        createReleaseModal.addField({
+            id: 'release-revision-code',
+            name: 'revision_code',
+            label: 'Revizyon Kodu',
+            type: 'text',
+            value: '',
+            placeholder: 'A1, B2, vb.',
+            icon: 'fas fa-code-branch',
+            colSize: 6,
+            helpText: 'Revizyon kodu (örn: A1, B2) - maksimum 10 karakter'
+        });
+
+        createReleaseModal.addField({
+            id: 'release-hardcopy-count',
+            name: 'hardcopy_count',
+            label: 'Hardcopy Sayısı',
+            type: 'number',
+            value: '',
+            min: 0,
+            placeholder: '0',
+            icon: 'fas fa-print',
+            colSize: 6,
+            helpText: 'Hardcopy sayısı (varsayılan: 0)'
+        });
+
+        createReleaseModal.addSection({
+            title: 'Değişiklik Günlüğü',
+            icon: 'fas fa-edit',
+            iconColor: 'text-warning'
+        });
+
+        createReleaseModal.addField({
+            id: 'release-changelog',
+            name: 'changelog',
+            label: 'Değişiklik Günlüğü',
+            type: 'textarea',
+            value: '',
+            required: false,
+            placeholder: '3_0003_1045_EBT_RIGHT_PANEL\n20.01.2026 REV. A1 (POZ-04 REVİZE EDİLDİ)\n\n@umit.bal @elvan.gunes @abdullah.anlas',
+            icon: 'fas fa-align-left',
+            colSize: 12,
+            helpText: 'Değişiklik günlüğü (@mention ile kullanıcıları bildirebilirsiniz) - Opsiyonel'
+        });
+
+        createReleaseModal.addField({
+            id: 'release-auto-complete',
+            name: 'auto_complete_design_task',
+            label: 'Son dağıtım',
+            type: 'checkbox',
+            value: true,
+            icon: 'fas fa-check-circle',
+            colSize: 12,
+            helpText: 'İşaretlendiğinde görev otomatik olarak tamamlanır'
+        });
+
+        createReleaseModal.render();
+        createReleaseModal.show();
+    } catch (error) {
+        console.error('Error loading task for release creation:', error);
+        showNotification('Görev bilgileri yüklenirken hata oluştu', 'error');
+    }
 }
 
 async function handleUncompleteTask(taskId) {
