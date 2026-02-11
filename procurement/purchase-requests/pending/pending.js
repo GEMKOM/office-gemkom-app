@@ -14,6 +14,7 @@ import {
     getPendingApprovalRequests,
     getApprovedByMeRequests,
     getPurchaseRequest, 
+    getPurchaseRequestAllFiles,
     approvePurchaseRequest, 
     rejectPurchaseRequest
 } from '../../../apis/procurement.js';
@@ -96,6 +97,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         title: 'Onay Bekleyen Talepler',
         icon: 'fas fa-clock',
         iconColor: 'text-warning',
+        rowAttributes: (row, rowIndex) => {
+            if (row.item_type === 'subcontracting') {
+                return {
+                    class: 'subcontracting-row',
+                    style: 'background-color: #fff3cd; border-left: 4px solid #ffc107;'
+                };
+            }
+            return {};
+        },
+        rowBackgroundColor: (row, rowIndex) => {
+            if (row.item_type === 'subcontracting') {
+                return '#fff3cd'; // Light yellow background
+            }
+            return null;
+        },
         columns: [
             {
                 field: 'request_number',
@@ -150,14 +166,52 @@ document.addEventListener('DOMContentLoaded', async () => {
                 type: 'date'
             },
             {
-                field: 'approval',
-                label: 'Onay Durumu',
-                sortable: false,
-                formatter: (value, row) => `
-                    <div style="min-width: 200px; text-align: middle; vertical-align: middle;">
-                        ${getApprovalInfo(row)}
-                    </div>
-                `
+                field: 'item_type',
+                label: 'Tip',
+                sortable: true,
+                formatter: (value, row) => {
+                    let badgeHtml = '';
+                    
+                    // Item type badge
+                    if (row.item_type === 'subcontracting') {
+                        badgeHtml = `<span class="status-badge status-yellow">
+                            <i class="fas fa-hammer me-1"></i>DAŞ
+                        </span>`;
+                    } else if (row.item_type === 'stock') {
+                        badgeHtml = `<span class="status-badge status-green">
+                            <i class="fas fa-box me-1"></i>Malzeme
+                        </span>`;
+                    } else if (row.item_type === 'expenditure') {
+                        badgeHtml = `<span class="status-badge status-grey">
+                            <i class="fas fa-receipt me-1"></i>Gider
+                        </span>`;
+                    } else {
+                        badgeHtml = '<span style="color: #6c757d;">-</span>';
+                    }
+                    
+                    // File count badge (only show if files exist)
+                    const fileCount = row.total_files || row.files_count || 0;
+                    let fileBadgeHtml = '';
+                    
+                    if (fileCount > 0) {
+                        fileBadgeHtml = `
+                            <button 
+                                type="button" 
+                                class="btn btn-sm btn-link p-0 ms-2 view-all-files-btn" 
+                                data-request-id="${row.id}" 
+                                data-request-number="${row.request_number || ''}"
+                                style="text-decoration: none; vertical-align: middle; line-height: 1;"
+                                title="Tüm dosyaları görüntüle">
+                                <span class="badge bg-info rounded-pill position-relative" style="font-size: 0.7rem; padding: 0.35rem 0.6rem; font-weight: 600; box-shadow: 0 2px 4px rgba(13, 202, 240, 0.3); cursor: pointer;">
+                                    <i class="fas fa-paperclip" style="font-size: 0.65rem;"></i>
+                                    <span style="margin-left: 0.25rem;">${fileCount}</span>
+                                </span>
+                            </button>
+                        `;
+                    }
+                    
+                    return `<div style="display: flex; align-items: center; flex-wrap: wrap; gap: 0.25rem;">${badgeHtml}${fileBadgeHtml}</div>`;
+                }
             }
         ],
         actions: [
@@ -452,8 +506,17 @@ async function loadApprovedRequests() {
 
 
 function setupEventListeners() {
-    // No need for complex event listeners since we recreate the modal each time
-    // The close callback is set up when the modal is recreated
+    // Event delegation for view all files buttons
+    document.addEventListener('click', (e) => {
+        if (e.target.closest('.view-all-files-btn')) {
+            const button = e.target.closest('.view-all-files-btn');
+            const requestId = button.getAttribute('data-request-id');
+            const requestNumber = button.getAttribute('data-request-number');
+            if (requestId) {
+                viewAllFiles(parseInt(requestId), requestNumber);
+            }
+        }
+    });
 }
 
 function disableTableActions() {
@@ -1644,6 +1707,212 @@ function showSpecificationsModal(specifications, itemDescription, item) {
             cleanupBackdrops();
         }, 300);
     });
+}
+
+async function viewAllFiles(requestId, requestNumber) {
+    try {
+        // Show loading notification
+        showNotification('Dosyalar yükleniyor...', 'info');
+        
+        // Fetch all files
+        const filesData = await getPurchaseRequestAllFiles(requestId);
+        
+        // Create or get the all files modal container
+        let modalContainer = document.getElementById('all-files-modal-container');
+        if (!modalContainer) {
+            modalContainer = document.createElement('div');
+            modalContainer.id = 'all-files-modal-container';
+            document.body.appendChild(modalContainer);
+        }
+        
+        // Destroy existing modal if it exists
+        let allFilesModal = null;
+        const existingModal = document.querySelector('#all-files-modal-container .modal');
+        if (existingModal) {
+            const existingInstance = bootstrap.Modal.getInstance(existingModal);
+            if (existingInstance) {
+                existingInstance.dispose();
+            }
+        }
+        
+        // Create a new DisplayModal for all files
+        allFilesModal = new DisplayModal('all-files-modal-container', {
+            title: `Tüm Dosyalar - ${requestNumber || 'Talep'}`,
+            icon: 'fas fa-paperclip',
+            size: 'xl',
+            showEditButton: false
+        });
+        
+        // Build HTML content for all files
+        let filesContent = '';
+        
+        // Request files section
+        if (filesData.request_files && filesData.request_files.length > 0) {
+            filesContent += `
+                <div class="mb-4">
+                    <h6 class="mb-3" style="color: #495057; font-weight: 600;">
+                        <i class="fas fa-file-alt me-2 text-primary"></i>
+                        Talep Dosyaları (${filesData.request_files.length})
+                    </h6>
+                    <div id="request-files-container"></div>
+                </div>
+            `;
+        }
+        
+        // Item files sections
+        if (filesData.items && filesData.items.length > 0) {
+            filesData.items.forEach((item, index) => {
+                if (item.files && item.files.length > 0) {
+                    filesContent += `
+                        <div class="mb-4">
+                            <h6 class="mb-3" style="color: #495057; font-weight: 600;">
+                                <i class="fas fa-box me-2 text-info"></i>
+                                ${item.item_name || item.item_code || 'Ürün'} - ${item.item_code || ''} (${item.files.length} dosya)
+                            </h6>
+                            <div id="item-files-container-${index}"></div>
+                        </div>
+                    `;
+                }
+            });
+        }
+        
+        // If no files, show message
+        if (!filesContent) {
+            filesContent = '<div class="text-center text-muted py-4"><i class="fas fa-inbox fa-3x mb-3"></i><p>Bu talep için dosya bulunmamaktadır.</p></div>';
+        } else {
+            // Add total files count
+            filesContent = `
+                <div class="alert alert-info mb-3">
+                    <i class="fas fa-info-circle me-2"></i>
+                    <strong>Toplam ${filesData.total_files || 0} dosya</strong> bulunmaktadır.
+                </div>
+                ${filesContent}
+            `;
+        }
+        
+        // Add custom section for all files
+        allFilesModal.addCustomSection({
+            id: 'all-files-section',
+            title: 'Tüm Dosyalar',
+            icon: 'fas fa-paperclip',
+            iconColor: 'text-info',
+            customContent: filesContent
+        });
+        
+        // Render the modal
+        allFilesModal.render();
+        
+        // Initialize FileAttachments components after modal is rendered
+        setTimeout(() => {
+            // Request files
+            if (filesData.request_files && filesData.request_files.length > 0) {
+                const requestFilesContainer = document.getElementById('request-files-container');
+                if (requestFilesContainer) {
+                    const requestFileAttachments = new FileAttachments('request-files-container', {
+                        title: '',
+                        layout: 'grid',
+                        showTitle: false,
+                        onFileClick: (file) => {
+                            const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                            const fileExtension = fileName.split('.').pop().toLowerCase();
+                            const viewer = new FileViewer();
+                            viewer.setDownloadCallback(async () => {
+                                await viewer.downloadFile(file.file_url, fileName);
+                            });
+                            viewer.openFile(file.file_url, fileName, fileExtension);
+                        },
+                        onDownloadClick: (fileUrl, fileName) => {
+                            fetch(fileUrl)
+                                .then(response => response.blob())
+                                .then(blob => {
+                                    const url = window.URL.createObjectURL(blob);
+                                    const link = document.createElement('a');
+                                    link.href = url;
+                                    link.download = fileName;
+                                    link.style.display = 'none';
+                                    document.body.appendChild(link);
+                                    link.click();
+                                    document.body.removeChild(link);
+                                    window.URL.revokeObjectURL(url);
+                                })
+                                .catch(error => {
+                                    console.error('Download failed:', error);
+                                    const link = document.createElement('a');
+                                    link.href = fileUrl;
+                                    link.download = fileName;
+                                    link.target = '_blank';
+                                    link.click();
+                                });
+                        }
+                    });
+                    requestFileAttachments.setFiles(filesData.request_files || []);
+                }
+            }
+            
+            // Item files
+            if (filesData.items && filesData.items.length > 0) {
+                filesData.items.forEach((item, index) => {
+                    if (item.files && item.files.length > 0) {
+                        const itemFilesContainer = document.getElementById(`item-files-container-${index}`);
+                        if (itemFilesContainer) {
+                            const itemFileAttachments = new FileAttachments(`item-files-container-${index}`, {
+                                title: '',
+                                layout: 'grid',
+                                showTitle: false,
+                                onFileClick: (file) => {
+                                    const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+                                    const fileExtension = fileName.split('.').pop().toLowerCase();
+                                    const viewer = new FileViewer();
+                                    viewer.setDownloadCallback(async () => {
+                                        await viewer.downloadFile(file.file_url, fileName);
+                                    });
+                                    viewer.openFile(file.file_url, fileName, fileExtension);
+                                },
+                                onDownloadClick: (fileUrl, fileName) => {
+                                    fetch(fileUrl)
+                                        .then(response => response.blob())
+                                        .then(blob => {
+                                            const url = window.URL.createObjectURL(blob);
+                                            const link = document.createElement('a');
+                                            link.href = url;
+                                            link.download = fileName;
+                                            link.style.display = 'none';
+                                            document.body.appendChild(link);
+                                            link.click();
+                                            document.body.removeChild(link);
+                                            window.URL.revokeObjectURL(url);
+                                        })
+                                        .catch(error => {
+                                            console.error('Download failed:', error);
+                                            const link = document.createElement('a');
+                                            link.href = fileUrl;
+                                            link.download = fileName;
+                                            link.target = '_blank';
+                                            link.click();
+                                        });
+                                }
+                            });
+                            itemFileAttachments.setFiles(item.files || []);
+                        }
+                    }
+                });
+            }
+        }, 100);
+        
+        // Show the modal
+        allFilesModal.show();
+        
+        // Setup cleanup on close
+        allFilesModal.onCloseCallback(() => {
+            setTimeout(() => {
+                cleanupBackdrops();
+            }, 300);
+        });
+        
+    } catch (error) {
+        console.error('Error loading all files:', error);
+        showNotification('Dosyalar yüklenirken hata oluştu: ' + error.message, 'error');
+    }
 }
 
 function cleanupBackdrops() {

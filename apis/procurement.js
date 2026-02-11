@@ -186,6 +186,22 @@ export async function getPurchaseRequest(requestId) {
     }
 }
 
+export async function getPurchaseRequestAllFiles(requestId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/purchase-requests/${requestId}/all_files/`);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Dosyalar yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching purchase request all files:', error);
+        throw error;
+    }
+}
+
 export async function savePurchaseRequestDraft(draftData) {
     try {
         const response = await authedFetch(`${backendBase}/procurement/purchase-request-draft/`, {

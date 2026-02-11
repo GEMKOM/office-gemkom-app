@@ -9,3 +9,19 @@
     max-height: 70vh;
     overflow-y: auto;
 }
+
+/* Subcontracting row highlighting */
+.subcontracting-row {
+    background-color: #fff3cd !important;
+    border-left: 4px solid #ffc107 !important;
+    position: relative;
+}
+
+.subcontracting-row:hover {
+    background-color: #ffe69c !important;
+    box-shadow: 0 2px 8px rgba(255, 193, 7, 0.2);
+}
+
+.subcontracting-row td {
+    background-color: transparent !important;
+}
