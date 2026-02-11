@@ -436,6 +436,10 @@ async function loadRequests() {
             if (filterValues['created-at-filter']) {
                 apiFilters.created_at__gte = filterValues['created-at-filter'];
             }
+            // Add Talep No (request_number) filter to API call if set
+            if (filterValues['talep-no-filter'] && filterValues['talep-no-filter'].trim() !== '') {
+                apiFilters.request_number = filterValues['talep-no-filter'].trim();
+            }
         }
         
         // Add ordering parameters
@@ -469,11 +473,8 @@ async function loadRequests() {
         
         console.log('Processed requests:', requests);
         
-        // Apply remaining local filters (Talep No only)
-        const filteredRequests = applyLocalFilters(requests);
-        
-        // Update the table component
-        requestsTable.updateData(filteredRequests, totalRequests, currentPage);
+        // All filtering is done on the backend; use API response as-is
+        requestsTable.updateData(requests, totalRequests, currentPage);
         updateRequestCounts();
         
     } catch (error) {
@@ -489,24 +490,7 @@ async function loadRequests() {
     }
 }
 
-function applyLocalFilters(requests) {
-    if (!requestFilters) return requests;
-    
-    const filters = requestFilters.getFilterValues();
-    let filtered = requests;
-    
-    // Talep No filter (client-side only for real-time search)
-    if (filters['talep-no-filter']) {
-        const searchTerm = filters['talep-no-filter'].toLowerCase();
-        filtered = filtered.filter(request => 
-            request.request_number?.toLowerCase().includes(searchTerm)
-        );
-    }
-    
-    return filtered;
-}
-
-// Client-side sorting and pagination removed - now handled by backend
+// All filtering (Talep No, requestor, status, priority, created_at) is done on the backend
 
 
 function updateRequestCounts() {
