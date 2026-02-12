@@ -73,6 +73,8 @@ export async function initDepartmentTasksPage(config) {
     let subtasksCache = new Map();
     let taskHierarchyMap = new Map(); // Track hierarchy levels for each task
     let expandButtonHandler = null;
+    let currentSortField = 'job_order'; // Default sort field
+    let currentSortDirection = 'desc'; // Default sort direction
 
     // Component instances
     let tasksFilters = null;
@@ -296,6 +298,8 @@ function initializeFiltersComponent() {
 function initializeTableComponent() {
     tasksTable = new TableComponent(containerIds.table, {
         title: 'Görev Listesi',
+        currentSortField: currentSortField,
+        currentSortDirection: currentSortDirection,
         rowAttributes: (row, rowIndex) => {
             // Style subtasks differently
             if (row.parent) {
@@ -455,28 +459,60 @@ function initializeTableComponent() {
                 field: 'assigned_to_name',
                 label: 'Atanan',
                 sortable: false,
-                formatter: (value) => value || '-'
+                editable: true,
+                formatter: (value, row) => {
+                    // Make it editable (exclude machining_part and cnc_part types)
+                    const isEditable = row.type !== 'machining_part' && row.type !== 'cnc_part';
+                    const cursorStyle = isEditable ? 'cursor: pointer;' : '';
+                    const taskId = row.id;
+                    const assignedToId = row.assigned_to || '';
+                    const displayValue = value || '-';
+                    
+                    return `
+                        <div class="editable-assigned" data-task-id="${taskId}" data-assigned-to="${assignedToId}" style="${cursorStyle}" ${isEditable ? 'title="Atanan kişiyi değiştirmek için tıklayın"' : ''}>
+                            ${displayValue}
+                        </div>
+                    `;
+                }
             },
             {
                 field: 'target_completion_date',
                 label: 'Hedef Bitiş',
                 sortable: true,
                 type: 'date',
-                formatter: (value) => {
-                    if (!value) return '-';
-                    const date = new Date(value);
-                    return date.toLocaleDateString('tr-TR', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
-                    });
+                editable: true,
+                formatter: (value, row) => {
+                    // Make it editable (exclude machining_part and cnc_part types)
+                    const isEditable = row.type !== 'machining_part' && row.type !== 'cnc_part';
+                    const cursorStyle = isEditable ? 'cursor: pointer;' : '';
+                    const taskId = row.id;
+                    
+                    let displayValue = '-';
+                    let dateValue = '';
+                    if (value) {
+                        const date = new Date(value);
+                        displayValue = date.toLocaleDateString('tr-TR', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                        });
+                        // Format for date input (YYYY-MM-DD)
+                        dateValue = date.toISOString().split('T')[0];
+                    }
+                    
+                    return `
+                        <div class="editable-date" data-task-id="${taskId}" data-date-value="${dateValue}" style="${cursorStyle}" ${isEditable ? 'title="Hedef bitiş tarihini değiştirmek için tıklayın"' : ''}>
+                            ${displayValue}
+                        </div>
+                    `;
                 }
             },
             {
                 field: 'completion_percentage',
                 label: 'Tamamlanma',
                 sortable: false,
-                formatter: (value) => {
+                editable: true,
+                formatter: (value, row) => {
                     if (!value && value !== 0) return '<div class="text-center">-</div>';
                     const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
                     
@@ -507,8 +543,13 @@ function initializeTableComponent() {
                     const textColor = percentage > 50 ? '#ffffff' : '#1f2937';
                     const textShadow = percentage > 50 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none';
                     
+                    // Make it clickable for editing (exclude machining_part and cnc_part types)
+                    const isEditable = row.type !== 'machining_part' && row.type !== 'cnc_part';
+                    const cursorStyle = isEditable ? 'cursor: pointer;' : '';
+                    const taskId = row.id;
+                    
                     return `
-                        <div class="text-center" style="position: relative; width: 100%;">
+                        <div class="text-center editable-progress" data-task-id="${taskId}" style="position: relative; width: 100%; ${cursorStyle}" ${isEditable ? 'title="İlerlemeyi düzenlemek için tıklayın"' : ''}>
                             <div class="progress" style="height: 24px; border-radius: 6px; background-color: #e5e7eb; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
                                 <div class="progress-bar ${colorClass}" 
                                      role="progressbar" 
@@ -557,6 +598,8 @@ function initializeTableComponent() {
         },
         onSort: async (field, direction) => {
             currentPage = 1;
+            currentSortField = field;
+            currentSortDirection = direction;
             await loadTasks();
         },
         onPageSizeChange: async (newPageSize) => {
@@ -879,11 +922,16 @@ async function loadTasks() {
         const filterValues = tasksFilters ? tasksFilters.getFilterValues() : {};
 
         // Build query options
+        // Build ordering string (field name with optional '-' prefix for descending)
+        const orderingField = currentSortField || 'job_order';
+        const orderingDirection = currentSortDirection === 'desc' ? '-' : '';
+        const ordering = `${orderingDirection}${orderingField}`;
+        
         const options = {
             page: currentPage,
             department: department,
             main_only: true, // Only show main tasks (no subtasks)
-            ordering: 'sequence'
+            ordering: ordering
         };
 
         // Status filter
@@ -940,12 +988,20 @@ async function loadTasks() {
 
         // Update table data with pagination info
         if (tasksTable) {
+            // Sync sort state with table component
+            tasksTable.currentSortField = currentSortField;
+            tasksTable.currentSortDirection = currentSortDirection;
+            tasksTable.options.currentSortField = currentSortField;
+            tasksTable.options.currentSortDirection = currentSortDirection;
             tasksTable.updateData(dataToDisplay, totalTasks, currentPage);
         }
 
         // Setup expand button listeners after table is updated
         setTimeout(() => {
             setupExpandButtonListeners();
+            setupProgressEditListeners();
+            setupAssignedEditListeners();
+            setupDateEditListeners();
         }, 50);
 
         if (typeof onAfterLoadTasks === 'function') {
@@ -1049,6 +1105,9 @@ function updateTableDataOnly() {
     // Setup expand button listeners after table is updated
     setTimeout(() => {
         setupExpandButtonListeners();
+        setupProgressEditListeners();
+        setupAssignedEditListeners();
+        setupDateEditListeners();
     }, 50);
 }
 
@@ -1164,6 +1223,535 @@ async function fetchTaskSubtasks(taskId) {
         }
         throw error;
     }
+}
+
+// Setup event listeners for progress editing using event delegation
+let progressEditHandler = null;
+function setupProgressEditListeners() {
+    if (!tasksTable || !tasksTable.container) {
+        // Table not ready yet, try again later
+        setTimeout(setupProgressEditListeners, 100);
+        return;
+    }
+    
+    // Remove existing handler if any
+    if (progressEditHandler) {
+        tasksTable.container.removeEventListener('click', progressEditHandler);
+    }
+    
+    // Create the handler function
+    progressEditHandler = (e) => {
+        // Check if the clicked element is an editable progress cell
+        const progressCell = e.target.closest('.editable-progress');
+        if (!progressCell) return;
+        
+        // Don't trigger if clicking on an input
+        if (e.target.tagName === 'INPUT') return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const taskIdAttr = progressCell.getAttribute('data-task-id');
+        if (!taskIdAttr) {
+            console.warn('Progress cell missing data-task-id attribute');
+            return;
+        }
+        
+        // Get current percentage from the displayed text
+        const percentageText = progressCell.querySelector('div[style*="position: absolute"]');
+        let currentValue = 0;
+        if (percentageText) {
+            const match = percentageText.textContent.match(/(\d+\.?\d*)%/);
+            if (match) {
+                currentValue = parseFloat(match[1]);
+            }
+        }
+        
+        // Store original value for comparison
+        const originalValue = currentValue;
+        const originalContent = progressCell.innerHTML;
+        
+        // Create inline input
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '0';
+        input.max = '100';
+        input.step = '0.1';
+        input.value = currentValue.toFixed(1);
+        input.className = 'form-control form-control-sm';
+        input.style.cssText = 'width: 80px; margin: 0 auto; text-align: center; font-weight: 600; z-index: 10; position: relative;';
+        
+        // Replace the progress bar with input
+        progressCell.innerHTML = '';
+        progressCell.style.display = 'flex';
+        progressCell.style.justifyContent = 'center';
+        progressCell.style.alignItems = 'center';
+        progressCell.appendChild(input);
+        
+        // Focus and select the input
+        input.focus();
+        input.select();
+        
+        // Helper function to update progress display without reloading
+        const updateProgressDisplay = (percentage) => {
+            const percentageValue = Math.min(100, Math.max(0, parseFloat(percentage) || 0));
+            
+            // Determine color based on percentage
+            let colorClass = 'bg-success';
+            let barColor = '#10b981';
+            if (percentageValue === 0) {
+                colorClass = 'bg-secondary';
+                barColor = '#6b7280';
+            } else if (percentageValue < 25) {
+                colorClass = 'bg-danger';
+                barColor = '#ef4444';
+            } else if (percentageValue < 50) {
+                colorClass = 'bg-warning';
+                barColor = '#f59e0b';
+            } else if (percentageValue < 75) {
+                colorClass = 'bg-info';
+                barColor = '#3b82f6';
+            } else if (percentageValue < 100) {
+                colorClass = 'bg-success';
+                barColor = '#10b981';
+            } else {
+                colorClass = 'bg-success';
+                barColor = '#059669';
+            }
+            
+            const textColor = percentageValue > 50 ? '#ffffff' : '#1f2937';
+            const textShadow = percentageValue > 50 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none';
+            
+            progressCell.innerHTML = `
+                <div class="text-center" style="position: relative; width: 100%;">
+                    <div class="progress" style="height: 24px; border-radius: 6px; background-color: #e5e7eb; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                        <div class="progress-bar ${colorClass}" 
+                             role="progressbar" 
+                             style="width: ${percentageValue}%; 
+                                    background: linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%);
+                                    border-radius: 6px;
+                                    transition: width 0.6s ease;
+                                    box-shadow: 0 2px 4px rgba(0,0,0,0.1);" 
+                             aria-valuenow="${percentageValue}" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                        </div>
+                    </div>
+                    <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                                font-weight: 600; font-size: 0.75rem; color: ${textColor}; 
+                                text-shadow: ${textShadow}; pointer-events: none; white-space: nowrap; z-index: 1;">
+                        ${percentageValue.toFixed(1)}%
+                    </div>
+                </div>
+            `;
+            progressCell.style.display = '';
+            progressCell.style.justifyContent = '';
+            progressCell.style.alignItems = '';
+        };
+        
+        // Handle save on Enter or blur
+        const saveProgress = async () => {
+            const newValue = parseFloat(input.value);
+            if (isNaN(newValue) || newValue < 0 || newValue > 100) {
+                showNotification('Geçerli bir değer girin (0-100)', 'error');
+                // Restore original display
+                progressCell.innerHTML = originalContent;
+                progressCell.style.display = '';
+                progressCell.style.justifyContent = '';
+                progressCell.style.alignItems = '';
+                return;
+            }
+            
+            // Check if value actually changed
+            if (Math.abs(newValue - originalValue) < 0.01) {
+                // Value didn't change, just restore display
+                progressCell.innerHTML = originalContent;
+                progressCell.style.display = '';
+                progressCell.style.justifyContent = '';
+                progressCell.style.alignItems = '';
+                return;
+            }
+            
+            const taskId = isNaN(taskIdAttr) ? taskIdAttr : parseInt(taskIdAttr);
+            const numericTaskId = typeof taskId === 'string' && !isNaN(taskId) ? parseInt(taskId) : taskId;
+            
+            try {
+                // Send PATCH request with manual_progress
+                await patchDepartmentTask(numericTaskId, { manual_progress: newValue });
+                showNotification('İlerleme güncellendi', 'success');
+                // Update display without reloading
+                updateProgressDisplay(newValue);
+                // Also update the task in the data array
+                const task = tasks.find(t => t.id === numericTaskId) || 
+                           Array.from(subtasksCache.values()).flat().find(t => t.id === numericTaskId);
+                if (task) {
+                    task.completion_percentage = newValue;
+                }
+            } catch (error) {
+                console.error('Error updating progress:', error);
+                let errorMessage = 'İlerleme güncellenirken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                showNotification(errorMessage, 'error');
+                // Restore original display
+                progressCell.innerHTML = originalContent;
+                progressCell.style.display = '';
+                progressCell.style.justifyContent = '';
+                progressCell.style.alignItems = '';
+            }
+        };
+        
+        // Handle cancel on Escape
+        const cancelEdit = () => {
+            progressCell.innerHTML = originalContent;
+            progressCell.style.display = '';
+            progressCell.style.justifyContent = '';
+            progressCell.style.alignItems = '';
+        };
+        
+        input.addEventListener('blur', saveProgress);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        });
+    };
+    
+    // Attach the event listener to the container (which persists across renders)
+    tasksTable.container.addEventListener('click', progressEditHandler);
+}
+
+// Setup event listeners for assigned user editing using event delegation
+let assignedEditHandler = null;
+function setupAssignedEditListeners() {
+    if (!tasksTable || !tasksTable.container) {
+        setTimeout(setupAssignedEditListeners, 100);
+        return;
+    }
+    
+    if (assignedEditHandler) {
+        tasksTable.container.removeEventListener('click', assignedEditHandler);
+    }
+    
+    assignedEditHandler = (e) => {
+        const assignedCell = e.target.closest('.editable-assigned');
+        if (!assignedCell) return;
+        
+        if (e.target.tagName === 'SELECT') return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const taskIdAttr = assignedCell.getAttribute('data-task-id');
+        const currentAssignedTo = assignedCell.getAttribute('data-assigned-to') || '';
+        
+        if (!taskIdAttr) {
+            console.warn('Assigned cell missing data-task-id attribute');
+            return;
+        }
+        
+        // Store original values
+        const originalValue = currentAssignedTo;
+        const originalContent = assignedCell.innerHTML;
+        const originalDisplayValue = assignedCell.textContent.trim();
+        
+        // Create dropdown with users
+        const select = document.createElement('select');
+        select.className = 'form-select form-select-sm';
+        select.style.cssText = 'width: 180px; margin: 0 auto; z-index: 10; position: relative;';
+        
+        // Add "Unassigned" option
+        const unassignedOption = document.createElement('option');
+        unassignedOption.value = '';
+        unassignedOption.textContent = 'Atanmamış';
+        if (!currentAssignedTo) {
+            unassignedOption.selected = true;
+        }
+        select.appendChild(unassignedOption);
+        
+        // Add user options
+        users.forEach(user => {
+            const option = document.createElement('option');
+            option.value = user.id.toString();
+            option.textContent = user.name || user.username;
+            if (currentAssignedTo === user.id.toString()) {
+                option.selected = true;
+            }
+            select.appendChild(option);
+        });
+        
+        // Replace cell content with dropdown
+        assignedCell.innerHTML = '';
+        assignedCell.style.display = 'flex';
+        assignedCell.style.justifyContent = 'center';
+        assignedCell.style.alignItems = 'center';
+        assignedCell.appendChild(select);
+        
+        // Focus the select
+        select.focus();
+        
+        // Helper function to update assigned display without reloading
+        const updateAssignedDisplay = (assignedToId) => {
+            let displayValue = '-';
+            if (assignedToId) {
+                const user = users.find(u => u.id.toString() === assignedToId.toString());
+                if (user) {
+                    displayValue = user.name || user.username;
+                }
+            }
+            assignedCell.innerHTML = displayValue;
+            assignedCell.setAttribute('data-assigned-to', assignedToId || '');
+            assignedCell.style.display = '';
+            assignedCell.style.justifyContent = '';
+            assignedCell.style.alignItems = '';
+        };
+        
+        // Handle save on blur or change
+        const saveAssigned = async () => {
+            const newValue = select.value;
+            
+            // Check if value actually changed
+            if (newValue === originalValue) {
+                // Value didn't change, just restore display
+                assignedCell.innerHTML = originalContent;
+                assignedCell.style.display = '';
+                assignedCell.style.justifyContent = '';
+                assignedCell.style.alignItems = '';
+                return;
+            }
+            
+            const taskId = isNaN(taskIdAttr) ? taskIdAttr : parseInt(taskIdAttr);
+            const numericTaskId = typeof taskId === 'string' && !isNaN(taskId) ? parseInt(taskId) : taskId;
+            
+            // Prepare update data
+            const updateData = {
+                assigned_to: newValue === '' || newValue === null ? null : parseInt(newValue)
+            };
+            
+            try {
+                await patchDepartmentTask(numericTaskId, updateData);
+                showNotification('Atanan kişi güncellendi', 'success');
+                // Update display without reloading
+                updateAssignedDisplay(newValue);
+                // Also update the task in the data array
+                const task = tasks.find(t => t.id === numericTaskId) || 
+                           Array.from(subtasksCache.values()).flat().find(t => t.id === numericTaskId);
+                if (task) {
+                    task.assigned_to = newValue ? parseInt(newValue) : null;
+                    const user = users.find(u => u.id.toString() === newValue);
+                    task.assigned_to_name = user ? (user.name || user.username) : null;
+                }
+            } catch (error) {
+                console.error('Error updating assigned user:', error);
+                let errorMessage = 'Atanan kişi güncellenirken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                showNotification(errorMessage, 'error');
+                // Restore original display
+                assignedCell.innerHTML = originalContent;
+                assignedCell.style.display = '';
+                assignedCell.style.justifyContent = '';
+                assignedCell.style.alignItems = '';
+            }
+        };
+        
+        // Handle cancel on Escape
+        const cancelEdit = () => {
+            assignedCell.innerHTML = originalContent;
+            assignedCell.style.display = '';
+            assignedCell.style.justifyContent = '';
+            assignedCell.style.alignItems = '';
+        };
+        
+        select.addEventListener('blur', saveAssigned);
+        select.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        });
+        // Also save on change (user selects a different option)
+        select.addEventListener('change', () => {
+            setTimeout(() => select.blur(), 100);
+        });
+    };
+    
+    tasksTable.container.addEventListener('click', assignedEditHandler);
+}
+
+// Setup event listeners for date editing using event delegation
+let dateEditHandler = null;
+function setupDateEditListeners() {
+    if (!tasksTable || !tasksTable.container) {
+        setTimeout(setupDateEditListeners, 100);
+        return;
+    }
+    
+    if (dateEditHandler) {
+        tasksTable.container.removeEventListener('click', dateEditHandler);
+    }
+    
+    dateEditHandler = (e) => {
+        const dateCell = e.target.closest('.editable-date');
+        if (!dateCell) return;
+        
+        if (e.target.tagName === 'INPUT') return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const taskIdAttr = dateCell.getAttribute('data-task-id');
+        const currentDateValue = dateCell.getAttribute('data-date-value') || '';
+        
+        if (!taskIdAttr) {
+            console.warn('Date cell missing data-task-id attribute');
+            return;
+        }
+        
+        // Store original values
+        const originalValue = currentDateValue;
+        const originalContent = dateCell.innerHTML;
+        
+        // Create date input
+        const input = document.createElement('input');
+        input.type = 'date';
+        input.value = currentDateValue;
+        input.className = 'form-control form-control-sm';
+        input.style.cssText = 'width: 150px; margin: 0 auto; z-index: 10; position: relative;';
+        
+        // Replace cell content with input
+        dateCell.innerHTML = '';
+        dateCell.style.display = 'flex';
+        dateCell.style.justifyContent = 'center';
+        dateCell.style.alignItems = 'center';
+        dateCell.appendChild(input);
+        
+        // Focus the input
+        input.focus();
+        
+        // Helper function to update date display without reloading
+        const updateDateDisplay = (dateValue) => {
+            let displayValue = '-';
+            if (dateValue) {
+                const date = new Date(dateValue);
+                displayValue = date.toLocaleDateString('tr-TR', {
+                    year: 'numeric',
+                    month: 'short',
+                    day: 'numeric'
+                });
+            }
+            dateCell.innerHTML = displayValue;
+            dateCell.setAttribute('data-date-value', dateValue || '');
+            dateCell.style.display = '';
+            dateCell.style.justifyContent = '';
+            dateCell.style.alignItems = '';
+        };
+        
+        // Handle save on blur or Enter
+        const saveDate = async () => {
+            const newValue = input.value;
+            
+            // Check if value actually changed
+            if (newValue === originalValue) {
+                // Value didn't change, just restore display
+                dateCell.innerHTML = originalContent;
+                dateCell.style.display = '';
+                dateCell.style.justifyContent = '';
+                dateCell.style.alignItems = '';
+                return;
+            }
+            
+            const taskId = isNaN(taskIdAttr) ? taskIdAttr : parseInt(taskIdAttr);
+            const numericTaskId = typeof taskId === 'string' && !isNaN(taskId) ? parseInt(taskId) : taskId;
+            
+            // Prepare update data
+            const updateData = {
+                target_completion_date: newValue || null
+            };
+            
+            try {
+                await patchDepartmentTask(numericTaskId, updateData);
+                showNotification('Hedef bitiş tarihi güncellendi', 'success');
+                // Update display without reloading
+                updateDateDisplay(newValue);
+                // Also update the task in the data array
+                const task = tasks.find(t => t.id === numericTaskId) || 
+                           Array.from(subtasksCache.values()).flat().find(t => t.id === numericTaskId);
+                if (task) {
+                    task.target_completion_date = newValue || null;
+                }
+            } catch (error) {
+                console.error('Error updating date:', error);
+                let errorMessage = 'Hedef bitiş tarihi güncellenirken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                showNotification(errorMessage, 'error');
+                // Restore original display
+                dateCell.innerHTML = originalContent;
+                dateCell.style.display = '';
+                dateCell.style.justifyContent = '';
+                dateCell.style.alignItems = '';
+            }
+        };
+        
+        // Handle cancel on Escape
+        const cancelEdit = () => {
+            dateCell.innerHTML = originalContent;
+            dateCell.style.display = '';
+            dateCell.style.justifyContent = '';
+            dateCell.style.alignItems = '';
+        };
+        
+        input.addEventListener('blur', saveDate);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        });
+    };
+    
+    tasksTable.container.addEventListener('click', dateEditHandler);
 }
 
 async function viewTaskDetails(taskId) {

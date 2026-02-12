@@ -178,9 +178,13 @@ export class TableComponent {
                 }
             }
             
+            // Add editable indicator if column is marked as editable
+            const editableIcon = column.editable ? 
+                '<i class="fas fa-edit editable-indicator text-muted ms-1" title="Düzenlenebilir" style="font-size: 0.75rem;"></i>' : '';
+            
             return `
                 <th class="${sortClass} ${headerExtraClass}" data-field="${column.field}">
-                    ${column.label} ${sortIcon}
+                    ${column.label} ${editableIcon} ${sortIcon}
                 </th>
             `;
         });
