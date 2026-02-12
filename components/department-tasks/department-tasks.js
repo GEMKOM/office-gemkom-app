@@ -60,7 +60,10 @@ export async function initDepartmentTasksPage(config) {
     };
 
     // State management (closure)
-    let currentPage = 1;
+    // Read initial page and page_size from URL
+    const urlParams = new URLSearchParams(window.location.search);
+    let currentPage = parseInt(urlParams.get('page')) || 1;
+    let currentPageSize = parseInt(urlParams.get('page_size')) || 20;
     let currentStatusFilter = 'pending,in_progress';
     let currentFilters = {};
     let tasks = [];
@@ -123,6 +126,7 @@ function normalizeStatusColors(statusOptions) {
         onBackClick: () => { window.location.href = backUrl; },
         onRefreshClick: async () => {
             currentPage = 1;
+            updateUrlParams({ page: 1 });
             await loadTasks();
         }
     });
@@ -181,7 +185,32 @@ function setupUrlHandlers() {
     // Handle browser back/forward buttons
     window.addEventListener('popstate', () => {
         checkUrlAndOpenModal();
+        // Reload tasks if page/page_size changed
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlPage = parseInt(urlParams.get('page')) || 1;
+        const urlPageSize = parseInt(urlParams.get('page_size')) || 20;
+        if (urlPage !== currentPage || urlPageSize !== currentPageSize) {
+            currentPage = urlPage;
+            currentPageSize = urlPageSize;
+            if (tasksTable) {
+                tasksTable.options.itemsPerPage = currentPageSize;
+            }
+            loadTasks();
+        }
     });
+}
+
+// Helper function to update URL parameters
+function updateUrlParams(params) {
+    const url = new URL(window.location);
+    Object.keys(params).forEach(key => {
+        if (params[key] !== null && params[key] !== undefined) {
+            url.searchParams.set(key, params[key].toString());
+        } else {
+            url.searchParams.delete(key);
+        }
+    });
+    window.history.replaceState({}, '', url);
 }
 
 async function checkUrlAndOpenModal() {
@@ -586,7 +615,7 @@ function initializeTableComponent() {
         sortable: true,
         pagination: true,
         serverSidePagination: true,
-        itemsPerPage: 20,
+        itemsPerPage: currentPageSize,
         refreshable: true,
         exportable: true,
         onRefresh: async () => {
@@ -604,10 +633,13 @@ function initializeTableComponent() {
         },
         onPageSizeChange: async (newPageSize) => {
             currentPage = 1;
+            currentPageSize = newPageSize;
+            updateUrlParams({ page: 1, page_size: newPageSize });
             await loadTasks();
         },
         onPageChange: async (page) => {
             currentPage = page;
+            updateUrlParams({ page: page });
             await loadTasks();
         },
         actions: [
@@ -665,7 +697,7 @@ function initializeTableComponent() {
                 icon: 'fas fa-forward',
                 class: 'btn-outline-secondary',
                 onClick: (row) => handleSkipTask(row.id),
-                visible: (row) => row.status === 'pending' && row.type !== 'machining_part' && row.type !== 'cnc_part'
+                visible: (row) => row.status !== 'completed' && row.status !== 'skipped' && row.type !== 'machining_part' && row.type !== 'cnc_part'
             }
         ],
         emptyMessage: 'Görev bulunamadı',
@@ -929,6 +961,7 @@ async function loadTasks() {
         
         const options = {
             page: currentPage,
+            page_size: currentPageSize,
             department: department,
             main_only: true, // Only show main tasks (no subtasks)
             ordering: ordering

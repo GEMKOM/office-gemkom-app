@@ -6,20 +6,16 @@ import {
     createJobOrder as createJobOrderAPI, 
     updateJobOrder as updateJobOrderAPI,
     startJobOrder as startJobOrderAPI,
-    completeJobOrder as completeJobOrderAPI,
     holdJobOrder as holdJobOrderAPI,
     resumeJobOrder as resumeJobOrderAPI,
     cancelJobOrder as cancelJobOrderAPI,
-    getJobOrderHierarchy,
     getStatusChoices,
-    getPriorityChoices,
     applyTemplateToJobOrder,
     getChildJobOrders,
     getJobOrderDepartmentTasks,
     getJobOrderChildren,
     getJobOrderFiles,
-    STATUS_OPTIONS,
-    PRIORITY_OPTIONS
+    STATUS_OPTIONS
 } from '../../apis/projects/jobOrders.js';
 import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks } from '../../apis/projects/departmentTasks.js';
 import { listTaskTemplates, getTaskTemplateById } from '../../apis/projects/taskTemplates.js';
@@ -48,6 +44,7 @@ import { ConfirmationModal } from '../../components/confirmation-modal/confirmat
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { backendBase } from '../../base.js';
+import { isAdmin } from '../../authService.js';
 import { listDrawingReleases, getCurrentRelease, requestRevision } from '../../apis/projects/design.js';
 import { fetchAllUsers } from '../../apis/users.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
@@ -65,9 +62,19 @@ let jobOrderFilters = null; // Filters component instance
 let jobOrdersTable = null; // Table component instance
 let customers = []; // Store customers for dropdowns
 let statusOptions = STATUS_OPTIONS; // Status options
-let priorityOptions = PRIORITY_OPTIONS; // Priority options
 let expandedRows = new Set(); // Track expanded rows by job_no
 let childrenCache = new Map(); // Cache children data by parent job_no
+
+// Helper function to check if user has planning team or superuser access
+function canEditJobOrders() {
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        return user.team === 'planning' || isAdmin();
+    } catch (error) {
+        console.warn('Failed to parse user data for permission check:', error);
+        return false;
+    }
+}
 
 // Modal component instances
 let createJobOrderModal = null;
@@ -78,6 +85,7 @@ let createDepartmentTaskModal = null;
 let viewJobOrderModal = null;
 let confirmationModal = null;
 let requestRevisionModal = null;
+let holdJobOrderModal = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -189,17 +197,12 @@ async function initializeJobOrders() {
 
 async function loadChoices() {
     try {
-        const [statuses, priorities] = await Promise.all([
-            getStatusChoices().catch(() => STATUS_OPTIONS),
-            getPriorityChoices().catch(() => PRIORITY_OPTIONS)
-        ]);
+        const statuses = await getStatusChoices().catch(() => STATUS_OPTIONS);
         statusOptions = statuses;
-        priorityOptions = priorities;
     } catch (error) {
         console.error('Error loading choices:', error);
         // Use static fallbacks
         statusOptions = STATUS_OPTIONS;
-        priorityOptions = PRIORITY_OPTIONS;
     }
 }
 
@@ -423,8 +426,9 @@ function initializeTableComponent() {
                 sortable: false,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
-                    if (value) {
-                        return `${value} <small class="text-muted">(${row.customer_code || ''})</small>`;
+                    const customerDisplayName = row.customer_short_name || row.customer_name || value;
+                    if (customerDisplayName) {
+                        return `${customerDisplayName} <small class="text-muted">(${row.customer_code || ''})</small>`;
                     }
                     return '-';
                 }
@@ -460,26 +464,6 @@ function initializeTableComponent() {
                 }
             },
             {
-                field: 'priority_display',
-                label: 'Öncelik',
-                sortable: true,
-                formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
-                    const priority = row.priority;
-                    const getPriorityBadgeClass = (priority) => {
-                        switch (priority) {
-                            case 'urgent': return 'status-red';
-                            case 'high': return 'status-yellow';
-                            case 'normal': return 'status-blue';
-                            case 'low': return 'status-grey';
-                            default: return 'status-grey';
-                        }
-                    };
-                    const badgeClass = getPriorityBadgeClass(priority);
-                    return `<span class="status-badge ${badgeClass}">${value || '-'}</span>`;
-                }
-            },
-            {
                 field: 'target_completion_date',
                 label: 'Hedef Tamamlanma',
                 sortable: true,
@@ -487,11 +471,12 @@ function initializeTableComponent() {
                 formatter: (value) => {
                     if (!value) return '-';
                     const date = new Date(value);
-                    return date.toLocaleDateString('tr-TR', {
+                    const formattedDate = date.toLocaleDateString('tr-TR', {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric'
                     });
+                    return `<strong>${formattedDate}</strong>`;
                 }
             },
             {
@@ -525,9 +510,8 @@ function initializeTableComponent() {
                         barColor = '#059669'; // darker green for 100%
                     }
                     
-                    // Determine text color based on percentage (for contrast)
-                    const textColor = percentage > 50 ? '#ffffff' : '#1f2937';
-                    const textShadow = percentage > 50 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none';
+                    // Text color always black
+                    const textColor = '#000000';
                     
                     return `
                         <div style="position: relative; width: 100%;">
@@ -546,7 +530,7 @@ function initializeTableComponent() {
                             </div>
                             <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
                                         font-weight: 600; font-size: 0.75rem; color: ${textColor}; 
-                                        text-shadow: ${textShadow}; pointer-events: none; white-space: nowrap; z-index: 1;">
+                                        pointer-events: none; white-space: nowrap; z-index: 1;">
                                 ${percentage.toFixed(1)}%
                             </div>
                         </div>
@@ -561,16 +545,6 @@ function initializeTableComponent() {
                     if (row._isDepartmentTasksRow) return '';
                     if (!value || value === 0) return '-';
                     return `<span class="status-badge status-grey">${value}</span>`;
-                }
-            },
-            {
-                field: 'department_tasks_count',
-                label: 'Görevler',
-                sortable: false,
-                formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
-                    if (!value || value === 0) return '-';
-                    return `<span class="status-badge status-blue">${value}</span>`;
                 }
             },
             {
@@ -629,7 +603,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     editJobOrder(row.job_no);
                 },
-                visible: (row) => row.status !== 'completed' && row.status !== 'cancelled'
+                visible: (row) => canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
             },
             {
                 key: 'view',
@@ -648,7 +622,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     showCreateChildJobOrderModal(row.job_no);
                 },
-                visible: (row) => row.status !== 'completed' && row.status !== 'cancelled'
+                visible: (row) => canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
             },
             {
                 key: 'add-department-task',
@@ -658,16 +632,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     showAddDepartmentTaskModal(row.job_no);
                 },
-                visible: (row) => row.status !== 'completed' && row.status !== 'cancelled'
-            },
-            {
-                key: 'hierarchy',
-                label: 'Hiyerarşi',
-                icon: 'fas fa-sitemap',
-                class: 'btn-outline-primary',
-                onClick: (row) => {
-                    viewJobOrderHierarchy(row.job_no);
-                }
+                visible: (row) => canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
             },
             {
                 key: 'start',
@@ -680,16 +645,6 @@ function initializeTableComponent() {
                 visible: (row) => row.status === 'draft'
             },
             {
-                key: 'complete',
-                label: 'Tamamla',
-                icon: 'fas fa-check',
-                class: 'btn-outline-success',
-                onClick: (row) => {
-                    completeJobOrder(row.job_no);
-                },
-                visible: (row) => row.status === 'active' || row.status === 'on_hold'
-            },
-            {
                 key: 'hold',
                 label: 'Beklet',
                 icon: 'fas fa-pause',
@@ -697,7 +652,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     holdJobOrder(row.job_no);
                 },
-                visible: (row) => row.status === 'active'
+                visible: (row) => canEditJobOrders() && row.status === 'active'
             },
             {
                 key: 'resume',
@@ -717,7 +672,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     cancelJobOrder(row.job_no);
                 },
-                visible: (row) => row.status !== 'completed' && row.status !== 'cancelled'
+                visible: (row) => canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
             }
         ],
         emptyMessage: 'İş emri bulunamadı',
@@ -762,16 +717,6 @@ function initializeFiltersComponent() {
         colSize: 2
     });
 
-    jobOrderFilters.addDropdownFilter({
-        id: 'priority-filter',
-        label: 'Öncelik',
-        options: [
-            { value: '', label: 'Tümü' },
-            ...priorityOptions.map(p => ({ value: p.value, label: p.label }))
-        ],
-        placeholder: 'Tümü',
-        colSize: 2
-    });
 
     // Customer filter - will be updated after customers load
     jobOrderFilters.addDropdownFilter({
@@ -862,6 +807,15 @@ function initializeModalComponents() {
         icon: 'fas fa-edit',
         size: 'lg',
         showEditButton: false
+    });
+
+    // Hold Job Order Modal
+    holdJobOrderModal = new EditModal('hold-job-order-modal-container', {
+        title: 'İş Emrini Beklet',
+        icon: 'fas fa-pause',
+        size: 'md',
+        showEditButton: false,
+        saveButtonText: 'Beklet'
     });
 
     requestRevisionModal.onSaveCallback(async (formData) => {
@@ -983,9 +937,6 @@ async function loadJobOrders() {
         }
         if (filterValues['status-filter']) {
             options.status = filterValues['status-filter'];
-        }
-        if (filterValues['priority-filter']) {
-            options.priority = filterValues['priority-filter'];
         }
         if (filterValues['customer-filter']) {
             options.customer = parseInt(filterValues['customer-filter']);
@@ -1341,26 +1292,11 @@ window.editJobOrder = async function(jobNo) {
             helpText: 'Teslim şekli bilgisi'
         });
 
-        // Add Priority and Dates section
+        // Add Dates section
         editJobOrderModal.addSection({
-            title: 'Öncelik ve Tarihler',
+            title: 'Tarihler',
             icon: 'fas fa-calendar-alt',
             iconColor: 'text-info'
-        });
-
-        editJobOrderModal.addField({
-            id: 'priority',
-            name: 'priority',
-            label: 'Öncelik',
-            type: 'dropdown',
-            value: jobOrder.priority || 'normal',
-            icon: 'fas fa-exclamation-triangle',
-            colSize: 6,
-            helpText: 'İş emri önceliği',
-            options: priorityOptions.map(p => ({
-                value: p.value,
-                label: p.label
-            }))
         });
 
         editJobOrderModal.addField({
@@ -1450,16 +1386,6 @@ window.viewJobOrder = async function(jobNo) {
             }
         };
         
-        const getPriorityBadgeClass = (priority) => {
-            switch (priority) {
-                case 'urgent': return 'status-red';
-                case 'high': return 'status-yellow';
-                case 'normal': return 'status-blue';
-                case 'low': return 'status-grey';
-                default: return 'status-grey';
-            }
-        };
-        
         // Format date helper
         const formatDate = (dateString) => {
             if (!dateString) return '-';
@@ -1517,7 +1443,7 @@ window.viewJobOrder = async function(jobNo) {
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-users me-1"></i>Müşteri
                             </label>
-                            <div class="field-value">${jobOrder.customer_name ? `${jobOrder.customer_name}${jobOrder.customer_code ? ' (' + jobOrder.customer_code + ')' : ''}` : '-'}</div>
+                            <div class="field-value">${(jobOrder.customer_short_name || jobOrder.customer_name) ? `${jobOrder.customer_short_name || jobOrder.customer_name}${jobOrder.customer_code ? ' (' + jobOrder.customer_code + ')' : ''}` : '-'}</div>
                         </div>
                         <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
@@ -1525,14 +1451,6 @@ window.viewJobOrder = async function(jobNo) {
                             </label>
                             <div class="field-value">
                                 ${jobOrder.status_display ? `<span class="status-badge ${getStatusBadgeClass(jobOrder.status)}">${jobOrder.status_display}</span>` : '-'}
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-exclamation-triangle me-1"></i>Öncelik
-                            </label>
-                            <div class="field-value">
-                                ${jobOrder.priority_display ? `<span class="status-badge ${getPriorityBadgeClass(jobOrder.priority)}">${jobOrder.priority_display}</span>` : '-'}
                             </div>
                         </div>
                         <div class="col-md-6">
@@ -1557,7 +1475,7 @@ window.viewJobOrder = async function(jobNo) {
                             <label class="field-label small text-muted mb-1">
                                 <i class="fas fa-calendar-check me-1"></i>Hedef Tamamlanma
                             </label>
-                            <div class="field-value">${formatDate(jobOrder.target_completion_date)}</div>
+                            <div class="field-value fw-bold">${formatDate(jobOrder.target_completion_date)}</div>
                         </div>
                         <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
@@ -1660,16 +1578,14 @@ window.viewJobOrder = async function(jobNo) {
             active: true
         });
         
-        // Add Departman Görevleri tab (only if count > 0)
-        if (jobOrder.department_tasks_count && jobOrder.department_tasks_count > 0) {
-            viewJobOrderModal.addTab({
-                id: 'departman-gorevleri',
-                label: 'Departman Görevleri',
-                icon: 'fas fa-tasks',
-                iconColor: 'text-primary',
-                customContent: '<div id="department-tasks-table-container"></div>'
-            });
-        }
+        // Add Departman Görevleri tab
+        viewJobOrderModal.addTab({
+            id: 'departman-gorevleri',
+            label: 'Departman Görevleri',
+            icon: 'fas fa-tasks',
+            iconColor: 'text-primary',
+            customContent: '<div id="department-tasks-table-container"></div>'
+        });
         
         // Add Alt Görevler tab (only if count > 0)
         if (jobOrder.children_count && jobOrder.children_count > 0) {
@@ -1716,7 +1632,7 @@ window.viewJobOrder = async function(jobNo) {
         
         // Set up tab click handlers for lazy loading
         setTimeout(() => {
-            setupTabClickHandlers(jobNo, getStatusBadgeClass, getPriorityBadgeClass, formatDate);
+            setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate);
         }, 100);
         
         // Data will be loaded on tab click (lazy loading)
@@ -1738,7 +1654,7 @@ window.viewJobOrder = async function(jobNo) {
 };
 
 // Setup tab click handlers for lazy loading
-function setupTabClickHandlers(jobNo, getStatusBadgeClass, getPriorityBadgeClass, formatDate) {
+function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate) {
     const modal = viewJobOrderModal.modal;
     if (!modal) return;
     
@@ -1761,7 +1677,7 @@ function setupTabClickHandlers(jobNo, getStatusBadgeClass, getPriorityBadgeClass
                     await loadDepartmentTasksTab(jobNo, getStatusBadgeClass, formatDate);
                     break;
                 case 'alt-gorevler':
-                    await loadChildrenTab(jobNo, getStatusBadgeClass, getPriorityBadgeClass);
+                    await loadChildrenTab(jobNo, getStatusBadgeClass);
                     break;
                 case 'dosyalar':
                     await loadFilesTab(jobNo);
@@ -1891,8 +1807,8 @@ function renderDepartmentTasksTable(tasks, getStatusBadgeClass, formatDate) {
                         barColor = '#059669';
                     }
                     
-                    const textColor = percentage > 50 ? '#ffffff' : '#1f2937';
-                    const textShadow = percentage > 50 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none';
+                    // Text color always black
+                    const textColor = '#000000';
                     
                     return `
                         <div style="position: relative; width: 100%;">
@@ -1911,7 +1827,7 @@ function renderDepartmentTasksTable(tasks, getStatusBadgeClass, formatDate) {
                             </div>
                             <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
                                         font-weight: 600; font-size: 0.75rem; color: ${textColor}; 
-                                        text-shadow: ${textShadow}; pointer-events: none; white-space: nowrap; z-index: 1;">
+                                        pointer-events: none; white-space: nowrap; z-index: 1;">
                                 ${percentage.toFixed(1)}%
                             </div>
                         </div>
@@ -1984,7 +1900,7 @@ function renderDepartmentTasksTable(tasks, getStatusBadgeClass, formatDate) {
 async function loadChildrenTab(jobNo, getStatusBadgeClass, getPriorityBadgeClass) {
     // Check cache first
     if (jobOrderTabCache.children !== null) {
-        renderChildrenTable(jobOrderTabCache.children, getStatusBadgeClass, getPriorityBadgeClass);
+        renderChildrenTable(jobOrderTabCache.children, getStatusBadgeClass);
         return;
     }
     
@@ -2001,7 +1917,7 @@ async function loadChildrenTab(jobNo, getStatusBadgeClass, getPriorityBadgeClass
         jobOrderTabCache.children = children;
         
         // Render the table
-        renderChildrenTable(children, getStatusBadgeClass, getPriorityBadgeClass);
+        renderChildrenTable(children, getStatusBadgeClass);
     } catch (error) {
         console.error('Error loading children:', error);
         container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Alt iş emirleri yüklenirken hata oluştu.</div>';
@@ -2009,7 +1925,7 @@ async function loadChildrenTab(jobNo, getStatusBadgeClass, getPriorityBadgeClass
 }
 
 // Render Children Table
-function renderChildrenTable(children, getStatusBadgeClass, getPriorityBadgeClass) {
+function renderChildrenTable(children, getStatusBadgeClass) {
     const container = viewJobOrderModal.content.querySelector('#children-table-container');
     if (!container) return;
     
@@ -2042,16 +1958,6 @@ function renderChildrenTable(children, getStatusBadgeClass, getPriorityBadgeClas
                 formatter: (value, row) => {
                     if (!value || value === '-') return '-';
                     const badgeClass = getStatusBadgeClass(row.status);
-                    return `<span class="status-badge ${badgeClass}">${value}</span>`;
-                }
-            },
-            {
-                field: 'priority_display',
-                label: 'Öncelik',
-                sortable: true,
-                formatter: (value, row) => {
-                    if (!value || value === '-') return '-';
-                    const badgeClass = getPriorityBadgeClass(row.priority);
                     return `<span class="status-badge ${badgeClass}">${value}</span>`;
                 }
             },
@@ -3532,70 +3438,6 @@ function showCreateTopicModal(jobNo) {
     createModal.show();
 }
 
-window.viewJobOrderHierarchy = async function(jobNo) {
-    try {
-        const hierarchy = await getJobOrderHierarchy(jobNo);
-        
-        // Create hierarchy view modal
-        const modal = document.createElement('div');
-        modal.className = 'modal fade';
-        modal.innerHTML = `
-            <div class="modal-dialog modal-lg">
-                <div class="modal-content">
-                    <div class="modal-header">
-                        <h5 class="modal-title">
-                            <i class="fas fa-sitemap me-2"></i>İş Emri Hiyerarşisi: ${hierarchy.job_no}
-                        </h5>
-                        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                    </div>
-                    <div class="modal-body">
-                        ${renderHierarchyTree(hierarchy)}
-                    </div>
-                    <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
-                    </div>
-                </div>
-            </div>
-        `;
-        document.body.appendChild(modal);
-        const bsModal = new bootstrap.Modal(modal);
-        bsModal.show();
-        modal.addEventListener('hidden.bs.modal', () => modal.remove());
-    } catch (error) {
-        console.error('Error viewing hierarchy:', error);
-        showNotification('Hiyerarşi bilgileri yüklenirken hata oluştu', 'error');
-    }
-};
-
-function renderHierarchyTree(node, level = 0) {
-    const indent = level * 30;
-    const hasChildren = node.children && node.children.length > 0;
-    
-    let html = `
-        <div class="hierarchy-node mb-2" style="padding-left: ${indent}px; border-left: ${level > 0 ? '2px solid #dee2e6' : 'none'};">
-            <div class="d-flex align-items-center p-2 bg-light rounded">
-                <i class="fas ${hasChildren ? 'fa-folder' : 'fa-file'} me-2 text-primary"></i>
-                <div class="flex-grow-1">
-                    <strong>${node.job_no}</strong> - ${node.title}
-                    <br>
-                    <small class="text-muted">
-                        Durum: ${node.status_display} | 
-                        Öncelik: ${node.priority || 'N/A'} | 
-                        Tamamlanma: ${node.completion_percentage}%
-                    </small>
-                </div>
-            </div>
-        </div>
-    `;
-    
-    if (hasChildren) {
-        node.children.forEach(child => {
-            html += renderHierarchyTree(child, level + 1);
-        });
-    }
-    
-    return html;
-}
 
 window.showCreateChildJobOrderModal = async function(parentJobNo) {
     if (customers.length === 0) {
@@ -3710,27 +3552,11 @@ window.showCreateChildJobOrderModal = async function(parentJobNo) {
         helpText: 'Teslim şekli bilgisi'
     });
 
-    // Add Priority and Dates section (customer is inherited from parent)
+    // Add Dates section (customer is inherited from parent)
     createJobOrderModal.addSection({
-        title: 'Öncelik ve Tarihler',
+        title: 'Tarihler',
         icon: 'fas fa-calendar-alt',
         iconColor: 'text-info'
-    });
-
-    createJobOrderModal.addField({
-        id: 'priority',
-        name: 'priority',
-        label: 'Öncelik',
-        type: 'dropdown',
-        placeholder: 'Öncelik seçin...',
-        value: parentJob.priority || 'normal',
-        icon: 'fas fa-exclamation-triangle',
-        colSize: 6,
-        helpText: 'İş emri önceliği',
-        options: priorityOptions.map(p => ({
-            value: p.value,
-            label: p.label
-        }))
     });
 
     createJobOrderModal.addField({
@@ -3864,118 +3690,125 @@ window.startJobOrder = async function(jobNo) {
     });
 };
 
-window.completeJobOrder = async function(jobNo) {
-    if (!confirm(`İş emri ${jobNo} tamamlanacak mı?`)) {
-        return;
-    }
-    
-    try {
-        const response = await completeJobOrderAPI(jobNo);
-        if (response && response.status === 'success') {
-            showNotification(response.message || 'İş emri tamamlandı', 'success');
-            await loadJobOrders();
-        } else {
-            throw new Error('İş emri tamamlanamadı');
-        }
-    } catch (error) {
-        console.error('Error completing job order:', error);
-        let errorMessage = 'İş emri tamamlanırken hata oluştu';
-        try {
-            if (error.message) {
-                const errorData = JSON.parse(error.message);
-                if (typeof errorData === 'object') {
-                    const errors = Object.values(errorData).flat();
-                    errorMessage = errors.join(', ') || errorMessage;
-                }
-            }
-        } catch (e) {}
-        showNotification(errorMessage, 'error');
-    }
-};
 
 window.holdJobOrder = async function(jobNo) {
-    const reason = prompt('Bekletme nedeni (opsiyonel):');
+    // Store the job number for the callback
+    window.holdingJobOrderNo = jobNo;
     
-    try {
-        const response = await holdJobOrderAPI(jobNo, reason ? { reason } : {});
-        if (response && response.status === 'success') {
-            showNotification(response.message || 'İş emri beklemede', 'success');
-            await loadJobOrders();
-        } else {
-            throw new Error('İş emri bekletilemedi');
+    // Clear and configure the hold modal
+    holdJobOrderModal.clearAll();
+    
+    holdJobOrderModal.addSection({
+        title: 'Bekletme Nedeni',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-warning'
+    });
+    
+    holdJobOrderModal.addField({
+        id: 'reason',
+        name: 'reason',
+        label: 'Bekletme Nedeni (Opsiyonel)',
+        type: 'textarea',
+        value: '',
+        icon: 'fas fa-comment',
+        colSize: 12,
+        helpText: 'İş emrinin neden bekletildiğini açıklayın',
+        rows: 4
+    });
+    
+    // Set up save callback
+    holdJobOrderModal.onSaveCallback(async (formData) => {
+        const jobNo = window.holdingJobOrderNo;
+        if (!jobNo) {
+            showNotification('Bekletilecek iş emri bulunamadı', 'error');
+            return;
         }
-    } catch (error) {
-        console.error('Error holding job order:', error);
-        let errorMessage = 'İş emri bekletilirken hata oluştu';
+        
         try {
-            if (error.message) {
-                const errorData = JSON.parse(error.message);
-                if (typeof errorData === 'object') {
-                    const errors = Object.values(errorData).flat();
-                    errorMessage = errors.join(', ') || errorMessage;
-                }
+            const response = await holdJobOrderAPI(jobNo, formData.reason ? { reason: formData.reason } : {});
+            if (response && response.status === 'success') {
+                holdJobOrderModal.hide();
+                window.holdingJobOrderNo = null;
+                showNotification(response.message || 'İş emri beklemede', 'success');
+                await loadJobOrders();
+            } else {
+                throw new Error('İş emri bekletilemedi');
             }
-        } catch (e) {}
-        showNotification(errorMessage, 'error');
-    }
+        } catch (error) {
+            console.error('Error holding job order:', error);
+            let errorMessage = 'İş emri bekletilirken hata oluştu';
+            try {
+                if (error.message) {
+                    const errorData = JSON.parse(error.message);
+                    if (typeof errorData === 'object') {
+                        const errors = Object.values(errorData).flat();
+                        errorMessage = errors.join(', ') || errorMessage;
+                    }
+                }
+            } catch (e) {}
+            showNotification(errorMessage, 'error');
+        }
+    });
+    
+    // Render and show modal
+    holdJobOrderModal.render();
+    holdJobOrderModal.show();
 };
 
 window.resumeJobOrder = async function(jobNo) {
-    if (!confirm(`İş emri ${jobNo} devam ettirilsin mi?`)) {
-        return;
-    }
-    
-    try {
-        const response = await resumeJobOrderAPI(jobNo);
-        if (response && response.status === 'success') {
-            showNotification(response.message || 'İş emri devam ediyor', 'success');
-            await loadJobOrders();
-        } else {
-            throw new Error('İş emri devam ettirilemedi');
-        }
-    } catch (error) {
-        console.error('Error resuming job order:', error);
-        let errorMessage = 'İş emri devam ettirilirken hata oluştu';
+    // Show confirmation modal
+    confirmationModal.setOnConfirm(async () => {
         try {
-            if (error.message) {
-                const errorData = JSON.parse(error.message);
-                if (typeof errorData === 'object') {
-                    const errors = Object.values(errorData).flat();
-                    errorMessage = errors.join(', ') || errorMessage;
-                }
+            const response = await resumeJobOrderAPI(jobNo);
+            if (response && response.status === 'success') {
+                confirmationModal.hide();
+                showNotification(response.message || 'İş emri devam ediyor', 'success');
+                await loadJobOrders();
+            } else {
+                throw new Error('İş emri devam ettirilemedi');
             }
-        } catch (e) {}
-        showNotification(errorMessage, 'error');
-    }
+        } catch (error) {
+            console.error('Error resuming job order:', error);
+            let errorMessage = 'İş emri devam ettirilirken hata oluştu';
+            try {
+                if (error.message) {
+                    const errorData = JSON.parse(error.message);
+                    if (typeof errorData === 'object') {
+                        const errors = Object.values(errorData).flat();
+                        errorMessage = errors.join(', ') || errorMessage;
+                    }
+                }
+            } catch (e) {}
+            confirmationModal.hide();
+            showNotification(errorMessage, 'error');
+        }
+    });
+    
+    confirmationModal.show({
+        title: 'İş Emri Devam Ettirme',
+        message: `İş emri ${jobNo} devam ettirilsin mi?`,
+        icon: 'fas fa-play-circle',
+        confirmText: 'Evet, Devam Ettir',
+        cancelText: 'Vazgeç',
+        confirmButtonClass: 'btn-info'
+    });
 };
 
 window.cancelJobOrder = async function(jobNo) {
-    if (!confirm(`İş emri ${jobNo} iptal edilecek mi? Bu işlem geri alınamaz.`)) {
-        return;
-    }
-    
-    try {
-        const response = await cancelJobOrderAPI(jobNo);
-        if (response && response.status === 'success') {
-            showNotification(response.message || 'İş emri iptal edildi', 'success');
-            await loadJobOrders();
-        } else {
-            throw new Error('İş emri iptal edilemedi');
+    // Show confirmation modal but don't make the API request
+    confirmationModal.show({
+        title: 'İş Emri İptal Onayı',
+        message: `İş emri ${jobNo} iptal edilecek mi? Bu işlem geri alınamaz.`,
+        icon: 'fas fa-exclamation-triangle',
+        confirmText: 'Evet',
+        cancelText: 'Vazgeç',
+        confirmButtonClass: 'btn-danger',
+        onConfirm: () => {
+            // Don't make the API request - just show a message
+            confirmationModal.hide();
+            showNotification('İş emri iptal işlemi gerçekleştirilemiyor. Lütfen sistem yöneticisi ile iletişime geçin.', 'info');
         }
-    } catch (error) {
-        console.error('Error cancelling job order:', error);
-        let errorMessage = 'İş emri iptal edilirken hata oluştu';
-        try {
-            if (error.message) {
-                const errorData = JSON.parse(error.message);
-                if (typeof errorData === 'object') {
-                    const errors = Object.values(errorData).flat();
-                    errorMessage = errors.join(', ') || errorMessage;
-                }
-            }
-        } catch (e) {}
-        showNotification(errorMessage, 'error');
-    }
+    });
 };
 
 function showCreateJobOrderModal() {
@@ -4091,27 +3924,11 @@ function showCreateJobOrderModal() {
         helpText: 'Teslim şekli bilgisi'
     });
 
-    // Add Priority and Dates section
+    // Add Dates section
     createJobOrderModal.addSection({
-        title: 'Öncelik ve Tarihler',
+        title: 'Tarihler',
         icon: 'fas fa-calendar-alt',
         iconColor: 'text-info'
-    });
-
-    createJobOrderModal.addField({
-        id: 'priority',
-        name: 'priority',
-        label: 'Öncelik',
-        type: 'dropdown',
-        placeholder: 'Öncelik seçin...',
-        value: 'normal',
-        icon: 'fas fa-exclamation-triangle',
-        colSize: 6,
-        helpText: 'İş emri önceliği',
-        options: priorityOptions.map(p => ({
-            value: p.value,
-            label: p.label
-        }))
     });
 
     createJobOrderModal.addField({
@@ -4531,16 +4348,21 @@ async function updateJobOrder(formData) {
             formData.customer = parseInt(formData.customer);
         }
         
-        // Handle quantity - convert to number and default to 1 if not provided
-        if (formData.quantity) {
-            formData.quantity = parseInt(formData.quantity) || 1;
+        // Handle quantity - convert to number, default to 1 if not provided or invalid
+        if (formData.quantity !== undefined && formData.quantity !== null && formData.quantity !== '') {
+            const quantityValue = parseInt(formData.quantity);
+            formData.quantity = isNaN(quantityValue) || quantityValue < 1 ? 1 : quantityValue;
         } else {
             formData.quantity = 1;
         }
         
-        // Handle incoterms - include if provided
-        if (formData.incoterms && formData.incoterms.trim() === '') {
-            delete formData.incoterms;
+        // Handle incoterms - include if provided and not empty
+        if (formData.incoterms !== undefined && formData.incoterms !== null) {
+            if (formData.incoterms.trim() === '') {
+                delete formData.incoterms;
+            } else {
+                formData.incoterms = formData.incoterms.trim();
+            }
         }
         
         const response = await updateJobOrderAPI(jobNo, formData);
@@ -4603,9 +4425,6 @@ async function exportJobOrders(format) {
         }
         if (filterValues['status-filter']) {
             options.status = filterValues['status-filter'];
-        }
-        if (filterValues['priority-filter']) {
-            options.priority = filterValues['priority-filter'];
         }
         if (filterValues['customer-filter']) {
             options.customer = parseInt(filterValues['customer-filter']);
