@@ -430,6 +430,15 @@ function initializeTableComponent() {
                 }
             },
             {
+                field: 'quantity',
+                label: 'Miktar',
+                sortable: true,
+                formatter: (value, row) => {
+                    if (row._isDepartmentTasksRow) return '';
+                    return value || value === 0 ? value : '-';
+                }
+            },
+            {
                 field: 'status_display',
                 label: 'Durum',
                 sortable: true,
@@ -1308,6 +1317,30 @@ window.editJobOrder = async function(jobNo) {
             helpText: 'Müşteri sipariş numarası'
         });
 
+        editJobOrderModal.addField({
+            id: 'quantity',
+            name: 'quantity',
+            label: 'Miktar',
+            type: 'number',
+            value: jobOrder.quantity || jobOrder.quantity === 0 ? jobOrder.quantity : '1',
+            icon: 'fas fa-hashtag',
+            colSize: 6,
+            helpText: 'İş emri miktarı',
+            min: 1,
+            step: 1
+        });
+
+        editJobOrderModal.addField({
+            id: 'incoterms',
+            name: 'incoterms',
+            label: 'Teslim Şekli',
+            type: 'text',
+            value: jobOrder.incoterms || '',
+            icon: 'fas fa-globe',
+            colSize: 6,
+            helpText: 'Teslim şekli bilgisi'
+        });
+
         // Add Priority and Dates section
         editJobOrderModal.addSection({
             title: 'Öncelik ve Tarihler',
@@ -1507,6 +1540,18 @@ window.viewJobOrder = async function(jobNo) {
                                 <i class="fas fa-file-invoice me-1"></i>Müşteri Sipariş No
                             </label>
                             <div class="field-value">${jobOrder.customer_order_no || '-'}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-hashtag me-1"></i>Miktar
+                            </label>
+                            <div class="field-value">${jobOrder.quantity || jobOrder.quantity === 0 ? jobOrder.quantity : '-'}</div>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="field-label small text-muted mb-1">
+                                <i class="fas fa-globe me-1"></i>Teslim Şekli
+                            </label>
+                            <div class="field-value">${jobOrder.incoterms || '-'}</div>
                         </div>
                         <div class="col-md-6">
                             <label class="field-label small text-muted mb-1">
@@ -3640,6 +3685,31 @@ window.showCreateChildJobOrderModal = async function(parentJobNo) {
         helpText: 'Detaylı açıklama'
     });
 
+    createJobOrderModal.addField({
+        id: 'quantity',
+        name: 'quantity',
+        label: 'Miktar',
+        type: 'number',
+        value: '1',
+        placeholder: 'Miktar',
+        icon: 'fas fa-hashtag',
+        colSize: 6,
+        helpText: 'İş emri miktarı',
+        min: 1,
+        step: 1
+    });
+
+    createJobOrderModal.addField({
+        id: 'incoterms',
+        name: 'incoterms',
+        label: 'Teslim Şekli',
+        type: 'text',
+        placeholder: 'Teslim şekli',
+        icon: 'fas fa-globe',
+        colSize: 6,
+        helpText: 'Teslim şekli bilgisi'
+    });
+
     // Add Priority and Dates section (customer is inherited from parent)
     createJobOrderModal.addSection({
         title: 'Öncelik ve Tarihler',
@@ -3994,6 +4064,31 @@ function showCreateJobOrderModal() {
         icon: 'fas fa-file-invoice',
         colSize: 6,
         helpText: 'Müşteri sipariş numarası'
+    });
+
+    createJobOrderModal.addField({
+        id: 'quantity',
+        name: 'quantity',
+        label: 'Miktar',
+        type: 'number',
+        value: '1',
+        placeholder: 'Miktar',
+        icon: 'fas fa-hashtag',
+        colSize: 6,
+        helpText: 'İş emri miktarı',
+        min: 1,
+        step: 1
+    });
+
+    createJobOrderModal.addField({
+        id: 'incoterms',
+        name: 'incoterms',
+        label: 'Teslim Şekli',
+        type: 'text',
+        placeholder: 'Teslim şekli',
+        icon: 'fas fa-globe',
+        colSize: 6,
+        helpText: 'Teslim şekli bilgisi'
     });
 
     // Add Priority and Dates section
@@ -4372,6 +4467,18 @@ async function createJobOrder(formData) {
             window.selectedCustomerCode = null;
         }
         
+        // Handle quantity - convert to number and default to 1 if not provided
+        if (formData.quantity) {
+            formData.quantity = parseInt(formData.quantity) || 1;
+        } else {
+            formData.quantity = 1;
+        }
+        
+        // Handle incoterms - include if provided
+        if (formData.incoterms && formData.incoterms.trim() === '') {
+            delete formData.incoterms;
+        }
+        
         const response = await createJobOrderAPI(formData);
         
         if (response && response.job_no) {
@@ -4422,6 +4529,18 @@ async function updateJobOrder(formData) {
         // Convert customer string to number if needed
         if (formData.customer) {
             formData.customer = parseInt(formData.customer);
+        }
+        
+        // Handle quantity - convert to number and default to 1 if not provided
+        if (formData.quantity) {
+            formData.quantity = parseInt(formData.quantity) || 1;
+        } else {
+            formData.quantity = 1;
+        }
+        
+        // Handle incoterms - include if provided
+        if (formData.incoterms && formData.incoterms.trim() === '') {
+            delete formData.incoterms;
         }
         
         const response = await updateJobOrderAPI(jobNo, formData);
