@@ -24,7 +24,7 @@ import {
 } from '../../apis/projects/departmentTasks.js';
 import { authFetchUsers } from '../../apis/users.js';
 import { createRelease } from '../../apis/projects/design.js';
-import { markPurchaseOrderDelivered, getPurchaseOrderById } from '../../apis/purchaseOrders.js';
+import { markPurchaseOrderDelivered } from '../../apis/purchaseOrders.js';
 
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
@@ -447,12 +447,24 @@ function initializeTableComponent() {
                     const indent = isSubtask ? 30 : 0;
                     const prefix = isSubtask ? '<i class="fas fa-level-down-alt text-muted me-1"></i>' : '';
                     
-                    // Special case: for procurement department, show purchase_request_number instead of job_order
+                    // Special case: for procurement_item task type, show purchase_request_number or planning_request_number
                     // Style it like machining tasks with badge-like appearance
-                    if (department === 'procurement' && row.purchase_request_number) {
-                        const purchaseRequestUrl = `/procurement/purchase-requests/registry/?talep=${encodeURIComponent(row.purchase_request_number)}`;
-                        const purchaseRequestLink = `<a href="${purchaseRequestUrl}" target="_blank" rel="noopener noreferrer" class="text-decoration-none" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); text-decoration: none; display: inline-block; white-space: nowrap; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='rgba(13, 110, 253, 0.2)'; this.style.textDecoration='underline';" onmouseout="this.style.background='rgba(13, 110, 253, 0.1)'; this.style.textDecoration='none';">${row.purchase_request_number}</a>`;
-                        return `<div style="padding-left: ${indent}px;">${prefix}${purchaseRequestLink}</div>`;
+                    if (row.task_type === 'procurement_item') {
+                        let requestNumber = null;
+                        let requestUrl = null;
+                        
+                        if (row.purchase_request_number) {
+                            requestNumber = row.purchase_request_number;
+                            requestUrl = `/procurement/purchase-requests/registry/?talep=${encodeURIComponent(requestNumber)}`;
+                        } else if (row.planning_request_number) {
+                            requestNumber = row.planning_request_number;
+                            requestUrl = `/planning/department-requests/?talep=${encodeURIComponent(requestNumber)}`;
+                        }
+                        
+                        if (requestNumber && requestUrl) {
+                            const requestLink = `<a href="${requestUrl}" target="_blank" rel="noopener noreferrer" class="text-decoration-none" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); text-decoration: none; display: inline-block; white-space: nowrap; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='rgba(13, 110, 253, 0.2)'; this.style.textDecoration='underline';" onmouseout="this.style.background='rgba(13, 110, 253, 0.1)'; this.style.textDecoration='none';">${requestNumber}</a>`;
+                            return `<div style="padding-left: ${indent}px;">${prefix}${requestLink}</div>`;
+                        }
                     }
                     
                     // Early return if no value (after checking procurement)
@@ -711,9 +723,10 @@ function initializeTableComponent() {
                 class: 'btn-outline-info',
                 onClick: (row) => viewTaskDetails(row.id),
                 visible: (row) => {
-                    // Hide for machining_part, cnc_part, and procurement tasks with purchase_order_id
+                    // Hide for machining_part, cnc_part
                     if (row.type === 'machining_part' || row.type === 'cnc_part') return false;
-                    if (department === 'procurement' && row.purchase_order_id) return false;
+                    // Hide for procurement_item tasks (with or without purchase_order_id)
+                    if (row.task_type === 'procurement_item') return false;
                     return true;
                 }
             },
@@ -724,9 +737,10 @@ function initializeTableComponent() {
                 class: 'btn-outline-primary',
                 onClick: (row) => showEditTaskModal(row.id),
                 visible: (row) => {
-                    // Hide for machining_part, cnc_part, and procurement tasks with purchase_order_id
+                    // Hide for machining_part, cnc_part
                     if (row.type === 'machining_part' || row.type === 'cnc_part') return false;
-                    if (department === 'procurement' && row.purchase_order_id) return false;
+                    // Hide for procurement_item tasks (with or without purchase_order_id)
+                    if (row.task_type === 'procurement_item') return false;
                     return true;
                 }
             },
@@ -737,10 +751,11 @@ function initializeTableComponent() {
                 class: 'btn-outline-info',
                 onClick: (row) => showAddSubtaskModal(row.id),
                 visible: (row) => {
-                    // Hide for subtasks, machining_part, cnc_part, and procurement tasks with purchase_order_id
+                    // Hide for subtasks, machining_part, cnc_part
                     if (row.parent) return false;
                     if (row.type === 'machining_part' || row.type === 'cnc_part') return false;
-                    if (department === 'procurement' && row.purchase_order_id) return false;
+                    // Hide for procurement_item tasks (with or without purchase_order_id)
+                    if (row.task_type === 'procurement_item') return false;
                     return true;
                 }
             },
@@ -750,7 +765,11 @@ function initializeTableComponent() {
                 icon: 'fas fa-play',
                 class: 'btn-outline-success',
                 onClick: (row) => handleStartTask(row.id),
-                visible: (row) => row.status === 'pending' && row.can_start && row.type !== 'machining_part' && row.type !== 'cnc_part'
+                visible: (row) => {
+                    // Hide for procurement_item tasks (with or without purchase_order_id)
+                    if (row.task_type === 'procurement_item') return false;
+                    return row.status === 'pending' && row.can_start && row.type !== 'machining_part' && row.type !== 'cnc_part';
+                }
             },
             {
                 key: 'complete',
@@ -759,9 +778,9 @@ function initializeTableComponent() {
                 class: 'btn-outline-success',
                 onClick: (row) => handleCompleteTask(row.id, row),
                 visible: (row) => {
-                    // For procurement tasks with purchase_order_id, show regardless of status
-                    if (department === 'procurement' && row.purchase_order_id) {
-                        return true;
+                    // For procurement_item tasks, show only if purchase_order_id exists
+                    if (row.task_type === 'procurement_item') {
+                        return !!row.purchase_order_id;
                     }
                     // For other tasks, show only when in_progress and not machining/cnc parts
                     return row.status === 'in_progress' && row.type !== 'machining_part' && row.type !== 'cnc_part';
@@ -773,7 +792,11 @@ function initializeTableComponent() {
                 icon: 'fas fa-undo',
                 class: 'btn-outline-warning',
                 onClick: (row) => handleUncompleteTask(row.id),
-                visible: (row) => row.status === 'completed' && row.type !== 'machining_part' && row.type !== 'cnc_part'
+                visible: (row) => {
+                    // Hide for procurement_item tasks (with or without purchase_order_id)
+                    if (row.task_type === 'procurement_item') return false;
+                    return row.status === 'completed' && row.type !== 'machining_part' && row.type !== 'cnc_part';
+                }
             },
             {
                 key: 'skip',
@@ -782,8 +805,8 @@ function initializeTableComponent() {
                 class: 'btn-outline-secondary',
                 onClick: (row) => handleSkipTask(row.id),
                 visible: (row) => {
-                    // Hide for procurement tasks with purchase_order_id
-                    if (department === 'procurement' && row.purchase_order_id) return false;
+                    // Hide for procurement_item tasks (with or without purchase_order_id)
+                    if (row.task_type === 'procurement_item') return false;
                     return row.status !== 'completed' && row.status !== 'skipped' && row.type !== 'machining_part' && row.type !== 'cnc_part';
                 }
             }
@@ -2483,8 +2506,8 @@ async function handleStartTask(taskId) {
 }
 
 async function handleCompleteTask(taskId, taskRow = null) {
-    // For procurement tasks with purchase_order_id, use special completion flow
-    if (department === 'procurement' && taskRow && taskRow.purchase_order_id) {
+    // For procurement_item tasks with purchase_order_id, use special completion flow
+    if (taskRow && taskRow.task_type === 'procurement_item' && taskRow.purchase_order_id) {
         confirmationModal.show({
             message: 'Bu satın alma emrini teslim edildi olarak işaretlemek istediğinize emin misiniz?',
             confirmText: 'Evet, Teslim Edildi',
@@ -2498,21 +2521,13 @@ async function handleCompleteTask(taskId, taskRow = null) {
                         return;
                     }
                     
-                    // Get purchase order to extract line_ids
-                    const purchaseOrder = await getPurchaseOrderById(task.purchase_order_id);
-                    
-                    // Extract line IDs from purchase order lines
-                    // Assuming the purchase order has a 'lines' or 'line_items' array
-                    const lineIds = purchaseOrder.lines?.map(line => line.id) || 
-                                   purchaseOrder.line_items?.map(line => line.id) || 
-                                   purchaseOrder.items?.map(item => item.id) || [];
-                    
-                    if (lineIds.length === 0) {
-                        showNotification('Satın alma emrinde satır bulunamadı', 'error');
+                    if (!task.po_line_id) {
+                        showNotification('Satın alma emri satır ID bulunamadı', 'error');
                         return;
                     }
                     
-                    await markPurchaseOrderDelivered(task.purchase_order_id, lineIds);
+                    // Use po_line_id from the task response
+                    await markPurchaseOrderDelivered(task.purchase_order_id, [task.po_line_id]);
                     showNotification('Satın alma emri teslim edildi olarak işaretlendi', 'success');
                     confirmationModal.hide();
                     await loadTasks();
