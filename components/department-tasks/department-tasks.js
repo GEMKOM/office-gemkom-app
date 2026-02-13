@@ -7,6 +7,7 @@ import { EditModal } from '../edit-modal/edit-modal.js';
 import { DisplayModal } from '../display-modal/display-modal.js';
 import { showNotification } from '../notification/notification.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
+import { getUser } from '../../authService.js';
 import {
     listDepartmentTasks,
     getDepartmentTaskById,
@@ -23,6 +24,7 @@ import {
 } from '../../apis/projects/departmentTasks.js';
 import { authFetchUsers } from '../../apis/users.js';
 import { createRelease } from '../../apis/projects/design.js';
+import { markPurchaseOrderDelivered, getPurchaseOrderById } from '../../apis/purchaseOrders.js';
 
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
@@ -161,7 +163,19 @@ async function initializeComponents() {
             console.warn('Could not fetch users:', error);
         }
 
-        initializeFiltersComponent();
+        // Get current user to determine default filter
+        let defaultAssignedUserId = null;
+        try {
+            const currentUser = await getUser();
+            // Filter by current user if not superuser and occupation is not manager
+            if (!currentUser.is_superuser && currentUser.occupation !== 'manager') {
+                defaultAssignedUserId = currentUser.id ? currentUser.id.toString() : null;
+            }
+        } catch (error) {
+            console.warn('Could not fetch current user:', error);
+        }
+
+        initializeFiltersComponent(defaultAssignedUserId);
         initializeTableComponent();
         initializeModalComponents();
         
@@ -237,7 +251,7 @@ async function checkUrlAndOpenModal() {
     }
 }
 
-function initializeFiltersComponent() {
+function initializeFiltersComponent(defaultAssignedUserId = null) {
     tasksFilters = new FiltersComponent(containerIds.filters, {
         title: 'Görev Filtreleri',
         onApply: (values) => {
@@ -300,6 +314,7 @@ function initializeFiltersComponent() {
         label: 'Atanan Kişi',
         options: userOptions,
         placeholder: 'Kişi seçin',
+        value: defaultAssignedUserId || '',
         colSize: 2
     });
 
@@ -345,6 +360,8 @@ function initializeTableComponent() {
                 label: '',
                 sortable: false,
                 width: '80px',
+                headerClass: 'expand-column-header',
+                cellClass: 'expand-column-cell',
                 formatter: (value, row) => {
                     const subtasksCount = row.subtasks_count || (row.subtasks ? row.subtasks.length : 0);
                     const hasChildren = subtasksCount > 0; // Show expand button for any task with subtasks
@@ -426,10 +443,20 @@ function initializeTableComponent() {
                 label: 'İş Emri',
                 sortable: true,
                 formatter: (value, row) => {
-                    if (!value) return '-';
                     const isSubtask = !!row.parent;
                     const indent = isSubtask ? 30 : 0;
                     const prefix = isSubtask ? '<i class="fas fa-level-down-alt text-muted me-1"></i>' : '';
+                    
+                    // Special case: for procurement department, show purchase_request_number instead of job_order
+                    // Style it like machining tasks with badge-like appearance
+                    if (department === 'procurement' && row.purchase_request_number) {
+                        const purchaseRequestUrl = `/procurement/purchase-requests/registry/?talep=${encodeURIComponent(row.purchase_request_number)}`;
+                        const purchaseRequestLink = `<a href="${purchaseRequestUrl}" target="_blank" rel="noopener noreferrer" class="text-decoration-none" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); text-decoration: none; display: inline-block; white-space: nowrap; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.background='rgba(13, 110, 253, 0.2)'; this.style.textDecoration='underline';" onmouseout="this.style.background='rgba(13, 110, 253, 0.1)'; this.style.textDecoration='none';">${row.purchase_request_number}</a>`;
+                        return `<div style="padding-left: ${indent}px;">${prefix}${purchaseRequestLink}</div>`;
+                    }
+                    
+                    // Early return if no value (after checking procurement)
+                    if (!value) return '-';
                     
                     // Special case: if type is machining_part, show key link to machining tasks
                     if (row.type === 'machining_part') {
@@ -471,6 +498,17 @@ function initializeTableComponent() {
                     const indent = isSubtask ? 30 : 0;
                     // Main tasks: show job order title; subtasks: show task title
                     const displayText = isSubtask ? (value || '-') : (row.job_order_title || value || '-');
+                    return `<div style="padding-left: ${indent}px;">${displayText}</div>`;
+                }
+            },
+            {
+                field: 'customer_name',
+                label: 'Müşteri',
+                sortable: true,
+                formatter: (value, row) => {
+                    const isSubtask = !!row.parent;
+                    const indent = isSubtask ? 30 : 0;
+                    const displayText = value || '-';
                     return `<div style="padding-left: ${indent}px;">${displayText}</div>`;
                 }
             },
@@ -568,9 +606,9 @@ function initializeTableComponent() {
                         barColor = '#059669'; // darker green for 100%
                     }
                     
-                    // Determine text color based on percentage (for contrast)
-                    const textColor = percentage > 50 ? '#ffffff' : '#1f2937';
-                    const textShadow = percentage > 50 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none';
+                    // Text color is always black
+                    const textColor = '#1f2937';
+                    const textShadow = 'none';
                     
                     // Make it clickable for editing (exclude machining_part and cnc_part types)
                     const isEditable = row.type !== 'machining_part' && row.type !== 'cnc_part';
@@ -597,6 +635,29 @@ function initializeTableComponent() {
                                         text-shadow: ${textShadow}; pointer-events: none; white-space: nowrap; z-index: 1;">
                                 ${percentage.toFixed(1)}%
                             </div>
+                        </div>
+                    `;
+                }
+            },
+            {
+                field: 'weight',
+                label: 'Ağırlık',
+                sortable: true,
+                editable: true,
+                formatter: (value, row) => {
+                    // Make it editable (exclude machining_part and cnc_part types)
+                    const isEditable = row.type !== 'machining_part' && row.type !== 'cnc_part';
+                    const cursorStyle = isEditable ? 'cursor: pointer;' : '';
+                    const taskId = row.id;
+                    
+                    let displayValue = '-';
+                    if (value !== null && value !== undefined && value !== '') {
+                        displayValue = parseFloat(value).toFixed(2);
+                    }
+                    
+                    return `
+                        <div class="text-center editable-weight" data-task-id="${taskId}" data-weight-value="${value || ''}" style="${cursorStyle}" ${isEditable ? 'title="Ağırlığı düzenlemek için tıklayın"' : ''}>
+                            ${displayValue}
                         </div>
                     `;
                 }
@@ -649,7 +710,12 @@ function initializeTableComponent() {
                 icon: 'fas fa-eye',
                 class: 'btn-outline-info',
                 onClick: (row) => viewTaskDetails(row.id),
-                visible: (row) => row.type !== 'machining_part' && row.type !== 'cnc_part'
+                visible: (row) => {
+                    // Hide for machining_part, cnc_part, and procurement tasks with purchase_order_id
+                    if (row.type === 'machining_part' || row.type === 'cnc_part') return false;
+                    if (department === 'procurement' && row.purchase_order_id) return false;
+                    return true;
+                }
             },
             {
                 key: 'edit',
@@ -657,7 +723,12 @@ function initializeTableComponent() {
                 icon: 'fas fa-edit',
                 class: 'btn-outline-primary',
                 onClick: (row) => showEditTaskModal(row.id),
-                visible: (row) => row.type !== 'machining_part' && row.type !== 'cnc_part'
+                visible: (row) => {
+                    // Hide for machining_part, cnc_part, and procurement tasks with purchase_order_id
+                    if (row.type === 'machining_part' || row.type === 'cnc_part') return false;
+                    if (department === 'procurement' && row.purchase_order_id) return false;
+                    return true;
+                }
             },
             {
                 key: 'add-subtask',
@@ -665,7 +736,13 @@ function initializeTableComponent() {
                 icon: 'fas fa-plus-circle',
                 class: 'btn-outline-info',
                 onClick: (row) => showAddSubtaskModal(row.id),
-                visible: (row) => !row.parent && row.type !== 'machining_part' && row.type !== 'cnc_part' // Only show for main tasks (not subtasks) and not for machining/cnc parts
+                visible: (row) => {
+                    // Hide for subtasks, machining_part, cnc_part, and procurement tasks with purchase_order_id
+                    if (row.parent) return false;
+                    if (row.type === 'machining_part' || row.type === 'cnc_part') return false;
+                    if (department === 'procurement' && row.purchase_order_id) return false;
+                    return true;
+                }
             },
             {
                 key: 'start',
@@ -680,8 +757,15 @@ function initializeTableComponent() {
                 label: 'Tamamla',
                 icon: 'fas fa-check',
                 class: 'btn-outline-success',
-                onClick: (row) => handleCompleteTask(row.id),
-                visible: (row) => row.status === 'in_progress' && row.type !== 'machining_part' && row.type !== 'cnc_part'
+                onClick: (row) => handleCompleteTask(row.id, row),
+                visible: (row) => {
+                    // For procurement tasks with purchase_order_id, show regardless of status
+                    if (department === 'procurement' && row.purchase_order_id) {
+                        return true;
+                    }
+                    // For other tasks, show only when in_progress and not machining/cnc parts
+                    return row.status === 'in_progress' && row.type !== 'machining_part' && row.type !== 'cnc_part';
+                }
             },
             {
                 key: 'uncomplete',
@@ -697,7 +781,11 @@ function initializeTableComponent() {
                 icon: 'fas fa-forward',
                 class: 'btn-outline-secondary',
                 onClick: (row) => handleSkipTask(row.id),
-                visible: (row) => row.status !== 'completed' && row.status !== 'skipped' && row.type !== 'machining_part' && row.type !== 'cnc_part'
+                visible: (row) => {
+                    // Hide for procurement tasks with purchase_order_id
+                    if (department === 'procurement' && row.purchase_order_id) return false;
+                    return row.status !== 'completed' && row.status !== 'skipped' && row.type !== 'machining_part' && row.type !== 'cnc_part';
+                }
             }
         ],
         emptyMessage: 'Görev bulunamadı',
@@ -817,6 +905,12 @@ function initializeModalComponents() {
             }
             if (formData.sequence) {
                 subtaskData.sequence = parseInt(formData.sequence);
+            }
+            if (formData.weight !== undefined && formData.weight !== null && formData.weight !== '') {
+                const weightValue = parseFloat(formData.weight);
+                if (!isNaN(weightValue)) {
+                    subtaskData.weight = weightValue;
+                }
             }
 
             await createDepartmentTask(subtaskData);
@@ -1035,6 +1129,7 @@ async function loadTasks() {
             setupProgressEditListeners();
             setupAssignedEditListeners();
             setupDateEditListeners();
+            setupWeightEditListeners();
         }, 50);
 
         if (typeof onAfterLoadTasks === 'function') {
@@ -1141,6 +1236,7 @@ function updateTableDataOnly() {
         setupProgressEditListeners();
         setupAssignedEditListeners();
         setupDateEditListeners();
+        setupWeightEditListeners();
     }, 50);
 }
 
@@ -1308,7 +1404,7 @@ function setupProgressEditListeners() {
         const input = document.createElement('input');
         input.type = 'number';
         input.min = '0';
-        input.max = '100';
+        input.max = '99';
         input.step = '0.1';
         input.value = currentValue.toFixed(1);
         input.className = 'form-control form-control-sm';
@@ -1352,8 +1448,9 @@ function setupProgressEditListeners() {
                 barColor = '#059669';
             }
             
-            const textColor = percentageValue > 50 ? '#ffffff' : '#1f2937';
-            const textShadow = percentageValue > 50 ? '0 1px 2px rgba(0,0,0,0.2)' : 'none';
+            // Text color is always black
+            const textColor = '#1f2937';
+            const textShadow = 'none';
             
             progressCell.innerHTML = `
                 <div class="text-center" style="position: relative; width: 100%;">
@@ -1385,8 +1482,8 @@ function setupProgressEditListeners() {
         // Handle save on Enter or blur
         const saveProgress = async () => {
             const newValue = parseFloat(input.value);
-            if (isNaN(newValue) || newValue < 0 || newValue > 100) {
-                showNotification('Geçerli bir değer girin (0-100)', 'error');
+            if (isNaN(newValue) || newValue < 0 || newValue > 99) {
+                showNotification('Geçerli bir değer girin (0-99)', 'error');
                 // Restore original display
                 progressCell.innerHTML = originalContent;
                 progressCell.style.display = '';
@@ -1787,6 +1884,180 @@ function setupDateEditListeners() {
     tasksTable.container.addEventListener('click', dateEditHandler);
 }
 
+// Setup event listeners for weight editing using event delegation
+let weightEditHandler = null;
+function setupWeightEditListeners() {
+    if (!tasksTable || !tasksTable.container) {
+        setTimeout(setupWeightEditListeners, 100);
+        return;
+    }
+    
+    if (weightEditHandler) {
+        tasksTable.container.removeEventListener('click', weightEditHandler);
+    }
+    
+    weightEditHandler = (e) => {
+        const weightCell = e.target.closest('.editable-weight');
+        if (!weightCell) return;
+        
+        if (e.target.tagName === 'INPUT') return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const taskIdAttr = weightCell.getAttribute('data-task-id');
+        const currentWeightValue = weightCell.getAttribute('data-weight-value') || '';
+        
+        if (!taskIdAttr) {
+            console.warn('Weight cell missing data-task-id attribute');
+            return;
+        }
+        
+        // Store original values
+        const originalValue = currentWeightValue;
+        const originalContent = weightCell.innerHTML;
+        
+        // Get current value from display text
+        let currentValue = '';
+        const displayText = weightCell.textContent.trim();
+        if (displayText && displayText !== '-') {
+            currentValue = displayText;
+        } else if (currentWeightValue) {
+            currentValue = parseFloat(currentWeightValue).toFixed(2);
+        }
+        
+        // Create number input
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.step = '0.01';
+        input.min = '0';
+        input.value = currentValue;
+        input.className = 'form-control form-control-sm';
+        input.style.cssText = 'width: 100px; margin: 0 auto; z-index: 10; position: relative; text-align: center;';
+        
+        // Replace cell content with input
+        weightCell.innerHTML = '';
+        weightCell.style.display = 'flex';
+        weightCell.style.justifyContent = 'center';
+        weightCell.style.alignItems = 'center';
+        weightCell.appendChild(input);
+        
+        // Focus and select the input
+        input.focus();
+        input.select();
+        
+        // Helper function to update weight display without reloading
+        const updateWeightDisplay = (weightValue) => {
+            let displayValue = '-';
+            if (weightValue !== null && weightValue !== undefined && weightValue !== '') {
+                const numValue = parseFloat(weightValue);
+                if (!isNaN(numValue)) {
+                    displayValue = numValue.toFixed(2);
+                }
+            }
+            weightCell.innerHTML = displayValue;
+            weightCell.setAttribute('data-weight-value', weightValue || '');
+            weightCell.style.display = '';
+            weightCell.style.justifyContent = '';
+            weightCell.style.alignItems = '';
+        };
+        
+        // Handle save on blur or Enter
+        const saveWeight = async () => {
+            const newValue = input.value.trim();
+            
+            // Check if value actually changed
+            const originalNum = originalValue ? parseFloat(originalValue) : null;
+            const newNum = newValue ? parseFloat(newValue) : null;
+            
+            if ((originalNum === null && newNum === null) || 
+                (originalNum !== null && newNum !== null && Math.abs(originalNum - newNum) < 0.001)) {
+                // Value didn't change, just restore display
+                weightCell.innerHTML = originalContent;
+                weightCell.style.display = '';
+                weightCell.style.justifyContent = '';
+                weightCell.style.alignItems = '';
+                return;
+            }
+            
+            // Validate the value
+            if (newValue && (isNaN(parseFloat(newValue)) || parseFloat(newValue) < 0)) {
+                showNotification('Geçerli bir ağırlık değeri girin (0 veya pozitif sayı)', 'error');
+                // Restore original display
+                weightCell.innerHTML = originalContent;
+                weightCell.style.display = '';
+                weightCell.style.justifyContent = '';
+                weightCell.style.alignItems = '';
+                return;
+            }
+            
+            const taskId = isNaN(taskIdAttr) ? taskIdAttr : parseInt(taskIdAttr);
+            const numericTaskId = typeof taskId === 'string' && !isNaN(taskId) ? parseInt(taskId) : taskId;
+            
+            // Prepare update data
+            const updateData = {
+                weight: newValue === '' ? null : parseFloat(newValue)
+            };
+            
+            try {
+                await patchDepartmentTask(numericTaskId, updateData);
+                showNotification('Ağırlık güncellendi', 'success');
+                // Update display without reloading
+                updateWeightDisplay(newValue);
+                // Also update the task in the data array
+                const task = tasks.find(t => t.id === numericTaskId) || 
+                           Array.from(subtasksCache.values()).flat().find(t => t.id === numericTaskId);
+                if (task) {
+                    task.weight = newValue === '' ? null : parseFloat(newValue);
+                }
+            } catch (error) {
+                console.error('Error updating weight:', error);
+                let errorMessage = 'Ağırlık güncellenirken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                showNotification(errorMessage, 'error');
+                // Restore original display
+                weightCell.innerHTML = originalContent;
+                weightCell.style.display = '';
+                weightCell.style.justifyContent = '';
+                weightCell.style.alignItems = '';
+            }
+        };
+        
+        // Handle cancel on Escape
+        const cancelEdit = () => {
+            weightCell.innerHTML = originalContent;
+            weightCell.style.display = '';
+            weightCell.style.justifyContent = '';
+            weightCell.style.alignItems = '';
+        };
+        
+        input.addEventListener('blur', saveWeight);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        });
+    };
+    
+    tasksTable.container.addEventListener('click', weightEditHandler);
+}
+
 async function viewTaskDetails(taskId) {
     try {
         const task = await getDepartmentTaskById(taskId);
@@ -2158,6 +2429,19 @@ async function showAddSubtaskModal(parentTaskId) {
             helpText: 'Alt görev sırası'
         });
 
+        addSubtaskModal.addField({
+            id: 'subtask-weight',
+            name: 'weight',
+            label: 'Ağırlık',
+            type: 'number',
+            value: '',
+            min: 0,
+            step: 0.01,
+            icon: 'fas fa-weight',
+            colSize: 6,
+            helpText: 'Alt görev ağırlığı'
+        });
+
         addSubtaskModal.render();
         addSubtaskModal.show();
     } catch (error) {
@@ -2198,7 +2482,63 @@ async function handleStartTask(taskId) {
     });
 }
 
-async function handleCompleteTask(taskId) {
+async function handleCompleteTask(taskId, taskRow = null) {
+    // For procurement tasks with purchase_order_id, use special completion flow
+    if (department === 'procurement' && taskRow && taskRow.purchase_order_id) {
+        confirmationModal.show({
+            message: 'Bu satın alma emrini teslim edildi olarak işaretlemek istediğinize emin misiniz?',
+            confirmText: 'Evet, Teslim Edildi',
+            onConfirm: async () => {
+                try {
+                    // Get the task to ensure we have the latest data
+                    const task = taskRow || await getDepartmentTaskById(taskId);
+                    
+                    if (!task.purchase_order_id) {
+                        showNotification('Satın alma emri bulunamadı', 'error');
+                        return;
+                    }
+                    
+                    // Get purchase order to extract line_ids
+                    const purchaseOrder = await getPurchaseOrderById(task.purchase_order_id);
+                    
+                    // Extract line IDs from purchase order lines
+                    // Assuming the purchase order has a 'lines' or 'line_items' array
+                    const lineIds = purchaseOrder.lines?.map(line => line.id) || 
+                                   purchaseOrder.line_items?.map(line => line.id) || 
+                                   purchaseOrder.items?.map(item => item.id) || [];
+                    
+                    if (lineIds.length === 0) {
+                        showNotification('Satın alma emrinde satır bulunamadı', 'error');
+                        return;
+                    }
+                    
+                    await markPurchaseOrderDelivered(task.purchase_order_id, lineIds);
+                    showNotification('Satın alma emri teslim edildi olarak işaretlendi', 'success');
+                    confirmationModal.hide();
+                    await loadTasks();
+                } catch (error) {
+                    console.error('Error marking purchase order as delivered:', error);
+                    let errorMessage = 'Satın alma emri işaretlenirken hata oluştu';
+                    try {
+                        if (error.message) {
+                            const errorData = JSON.parse(error.message);
+                            if (typeof errorData === 'object') {
+                                const errors = Object.values(errorData).flat();
+                                errorMessage = errors.join(', ') || errorMessage;
+                            } else {
+                                errorMessage = error.message;
+                            }
+                        }
+                    } catch (e) {
+                        // If parsing fails, use default message
+                    }
+                    showNotification(errorMessage, 'error');
+                }
+            }
+        });
+        return;
+    }
+    
     // For design department, show release creation modal instead of simple completion
     if (department === 'design') {
         await showCreateReleaseModal(taskId);

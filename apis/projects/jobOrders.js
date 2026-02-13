@@ -62,6 +62,9 @@ export async function listJobOrders(options = {}) {
         if (options.page) {
             queryParams.append('page', options.page.toString());
         }
+        if (options.page_size) {
+            queryParams.append('page_size', options.page_size.toString());
+        }
 
         const url = `${backendBase}/projects/job-orders/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
         const response = await authedFetch(url);

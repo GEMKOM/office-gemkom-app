@@ -239,3 +239,34 @@ export async function markSchedulePaid(orderId, scheduleId, paidWithTax) {
         throw error;
     }
 }
+
+/**
+ * Mark purchase order lines as delivered
+ * @param {string|number} orderId - Purchase order ID
+ * @param {Array<number>} lineIds - Array of line IDs to mark as delivered
+ * @returns {Promise<Object>} Updated purchase order
+ */
+export async function markPurchaseOrderDelivered(orderId, lineIds) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/purchase-orders/${orderId}/mark_delivered/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                line_ids: lineIds
+            })
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || `HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error marking purchase order ${orderId} as delivered:`, error);
+        throw error;
+    }
+}

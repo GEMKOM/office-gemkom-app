@@ -50,7 +50,10 @@ import { fetchAllUsers } from '../../apis/users.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
 
 // State management
-let currentPage = 1;
+// Read initial page and page_size from URL
+const urlParams = new URLSearchParams(window.location.search);
+let currentPage = parseInt(urlParams.get('page')) || 1;
+let currentPageSize = parseInt(urlParams.get('page_size')) || 100;
 let currentOrdering = 'job_no'; // Default backend ordering
 let currentSortField = 'job_no'; // Default sort field
 let currentSortDirection = 'asc'; // Default sort direction
@@ -186,6 +189,9 @@ async function initializeJobOrders() {
             }
         }
 
+        // Setup URL handlers for pagination
+        setupUrlHandlers();
+        
         // Load page normally
         await loadJobOrders();
         updateJobOrderCounts();
@@ -193,6 +199,38 @@ async function initializeJobOrders() {
         console.error('Error initializing job orders:', error);
         showNotification('İş emirleri yüklenirken hata oluştu', 'error');
     }
+}
+
+// Setup URL handlers for pagination
+function setupUrlHandlers() {
+    // Handle browser back/forward buttons
+    window.addEventListener('popstate', () => {
+        // Reload job orders if page/page_size changed
+        const urlParams = new URLSearchParams(window.location.search);
+        const urlPage = parseInt(urlParams.get('page')) || 1;
+        const urlPageSize = parseInt(urlParams.get('page_size')) || 100;
+        if (urlPage !== currentPage || urlPageSize !== currentPageSize) {
+            currentPage = urlPage;
+            currentPageSize = urlPageSize;
+            if (jobOrdersTable) {
+                jobOrdersTable.options.itemsPerPage = currentPageSize;
+            }
+            loadJobOrders();
+        }
+    });
+}
+
+// Helper function to update URL parameters
+function updateUrlParams(params) {
+    const url = new URL(window.location);
+    Object.keys(params).forEach(key => {
+        if (params[key] !== null && params[key] !== undefined) {
+            url.searchParams.set(key, params[key].toString());
+        } else {
+            url.searchParams.delete(key);
+        }
+    });
+    window.history.replaceState({}, '', url);
 }
 
 async function loadChoices() {
@@ -402,16 +440,6 @@ function initializeTableComponent() {
                 }
             },
             {
-                field: 'parent',
-                label: 'Ana İş',
-                sortable: false,
-                formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
-                    if (!value) return '<span class="text-muted">-</span>';
-                    return `<span class="badge bg-light text-dark">${value}</span>`;
-                }
-            },
-            {
                 field: 'title',
                 label: 'Başlık',
                 sortable: true,
@@ -567,11 +595,12 @@ function initializeTableComponent() {
         sortable: true,
         pagination: true,
         serverSidePagination: true,
-        itemsPerPage: 20,
+        itemsPerPage: currentPageSize,
         refreshable: true,
         exportable: true,
         onRefresh: async () => {
             currentPage = 1;
+            updateUrlParams({ page: 1 });
             await loadJobOrders();
         },
         onExport: async (format) => {
@@ -588,10 +617,13 @@ function initializeTableComponent() {
                 jobOrdersTable.options.itemsPerPage = newPageSize;
             }
             currentPage = 1;
+            currentPageSize = newPageSize;
+            updateUrlParams({ page: 1, page_size: newPageSize });
             await loadJobOrders();
         },
         onPageChange: async (page) => {
             currentPage = page;
+            updateUrlParams({ page: page });
             await loadJobOrders();
         },
         actions: [
@@ -928,6 +960,7 @@ async function loadJobOrders() {
         // Build query options
         const options = {
             page: currentPage,
+            page_size: currentPageSize,
             ordering: currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`
         };
         
@@ -1503,14 +1536,6 @@ window.viewJobOrder = async function(jobNo) {
                                 <i class="fas fa-align-left me-1"></i>Açıklama
                             </label>
                             <div class="field-value">${jobOrder.description}</div>
-                        </div>
-                        ` : ''}
-                        ${jobOrder.parent ? `
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-level-up-alt me-1"></i>Ana İş
-                            </label>
-                            <div class="field-value">${jobOrder.parent}${jobOrder.parent_title ? ' - ' + jobOrder.parent_title : ''}</div>
                         </div>
                         ` : ''}
                         ${(jobOrder.estimated_cost || jobOrder.total_cost) ? `
