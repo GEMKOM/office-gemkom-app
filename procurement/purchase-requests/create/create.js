@@ -1727,7 +1727,7 @@ async function loadPlanningRequestItems() {
         const displayItems = [...pinnedItems, ...pageItems];
         
         // Update table with paginated data + pinned items (pinned are extra rows, pagination counts stay backend-based)
-        planningItemsTable.updateData(displayItems, totalCount);
+        planningItemsTable.updateData(displayItems, totalCount, planningItemsCurrentPage);
         planningItemsTable.setLoading(false);
         
         // Re-render checkboxes and quantity inputs to reflect current selection state
