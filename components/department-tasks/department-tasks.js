@@ -506,10 +506,24 @@ function initializeTableComponent() {
                 label: 'Görev Başlığı',
                 sortable: true,
                 formatter: (value, row) => {
+                    // Check if this is a subtask (has a parent)
+                    // Consistent with other column formatters (line 446, 509, 533)
                     const isSubtask = !!row.parent;
                     const indent = isSubtask ? 30 : 0;
                     // Main tasks: show job order title; subtasks: show task title
                     const displayText = isSubtask ? (value || '-') : (row.job_order_title || value || '-');
+                    
+                    // Make title editable only for subtasks
+                    if (isSubtask) {
+                        const taskId = row.id;
+                        const cursorStyle = 'cursor: pointer;';
+                        return `
+                            <div class="editable-title" data-task-id="${taskId}" data-title-value="${value || ''}" style="padding-left: ${indent}px; ${cursorStyle}" title="Başlığı düzenlemek için tıklayın">
+                                ${displayText}
+                            </div>
+                        `;
+                    }
+                    
                     return `<div style="padding-left: ${indent}px;">${displayText}</div>`;
                 }
             },
@@ -857,10 +871,24 @@ function initializeModalComponents() {
         if (!taskId) return;
 
         try {
+            // Get the task to check if it's a subtask
+            const task = await getDepartmentTaskById(taskId);
+            const isSubtask = !!task.parent;
+            
             // Prepare update data
             const updateData = {};
 
-            // Title, job_order, and sequence cannot be changed, so don't include them in update
+            // Title can only be changed for subtasks
+            if (isSubtask && formData.title !== undefined) {
+                const trimmedTitle = formData.title.trim();
+                if (!trimmedTitle) {
+                    showNotification('Başlık boş olamaz', 'error');
+                    return;
+                }
+                updateData.title = trimmedTitle;
+            }
+            // job_order and sequence cannot be changed, so don't include them in update
+            
             if (formData.description !== undefined) updateData.description = formData.description || null;
             if (formData.assigned_to !== undefined) {
                 updateData.assigned_to = formData.assigned_to === '' || formData.assigned_to === null ? null : parseInt(formData.assigned_to);
@@ -987,13 +1015,16 @@ function initializeReleaseModal() {
         if (!taskId) return;
 
         try {
-            // Get task to get job_order
+            // Get task to get job_order and check if it's a subtask
             const task = await getDepartmentTaskById(taskId);
             
             if (!task.job_order) {
                 showNotification('İş emri bulunamadı', 'error');
                 return;
             }
+
+            // Check if this is a subtask
+            const isSubtask = !!task.parent;
 
             // Prepare release data
             const releaseData = {
@@ -1003,8 +1034,11 @@ function initializeReleaseModal() {
                 revision_code: formData.revision_code || '',
             };
 
-            // Auto complete design task checkbox (defaults to true if not provided)
-            releaseData.auto_complete_design_task = formData.auto_complete_design_task !== false;
+            // auto_complete_design_task is only for parent tasks
+            // For subtasks, we'll complete them separately after creating the release
+            if (!isSubtask) {
+                releaseData.auto_complete_design_task = formData.auto_complete_design_task !== false;
+            }
 
             // Optional fields
             if (formData.hardcopy_count !== undefined && formData.hardcopy_count !== null && formData.hardcopy_count !== '') {
@@ -1022,6 +1056,12 @@ function initializeReleaseModal() {
 
             // Create release
             await createRelease(releaseData);
+            
+            // For subtasks, complete them separately via the completion endpoint
+            if (isSubtask) {
+                await completeDepartmentTask(taskId);
+            }
+            
             showNotification('Teknik çizim yayını oluşturuldu', 'success');
             createReleaseModal.hide();
             window.pendingReleaseTaskId = null;
@@ -1153,6 +1193,7 @@ async function loadTasks() {
             setupAssignedEditListeners();
             setupDateEditListeners();
             setupWeightEditListeners();
+            setupTitleEditListeners();
         }, 50);
 
         if (typeof onAfterLoadTasks === 'function') {
@@ -1260,6 +1301,7 @@ function updateTableDataOnly() {
         setupAssignedEditListeners();
         setupDateEditListeners();
         setupWeightEditListeners();
+        setupTitleEditListeners();
     }, 50);
 }
 
@@ -2081,6 +2123,172 @@ function setupWeightEditListeners() {
     tasksTable.container.addEventListener('click', weightEditHandler);
 }
 
+// Setup event listeners for title editing using event delegation (only for subtasks)
+let titleEditHandler = null;
+function setupTitleEditListeners() {
+    if (!tasksTable || !tasksTable.container) {
+        setTimeout(setupTitleEditListeners, 100);
+        return;
+    }
+    
+    if (titleEditHandler) {
+        tasksTable.container.removeEventListener('click', titleEditHandler);
+    }
+    
+    titleEditHandler = (e) => {
+        const titleCell = e.target.closest('.editable-title');
+        if (!titleCell) return;
+        
+        // Don't trigger if clicking on an input that's already there
+        if (e.target.tagName === 'INPUT') return;
+        
+        // Don't trigger if clicking on a button or link
+        if (e.target.closest('button') || e.target.closest('a')) return;
+        
+        e.preventDefault();
+        e.stopPropagation();
+        
+        const taskIdAttr = titleCell.getAttribute('data-task-id');
+        const currentTitleValue = titleCell.getAttribute('data-title-value') || '';
+        
+        if (!taskIdAttr) {
+            console.warn('Title cell missing data-task-id attribute');
+            return;
+        }
+        
+        // Store original values
+        const originalValue = currentTitleValue;
+        const originalContent = titleCell.innerHTML;
+        
+        // Get current value from display text
+        let currentValue = '';
+        const displayText = titleCell.textContent.trim();
+        if (displayText && displayText !== '-') {
+            currentValue = displayText;
+        } else if (currentTitleValue) {
+            currentValue = currentTitleValue;
+        }
+        
+        // Create text input
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.value = currentValue;
+        input.className = 'form-control form-control-sm';
+        input.style.cssText = 'width: 100%; padding: 4px 8px; z-index: 10; position: relative;';
+        
+        // Replace cell content with input
+        titleCell.innerHTML = '';
+        titleCell.style.display = 'flex';
+        titleCell.style.justifyContent = 'flex-start';
+        titleCell.style.alignItems = 'center';
+        titleCell.appendChild(input);
+        
+        // Focus and select the input
+        input.focus();
+        input.select();
+        
+        // Helper function to update title display without reloading
+        const updateTitleDisplay = (titleValue) => {
+            const displayValue = titleValue || '-';
+            titleCell.innerHTML = displayValue;
+            titleCell.setAttribute('data-title-value', titleValue || '');
+            titleCell.style.display = '';
+            titleCell.style.justifyContent = '';
+            titleCell.style.alignItems = '';
+        };
+        
+        // Handle save on blur or Enter
+        const saveTitle = async () => {
+            const newValue = input.value.trim();
+            
+            // Check if value actually changed
+            if (newValue === originalValue) {
+                // Value didn't change, just restore display
+                titleCell.innerHTML = originalContent;
+                titleCell.style.display = '';
+                titleCell.style.justifyContent = '';
+                titleCell.style.alignItems = '';
+                return;
+            }
+            
+            // Validate: title cannot be empty
+            if (!newValue) {
+                showNotification('Başlık boş olamaz', 'error');
+                // Restore original display
+                titleCell.innerHTML = originalContent;
+                titleCell.style.display = '';
+                titleCell.style.justifyContent = '';
+                titleCell.style.alignItems = '';
+                return;
+            }
+            
+            const taskId = isNaN(taskIdAttr) ? taskIdAttr : parseInt(taskIdAttr);
+            const numericTaskId = typeof taskId === 'string' && !isNaN(taskId) ? parseInt(taskId) : taskId;
+            
+            // Prepare update data
+            const updateData = {
+                title: newValue
+            };
+            
+            try {
+                await patchDepartmentTask(numericTaskId, updateData);
+                showNotification('Başlık güncellendi', 'success');
+                // Update display without reloading
+                updateTitleDisplay(newValue);
+                // Also update the task in the data array
+                const task = tasks.find(t => t.id === numericTaskId) || 
+                           Array.from(subtasksCache.values()).flat().find(t => t.id === numericTaskId);
+                if (task) {
+                    task.title = newValue;
+                }
+            } catch (error) {
+                console.error('Error updating title:', error);
+                let errorMessage = 'Başlık güncellenirken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                showNotification(errorMessage, 'error');
+                // Restore original display
+                titleCell.innerHTML = originalContent;
+                titleCell.style.display = '';
+                titleCell.style.justifyContent = '';
+                titleCell.style.alignItems = '';
+            }
+        };
+        
+        // Handle cancel on Escape
+        const cancelEdit = () => {
+            titleCell.innerHTML = originalContent;
+            titleCell.style.display = '';
+            titleCell.style.justifyContent = '';
+            titleCell.style.alignItems = '';
+        };
+        
+        input.addEventListener('blur', saveTitle);
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                input.blur();
+            } else if (e.key === 'Escape') {
+                e.preventDefault();
+                cancelEdit();
+            }
+        });
+    };
+    
+    tasksTable.container.addEventListener('click', titleEditHandler);
+}
+
 async function viewTaskDetails(taskId) {
     try {
         const task = await getDepartmentTaskById(taskId);
@@ -2293,6 +2501,9 @@ async function showEditTaskModal(taskId) {
             helpText: 'İş emri (değiştirilemez)'
         });
 
+        // Check if this is a subtask (has a parent)
+        const isSubtask = !!task.parent;
+        
         editTaskModal.addField({
             id: 'edit-title',
             name: 'title',
@@ -2300,10 +2511,10 @@ async function showEditTaskModal(taskId) {
             type: 'text',
             value: task.title || '',
             required: true,
-            readonly: true,
+            readonly: !isSubtask, // Only editable for subtasks
             icon: 'fas fa-heading',
             colSize: 6,
-            helpText: 'Görev başlığı (değiştirilemez)'
+            helpText: isSubtask ? 'Alt görev başlığı (düzenlenebilir)' : 'Görev başlığı (değiştirilemez)'
         });
 
         editTaskModal.addField({
@@ -2554,9 +2765,17 @@ async function handleCompleteTask(taskId, taskRow = null) {
         return;
     }
     
-    // For design department, show release creation modal instead of simple completion
+    // For design department, check if it's a subtask
     if (department === 'design') {
-        await showCreateReleaseModal(taskId);
+        // Get task to check if it's a subtask
+        const task = taskRow || await getDepartmentTaskById(taskId);
+        const isSubtask = !!task.parent;
+        
+        if (isSubtask) {
+            await showSubtaskCompleteModal(taskId);
+        } else {
+            await showCreateReleaseModal(taskId);
+        }
     } else {
         // For other departments, use the standard completion flow
         confirmationModal.show({
@@ -2588,6 +2807,260 @@ async function handleCompleteTask(taskId, taskRow = null) {
                 }
             }
         });
+    }
+}
+
+async function showSubtaskCompleteModal(taskId) {
+    try {
+        if (!createReleaseModal) {
+            showNotification('Yayın modalı başlatılamadı', 'error');
+            return;
+        }
+
+        const task = await getDepartmentTaskById(taskId);
+        
+        if (!task.job_order) {
+            showNotification('İş emri bulunamadı', 'error');
+            return;
+        }
+
+        window.pendingReleaseTaskId = taskId;
+        
+        createReleaseModal.clearAll();
+
+        // Add checkbox to ask if there's a release
+        createReleaseModal.addSection({
+            title: 'Görevi Tamamla',
+            icon: 'fas fa-check-circle',
+            iconColor: 'text-success'
+        });
+
+        createReleaseModal.addField({
+            id: 'has-release',
+            name: 'has_release',
+            label: 'Yayın var mı?',
+            type: 'checkbox',
+            value: false,
+            icon: 'fas fa-file-export',
+            colSize: 12,
+            helpText: 'İşaretlendiğinde yayın bilgileri girilebilir'
+        });
+
+        // Store field IDs that should be conditionally shown
+        const releaseFieldIds = [];
+
+        // Add release fields (initially hidden)
+        const releaseSectionId = 'release-section';
+        createReleaseModal.addSection({
+            id: releaseSectionId,
+            title: 'Yayın Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary'
+        });
+
+        createReleaseModal.addField({
+            id: 'release-job-order',
+            name: 'job_order',
+            label: 'İş Emri',
+            type: 'text',
+            value: task.job_order ? `${task.job_order} - ${task.job_order_title || ''}` : '-',
+            readonly: true,
+            icon: 'fas fa-file-invoice',
+            colSize: 12,
+            helpText: 'İş emri (değiştirilemez)'
+        });
+        releaseFieldIds.push('release-job-order');
+
+        createReleaseModal.addField({
+            id: 'release-folder-path',
+            name: 'folder_path',
+            label: 'Klasör Yolu',
+            type: 'text',
+            value: '',
+            required: false, // Will be set to true when checkbox is checked
+            placeholder: 'C:\\CVSPDM\\CVS\\009_KAPTAN\\EAF\\009_34_EBT_PANEL\\PDF',
+            icon: 'fas fa-folder',
+            colSize: 12,
+            helpText: 'Ağ klasör yolu (maksimum 500 karakter)'
+        });
+        releaseFieldIds.push('release-folder-path');
+
+        createReleaseModal.addField({
+            id: 'release-revision-code',
+            name: 'revision_code',
+            label: 'Revizyon Kodu',
+            type: 'text',
+            value: '',
+            placeholder: 'A1, B2, vb.',
+            icon: 'fas fa-code-branch',
+            colSize: 6,
+            helpText: 'Revizyon kodu (örn: A1, B2) - maksimum 10 karakter'
+        });
+        releaseFieldIds.push('release-revision-code');
+
+        createReleaseModal.addField({
+            id: 'release-hardcopy-count',
+            name: 'hardcopy_count',
+            label: 'Hardcopy Sayısı',
+            type: 'number',
+            value: '',
+            min: 0,
+            placeholder: '0',
+            icon: 'fas fa-print',
+            colSize: 6,
+            helpText: 'Hardcopy sayısı (varsayılan: 0)'
+        });
+        releaseFieldIds.push('release-hardcopy-count');
+
+        createReleaseModal.addSection({
+            id: 'changelog-section',
+            title: 'Değişiklik Günlüğü',
+            icon: 'fas fa-edit',
+            iconColor: 'text-warning'
+        });
+
+        // Pre-populate changelog with subtask title
+        const defaultChangelog = task.title || '';
+        
+        createReleaseModal.addField({
+            id: 'release-changelog',
+            name: 'changelog',
+            label: 'Değişiklik Günlüğü',
+            type: 'textarea',
+            value: defaultChangelog,
+            required: false,
+            placeholder: '3_0003_1045_EBT_RIGHT_PANEL\n20.01.2026 REV. A1 (POZ-04 REVİZE EDİLDİ)\n\n@umit.bal @elvan.gunes @abdullah.anlas',
+            icon: 'fas fa-align-left',
+            colSize: 12,
+            helpText: 'Değişiklik günlüğü (@mention ile kullanıcıları bildirebilirsiniz) - Opsiyonel'
+        });
+        releaseFieldIds.push('release-changelog');
+
+        // Initially hide release fields
+        createReleaseModal.render();
+        
+        // Function to toggle release fields visibility
+        const toggleReleaseFields = (show) => {
+            const modalElement = document.getElementById('create-release-modal-container');
+            if (modalElement) {
+                const releaseSection = modalElement.querySelector(`[data-section-id="${releaseSectionId}"]`);
+                const changelogSection = modalElement.querySelector(`[data-section-id="changelog-section"]`);
+                if (releaseSection) releaseSection.style.display = show ? '' : 'none';
+                if (changelogSection) changelogSection.style.display = show ? '' : 'none';
+                
+                // Make folder_path required only if release is checked
+                const folderPathField = document.getElementById('release-folder-path');
+                if (folderPathField) {
+                    folderPathField.required = show;
+                    const label = folderPathField.closest('.mb-3')?.querySelector('label');
+                    if (label && show) {
+                        const requiredMark = label.querySelector('.text-danger');
+                        if (!requiredMark && folderPathField.required) {
+                            label.innerHTML += ' <span class="text-danger">*</span>';
+                        }
+                    } else if (label && !show) {
+                        const requiredMark = label.querySelector('.text-danger');
+                        if (requiredMark) requiredMark.remove();
+                    }
+                }
+            }
+        };
+
+        // Initially hide release fields
+        setTimeout(() => toggleReleaseFields(false), 50);
+
+        // Add event listener to toggle release fields
+        setTimeout(() => {
+            const hasReleaseCheckbox = document.getElementById('has-release');
+            if (hasReleaseCheckbox) {
+                hasReleaseCheckbox.addEventListener('change', (e) => {
+                    toggleReleaseFields(e.target.checked);
+                });
+            }
+        }, 100);
+
+        // Override save callback for subtask completion
+        createReleaseModal.onSaveCallback(async (formData) => {
+            const taskId = window.pendingReleaseTaskId;
+            if (!taskId) return;
+
+            try {
+                const hasRelease = formData.has_release === true || formData.has_release === 'true';
+                
+                if (hasRelease) {
+                    // Get task to get job_order
+                    const task = await getDepartmentTaskById(taskId);
+                    
+                    if (!task.job_order) {
+                        showNotification('İş emri bulunamadı', 'error');
+                        return;
+                    }
+
+                    // Prepare release data
+                    const releaseData = {
+                        job_order: task.job_order,
+                        folder_path: formData.folder_path || '',
+                        changelog: formData.changelog ? formData.changelog.trim() : '',
+                        revision_code: formData.revision_code || '',
+                    };
+
+                    // Optional fields
+                    if (formData.hardcopy_count !== undefined && formData.hardcopy_count !== null && formData.hardcopy_count !== '') {
+                        const hardcopyCount = parseInt(formData.hardcopy_count);
+                        if (!isNaN(hardcopyCount)) {
+                            releaseData.hardcopy_count = hardcopyCount;
+                        }
+                    }
+
+                    // Validate required fields
+                    if (!releaseData.folder_path.trim()) {
+                        showNotification('Klasör yolu gereklidir', 'error');
+                        return;
+                    }
+
+                    // Create release
+                    await createRelease(releaseData);
+                    
+                    // Complete the subtask
+                    await completeDepartmentTask(taskId);
+                    
+                    showNotification('Yayın oluşturuldu ve görev tamamlandı', 'success');
+                } else {
+                    // Only complete the subtask, no release
+                    await completeDepartmentTask(taskId);
+                    showNotification('Görev tamamlandı', 'success');
+                }
+                
+                createReleaseModal.hide();
+                window.pendingReleaseTaskId = null;
+                
+                // Reload tasks to reflect the completion
+                await loadTasks();
+            } catch (error) {
+                console.error('Error completing subtask:', error);
+                const hasRelease = formData.has_release === true || formData.has_release === 'true';
+                let errorMessage = hasRelease ? 'Yayın oluşturulurken hata oluştu' : 'Görev tamamlanırken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                showNotification(errorMessage, 'error');
+            }
+        });
+
+        createReleaseModal.show();
+    } catch (error) {
+        console.error('Error loading task for subtask completion:', error);
+        showNotification('Görev bilgileri yüklenirken hata oluştu', 'error');
     }
 }
 
@@ -2671,12 +3144,18 @@ async function showCreateReleaseModal(taskId) {
             iconColor: 'text-warning'
         });
 
+        // Check if this is a subtask (has a parent)
+        const isSubtask = !!task.parent;
+        
+        // For subtasks, pre-populate changelog with the subtask title
+        const defaultChangelog = isSubtask && task.title ? task.title : '';
+        
         createReleaseModal.addField({
             id: 'release-changelog',
             name: 'changelog',
             label: 'Değişiklik Günlüğü',
             type: 'textarea',
-            value: '',
+            value: defaultChangelog,
             required: false,
             placeholder: '3_0003_1045_EBT_RIGHT_PANEL\n20.01.2026 REV. A1 (POZ-04 REVİZE EDİLDİ)\n\n@umit.bal @elvan.gunes @abdullah.anlas',
             icon: 'fas fa-align-left',
@@ -2684,12 +3163,15 @@ async function showCreateReleaseModal(taskId) {
             helpText: 'Değişiklik günlüğü (@mention ile kullanıcıları bildirebilirsiniz) - Opsiyonel'
         });
 
+        // For subtasks, "Son dağıtım" checkbox should be unchecked by default
+        const defaultAutoComplete = !isSubtask;
+        
         createReleaseModal.addField({
             id: 'release-auto-complete',
             name: 'auto_complete_design_task',
             label: 'Son dağıtım',
             type: 'checkbox',
-            value: true,
+            value: defaultAutoComplete,
             icon: 'fas fa-check-circle',
             colSize: 12,
             helpText: 'İşaretlendiğinde görev otomatik olarak tamamlanır'
