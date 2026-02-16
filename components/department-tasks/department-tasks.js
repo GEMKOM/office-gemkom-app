@@ -24,7 +24,7 @@ import {
 } from '../../apis/projects/departmentTasks.js';
 import { authFetchUsers } from '../../apis/users.js';
 import { createRelease } from '../../apis/projects/design.js';
-import { markPurchaseOrderDelivered } from '../../apis/purchaseOrders.js';
+import { markPlanningRequestItemDelivered } from '../../apis/planning/planningRequestItems.js';
 
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
@@ -792,9 +792,9 @@ function initializeTableComponent() {
                 class: 'btn-outline-success',
                 onClick: (row) => handleCompleteTask(row.id, row),
                 visible: (row) => {
-                    // For procurement_item tasks, show only if purchase_order_id exists
+                    // For procurement_item tasks, show only if planning_request_item_id exists and is_delivered is false
                     if (row.task_type === 'procurement_item') {
-                        return !!row.purchase_order_id;
+                        return !!row.planning_request_item_id && row.is_delivered === false;
                     }
                     // For other tasks, show only when in_progress and not machining/cnc parts
                     return row.status === 'in_progress' && row.type !== 'machining_part' && row.type !== 'cnc_part';
@@ -2717,34 +2717,29 @@ async function handleStartTask(taskId) {
 }
 
 async function handleCompleteTask(taskId, taskRow = null) {
-    // For procurement_item tasks with purchase_order_id, use special completion flow
-    if (taskRow && taskRow.task_type === 'procurement_item' && taskRow.purchase_order_id) {
+    // For procurement_item tasks with planning_request_item_id, use special completion flow
+    if (taskRow && taskRow.task_type === 'procurement_item' && taskRow.planning_request_item_id) {
         confirmationModal.show({
-            message: 'Bu satın alma emrini teslim edildi olarak işaretlemek istediğinize emin misiniz?',
+            message: 'Bu planlama talebi kalemini teslim edildi olarak işaretlemek istediğinize emin misiniz?',
             confirmText: 'Evet, Teslim Edildi',
             onConfirm: async () => {
                 try {
                     // Get the task to ensure we have the latest data
                     const task = taskRow || await getDepartmentTaskById(taskId);
                     
-                    if (!task.purchase_order_id) {
-                        showNotification('Satın alma emri bulunamadı', 'error');
+                    if (!task.planning_request_item_id) {
+                        showNotification('Planlama talebi kalemi bulunamadı', 'error');
                         return;
                     }
                     
-                    if (!task.po_line_id) {
-                        showNotification('Satın alma emri satır ID bulunamadı', 'error');
-                        return;
-                    }
-                    
-                    // Use po_line_id from the task response
-                    await markPurchaseOrderDelivered(task.purchase_order_id, [task.po_line_id]);
-                    showNotification('Satın alma emri teslim edildi olarak işaretlendi', 'success');
+                    // Use planning_request_item_id from the task response
+                    await markPlanningRequestItemDelivered(task.planning_request_item_id);
+                    showNotification('Planlama talebi kalemi teslim edildi olarak işaretlendi', 'success');
                     confirmationModal.hide();
                     await loadTasks();
                 } catch (error) {
-                    console.error('Error marking purchase order as delivered:', error);
-                    let errorMessage = 'Satın alma emri işaretlenirken hata oluştu';
+                    console.error('Error marking planning request item as delivered:', error);
+                    let errorMessage = 'Planlama talebi kalemi işaretlenirken hata oluştu';
                     try {
                         if (error.message) {
                             const errorData = JSON.parse(error.message);

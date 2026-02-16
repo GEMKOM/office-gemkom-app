@@ -341,3 +341,29 @@ export async function getPlanningRequestItemsFiles(itemIds = []) {
     }
 }
 
+/**
+ * Mark a planning request item as delivered
+ * @param {string|number} itemId - Planning request item ID
+ * @returns {Promise<Object>} Updated planning request item
+ */
+export async function markPlanningRequestItemDelivered(itemId) {
+    try {
+        const response = await authedFetch(`${PLANNING_BASE_URL}/items/${itemId}/mark_delivered/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Planlama talebi kalemi teslim edildi olarak işaretlenirken hata oluştu');
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error marking planning request item ${itemId} as delivered:`, error);
+        throw error;
+    }
+}
