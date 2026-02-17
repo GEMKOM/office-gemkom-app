@@ -980,6 +980,7 @@ function initializeModalComponents() {
         title: 'İş Emri Detayları',
         icon: 'fas fa-info-circle',
         size: 'xl',
+        fullscreen: true,
         showEditButton: false
     });
 
@@ -2383,13 +2384,25 @@ function renderDrawingReleasesUI(container, releases, jobNo, currentRelease = nu
         });
     };
     
-    const getStatusBadge = (status) => {
+    const getStatusBadge = (release) => {
+        // Use status_display if available, otherwise fall back to status mapping
+        const statusDisplay = release.status_display;
+        if (statusDisplay) {
+            const statusMap = {
+                'released': 'status-green',
+                'in_revision': 'status-yellow',
+                'pending_revision': 'status-blue'
+            };
+            const statusClass = statusMap[release.status] || 'status-grey';
+            return `<span class="status-badge ${statusClass}">${statusDisplay}</span>`;
+        }
+        // Fallback to old mapping if status_display is not available
         const statusMap = {
             'released': { label: 'Yayınlandı', class: 'status-green' },
             'in_revision': { label: 'Revizyonda', class: 'status-yellow' },
             'pending_revision': { label: 'Revizyon Bekliyor', class: 'status-blue' }
         };
-        const statusInfo = statusMap[status] || { label: status, class: 'status-grey' };
+        const statusInfo = statusMap[release.status] || { label: release.status, class: 'status-grey' };
         return `<span class="status-badge ${statusInfo.class}">${statusInfo.label}</span>`;
     };
     
@@ -2406,7 +2419,7 @@ function renderDrawingReleasesUI(container, releases, jobNo, currentRelease = nu
                     <div class="row">
                         <div class="col-md-6">
                             <p><strong>Revizyon:</strong> ${currentRelease.revision_code || '-'} (Rev. ${currentRelease.revision_number || '-'})</p>
-                            <p><strong>Durum:</strong> ${getStatusBadge(currentRelease.status)}</p>
+                            <p><strong>Durum:</strong> ${getStatusBadge(currentRelease)}</p>
                             <p><strong>Klasör Yolu:</strong> ${currentRelease.folder_path || '-'}</p>
                         </div>
                         <div class="col-md-6">
@@ -2415,7 +2428,7 @@ function renderDrawingReleasesUI(container, releases, jobNo, currentRelease = nu
                             <p><strong>Hardcopy Sayısı:</strong> ${currentRelease.hardcopy_count || 0}</p>
                         </div>
                     </div>
-                    ${currentRelease.changelog ? `<div class="mt-3"><strong>Değişiklik Günlüğü:</strong><pre class="bg-light p-2 rounded">${currentRelease.changelog}</pre></div>` : ''}
+                    ${currentRelease.changelog ? `<div class="mt-3"><strong>Değişiklik Günlüğü:</strong><pre class="bg-light p-2 rounded">${escapeHtml(currentRelease.changelog)}</pre></div>` : ''}
                     ${currentRelease.status === 'released' ? `
                         <div class="mt-3">
                             <button type="button" class="btn btn-sm btn-outline-primary request-revision-btn" data-release-id="${currentRelease.id}">
@@ -2449,6 +2462,8 @@ function renderDrawingReleasesUI(container, releases, jobNo, currentRelease = nu
                     <th>Yayınlayan</th>
                     <th>Yayın Tarihi</th>
                     <th>Hardcopy</th>
+                    <th>Klasör Yolu</th>
+                    <th>Değişiklik Günlüğü</th>
                 </tr>
             </thead>
             <tbody>
@@ -2456,13 +2471,17 @@ function renderDrawingReleasesUI(container, releases, jobNo, currentRelease = nu
         
         releases.forEach(release => {
             const isCurrent = currentRelease && release.id === currentRelease.id;
+            const folderPath = release.folder_path ? escapeHtml(release.folder_path) : '-';
+            const changelog = release.changelog ? escapeHtml(release.changelog.trim()) : '-';
             html += `
                 <tr ${isCurrent ? 'style="background-color: #f8f9fa;"' : ''}>
                     <td><strong>${release.revision_code || '-'}</strong> (Rev. ${release.revision_number || '-'})</td>
-                    <td>${getStatusBadge(release.status)}</td>
+                    <td>${getStatusBadge(release)}</td>
                     <td>${release.released_by_name || '-'}</td>
                     <td>${formatDateTime(release.released_at)}</td>
                     <td>${release.hardcopy_count || 0}</td>
+                    <td><code style="font-size: 0.9em; word-break: break-all;">${folderPath}</code></td>
+                    <td>${changelog !== '-' ? `<pre style="white-space: pre-wrap; word-wrap: break-word; margin: 0; font-size: 0.9em; max-width: 400px;">${changelog}</pre>` : '-'}</td>
                 </tr>
             `;
         });
@@ -2818,7 +2837,8 @@ async function viewTopicDetail(topicId, jobNo) {
         const detailModal = new DisplayModal('topic-detail-modal-container', {
             title: `Tartışma: ${topic.title}`,
             icon: 'fas fa-comments',
-            size: 'lg',
+            size: 'xl',
+            fullscreen: true,
             showEditButton: false
         });
 

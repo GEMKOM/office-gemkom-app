@@ -37,6 +37,8 @@ import { showNotification } from '../../../components/notification/notification.
 import { markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { getRemnantPlates, getRemnantPlateById } from '../../../apis/cnc_cutting/remnants.js';
+import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
+import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 
 // State management
 let currentPage = 1;
@@ -70,6 +72,10 @@ let remnantSelectionTable = null; // Table component for remnant selection
 let modalDataPromise = null;
 let machinesPromise = null;
 let shouldOpenModal = false;
+
+// Job order dropdown state
+let jobOrderDropdowns = new Map(); // Store dropdown references by part index
+let jobOrderDropdownOptions = []; // Array of { job_no, title }
 let pendingModalMode = null;
 let pendingCutKey = null;
 
@@ -1184,7 +1190,7 @@ function showCutDetailsModal(cut) {
     }
 }
 
-function showCreateCutModal() {
+async function showCreateCutModal() {
     // Create Edit Modal instance for creating new cut
     createCutModal = new EditModal('create-cut-modal-container', {
         title: 'Yeni Kesim Oluştur',
@@ -1192,6 +1198,14 @@ function showCreateCutModal() {
         saveButtonText: 'Kesim Oluştur',
         size: 'lg'
     });
+    
+    // Clear dropdown references
+    jobOrderDropdowns.clear();
+    
+    // Load job order options if not already loaded
+    if (jobOrderDropdownOptions.length === 0) {
+        await loadJobOrderDropdownOptions();
+    }
     
     // Set up the create cut form
     setupCreateCutForm(createCutModal);
@@ -1367,6 +1381,8 @@ function setupCreateCutForm(createCutModal) {
     
     // Set up cancel callback
     createCutModal.onCancelCallback(() => {
+        // Clear dropdown references
+        jobOrderDropdowns.clear();
         // Reset form if needed
         console.log('Create cut cancelled');
     });
@@ -1537,6 +1553,8 @@ function setupCreateCutForm(createCutModal) {
 			const container = document.getElementById('parts-container');
 			if (!container) return;
 			container.innerHTML = '';
+			// Clear dropdown references
+			jobOrderDropdowns.clear();
 			showNotification('Tüm parçalar temizlendi', 'info');
 		});
 	}
@@ -1598,7 +1616,10 @@ async function handleCreateCutSave(formData) {
     // Collect parts data from dynamic rows
     const partRows = document.querySelectorAll('.part-row');
     for (const row of partRows) {
-        const jobNo = row.querySelector('input[name="job_no"]')?.value?.trim();
+        const partIndex = parseInt(row.dataset.index);
+        // Get job_no from dropdown
+        const jobOrderDropdown = jobOrderDropdowns.get(partIndex);
+        const jobNo = jobOrderDropdown?.getValue() || '';
         const imageNo = row.querySelector('input[name="image_no"]')?.value?.trim();
         const positionNo = row.querySelector('input[name="position_no"]')?.value?.trim();
         const weight = row.querySelector('input[name="weight"]')?.value?.trim();
@@ -1634,6 +1655,9 @@ async function handleCreateCutSave(formData) {
         
         if (response) {
             showNotification('Kesim başarıyla oluşturuldu', 'success');
+            
+            // Clear dropdown references
+            jobOrderDropdowns.clear();
             
             // Close the modal
             const modalInstance = bootstrap.Modal.getOrCreateInstance(document.querySelector('#create-cut-modal-container .modal'));
@@ -2700,10 +2724,13 @@ async function editPart(partId) {
                 {
                     id: 'part-job-no',
                     label: 'İş No',
-                    type: 'text',
+                    type: 'dropdown',
                     required: true,
                     value: part.job_no || '',
-                    colSize: 6
+                    placeholder: 'İş emri seçin',
+                    searchable: true,
+                    colSize: 6,
+                    options: [] // Will be populated after modal renders
                 },
                 {
                     id: 'part-image-no',
@@ -2745,8 +2772,12 @@ async function editPart(partId) {
         });
         
         editPartModal.onSaveCallback(async (formData) => {
+            // Get job_no from dropdown
+            const dropdown = editPartModal.dropdowns?.get('part-job-no');
+            const jobNo = dropdown?.getValue() || formData['part-job-no'] || '';
+            
             const updateData = {
-                job_no: formData['part-job-no'],
+                job_no: jobNo,
                 image_no: formData['part-image-no'],
                 position_no: formData['part-position-no'],
                 weight_kg: formData['part-weight'],
@@ -2772,6 +2803,27 @@ async function editPart(partId) {
         });
         
         editPartModal.render();
+        
+        // Load job order options and populate dropdown after rendering
+        setTimeout(async () => {
+            if (jobOrderDropdownOptions.length === 0) {
+                await loadJobOrderDropdownOptions();
+            }
+            
+            const dropdown = editPartModal.dropdowns?.get('part-job-no');
+            if (dropdown && jobOrderDropdownOptions.length > 0) {
+                const dropdownItems = jobOrderDropdownOptions.map(jobOrder => ({
+                    value: jobOrder.job_no,
+                    text: `${jobOrder.job_no} - ${jobOrder.title}`
+                }));
+                dropdown.setItems(dropdownItems);
+                // Set the value if it exists
+                if (part.job_no) {
+                    dropdown.setValue(part.job_no);
+                }
+            }
+        }, 100);
+        
         editPartModal.show();
         
     } catch (error) {
@@ -2830,10 +2882,12 @@ function showAddPartModal() {
             {
                 id: 'part-job-no',
                 label: 'İş No',
-                type: 'text',
+                type: 'dropdown',
                 required: true,
-                placeholder: 'İş numarasını girin',
-                colSize: 6
+                placeholder: 'İş emri seçin',
+                searchable: true,
+                colSize: 6,
+                options: [] // Will be populated after modal renders
             },
             {
                 id: 'part-image-no',
@@ -2875,9 +2929,13 @@ function showAddPartModal() {
     });
     
     addPartModal.onSaveCallback(async (formData) => {
+        // Get job_no from dropdown
+        const dropdown = addPartModal.dropdowns?.get('part-job-no');
+        const jobNo = dropdown?.getValue() || formData['part-job-no'] || '';
+        
         const partData = {
             cnc_task: currentEditTask.key,
-            job_no: formData['part-job-no'],
+            job_no: jobNo,
             image_no: formData['part-image-no'],
             position_no: formData['part-position-no'],
             weight_kg: formData['part-weight'],
@@ -2909,6 +2967,23 @@ function showAddPartModal() {
     });
     
     addPartModal.render();
+    
+    // Load job order options and populate dropdown after rendering
+    setTimeout(async () => {
+        if (jobOrderDropdownOptions.length === 0) {
+            await loadJobOrderDropdownOptions();
+        }
+        
+        const dropdown = addPartModal.dropdowns?.get('part-job-no');
+        if (dropdown && jobOrderDropdownOptions.length > 0) {
+            const dropdownItems = jobOrderDropdownOptions.map(jobOrder => ({
+                value: jobOrder.job_no,
+                text: `${jobOrder.job_no} - ${jobOrder.title}`
+            }));
+            dropdown.setItems(dropdownItems);
+        }
+    }, 100);
+    
     addPartModal.show();
 }
 
@@ -3143,7 +3218,7 @@ function addPart() {
         <div class="part-row mb-3" data-index="${partIndex}">
             <div class="row g-2">
                 <div class="col-md-2">
-                    <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş numarası">
+                    <div id="job-no-dropdown-${partIndex}"></div>
                 </div>
                 <div class="col-md-2">
                     <input type="text" class="form-control form-control-sm" name="image_no" placeholder="Resim numarası">
@@ -3167,6 +3242,71 @@ function addPart() {
     `;
     
     container.insertAdjacentHTML('beforeend', partHtml);
+    
+    // Initialize job order dropdown for this part
+    setTimeout(() => {
+        initializeJobOrderDropdown(partIndex);
+    }, 100);
+}
+
+// Load job order dropdown options
+async function loadJobOrderDropdownOptions() {
+    try {
+        jobOrderDropdownOptions = await getJobOrderDropdown();
+    } catch (error) {
+        console.error('Error loading job order dropdown options:', error);
+        jobOrderDropdownOptions = [];
+        showNotification('İş emirleri yüklenirken hata oluştu', 'error');
+    }
+}
+
+// Initialize job order dropdown for a specific part
+function initializeJobOrderDropdown(partIndex, initialValue = '') {
+    const container = document.getElementById(`job-no-dropdown-${partIndex}`);
+    if (!container) return;
+
+    // Load options if not already loaded
+    if (jobOrderDropdownOptions.length === 0) {
+        loadJobOrderDropdownOptions().then(() => {
+            setupJobOrderDropdown(container, partIndex, initialValue);
+        }).catch(() => {
+            // Initialize with empty options if loading fails
+            setupJobOrderDropdown(container, partIndex, initialValue);
+        });
+    } else {
+        setupJobOrderDropdown(container, partIndex, initialValue);
+    }
+}
+
+// Setup the job order dropdown component
+function setupJobOrderDropdown(container, partIndex, initialValue = '') {
+    // Clear container
+    container.innerHTML = '';
+
+    // Create dropdown
+    const dropdown = new ModernDropdown(container, {
+        placeholder: 'İş emri seçin',
+        searchable: true,
+        multiple: false,
+        maxHeight: 200,
+        width: '100%'
+    });
+
+    // Convert job orders to dropdown items format
+    const dropdownItems = jobOrderDropdownOptions.map(jobOrder => ({
+        value: jobOrder.job_no,
+        text: `${jobOrder.job_no} - ${jobOrder.title}`
+    }));
+
+    dropdown.setItems(dropdownItems);
+
+    // Set initial value if provided
+    if (initialValue) {
+        dropdown.setValue(initialValue);
+    }
+
+    // Store dropdown reference in Map
+    jobOrderDropdowns.set(partIndex, dropdown);
 }
 
 // Populate parts from parsed objects
@@ -3180,13 +3320,32 @@ function populatePartsFromParsed(parsedParts) {
         addPart();
         const lastRow = container.lastElementChild;
         if (!lastRow) continue;
-        const jobInput = lastRow.querySelector('input[name="job_no"]');
+        const partIndex = parseInt(lastRow.dataset.index);
         const imageInput = lastRow.querySelector('input[name="image_no"]');
         const positionInput = lastRow.querySelector('input[name="position_no"]');
         const weightInput = lastRow.querySelector('input[name="weight"]');
         const quantityInput = lastRow.querySelector('input[name="quantity"]');
 
-        if (jobInput) jobInput.value = p.job_no || '';
+        // Set job_no in dropdown
+        if (p.job_no) {
+            setTimeout(() => {
+                const dropdown = jobOrderDropdowns.get(partIndex);
+                if (dropdown) {
+                    dropdown.setValue(p.job_no);
+                } else {
+                    // If dropdown not ready, try again
+                    const checkDropdown = setInterval(() => {
+                        const dd = jobOrderDropdowns.get(partIndex);
+                        if (dd) {
+                            dd.setValue(p.job_no);
+                            clearInterval(checkDropdown);
+                        }
+                    }, 50);
+                    setTimeout(() => clearInterval(checkDropdown), 2000);
+                }
+            }, 200);
+        }
+        
         if (imageInput) imageInput.value = p.image_no || '';
         if (positionInput) positionInput.value = p.position_no || '';
         if (weightInput && p.weight_kg != null) weightInput.value = String(p.weight_kg);
@@ -3196,6 +3355,19 @@ function populatePartsFromParsed(parsedParts) {
 
 // Remove part
 function removePart(index) {
+    // Clean up dropdown reference
+    jobOrderDropdowns.delete(index);
+    
+    // Re-index dropdown references for remaining parts
+    const newDropdowns = new Map();
+    jobOrderDropdowns.forEach((dropdown, oldIndex) => {
+        if (oldIndex < index) {
+            newDropdowns.set(oldIndex, dropdown);
+        } else if (oldIndex > index) {
+            newDropdowns.set(oldIndex - 1, dropdown);
+        }
+    });
+    jobOrderDropdowns = newDropdowns;
     const partRow = document.querySelector(`.part-row[data-index="${index}"]`);
     if (partRow) {
         partRow.remove();

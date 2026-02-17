@@ -26,6 +26,8 @@ import {
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { fetchAllUsers } from '../../../apis/users.js';
 import { showNotification } from '../../../components/notification/notification.js';
+import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
+import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 
 // State management
 let currentPage = 1;
@@ -49,6 +51,10 @@ let departmentRequestsFilters = null;
 let planningRequestsFilters = null;
 let pendingErpEntryFilters = null;
 let loadCompletedRequests = null;
+
+// Job order dropdown state
+let jobOrderDropdowns = new Map(); // Store dropdown references by item index
+let jobOrderDropdownOptions = []; // Array of { job_no, title }
 
 // Pending ERP Entry requests state
 let pendingErpEntryCurrentPage = 1;
@@ -1504,7 +1510,7 @@ async function showPlanningRequestDetailsModal(request) {
                         <thead class="table-light">
                             <tr>
                                 <th>#</th>
-                                <th>Ürün Kodu</th>
+                                <th style="min-width: 200px; white-space: nowrap;">Ürün Kodu</th>
                                 <th>Ürün Adı</th>
                                 <th>Ürün Açıklaması</th>
                                 <th>İş No</th>
@@ -1521,7 +1527,7 @@ async function showPlanningRequestDetailsModal(request) {
                             ${itemsData.map(item => `
                                 <tr>
                                     <td>${item.id}</td>
-                                    <td><strong>${item.code}</strong></td>
+                                    <td style="white-space: nowrap;"><strong>${item.code}</strong></td>
                                     <td>${item.name}</td>
                                     <td>${item.description}</td>
                                     <td>${item.job_no}</td>
@@ -1840,6 +1846,8 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
     createPlanningRequestModal.clearAll();
     // Clear file attachments
     fileAttachments = [];
+    // Clear dropdown references
+    jobOrderDropdowns.clear();
 
     // Update modal title if department request is provided
     if (departmentRequest) {
@@ -1963,7 +1971,10 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
                 const itemDescription = row.querySelector('input[name="item_description"]')?.value?.trim();
                 const itemUnit = row.querySelector('select[name="item_unit"]')?.value?.trim() || 'adet';
                 const itemQuantity = row.querySelector('input[name="item_quantity"]')?.value?.trim();
-                const jobNo = row.querySelector('input[name="job_no"]')?.value?.trim();
+                // Get job_no from dropdown
+                const itemIndex = parseInt(row.dataset.index);
+                const jobOrderDropdown = jobOrderDropdowns.get(itemIndex);
+                const jobNo = jobOrderDropdown?.getValue() || '';
                 const itemSpecifications = row.querySelector('input[name="item_specifications"]')?.value?.trim();
                 
                 // Validate required fields
@@ -2117,6 +2128,8 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
         createPlanningRequestModal.clearAll();
         // Clear file attachments
         fileAttachments = [];
+        // Clear dropdown references
+        jobOrderDropdowns.clear();
         renderFilesList();
     });
 
@@ -2162,23 +2175,26 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
         }
         
         // Setup items section with custom HTML after rendering
-        setupItemsSection();
-        setupAttachmentsSection();
-        
-        // Pre-fill items if department request is provided
-        if (departmentRequest) {
-            // Store department request ID for later use (always set, even if no files)
-            const modalContainer = createPlanningRequestModal.container;
-            if (!modalContainer.querySelector('[data-department-request-id]')) {
-                const hiddenInput = document.createElement('div');
-                hiddenInput.setAttribute('data-department-request-id', departmentRequest.id);
-                hiddenInput.style.display = 'none';
-                modalContainer.appendChild(hiddenInput);
+        setupItemsSection().then(() => {
+            // Pre-fill items if department request is provided
+            if (departmentRequest) {
+                // Store department request ID for later use (always set, even if no files)
+                const modalContainer = createPlanningRequestModal.container;
+                if (!modalContainer.querySelector('[data-department-request-id]')) {
+                    const hiddenInput = document.createElement('div');
+                    hiddenInput.setAttribute('data-department-request-id', departmentRequest.id);
+                    hiddenInput.style.display = 'none';
+                    modalContainer.appendChild(hiddenInput);
+                }
+                
+                // Pre-fill items after a short delay to ensure dropdowns are initialized
+                setTimeout(() => {
+                    prefillItemsFromDepartmentRequest(departmentRequest);
+                    prefillFilesFromDepartmentRequest(departmentRequest);
+                }, 200);
             }
-            
-            prefillItemsFromDepartmentRequest(departmentRequest);
-            prefillFilesFromDepartmentRequest(departmentRequest);
-        }
+        });
+        setupAttachmentsSection();
     }, 100);
 
     // Show the modal
@@ -2201,6 +2217,8 @@ async function showEditPlanningRequestModal(request) {
     createPlanningRequestModal.clearAll();
     // Clear file attachments
     fileAttachments = [];
+    // Clear dropdown references
+    jobOrderDropdowns.clear();
 
     // Update modal title
     createPlanningRequestModal.setTitle('Planlama Talebi Düzenle');
@@ -2416,7 +2434,10 @@ async function showEditPlanningRequestModal(request) {
                 const itemDescription = row.querySelector('input[name="item_description"]')?.value?.trim();
                 const itemUnit = row.querySelector('select[name="item_unit"]')?.value?.trim() || 'adet';
                 const itemQuantity = row.querySelector('input[name="item_quantity"]')?.value?.trim();
-                const jobNo = row.querySelector('input[name="job_no"]')?.value?.trim();
+                // Get job_no from dropdown
+                const itemIndex = parseInt(row.dataset.index);
+                const jobOrderDropdown = jobOrderDropdowns.get(itemIndex);
+                const jobNo = jobOrderDropdown?.getValue() || '';
                 const itemSpecifications = row.querySelector('input[name="item_specifications"]')?.value?.trim();
                 
                 // Validate required fields
@@ -2636,12 +2657,14 @@ async function showEditPlanningRequestModal(request) {
         }
         
         // Setup items section with custom HTML after rendering
-        setupItemsSection();
+        setupItemsSection().then(() => {
+            // Pre-fill items and files from planning request after dropdowns are ready
+            setTimeout(() => {
+                prefillItemsFromPlanningRequest(request);
+                prefillFilesFromPlanningRequest(request);
+            }, 200);
+        });
         setupAttachmentsSection();
-        
-        // Pre-fill items and files from planning request
-        prefillItemsFromPlanningRequest(request);
-        prefillFilesFromPlanningRequest(request);
     }, 100);
 
     // Show the modal
@@ -2835,7 +2858,7 @@ function prefillItemsFromPlanningRequest(request) {
                         <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtmlAttribute(itemDescription)}">
                     </div>
                     <div class="col-md-1">
-                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtmlAttribute(jobNo)}" required>
+                        <div id="job-no-dropdown-${index}"></div>
                     </div>
                     <div class="col-md-1">
                         <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="0.01" min="0.01" value="${quantity}" required>
@@ -2858,6 +2881,23 @@ function prefillItemsFromPlanningRequest(request) {
         `;
 
         container.insertAdjacentHTML('beforeend', itemHtml);
+
+        // Initialize job order dropdown for this item
+        setTimeout(() => {
+            initializeJobOrderDropdown(index);
+            // Set value if jobNo exists
+            if (jobNo) {
+                const checkDropdown = setInterval(() => {
+                    const dropdown = jobOrderDropdowns.get(index);
+                    if (dropdown) {
+                        dropdown.setValue(jobNo);
+                        clearInterval(checkDropdown);
+                    }
+                }, 50);
+                // Clear interval after 2 seconds if dropdown still not ready
+                setTimeout(() => clearInterval(checkDropdown), 2000);
+            }
+        }, 100);
 
         // Add event listener to item specifications field to update file list when description changes
         const itemRow = container.querySelector(`.planning-item-row[data-index="${index}"]`);
@@ -3024,7 +3064,7 @@ function prefillItemsFromDepartmentRequest(departmentRequest) {
                         <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtmlAttribute(itemDescription)}">
                     </div>
                     <div class="col-md-1">
-                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtmlAttribute(jobNo)}" required>
+                        <div id="job-no-dropdown-${index}"></div>
                     </div>
                     <div class="col-md-1">
                         <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="0.01" min="0.01" value="${quantity}" required>
@@ -3047,6 +3087,23 @@ function prefillItemsFromDepartmentRequest(departmentRequest) {
         `;
 
         container.insertAdjacentHTML('beforeend', itemHtml);
+
+        // Initialize job order dropdown for this item
+        setTimeout(() => {
+            initializeJobOrderDropdown(index);
+            // Set value if jobNo exists
+            if (jobNo) {
+                const checkDropdown = setInterval(() => {
+                    const dropdown = jobOrderDropdowns.get(index);
+                    if (dropdown) {
+                        dropdown.setValue(jobNo);
+                        clearInterval(checkDropdown);
+                    }
+                }, 50);
+                // Clear interval after 2 seconds if dropdown still not ready
+                setTimeout(() => clearInterval(checkDropdown), 2000);
+            }
+        }, 100);
 
         // Add event listener to item specifications field to update file list when description changes
         const itemRow = container.querySelector(`.planning-item-row[data-index="${index}"]`);
@@ -3132,12 +3189,17 @@ function prefillFilesFromDepartmentRequest(departmentRequest) {
 }
 
 // Setup items section with dynamic add/remove functionality
-function setupItemsSection() {
+async function setupItemsSection() {
     const itemsSection = createPlanningRequestModal.container.querySelector('[data-section-id="items-info"]');
     if (!itemsSection) return;
 
     const fieldsContainer = itemsSection.querySelector('.row.g-2');
     if (!fieldsContainer) return;
+    
+    // Load job order dropdown options if not already loaded
+    if (jobOrderDropdownOptions.length === 0) {
+        await loadJobOrderDropdownOptions();
+    }
 
     const itemsHtml = `
         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -3224,6 +3286,8 @@ function setupItemsSection() {
             const container = document.getElementById('planning-items-container');
             if (!container) return;
             container.innerHTML = '';
+            // Clear dropdown references
+            jobOrderDropdowns.clear();
             // Remove all item references from file attachments (keep only 'request')
             fileAttachments.forEach(attachment => {
                 attachment.attachTo = attachment.attachTo.filter(t => t === 'request');
@@ -3259,7 +3323,7 @@ function addPlanningItem() {
                     <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması">
                 </div>
                 <div class="col-md-1">
-                    <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" required>
+                    <div id="job-no-dropdown-${itemIndex}"></div>
                 </div>
                 <div class="col-md-1">
                     <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="0.01" min="0.01" value="1" required>
@@ -3283,6 +3347,11 @@ function addPlanningItem() {
     
     container.insertAdjacentHTML('beforeend', itemHtml);
     
+    // Initialize job order dropdown for this item
+    setTimeout(() => {
+        initializeJobOrderDropdown(itemIndex);
+    }, 100);
+    
     // Add event listener to item specifications field to update file list when description changes
     const itemRow = container.querySelector(`.planning-item-row[data-index="${itemIndex}"]`);
     if (itemRow) {
@@ -3296,10 +3365,67 @@ function addPlanningItem() {
     }
 }
 
+// Load job order dropdown options
+async function loadJobOrderDropdownOptions() {
+    try {
+        jobOrderDropdownOptions = await getJobOrderDropdown();
+    } catch (error) {
+        console.error('Error loading job order dropdown options:', error);
+        jobOrderDropdownOptions = [];
+        showNotification('İş emirleri yüklenirken hata oluştu', 'error');
+    }
+}
+
+// Initialize job order dropdown for a specific item
+function initializeJobOrderDropdown(itemIndex) {
+    const container = document.getElementById(`job-no-dropdown-${itemIndex}`);
+    if (!container) return;
+
+    // Load options if not already loaded
+    if (jobOrderDropdownOptions.length === 0) {
+        loadJobOrderDropdownOptions().then(() => {
+            setupJobOrderDropdown(container, itemIndex);
+        }).catch(() => {
+            // Initialize with empty options if loading fails
+            setupJobOrderDropdown(container, itemIndex);
+        });
+    } else {
+        setupJobOrderDropdown(container, itemIndex);
+    }
+}
+
+// Setup the job order dropdown component
+function setupJobOrderDropdown(container, itemIndex) {
+    // Clear container
+    container.innerHTML = '';
+
+    // Create dropdown
+    const dropdown = new ModernDropdown(container, {
+        placeholder: 'İş emri seçin',
+        searchable: true,
+        multiple: false,
+        maxHeight: 200,
+        width: '100%'
+    });
+
+    // Convert job orders to dropdown items format
+    const dropdownItems = jobOrderDropdownOptions.map(jobOrder => ({
+        value: jobOrder.job_no,
+        text: `${jobOrder.job_no} - ${jobOrder.title}`
+    }));
+
+    dropdown.setItems(dropdownItems);
+
+    // Store dropdown reference in Map
+    jobOrderDropdowns.set(itemIndex, dropdown);
+}
+
 // Remove item from planning request form
 function removePlanningItem(index) {
     const itemRow = document.querySelector(`.planning-item-row[data-index="${index}"]`);
     if (itemRow) {
+        // Clean up dropdown reference
+        jobOrderDropdowns.delete(index);
         itemRow.remove();
     }
 }
@@ -4737,7 +4863,7 @@ function importExcelItems() {
                         <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtmlAttribute(item.item_description)}">
                     </div>
                     <div class="col-md-1">
-                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no" value="${escapeHtmlAttribute(item.job_no)}" required>
+                        <div id="job-no-dropdown-${itemIndex}"></div>
                     </div>
                     <div class="col-md-1">
                         <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="0.01" min="0.01" value="${item.quantity}" required>
@@ -4760,6 +4886,23 @@ function importExcelItems() {
         `;
         
         container.insertAdjacentHTML('beforeend', itemHtml);
+        
+        // Initialize job order dropdown for this item
+        setTimeout(() => {
+            initializeJobOrderDropdown(itemIndex);
+            // Set value if job_no exists
+            if (item.job_no) {
+                const checkDropdown = setInterval(() => {
+                    const dropdown = jobOrderDropdowns.get(itemIndex);
+                    if (dropdown) {
+                        dropdown.setValue(item.job_no);
+                        clearInterval(checkDropdown);
+                    }
+                }, 50);
+                // Clear interval after 2 seconds if dropdown still not ready
+                setTimeout(() => clearInterval(checkDropdown), 2000);
+            }
+        }, 100);
         
         // Add event listener to item specifications field to update file list when description changes
         const itemRow = container.querySelector(`.planning-item-row[data-index="${itemIndex}"]`);

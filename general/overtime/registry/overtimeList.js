@@ -18,6 +18,7 @@ import { TableComponent } from '../../../components/table/table.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
+import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 import { 
     initializeModalComponents, 
     showOvertimeDetailsModal, 
@@ -36,6 +37,8 @@ let allUsers = [];
 let allTeams = [];
 let overtimeTable = null; // TableComponent instance
 let userDropdowns = new Map(); // Store dropdown references
+let jobOrderDropdowns = new Map(); // Store job order dropdown references
+let jobOrderDropdownOptions = []; // Array of { job_no, title }
 let cancelOvertimeModal = null; // DisplayModal instance for cancel
 let createOvertimeModal = null; // EditModal instance for create
 
@@ -532,6 +535,10 @@ async function showCreateOvertimeModal() {
     // Clear previous data
     createOvertimeModal.clearAll();
     
+    // Clear dropdown references
+    userDropdowns.clear();
+    jobOrderDropdowns.clear();
+    
     // Add basic information section
     createOvertimeModal.addSection({
         title: 'Temel Bilgiler',
@@ -641,15 +648,16 @@ async function showCreateOvertimeModal() {
         addParticipantBtn.addEventListener('click', addParticipant);
     }
     
-    // Load users for dropdowns
+    // Load users and job orders for dropdowns
     try {
         await loadUsersForModal();
+        await loadJobOrderDropdownOptions();
         // Add initial participant
         setTimeout(() => {
             addParticipant();
         }, 100);
     } catch (error) {
-        showErrorMessage('Kullanıcılar yüklenirken hata oluştu.');
+        showErrorMessage('Veriler yüklenirken hata oluştu.');
     }
     
     createOvertimeModal.show();
@@ -887,7 +895,7 @@ function addParticipant() {
                         <label class="form-label compact">
                             <i class="fas fa-hashtag me-1"></i>İş Emri No *
                         </label>
-                        <input type="text" class="form-control form-control-sm" name="job_no" placeholder="Örn: 001-23" required>
+                        <div id="job-no-dropdown-${participantIndex}"></div>
                         <div class="form-text compact">Çalışanın çalışacağı iş emri numarası</div>
                     </div>
                 </div>
@@ -917,6 +925,7 @@ function addParticipant() {
     // Initialize user dropdown for this participant with a small delay to ensure DOM is ready
     setTimeout(() => {
         initializeUserDropdown(participantIndex);
+        initializeJobOrderDropdown(participantIndex);
     }, 10);
 }
 
@@ -946,6 +955,61 @@ function initializeUserDropdown(index) {
     userDropdowns.set(index, dropdown);
 }
 
+// Load job order dropdown options
+async function loadJobOrderDropdownOptions() {
+    try {
+        jobOrderDropdownOptions = await getJobOrderDropdown();
+    } catch (error) {
+        console.error('Error loading job order dropdown options:', error);
+        jobOrderDropdownOptions = [];
+        showErrorMessage('İş emirleri yüklenirken hata oluştu.');
+    }
+}
+
+// Initialize job order dropdown for a specific participant
+function initializeJobOrderDropdown(participantIndex) {
+    const container = document.getElementById(`job-no-dropdown-${participantIndex}`);
+    if (!container) return;
+
+    // Load options if not already loaded
+    if (jobOrderDropdownOptions.length === 0) {
+        loadJobOrderDropdownOptions().then(() => {
+            setupJobOrderDropdown(container, participantIndex);
+        }).catch(() => {
+            // Initialize with empty options if loading fails
+            setupJobOrderDropdown(container, participantIndex);
+        });
+    } else {
+        setupJobOrderDropdown(container, participantIndex);
+    }
+}
+
+// Setup the job order dropdown component
+function setupJobOrderDropdown(container, participantIndex) {
+    // Clear container
+    container.innerHTML = '';
+
+    // Create dropdown
+    const dropdown = new ModernDropdown(container, {
+        placeholder: 'İş emri seçin',
+        searchable: true,
+        multiple: false,
+        maxHeight: 200,
+        width: '100%'
+    });
+
+    // Convert job orders to dropdown items format
+    const dropdownItems = jobOrderDropdownOptions.map(jobOrder => ({
+        value: jobOrder.job_no,
+        text: `${jobOrder.job_no} - ${jobOrder.title}`
+    }));
+
+    dropdown.setItems(dropdownItems);
+
+    // Store dropdown reference in Map
+    jobOrderDropdowns.set(participantIndex, dropdown);
+}
+
 // Remove participant
 function removeParticipant(index) {
     const participantRow = document.querySelector(`.participant-row[data-index="${index}"]`);
@@ -953,8 +1017,9 @@ function removeParticipant(index) {
         // Don't remove if it's the only participant
         const container = document.getElementById('participants-container');
         if (container.children.length > 1) {
-            // Clean up dropdown reference
+            // Clean up dropdown references
             userDropdowns.delete(index);
+            jobOrderDropdowns.delete(index);
             participantRow.remove();
         } else {
             showErrorMessage('En az bir katılımcı olmalıdır.');
@@ -977,15 +1042,17 @@ async function submitOvertimeRequest(formData) {
         const participantRows = document.querySelectorAll('.participant-row');
         
         for (const row of participantRows) {
-            const participantIndex = row.dataset.index;
-            const jobNoInput = row.querySelector('input[name="job_no"]');
+            const participantIndex = parseInt(row.dataset.index);
             const descriptionInput = row.querySelector('input[name="description"]');
             
-            // Get dropdown from Map
-            const dropdown = userDropdowns.get(parseInt(participantIndex));
-            const userId = dropdown?.getValue();
-            const jobNo = jobNoInput?.value?.trim();
+            // Get dropdowns from Maps
+            const userDropdown = userDropdowns.get(participantIndex);
+            const jobOrderDropdown = jobOrderDropdowns.get(participantIndex);
+            
+            const userId = userDropdown?.getValue();
+            const jobNo = jobOrderDropdown?.getValue();
             const description = descriptionInput?.value?.trim() || '';
+            
             if (!userId || !jobNo) {
                 showErrorMessage('Lütfen tüm katılımcılar için gerekli bilgileri doldurun.');
                 return;

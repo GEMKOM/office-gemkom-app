@@ -26,6 +26,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-project-diagram',
                 iconColor: 'primary',
                 link: '/design/projects'
+            },
+            {
+                title: 'Revizyon Talepleri',
+                description: 'Bekleyen revizyon taleplerini görüntüleyin, onaylayın veya reddedin.',
+                icon: 'fas fa-edit',
+                iconColor: 'warning',
+                link: '/design/revision-requests'
             }
         ]
     });

@@ -76,6 +76,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Projeler',
                 icon: 'fas fa-project-diagram',
                 children: {}
+            },
+            '/design/revision-requests': {
+                label: 'Revizyon Talepleri',
+                icon: 'fas fa-edit',
+                children: {}
             }
         }
     },

@@ -6,6 +6,8 @@ import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { TableComponent } from '../../../../components/table/table.js';
 import { getUser } from '../../../../authService.js';
 import { showNotification } from '../../../../components/notification/notification.js';
+import { ModernDropdown } from '../../../../components/dropdown/dropdown.js';
+import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
 
 // State management
 let currentPage = 1;
@@ -34,6 +36,10 @@ const columns = [
 
 let rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
 let eventListenersSetup = false;
+
+// Job order dropdown state
+let jobOrderDropdowns = new Map(); // Store dropdown references by row index
+let jobOrderDropdownOptions = []; // Array of { job_no, title }
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -68,9 +74,80 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initializeFiltersComponent();
     await initializeTableComponent();
     
+    // Load job order dropdown options
+    await loadJobOrderDropdownOptions();
+    
     // Load tasks
     await loadTasks();
 });
+
+// Load job order dropdown options
+async function loadJobOrderDropdownOptions() {
+    try {
+        jobOrderDropdownOptions = await getJobOrderDropdown();
+    } catch (error) {
+        console.error('Error loading job order dropdown options:', error);
+        jobOrderDropdownOptions = [];
+        showNotification('İş emirleri yüklenirken hata oluştu', 'error');
+    }
+}
+
+// Initialize job order dropdown for a specific row
+function initializeJobOrderDropdown(rowIndex, initialValue = '') {
+    const container = document.getElementById(`job-no-dropdown-${rowIndex}`);
+    if (!container) return;
+
+    // Load options if not already loaded
+    if (jobOrderDropdownOptions.length === 0) {
+        loadJobOrderDropdownOptions().then(() => {
+            setupJobOrderDropdown(container, rowIndex, initialValue);
+        }).catch(() => {
+            // Initialize with empty options if loading fails
+            setupJobOrderDropdown(container, rowIndex, initialValue);
+        });
+    } else {
+        setupJobOrderDropdown(container, rowIndex, initialValue);
+    }
+}
+
+// Setup the job order dropdown component
+function setupJobOrderDropdown(container, rowIndex, initialValue = '') {
+    // Clear container
+    container.innerHTML = '';
+
+    // Create dropdown
+    const dropdown = new ModernDropdown(container, {
+        placeholder: 'İş emri seçin',
+        searchable: true,
+        multiple: false,
+        maxHeight: 200,
+        width: '100%'
+    });
+
+    // Convert job orders to dropdown items format
+    const dropdownItems = jobOrderDropdownOptions.map(jobOrder => ({
+        value: jobOrder.job_no,
+        text: `${jobOrder.job_no} - ${jobOrder.title}`
+    }));
+
+    dropdown.setItems(dropdownItems);
+
+    // Set initial value if provided
+    if (initialValue) {
+        dropdown.setValue(initialValue);
+    }
+
+    // Store dropdown reference in Map
+    jobOrderDropdowns.set(rowIndex, dropdown);
+
+    // Add event listener to update row data when dropdown value changes
+    container.addEventListener('dropdown:select', (e) => {
+        const selectedValue = e.detail.value;
+        if (rows[rowIndex] !== undefined) {
+            rows[rowIndex].job_no = selectedValue || '';
+        }
+    });
+}
 
 function setupBulkCreateTable() {
     renderBulkCreateTable();
@@ -98,7 +175,10 @@ function renderBulkCreateTable() {
     rows.forEach((row, i) => {
         html += `<tr>`;
         for (const col of columns) {
-            if (col.type === 'textarea') {
+            if (col.key === 'job_no') {
+                // Use dropdown container for job_no
+                html += `<td><div id="job-no-dropdown-${i}" class="job-no-dropdown-container"></div></td>`;
+            } else if (col.type === 'textarea') {
                 html += `<td><textarea class="form-control form-control-sm bulk-input" data-row="${i}" data-key="${col.key}" rows="2" ${col.required ? 'required' : ''}>${row[col.key] || ''}</textarea></td>`;
             } else {
                 const inputType = col.type === 'number' ? 'number' : (col.type === 'date' ? 'date' : 'text');
@@ -129,6 +209,13 @@ function renderBulkCreateTable() {
         </div>`;
     
     container.innerHTML = html;
+    
+    // Initialize job order dropdowns for all rows
+    setTimeout(() => {
+        rows.forEach((row, i) => {
+            initializeJobOrderDropdown(i, row.job_no);
+        });
+    }, 100);
     
     // Add "Add Row" button if not already present
     const actionsContainer = document.querySelector('.bulk-create-actions');
@@ -174,8 +261,16 @@ function setupBulkCreateEventListeners() {
             const btn = e.target.closest('.bulk-duplicate');
             const rowIdx = parseInt(btn.getAttribute('data-row'));
             if (rows[rowIdx] !== undefined) {
+                // Get job_no from dropdown before duplicating
+                const dropdown = jobOrderDropdowns.get(rowIdx);
+                const jobNo = dropdown?.getValue() || rows[rowIdx].job_no || '';
+                
                 const newRow = { ...rows[rowIdx] };
+                newRow.job_no = jobNo; // Preserve job_no value
                 rows.splice(rowIdx + 1, 0, newRow);
+                
+                // Clear dropdown references (will be recreated in renderBulkCreateTable)
+                jobOrderDropdowns.clear();
                 renderBulkCreateTable();
             }
             return;
@@ -188,7 +283,21 @@ function setupBulkCreateEventListeners() {
             const btn = e.target.closest('.bulk-remove');
             const rowIdx = parseInt(btn.getAttribute('data-row'));
             if (rows.length > 1 && rows[rowIdx] !== undefined) {
+                // Clean up dropdown reference
+                jobOrderDropdowns.delete(rowIdx);
                 rows.splice(rowIdx, 1);
+                
+                // Re-index dropdown references
+                const newDropdowns = new Map();
+                jobOrderDropdowns.forEach((dropdown, oldIndex) => {
+                    if (oldIndex < rowIdx) {
+                        newDropdowns.set(oldIndex, dropdown);
+                    } else if (oldIndex > rowIdx) {
+                        newDropdowns.set(oldIndex - 1, dropdown);
+                    }
+                });
+                jobOrderDropdowns = newDropdowns;
+                
                 renderBulkCreateTable();
             }
             return;
@@ -213,6 +322,8 @@ function setupEventListeners() {
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
             rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
+            // Clear dropdown references
+            jobOrderDropdowns.clear();
             renderBulkCreateTable();
             showNotification('Form temizlendi', 'info');
         });
@@ -249,7 +360,13 @@ async function handleBulkCreateSave() {
     
     rows.forEach((row, index) => {
         requiredFields.forEach(field => {
-            if (!row[field] || row[field].toString().trim() === '') {
+            let value = row[field];
+            // Get job_no from dropdown if it's job_no field
+            if (field === 'job_no') {
+                const dropdown = jobOrderDropdowns.get(index);
+                value = dropdown?.getValue() || row[field];
+            }
+            if (!value || value.toString().trim() === '') {
                 missingFields.push(`Satır ${index + 1}: ${columns.find(col => col.key === field)?.label}`);
             }
         });
@@ -285,18 +402,24 @@ async function handleBulkCreateSave() {
     }
     
     // Prepare payload for bulk create parts (without operations)
-    const payload = rows.map(row => ({
-        name: row.name,
-        job_no: row.job_no,
-        image_no: row.image_no || null,
-        position_no: row.position_no || null,
-        quantity: row.quantity ? parseInt(row.quantity) : null,
-        material: row.material || null,
-        weight_kg: row.weight_kg ? parseFloat(row.weight_kg) : null,
-        finish_time: row.finish_time,
-        description: row.description || null,
-        operations: [] // Empty operations array - operations can be added later
-    }));
+    const payload = rows.map((row, index) => {
+        // Get job_no from dropdown
+        const dropdown = jobOrderDropdowns.get(index);
+        const jobNo = dropdown?.getValue() || row.job_no || '';
+        
+        return {
+            name: row.name,
+            job_no: jobNo,
+            image_no: row.image_no || null,
+            position_no: row.position_no || null,
+            quantity: row.quantity ? parseInt(row.quantity) : null,
+            material: row.material || null,
+            weight_kg: row.weight_kg ? parseFloat(row.weight_kg) : null,
+            finish_time: row.finish_time,
+            description: row.description || null,
+            operations: [] // Empty operations array - operations can be added later
+        };
+    });
     
     try {
         const responseData = await bulkCreateParts(payload);
@@ -308,6 +431,7 @@ async function handleBulkCreateSave() {
             
             // Reset form
             rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
+            jobOrderDropdowns.clear();
             renderBulkCreateTable();
             
             showNotification(`${responseData.created || responseData.parts.length} parça başarıyla oluşturuldu!`, 'success');
@@ -315,6 +439,7 @@ async function handleBulkCreateSave() {
             showNotification(`${payload.length} parça başarıyla oluşturuldu!`, 'success');
             // Reset form
             rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
+            jobOrderDropdowns.clear();
             renderBulkCreateTable();
         }
         

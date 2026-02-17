@@ -13,6 +13,8 @@ import {
 } from '../../../../apis/welding/crud.js';
 import { authFetchUsers } from '../../../../apis/users.js';
 import { showNotification } from '../../../../components/notification/notification.js';
+import { ModernDropdown } from '../../../../components/dropdown/dropdown.js';
+import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
 
 // State management
 let currentPage = 1;
@@ -26,6 +28,10 @@ let timeEntriesTable = null;
 let users = [];
 let editTimeEntryModal = null;
 let deleteTimeEntryModal = null;
+
+// Job order dropdown state
+let jobOrderDropdowns = new Map(); // Store dropdown references by row index
+let jobOrderDropdownOptions = []; // Array of { job_no, title }
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -44,6 +50,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
     
     await loadUsers();
+    // Load job order dropdown options
+    await loadJobOrderDropdownOptions();
     initializeFiltersComponent();
     initializeTableComponent();
     initializeEditModal();
@@ -61,6 +69,17 @@ async function loadUsers() {
     } catch (error) {
         console.error('Error loading users:', error);
         users = [];
+    }
+}
+
+// Load job order dropdown options
+async function loadJobOrderDropdownOptions() {
+    try {
+        jobOrderDropdownOptions = await getJobOrderDropdown();
+    } catch (error) {
+        console.error('Error loading job order dropdown options:', error);
+        jobOrderDropdownOptions = [];
+        showNotification('İş emirleri yüklenirken hata oluştu', 'error');
     }
 }
 
@@ -438,6 +457,55 @@ function setupBulkCreateForm(bulkCreateModal) {
     let initialRows = JSON.stringify(rows);
     let parsedExcelRows = []; // Store parsed Excel rows
     
+    // Initialize job order dropdown for a specific row
+    function initializeJobOrderDropdown(rowIndex, initialValue = '') {
+        const container = document.getElementById(`job-no-dropdown-${rowIndex}`);
+        if (!container) return;
+
+        // Load options if not already loaded
+        if (jobOrderDropdownOptions.length === 0) {
+            loadJobOrderDropdownOptions().then(() => {
+                setupJobOrderDropdown(container, rowIndex, initialValue);
+            }).catch(() => {
+                // Initialize with empty options if loading fails
+                setupJobOrderDropdown(container, rowIndex, initialValue);
+            });
+        } else {
+            setupJobOrderDropdown(container, rowIndex, initialValue);
+        }
+    }
+
+    // Setup the job order dropdown component
+    function setupJobOrderDropdown(container, rowIndex, initialValue = '') {
+        // Clear container
+        container.innerHTML = '';
+
+        // Create dropdown
+        const dropdown = new ModernDropdown(container, {
+            placeholder: 'İş emri seçin',
+            searchable: true,
+            multiple: false,
+            maxHeight: 200,
+            width: '100%'
+        });
+
+        // Convert job orders to dropdown items format
+        const dropdownItems = jobOrderDropdownOptions.map(jobOrder => ({
+            value: jobOrder.job_no,
+            text: `${jobOrder.job_no} - ${jobOrder.title}`
+        }));
+
+        dropdown.setItems(dropdownItems);
+
+        // Set initial value if provided
+        if (initialValue) {
+            dropdown.setValue(initialValue);
+        }
+
+        // Store dropdown reference in Map
+        jobOrderDropdowns.set(rowIndex, dropdown);
+    }
+    
     function checkForUnsavedChanges() {
         const currentRows = JSON.stringify(rows);
         hasUnsavedChanges = currentRows !== initialRows;
@@ -523,6 +591,9 @@ function setupBulkCreateForm(bulkCreateModal) {
                         });
                     }
                     html += `</select></td>`;
+                } else if (col.key === 'job_no') {
+                    // Use dropdown container for job_no
+                    html += `<td><div id="job-no-dropdown-${i}" class="job-no-dropdown-container"></div></td>`;
                 } else {
                     const inputType = col.type === 'number' ? 'number' : (col.type === 'date' ? 'date' : 'text');
                     let inputAttrs = '';
@@ -624,6 +695,13 @@ function setupBulkCreateForm(bulkCreateModal) {
             if (customContentDiv) {
                 customContentDiv.innerHTML = customContent;
                 setupBulkCreateEventListeners();
+                
+                // Initialize job order dropdowns for all rows after rendering
+                setTimeout(() => {
+                    rows.forEach((row, i) => {
+                        initializeJobOrderDropdown(i, row.job_no);
+                    });
+                }, 100);
             }
         }
     }
@@ -657,8 +735,16 @@ function setupBulkCreateForm(bulkCreateModal) {
                     return;
                 }
                 const rowIdx = parseInt(btn.getAttribute('data-row'));
+                // Get job_no from dropdown before duplicating
+                const dropdown = jobOrderDropdowns.get(rowIdx);
+                const jobNo = dropdown?.getValue() || rows[rowIdx].job_no || '';
+                
                 const newRow = { ...rows[rowIdx] };
+                newRow.job_no = jobNo; // Preserve job_no value
                 rows.splice(rowIdx + 1, 0, newRow);
+                
+                // Clear dropdown references (will be recreated in reRenderTable)
+                jobOrderDropdowns.clear();
                 checkForUnsavedChanges();
                 reRenderTable();
             });
@@ -670,7 +756,21 @@ function setupBulkCreateForm(bulkCreateModal) {
                 e.stopPropagation();
                 const rowIdx = parseInt(btn.getAttribute('data-row'));
                 if (rows.length > 1) {
+                    // Clean up dropdown reference
+                    jobOrderDropdowns.delete(rowIdx);
                     rows.splice(rowIdx, 1);
+                    
+                    // Re-index dropdown references for remaining rows
+                    const newDropdowns = new Map();
+                    jobOrderDropdowns.forEach((dropdown, oldIndex) => {
+                        if (oldIndex < rowIdx) {
+                            newDropdowns.set(oldIndex, dropdown);
+                        } else if (oldIndex > rowIdx) {
+                            newDropdowns.set(oldIndex - 1, dropdown);
+                        }
+                    });
+                    jobOrderDropdowns = newDropdowns;
+                    
                     checkForUnsavedChanges();
                     reRenderTable();
                 }
@@ -700,6 +800,8 @@ function setupBulkCreateForm(bulkCreateModal) {
                 if (confirm('Tüm satırları temizlemek istediğinize emin misiniz?')) {
                     // Keep only one empty row
                     rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
+                    // Clear dropdown references
+                    jobOrderDropdowns.clear();
                     updateInitialState();
                     reRenderTable();
                     showModalNotification('Tüm satırlar temizlendi', 'info');
@@ -963,6 +1065,9 @@ function setupBulkCreateForm(bulkCreateModal) {
         }
         
         const rowCount = parsedExcelRows.length;
+        const rowsToAdd = rows.length + parsedExcelRows.length > 300 
+            ? parsedExcelRows.slice(0, 300 - rows.length)
+            : parsedExcelRows;
         
         // Check if adding these rows would exceed the limit
         if (rows.length + parsedExcelRows.length > 300) {
@@ -972,12 +1077,14 @@ function setupBulkCreateForm(bulkCreateModal) {
                 return;
             }
             showModalNotification(`Sadece ${available} satır eklenebilir (Maksimum 300 satır limiti). İlk ${available} satır eklenecek.`, 'warning');
-            // Add only the available rows
-            rows.push(...parsedExcelRows.slice(0, available));
-        } else {
-            // Add parsed rows to the main rows array
-            rows.push(...parsedExcelRows);
         }
+        
+        // Store job_no values from parsed rows before adding
+        const jobNoValues = rowsToAdd.map(row => row.job_no || '');
+        const startIndex = rows.length; // Store starting index before adding rows
+        
+        // Add parsed rows to the main rows array
+        rows.push(...rowsToAdd);
         checkForUnsavedChanges();
         
         // Clear Excel paste section
@@ -994,7 +1101,25 @@ function setupBulkCreateForm(bulkCreateModal) {
         // Re-render table
         reRenderTable();
         
-        showModalNotification(`${rowCount} satır tabloya eklendi`, 'success');
+        // Set job_no values in dropdowns after rendering
+        setTimeout(() => {
+            rowsToAdd.forEach((row, i) => {
+                const rowIndex = startIndex + i;
+                if (row.job_no) {
+                    const checkDropdown = setInterval(() => {
+                        const dropdown = jobOrderDropdowns.get(rowIndex);
+                        if (dropdown) {
+                            dropdown.setValue(row.job_no);
+                            clearInterval(checkDropdown);
+                        }
+                    }, 50);
+                    // Clear interval after 2 seconds if dropdown still not ready
+                    setTimeout(() => clearInterval(checkDropdown), 2000);
+                }
+            });
+        }, 200);
+        
+        showModalNotification(`${rowsToAdd.length} satır tabloya eklendi`, 'success');
     }
     
     // Add section for the bulk create table
@@ -1014,6 +1139,8 @@ function setupBulkCreateForm(bulkCreateModal) {
     // Set up cancel callback
     bulkCreateModal.onCancelCallback(() => {
         rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
+        // Clear dropdown references
+        jobOrderDropdowns.clear();
         updateInitialState();
     });
     
@@ -1021,7 +1148,12 @@ function setupBulkCreateForm(bulkCreateModal) {
     bulkCreateModal.render();
     
     // Add custom content after rendering
-    setTimeout(() => {
+    setTimeout(async () => {
+        // Load job order dropdown options if not already loaded
+        if (jobOrderDropdownOptions.length === 0) {
+            await loadJobOrderDropdownOptions();
+        }
+        
         const sectionElement = bulkCreateModal.container.querySelector('[data-section-id="bulk-create-table"]');
         if (sectionElement) {
             const fieldsContainer = sectionElement.querySelector('.row.g-2');
@@ -1031,6 +1163,13 @@ function setupBulkCreateForm(bulkCreateModal) {
         }
         
         setupBulkCreateEventListeners();
+        
+        // Initialize job order dropdowns for all rows
+        setTimeout(() => {
+            rows.forEach((row, i) => {
+                initializeJobOrderDropdown(i, row.job_no);
+            });
+        }, 100);
     }, 100);
 }
 
@@ -1046,7 +1185,13 @@ async function handleBulkCreateSave(rows, columns, showModalNotification) {
     
     rows.forEach((row, index) => {
         requiredFields.forEach(field => {
-            if (!row[field] || row[field].toString().trim() === '') {
+            let value = row[field];
+            // Get job_no from dropdown if it's job_no field
+            if (field === 'job_no') {
+                const dropdown = jobOrderDropdowns.get(index);
+                value = dropdown?.getValue() || row[field];
+            }
+            if (!value || value.toString().trim() === '') {
                 missingFields.push(`Satır ${index + 1}: ${columns.find(col => col.key === field)?.label}`);
             }
         });
@@ -1073,14 +1218,20 @@ async function handleBulkCreateSave(rows, columns, showModalNotification) {
     }
     
     const payload = {
-        entries: rows.map(row => ({
-            employee: parseInt(row.employee),
-            job_no: row.job_no,
-            date: row.date,
-            hours: parseFloat(row.hours),
-            overtime_type: row.overtime_type || 'regular',
-            description: row.description || ''
-        }))
+        entries: rows.map((row, index) => {
+            // Get job_no from dropdown
+            const dropdown = jobOrderDropdowns.get(index);
+            const jobNo = dropdown?.getValue() || row.job_no || '';
+            
+            return {
+                employee: parseInt(row.employee),
+                job_no: jobNo,
+                date: row.date,
+                hours: parseFloat(row.hours),
+                overtime_type: row.overtime_type || 'regular',
+                description: row.description || ''
+            };
+        })
     };
     
     try {
@@ -1166,17 +1317,27 @@ function editTimeEntry(row) {
         ]
     });
 
-    // Add job number field
+    // Add job number field (dropdown)
+    // Convert job orders to dropdown options format
+    const jobOrderOptions = jobOrderDropdownOptions.length > 0 
+        ? jobOrderDropdownOptions.map(jobOrder => ({
+            value: jobOrder.job_no,
+            label: `${jobOrder.job_no} - ${jobOrder.title}`
+        }))
+        : []; // Will be populated after modal renders if not loaded yet
+    
     editTimeEntryModal.addField({
         id: 'job_no',
         name: 'job_no',
         label: 'İş No',
-        type: 'text',
+        type: 'dropdown',
         value: row.job_no || '',
         required: true,
         icon: 'fas fa-hashtag',
         colSize: 6,
-        helpText: 'İş numarası'
+        helpText: 'İş emri seçin',
+        searchable: true,
+        options: jobOrderOptions
     });
 
     // Add date field
@@ -1250,6 +1411,48 @@ function editTimeEntry(row) {
 
     // Render and show modal
     editTimeEntryModal.render();
+    
+    // Load job order options and populate dropdown after rendering if not already loaded
+    setTimeout(async () => {
+        if (jobOrderDropdownOptions.length === 0) {
+            await loadJobOrderDropdownOptions();
+        }
+        
+        const dropdown = editTimeEntryModal.dropdowns?.get('job_no');
+        if (dropdown) {
+            if (jobOrderDropdownOptions.length > 0) {
+                const dropdownItems = jobOrderDropdownOptions.map(jobOrder => ({
+                    value: jobOrder.job_no,
+                    text: `${jobOrder.job_no} - ${jobOrder.title}`
+                }));
+                dropdown.setItems(dropdownItems);
+                // Set the value if it exists
+                if (row.job_no) {
+                    dropdown.setValue(row.job_no);
+                }
+            }
+        } else {
+            // If dropdown not ready yet, try again
+            const checkDropdown = setInterval(() => {
+                const dd = editTimeEntryModal.dropdowns?.get('job_no');
+                if (dd) {
+                    if (jobOrderDropdownOptions.length > 0) {
+                        const dropdownItems = jobOrderDropdownOptions.map(jobOrder => ({
+                            value: jobOrder.job_no,
+                            text: `${jobOrder.job_no} - ${jobOrder.title}`
+                        }));
+                        dd.setItems(dropdownItems);
+                        if (row.job_no) {
+                            dd.setValue(row.job_no);
+                        }
+                    }
+                    clearInterval(checkDropdown);
+                }
+            }, 50);
+            setTimeout(() => clearInterval(checkDropdown), 2000);
+        }
+    }, 150);
+    
     editTimeEntryModal.show();
 }
 
@@ -1261,10 +1464,14 @@ async function updateTimeEntry(formData) {
     }
     
     try {
+        // Get job_no from dropdown
+        const dropdown = editTimeEntryModal.dropdowns?.get('job_no');
+        const jobNo = dropdown?.getValue() || formData.job_no || '';
+        
         // Prepare update data
         const updateData = {
             employee: parseInt(formData.employee),
-            job_no: formData.job_no,
+            job_no: jobNo,
             date: formData.date,
             hours: parseFloat(formData.hours),
             overtime_type: formData.overtime_type || 'regular',

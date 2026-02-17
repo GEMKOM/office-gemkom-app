@@ -617,3 +617,23 @@ export async function recalculateJobOrderProgress(jobNo) {
         throw error;
     }
 }
+
+/**
+ * Get job orders for dropdown (simplified list with job_no and title)
+ * @returns {Promise<Array>} Array of job orders with job_no and title
+ */
+export async function getJobOrderDropdown() {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/job-orders/dropdown/`);
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Error fetching job order dropdown:', error);
+        throw error;
+    }
+}

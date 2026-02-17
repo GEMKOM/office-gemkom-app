@@ -74,6 +74,9 @@ export async function listDepartmentTasks(options = {}) {
         if (options.page_size) {
             queryParams.append('page_size', options.page_size.toString());
         }
+        if (options.has_pending_revision !== undefined && options.has_pending_revision !== null) {
+            queryParams.append('has_pending_revision', options.has_pending_revision.toString());
+        }
 
         const url = `${backendBase}/projects/department-tasks/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
         const response = await authedFetch(url);
@@ -312,8 +315,17 @@ export async function completeDepartmentTask(taskId) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            }
+            },
+            redirect: 'manual' // Prevent automatic redirect following
         });
+        
+        // Handle redirect responses (301, 302, 303, 307, 308) without causing page navigation
+        // When redirect: 'manual' is set, redirects return these status codes
+        if (response.status >= 300 && response.status < 400) {
+            // If backend returns redirect, just return success without following it
+            // This prevents the browser from navigating to the redirect URL
+            return { status: 'success', message: 'Task completed' };
+        }
         
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));

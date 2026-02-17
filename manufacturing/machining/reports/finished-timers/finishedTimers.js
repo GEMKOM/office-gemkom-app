@@ -12,6 +12,7 @@ import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
 import { ConfirmationModal } from '../../../../components/confirmation-modal/confirmation-modal.js';
 import { showNotification } from '../../../../components/notification/notification.js';
+import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
 
 // State management
 let currentPage = 1;
@@ -696,7 +697,9 @@ function buildTimerQuery(page = 1) {
         params.append('issue_key', issueKeyFilter);
     }
     
-    const jobNoFilter = filterValues['job-no-filter'];
+    // Get job_no from dropdown filter
+    const jobNoDropdown = timerFilters.dropdowns?.get('job-no-filter');
+    const jobNoFilter = jobNoDropdown?.getValue() || filterValues['job-no-filter'];
     if (jobNoFilter) {
         params.append('job_no', jobNoFilter);
     }

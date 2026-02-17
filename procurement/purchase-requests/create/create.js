@@ -1314,7 +1314,7 @@ async function showPlanningRequestItemsModal() {
     modal.show();
 }
 
-function initializePlanningItemsFilters() {
+async function initializePlanningItemsFilters() {
     const container = document.getElementById('planning-items-filters-container');
     if (!container) return;
     

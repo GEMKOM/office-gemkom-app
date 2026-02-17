@@ -21,6 +21,7 @@ import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { fetchAllUsers } from '../../../apis/users.js';
 import { showNotification } from '../../../components/notification/notification.js';
+import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 
 // State management
 let currentPage = 1;
@@ -38,6 +39,8 @@ let isEditMode = false;
 let departmentRequestsFilters = null;
 // File-to-item mapping state
 let fileItemMappings = []; // Array of { file: File, attachTo: ['request' | itemIndex, ...] }
+// Job order dropdown data
+let jobOrderDropdownOptions = []; // Array of { job_no, title }
 
 // Priority options
 const priorityOptions = [
@@ -568,7 +571,7 @@ function setupCreateEditForm(request = null) {
     createEditModal.render();
 
     // Rearrange sections into two-column layout after rendering
-    setTimeout(() => {
+    setTimeout(async () => {
         const form = createEditModal.container.querySelector('#edit-modal-form');
         const basicInfoSection = createEditModal.container.querySelector('[data-section-id="basic-info-section"]');
         const requestDetailsSection = createEditModal.container.querySelector('[data-section-id="request-details-section"]');
@@ -606,7 +609,7 @@ function setupCreateEditForm(request = null) {
         }
         
         // Add items table after rendering
-        setupItemsSection(request);
+        await setupItemsSection(request);
         
         // Setup files display section if editing
         if (isEditMode && request) {
@@ -799,7 +802,8 @@ function updateFilesMappingList() {
             const itemRow = document.querySelector(`.item-row[data-index="${i}"]`);
             if (!itemRow) continue;
             
-            const jobNo = itemRow.querySelector('input[name="job_no"]')?.value?.trim() || '';
+            const jobNoDropdownContainer = itemRow.querySelector(`[id^="job-no-dropdown-"]`);
+            const jobNo = jobNoDropdownContainer?.dropdownInstance?.getValue() || itemRow.dataset.jobNo || '';
             const itemDescription = itemRow.querySelector('input[name="item_description"]')?.value?.trim() || '';
             const itemSpecifications = itemRow.querySelector('input[name="item_specifications"]')?.value?.trim() || '';
             const itemName = itemRow.querySelector('input[name="item_name"]')?.value?.trim() || '';
@@ -933,7 +937,7 @@ function removeFileMapping(fileIndex) {
 // Make functions globally available
 window.removeFileMapping = removeFileMapping;
 
-function setupItemsSection(request = null) {
+async function setupItemsSection(request = null) {
     const itemsSection = createEditModal.container.querySelector('[data-section-id="items-info"]');
     if (!itemsSection) return;
 
@@ -1078,15 +1082,20 @@ function setupItemsSection(request = null) {
         });
     }
 
+    // Load job order dropdown options if not already loaded
+    if (jobOrderDropdownOptions.length === 0) {
+        await loadJobOrderDropdownOptions();
+    }
+
     // Load existing items if editing
     if (request && request.items && request.items.length > 0) {
-        request.items.forEach(item => {
+        for (const item of request.items) {
             addItem();
             const lastRow = document.getElementById('items-container')?.lastElementChild;
             if (lastRow) {
                 const codeInput = lastRow.querySelector('input[name="item_code"]');
                 const nameInput = lastRow.querySelector('input[name="item_name"]');
-                const jobNoInput = lastRow.querySelector('input[name="job_no"]');
+                const jobNoDropdownContainer = lastRow.querySelector(`[id^="job-no-dropdown-"]`);
                 const unitSelect = lastRow.querySelector('select[name="item_unit"]');
                 const quantityInput = lastRow.querySelector('input[name="item_quantity"]');
                 const descInput = lastRow.querySelector('input[name="item_description"]');
@@ -1094,14 +1103,97 @@ function setupItemsSection(request = null) {
                 
                 if (codeInput) codeInput.value = item.item_code || '';
                 if (nameInput) nameInput.value = item.item_name || item.name || '';
-                if (jobNoInput) jobNoInput.value = item.job_no || '';
+                // Set job_no dropdown value after initialization (wait for dropdown to be ready)
+                if (jobNoDropdownContainer && item.job_no) {
+                    // Wait for dropdown to be initialized
+                    const checkDropdown = setInterval(() => {
+                        const dropdown = jobNoDropdownContainer.dropdownInstance;
+                        if (dropdown) {
+                            dropdown.setValue(item.job_no);
+                            clearInterval(checkDropdown);
+                        }
+                    }, 50);
+                    // Clear interval after 2 seconds if dropdown still not ready
+                    setTimeout(() => clearInterval(checkDropdown), 2000);
+                }
                 if (unitSelect) unitSelect.value = item.item_unit || item.unit || '';
                 if (quantityInput) quantityInput.value = item.quantity || '1';
                 if (descInput) descInput.value = item.item_description || item.description || '';
                 if (specsInput) specsInput.value = item.item_specifications || item.specifications || '';
             }
-        });
+        }
     }
+}
+
+/**
+ * Load job order dropdown options
+ */
+async function loadJobOrderDropdownOptions() {
+    try {
+        jobOrderDropdownOptions = await getJobOrderDropdown();
+    } catch (error) {
+        console.error('Error loading job order dropdown options:', error);
+        jobOrderDropdownOptions = [];
+        showNotification('İş emirleri yüklenirken hata oluştu', 'error');
+    }
+}
+
+/**
+ * Initialize job order dropdown for a specific item
+ */
+function initializeJobOrderDropdown(itemIndex) {
+    const container = document.getElementById(`job-no-dropdown-${itemIndex}`);
+    if (!container) return;
+
+    // Load options if not already loaded
+    if (jobOrderDropdownOptions.length === 0) {
+        loadJobOrderDropdownOptions().then(() => {
+            setupJobOrderDropdown(container, itemIndex);
+        }).catch(() => {
+            // Initialize with empty options if loading fails
+            setupJobOrderDropdown(container, itemIndex);
+        });
+    } else {
+        setupJobOrderDropdown(container, itemIndex);
+    }
+}
+
+/**
+ * Setup the job order dropdown component
+ */
+function setupJobOrderDropdown(container, itemIndex) {
+    // Clear container
+    container.innerHTML = '';
+
+    // Create dropdown
+    const dropdown = new ModernDropdown(container, {
+        placeholder: 'İş no seçin',
+        searchable: true,
+        multiple: false,
+        maxHeight: 200,
+        width: '100%'
+    });
+
+    // Convert job orders to dropdown items format
+    const dropdownItems = jobOrderDropdownOptions.map(jobOrder => ({
+        value: jobOrder.job_no,
+        text: `${jobOrder.job_no} - ${jobOrder.title}`
+    }));
+
+    dropdown.setItems(dropdownItems);
+
+    // Store dropdown instance on container for later access
+    container.dropdownInstance = dropdown;
+
+    // Add event listener to update hidden input or store value
+    container.addEventListener('dropdown:select', (e) => {
+        const selectedValue = e.detail.value;
+        // Store the value in a hidden input or data attribute for form collection
+        const itemRow = container.closest('.item-row');
+        if (itemRow) {
+            itemRow.dataset.jobNo = selectedValue || '';
+        }
+    });
 }
 
 function addItem() {
@@ -1121,7 +1213,7 @@ function addItem() {
                     <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" required>
                 </div>
                 <div class="col-md-1">
-                    <input type="text" class="form-control form-control-sm" name="job_no" placeholder="İş no">
+                    <div id="job-no-dropdown-${itemIndex}"></div>
                 </div>
                 <div class="col-md-1">
                     <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="1" min="1" value="1">
@@ -1153,6 +1245,11 @@ function addItem() {
     `;
     
     container.insertAdjacentHTML('beforeend', itemHtml);
+    
+    // Initialize job order dropdown for this item
+    setTimeout(() => {
+        initializeJobOrderDropdown(itemIndex);
+    }, 100);
     
     // Update file mapping list if it exists
     if (!isEditMode) {
@@ -1196,7 +1293,7 @@ function duplicateItem(index) {
     // Get all values from the current item
     const codeInput = itemRow.querySelector('input[name="item_code"]');
     const nameInput = itemRow.querySelector('input[name="item_name"]');
-    const jobNoInput = itemRow.querySelector('input[name="job_no"]');
+    const jobNoDropdownContainer = itemRow.querySelector(`[id^="job-no-dropdown-"]`);
     const quantityInput = itemRow.querySelector('input[name="item_quantity"]');
     const unitSelect = itemRow.querySelector('select[name="item_unit"]');
     const descInput = itemRow.querySelector('input[name="item_description"]');
@@ -1204,7 +1301,7 @@ function duplicateItem(index) {
 
     const code = codeInput ? codeInput.value : '';
     const name = nameInput ? nameInput.value : '';
-    const jobNo = jobNoInput ? jobNoInput.value : '';
+    const jobNo = jobNoDropdownContainer?.dropdownInstance?.getValue() || itemRow.dataset.jobNo || '';
     const quantity = quantityInput ? quantityInput.value : '1';
     const unit = unitSelect ? unitSelect.value : '';
     const description = descInput ? descInput.value : '';
@@ -1221,7 +1318,7 @@ function duplicateItem(index) {
             // Fill in the duplicated values
             const newCodeInput = lastRow.querySelector('input[name="item_code"]');
             const newNameInput = lastRow.querySelector('input[name="item_name"]');
-            const newJobNoInput = lastRow.querySelector('input[name="job_no"]');
+            const newJobNoDropdownContainer = lastRow.querySelector(`[id^="job-no-dropdown-"]`);
             const newQuantityInput = lastRow.querySelector('input[name="item_quantity"]');
             const newUnitSelect = lastRow.querySelector('select[name="item_unit"]');
             const newDescInput = lastRow.querySelector('input[name="item_description"]');
@@ -1229,7 +1326,19 @@ function duplicateItem(index) {
 
             if (newCodeInput) newCodeInput.value = code;
             if (newNameInput) newNameInput.value = name;
-            if (newJobNoInput) newJobNoInput.value = jobNo;
+            // Set job_no dropdown value after initialization (wait for dropdown to be ready)
+            if (newJobNoDropdownContainer && jobNo) {
+                // Wait for dropdown to be initialized
+                const checkDropdown = setInterval(() => {
+                    const dropdown = newJobNoDropdownContainer.dropdownInstance;
+                    if (dropdown) {
+                        dropdown.setValue(jobNo);
+                        clearInterval(checkDropdown);
+                    }
+                }, 50);
+                // Clear interval after 2 seconds if dropdown still not ready
+                setTimeout(() => clearInterval(checkDropdown), 2000);
+            }
             if (newQuantityInput) newQuantityInput.value = quantity;
             if (newUnitSelect) newUnitSelect.value = unit;
             if (newDescInput) newDescInput.value = description;
@@ -1295,7 +1404,9 @@ async function handleSaveRequest(formData) {
         for (const row of itemRows) {
             const itemCode = row.querySelector('input[name="item_code"]')?.value?.trim();
             const itemName = row.querySelector('input[name="item_name"]')?.value?.trim();
-            const jobNo = row.querySelector('input[name="job_no"]')?.value?.trim();
+            // Get job_no from dropdown
+            const jobNoDropdownContainer = row.querySelector(`[id^="job-no-dropdown-"]`);
+            const jobNo = jobNoDropdownContainer?.dropdownInstance?.getValue() || row.dataset.jobNo || '';
             const itemUnit = row.querySelector('select[name="item_unit"]')?.value?.trim();
             const itemQuantity = row.querySelector('input[name="item_quantity"]')?.value?.trim();
             const itemDescription = row.querySelector('input[name="item_description"]')?.value?.trim();

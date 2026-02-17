@@ -286,7 +286,7 @@ async function showDepartmentRequestDetailsModal(request = null) {
                             <thead class="table-light">
                                 <tr>
                                     <th>#</th>
-                                    <th>Ürün Kodu</th>
+                                    <th style="min-width: 200px; white-space: nowrap;">Ürün Kodu</th>
                                     <th>Ürün Adı</th>
                                     <th>Ürün Açıklaması</th>
                                     <th>İş No</th>
@@ -299,7 +299,7 @@ async function showDepartmentRequestDetailsModal(request = null) {
                                 ${itemsData.map(item => `
                                     <tr>
                                         <td>${item.id}</td>
-                                        <td><strong>${item.item_code}</strong></td>
+                                        <td style="white-space: nowrap;"><strong>${item.item_code}</strong></td>
                                         <td>${item.item_name}</td>
                                         <td>${item.item_description}</td>
                                         <td>${item.job_no}</td>

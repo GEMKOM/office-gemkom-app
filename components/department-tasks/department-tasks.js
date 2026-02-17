@@ -23,7 +23,7 @@ import {
     DEPARTMENT_OPTIONS
 } from '../../apis/projects/departmentTasks.js';
 import { authFetchUsers } from '../../apis/users.js';
-import { createRelease } from '../../apis/projects/design.js';
+import { createRelease, completeRevision } from '../../apis/projects/design.js';
 import { markPlanningRequestItemDelivered } from '../../apis/planning/planningRequestItems.js';
 
 /**
@@ -89,6 +89,7 @@ export async function initDepartmentTasksPage(config) {
     let editTaskModal = null;
     let addSubtaskModal = null;
     let createReleaseModal = null;
+    let completeRevisionModal = null;
 
 // Status color mapping to ensure consistency with CSS classes
 const STATUS_COLOR_MAP = {
@@ -345,14 +346,22 @@ function initializeTableComponent() {
         currentSortField: currentSortField,
         currentSortDirection: currentSortDirection,
         rowAttributes: (row, rowIndex) => {
+            const attributes = {};
+            
             // Style subtasks differently
             if (row.parent) {
-                return {
-                    class: 'subtask-row',
-                    'data-parent-id': row.parent
-                };
+                attributes.class = 'subtask-row';
+                attributes['data-parent-id'] = row.parent;
             }
-            return null;
+            
+            // Clearly indicate tasks under revision
+            if (row.is_under_revision) {
+                // Light warning background (no custom CSS)
+                attributes.style = 'background-color: rgba(255, 193, 7, 0.12);';
+                attributes['data-under-revision'] = 'true';
+            }
+            
+            return Object.keys(attributes).length ? attributes : null;
         },
         columns: [
             {
@@ -545,7 +554,12 @@ function initializeTableComponent() {
                 formatter: (value, row) => {
                     const status = statusOptions.find(s => s.value === value) || { label: value, color: 'grey' };
                     const colorClass = `status-${status.color}`;
-                    return `<span class="status-badge ${colorClass}">${status.label}</span>`;
+                    const statusBadge = `<span class="status-badge ${colorClass}">${status.label}</span>`;
+                    const revisionBadge = row.is_under_revision
+                        ? `<span class="status-badge status-red ms-1"><i class="fas fa-rotate me-1"></i>Revizyonda</span>`
+                        : '';
+                    
+                    return `<div class="d-flex align-items-center flex-wrap">${statusBadge}${revisionBadge}</div>`;
                 }
             },
             {
@@ -1010,6 +1024,15 @@ function initializeReleaseModal() {
         showEditButton: false
     });
 
+    // Complete revision modal
+    completeRevisionModal = new EditModal('complete-revision-modal-container', {
+        title: 'Revizyonu Tamamla',
+        icon: 'fas fa-check-circle',
+        size: 'lg',
+        showEditButton: false,
+        saveButtonText: 'Tamamla'
+    });
+
     createReleaseModal.onSaveCallback(async (formData) => {
         const taskId = window.pendingReleaseTaskId;
         if (!taskId) return;
@@ -1059,15 +1082,20 @@ function initializeReleaseModal() {
             
             // For subtasks, complete them separately via the completion endpoint
             if (isSubtask) {
-                await completeDepartmentTask(taskId);
+                const completeResponse = await completeDepartmentTask(taskId);
+                
+                // Update the task in local data
+                if (completeResponse && completeResponse.task) {
+                    updateTaskInLocalData(taskId, completeResponse.task);
+                }
             }
             
             showNotification('Teknik çizim yayını oluşturuldu', 'success');
             createReleaseModal.hide();
             window.pendingReleaseTaskId = null;
             
-            // Reload tasks to reflect the completion
-            await loadTasks();
+            // Update the table without full reload
+            updateTableDataOnly();
         } catch (error) {
             console.error('Error creating release:', error);
             let errorMessage = 'Yayın oluşturulurken hata oluştu';
@@ -1083,6 +1111,75 @@ function initializeReleaseModal() {
                 }
             } catch (e) {
                 // If parsing fails, use default message
+            }
+            showNotification(errorMessage, 'error');
+        }
+    });
+
+    completeRevisionModal.onSaveCallback(async (formData) => {
+        const taskId = window.pendingRevisionCompletionTaskId;
+        if (!taskId) return;
+
+        try {
+            const task = await getDepartmentTaskById(taskId);
+
+            const releaseId = task.active_revision_release_id;
+            if (!releaseId) {
+                showNotification('Aktif revizyon yayını bulunamadı', 'error');
+                return;
+            }
+
+            const completionData = {
+                folder_path: formData.folder_path || '',
+                revision_code: formData.revision_code || '',
+                changelog: formData.changelog ? formData.changelog.trim() : ''
+            };
+
+            if (!completionData.folder_path.trim()) {
+                showNotification('Klasör yolu gereklidir', 'error');
+                return;
+            }
+            if (!completionData.revision_code.trim()) {
+                showNotification('Revizyon kodu gereklidir', 'error');
+                return;
+            }
+            if (!completionData.changelog.trim()) {
+                showNotification('Değişiklik günlüğü gereklidir', 'error');
+                return;
+            }
+
+            if (formData.hardcopy_count !== undefined && formData.hardcopy_count !== null && formData.hardcopy_count !== '') {
+                const hardcopyCount = parseInt(formData.hardcopy_count);
+                if (!isNaN(hardcopyCount)) {
+                    completionData.hardcopy_count = hardcopyCount;
+                }
+            }
+
+            if (formData.topic_content && formData.topic_content.trim()) {
+                completionData.topic_content = formData.topic_content.trim();
+            }
+
+            await completeRevision(releaseId, completionData);
+
+            showNotification('Revizyon tamamlandı', 'success');
+            completeRevisionModal.hide();
+            window.pendingRevisionCompletionTaskId = null;
+            await loadTasks();
+        } catch (error) {
+            console.error('Error completing revision:', error);
+            let errorMessage = 'Revizyon tamamlanırken hata oluştu';
+            try {
+                if (error.message) {
+                    const errorData = JSON.parse(error.message);
+                    if (typeof errorData === 'object') {
+                        const errors = Object.values(errorData).flat();
+                        errorMessage = errors.join(', ') || errorMessage;
+                    } else {
+                        errorMessage = error.message;
+                    }
+                }
+            } catch (e) {
+                // ignore parse
             }
             showNotification(errorMessage, 'error');
         }
@@ -1303,6 +1400,28 @@ function updateTableDataOnly() {
         setupWeightEditListeners();
         setupTitleEditListeners();
     }, 50);
+}
+
+// Update a single task in the local data after API response
+function updateTaskInLocalData(taskId, updatedTask) {
+    // Find and update the task in the tasks array
+    const taskIndex = tasks.findIndex(t => t.id === taskId);
+    if (taskIndex !== -1) {
+        tasks[taskIndex] = updatedTask;
+        return true;
+    }
+    
+    // If task not found in main tasks, it might be a subtask
+    // Check in subtasks cache
+    for (const [parentId, subtasks] of subtasksCache.entries()) {
+        const subtaskIndex = subtasks.findIndex(st => st.id === taskId);
+        if (subtaskIndex !== -1) {
+            subtasks[subtaskIndex] = updatedTask;
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 // Setup event listeners for expand/collapse buttons using event delegation
@@ -2769,7 +2888,11 @@ async function handleCompleteTask(taskId, taskRow = null) {
         if (isSubtask) {
             await showSubtaskCompleteModal(taskId);
         } else {
-            await showCreateReleaseModal(taskId);
+            if (task.is_under_revision) {
+                await showCompleteRevisionModal(taskId);
+            } else {
+                await showCreateReleaseModal(taskId);
+            }
         }
     } else {
         // For other departments, use the standard completion flow
@@ -2778,10 +2901,24 @@ async function handleCompleteTask(taskId, taskRow = null) {
             confirmText: 'Evet, Tamamla',
             onConfirm: async () => {
                 try {
-                    await completeDepartmentTask(taskId);
+                    const response = await completeDepartmentTask(taskId);
                     showNotification('Görev tamamlandı', 'success');
                     confirmationModal.hide();
-                    await loadTasks();
+                    
+                    // Update the task in the local data without reloading all tasks
+                    if (response && response.task) {
+                        const updatedTask = response.task;
+                        if (updateTaskInLocalData(taskId, updatedTask)) {
+                            // Update the table without full reload
+                            updateTableDataOnly();
+                        } else {
+                            // Task not found, fallback to full reload
+                            await loadTasks();
+                        }
+                    } else {
+                        // Fallback to full reload if response doesn't have task data
+                        await loadTasks();
+                    }
                 } catch (error) {
                     console.error('Error completing task:', error);
                     let errorMessage = 'Görev tamamlanırken hata oluştu';
@@ -2802,6 +2939,137 @@ async function handleCompleteTask(taskId, taskRow = null) {
                 }
             }
         });
+    }
+}
+
+async function showCompleteRevisionModal(taskId) {
+    try {
+        if (!completeRevisionModal) {
+            showNotification('Revizyon tamamlama modalı başlatılamadı', 'error');
+            return;
+        }
+
+        const task = await getDepartmentTaskById(taskId);
+
+        if (!task.job_order) {
+            showNotification('İş emri bulunamadı', 'error');
+            return;
+        }
+
+        if (!task.is_under_revision) {
+            showNotification('Bu görev revizyonda değil', 'error');
+            return;
+        }
+
+        if (!task.active_revision_release_id) {
+            showNotification('Aktif revizyon yayını bulunamadı', 'error');
+            return;
+        }
+
+        window.pendingRevisionCompletionTaskId = taskId;
+
+        completeRevisionModal.clearAll();
+
+        completeRevisionModal.addSection({
+            title: 'Revizyon Tamamlama',
+            icon: 'fas fa-check-circle',
+            iconColor: 'text-success'
+        });
+
+        completeRevisionModal.addField({
+            id: 'rev-complete-job-order',
+            name: 'job_order',
+            label: 'İş Emri',
+            type: 'text',
+            value: task.job_order ? `${task.job_order} - ${task.job_order_title || ''}` : '-',
+            readonly: true,
+            icon: 'fas fa-file-invoice',
+            colSize: 12,
+            helpText: 'İş emri (değiştirilemez)'
+        });
+
+        completeRevisionModal.addField({
+            id: 'rev-complete-folder-path',
+            name: 'folder_path',
+            label: 'Klasör Yolu',
+            type: 'text',
+            value: '',
+            required: true,
+            placeholder: 'C:\\CVSPDM\\CVS\\009_KAPTAN\\EAF\\009_34_EBT_PANEL\\PDF',
+            icon: 'fas fa-folder',
+            colSize: 12,
+            helpText: 'Ağ klasör yolu (maksimum 500 karakter)'
+        });
+
+        completeRevisionModal.addField({
+            id: 'rev-complete-revision-code',
+            name: 'revision_code',
+            label: 'Revizyon Kodu',
+            type: 'text',
+            value: '',
+            required: true,
+            placeholder: 'A1, B2, vb.',
+            icon: 'fas fa-code-branch',
+            colSize: 6,
+            helpText: 'Revizyon kodu (örn: A1, B2) - maksimum 10 karakter'
+        });
+
+        completeRevisionModal.addField({
+            id: 'rev-complete-hardcopy-count',
+            name: 'hardcopy_count',
+            label: 'Hardcopy Sayısı',
+            type: 'number',
+            value: '',
+            min: 0,
+            placeholder: '0',
+            icon: 'fas fa-print',
+            colSize: 6,
+            helpText: 'Hardcopy sayısı (opsiyonel)'
+        });
+
+        completeRevisionModal.addSection({
+            title: 'Değişiklik Günlüğü',
+            icon: 'fas fa-edit',
+            iconColor: 'text-warning'
+        });
+
+        completeRevisionModal.addField({
+            id: 'rev-complete-changelog',
+            name: 'changelog',
+            label: 'Değişiklik Günlüğü',
+            type: 'textarea',
+            value: '',
+            required: true,
+            placeholder: 'Değişiklikleri yazın...\n\n@mention ile kullanıcıları bildirebilirsiniz',
+            icon: 'fas fa-align-left',
+            colSize: 12,
+            helpText: 'Değişiklik günlüğü (@mention destekli)'
+        });
+
+        completeRevisionModal.addSection({
+            title: 'Konu Mesajı (Opsiyonel)',
+            icon: 'fas fa-comment-dots',
+            iconColor: 'text-info'
+        });
+
+        completeRevisionModal.addField({
+            id: 'rev-complete-topic-content',
+            name: 'topic_content',
+            label: 'Konu Mesajı',
+            type: 'textarea',
+            value: '',
+            required: false,
+            placeholder: 'İlgilileri bilgilendirmek için mesaj yazın...\n\n@mention ile kullanıcıları etiketleyebilirsiniz',
+            icon: 'fas fa-at',
+            colSize: 12,
+            helpText: 'Opsiyonel'
+        });
+
+        completeRevisionModal.render();
+        completeRevisionModal.show();
+    } catch (error) {
+        console.error('Error opening complete revision modal:', error);
+        showNotification('Revizyon tamamlama modalı açılırken hata oluştu', 'error');
     }
 }
 
@@ -3017,20 +3285,30 @@ async function showSubtaskCompleteModal(taskId) {
                     await createRelease(releaseData);
                     
                     // Complete the subtask
-                    await completeDepartmentTask(taskId);
+                    const completeResponse = await completeDepartmentTask(taskId);
                     
                     showNotification('Yayın oluşturuldu ve görev tamamlandı', 'success');
+                    
+                    // Update the task in local data
+                    if (completeResponse && completeResponse.task) {
+                        updateTaskInLocalData(taskId, completeResponse.task);
+                    }
                 } else {
                     // Only complete the subtask, no release
-                    await completeDepartmentTask(taskId);
+                    const completeResponse = await completeDepartmentTask(taskId);
                     showNotification('Görev tamamlandı', 'success');
+                    
+                    // Update the task in local data
+                    if (completeResponse && completeResponse.task) {
+                        updateTaskInLocalData(taskId, completeResponse.task);
+                    }
                 }
                 
                 createReleaseModal.hide();
                 window.pendingReleaseTaskId = null;
                 
-                // Reload tasks to reflect the completion
-                await loadTasks();
+                // Update the table without full reload
+                updateTableDataOnly();
             } catch (error) {
                 console.error('Error completing subtask:', error);
                 const hasRelease = formData.has_release === true || formData.has_release === 'true';

@@ -5,6 +5,7 @@ import { FiltersComponent } from '../../../components/filters/filters.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { getUser } from '../../../authService.js';
 import { showNotification } from '../../../components/notification/notification.js';
+import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 
 // State management
 let currentPage = 1;
@@ -702,7 +703,9 @@ function buildTaskQuery(page = 1) {
     // Add filters
     const keyFilter = filterValues['key-filter']?.trim();
     const nameFilter = filterValues['name-filter']?.trim();
-    const jobNoFilter = filterValues['job-no-filter']?.trim();
+    // Get job_no from dropdown filter
+    const jobNoDropdown = taskFilters.dropdowns?.get('job-no-filter');
+    const jobNoFilter = jobNoDropdown?.getValue() || filterValues['job-no-filter']?.trim();
     const imageNoFilter = filterValues['image-no-filter']?.trim();
     const positionNoFilter = filterValues['position-no-filter']?.trim();
     const finishTimeFilter = filterValues['finish-time-filter'];

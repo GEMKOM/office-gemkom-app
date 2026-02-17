@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GEMKOM - Dizayn Departmanı Görevleri</title>
+    <title>GEMKOM - Revizyon Talepleri</title>
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <!-- Font Awesome for icons -->
@@ -16,7 +16,6 @@
     <link rel="stylesheet" href="../../../components/table/table.css">
     <link rel="stylesheet" href="../../../components/badges/badges.css">
     <link rel="stylesheet" href="../../../components/filters/filters.css">
-    <link rel="stylesheet" href="../../../components/department-tasks/department-tasks.css">
     <!-- Modal Components -->
     <link rel="stylesheet" href="../../../components/display-modal/display-modal.css">
     <link rel="stylesheet" href="../../../components/confirmation-modal/confirmation-modal.css">
@@ -32,17 +31,10 @@
             <!-- Header Component Placeholder -->
             <div id="header-placeholder"></div>
 
-            <!-- Filters Section -->
-            <div class="row mb-3">
-                <div class="col-12">
-                    <div id="filters-placeholder"></div>
-                </div>
-            </div>
-
-            <!-- Tasks Table Section -->
+            <!-- Revision Requests Table Section -->
             <div class="row">
                 <div class="col-12">
-                    <div id="tasks-table-container"></div>
+                    <div id="revision-requests-table-container"></div>
                 </div>
             </div>
         </div>
@@ -50,21 +42,17 @@
 
     <!-- Modal Component Containers -->
     <div id="confirmation-modal-container"></div>
-    <div id="task-details-modal-container"></div>
-    <div id="edit-task-modal-container"></div>
-    <div id="add-subtask-modal-container"></div>
-    <div id="create-release-modal-container"></div>
-    <div id="complete-revision-modal-container"></div>
+    <div id="reject-modal-container"></div>
+    <div id="revision-request-details-modal-container"></div>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <!-- Components -->
     <script type="module" src="../../../components/header/header.js"></script>
     <script type="module" src="../../../components/table/table.js"></script>
-    <script type="module" src="../../../components/filters/filters.js"></script>
     <script type="module" src="../../../components/confirmation-modal/confirmation-modal.js"></script>
     <script type="module" src="../../../components/edit-modal/edit-modal.js"></script>
     <script type="module" src="../../../components/display-modal/display-modal.js"></script>
-    <script type="module" src="department-tasks.js"></script>
+    <script type="module" src="revision-requests.js"></script>
 </body>
 </html>

@@ -88,6 +88,12 @@ async function handleLandingPage() {
                             icon: 'fas fa-project-diagram',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/design/projects'
+                        },
+                        {
+                            label: 'Revizyon Talepleri',
+                            icon: 'fas fa-edit',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/design/revision-requests'
                         }
                     ]
                 },
