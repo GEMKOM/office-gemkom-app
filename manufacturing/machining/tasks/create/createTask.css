@@ -122,6 +122,58 @@
     margin-bottom: 0.5rem;
 }
 
+/* Ensure table-responsive allows dropdown overflow */
+#bulk-create-table-container .table-responsive {
+    overflow-x: auto;
+    overflow-y: visible;
+    position: relative;
+}
+
+/* When dropdown is open, allow full overflow */
+#bulk-create-table-container .table-responsive:has(.modern-dropdown.open) {
+    overflow: visible !important;
+}
+
+/* Ensure card body allows dropdown overflow */
+.dashboard-card .card-body {
+    overflow: visible;
+    position: relative;
+    z-index: 1; /* Lower than dropdown */
+}
+
+/* Ensure dashboard-card compact has lower z-index than dropdown */
+/* Override filters.css z-index: 100 !important with more specific selector */
+.dashboard-card.compact {
+    position: relative;
+    z-index: 1 !important; /* Lower than dropdown - override filters.css */
+}
+
+/* Specifically target filters section to have lower z-index */
+#filters-placeholder .dashboard-card.compact,
+.filters-component .dashboard-card.compact {
+    position: relative;
+    z-index: 1 !important; /* Lower than dropdown - override filters.css */
+}
+
+/* When dropdown is open, ensure it's above dashboard-card compact */
+.dashboard-card.compact:has(.modern-dropdown.open) {
+    z-index: 1 !important;
+}
+
+/* Ensure filters section stays below when dropdown is open anywhere on page */
+body:has(.job-no-dropdown-container .modern-dropdown.open) #filters-placeholder .dashboard-card.compact,
+body:has(.job-no-dropdown-container .modern-dropdown.open) .filters-component .dashboard-card.compact {
+    z-index: 1 !important;
+    position: relative;
+}
+
+/* Ensure buttons stay below dropdown */
+#create-tasks-btn,
+#clear-form-btn {
+    position: relative;
+    z-index: 1;
+}
+
 .bulk-create-footer {
     text-align: right;
     padding-top: 0.5rem;
@@ -130,6 +182,12 @@
 .bulk-create-actions {
     border-top: 1px solid rgba(0, 0, 0, 0.1);
     padding-top: 1rem;
+    position: relative;
+    z-index: 1; /* Lower than dropdown */
+    text-align: right;
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
 }
 
 .bulk-input {
@@ -159,6 +217,136 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Allow dropdown containers to overflow table cells */
+.table-responsive table td {
+    position: relative;
+}
+
+/* Specific override for cells containing dropdowns */
+.table-responsive table td:has(.job-no-dropdown-container),
+.table-responsive table td:has(.modern-dropdown-container) {
+    overflow: visible !important;
+}
+
+/* Fallback for browsers that don't support :has() - target all cells and let dropdown handle it */
+.job-no-dropdown-container {
+    position: relative;
+    z-index: 1;
+}
+
+/* Ensure dropdown menu can overflow table cell */
+.job-no-dropdown-container .modern-dropdown,
+.job-no-dropdown-container .modern-dropdown-container {
+    position: relative;
+    z-index: 1;
+}
+
+.job-no-dropdown-container .modern-dropdown.open {
+    z-index: 99999 !important;
+    position: relative !important;
+}
+
+.job-no-dropdown-container .modern-dropdown.open .dropdown-menu {
+    position: absolute !important;
+    z-index: 99999 !important;
+    overflow: visible !important;
+}
+
+/* Ensure dropdown container has high z-index when open */
+.job-no-dropdown-container:has(.modern-dropdown.open) {
+    z-index: 99999 !important;
+    position: relative !important;
+}
+
+/* Ensure the entire table row has high z-index when dropdown is open */
+.table-responsive table tbody tr:has(.modern-dropdown.open) {
+    z-index: 99999 !important;
+    position: relative !important;
+}
+
+/* Ensure table cell has high z-index when dropdown is open */
+.table-responsive table tbody tr td:has(.modern-dropdown.open) {
+    z-index: 99999 !important;
+    position: relative !important;
+}
+
+/* Preserve dropdown menu styles when portaled to body */
+.modern-dropdown-menu-portal {
+    background: var(--white, #ffffff) !important;
+    border: 2px solid #e9ecef !important;
+    border-top: none !important;
+    border-radius: 0 0 8px 8px !important;
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15) !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+    transform: translateY(0) !important;
+    max-height: 400px !important;
+    overflow: hidden !important;
+}
+
+.modern-dropdown-menu-portal .dropdown-items {
+    max-height: 400px !important;
+    overflow-y: auto !important;
+    padding: 0.5rem 0 !important;
+}
+
+.modern-dropdown-menu-portal .dropdown-item {
+    padding: 0.75rem 1rem !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    color: var(--text-color, #2c3e50) !important;
+    background: transparent !important;
+    border: none !important;
+    text-align: left !important;
+    width: 100% !important;
+    display: block !important;
+}
+
+.modern-dropdown-menu-portal .dropdown-item:hover {
+    background: #f8f9fa !important;
+    color: var(--secondary-color, #DC143C) !important;
+}
+
+.modern-dropdown-menu-portal .dropdown-item.selected {
+    background: var(--white, #ffffff) !important;
+    border-bottom: 2px solid var(--secondary-color, #DC143C) !important;
+    color: var(--text-light, #6c757d) !important;
+}
+
+.modern-dropdown-menu-portal .dropdown-search {
+    width: 100% !important;
+    padding: 0.75rem 1rem !important;
+    border: none !important;
+    border-bottom: 2px solid #e9ecef !important;
+    background: #f8f9fa !important;
+    color: var(--text-color, #2c3e50) !important;
+    font-size: 0.95rem !important;
+    outline: none !important;
+}
+
+.modern-dropdown-menu-portal .dropdown-search:focus {
+    border-bottom-color: var(--secondary-color, #DC143C) !important;
+}
+
+/* Force table-responsive to allow overflow when any dropdown in it is open */
+#bulk-create-table-container:has(.modern-dropdown.open) .table-responsive {
+    overflow: visible !important;
+}
+
+/* More specific: when dropdown is open, make table cell overflow visible */
+#bulk-create-table-container .table-responsive table tbody tr td:has(.modern-dropdown.open) {
+    overflow: visible !important;
+}
+
+/* Ensure the entire chain allows overflow */
+#bulk-create-table-container,
+#bulk-create-table-container .table-responsive,
+#bulk-create-table-container .table-responsive table,
+#bulk-create-table-container .table-responsive table tbody,
+#bulk-create-table-container .table-responsive table tbody tr {
+    position: relative;
 }
 
 /* Allow text wrapping for specific columns */

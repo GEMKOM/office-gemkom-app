@@ -147,6 +147,67 @@ function setupJobOrderDropdown(container, rowIndex, initialValue = '') {
             rows[rowIndex].job_no = selectedValue || '';
         }
     });
+    
+    // Handle dropdown open/close to fix overflow issues
+    container.addEventListener('dropdown:open', () => {
+        setTimeout(() => {
+            const dropdownMenu = container.querySelector('.dropdown-menu');
+            if (!dropdownMenu) return;
+            
+            // Ensure dropdown menu has very high z-index
+            dropdownMenu.style.zIndex = '999999';
+            dropdownMenu.style.position = 'absolute';
+            
+            // Ensure all parent containers allow overflow
+            let currentElement = container;
+            while (currentElement && currentElement !== document.body) {
+                const style = window.getComputedStyle(currentElement);
+                if (style.overflow === 'hidden' || style.overflow === 'auto') {
+                    currentElement.style.overflow = 'visible';
+                    currentElement.dataset.originalOverflow = style.overflow;
+                }
+                if (style.overflowY === 'hidden' || style.overflowY === 'auto') {
+                    currentElement.style.overflowY = 'visible';
+                }
+                currentElement = currentElement.parentElement;
+            }
+            
+            // Ensure table-responsive allows overflow
+            const tableResponsive = container.closest('.table-responsive');
+            if (tableResponsive) {
+                tableResponsive.style.overflowX = 'auto';
+                tableResponsive.style.overflowY = 'visible';
+            }
+            
+            // Ensure all dashboard-card.compact elements have lower z-index
+            const allDashboardCards = document.querySelectorAll('.dashboard-card.compact');
+            allDashboardCards.forEach(card => {
+                if (!card.contains(container)) {
+                    card.style.zIndex = '1';
+                    card.style.position = 'relative';
+                }
+            });
+        }, 50);
+    });
+    
+    container.addEventListener('dropdown:close', () => {
+        // Restore original overflow values
+        let currentElement = container;
+        while (currentElement && currentElement !== document.body) {
+            if (currentElement.dataset.originalOverflow) {
+                currentElement.style.overflow = currentElement.dataset.originalOverflow;
+                delete currentElement.dataset.originalOverflow;
+            }
+            currentElement = currentElement.parentElement;
+        }
+        
+        // Restore table-responsive
+        const tableResponsive = container.closest('.table-responsive');
+        if (tableResponsive) {
+            tableResponsive.style.overflowX = '';
+            tableResponsive.style.overflowY = '';
+        }
+    });
 }
 
 function setupBulkCreateTable() {
