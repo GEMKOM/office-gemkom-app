@@ -82,9 +82,10 @@ function toggleActionButtons() {
     // Re-render the table to apply changes
     if (jobOrdersTable) {
         jobOrdersTable.render();
-        // Re-setup the toggle button after render
+        // Re-setup both the toggle button and expand listeners after render
         setTimeout(() => {
             setupActionToggleButton();
+            setupExpandButtonListeners();
         }, 50);
     }
 }
@@ -832,17 +833,10 @@ function setupActionToggleButton() {
             return;
         }
         
-        // Check if button already exists
-        if (document.getElementById('toggle-actions-btn')) {
-            // Update existing button state
-            const existingBtn = document.getElementById('toggle-actions-btn');
-            const icon = existingBtn.querySelector('i');
-            const text = existingBtn.querySelector('span');
-            if (icon && text) {
-                icon.className = `fas ${HIDE_ACTION_BUTTONS ? 'fa-eye' : 'fa-eye-slash'} me-1`;
-                text.textContent = HIDE_ACTION_BUTTONS ? 'Aksiyonları Göster' : 'Aksiyonları Gizle';
-            }
-            return;
+        // Remove existing button if it exists (to ensure it's in the right place after re-render)
+        const existingBtn = document.getElementById('toggle-actions-btn');
+        if (existingBtn) {
+            existingBtn.remove();
         }
         
         // Create toggle button
@@ -1234,9 +1228,10 @@ function updateTableDataOnly() {
     // Update table data without loading state
     jobOrdersTable.updateData(dataToDisplay, totalJobOrders, currentPage);
     
-    // Setup expand button listeners after table is updated
+    // Setup both expand button listeners and toggle button after table is updated
     setTimeout(() => {
         setupExpandButtonListeners();
+        setupActionToggleButton();
     }, 50);
 }
 
