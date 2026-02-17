@@ -590,3 +590,30 @@ export async function getJobOrderFiles(jobNo) {
         throw error;
     }
 }
+
+/**
+ * Recalculate progress for a job order
+ * @param {string} jobNo - Job order number
+ * @returns {Promise<Object>} Response with job_no, old_percentage, and new_percentage
+ */
+export async function recalculateJobOrderProgress(jobNo) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${jobNo}/recalculate_progress/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error recalculating progress for job order ${jobNo}:`, error);
+        throw error;
+    }
+}

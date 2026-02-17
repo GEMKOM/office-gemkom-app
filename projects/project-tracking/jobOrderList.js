@@ -9,6 +9,7 @@ import {
     holdJobOrder as holdJobOrderAPI,
     resumeJobOrder as resumeJobOrderAPI,
     cancelJobOrder as cancelJobOrderAPI,
+    recalculateJobOrderProgress,
     getStatusChoices,
     applyTemplateToJobOrder,
     getChildJobOrders,
@@ -801,6 +802,16 @@ function initializeTableComponent() {
                     cancelJobOrder(row.job_no);
                 },
                 visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+            },
+            {
+                key: 'recalculate-progress',
+                label: 'İlerlemeyi Yeniden Hesapla',
+                icon: 'fas fa-calculator',
+                class: 'btn-outline-info',
+                onClick: (row) => {
+                    recalculateProgress(row.job_no);
+                },
+                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'cancelled'
             }
         ],
         emptyMessage: 'İş emri bulunamadı',
@@ -3991,6 +4002,52 @@ window.cancelJobOrder = async function(jobNo) {
             // Don't make the API request - just show a message
             confirmationModal.hide();
             showNotification('İş emri iptal işlemi gerçekleştirilemiyor. Lütfen sistem yöneticisi ile iletişime geçin.', 'info');
+        }
+    });
+};
+
+window.recalculateProgress = async function(jobNo) {
+    confirmationModal.show({
+        title: 'İlerleme Yeniden Hesaplama',
+        message: `İş emri ${jobNo} için ilerleme yüzdesi yeniden hesaplansın mı?`,
+        icon: 'fas fa-calculator',
+        confirmText: 'Evet, Hesapla',
+        cancelText: 'Vazgeç',
+        confirmButtonClass: 'btn-info',
+        onConfirm: async () => {
+            try {
+                const response = await recalculateJobOrderProgress(jobNo);
+                if (response && response.job_no) {
+                    confirmationModal.hide();
+                    const oldPercentage = response.old_percentage !== undefined ? response.old_percentage.toFixed(1) : 'N/A';
+                    const newPercentage = response.new_percentage !== undefined ? response.new_percentage.toFixed(1) : 'N/A';
+                    showNotification(
+                        `İlerleme yeniden hesaplandı. Eski: %${oldPercentage}, Yeni: %${newPercentage}`,
+                        'success'
+                    );
+                    await loadJobOrders();
+                } else {
+                    throw new Error('İlerleme yeniden hesaplanamadı');
+                }
+            } catch (error) {
+                console.error('Error recalculating progress:', error);
+                let errorMessage = 'İlerleme yeniden hesaplanırken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                confirmationModal.hide();
+                showNotification(errorMessage, 'error');
+            }
         }
     });
 };
