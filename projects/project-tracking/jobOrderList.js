@@ -68,6 +68,27 @@ let statusOptions = STATUS_OPTIONS; // Status options
 let expandedRows = new Set(); // Track expanded rows by job_no
 let childrenCache = new Map(); // Cache children data by parent job_no
 
+// Configuration: Hide action buttons except detail button
+// Set to true to hide all action buttons except the detail/view button
+// Can be controlled via localStorage or URL parameter
+let HIDE_ACTION_BUTTONS = localStorage.getItem('hideJobOrderActions') === 'true' || 
+                          urlParams.get('hideActions') === 'true';
+
+// Function to toggle action buttons visibility
+function toggleActionButtons() {
+    HIDE_ACTION_BUTTONS = !HIDE_ACTION_BUTTONS;
+    localStorage.setItem('hideJobOrderActions', HIDE_ACTION_BUTTONS.toString());
+    
+    // Re-render the table to apply changes
+    if (jobOrdersTable) {
+        jobOrdersTable.render();
+        // Re-setup the toggle button after render
+        setTimeout(() => {
+            setupActionToggleButton();
+        }, 50);
+    }
+}
+
 // Helper function to check if user has planning team or superuser access
 function canEditJobOrders() {
     try {
@@ -424,19 +445,39 @@ function initializeTableComponent() {
                 field: 'job_no',
                 label: 'İş Emri No',
                 sortable: true,
+                width: '160px',
                 formatter: (value, row) => {
-                    const isChild = !!row.parent;
+                    if (row._isDepartmentTasksRow) return '';
                     
-                    // Calculate hierarchy level (0 = root, 1 = child, 2 = grandchild, etc.)
+                    const isChild = !!row.parent;
                     const hierarchyLevel = row.hierarchy_level || (isChild ? 1 : 0);
                     
-                    // Job number with hierarchy styling - lighter color for child jobs
-                    const jobNoStyle = hierarchyLevel > 0 ? 'color: #6c757d; font-weight: 500;' : 'font-weight: 600;';
-                    const jobNoDisplay = hierarchyLevel > 0 
-                        ? `<span style="${jobNoStyle}">${value || '-'}</span>` 
-                        : `<strong style="${jobNoStyle}">${value || '-'}</strong>`;
+                    if (!value) return '-';
                     
-                    return jobNoDisplay;
+                    // Clean, integrated styling for job number
+                    if (hierarchyLevel > 0) {
+                        // Child jobs - subtle styling
+                        return `
+                            <div style="
+                                color: #6c757d;
+                                font-weight: 500;
+                                font-size: 0.9rem;
+                                font-family: 'Courier New', monospace;
+                                letter-spacing: 0.3px;
+                            ">${value}</div>
+                        `;
+                    } else {
+                        // Root jobs - prominent but clean
+                        return `
+                            <div style="
+                                color: #0d6efd;
+                                font-weight: 700;
+                                font-size: 0.95rem;
+                                font-family: 'Courier New', monospace;
+                                letter-spacing: 0.5px;
+                            ">${value}</div>
+                        `;
+                    }
                 }
             },
             {
@@ -445,20 +486,64 @@ function initializeTableComponent() {
                 sortable: true,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
-                    return value || '-';
+                    if (!value) return '-';
+                    
+                    const hierarchyLevel = row.hierarchy_level || 0;
+                    
+                    // Enhanced title display with hierarchy awareness
+                    if (hierarchyLevel > 0) {
+                        return `
+                            <div style="
+                                color: #495057;
+                                font-weight: 500;
+                                font-size: 0.9rem;
+                                line-height: 1.4;
+                            ">${value}</div>
+                        `;
+                    } else {
+                        return `
+                            <div style="
+                                color: #212529;
+                                font-weight: 600;
+                                font-size: 0.95rem;
+                                line-height: 1.5;
+                            ">${value}</div>
+                        `;
+                    }
                 }
             },
             {
                 field: 'customer_name',
                 label: 'Müşteri',
                 sortable: false,
+                width: '220px',
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
+                    
                     const customerDisplayName = row.customer_short_name || row.customer_name || value;
-                    if (customerDisplayName) {
-                        return `${customerDisplayName} <small class="text-muted">(${row.customer_code || ''})</small>`;
-                    }
-                    return '-';
+                    const customerCode = row.customer_code;
+                    
+                    if (!customerDisplayName) return '-';
+                    
+                    return `
+                        <div style="display: flex; flex-direction: column; gap: 4px;">
+                            <div style="
+                                color: #212529;
+                                font-weight: 600;
+                                font-size: 0.9rem;
+                                line-height: 1.3;
+                            ">${customerDisplayName}</div>
+                            ${customerCode ? `
+                                <div style="
+                                    color: #6c757d;
+                                    font-size: 0.75rem;
+                                    font-weight: 500;
+                                    font-family: 'Courier New', monospace;
+                                    letter-spacing: 0.3px;
+                                ">${customerCode}</div>
+                            ` : ''}
+                        </div>
+                    `;
                 }
             },
             {
@@ -511,6 +596,8 @@ function initializeTableComponent() {
                 field: 'completion_percentage',
                 label: 'Tamamlanma',
                 sortable: false,
+                width: '300px',
+                headerClass: 'completion-percentage-header',
                 formatter: (value) => {
                     if (!value && value !== 0) return '-';
                     const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
@@ -538,27 +625,34 @@ function initializeTableComponent() {
                         barColor = '#059669'; // darker green for 100%
                     }
                     
-                    // Text color always black
+                    // Text color always black for visibility
                     const textColor = '#000000';
                     
                     return `
-                        <div style="position: relative; width: 100%;">
-                            <div class="progress" style="height: 24px; border-radius: 6px; background-color: #e5e7eb; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                        <div style="position: relative; width: 100%; padding: 4px 0;">
+                            <div class="progress" style="height: 28px; border-radius: 6px; background-color: #e5e7eb; 
+                                                         box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden;">
                                 <div class="progress-bar ${colorClass}" 
                                      role="progressbar" 
                                      style="width: ${percentage}%; 
                                             background: linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%);
                                             border-radius: 6px;
                                             transition: width 0.6s ease;
-                                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);" 
+                                            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+                                            position: relative;
+                                            overflow: hidden;" 
                                      aria-valuenow="${percentage}" 
                                      aria-valuemin="0" 
                                      aria-valuemax="100">
+                                    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+                                                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
+                                                animation: shimmer 3s infinite;
+                                                pointer-events: none;"></div>
                                 </div>
                             </div>
                             <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-                                        font-weight: 600; font-size: 0.75rem; color: ${textColor}; 
-                                        pointer-events: none; white-space: nowrap; z-index: 1;">
+                                        font-weight: 600; font-size: 0.8rem; color: ${textColor}; 
+                                        pointer-events: none; white-space: nowrap; z-index: 2;">
                                 ${percentage.toFixed(1)}%
                             </div>
                         </div>
@@ -635,7 +729,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     editJobOrder(row.job_no);
                 },
-                visible: (row) => canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
             },
             {
                 key: 'view',
@@ -644,7 +738,8 @@ function initializeTableComponent() {
                 class: 'btn-outline-info',
                 onClick: (row) => {
                     viewJobOrder(row.job_no);
-                }
+                },
+                visible: () => true // Always show detail button
             },
             {
                 key: 'create-child',
@@ -654,7 +749,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     showCreateChildJobOrderModal(row.job_no);
                 },
-                visible: (row) => canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
             },
             {
                 key: 'add-department-task',
@@ -664,7 +759,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     showAddDepartmentTaskModal(row.job_no);
                 },
-                visible: (row) => canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
             },
             {
                 key: 'start',
@@ -674,7 +769,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     startJobOrder(row.job_no);
                 },
-                visible: (row) => row.status === 'draft'
+                visible: (row) => !HIDE_ACTION_BUTTONS && row.status === 'draft'
             },
             {
                 key: 'hold',
@@ -684,7 +779,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     holdJobOrder(row.job_no);
                 },
-                visible: (row) => canEditJobOrders() && row.status === 'active'
+                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status === 'active'
             },
             {
                 key: 'resume',
@@ -694,7 +789,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     resumeJobOrder(row.job_no);
                 },
-                visible: (row) => row.status === 'on_hold'
+                visible: (row) => !HIDE_ACTION_BUTTONS && row.status === 'on_hold'
             },
             {
                 key: 'cancel',
@@ -704,12 +799,71 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     cancelJobOrder(row.job_no);
                 },
-                visible: (row) => canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
             }
         ],
         emptyMessage: 'İş emri bulunamadı',
         emptyIcon: 'fas fa-tasks'
     });
+    
+    // Add toggle button for action buttons visibility
+    setupActionToggleButton();
+}
+
+// Setup toggle button for action buttons
+function setupActionToggleButton() {
+    // Wait for table to render, then add the button
+    const trySetup = () => {
+        const tableContainer = document.getElementById('job-orders-table-container');
+        if (!tableContainer) {
+            setTimeout(trySetup, 100);
+            return;
+        }
+        
+        const cardHeader = tableContainer.querySelector('.card-header');
+        if (!cardHeader) {
+            setTimeout(trySetup, 100);
+            return;
+        }
+        
+        const cardActions = cardHeader.querySelector('.card-actions');
+        if (!cardActions) {
+            setTimeout(trySetup, 100);
+            return;
+        }
+        
+        // Check if button already exists
+        if (document.getElementById('toggle-actions-btn')) {
+            // Update existing button state
+            const existingBtn = document.getElementById('toggle-actions-btn');
+            const icon = existingBtn.querySelector('i');
+            const text = existingBtn.querySelector('span');
+            if (icon && text) {
+                icon.className = `fas ${HIDE_ACTION_BUTTONS ? 'fa-eye' : 'fa-eye-slash'} me-1`;
+                text.textContent = HIDE_ACTION_BUTTONS ? 'Aksiyonları Göster' : 'Aksiyonları Gizle';
+            }
+            return;
+        }
+        
+        // Create toggle button
+        const toggleBtn = document.createElement('button');
+        toggleBtn.id = 'toggle-actions-btn';
+        toggleBtn.className = 'btn btn-sm btn-outline-secondary';
+        toggleBtn.innerHTML = `
+            <i class="fas ${HIDE_ACTION_BUTTONS ? 'fa-eye' : 'fa-eye-slash'} me-1"></i>
+            <span>${HIDE_ACTION_BUTTONS ? 'Aksiyonları Göster' : 'Aksiyonları Gizle'}</span>
+        `;
+        toggleBtn.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            toggleActionButtons();
+        };
+        
+        // Insert before other buttons
+        cardActions.insertBefore(toggleBtn, cardActions.firstChild);
+    };
+    
+    trySetup();
 }
 
 function initializeFiltersComponent() {
@@ -1014,6 +1168,7 @@ async function loadJobOrders() {
             // Use setTimeout to ensure DOM is fully rendered
             setTimeout(() => {
                 setupExpandButtonListeners();
+                setupActionToggleButton(); // Setup toggle button after table renders
             }, 50);
         } else {
             console.warn('jobOrdersTable is null, cannot update data');
@@ -1806,6 +1961,8 @@ function renderDepartmentTasksTable(tasks, getStatusBadgeClass, formatDate) {
                 field: 'completion_percentage',
                 label: 'Tamamlanma',
                 sortable: true,
+                width: '300px',
+                headerClass: 'completion-percentage-header',
                 formatter: (value) => {
                     if (!value && value !== 0) return '-';
                     const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
@@ -1832,27 +1989,34 @@ function renderDepartmentTasksTable(tasks, getStatusBadgeClass, formatDate) {
                         barColor = '#059669';
                     }
                     
-                    // Text color always black
+                    // Text color always black for visibility
                     const textColor = '#000000';
                     
                     return `
-                        <div style="position: relative; width: 100%;">
-                            <div class="progress" style="height: 24px; border-radius: 6px; background-color: #e5e7eb; box-shadow: inset 0 1px 2px rgba(0,0,0,0.1);">
+                        <div style="position: relative; width: 100%; padding: 4px 0;">
+                            <div class="progress" style="height: 28px; border-radius: 6px; background-color: #e5e7eb; 
+                                                         box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden;">
                                 <div class="progress-bar ${colorClass}" 
                                      role="progressbar" 
                                      style="width: ${percentage}%; 
                                             background: linear-gradient(90deg, ${barColor} 0%, ${barColor}dd 100%);
                                             border-radius: 6px;
                                             transition: width 0.6s ease;
-                                            box-shadow: 0 2px 4px rgba(0,0,0,0.1);" 
+                                            box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+                                            position: relative;
+                                            overflow: hidden;" 
                                      aria-valuenow="${percentage}" 
                                      aria-valuemin="0" 
                                      aria-valuemax="100">
+                                    <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+                                                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
+                                                animation: shimmer 3s infinite;
+                                                pointer-events: none;"></div>
                                 </div>
                             </div>
                             <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-                                        font-weight: 600; font-size: 0.75rem; color: ${textColor}; 
-                                        pointer-events: none; white-space: nowrap; z-index: 1;">
+                                        font-weight: 600; font-size: 0.8rem; color: ${textColor}; 
+                                        pointer-events: none; white-space: nowrap; z-index: 2;">
                                 ${percentage.toFixed(1)}%
                             </div>
                         </div>

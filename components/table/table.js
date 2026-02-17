@@ -158,6 +158,7 @@ export class TableComponent {
             const sortable = this.options.sortable && column.sortable !== false;
             const sortClass = sortable ? 'sortable' : '';
             const headerExtraClass = column.headerClass || '';
+            const widthStyle = column.width ? `style="width: ${column.width}; min-width: ${column.width};"` : '';
             
             // Determine sort icon based on current sort state
             let sortIcon = '';
@@ -183,7 +184,7 @@ export class TableComponent {
                 '<i class="fas fa-edit editable-indicator text-muted ms-1" title="Düzenlenebilir" style="font-size: 0.75rem;"></i>' : '';
             
             return `
-                <th class="${sortClass} ${headerExtraClass}" data-field="${column.field}">
+                <th class="${sortClass} ${headerExtraClass}" data-field="${column.field}" ${widthStyle}>
                     ${column.label} ${editableIcon} ${sortIcon}
                 </th>
             `;
@@ -325,9 +326,10 @@ export class TableComponent {
             const cellExtraClass = column.cellClass || '';
             const dataAttributes = isEditable ? 
                 `data-field="${column.field}" data-row-index="${rowIndex}"` : '';
+            const widthStyle = column.width ? `style="width: ${column.width}; min-width: ${column.width};"` : '';
             
             return `
-                <td class="${editableClass} ${cellExtraClass}" ${dataAttributes}>
+                <td class="${editableClass} ${cellExtraClass}" ${dataAttributes} ${widthStyle}>
                     ${this.formatCellValue(value, column, row)}
                 </td>
             `;
