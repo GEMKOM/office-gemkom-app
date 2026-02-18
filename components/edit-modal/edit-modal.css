@@ -20,6 +20,7 @@
 .edit-modal-container .modal-dialog.modal-fullscreen .modal-body {
     flex: 1;
     overflow-y: auto;
+    overflow-x: visible; /* Allow dropdowns to overflow horizontally */
     padding: 1.5rem;
 }
 
@@ -71,6 +72,8 @@
 .edit-modal-container .modal-body.compact {
     padding: 1.5rem;
     background: white;
+    overflow-x: visible; /* Allow dropdowns to overflow horizontally */
+    position: relative; /* Ensure proper stacking context */
 }
 
 .edit-modal-container .modal-footer.compact {
@@ -232,10 +235,31 @@
 /* Dropdown Field Styling */
 .edit-modal-container .dropdown-field-container {
     position: relative;
+    overflow: visible; /* Allow dropdown menu to overflow */
+    z-index: 1; /* Lower z-index so dropdown portal can appear above */
 }
 
 .edit-modal-container .dropdown-field-container .modern-dropdown-container {
     width: 100%;
+    position: relative;
+    z-index: 1; /* Lower z-index so dropdown portal can appear above */
+}
+
+/* Ensure dropdown search input works inside modal */
+.edit-modal-container .dropdown-search {
+    pointer-events: auto !important;
+    cursor: text !important;
+    user-select: text !important;
+    -webkit-user-select: text !important;
+}
+
+/* Ensure modal doesn't block dropdown portal */
+.edit-modal-container .modal-content {
+    overflow: visible; /* Allow dropdown portal to appear outside modal */
+}
+
+.edit-modal-container .modal-dialog {
+    overflow: visible; /* Allow dropdown portal to appear outside modal */
 }
 
 /* Date Field Styling */

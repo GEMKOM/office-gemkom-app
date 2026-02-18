@@ -87,22 +87,43 @@ export class ModernDropdown {
             this.toggle();
         });
         
-        // Close on outside click
-        document.addEventListener('click', (e) => {
-            if (!this.dropdown.contains(e.target)) {
+        // Close on outside click - must check dropdown, portal, and menu
+        this.outsideClickHandler = (e) => {
+            const isInsideDropdown = this.dropdown && this.dropdown.contains(e.target);
+            const isInsidePortal = this.portalWrapper && this.portalWrapper.contains(e.target);
+            const isInsideMenu = this.menu && this.menu.contains(e.target);
+            
+            // Only close if click is outside all of these
+            if (!isInsideDropdown && !isInsidePortal && !isInsideMenu) {
                 this.close();
             }
-        });
+        };
+        document.addEventListener('click', this.outsideClickHandler);
         
         // Search functionality
         if (this.options.searchable && this.searchInput) {
             this.searchInput.addEventListener('input', (e) => {
+                e.stopPropagation();
                 this.filterItems(e.target.value);
             });
             
             this.searchInput.addEventListener('click', (e) => {
                 e.stopPropagation();
-            });
+                e.stopImmediatePropagation();
+            }, true);
+            
+            this.searchInput.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+                e.stopImmediatePropagation();
+            }, true);
+            
+            this.searchInput.addEventListener('focus', (e) => {
+                e.stopPropagation();
+            }, true);
+            
+            this.searchInput.addEventListener('keydown', (e) => {
+                e.stopPropagation();
+            }, true);
         }
         
         // Keyboard navigation
@@ -186,6 +207,9 @@ export class ModernDropdown {
         this.dropdown.style.zIndex = this.currentZIndex;
         this.dropdown.style.position = 'relative';
         
+        // Use portal approach to escape overflow constraints
+        this.moveMenuToPortal();
+        
         // Focus search input if available
         if (this.options.searchable && this.searchInput) {
             setTimeout(() => this.searchInput.focus(), 100);
@@ -193,6 +217,131 @@ export class ModernDropdown {
         
         // Trigger custom event
         this.container.dispatchEvent(new CustomEvent('dropdown:open'));
+    }
+    
+    moveMenuToPortal() {
+        // Store original parent
+        this.originalMenuParent = this.menu.parentElement;
+        
+        // Create portal wrapper
+        this.portalWrapper = document.createElement('div');
+        this.portalWrapper.className = 'modern-dropdown-portal';
+        this.portalWrapper.style.position = 'fixed';
+        this.portalWrapper.style.zIndex = this.currentZIndex;
+        // Don't set pointer-events: none - it prevents children from receiving events
+        document.body.appendChild(this.portalWrapper);
+        
+        // Prevent Bootstrap modal focus trap from stealing focus from the portal.
+        // Bootstrap listens for 'focusin' on the document and redirects focus back
+        // into the modal. Stopping propagation here keeps focus in the portal.
+        this.portalFocusinHandler = (e) => {
+            e.stopPropagation();
+        };
+        this.portalWrapper.addEventListener('focusin', this.portalFocusinHandler);
+        
+        // Move menu to portal
+        this.portalWrapper.appendChild(this.menu);
+        this.menu.classList.add('modern-dropdown-menu-portal');
+        
+        // Ensure menu and all interactive elements can receive pointer events
+        this.menu.style.pointerEvents = 'auto';
+        
+        // Explicitly enable search input for interaction after portal move
+        if (this.searchInput) {
+            // Force enable the input
+            this.searchInput.disabled = false;
+            this.searchInput.readOnly = false;
+            this.searchInput.removeAttribute('disabled');
+            this.searchInput.removeAttribute('readonly');
+            
+            // Set styles to ensure it's interactive
+            this.searchInput.style.pointerEvents = 'auto';
+            this.searchInput.style.cursor = 'text';
+            this.searchInput.style.position = 'relative';
+            this.searchInput.style.zIndex = '999999';
+            this.searchInput.style.userSelect = 'text';
+            this.searchInput.style.webkitUserSelect = 'text';
+            
+            // Add mousedown handler to prevent dropdown from closing
+            this.searchInput.addEventListener('mousedown', (e) => {
+                e.stopPropagation();
+            }, true);
+            
+            // Add focus handler
+            this.searchInput.addEventListener('focus', (e) => {
+                e.stopPropagation();
+            }, true);
+        }
+        
+        // Position the portal wrapper
+        this.updatePortalPosition();
+        
+        // Update position on scroll/resize
+        this.positionUpdateHandler = () => this.updatePortalPosition();
+        window.addEventListener('scroll', this.positionUpdateHandler, true);
+        window.addEventListener('resize', this.positionUpdateHandler);
+        
+        // Re-focus search input if it exists
+        if (this.options.searchable && this.searchInput) {
+            setTimeout(() => {
+                this.searchInput.focus();
+            }, 100);
+        }
+    }
+    
+    updatePortalPosition() {
+        if (!this.portalWrapper || !this.selectedDisplay) return;
+        
+        const rect = this.selectedDisplay.getBoundingClientRect();
+        // Use fixed positioning relative to viewport
+        this.portalWrapper.style.top = `${rect.bottom}px`;
+        this.portalWrapper.style.left = `${rect.left}px`;
+        this.portalWrapper.style.width = `${rect.width}px`;
+        
+        // Ensure menu is positioned correctly within portal
+        this.menu.style.position = 'absolute';
+        this.menu.style.top = '0';
+        this.menu.style.left = '0';
+        this.menu.style.right = 'auto';
+        this.menu.style.width = '100%';
+        this.menu.style.zIndex = this.currentZIndex;
+        this.menu.style.pointerEvents = 'auto'; // Ensure menu can receive events
+    }
+    
+    moveMenuBackFromPortal() {
+        if (!this.portalWrapper || !this.originalMenuParent) return;
+        
+        // Remove event listeners
+        if (this.positionUpdateHandler) {
+            window.removeEventListener('scroll', this.positionUpdateHandler, true);
+            window.removeEventListener('resize', this.positionUpdateHandler);
+            this.positionUpdateHandler = null;
+        }
+        
+        // Remove focusin handler that prevented Bootstrap modal focus trap
+        if (this.portalFocusinHandler) {
+            this.portalWrapper.removeEventListener('focusin', this.portalFocusinHandler);
+            this.portalFocusinHandler = null;
+        }
+        
+        // Move menu back to original parent
+        this.originalMenuParent.appendChild(this.menu);
+        this.menu.classList.remove('modern-dropdown-menu-portal');
+        
+        // Remove portal wrapper
+        if (this.portalWrapper.parentElement) {
+            this.portalWrapper.remove();
+        }
+        
+        // Reset menu styles
+        this.menu.style.position = '';
+        this.menu.style.top = '';
+        this.menu.style.left = '';
+        this.menu.style.right = '';
+        this.menu.style.width = '';
+        
+        this.portalWrapper = null;
+        this.originalMenuParent = null;
     }
     
     closeAllOtherDropdowns() {
@@ -208,6 +357,9 @@ export class ModernDropdown {
         this.isOpen = false;
         this.dropdown.classList.remove('open');
         this.selectedDisplay.querySelector('.dropdown-arrow').className = 'fas fa-chevron-down dropdown-arrow';
+        
+        // Move menu back from portal before hiding
+        this.moveMenuBackFromPortal();
         
         // Hide dropdown menu
         this.menu.style.display = 'none';
@@ -433,7 +585,23 @@ export class ModernDropdown {
     }
     
     destroy() {
+        // Clean up portal if still active
+        if (this.isOpen) {
+            this.moveMenuBackFromPortal();
+        }
+        
+        // Remove event listeners
+        if (this.outsideClickHandler) {
+            document.removeEventListener('click', this.outsideClickHandler);
+        }
+        
         this.container.innerHTML = '';
         this.container.className = '';
+        
+        // Remove from global tracking
+        const index = allDropdowns.indexOf(this);
+        if (index > -1) {
+            allDropdowns.splice(index, 1);
+        }
     }
 }

@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Dropdown Test</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- Dropdown CSS -->
+    <link rel="stylesheet" href="dropdown.css">
+    
+    <style>
+        body {
+            padding: 40px;
+            background-color: #f5f5f5;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        
+        .test-container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .test-section {
+            margin-bottom: 40px;
+        }
+        
+        .test-section h3 {
+            margin-bottom: 20px;
+            color: #333;
+            border-bottom: 2px solid #DC143C;
+            padding-bottom: 10px;
+        }
+        
+        .test-section .mb-3 {
+            margin-bottom: 20px;
+        }
+        
+        .info-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-top: 20px;
+            border-left: 4px solid #DC143C;
+        }
+        
+        .info-box code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1 class="mb-4">Modern Dropdown Component Test</h1>
+        
+        <!-- Test 1: Searchable Single Select -->
+        <div class="test-section">
+            <h3>Test 1: Searchable Single Select Dropdown</h3>
+            <p class="text-muted">This dropdown has search functionality. Try typing in the search bar.</p>
+            <div id="dropdown-1-container" class="mb-3"></div>
+            <div class="info-box">
+                <strong>Selected Value:</strong> <span id="selected-value-1">None</span><br>
+                <strong>Status:</strong> <span id="status-1">Ready</span>
+            </div>
+        </div>
+        
+        <!-- Test 2: Non-Searchable Single Select -->
+        <div class="test-section">
+            <h3>Test 2: Non-Searchable Single Select Dropdown</h3>
+            <p class="text-muted">This dropdown does not have search functionality.</p>
+            <div id="dropdown-2-container" class="mb-3"></div>
+            <div class="info-box">
+                <strong>Selected Value:</strong> <span id="selected-value-2">None</span>
+            </div>
+        </div>
+        
+        <!-- Test 3: Multi-Select Dropdown -->
+        <div class="test-section">
+            <h3>Test 3: Multi-Select Dropdown</h3>
+            <p class="text-muted">This dropdown allows multiple selections.</p>
+            <div id="dropdown-3-container" class="mb-3"></div>
+            <div class="info-box">
+                <strong>Selected Values:</strong> <span id="selected-value-3">None</span>
+            </div>
+        </div>
+        
+        <!-- Test 4: Dropdown in Table (to test portal/overflow) -->
+        <div class="test-section">
+            <h3>Test 4: Dropdown in Table (Portal Test)</h3>
+            <p class="text-muted">This tests the dropdown in a table with overflow constraints.</p>
+            <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                <table class="table table-bordered">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Job Order</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>1</td>
+                            <td>
+                                <div id="dropdown-table-1-container" style="width: 200px;"></div>
+                            </td>
+                            <td>Active</td>
+                        </tr>
+                        <tr>
+                            <td>2</td>
+                            <td>
+                                <div id="dropdown-table-2-container" style="width: 200px;"></div>
+                            </td>
+                            <td>Pending</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        
+        <!-- Test 5: Dropdown in Card (to test z-index) -->
+        <div class="test-section">
+            <h3>Test 5: Dropdown in Card with Filters</h3>
+            <p class="text-muted">This tests the dropdown appearing above other elements.</p>
+            <div class="card" style="position: relative; z-index: 1;">
+                <div class="card-header">
+                    <h5 class="mb-0">Filters</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <label>Job Order:</label>
+                            <div id="dropdown-card-1-container"></div>
+                        </div>
+                        <div class="col-md-6">
+                            <label>Status:</label>
+                            <div id="dropdown-card-2-container"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Dropdown Component -->
+    <script type="module">
+        import { ModernDropdown } from './dropdown.js';
+        
+        // Sample data for testing
+        const jobOrders = [
+            { value: '1000', text: '1000 - Fabrika İşleri' },
+            { value: '009-34', text: '009-34 - EBT PANEL' },
+            { value: '009-36', text: '009-36 - LOWER SHELL' },
+            { value: '028-12', text: '028-12 - TRANSFER CA' },
+            { value: '028-15', text: '028-15 - TRANSFER CB' },
+            { value: '050-01', text: '050-01 - MAIN FRAME' },
+            { value: '050-02', text: '050-02 - SUB FRAME' },
+            { value: '100-10', text: '100-10 - PANEL ASSEMBLY' },
+            { value: '200-20', text: '200-20 - WELDING UNIT' },
+            { value: '300-30', text: '300-30 - FINISHING' },
+            { value: '400-40', text: '400-40 - QUALITY CHECK' },
+            { value: '500-50', text: '500-50 - PACKAGING' }
+        ];
+        
+        const statuses = [
+            { value: 'active', text: 'Active' },
+            { value: 'pending', text: 'Pending' },
+            { value: 'completed', text: 'Completed' },
+            { value: 'cancelled', text: 'Cancelled' }
+        ];
+        
+        // Test 1: Searchable Single Select
+        const dropdown1 = new ModernDropdown(document.getElementById('dropdown-1-container'), {
+            placeholder: 'İş emri seçin',
+            searchable: true,
+            multiple: false
+        });
+        dropdown1.setItems(jobOrders);
+        
+        dropdown1.container.addEventListener('dropdown:select', (e) => {
+            document.getElementById('selected-value-1').textContent = e.detail.value || 'None';
+            document.getElementById('status-1').textContent = 'Selected: ' + (e.detail.item ? e.detail.item.text : 'None');
+        });
+        
+        // Test 2: Non-Searchable Single Select
+        const dropdown2 = new ModernDropdown(document.getElementById('dropdown-2-container'), {
+            placeholder: 'Select an option',
+            searchable: false,
+            multiple: false
+        });
+        dropdown2.setItems(statuses);
+        
+        dropdown2.container.addEventListener('dropdown:select', (e) => {
+            document.getElementById('selected-value-2').textContent = e.detail.value || 'None';
+        });
+        
+        // Test 3: Multi-Select
+        const dropdown3 = new ModernDropdown(document.getElementById('dropdown-3-container'), {
+            placeholder: 'Select multiple options',
+            searchable: true,
+            multiple: true
+        });
+        dropdown3.setItems(statuses);
+        
+        dropdown3.container.addEventListener('dropdown:select', (e) => {
+            const values = Array.isArray(e.detail.value) ? e.detail.value.join(', ') : e.detail.value;
+            document.getElementById('selected-value-3').textContent = values || 'None';
+        });
+        
+        // Test 4: Dropdowns in Table
+        const dropdownTable1 = new ModernDropdown(document.getElementById('dropdown-table-1-container'), {
+            placeholder: 'İş emri seçin',
+            searchable: true,
+            multiple: false
+        });
+        dropdownTable1.setItems(jobOrders);
+        
+        const dropdownTable2 = new ModernDropdown(document.getElementById('dropdown-table-2-container'), {
+            placeholder: 'İş emri seçin',
+            searchable: true,
+            multiple: false
+        });
+        dropdownTable2.setItems(jobOrders);
+        
+        // Test 5: Dropdowns in Card
+        const dropdownCard1 = new ModernDropdown(document.getElementById('dropdown-card-1-container'), {
+            placeholder: 'İş emri seçin',
+            searchable: true,
+            multiple: false
+        });
+        dropdownCard1.setItems(jobOrders);
+        
+        const dropdownCard2 = new ModernDropdown(document.getElementById('dropdown-card-2-container'), {
+            placeholder: 'Status seçin',
+            searchable: false,
+            multiple: false
+        });
+        dropdownCard2.setItems(statuses);
+        
+        console.log('All dropdowns initialized successfully!');
+        console.log('Test 1 (Searchable):', dropdown1);
+        console.log('Test 2 (Non-searchable):', dropdown2);
+        console.log('Test 3 (Multi-select):', dropdown3);
+    </script>
+</body>
+</html>

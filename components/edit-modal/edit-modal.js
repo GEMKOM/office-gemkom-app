@@ -106,12 +106,20 @@ export class EditModal {
         });
         
         
-        // Form validation events
+        // Form validation events - exclude dropdown search inputs
         this.form.addEventListener('input', (e) => {
+            // Don't validate dropdown search inputs - they're handled by the dropdown component
+            if (e.target.classList.contains('dropdown-search')) {
+                return;
+            }
             this.validateField(e.target);
         });
         
         this.form.addEventListener('change', (e) => {
+            // Don't validate dropdown search inputs - they're handled by the dropdown component
+            if (e.target.classList.contains('dropdown-search')) {
+                return;
+            }
             this.validateField(e.target);
         });
     }

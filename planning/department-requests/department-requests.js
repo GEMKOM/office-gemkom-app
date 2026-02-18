@@ -3418,6 +3418,9 @@ function setupJobOrderDropdown(container, itemIndex) {
 
     // Store dropdown reference in Map
     jobOrderDropdowns.set(itemIndex, dropdown);
+    
+    // Ensure the dropdown container doesn't have any event handlers that might interfere
+    // The dropdown component handles all its own events internally
 }
 
 // Remove item from planning request form
