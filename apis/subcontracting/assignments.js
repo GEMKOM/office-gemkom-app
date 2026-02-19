@@ -136,3 +136,31 @@ export async function deleteAssignment(assignmentId) {
     
     return await resp.json();
 }
+
+/**
+ * Create assignment with subtask atomically
+ * @param {Object} assignmentData - Assignment data with subtask creation
+ * @param {number} assignmentData.kaynak_task_id - Kaynaklı İmalat task ID (parent)
+ * @param {number} assignmentData.subcontractor - Subcontractor ID
+ * @param {number} assignmentData.price_tier - Price tier ID
+ * @param {string} assignmentData.allocated_weight_kg - Allocated weight in kg
+ * @param {string} [assignmentData.title] - Optional custom title for subtask (defaults to subcontractor name)
+ * @param {number} [assignmentData.weight] - Optional weight for subtask (defaults to 10)
+ * @returns {Promise<Object>} Created assignment with full details
+ */
+export async function createAssignmentWithSubtask(assignmentData) {
+    const url = `${backendBase}/subcontracting/assignments/create-with-subtask/`;
+    const resp = await authedFetch(url, {
+        method: 'POST',
+        body: JSON.stringify(assignmentData)
+    });
+    
+    if (!resp.ok) {
+        const errorData = await resp.json();
+        const errorMessage = errorData.detail || errorData.message || Object.values(errorData).flat().join(', ') || 'Taşeron ataması ve alt görev oluşturulurken hata oluştu';
+        throw new Error(errorMessage);
+    }
+    
+    const data = await resp.json();
+    return data;
+}

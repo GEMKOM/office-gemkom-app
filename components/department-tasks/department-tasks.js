@@ -29,7 +29,8 @@ import {
     fetchAssignments, 
     createAssignment, 
     updateAssignment, 
-    deleteAssignment 
+    deleteAssignment,
+    createAssignmentWithSubtask
 } from '../../apis/subcontracting/assignments.js';
 import { fetchSubcontractors } from '../../apis/subcontracting/subcontractors.js';
 import { fetchPriceTiers, getPriceTierRemainingWeight } from '../../apis/subcontracting/priceTiers.js';
@@ -844,6 +845,19 @@ function initializeTableComponent() {
                     // Hide for procurement_item tasks (with or without purchase_order_id)
                     if (row.task_type === 'procurement_item') return false;
                     return row.status !== 'completed' && row.status !== 'skipped' && row.type !== 'machining_part' && row.type !== 'cnc_part';
+                }
+            },
+            {
+                key: 'assign-subcontractor',
+                label: 'Taşeron Ata',
+                icon: 'fas fa-handshake',
+                class: 'btn-outline-primary',
+                onClick: (row) => showCreateAssignmentWithSubtaskModal(row.id, row),
+                visible: (row) => {
+                    // Only show for welding (Kaynaklı İmalat) tasks in manufacturing department
+                    if (department !== 'manufacturing') return false;
+                    // Check if this task itself has task_type === 'welding'
+                    return row.task_type === 'welding';
                 }
             }
         ],
@@ -2550,6 +2564,7 @@ async function viewTaskDetails(taskId) {
         }
 
         // Add Taşeron Ataması section for subtasks (only for manufacturing department)
+        // Note: Create button removed - use "Taşeron Ata" button in table actions for Kaynaklı İmalat subtasks
         if (task.parent && department === 'manufacturing') {
             await addSubcontractingAssignmentSection(taskDetailsModal, task);
         }
@@ -3477,10 +3492,24 @@ async function handleUncompleteTask(taskId) {
         confirmText: 'Evet, Geri Al',
         onConfirm: async () => {
             try {
-                await uncompleteDepartmentTask(taskId);
+                const response = await uncompleteDepartmentTask(taskId);
                 showNotification('Görev tamamlanma durumu geri alındı', 'success');
                 confirmationModal.hide();
-                await loadTasks();
+                
+                // Update the task in the local data without reloading all tasks
+                if (response && response.task) {
+                    const updatedTask = response.task;
+                    if (updateTaskInLocalData(taskId, updatedTask)) {
+                        // Update the table without full reload
+                        updateTableDataOnly();
+                    } else {
+                        // Task not found, fallback to full reload
+                        await loadTasks();
+                    }
+                } else {
+                    // Fallback to full reload if response doesn't have task data
+                    await loadTasks();
+                }
             } catch (error) {
                 console.error('Error uncompleting task:', error);
                 let errorMessage = 'Görev tamamlanma durumu geri alınırken hata oluştu';
@@ -3510,10 +3539,24 @@ async function handleSkipTask(taskId) {
         confirmText: 'Evet, Atla',
         onConfirm: async () => {
             try {
-                await skipDepartmentTask(taskId);
+                const response = await skipDepartmentTask(taskId);
                 showNotification('Görev atlandı', 'success');
                 confirmationModal.hide();
-                await loadTasks();
+                
+                // Update the task in the local data without reloading all tasks
+                if (response && response.task) {
+                    const updatedTask = response.task;
+                    if (updateTaskInLocalData(taskId, updatedTask)) {
+                        // Update the table without full reload
+                        updateTableDataOnly();
+                    } else {
+                        // Task not found, fallback to full reload
+                        await loadTasks();
+                    }
+                } else {
+                    // Fallback to full reload if response doesn't have task data
+                    await loadTasks();
+                }
             } catch (error) {
                 console.error('Error skipping task:', error);
                 let errorMessage = 'Görev atlanırken hata oluştu';
@@ -3700,15 +3743,14 @@ async function addSubcontractingAssignmentSection(modal, task) {
             // Store assignment for later use
             window.currentAssignment = assignment;
         } else {
-            // Show create assignment button
+            // Show message that assignment can be created from table actions
+            // Note: "Taşeron Ata" button removed from details - use table action button for Kaynaklı İmalat subtasks
             modal.addCustomSection({
                 id: 'no-assignment',
                 customContent: `
                     <div class="text-center py-3">
                         <p class="text-muted mb-3">Bu alt göreve henüz taşeron atanmamış.</p>
-                        <button type="button" class="btn btn-primary" id="create-assignment-btn-${task.id}">
-                            <i class="fas fa-plus me-1"></i>Taşeron Ata
-                        </button>
+                        <p class="text-muted small">Kaynaklı İmalat alt görevleri için tablodaki "Taşeron Ata" butonunu kullanın.</p>
                     </div>
                 `
             });
@@ -3716,14 +3758,6 @@ async function addSubcontractingAssignmentSection(modal, task) {
         
         // Set up event listeners after modal is rendered
         setTimeout(() => {
-            const createBtn = document.getElementById(`create-assignment-btn-${task.id}`);
-            if (createBtn) {
-                createBtn.addEventListener('click', () => {
-                    modal.hide();
-                    showCreateAssignmentModal(task);
-                });
-            }
-            
             const editBtn = document.getElementById(`edit-assignment-btn-${task.id}`);
             if (editBtn) {
                 editBtn.addEventListener('click', () => {
@@ -3993,6 +4027,189 @@ async function showEditAssignmentModal(task, assignment) {
         });
     } catch (error) {
         console.error('Error showing edit assignment modal:', error);
+        showNotification('Atama formu yüklenirken hata oluştu', 'error');
+    }
+}
+
+// Show Create Assignment With Subtask Modal
+async function showCreateAssignmentWithSubtaskModal(taskId, taskRow = null) {
+    try {
+        // Get task to ensure we have the latest data
+        const task = taskRow || await getDepartmentTaskById(taskId);
+        
+        // Verify this is a welding (Kaynaklı İmalat) task
+        if (task.task_type !== 'welding') {
+            showNotification('Bu işlem sadece Kaynaklı İmalat görevleri için kullanılabilir', 'error');
+            return;
+        }
+        
+        // Fetch subcontractors and price tiers
+        const [subcontractorsResponse, tiersResponse] = await Promise.all([
+            fetchSubcontractors({ is_active: true }),
+            fetchPriceTiers({ job_order: task.job_order })
+        ]);
+        
+        const subcontractors = subcontractorsResponse.results || subcontractorsResponse || [];
+        const tiers = tiersResponse.results || tiersResponse || [];
+        
+        const modal = new EditModal('assignment-modal-container', {
+            title: 'Taşeron Ata ve Alt Görev Oluştur',
+            icon: 'fas fa-handshake',
+            size: 'md',
+            showEditButton: false
+        });
+        
+        modal.clearAll();
+        modal.addSection({
+            title: 'Atama Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary'
+        });
+        
+        modal.addField({
+            id: 'assignment-subtask-subcontractor',
+            name: 'subcontractor',
+            label: 'Taşeron',
+            type: 'dropdown',
+            value: '',
+            required: true,
+            options: [
+                { value: '', label: 'Taşeron seçin...' },
+                ...subcontractors.map(s => ({ value: s.id.toString(), label: s.name || s.short_name }))
+            ],
+            icon: 'fas fa-building',
+            colSize: 12
+        });
+        
+        modal.addField({
+            id: 'assignment-subtask-price-tier',
+            name: 'price_tier',
+            label: 'Fiyat Kademesi',
+            type: 'dropdown',
+            value: '',
+            required: true,
+            options: [
+                { value: '', label: 'Kademe seçin...' },
+                ...tiers.map(t => ({ 
+                    value: t.id.toString(), 
+                    label: `${t.name} (${t.price_per_kg} ${t.currency}/kg, Kalan: ${t.remaining_weight_kg || 0} kg)` 
+                }))
+            ],
+            icon: 'fas fa-list',
+            colSize: 12
+        });
+        
+        modal.addField({
+            id: 'assignment-subtask-weight',
+            name: 'allocated_weight_kg',
+            label: 'Ayrılan Ağırlık (kg)',
+            type: 'number',
+            value: '',
+            required: true,
+            step: '0.01',
+            min: '0',
+            icon: 'fas fa-weight',
+            colSize: 12,
+            helpText: 'Maksimum ağırlık seçilen kademenin kalan ağırlığına göre belirlenecektir'
+        });
+        
+        modal.addSection({
+            title: 'Alt Görev Bilgileri (Opsiyonel)',
+            icon: 'fas fa-tasks',
+            iconColor: 'text-info'
+        });
+        
+        modal.addField({
+            id: 'assignment-subtask-title',
+            name: 'title',
+            label: 'Alt Görev Başlığı',
+            type: 'text',
+            value: '',
+            required: false,
+            icon: 'fas fa-heading',
+            colSize: 12,
+            helpText: 'Boş bırakılırsa taşeron adı kullanılacaktır'
+        });
+        
+        modal.addField({
+            id: 'assignment-subtask-weight-field',
+            name: 'weight',
+            label: 'Alt Görev Ağırlığı',
+            type: 'number',
+            value: '10',
+            required: false,
+            step: '0.01',
+            min: '0',
+            icon: 'fas fa-weight-hanging',
+            colSize: 12,
+            helpText: 'Varsayılan: 10'
+        });
+        
+        modal.render();
+        modal.show();
+        
+        // Update max weight when tier is selected
+        const tierSelect = modal.container.querySelector('#assignment-subtask-price-tier');
+        const weightInput = modal.container.querySelector('#assignment-subtask-weight');
+        
+        if (tierSelect && weightInput) {
+            tierSelect.addEventListener('change', async (e) => {
+                const tierId = e.target.value;
+                if (tierId) {
+                    try {
+                        const remaining = await getPriceTierRemainingWeight(parseInt(tierId));
+                        weightInput.max = remaining.remaining_weight_kg || 0;
+                        weightInput.setAttribute('max', remaining.remaining_weight_kg || 0);
+                        if (weightInput.value && parseFloat(weightInput.value) > remaining.remaining_weight_kg) {
+                            weightInput.value = remaining.remaining_weight_kg;
+                        }
+                    } catch (error) {
+                        console.error('Error fetching remaining weight:', error);
+                    }
+                }
+            });
+        }
+        
+        modal.onSaveCallback(async (formData) => {
+            try {
+                const assignmentData = {
+                    kaynak_task_id: taskId,
+                    subcontractor: parseInt(formData.subcontractor),
+                    price_tier: parseInt(formData.price_tier),
+                    allocated_weight_kg: formData.allocated_weight_kg
+                };
+                
+                // Add optional fields if provided
+                if (formData.title && formData.title.trim()) {
+                    assignmentData.title = formData.title.trim();
+                }
+                if (formData.weight !== undefined && formData.weight !== null && formData.weight !== '') {
+                    assignmentData.weight = parseFloat(formData.weight);
+                }
+                
+                await createAssignmentWithSubtask(assignmentData);
+                showNotification('Taşeron ataması ve alt görev oluşturuldu', 'success');
+                modal.hide();
+                
+                // Clear subtasks cache for this welding task to force refresh
+                if (subtasksCache.has(taskId)) {
+                    subtasksCache.delete(taskId);
+                }
+                
+                // If this task was expanded, refresh subtasks
+                if (expandedRows.has(taskId)) {
+                    await fetchTaskSubtasks(taskId);
+                }
+                
+                // Reload tasks to show the new subtask
+                await loadTasks();
+            } catch (error) {
+                console.error('Error creating assignment with subtask:', error);
+                showNotification(error.message || 'Taşeron ataması ve alt görev oluşturulurken hata oluştu', 'error');
+            }
+        });
+    } catch (error) {
+        console.error('Error showing create assignment with subtask modal:', error);
         showNotification('Atama formu yüklenirken hata oluştu', 'error');
     }
 }

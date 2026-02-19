@@ -94,6 +94,30 @@ export async function generateStatement(generateData) {
 }
 
 /**
+ * Generate statements in bulk for all subcontractors for a given period
+ * @param {Object} generateData - Generation parameters
+ * @param {number} generateData.year - Year
+ * @param {number} generateData.month - Month (1-12)
+ * @returns {Promise<Object>} Response with generated statements
+ */
+export async function generateBulkStatements(generateData) {
+    const url = `${backendBase}/subcontracting/statements/generate-bulk/`;
+    const resp = await authedFetch(url, {
+        method: 'POST',
+        body: JSON.stringify(generateData)
+    });
+    
+    if (!resp.ok) {
+        const errorData = await resp.json();
+        const errorMessage = errorData.detail || errorData.message || Object.values(errorData).flat().join(', ') || 'Hakedişler oluşturulurken hata oluştu';
+        throw new Error(errorMessage);
+    }
+    
+    const data = await resp.json();
+    return data;
+}
+
+/**
  * Refresh a statement (regenerate line items)
  * @param {number} statementId - Statement ID
  * @returns {Promise<Object>} Refreshed statement

@@ -4,6 +4,7 @@ import {
     fetchStatements,
     fetchStatement,
     generateStatement,
+    generateBulkStatements,
     refreshStatement,
     submitStatement,
     decideStatement,
@@ -439,21 +440,6 @@ function showGenerateStatementModal() {
         iconColor: 'text-primary'
     });
     
-    generateStatementModal.addField({
-        id: 'generate-subcontractor',
-        name: 'subcontractor',
-        label: 'Taşeron',
-        type: 'dropdown',
-        value: '',
-        required: true,
-        options: [
-            { value: '', label: 'Taşeron seçin...' },
-            ...subcontractors.map(s => ({ value: s.id.toString(), label: s.name || s.short_name }))
-        ],
-        icon: 'fas fa-building',
-        colSize: 12
-    });
-    
     const currentYear = new Date().getFullYear();
     const currentMonth = new Date().getMonth() + 1;
     
@@ -488,17 +474,16 @@ function showGenerateStatementModal() {
     
     generateStatementModal.onSaveCallback(async (formData) => {
         try {
-            await generateStatement({
-                subcontractor: parseInt(formData.subcontractor),
+            await generateBulkStatements({
                 year: parseInt(formData.year),
                 month: parseInt(formData.month)
             });
-            showNotification('Hakediş oluşturuldu', 'success');
+            showNotification('Hakedişler oluşturuldu', 'success');
             generateStatementModal.hide();
             await loadStatements();
         } catch (error) {
-            console.error('Error generating statement:', error);
-            showNotification(error.message || 'Hakediş oluşturulurken hata oluştu', 'error');
+            console.error('Error generating statements:', error);
+            showNotification(error.message || 'Hakedişler oluşturulurken hata oluştu', 'error');
         }
     });
 }
