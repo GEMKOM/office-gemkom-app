@@ -49,6 +49,12 @@ import { isAdmin } from '../../authService.js';
 import { listDrawingReleases, getCurrentRelease, requestRevision } from '../../apis/projects/design.js';
 import { fetchAllUsers } from '../../apis/users.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
+import { 
+    fetchPriceTiers, 
+    createPriceTier, 
+    updatePriceTier, 
+    deletePriceTier 
+} from '../../apis/subcontracting/priceTiers.js';
 
 // State management
 // Read initial page and page_size from URL
@@ -96,6 +102,17 @@ function canEditJobOrders() {
     try {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
         return user.team === 'planning' || isAdmin();
+    } catch (error) {
+        console.warn('Failed to parse user data for permission check:', error);
+        return false;
+    }
+}
+
+// Helper function to check if user has planning or management access
+function canViewSubcontracting() {
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        return user.team === 'planning' || user.team === 'management' || isAdmin();
     } catch (error) {
         console.warn('Failed to parse user data for permission check:', error);
         return false;
@@ -1814,6 +1831,17 @@ window.viewJobOrder = async function(jobNo) {
             });
         }
         
+        // Add Taşeronluk tab (only for planning and management)
+        if (canViewSubcontracting()) {
+            viewJobOrderModal.addTab({
+                id: 'taseronluk',
+                label: 'Taşeronluk',
+                icon: 'fas fa-handshake',
+                iconColor: 'text-primary',
+                customContent: '<div id="price-tiers-container" style="padding: 20px;"></div>'
+            });
+        }
+        
         // Render the modal
         viewJobOrderModal.render();
         
@@ -1874,6 +1902,9 @@ function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate) {
                     break;
                 case 'teknik-cizimler':
                     await loadDrawingReleasesTab(jobNo);
+                    break;
+                case 'taseronluk':
+                    await loadPriceTiersTab(jobNo);
                     break;
             }
         });
@@ -2499,6 +2530,391 @@ function renderDrawingReleasesUI(container, releases, jobNo, currentRelease = nu
             const releaseId = parseInt(e.target.closest('.request-revision-btn').getAttribute('data-release-id'));
             showRequestRevisionModal(releaseId, jobNo);
         });
+    });
+}
+
+// Load Price Tiers Tab
+async function loadPriceTiersTab(jobNo) {
+    const container = document.getElementById('price-tiers-container');
+    if (!container) return;
+    
+    // Show loading state
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
+    
+    try {
+        // Get job order to check total_weight_kg
+        const jobOrder = jobOrderTabCache.jobOrder || await getJobOrderByJobNo(jobNo);
+        if (!jobOrderTabCache.jobOrder) {
+            jobOrderTabCache.jobOrder = jobOrder;
+        }
+        
+        // Fetch price tiers
+        const response = await fetchPriceTiers({ job_order: jobNo });
+        const tiers = response.results || response || [];
+        
+        // Render price tiers UI
+        renderPriceTiersUI(container, tiers, jobOrder, jobNo);
+    } catch (error) {
+        console.error('Error loading price tiers:', error);
+        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Fiyat kademeleri yüklenirken hata oluştu.</div>';
+    }
+}
+
+// Render Price Tiers UI
+function renderPriceTiersUI(container, tiers, jobOrder, jobNo) {
+    const formatCurrency = (amount, currency) => {
+        if (!amount) return '-';
+        return new Intl.NumberFormat('tr-TR', {
+            style: 'decimal',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 4
+        }).format(amount) + ' ' + (currency || 'TRY');
+    };
+    
+    const formatWeight = (weight) => {
+        if (!weight) return '-';
+        return new Intl.NumberFormat('tr-TR', {
+            style: 'decimal',
+            minimumFractionDigits: 0,
+            maximumFractionDigits: 2
+        }).format(weight) + ' kg';
+    };
+    
+    let html = '<div class="price-tiers-section">';
+    
+    // Total Weight Section
+    html += `
+        <div class="card mb-4">
+            <div class="card-header">
+                <h6 class="mb-0"><i class="fas fa-weight me-2"></i>Toplam Ağırlık</h6>
+            </div>
+            <div class="card-body">
+                <div class="row align-items-center">
+                    <div class="col-md-6">
+                        <label class="form-label">Toplam Ağırlık (kg)</label>
+                        <div class="input-group">
+                            <input type="number" class="form-control" id="total-weight-input" 
+                                   value="${jobOrder.total_weight_kg || ''}" 
+                                   step="0.01" min="0"
+                                   ${!canEditJobOrders() ? 'readonly' : ''}>
+                            <button class="btn btn-primary" id="save-total-weight-btn" 
+                                    ${!canEditJobOrders() ? 'disabled' : ''}>
+                                <i class="fas fa-save me-1"></i>Kaydet
+                            </button>
+                        </div>
+                        ${!jobOrder.total_weight_kg ? '<small class="text-warning"><i class="fas fa-exclamation-triangle me-1"></i>Toplam ağırlık belirlenmeden fiyat kademesi eklenemez.</small>' : ''}
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+    
+    // Price Tiers Table
+    html += `
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h6 class="mb-0"><i class="fas fa-list me-2"></i>Fiyat Kademeleri</h6>
+                <button class="btn btn-sm btn-primary" id="add-tier-btn" 
+                        ${!jobOrder.total_weight_kg ? 'disabled' : ''}>
+                    <i class="fas fa-plus me-1"></i>Kademe Ekle
+                </button>
+            </div>
+            <div class="card-body">
+                ${tiers.length === 0 ? `
+                    <div class="text-center py-4 text-muted">
+                        <i class="fas fa-list fa-2x mb-2"></i>
+                        <p>Henüz fiyat kademesi eklenmemiş.</p>
+                    </div>
+                ` : `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Ad</th>
+                                    <th>Fiyat/kg</th>
+                                    <th>Para Birimi</th>
+                                    <th>Ayrılan Ağırlık</th>
+                                    <th>Kullanılan</th>
+                                    <th>Kalan</th>
+                                    <th>İşlemler</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${tiers.map(tier => `
+                                    <tr>
+                                        <td><strong>${tier.name || '-'}</strong></td>
+                                        <td>${formatCurrency(tier.price_per_kg, tier.currency)}</td>
+                                        <td>${tier.currency || '-'}</td>
+                                        <td>${formatWeight(tier.allocated_weight_kg)}</td>
+                                        <td>${formatWeight(tier.used_weight_kg || 0)}</td>
+                                        <td>${formatWeight(tier.remaining_weight_kg || 0)}</td>
+                                        <td>
+                                            ${canEditJobOrders() ? `
+                                                <button class="btn btn-sm btn-outline-primary edit-tier-btn" data-tier-id="${tier.id}">
+                                                    <i class="fas fa-edit"></i>
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger delete-tier-btn" data-tier-id="${tier.id}">
+                                                    <i class="fas fa-trash"></i>
+                                                </button>
+                                            ` : '-'}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                `}
+            </div>
+        </div>
+    `;
+    
+    html += '</div>';
+    
+    container.innerHTML = html;
+    
+    // Set up event listeners
+    if (canEditJobOrders()) {
+        // Save total weight
+        const saveWeightBtn = container.querySelector('#save-total-weight-btn');
+        if (saveWeightBtn) {
+            saveWeightBtn.addEventListener('click', async () => {
+                const totalWeight = parseFloat(container.querySelector('#total-weight-input').value);
+                if (isNaN(totalWeight) || totalWeight < 0) {
+                    showNotification('Geçerli bir ağırlık değeri giriniz', 'error');
+                    return;
+                }
+                
+                try {
+                    await updateJobOrderAPI(jobNo, { total_weight_kg: totalWeight });
+                    showNotification('Toplam ağırlık güncellendi', 'success');
+                    // Reload the tab
+                    await loadPriceTiersTab(jobNo);
+                } catch (error) {
+                    console.error('Error updating total weight:', error);
+                    showNotification(error.message || 'Toplam ağırlık güncellenirken hata oluştu', 'error');
+                }
+            });
+        }
+        
+        // Add tier button
+        const addTierBtn = container.querySelector('#add-tier-btn');
+        if (addTierBtn) {
+            addTierBtn.addEventListener('click', () => {
+                showAddTierModal(jobNo, jobOrder);
+            });
+        }
+        
+        // Edit tier buttons
+        container.querySelectorAll('.edit-tier-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tierId = parseInt(btn.dataset.tierId);
+                const tier = tiers.find(t => t.id === tierId);
+                if (tier) {
+                    showEditTierModal(jobNo, tier, jobOrder);
+                }
+            });
+        });
+        
+        // Delete tier buttons
+        container.querySelectorAll('.delete-tier-btn').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const tierId = parseInt(btn.dataset.tierId);
+                const tier = tiers.find(t => t.id === tierId);
+                if (tier && confirm(`"${tier.name}" kademesini silmek istediğinizden emin misiniz?`)) {
+                    try {
+                        await deletePriceTier(tierId);
+                        showNotification('Fiyat kademesi silindi', 'success');
+                        await loadPriceTiersTab(jobNo);
+                    } catch (error) {
+                        console.error('Error deleting tier:', error);
+                        showNotification(error.message || 'Fiyat kademesi silinirken hata oluştu', 'error');
+                    }
+                }
+            });
+        });
+    }
+}
+
+// Show Add Tier Modal
+function showAddTierModal(jobNo, jobOrder) {
+    if (!jobOrder.total_weight_kg) {
+        showNotification('Önce toplam ağırlık belirlenmelidir', 'error');
+        return;
+    }
+    
+    const modal = new EditModal('price-tier-modal-container', {
+        title: 'Yeni Fiyat Kademesi Ekle',
+        icon: 'fas fa-plus-circle',
+        size: 'md',
+        showEditButton: false
+    });
+    
+    modal.clearAll();
+    modal.addSection({
+        title: 'Kademe Bilgileri',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary'
+    });
+    
+    modal.addField({
+        id: 'tier-name',
+        name: 'name',
+        label: 'Ad',
+        type: 'text',
+        value: '',
+        required: true,
+        icon: 'fas fa-tag',
+        colSize: 12
+    });
+    
+    modal.addField({
+        id: 'tier-price',
+        name: 'price_per_kg',
+        label: 'Fiyat/kg',
+        type: 'number',
+        value: '',
+        required: true,
+        step: '0.01',
+        min: '0',
+        icon: 'fas fa-money-bill-wave',
+        colSize: 6
+    });
+    
+    modal.addField({
+        id: 'tier-currency',
+        name: 'currency',
+        label: 'Para Birimi',
+        type: 'dropdown',
+        value: 'TRY',
+        options: CURRENCY_OPTIONS.map(c => ({ value: c.value, label: c.label })),
+        icon: 'fas fa-coins',
+        colSize: 6
+    });
+    
+    modal.addField({
+        id: 'tier-weight',
+        name: 'allocated_weight_kg',
+        label: 'Ayrılan Ağırlık (kg)',
+        type: 'number',
+        value: '',
+        required: true,
+        step: '0.01',
+        min: '0',
+        max: jobOrder.total_weight_kg.toString(),
+        icon: 'fas fa-weight',
+        colSize: 12,
+        helpText: `Maksimum: ${jobOrder.total_weight_kg} kg`
+    });
+    
+    modal.render();
+    modal.show();
+    
+    modal.onSaveCallback(async (formData) => {
+        try {
+            await createPriceTier({
+                job_order: jobNo,
+                name: formData.name,
+                price_per_kg: parseFloat(formData.price_per_kg),
+                currency: formData.currency || 'TRY',
+                allocated_weight_kg: parseFloat(formData.allocated_weight_kg)
+            });
+            showNotification('Fiyat kademesi eklendi', 'success');
+            modal.hide();
+            await loadPriceTiersTab(jobNo);
+        } catch (error) {
+            console.error('Error creating tier:', error);
+            showNotification(error.message || 'Fiyat kademesi eklenirken hata oluştu', 'error');
+        }
+    });
+}
+
+// Show Edit Tier Modal
+function showEditTierModal(jobNo, tier, jobOrder) {
+    const modal = new EditModal('price-tier-modal-container', {
+        title: 'Fiyat Kademesi Düzenle',
+        icon: 'fas fa-edit',
+        size: 'md',
+        showEditButton: false
+    });
+    
+    modal.clearAll();
+    modal.addSection({
+        title: 'Kademe Bilgileri',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary'
+    });
+    
+    modal.addField({
+        id: 'tier-name',
+        name: 'name',
+        label: 'Ad',
+        type: 'text',
+        value: tier.name || '',
+        required: true,
+        icon: 'fas fa-tag',
+        colSize: 12
+    });
+    
+    modal.addField({
+        id: 'tier-price',
+        name: 'price_per_kg',
+        label: 'Fiyat/kg',
+        type: 'number',
+        value: tier.price_per_kg || '',
+        required: true,
+        step: '0.01',
+        min: '0',
+        icon: 'fas fa-money-bill-wave',
+        colSize: 6
+    });
+    
+    modal.addField({
+        id: 'tier-currency',
+        name: 'currency',
+        label: 'Para Birimi',
+        type: 'dropdown',
+        value: tier.currency || 'TRY',
+        options: CURRENCY_OPTIONS.map(c => ({ value: c.value, label: c.label })),
+        icon: 'fas fa-coins',
+        colSize: 6
+    });
+    
+    modal.addField({
+        id: 'tier-weight',
+        name: 'allocated_weight_kg',
+        label: 'Ayrılan Ağırlık (kg)',
+        type: 'number',
+        value: tier.allocated_weight_kg || '',
+        required: true,
+        step: '0.01',
+        min: '0',
+        max: jobOrder.total_weight_kg.toString(),
+        icon: 'fas fa-weight',
+        colSize: 12,
+        helpText: `Maksimum: ${jobOrder.total_weight_kg} kg`
+    });
+    
+    modal.render();
+    modal.show();
+    
+    window.editingTierId = tier.id;
+    
+    modal.onSaveCallback(async (formData) => {
+        try {
+            await updatePriceTier(window.editingTierId, {
+                name: formData.name,
+                price_per_kg: parseFloat(formData.price_per_kg),
+                currency: formData.currency || 'TRY',
+                allocated_weight_kg: parseFloat(formData.allocated_weight_kg)
+            });
+            showNotification('Fiyat kademesi güncellendi', 'success');
+            modal.hide();
+            window.editingTierId = null;
+            await loadPriceTiersTab(jobNo);
+        } catch (error) {
+            console.error('Error updating tier:', error);
+            showNotification(error.message || 'Fiyat kademesi güncellenirken hata oluştu', 'error');
+        }
     });
 }
 

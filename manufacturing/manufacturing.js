@@ -155,6 +155,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                         link: '/manufacturing/reports/combined-job-costs'
                     }
                 ]
+            },
+            {
+                title: 'Taşeronluk',
+                description: 'Taşeron yönetimi, fiyat kademeleri ve hakediş işlemleri.',
+                icon: 'fas fa-handshake',
+                iconColor: 'primary',
+                link: '/subcontracting/subcontractors',
+                features: [
+                    {
+                        label: 'Taşeronlar',
+                        icon: 'fas fa-building',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/subcontracting/subcontractors'
+                    },
+                    {
+                        label: 'Hakedişler',
+                        icon: 'fas fa-file-invoice-dollar',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/subcontracting/statements'
+                    }
+                ]
             }
         ]
     });

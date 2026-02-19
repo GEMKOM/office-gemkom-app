@@ -25,6 +25,14 @@ import {
 import { authFetchUsers } from '../../apis/users.js';
 import { createRelease, completeRevision } from '../../apis/projects/design.js';
 import { markPlanningRequestItemDelivered } from '../../apis/planning/planningRequestItems.js';
+import { 
+    fetchAssignments, 
+    createAssignment, 
+    updateAssignment, 
+    deleteAssignment 
+} from '../../apis/subcontracting/assignments.js';
+import { fetchSubcontractors } from '../../apis/subcontracting/subcontractors.js';
+import { fetchPriceTiers, getPriceTierRemainingWeight } from '../../apis/subcontracting/priceTiers.js';
 
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
@@ -2541,6 +2549,11 @@ async function viewTaskDetails(taskId) {
             });
         }
 
+        // Add Taşeron Ataması section for subtasks (only for manufacturing department)
+        if (task.parent && department === 'manufacturing') {
+            await addSubcontractingAssignmentSection(taskDetailsModal, task);
+        }
+
         taskDetailsModal.render();
         
         // Add subtask button after rendering (only for main tasks)
@@ -3611,6 +3624,376 @@ async function exportTasks(format) {
         if (tasksTable) {
             tasksTable.setExportLoading(false);
         }
+    }
+}
+
+// Add Subcontracting Assignment Section
+async function addSubcontractingAssignmentSection(modal, task) {
+    try {
+        // Fetch assignment for this subtask
+        const assignmentsResponse = await fetchAssignments({ department_task: task.id });
+        const assignments = assignmentsResponse.results || assignmentsResponse || [];
+        const assignment = assignments.length > 0 ? assignments[0] : null;
+        
+        modal.addSection({
+            title: 'Taşeron Ataması',
+            icon: 'fas fa-handshake',
+            iconColor: 'text-warning'
+        });
+        
+        if (assignment) {
+            // Display existing assignment
+            const formatCurrency = (amount, currency) => {
+                if (!amount) return '-';
+                return new Intl.NumberFormat('tr-TR', {
+                    style: 'decimal',
+                    minimumFractionDigits: 2,
+                    maximumFractionDigits: 2
+                }).format(amount) + ' ' + (currency || 'TRY');
+            };
+            
+            modal.addCustomSection({
+                id: 'assignment-info',
+                customContent: `
+                    <div class="assignment-info p-3 bg-light rounded">
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <strong>Taşeron:</strong> ${assignment.subcontractor_name || '-'}
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Fiyat Kademesi:</strong> ${assignment.price_tier_name || '-'} (${formatCurrency(assignment.price_per_kg, assignment.cost_currency)}/kg)
+                            </div>
+                        </div>
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <strong>Ayrılan Ağırlık:</strong> ${assignment.allocated_weight_kg || 0} kg
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Mevcut İlerleme:</strong> ${assignment.current_progress || 0}%
+                            </div>
+                        </div>
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <strong>Faturalanmış İlerleme:</strong> ${assignment.last_billed_progress || 0}%
+                            </div>
+                            <div class="col-md-6">
+                                <strong>Faturalanmamış:</strong> ${assignment.unbilled_progress || 0}% → ${assignment.unbilled_weight_kg || 0} kg × ${formatCurrency(assignment.price_per_kg, assignment.cost_currency)} = ${formatCurrency(assignment.unbilled_cost, assignment.cost_currency)}
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-12">
+                                <strong>Toplam Maliyet:</strong> ${assignment.allocated_weight_kg || 0} × ${assignment.current_progress || 0}% × ${formatCurrency(assignment.price_per_kg, assignment.cost_currency)} = ${formatCurrency(assignment.current_cost, assignment.cost_currency)}
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <button type="button" class="btn btn-sm btn-primary" id="edit-assignment-btn-${task.id}">
+                                <i class="fas fa-edit me-1"></i>Düzenle
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-danger" id="delete-assignment-btn-${task.id}">
+                                <i class="fas fa-trash me-1"></i>Sil
+                            </button>
+                        </div>
+                    </div>
+                `
+            });
+            
+            // Store assignment for later use
+            window.currentAssignment = assignment;
+        } else {
+            // Show create assignment button
+            modal.addCustomSection({
+                id: 'no-assignment',
+                customContent: `
+                    <div class="text-center py-3">
+                        <p class="text-muted mb-3">Bu alt göreve henüz taşeron atanmamış.</p>
+                        <button type="button" class="btn btn-primary" id="create-assignment-btn-${task.id}">
+                            <i class="fas fa-plus me-1"></i>Taşeron Ata
+                        </button>
+                    </div>
+                `
+            });
+        }
+        
+        // Set up event listeners after modal is rendered
+        setTimeout(() => {
+            const createBtn = document.getElementById(`create-assignment-btn-${task.id}`);
+            if (createBtn) {
+                createBtn.addEventListener('click', () => {
+                    modal.hide();
+                    showCreateAssignmentModal(task);
+                });
+            }
+            
+            const editBtn = document.getElementById(`edit-assignment-btn-${task.id}`);
+            if (editBtn) {
+                editBtn.addEventListener('click', () => {
+                    modal.hide();
+                    showEditAssignmentModal(task, assignment);
+                });
+            }
+            
+            const deleteBtn = document.getElementById(`delete-assignment-btn-${task.id}`);
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', async () => {
+                    if (confirm('Taşeron atamasını silmek istediğinizden emin misiniz?')) {
+                        try {
+                            await deleteAssignment(assignment.id);
+                            showNotification('Taşeron ataması silindi', 'success');
+                            modal.hide();
+                            viewTaskDetails(task.id);
+                        } catch (error) {
+                            console.error('Error deleting assignment:', error);
+                            showNotification(error.message || 'Taşeron ataması silinirken hata oluştu', 'error');
+                        }
+                    }
+                });
+            }
+        }, 100);
+    } catch (error) {
+        console.error('Error loading assignment:', error);
+        // Don't show error to user, just skip the section
+    }
+}
+
+// Show Create Assignment Modal
+async function showCreateAssignmentModal(task) {
+    try {
+        // Fetch subcontractors and price tiers
+        const [subcontractorsResponse, tiersResponse] = await Promise.all([
+            fetchSubcontractors({ is_active: true }),
+            fetchPriceTiers({ job_order: task.job_order })
+        ]);
+        
+        const subcontractors = subcontractorsResponse.results || subcontractorsResponse || [];
+        const tiers = tiersResponse.results || tiersResponse || [];
+        
+        const modal = new EditModal('assignment-modal-container', {
+            title: 'Taşeron Ataması Oluştur',
+            icon: 'fas fa-handshake',
+            size: 'md',
+            showEditButton: false
+        });
+        
+        modal.clearAll();
+        modal.addSection({
+            title: 'Atama Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary'
+        });
+        
+        modal.addField({
+            id: 'assignment-subcontractor',
+            name: 'subcontractor',
+            label: 'Taşeron',
+            type: 'dropdown',
+            value: '',
+            required: true,
+            options: [
+                { value: '', label: 'Taşeron seçin...' },
+                ...subcontractors.map(s => ({ value: s.id.toString(), label: s.name || s.short_name }))
+            ],
+            icon: 'fas fa-building',
+            colSize: 12
+        });
+        
+        modal.addField({
+            id: 'assignment-price-tier',
+            name: 'price_tier',
+            label: 'Fiyat Kademesi',
+            type: 'dropdown',
+            value: '',
+            required: true,
+            options: [
+                { value: '', label: 'Kademe seçin...' },
+                ...tiers.map(t => ({ 
+                    value: t.id.toString(), 
+                    label: `${t.name} (${t.price_per_kg} ${t.currency}/kg, Kalan: ${t.remaining_weight_kg || 0} kg)` 
+                }))
+            ],
+            icon: 'fas fa-list',
+            colSize: 12
+        });
+        
+        modal.addField({
+            id: 'assignment-weight',
+            name: 'allocated_weight_kg',
+            label: 'Ayrılan Ağırlık (kg)',
+            type: 'number',
+            value: '',
+            required: true,
+            step: '0.01',
+            min: '0',
+            icon: 'fas fa-weight',
+            colSize: 12,
+            helpText: 'Maksimum ağırlık seçilen kademenin kalan ağırlığına göre belirlenecektir'
+        });
+        
+        modal.render();
+        modal.show();
+        
+        // Update max weight when tier is selected
+        const tierSelect = modal.container.querySelector('#assignment-price-tier');
+        const weightInput = modal.container.querySelector('#assignment-weight');
+        
+        if (tierSelect && weightInput) {
+            tierSelect.addEventListener('change', async (e) => {
+                const tierId = e.target.value;
+                if (tierId) {
+                    try {
+                        const remaining = await getPriceTierRemainingWeight(parseInt(tierId));
+                        weightInput.max = remaining.remaining_weight_kg || 0;
+                        weightInput.setAttribute('max', remaining.remaining_weight_kg || 0);
+                        if (weightInput.value && parseFloat(weightInput.value) > remaining.remaining_weight_kg) {
+                            weightInput.value = remaining.remaining_weight_kg;
+                        }
+                    } catch (error) {
+                        console.error('Error fetching remaining weight:', error);
+                    }
+                }
+            });
+        }
+        
+        modal.onSaveCallback(async (formData) => {
+            try {
+                await createAssignment({
+                    department_task: task.id,
+                    subcontractor: parseInt(formData.subcontractor),
+                    price_tier: parseInt(formData.price_tier),
+                    allocated_weight_kg: parseFloat(formData.allocated_weight_kg)
+                });
+                showNotification('Taşeron ataması oluşturuldu', 'success');
+                modal.hide();
+                viewTaskDetails(task.id);
+            } catch (error) {
+                console.error('Error creating assignment:', error);
+                showNotification(error.message || 'Taşeron ataması oluşturulurken hata oluştu', 'error');
+            }
+        });
+    } catch (error) {
+        console.error('Error showing create assignment modal:', error);
+        showNotification('Atama formu yüklenirken hata oluştu', 'error');
+    }
+}
+
+// Show Edit Assignment Modal
+async function showEditAssignmentModal(task, assignment) {
+    try {
+        // Fetch subcontractors and price tiers
+        const [subcontractorsResponse, tiersResponse] = await Promise.all([
+            fetchSubcontractors({ is_active: true }),
+            fetchPriceTiers({ job_order: task.job_order })
+        ]);
+        
+        const subcontractors = subcontractorsResponse.results || subcontractorsResponse || [];
+        const tiers = tiersResponse.results || tiersResponse || [];
+        
+        const modal = new EditModal('assignment-modal-container', {
+            title: 'Taşeron Ataması Düzenle',
+            icon: 'fas fa-edit',
+            size: 'md',
+            showEditButton: false
+        });
+        
+        modal.clearAll();
+        modal.addSection({
+            title: 'Atama Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary'
+        });
+        
+        modal.addField({
+            id: 'edit-assignment-subcontractor',
+            name: 'subcontractor',
+            label: 'Taşeron',
+            type: 'dropdown',
+            value: assignment.subcontractor ? assignment.subcontractor.toString() : '',
+            required: true,
+            options: [
+                { value: '', label: 'Taşeron seçin...' },
+                ...subcontractors.map(s => ({ value: s.id.toString(), label: s.name || s.short_name }))
+            ],
+            icon: 'fas fa-building',
+            colSize: 12
+        });
+        
+        modal.addField({
+            id: 'edit-assignment-price-tier',
+            name: 'price_tier',
+            label: 'Fiyat Kademesi',
+            type: 'dropdown',
+            value: assignment.price_tier ? assignment.price_tier.toString() : '',
+            required: true,
+            options: [
+                { value: '', label: 'Kademe seçin...' },
+                ...tiers.map(t => ({ 
+                    value: t.id.toString(), 
+                    label: `${t.name} (${t.price_per_kg} ${t.currency}/kg, Kalan: ${t.remaining_weight_kg || 0} kg)` 
+                }))
+            ],
+            icon: 'fas fa-list',
+            colSize: 12
+        });
+        
+        modal.addField({
+            id: 'edit-assignment-weight',
+            name: 'allocated_weight_kg',
+            label: 'Ayrılan Ağırlık (kg)',
+            type: 'number',
+            value: assignment.allocated_weight_kg || '',
+            required: true,
+            step: '0.01',
+            min: '0',
+            icon: 'fas fa-weight',
+            colSize: 12,
+            helpText: 'Maksimum ağırlık seçilen kademenin kalan ağırlığına göre belirlenecektir'
+        });
+        
+        modal.render();
+        modal.show();
+        
+        window.editingAssignmentId = assignment.id;
+        
+        // Update max weight when tier is selected
+        const tierSelect = modal.container.querySelector('#edit-assignment-price-tier');
+        const weightInput = modal.container.querySelector('#edit-assignment-weight');
+        
+        if (tierSelect && weightInput) {
+            tierSelect.addEventListener('change', async (e) => {
+                const tierId = e.target.value;
+                if (tierId) {
+                    try {
+                        const remaining = await getPriceTierRemainingWeight(parseInt(tierId));
+                        weightInput.max = remaining.remaining_weight_kg || 0;
+                        weightInput.setAttribute('max', remaining.remaining_weight_kg || 0);
+                        if (weightInput.value && parseFloat(weightInput.value) > remaining.remaining_weight_kg) {
+                            weightInput.value = remaining.remaining_weight_kg;
+                        }
+                    } catch (error) {
+                        console.error('Error fetching remaining weight:', error);
+                    }
+                }
+            });
+        }
+        
+        modal.onSaveCallback(async (formData) => {
+            try {
+                await updateAssignment(window.editingAssignmentId, {
+                    subcontractor: parseInt(formData.subcontractor),
+                    price_tier: parseInt(formData.price_tier),
+                    allocated_weight_kg: parseFloat(formData.allocated_weight_kg)
+                });
+                showNotification('Taşeron ataması güncellendi', 'success');
+                modal.hide();
+                window.editingAssignmentId = null;
+                viewTaskDetails(task.id);
+            } catch (error) {
+                console.error('Error updating assignment:', error);
+                showNotification(error.message || 'Taşeron ataması güncellenirken hata oluştu', 'error');
+            }
+        });
+    } catch (error) {
+        console.error('Error showing edit assignment modal:', error);
+        showNotification('Atama formu yüklenirken hata oluştu', 'error');
     }
 }
 
