@@ -1,4 +1,5 @@
-import { initNavbar } from '../../../components/navbar.js';
+import { guardRoute } from '../../../../authService.js';
+import { initNavbar } from '../../../../components/navbar.js';
 import { 
     fetchStatements,
     fetchStatement,
@@ -11,26 +12,24 @@ import {
     createStatementAdjustment,
     deleteStatementAdjustment,
     getStatementStatusInfo
-} from '../../../apis/subcontracting/statements.js';
-import { fetchSubcontractors } from '../../../apis/subcontracting/subcontractors.js';
-import { HeaderComponent } from '../../../components/header/header.js';
-import { FiltersComponent } from '../../../components/filters/filters.js';
-import { TableComponent } from '../../../components/table/table.js';
-import { DisplayModal } from '../../../components/display-modal/display-modal.js';
-import { EditModal } from '../../../components/edit-modal/edit-modal.js';
-import { initRouteProtection } from '../../../apis/routeProtection.js';
-import { showNotification } from '../../../components/notification/notification.js';
+} from '../../../../apis/subcontracting/statements.js';
+import { fetchSubcontractors } from '../../../../apis/subcontracting/subcontractors.js';
+import { HeaderComponent } from '../../../../components/header/header.js';
+import { FiltersComponent } from '../../../../components/filters/filters.js';
+import { TableComponent } from '../../../../components/table/table.js';
+import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
+import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
+import { initRouteProtection } from '../../../../apis/routeProtection.js';
+import { showNotification } from '../../../../components/notification/notification.js';
 
-// State management
-let currentPage = 1;
-let currentSortField = '-period_year';
-let currentSortDirection = 'desc';
-let statements = [];
-let totalStatements = 0;
-let isLoading = false;
+// Header component instance
+let headerComponent;
+
+// Filters component instance
 let statementsFilters = null;
+
+// Table component instance
 let statementsTable = null;
-let subcontractors = [];
 
 // Modal component instances
 let generateStatementModal = null;
@@ -38,8 +37,22 @@ let statementDetailModal = null;
 let adjustmentModal = null;
 let decideModal = null;
 
+// State management
+let currentPage = 1;
+let currentSortField = '-year';
+let currentSortDirection = 'desc';
+let statements = [];
+let totalStatements = 0;
+let isLoading = false;
+let subcontractors = [];
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
+    if (!guardRoute()) {
+        return;
+    }
+
+    // Initialize route protection
     if (!initRouteProtection()) {
         return;
     }
@@ -47,28 +60,42 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
     
     // Initialize header component
-    const header = new HeaderComponent({
+    initHeaderComponent();
+    
+    // Initialize modal components
+    initializeModalComponents();
+    
+    await initializeStatements();
+});
+
+// Initialize header component
+function initHeaderComponent() {
+    headerComponent = new HeaderComponent({
         title: 'Hakediş Yönetimi',
         subtitle: 'Taşeron hakediş listesi ve yönetimi',
         icon: 'file-invoice-dollar',
         showBackButton: 'block',
         showCreateButton: 'block',
-        showBulkCreateButton: 'none',
+        showRefreshButton: 'block',
         createButtonText: 'Yeni Hakediş Oluştur',
+        refreshButtonText: 'Yenile',
         onBackClick: () => window.location.href = '/manufacturing/',
-        onCreateClick: () => showGenerateStatementModal()
+        onCreateClick: () => {
+            showGenerateStatementModal();
+        },
+        onRefreshClick: async () => {
+            // Reset to first page when refreshing
+            currentPage = 1;
+            await loadStatements();
+        }
     });
-    
-    await initializeStatements();
-    setupEventListeners();
-});
+}
 
 async function initializeStatements() {
     try {
         await loadSubcontractors();
         initializeFiltersComponent();
         initializeTableComponent();
-        initializeModalComponents();
         
         await loadStatements();
     } catch (error) {
@@ -91,23 +118,20 @@ function initializeTableComponent() {
         title: 'Hakediş Listesi',
         columns: [
             {
+                field: '_expand',
+                label: '',
+                sortable: false,
+                width: '50px',
+                formatter: (value, row) => {
+                    // This will be empty for regular rows, the expand icon is in the group header
+                    return '';
+                }
+            },
+            {
                 field: 'subcontractor_name',
                 label: 'Taşeron',
                 sortable: true,
                 formatter: (value) => `<strong>${value || '-'}</strong>`
-            },
-            {
-                field: 'period',
-                label: 'Dönem',
-                sortable: true,
-                formatter: (value, row) => {
-                    if (row.period_year && row.period_month) {
-                        const monthNames = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
-                                          'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-                        return `${row.period_year}/${String(row.period_month).padStart(2, '0')}`;
-                    }
-                    return '-';
-                }
             },
             {
                 field: 'status',
@@ -115,7 +139,14 @@ function initializeTableComponent() {
                 sortable: true,
                 formatter: (value) => {
                     const statusInfo = getStatementStatusInfo(value);
-                    return `<span class="status-badge ${statusInfo.class}">${statusInfo.label}</span>`;
+                    // Map status classes to badge classes
+                    let badgeClass = statusInfo.class;
+                    if (badgeClass === 'status-teal') {
+                        badgeClass = 'status-blue';
+                    } else if (badgeClass === 'status-unknown') {
+                        badgeClass = 'status-grey';
+                    }
+                    return `<span class="status-badge ${badgeClass}">${statusInfo.label}</span>`;
                 }
             },
             {
@@ -201,7 +232,32 @@ function initializeTableComponent() {
             }
         ],
         emptyMessage: 'Hakediş bulunamadı',
-        emptyIcon: 'fas fa-file-invoice-dollar'
+        emptyIcon: 'fas fa-file-invoice-dollar',
+        // Grouping configuration
+        groupBy: 'period',
+        groupCollapsible: true,
+        defaultGroupExpanded: true,
+        groupHeaderFormatter: (groupValue, groupRows) => {
+            // groupValue is the period string (e.g., "2026-02")
+            // Parse it to display nicely
+            const [year, month] = groupValue.split('-');
+            const monthNames = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
+                              'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+            const monthName = monthNames[parseInt(month) - 1] || month;
+            const count = groupRows.length;
+            const periodText = `${monthName} ${year}`;
+            return `
+                <div style="
+                    color: #0d6efd;
+                    font-weight: 500;
+                    font-size: 0.95rem;
+                    font-family: 'Courier New', monospace;
+                    letter-spacing: 0.5px;
+                    display: inline-block;
+                ">${periodText}</div>
+                <span class="badge bg-secondary ms-2">${count} ${count === 1 ? 'hakediş' : 'hakediş'}</span>
+            `;
+        }
     });
 }
 
@@ -273,14 +329,17 @@ function initializeFiltersComponent() {
     });
 }
 
+// Initialize modal components
 function initializeModalComponents() {
+    // Generate Statement Modal
     generateStatementModal = new EditModal('generate-statement-modal-container', {
         title: 'Yeni Hakediş Oluştur',
         icon: 'fas fa-plus-circle',
-        size: 'md',
-        showEditButton: false
+        saveButtonText: 'Hakediş Oluştur',
+        size: 'md'
     });
 
+    // Statement Detail Modal
     statementDetailModal = new DisplayModal('statement-detail-modal-container', {
         title: 'Hakediş Detayı',
         icon: 'fas fa-file-invoice-dollar',
@@ -289,18 +348,20 @@ function initializeModalComponents() {
         showEditButton: false
     });
 
+    // Adjustment Modal
     adjustmentModal = new EditModal('adjustment-modal-container', {
         title: 'Düzeltme Ekle',
         icon: 'fas fa-edit',
-        size: 'md',
-        showEditButton: false
+        saveButtonText: 'Düzeltme Ekle',
+        size: 'md'
     });
 
+    // Decide Modal
     decideModal = new EditModal('decide-statement-modal-container', {
         title: 'Hakediş Kararı',
         icon: 'fas fa-gavel',
-        size: 'md',
-        showEditButton: false
+        saveButtonText: 'Karar Ver',
+        size: 'md'
     });
 }
 
@@ -340,6 +401,14 @@ async function loadStatements() {
         
         statements = response.results || response || [];
         totalStatements = response.count || response.total || statements.length;
+        
+        // Add period field for grouping (format: "YYYY-MM" for proper sorting)
+        statements = statements.map(statement => ({
+            ...statement,
+            period: statement.year && statement.month 
+                ? `${statement.year}-${String(statement.month).padStart(2, '0')}`
+                : 'unknown'
+        }));
         
         if (statementsTable) {
             statementsTable.updateData(statements, totalStatements, currentPage);
@@ -452,8 +521,8 @@ async function viewStatementDetail(statementId) {
         const statusInfo = getStatementStatusInfo(statement.status);
         const monthNames = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran', 
                           'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
-        const periodText = statement.period_year && statement.period_month 
-            ? `${monthNames[statement.period_month - 1]} ${statement.period_year}`
+        const periodText = statement.year && statement.month 
+            ? `${monthNames[statement.month - 1]} ${statement.year}`
             : '-';
         
         // Header Section
@@ -488,7 +557,16 @@ async function viewStatementDetail(statementId) {
             value: statusInfo.label,
             icon: 'fas fa-info-circle',
             colSize: 4,
-            format: () => `<span class="status-badge ${statusInfo.class}">${statusInfo.label}</span>`
+            format: () => {
+                // Map status classes to badge classes
+                let badgeClass = statusInfo.class;
+                if (badgeClass === 'status-teal') {
+                    badgeClass = 'status-blue';
+                } else if (badgeClass === 'status-unknown') {
+                    badgeClass = 'status-grey';
+                }
+                return `<span class="status-badge ${badgeClass}">${statusInfo.label}</span>`;
+            }
         });
         
         // Line Items Section
@@ -585,7 +663,7 @@ async function viewStatementDetail(statementId) {
                                             ` : ''}
                                         </tr>
                                     `).join('') : 
-                                    '<tr><td colspan="${statement.status === 'draft' || statement.status === 'rejected' ? '5' : '4'}" class="text-center text-muted">Düzeltme bulunmamaktadır</td></tr>'
+                                    `<tr><td colspan="${statement.status === 'draft' || statement.status === 'rejected' ? '5' : '4'}" class="text-center text-muted">Düzeltme bulunmamaktadır</td></tr>`
                                 }
                             </tbody>
                             <tfoot class="table-light">
@@ -668,121 +746,128 @@ function setupStatementDetailActions(statement, adjustments) {
         });
     });
     
-    // Action buttons based on status
-    const modalBody = statementDetailModal.container.querySelector('.modal-body');
-    if (modalBody) {
-        let actionButtons = '';
+    // Update footer buttons based on status
+    const modalFooter = statementDetailModal.container.querySelector('.modal-footer');
+    if (modalFooter) {
+        let footerButtons = '';
         
         if (statement.status === 'draft') {
-            actionButtons = `
-                <div class="mt-3 d-flex gap-2">
-                    <button class="btn btn-primary" id="refresh-statement-btn">
-                        <i class="fas fa-sync me-1"></i>Yenile
-                    </button>
-                    <button class="btn btn-success" id="submit-statement-btn">
-                        <i class="fas fa-paper-plane me-1"></i>Onaya Gönder
-                    </button>
-                </div>
+            footerButtons = `
+                <button type="button" class="btn btn-sm btn-primary" id="refresh-statement-btn">
+                    <i class="fas fa-sync me-1"></i>Yenile
+                </button>
+                <button type="button" class="btn btn-sm btn-success" id="submit-statement-btn">
+                    <i class="fas fa-paper-plane me-1"></i>Onaya Gönder
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Kapat
+                </button>
             `;
         } else if (statement.status === 'submitted') {
-            actionButtons = `
-                <div class="mt-3 d-flex gap-2">
-                    <button class="btn btn-success" id="approve-statement-btn">
-                        <i class="fas fa-check me-1"></i>Onayla
-                    </button>
-                    <button class="btn btn-danger" id="reject-statement-btn">
-                        <i class="fas fa-times me-1"></i>Reddet
-                    </button>
-                </div>
+            footerButtons = `
+                <button type="button" class="btn btn-sm btn-success" id="approve-statement-btn">
+                    <i class="fas fa-check me-1"></i>Onayla
+                </button>
+                <button type="button" class="btn btn-sm btn-danger" id="reject-statement-btn">
+                    <i class="fas fa-times me-1"></i>Reddet
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Kapat
+                </button>
             `;
         } else if (statement.status === 'rejected') {
-            actionButtons = `
-                <div class="mt-3 d-flex gap-2">
-                    <button class="btn btn-primary" id="refresh-statement-btn">
-                        <i class="fas fa-sync me-1"></i>Yenile
-                    </button>
-                    <button class="btn btn-success" id="submit-statement-btn">
-                        <i class="fas fa-paper-plane me-1"></i>Onaya Gönder
-                    </button>
-                </div>
+            footerButtons = `
+                <button type="button" class="btn btn-sm btn-primary" id="refresh-statement-btn">
+                    <i class="fas fa-sync me-1"></i>Yenile
+                </button>
+                <button type="button" class="btn btn-sm btn-success" id="submit-statement-btn">
+                    <i class="fas fa-paper-plane me-1"></i>Onaya Gönder
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Kapat
+                </button>
             `;
         } else if (statement.status === 'approved') {
-            actionButtons = `
-                <div class="mt-3">
-                    <button class="btn btn-info" id="mark-paid-btn">
-                        <i class="fas fa-money-check-alt me-1"></i>Ödendi olarak işaretle
-                    </button>
-                </div>
+            footerButtons = `
+                <button type="button" class="btn btn-sm btn-info" id="mark-paid-btn">
+                    <i class="fas fa-money-check-alt me-1"></i>Ödendi olarak işaretle
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Kapat
+                </button>
+            `;
+        } else {
+            // Default: just close button
+            footerButtons = `
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                    <i class="fas fa-times me-1"></i>Kapat
+                </button>
             `;
         }
         
-        if (actionButtons) {
-            const actionDiv = document.createElement('div');
-            actionDiv.innerHTML = actionButtons;
-            modalBody.appendChild(actionDiv);
-            
-            // Set up button handlers
-            const refreshBtn = document.getElementById('refresh-statement-btn');
-            if (refreshBtn) {
-                refreshBtn.addEventListener('click', async () => {
-                    if (confirm('Mevcut kalemler silinip güncel verilerden yeniden oluşturulacak. Düzeltmeler korunacaktır. Devam edilsin mi?')) {
-                        try {
-                            await refreshStatement(statement.id);
-                            showNotification('Hakediş yenilendi', 'success');
-                            viewStatementDetail(statement.id);
-                        } catch (error) {
-                            console.error('Error refreshing statement:', error);
-                            showNotification(error.message || 'Hakediş yenilenirken hata oluştu', 'error');
-                        }
-                    }
-                });
-            }
-            
-            const submitBtn = document.getElementById('submit-statement-btn');
-            if (submitBtn) {
-                submitBtn.addEventListener('click', async () => {
+        modalFooter.innerHTML = footerButtons;
+        
+        // Set up button handlers
+        const refreshBtn = document.getElementById('refresh-statement-btn');
+        if (refreshBtn) {
+            refreshBtn.addEventListener('click', async () => {
+                if (confirm('Mevcut kalemler silinip güncel verilerden yeniden oluşturulacak. Düzeltmeler korunacaktır. Devam edilsin mi?')) {
                     try {
-                        await submitStatement(statement.id);
-                        showNotification('Hakediş onaya gönderildi', 'success');
+                        await refreshStatement(statement.id);
+                        showNotification('Hakediş yenilendi', 'success');
+                        viewStatementDetail(statement.id);
+                    } catch (error) {
+                        console.error('Error refreshing statement:', error);
+                        showNotification(error.message || 'Hakediş yenilenirken hata oluştu', 'error');
+                    }
+                }
+            });
+        }
+        
+        const submitBtn = document.getElementById('submit-statement-btn');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', async () => {
+                try {
+                    await submitStatement(statement.id);
+                    showNotification('Hakediş onaya gönderildi', 'success');
+                    viewStatementDetail(statement.id);
+                    await loadStatements();
+                } catch (error) {
+                    console.error('Error submitting statement:', error);
+                    showNotification(error.message || 'Hakediş onaya gönderilirken hata oluştu', 'error');
+                }
+            });
+        }
+        
+        const approveBtn = document.getElementById('approve-statement-btn');
+        if (approveBtn) {
+            approveBtn.addEventListener('click', () => {
+                showDecideModal(statement.id, true);
+            });
+        }
+        
+        const rejectBtn = document.getElementById('reject-statement-btn');
+        if (rejectBtn) {
+            rejectBtn.addEventListener('click', () => {
+                showDecideModal(statement.id, false);
+            });
+        }
+        
+        const markPaidBtn = document.getElementById('mark-paid-btn');
+        if (markPaidBtn) {
+            markPaidBtn.addEventListener('click', async () => {
+                if (confirm('Hakedişi ödendi olarak işaretlemek istediğinizden emin misiniz?')) {
+                    try {
+                        await markStatementAsPaid(statement.id);
+                        showNotification('Hakediş ödendi olarak işaretlendi', 'success');
                         viewStatementDetail(statement.id);
                         await loadStatements();
                     } catch (error) {
-                        console.error('Error submitting statement:', error);
-                        showNotification(error.message || 'Hakediş onaya gönderilirken hata oluştu', 'error');
+                        console.error('Error marking as paid:', error);
+                        showNotification(error.message || 'Hakediş işaretlenirken hata oluştu', 'error');
                     }
-                });
-            }
-            
-            const approveBtn = document.getElementById('approve-statement-btn');
-            if (approveBtn) {
-                approveBtn.addEventListener('click', () => {
-                    showDecideModal(statement.id, true);
-                });
-            }
-            
-            const rejectBtn = document.getElementById('reject-statement-btn');
-            if (rejectBtn) {
-                rejectBtn.addEventListener('click', () => {
-                    showDecideModal(statement.id, false);
-                });
-            }
-            
-            const markPaidBtn = document.getElementById('mark-paid-btn');
-            if (markPaidBtn) {
-                markPaidBtn.addEventListener('click', async () => {
-                    if (confirm('Hakedişi ödendi olarak işaretlemek istediğinizden emin misiniz?')) {
-                        try {
-                            await markStatementAsPaid(statement.id);
-                            showNotification('Hakediş ödendi olarak işaretlendi', 'success');
-                            viewStatementDetail(statement.id);
-                            await loadStatements();
-                        } catch (error) {
-                            console.error('Error marking as paid:', error);
-                            showNotification(error.message || 'Hakediş işaretlenirken hata oluştu', 'error');
-                        }
-                    }
-                });
-            }
+                }
+            });
         }
     }
 }
@@ -920,8 +1005,4 @@ function formatCurrency(amount, currency) {
         minimumFractionDigits: 2,
         maximumFractionDigits: 2
     }).format(amount) + ' ' + (currency || 'TRY');
-}
-
-function setupEventListeners() {
-    // Additional event listeners if needed
 }

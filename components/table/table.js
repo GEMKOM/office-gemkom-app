@@ -288,11 +288,13 @@ export class TableComponent {
     }
     
     renderGroupHeader(groupKey, groupValue, groupRows, isExpanded) {
-        const colspan = this.options.columns.length + (this.options.actions.length > 0 ? 1 : 0);
         const toggleIcon = isExpanded ? 'fa-chevron-down' : 'fa-chevron-right';
         const toggleClass = this.options.groupCollapsible ? 'group-header-toggle' : '';
         const toggleClick = this.options.groupCollapsible ? 
             `onclick="document.getElementById('${this.containerId}').dispatchEvent(new CustomEvent('toggleGroup', {detail: {groupKey: '${groupKey}'}}))"` : '';
+        
+        // Check if there's an _expand column (first column with field '_expand')
+        const hasExpandColumn = this.options.columns.length > 0 && this.options.columns[0].field === '_expand';
         
         // Format group header
         let headerContent = '';
@@ -309,13 +311,33 @@ export class TableComponent {
             `;
         }
         
-        return `
-            <tr class="group-header ${toggleClass}" data-group-key="${groupKey}" ${toggleClick}>
-                <td colspan="${colspan}" class="group-header-cell">
-                    ${headerContent}
-                </td>
-            </tr>
-        `;
+        if (hasExpandColumn) {
+            // Render with separate cells: expand column + content spanning remaining columns
+            const expandColumn = this.options.columns[0];
+            const expandWidth = expandColumn.width || '50px';
+            const remainingColspan = this.options.columns.length - 1 + (this.options.actions.length > 0 ? 1 : 0);
+            
+            return `
+                <tr class="group-header ${toggleClass}" data-group-key="${groupKey}">
+                    <td class="group-header-cell" style="width: ${expandWidth};" ${toggleClick}>
+                        ${this.options.groupCollapsible ? `<i class="fas ${toggleIcon}" style="color: #0d6efd; cursor: pointer;"></i>` : ''}
+                    </td>
+                    <td colspan="${remainingColspan}" class="group-header-cell">
+                        ${headerContent}
+                    </td>
+                </tr>
+            `;
+        } else {
+            // Original behavior: single cell spanning all columns
+            const colspan = this.options.columns.length + (this.options.actions.length > 0 ? 1 : 0);
+            return `
+                <tr class="group-header ${toggleClass}" data-group-key="${groupKey}" ${toggleClick}>
+                    <td colspan="${colspan}" class="group-header-cell">
+                        ${headerContent}
+                    </td>
+                </tr>
+            `;
+        }
     }
     
     renderRow(row, rowIndex) {

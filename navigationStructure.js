@@ -318,16 +318,16 @@ export const NAVIGATION_STRUCTURE = {
                 icon: 'fas fa-project-diagram',
                 children: {}
             },
-            '/subcontracting': {
+            '/manufacturing/subcontracting': {
                 label: 'Taşeronluk',
                 icon: 'fas fa-handshake',
                 children: {
-                    '/subcontracting/subcontractors': {
+                    '/manufacturing/subcontracting/subcontractors': {
                         label: 'Taşeronlar',
                         icon: 'fas fa-building',
                         children: {}
                     },
-                    '/subcontracting/statements': {
+                    '/manufacturing/subcontracting/statements': {
                         label: 'Hakedişler',
                         icon: 'fas fa-file-invoice-dollar',
                         children: {}

@@ -1,20 +1,20 @@
-import { guardRoute } from '../../../authService.js';
-import { initNavbar } from '../../../components/navbar.js';
+import { guardRoute } from '../../../../authService.js';
+import { initNavbar } from '../../../../components/navbar.js';
 import { 
     fetchSubcontractors, 
     createSubcontractor, 
     updateSubcontractor, 
     deleteSubcontractor 
-} from '../../../apis/subcontracting/subcontractors.js';
-import { HeaderComponent } from '../../../components/header/header.js';
-import { FiltersComponent } from '../../../components/filters/filters.js';
-import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
-import { TableComponent } from '../../../components/table/table.js';
-import { DisplayModal } from '../../../components/display-modal/display-modal.js';
-import { EditModal } from '../../../components/edit-modal/edit-modal.js';
-import { initRouteProtection } from '../../../apis/routeProtection.js';
-import { showNotification } from '../../../components/notification/notification.js';
-import { CURRENCY_OPTIONS } from '../../../apis/projects/customers.js';
+} from '../../../../apis/subcontracting/subcontractors.js';
+import { HeaderComponent } from '../../../../components/header/header.js';
+import { FiltersComponent } from '../../../../components/filters/filters.js';
+import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
+import { TableComponent } from '../../../../components/table/table.js';
+import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
+import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
+import { initRouteProtection } from '../../../../apis/routeProtection.js';
+import { showNotification } from '../../../../components/notification/notification.js';
+import { CURRENCY_OPTIONS } from '../../../../apis/projects/customers.js';
 
 // Header component instance
 let headerComponent;
@@ -835,4 +835,3 @@ async function showDeleteSubcontractorModal(subcontractorId, subcontractorName) 
         showNotification('Silme onayı gösterilirken hata oluştu', 'error');
     }
 }
-
