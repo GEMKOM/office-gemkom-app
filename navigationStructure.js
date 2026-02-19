@@ -319,7 +319,7 @@ export const NAVIGATION_STRUCTURE = {
                 children: {}
             },
             '/manufacturing/subcontracting': {
-                label: 'Taşeronluk',
+                label: 'Taşeron',
                 icon: 'fas fa-handshake',
                 children: {
                     '/manufacturing/subcontracting/subcontractors': {

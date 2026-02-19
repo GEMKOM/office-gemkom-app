@@ -157,7 +157,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ]
             },
             {
-                title: 'Taşeronluk',
+                title: 'Taşeron',
                 description: 'Taşeron yönetimi, fiyat kademeleri ve hakediş işlemleri.',
                 icon: 'fas fa-handshake',
                 iconColor: 'primary',

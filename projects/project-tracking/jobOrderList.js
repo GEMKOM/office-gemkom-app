@@ -1835,7 +1835,7 @@ window.viewJobOrder = async function(jobNo) {
         if (canViewSubcontracting()) {
             viewJobOrderModal.addTab({
                 id: 'taseronluk',
-                label: 'Taşeronluk',
+                label: 'Taşeron',
                 icon: 'fas fa-handshake',
                 iconColor: 'text-primary',
                 customContent: '<div id="price-tiers-container" style="padding: 20px;"></div>'
