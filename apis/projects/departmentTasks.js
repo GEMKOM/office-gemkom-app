@@ -636,6 +636,46 @@ export const STATUS_OPTIONS = [
 ];
 
 /**
+ * Bulk create subtasks for a parent task
+ * @param {number} parentTaskId - Parent task ID
+ * @param {Object} bulkData - Bulk creation data
+ * @param {Array<Object>} bulkData.tasks - Array of TaskNode objects (required)
+ * @param {string} bulkData.tasks[].title - Task title (required, max 255)
+ * @param {number} [bulkData.tasks[].weight] - Weight 1-100 (default 10)
+ * @param {number} [bulkData.tasks[].sequence] - Sequence number ≥ 1 (default 1)
+ * @param {string} [bulkData.tasks[].task_type] - Task type: cnc_cutting, machining, welding, painting, part
+ * @param {string} [bulkData.tasks[].description] - Description
+ * @param {string} [bulkData.tasks[].notes] - Notes
+ * @param {number} [bulkData.tasks[].assigned_to] - Assigned user ID (must be active)
+ * @param {string} [bulkData.tasks[].target_start_date] - Target start date (YYYY-MM-DD)
+ * @param {string} [bulkData.tasks[].target_completion_date] - Target completion date (YYYY-MM-DD)
+ * @param {Array<Object>} [bulkData.tasks[].subtasks] - Nested subtasks (unlimited depth)
+ * @returns {Promise<Object>} Response with status, message, and created tasks
+ */
+export async function bulkCreateSubtasks(parentTaskId, bulkData) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/department-tasks/${parentTaskId}/bulk_create_subtasks/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(bulkData)
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error bulk creating subtasks for task ${parentTaskId}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Department options (static fallback if API is unavailable)
  */
 export const DEPARTMENT_OPTIONS = [

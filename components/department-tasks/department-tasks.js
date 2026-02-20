@@ -18,6 +18,7 @@ import {
     unskipDepartmentTask,
     patchDepartmentTask,
     createDepartmentTask,
+    bulkCreateSubtasks,
     getStatusChoices,
     getDepartmentChoices,
     STATUS_OPTIONS,
@@ -35,6 +36,7 @@ import {
 } from '../../apis/subcontracting/assignments.js';
 import { fetchSubcontractors } from '../../apis/subcontracting/subcontractors.js';
 import { fetchPriceTiers, getPriceTierRemainingWeight, updatePriceTier } from '../../apis/subcontracting/priceTiers.js';
+import { submitQCReview, bulkSubmitQCReviews } from '../../apis/qualityControl.js';
 
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
@@ -98,8 +100,10 @@ export async function initDepartmentTasksPage(config) {
     let taskDetailsModal = null;
     let editTaskModal = null;
     let addSubtaskModal = null;
+    let bulkSubtaskModal = null;
     let createReleaseModal = null;
     let completeRevisionModal = null;
+    let submitQCModal = null;
 
 // Status color mapping to ensure consistency with CSS classes
 const STATUS_COLOR_MAP = {
@@ -193,6 +197,11 @@ async function initializeComponents() {
         // Initialize release modal for design department
         if (department === 'design') {
             initializeReleaseModal();
+        }
+        
+        // Initialize QC submit modal for manufacturing department
+        if (department === 'manufacturing') {
+            initializeQCSubmitModal();
         }
         
         // Check for task parameter in URL to open modal directly
@@ -569,7 +578,20 @@ function initializeTableComponent() {
                         ? `<span class="status-badge status-red ms-1"><i class="fas fa-rotate me-1"></i>Revizyonda</span>`
                         : '';
                     
-                    return `<div class="d-flex align-items-center flex-wrap">${statusBadge}${revisionBadge}</div>`;
+                    // QC status badge
+                    let qcBadge = '';
+                    if (row.qc_required === true) {
+                        const qcStatusMap = {
+                            'pending': { class: 'status-yellow', label: 'KK Bekleniyor', icon: 'fas fa-clock' },
+                            'waiting': { class: 'status-blue', label: 'KK Bekleniyor', icon: 'fas fa-hourglass-half' },
+                            'approved': { class: 'status-green', label: 'KK Onaylandı', icon: 'fas fa-check-circle' },
+                            'rejected': { class: 'status-red', label: 'KK Reddedildi', icon: 'fas fa-times-circle' }
+                        };
+                        const qcStatus = qcStatusMap[row.qc_status] || { class: 'status-grey', label: 'KK', icon: 'fas fa-clipboard-check' };
+                        qcBadge = `<span class="status-badge ${qcStatus.class} ms-1"><i class="${qcStatus.icon} me-1"></i>${qcStatus.label}</span>`;
+                    }
+                    
+                    return `<div class="d-flex align-items-center flex-wrap">${statusBadge}${revisionBadge}${qcBadge}</div>`;
                 }
             },
             {
@@ -757,8 +779,8 @@ function initializeTableComponent() {
             {
                 key: 'view',
                 label: 'Detay',
-                icon: 'fas fa-eye',
-                class: 'btn-outline-info',
+                icon: 'fas fa-cog',
+                class: 'btn-outline-primary',
                 onClick: (row) => viewTaskDetails(row.id),
                 visible: (row) => {
                     // Hide for machining_part, cnc_part
@@ -766,47 +788,6 @@ function initializeTableComponent() {
                     // Hide for procurement_item tasks (with or without purchase_order_id)
                     if (row.task_type === 'procurement_item') return false;
                     return true;
-                }
-            },
-            {
-                key: 'edit',
-                label: 'Düzenle',
-                icon: 'fas fa-edit',
-                class: 'btn-outline-primary',
-                onClick: (row) => showEditTaskModal(row.id),
-                visible: (row) => {
-                    // Hide for machining_part, cnc_part
-                    if (row.type === 'machining_part' || row.type === 'cnc_part') return false;
-                    // Hide for procurement_item tasks (with or without purchase_order_id)
-                    if (row.task_type === 'procurement_item') return false;
-                    return true;
-                }
-            },
-            {
-                key: 'add-subtask',
-                label: 'Alt Görev Ekle',
-                icon: 'fas fa-plus-circle',
-                class: 'btn-outline-info',
-                onClick: (row) => showAddSubtaskModal(row.id),
-                visible: (row) => {
-                    // Available at all hierarchy levels (top-level, subtasks, subtasks of subtasks, etc.)
-                    // Hide only for machining_part, cnc_part, and procurement_item tasks
-                    if (row.type === 'machining_part' || row.type === 'cnc_part') return false;
-                    // Hide for procurement_item tasks (with or without purchase_order_id)
-                    if (row.task_type === 'procurement_item') return false;
-                    return true;
-                }
-            },
-            {
-                key: 'start',
-                label: 'Başlat',
-                icon: 'fas fa-play',
-                class: 'btn-outline-success',
-                onClick: (row) => handleStartTask(row.id),
-                visible: (row) => {
-                    // Hide for procurement_item tasks (with or without purchase_order_id)
-                    if (row.task_type === 'procurement_item') return false;
-                    return row.status === 'pending' && row.can_start && row.type !== 'machining_part' && row.type !== 'cnc_part';
                 }
             },
             {
@@ -821,19 +802,15 @@ function initializeTableComponent() {
                         return !!row.planning_request_item_id && row.is_delivered === false;
                     }
                     // For other tasks, show only when in_progress and not machining/cnc parts
-                    return row.status === 'in_progress' && row.type !== 'machining_part' && row.type !== 'cnc_part';
-                }
-            },
-            {
-                key: 'uncomplete',
-                label: 'Tamamlanmayı Geri Al',
-                icon: 'fas fa-undo',
-                class: 'btn-outline-warning',
-                onClick: (row) => handleUncompleteTask(row.id),
-                visible: (row) => {
-                    // Hide for procurement_item tasks (with or without purchase_order_id)
-                    if (row.task_type === 'procurement_item') return false;
-                    return row.status === 'completed' && row.type !== 'machining_part' && row.type !== 'cnc_part';
+                    // Also check QC approval: if qc_required=true, must have has_qc_approval=true (qc_status='approved')
+                    if (row.status !== 'in_progress' || row.type === 'machining_part' || row.type === 'cnc_part') {
+                        return false;
+                    }
+                    // Block completion if QC required but not approved
+                    if (row.qc_required === true && row.has_qc_approval !== true) {
+                        return false;
+                    }
+                    return true;
                 }
             },
             {
@@ -846,44 +823,6 @@ function initializeTableComponent() {
                     // Hide for procurement_item tasks (with or without purchase_order_id)
                     if (row.task_type === 'procurement_item') return false;
                     return row.status !== 'completed' && row.status !== 'skipped' && row.type !== 'machining_part' && row.type !== 'cnc_part';
-                }
-            },
-            {
-                key: 'unskip',
-                label: 'Atlamayı Geri Al',
-                icon: 'fas fa-undo',
-                class: 'btn-outline-warning',
-                onClick: (row) => handleUnskipTask(row.id),
-                visible: (row) => {
-                    // Hide for procurement_item tasks (with or without purchase_order_id)
-                    if (row.task_type === 'procurement_item') return false;
-                    return row.status === 'skipped' && row.type !== 'machining_part' && row.type !== 'cnc_part';
-                }
-            },
-            {
-                key: 'assign-subcontractor',
-                label: 'Taşeron Ata',
-                icon: 'fas fa-handshake',
-                class: 'btn-outline-primary',
-                onClick: (row) => showCreateAssignmentWithSubtaskModal(row.id, row),
-                visible: (row) => {
-                    // Show for all welding (Kaynaklı İmalat) tasks in manufacturing department
-                    // Works at any hierarchy level (top-level, subtasks, subtasks of subtasks, etc.)
-                    if (department !== 'manufacturing') return false;
-                    // Check if this task itself has task_type === 'welding' (regardless of hierarchy level)
-                    return row.task_type === 'welding';
-                }
-            },
-            {
-                key: 'set-paint-price',
-                label: 'Boya Fiyatı Belirle',
-                icon: 'fas fa-paint-brush',
-                class: 'btn-outline-info',
-                onClick: (row) => showSetPaintPriceModal(row.id, row),
-                visible: (row) => {
-                    // Show for all painting tasks
-                    // Works at any hierarchy level
-                    return row.task_type === 'painting';
                 }
             }
         ],
@@ -904,9 +843,9 @@ function initializeModalComponents() {
 
     // Task details modal
     taskDetailsModal = new DisplayModal('task-details-modal-container', {
-        title: 'Görev Detayları',
-        icon: 'fas fa-info-circle',
-        size: 'lg',
+        title: 'Görev İşlemleri',
+        icon: 'fas fa-tasks',
+        size: 'xl',
         showEditButton: false
     });
     
@@ -1061,6 +1000,18 @@ function initializeModalComponents() {
             showNotification(errorMessage, 'error');
         }
     });
+
+    // Bulk subtask modal (only if container exists)
+    const bulkSubtaskContainer = document.getElementById('bulk-subtask-modal-container');
+    if (bulkSubtaskContainer) {
+        bulkSubtaskModal = new EditModal('bulk-subtask-modal-container', {
+            title: 'Toplu Alt Görev Ekle',
+            icon: 'fas fa-layer-group',
+            size: 'xl',
+            showEditButton: false,
+            saveButtonText: 'Oluştur'
+        });
+    }
 }
 
 function initializeReleaseModal() {
@@ -1232,6 +1183,178 @@ function initializeReleaseModal() {
             showNotification(errorMessage, 'error');
         }
     });
+}
+
+function initializeQCSubmitModal() {
+    // QC submit modal
+    submitQCModal = new EditModal('submit-qc-modal-container', {
+        title: 'Kalite Kontrole Gönder',
+        icon: 'fas fa-clipboard-check',
+        size: 'lg',
+        showEditButton: false,
+        saveButtonText: 'Gönder'
+    });
+
+    submitQCModal.onSaveCallback(async (formData) => {
+        const taskId = window.pendingQCTaskId;
+        if (!taskId) return;
+
+        try {
+            // Build part_data object from form fields
+            const partData = {};
+            
+            if (formData.location) {
+                partData.location = formData.location.trim();
+            }
+            if (formData.quantity_inspected) {
+                partData.quantity_inspected = parseInt(formData.quantity_inspected);
+            }
+            if (formData.position_no) {
+                partData.position_no = formData.position_no.trim();
+            }
+            if (formData.drawing_no) {
+                partData.drawing_no = formData.drawing_no.trim();
+            }
+            if (formData.notes) {
+                partData.notes = formData.notes.trim();
+            }
+
+            // Add any other custom fields that might be in the form
+            Object.keys(formData).forEach(key => {
+                if (!['location', 'quantity_inspected', 'position_no', 'drawing_no', 'notes'].includes(key) && formData[key]) {
+                    partData[key] = formData[key];
+                }
+            });
+
+            await submitQCReview(taskId, partData);
+            showNotification('Görev kalite kontrole gönderildi', 'success');
+            submitQCModal.hide();
+            window.pendingQCTaskId = null;
+            await loadTasks();
+        } catch (error) {
+            console.error('Error submitting QC review:', error);
+            let errorMessage = 'Kalite kontrole gönderilirken hata oluştu';
+            try {
+                if (error.message) {
+                    errorMessage = error.message;
+                }
+            } catch (e) {
+                // If parsing fails, use default message
+            }
+            showNotification(errorMessage, 'error');
+        }
+    });
+}
+
+async function showSubmitQCModal(taskId, taskRow = null) {
+    try {
+        if (!submitQCModal) {
+            showNotification('QC gönderme modalı başlatılamadı', 'error');
+            return;
+        }
+
+        const task = taskRow || await getDepartmentTaskById(taskId);
+
+        if (!task.qc_required) {
+            showNotification('Bu görev kalite kontrol gerektirmiyor', 'error');
+            return;
+        }
+
+        // Allow submitting even if already approved - can send multiple reviews
+        window.pendingQCTaskId = taskId;
+
+        submitQCModal.clearAll();
+
+        submitQCModal.addSection({
+            title: 'Parça Bilgileri',
+            icon: 'fas fa-cog'
+        });
+
+        submitQCModal.addField({
+            id: 'qc-job-order',
+            name: 'job_order',
+            label: 'İş Emri',
+            type: 'text',
+            value: task.job_order ? `${task.job_order} - ${task.job_order_title || ''}` : '-',
+            readonly: true,
+            icon: 'fas fa-file-invoice',
+            colSize: 12,
+            section: 0
+        });
+
+        submitQCModal.addField({
+            id: 'qc-task-title',
+            name: 'task_title',
+            label: 'Görev',
+            type: 'text',
+            value: task.title || '-',
+            readonly: true,
+            icon: 'fas fa-tasks',
+            colSize: 12,
+            section: 0
+        });
+
+        submitQCModal.addField({
+            id: 'qc-location',
+            name: 'location',
+            label: 'Konum',
+            type: 'text',
+            placeholder: 'Örn: Atölye B, Raf 3',
+            icon: 'fas fa-map-marker-alt',
+            colSize: 6,
+            section: 0
+        });
+
+        submitQCModal.addField({
+            id: 'qc-quantity',
+            name: 'quantity_inspected',
+            label: 'İncelenen Miktar',
+            type: 'number',
+            placeholder: '0',
+            icon: 'fas fa-hashtag',
+            colSize: 6,
+            section: 0
+        });
+
+        submitQCModal.addField({
+            id: 'qc-position',
+            name: 'position_no',
+            label: 'Pozisyon No',
+            type: 'text',
+            placeholder: 'Örn: POS-07',
+            icon: 'fas fa-tag',
+            colSize: 6,
+            section: 0
+        });
+
+        submitQCModal.addField({
+            id: 'qc-drawing',
+            name: 'drawing_no',
+            label: 'Çizim No',
+            type: 'text',
+            placeholder: 'Örn: GEM-254-01-A',
+            icon: 'fas fa-drafting-compass',
+            colSize: 6,
+            section: 0
+        });
+
+        submitQCModal.addField({
+            id: 'qc-notes',
+            name: 'notes',
+            label: 'Notlar',
+            type: 'textarea',
+            placeholder: 'İlk parti, ölçümler ekte',
+            icon: 'fas fa-sticky-note',
+            colSize: 12,
+            section: 0
+        });
+
+        submitQCModal.render();
+        submitQCModal.show();
+    } catch (error) {
+        console.error('Error showing QC submit modal:', error);
+        showNotification('Modal açılırken hata oluştu', 'error');
+    }
 }
 
 async function loadTasks() {
@@ -2460,181 +2583,130 @@ async function viewTaskDetails(taskId) {
     try {
         const task = await getDepartmentTaskById(taskId);
         
+        // Determine available actions based on task type and status
+        const availableActions = getAvailableActions(task);
+        
+        if (availableActions.length === 0) {
+            showNotification('Bu görev için kullanılabilir işlem bulunmamaktadır', 'info');
+            return;
+        }
+
+        // Create custom modal with vertical tabs
         taskDetailsModal.clearData();
         
-        // Add task information section
-        taskDetailsModal.addSection({
-            title: 'Görev Bilgileri',
-            icon: 'fas fa-info-circle',
-            iconColor: 'text-primary'
-        });
+        // Create custom HTML for vertical tab interface
+        const modalHtml = `
+            <div class="task-actions-modal">
+                <div class="row g-0 h-100">
+                    <!-- Vertical Tabs -->
+                    <div class="col-md-3 border-end bg-light" style="min-height: 400px;">
+                        <div class="nav flex-column nav-pills p-3" id="task-actions-tabs" role="tablist">
+                            ${availableActions.map((action, index) => `
+                                <button class="nav-link ${index === 0 ? 'active' : ''} mb-2 text-start" 
+                                        id="tab-${action.key}-nav" 
+                                        data-bs-toggle="tab" 
+                                        data-bs-target="#tab-${action.key}-pane" 
+                                        type="button" 
+                                        role="tab"
+                                        aria-controls="tab-${action.key}-pane"
+                                        aria-selected="${index === 0 ? 'true' : 'false'}"
+                                        style="${index === 0 ? 'color: #0d6efd !important; background-color: #e7f1ff !important; border: 2px solid #0d6efd !important;' : 'color: #212529 !important; background-color: #ffffff !important;'}">
+                                    <i class="${action.icon} me-2" style="color: ${index === 0 ? '#0d6efd' : '#212529'} !important;"></i><span style="color: ${index === 0 ? '#0d6efd' : '#212529'} !important;">${action.label}</span>
+                                </button>
+                            `).join('')}
+                        </div>
+                    </div>
+                    <!-- Tab Content -->
+                    <div class="col-md-9">
+                        <div class="tab-content p-4" id="task-actions-tab-content">
+                            ${availableActions.map((action, index) => `
+                                <div class="tab-pane fade ${index === 0 ? 'show active' : ''}" 
+                                     id="tab-${action.key}-pane" 
+                                     role="tabpanel"
+                                     aria-labelledby="tab-${action.key}-nav">
+                                    <div id="action-content-${action.key}">
+                                        <!-- Content will be loaded here -->
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
 
-        taskDetailsModal.addField({
-            id: 'task-title',
-            name: 'title',
-            label: 'Başlık',
-            type: 'text',
-            value: task.title || '-',
-            icon: 'fas fa-heading',
-            colSize: 12
-        });
-
-        taskDetailsModal.addField({
-            id: 'task-job-order',
-            name: 'job_order',
-            label: 'İş Emri',
-            type: 'text',
-            value: task.job_order ? `${task.job_order} - ${task.job_order_title || ''}` : '-',
-            icon: 'fas fa-file-invoice',
-            colSize: 6
-        });
-
-        taskDetailsModal.addField({
-            id: 'task-status',
-            name: 'status',
-            label: 'Durum',
-            type: 'text',
-            value: task.status_display || '-',
-            icon: 'fas fa-info-circle',
-            colSize: 6
-        });
-
-        if (task.description) {
-            taskDetailsModal.addField({
-                id: 'task-description',
-                name: 'description',
-                label: 'Açıklama',
-                type: 'textarea',
-                value: task.description,
-                icon: 'fas fa-align-left',
-                colSize: 12
-            });
-        }
-
-        if (task.assigned_to_name) {
-            taskDetailsModal.addField({
-                id: 'task-assigned',
-                name: 'assigned_to',
-                label: 'Atanan Kişi',
-                type: 'text',
-                value: task.assigned_to_name,
-                icon: 'fas fa-user',
-                colSize: 6
-            });
-        }
-
-        if (task.target_completion_date) {
-            taskDetailsModal.addField({
-                id: 'task-target-date',
-                name: 'target_completion_date',
-                label: 'Hedef Bitiş Tarihi',
-                type: 'text',
-                value: new Date(task.target_completion_date).toLocaleDateString('tr-TR'),
-                icon: 'fas fa-calendar',
-                colSize: 6
-            });
-        }
-
-        if (task.depends_on_tasks && task.depends_on_tasks.length > 0) {
-            taskDetailsModal.addSection({
-                title: 'Bağımlılıklar',
-                icon: 'fas fa-link',
-                iconColor: 'text-warning'
-            });
-
-            task.depends_on_tasks.forEach((dep, index) => {
-                taskDetailsModal.addField({
-                    id: `dep-${index}`,
-                    name: `dependency_${index}`,
-                    label: `Bağımlılık ${index + 1}`,
-                    type: 'text',
-                    value: `${dep.title} (${dep.status_display || dep.status})`,
-                    icon: 'fas fa-link',
-                    colSize: 12
-                });
-            });
-        }
-
-        // Subtasks section
-        taskDetailsModal.addSection({
-            title: `Alt Görevler (${task.subtasks_count || 0})`,
-            icon: 'fas fa-list',
-            iconColor: 'text-info'
-        });
-
-        if (task.subtasks && task.subtasks.length > 0) {
-            task.subtasks.forEach((subtask, index) => {
-                const status = statusOptions.find(s => s.value === subtask.status) || { label: subtask.status, color: 'grey' };
-                const statusLabel = status.label;
-                
-                taskDetailsModal.addField({
-                    id: `subtask-${index}`,
-                    name: `subtask_${index}`,
-                    label: `Alt Görev ${index + 1} (Sıra: ${subtask.sequence || index + 1})`,
-                    type: 'text',
-                    value: `${subtask.title} - Durum: ${statusLabel}`,
-                    icon: 'fas fa-tasks',
-                    colSize: 12
-                });
-            });
-        } else {
-            taskDetailsModal.addField({
-                id: 'no-subtasks',
-                name: 'no_subtasks',
-                label: 'Alt Görev',
-                type: 'text',
-                value: 'Alt görev bulunmamaktadır',
-                icon: 'fas fa-info-circle',
-                colSize: 12
-            });
-        }
-
-        // Add Taşeron Ataması section for subtasks (only for manufacturing department)
-        // Note: Create button removed - use "Taşeron Ata" button in table actions for Kaynaklı İmalat subtasks
-        if (task.parent && department === 'manufacturing') {
-            await addSubcontractingAssignmentSection(taskDetailsModal, task);
-        }
-
+        taskDetailsModal.addCustomContent(modalHtml);
         taskDetailsModal.render();
         
-        // Add subtask button after rendering (only for main tasks)
-        if (!task.parent) {
-            setTimeout(() => {
-                const modalBody = taskDetailsModal.container.querySelector('.modal-body');
-                if (modalBody) {
-                    // Find the subtasks section
-                    const sections = modalBody.querySelectorAll('.section');
-                    let subtaskSection = null;
-                    sections.forEach(section => {
-                        const title = section.querySelector('.section-title');
-                        if (title && title.textContent.includes('Alt Görevler')) {
-                            subtaskSection = section;
+        // Load content for each action tab
+        availableActions.forEach((action, index) => {
+            if (index === 0) {
+                // Load first tab immediately
+                loadActionContent(task, action);
+            } else {
+                // Load other tabs on click
+                const tabNav = taskDetailsModal.container.querySelector(`#tab-${action.key}-nav`);
+                if (tabNav) {
+                    tabNav.addEventListener('shown.bs.tab', () => {
+                        loadActionContent(task, action);
+                    });
+                }
+            }
+        });
+        
+        // Setup tab click handlers to update colors
+        setTimeout(() => {
+            const tabButtons = taskDetailsModal.container.querySelectorAll('#task-actions-tabs .nav-link');
+            tabButtons.forEach(btn => {
+                btn.addEventListener('click', function() {
+                    // Update all tabs
+                    tabButtons.forEach(tab => {
+                        if (tab === this) {
+                            // Active tab
+                            tab.style.color = '#0d6efd';
+                            tab.style.backgroundColor = '#e7f1ff';
+                            tab.style.border = '2px solid #0d6efd';
+                            const icon = tab.querySelector('i');
+                            const span = tab.querySelector('span');
+                            if (icon) icon.style.color = '#0d6efd';
+                            if (span) span.style.color = '#0d6efd';
+                        } else {
+                            // Non-active tabs
+                            tab.style.color = '#212529';
+                            tab.style.backgroundColor = '#ffffff';
+                            tab.style.border = '1px solid #dee2e6';
+                            const icon = tab.querySelector('i');
+                            const span = tab.querySelector('span');
+                            if (icon) icon.style.color = '#212529';
+                            if (span) span.style.color = '#212529';
                         }
                     });
-                    
-                    if (subtaskSection) {
-                        const sectionContent = subtaskSection.querySelector('.section-content') || subtaskSection;
-                        const buttonDiv = document.createElement('div');
-                        buttonDiv.className = 'mb-3';
-                        buttonDiv.innerHTML = `
-                            <button type="button" class="btn btn-sm btn-primary" id="add-subtask-btn-${task.id}">
-                                <i class="fas fa-plus me-1"></i>Alt Görev Ekle
-                            </button>
-                        `;
-                        sectionContent.insertBefore(buttonDiv, sectionContent.firstChild);
-                        
-                        // Add event listener
-                        const addBtn = document.getElementById(`add-subtask-btn-${task.id}`);
-                        if (addBtn) {
-                            addBtn.addEventListener('click', () => {
-                                taskDetailsModal.hide();
-                                showAddSubtaskModal(task.id);
-                            });
+                });
+                
+                // Also listen to Bootstrap tab events
+                btn.addEventListener('shown.bs.tab', function() {
+                    tabButtons.forEach(tab => {
+                        if (tab.classList.contains('active')) {
+                            tab.style.color = '#0d6efd';
+                            tab.style.backgroundColor = '#e7f1ff';
+                            tab.style.border = '2px solid #0d6efd';
+                            const icon = tab.querySelector('i');
+                            const span = tab.querySelector('span');
+                            if (icon) icon.style.color = '#0d6efd';
+                            if (span) span.style.color = '#0d6efd';
+                        } else {
+                            tab.style.color = '#212529';
+                            tab.style.backgroundColor = '#ffffff';
+                            tab.style.border = '1px solid #dee2e6';
+                            const icon = tab.querySelector('i');
+                            const span = tab.querySelector('span');
+                            if (icon) icon.style.color = '#212529';
+                            if (span) span.style.color = '#212529';
                         }
-                    }
-                }
-            }, 100);
-        }
+                    });
+                });
+            });
+        }, 100);
         
         // Update URL to include the task ID
         const url = new URL(window.location);
@@ -2645,6 +2717,1140 @@ async function viewTaskDetails(taskId) {
     } catch (error) {
         console.error('Error loading task details:', error);
         showNotification('Görev detayları yüklenirken hata oluştu', 'error');
+    }
+}
+
+// Get available actions for a task based on type and status
+function getAvailableActions(task) {
+    const actions = [];
+    
+    // Edit action - available for most tasks
+    if (task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
+        actions.push({
+            key: 'edit',
+            label: 'Düzenle',
+            icon: 'fas fa-edit',
+            handler: 'edit'
+        });
+    }
+    
+    // Start action
+    if (task.status === 'pending' && task.can_start && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
+        actions.push({
+            key: 'start',
+            label: 'Başlat',
+            icon: 'fas fa-play',
+            handler: 'start'
+        });
+    }
+    
+    // Submit QC action - allow even if already approved
+    if (department === 'manufacturing' && task.qc_required === true) {
+        actions.push({
+            key: 'submit-qc',
+            label: 'KK\'ya Gönder',
+            icon: 'fas fa-clipboard-check',
+            handler: 'submit-qc'
+        });
+    }
+    
+    // Uncomplete action
+    if (task.status === 'completed' && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
+        actions.push({
+            key: 'uncomplete',
+            label: 'Tamamlanmayı Geri Al',
+            icon: 'fas fa-undo',
+            handler: 'uncomplete'
+        });
+    }
+    
+    // Unskip action
+    if (task.status === 'skipped' && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
+        actions.push({
+            key: 'unskip',
+            label: 'Atlamayı Geri Al',
+            icon: 'fas fa-undo',
+            handler: 'unskip'
+        });
+    }
+    
+    // Add subtask action - only for design department
+    if (department === 'design' && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
+        actions.push({
+            key: 'add-subtask',
+            label: 'Alt Görev Ekle',
+            icon: 'fas fa-plus-circle',
+            handler: 'add-subtask'
+        });
+    }
+    
+    // Bulk subtask action
+    if (task.task_type !== null && task.task_type !== undefined && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
+        actions.push({
+            key: 'bulk-subtask',
+            label: 'Toplu Alt Görev Ekle',
+            icon: 'fas fa-layer-group',
+            handler: 'bulk-subtask'
+        });
+    }
+    
+    // Assign subcontractor action
+    if (department === 'manufacturing' && task.task_type === 'welding') {
+        actions.push({
+            key: 'assign-subcontractor',
+            label: 'Taşeron Ata',
+            icon: 'fas fa-handshake',
+            handler: 'assign-subcontractor'
+        });
+    }
+    
+    // Set paint price action
+    if (task.task_type === 'painting') {
+        actions.push({
+            key: 'set-paint-price',
+            label: 'Boya Fiyatı Belirle',
+            icon: 'fas fa-paint-brush',
+            handler: 'set-paint-price'
+        });
+    }
+    
+    return actions;
+}
+
+// Load content for a specific action
+async function loadActionContent(task, action) {
+    const contentContainer = taskDetailsModal.container.querySelector(`#action-content-${action.key}`);
+    if (!contentContainer || contentContainer.dataset.loaded === 'true') {
+        return; // Already loaded
+    }
+    
+    contentContainer.innerHTML = '<div class="text-center py-4"><div class="spinner-border" role="status"></div></div>';
+    
+    try {
+        let content = '';
+        
+        switch (action.handler) {
+            case 'edit':
+                content = await renderEditActionForm(task);
+                break;
+            case 'start':
+                content = await renderStartActionForm(task);
+                break;
+            case 'complete':
+                content = await renderCompleteActionForm(task);
+                break;
+            case 'submit-qc':
+                content = await renderSubmitQCActionForm(task);
+                break;
+            case 'uncomplete':
+                content = await renderUncompleteActionForm(task);
+                break;
+            case 'skip':
+                content = await renderSkipActionForm(task);
+                break;
+            case 'unskip':
+                content = await renderUnskipActionForm(task);
+                break;
+            case 'add-subtask':
+                content = await renderAddSubtaskActionForm(task);
+                break;
+            case 'bulk-subtask':
+                content = await renderBulkSubtaskActionForm(task);
+                break;
+            case 'assign-subcontractor':
+                content = await renderAssignSubcontractorActionForm(task);
+                break;
+            case 'set-paint-price':
+                content = await renderSetPaintPriceActionForm(task);
+                break;
+            default:
+                content = '<p>İşlem formu yüklenemedi</p>';
+        }
+        
+        contentContainer.innerHTML = content;
+        contentContainer.dataset.loaded = 'true';
+        
+        // Setup bulk subtask builder if needed
+        if (action.handler === 'bulk-subtask') {
+            setupBulkSubtaskBuilderInline(task, contentContainer);
+        }
+        
+        // Setup QC reviews builder if needed
+        if (action.handler === 'submit-qc') {
+            setupQCReviewsBuilderInline(task, contentContainer);
+        }
+        
+        // Attach event listeners for form submission
+        attachActionFormListeners(task, action);
+    } catch (error) {
+        console.error(`Error loading ${action.key} content:`, error);
+        contentContainer.innerHTML = '<p class="text-danger">İçerik yüklenirken hata oluştu</p>';
+    }
+}
+
+// Render form for edit action
+async function renderEditActionForm(task) {
+    // This will reuse the existing edit modal form structure
+    // We'll create a simplified inline form
+    const userOptions = [
+        { value: '', label: 'Atanmamış' },
+        ...users.map(u => ({ value: u.id.toString(), label: u.name || u.username }))
+    ];
+    
+    const isSubtask = !!task.parent;
+    
+    return `
+        <h5 class="mb-4"><i class="fas fa-edit me-2"></i>Görevi Düzenle</h5>
+        <form id="edit-action-form">
+            <div class="row g-3">
+                <div class="col-md-12">
+                    <label class="form-label">Başlık ${isSubtask ? '' : '<span class="text-muted">(Değiştirilemez)</span>'}</label>
+                    <input type="text" class="form-control" id="edit-title" value="${task.title || ''}" ${!isSubtask ? 'readonly' : ''}>
+                    ${isSubtask ? '<small class="form-text text-muted">Alt görev başlığı düzenlenebilir</small>' : ''}
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label">Açıklama</label>
+                    <textarea class="form-control" id="edit-description" rows="3">${task.description || ''}</textarea>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Atanan Kişi</label>
+                    <select class="form-select" id="edit-assigned-to">
+                        ${userOptions.map(opt => `<option value="${opt.value}" ${task.assigned_to && task.assigned_to.toString() === opt.value ? 'selected' : ''}>${opt.label}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Hedef Bitiş Tarihi</label>
+                    <input type="date" class="form-control" id="edit-target-completion-date" value="${task.target_completion_date ? task.target_completion_date.split('T')[0] : ''}">
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label">Notlar</label>
+                    <textarea class="form-control" id="edit-notes" rows="2">${task.notes || ''}</textarea>
+                </div>
+                <div class="col-md-12">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Kaydet
+                    </button>
+                </div>
+            </div>
+        </form>
+    `;
+}
+
+// Render form for start action
+async function renderStartActionForm(task) {
+    return `
+        <h5 class="mb-4"><i class="fas fa-play me-2"></i>Görevi Başlat</h5>
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            Bu görevi başlatmak istediğinize emin misiniz?
+        </div>
+        <form id="start-action-form">
+            <button type="submit" class="btn btn-success">
+                <i class="fas fa-play me-1"></i>Görevi Başlat
+            </button>
+        </form>
+    `;
+}
+
+// Render form for complete action
+async function renderCompleteActionForm(task) {
+    if (task.task_type === 'procurement_item') {
+        return `
+            <h5 class="mb-4"><i class="fas fa-check me-2"></i>Planlama Talebi Kalemini Teslim Edildi Olarak İşaretle</h5>
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                Bu planlama talebi kalemini teslim edildi olarak işaretlemek istediğinize emin misiniz?
+            </div>
+            <form id="complete-action-form">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-check me-1"></i>Teslim Edildi Olarak İşaretle
+                </button>
+            </form>
+        `;
+    }
+    return `
+        <h5 class="mb-4"><i class="fas fa-check me-2"></i>Görevi Tamamla</h5>
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            Bu görevi tamamlamak istediğinize emin misiniz?
+        </div>
+        <form id="complete-action-form">
+            <button type="submit" class="btn btn-success">
+                <i class="fas fa-check me-1"></i>Görevi Tamamla
+            </button>
+        </form>
+    `;
+}
+
+// Render form for submit QC action
+async function renderSubmitQCActionForm(task) {
+    const reviewsContainerId = `qc-reviews-container-${task.id}`;
+    
+    return `
+        <h5 class="mb-4"><i class="fas fa-clipboard-check me-2"></i>Kalite Kontrolüne Gönder</h5>
+        <form id="submit-qc-action-form">
+            <div class="row g-3 mb-3">
+                <div class="col-md-6">
+                    <label class="form-label">
+                        <i class="fas fa-file-invoice me-1"></i>İş Emri
+                    </label>
+                    <input type="text" class="form-control" value="${task.job_order ? `${task.job_order} - ${task.job_order_title || ''}` : '-'}" readonly>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">
+                        <i class="fas fa-tasks me-1"></i>Görev
+                    </label>
+                    <input type="text" class="form-control" value="${task.title || '-'}" readonly>
+                </div>
+            </div>
+            <div class="mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <h6 class="mb-0"><i class="fas fa-clipboard-list me-2"></i>İnceleme Bilgileri</h6>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-success" id="excel-import-qc-btn-${task.id}">
+                            <i class="fas fa-file-excel me-1"></i>Excel'den İçe Aktar
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="add-qc-review-btn-${task.id}">
+                            <i class="fas fa-plus me-1"></i>İnceleme Ekle
+                        </button>
+                    </div>
+                </div>
+                <div class="row g-2 mb-2">
+                    <div class="col-md-2">
+                        <small class="text-muted fw-bold">
+                            <i class="fas fa-map-marker-alt me-1"></i>Konum
+                        </small>
+                    </div>
+                    <div class="col-md-2">
+                        <small class="text-muted fw-bold">
+                            <i class="fas fa-hashtag me-1"></i>İncelenen Miktar
+                        </small>
+                    </div>
+                    <div class="col-md-3">
+                        <small class="text-muted fw-bold">
+                            <i class="fas fa-drafting-compass me-1"></i>Çizim No
+                        </small>
+                    </div>
+                    <div class="col-md-2">
+                        <small class="text-muted fw-bold">
+                            <i class="fas fa-tag me-1"></i>Pozisyon No
+                        </small>
+                    </div>
+                    <div class="col-md-2">
+                        <small class="text-muted fw-bold">
+                            <i class="fas fa-sticky-note me-1"></i>Notlar
+                        </small>
+                    </div>
+                    <div class="col-md-1">
+                        <small class="text-muted fw-bold">İşlem</small>
+                    </div>
+                </div>
+                <div id="${reviewsContainerId}" class="qc-reviews-container" style="max-height: 400px; overflow-y: auto;">
+                    <!-- Reviews will be added here -->
+                </div>
+            </div>
+            <div class="mt-3">
+                <button type="submit" class="btn btn-warning">
+                    <i class="fas fa-clipboard-check me-1"></i>KK'ya Gönder
+                </button>
+            </div>
+        </form>
+    `;
+}
+
+// Render form for uncomplete action
+async function renderUncompleteActionForm(task) {
+    return `
+        <h5 class="mb-4"><i class="fas fa-undo me-2"></i>Tamamlanmayı Geri Al</h5>
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            Bu görevin tamamlanmasını geri almak istediğinize emin misiniz?
+        </div>
+        <form id="uncomplete-action-form">
+            <button type="submit" class="btn btn-warning">
+                <i class="fas fa-undo me-1"></i>Tamamlanmayı Geri Al
+            </button>
+        </form>
+    `;
+}
+
+// Render form for skip action
+async function renderSkipActionForm(task) {
+    return `
+        <h5 class="mb-4"><i class="fas fa-forward me-2"></i>Görevi Atla</h5>
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            Bu görevi atlamak istediğinize emin misiniz?
+        </div>
+        <form id="skip-action-form">
+            <button type="submit" class="btn btn-secondary">
+                <i class="fas fa-forward me-1"></i>Görevi Atla
+            </button>
+        </form>
+    `;
+}
+
+// Render form for unskip action
+async function renderUnskipActionForm(task) {
+    return `
+        <h5 class="mb-4"><i class="fas fa-undo me-2"></i>Atlamayı Geri Al</h5>
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            Bu görevin atlanmasını geri almak istediğinize emin misiniz?
+        </div>
+        <form id="unskip-action-form">
+            <button type="submit" class="btn btn-warning">
+                <i class="fas fa-undo me-1"></i>Atlamayı Geri Al
+            </button>
+        </form>
+    `;
+}
+
+// Render form for add subtask action
+async function renderAddSubtaskActionForm(task) {
+    try {
+        // Get parent task to determine next sequence number
+        const parentTask = await getDepartmentTaskById(task.id);
+        const nextSequence = (parentTask.subtasks_count || 0) + 1;
+        
+        return `
+            <h5 class="mb-4"><i class="fas fa-plus-circle me-2"></i>Alt Görev Ekle</h5>
+            <form id="add-subtask-action-form">
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-heading me-1"></i>Başlık
+                        </label>
+                        <input type="text" class="form-control" id="subtask-title" name="title" placeholder="Boş bırakılırsa iş emri adı kullanılır">
+                        <small class="form-text text-muted">Alt görev başlığı (boş bırakılabilir)</small>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-align-left me-1"></i>Açıklama
+                        </label>
+                        <textarea class="form-control" id="subtask-description" name="description" rows="3" placeholder="Alt görev açıklaması"></textarea>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            <i class="fas fa-sort-numeric-up me-1"></i>Sıra
+                        </label>
+                        <input type="number" class="form-control" id="subtask-sequence" name="sequence" value="${nextSequence}" min="1">
+                        <small class="form-text text-muted">Alt görev sırası</small>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">
+                            <i class="fas fa-weight me-1"></i>Ağırlık
+                        </label>
+                        <input type="number" class="form-control" id="subtask-weight" name="weight" min="0" step="0.01">
+                        <small class="form-text text-muted">Alt görev ağırlığı</small>
+                    </div>
+                    <div class="col-md-12">
+                        <button type="submit" class="btn btn-primary">
+                            <i class="fas fa-save me-1"></i>Alt Görev Ekle
+                        </button>
+                    </div>
+                </div>
+            </form>
+        `;
+    } catch (error) {
+        console.error('Error loading parent task for add subtask form:', error);
+        return '<p class="text-danger">Form yüklenirken hata oluştu</p>';
+    }
+}
+
+// Render form for bulk subtask action
+async function renderBulkSubtaskActionForm(task) {
+    try {
+        // Get parent task to determine next sequence number
+        const parentTask = await getDepartmentTaskById(task.id);
+        const nextSequence = (parentTask.subtasks_count || 0) + 1;
+        
+        const tasksContainerId = `bulk-subtasks-container-${task.id}`;
+        
+        return `
+            <h5 class="mb-4"><i class="fas fa-layer-group me-2"></i>Toplu Alt Görev Ekle</h5>
+            <form id="bulk-subtask-action-form">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <label class="form-label mb-0"><i class="fas fa-tasks me-1"></i>Alt Görevler</label>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="add-bulk-task-btn-${task.id}">
+                            <i class="fas fa-plus me-1"></i>Görev Ekle
+                        </button>
+                    </div>
+                    <div id="${tasksContainerId}" class="bulk-subtasks-container" style="max-height: 400px; overflow-y: auto;">
+                        <!-- Tasks will be added here -->
+                    </div>
+                </div>
+                <div class="mt-3">
+                    <button type="submit" class="btn btn-success">
+                        <i class="fas fa-save me-1"></i>Alt Görevleri Oluştur
+                    </button>
+                </div>
+            </form>
+        `;
+    } catch (error) {
+        console.error('Error loading parent task for bulk subtask form:', error);
+        return '<p class="text-danger">Form yüklenirken hata oluştu</p>';
+    }
+}
+
+// Render form for assign subcontractor action
+async function renderAssignSubcontractorActionForm(task) {
+    if (task.task_type !== 'welding') {
+        return '<p class="text-warning">Bu işlem sadece Kaynaklı İmalat görevleri için kullanılabilir</p>';
+    }
+    
+    try {
+        // Fetch subcontractors and price tiers
+        const [subcontractorsResponse, tiersResponse] = await Promise.all([
+            fetchSubcontractors({ is_active: true }),
+            fetchPriceTiers({ job_order: task.job_order })
+        ]);
+        
+        const subcontractors = subcontractorsResponse.results || subcontractorsResponse || [];
+        const tiers = tiersResponse.results || tiersResponse || [];
+        
+        const subcontractorOptions = [
+            { value: '', label: 'Taşeron seçin...' },
+            ...subcontractors.map(s => ({ value: s.id.toString(), label: s.name || s.short_name }))
+        ];
+        
+        const tierOptions = [
+            { value: '', label: 'Kademe seçin...' },
+            ...tiers.map(t => ({ 
+                value: t.id.toString(), 
+                label: `${t.name} (${t.price_per_kg} ${t.currency}/kg, Kalan: ${t.remaining_weight_kg || 0} kg)` 
+            }))
+        ];
+        
+        return `
+            <h5 class="mb-4"><i class="fas fa-handshake me-2"></i>Taşeron Ata ve Alt Görev Oluştur</h5>
+            <form id="assign-subcontractor-action-form">
+                <div class="mb-4">
+                    <h6 class="text-primary"><i class="fas fa-info-circle me-2"></i>Atama Bilgileri</h6>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-building me-1"></i>Taşeron <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="assignment-subtask-subcontractor" name="subcontractor" required>
+                            ${subcontractorOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-list me-1"></i>Fiyat Kademesi <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="assignment-subtask-price-tier" name="price_tier" required>
+                            ${tierOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-weight me-1"></i>Ayrılan Ağırlık (kg) <span class="text-danger">*</span>
+                        </label>
+                        <input type="number" class="form-control" id="assignment-subtask-weight" name="allocated_weight_kg" step="0.01" min="0" required>
+                        <small class="form-text text-muted">Maksimum ağırlık seçilen kademenin kalan ağırlığına göre belirlenecektir</small>
+                    </div>
+                </div>
+                <div class="mb-4 mt-4">
+                    <h6 class="text-info"><i class="fas fa-tasks me-2"></i>Alt Görev Bilgileri (Opsiyonel)</h6>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-heading me-1"></i>Alt Görev Başlığı
+                        </label>
+                        <input type="text" class="form-control" id="assignment-subtask-title" name="title" placeholder="Boş bırakılırsa taşeron adı kullanılacaktır">
+                    </div>
+                </div>
+                <div class="col-md-12 mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Taşeron Ata ve Alt Görev Oluştur
+                    </button>
+                </div>
+            </form>
+        `;
+    } catch (error) {
+        console.error('Error loading subcontractor form data:', error);
+        return '<p class="text-danger">Form yüklenirken hata oluştu</p>';
+    }
+}
+
+// Render form for set paint price action
+async function renderSetPaintPriceActionForm(task) {
+    if (task.task_type !== 'painting') {
+        return '<p class="text-warning">Bu işlem sadece Boya görevleri için kullanılabilir</p>';
+    }
+    
+    if (!task.job_order) {
+        return '<p class="text-danger">İş emri bulunamadı</p>';
+    }
+    
+    try {
+        // Fetch price tiers for this job order
+        const tiersResponse = await fetchPriceTiers({ job_order: task.job_order });
+        const tiers = tiersResponse.results || tiersResponse || [];
+        
+        // Find the painting tier
+        const paintingTier = tiers.find(t => {
+            const tierName = (t.name || '').toLowerCase();
+            return tierName.includes('boya') || tierName.includes('painting');
+        });
+        
+        if (!paintingTier) {
+            return '<p class="text-danger">Boya fiyat kademesi bulunamadı</p>';
+        }
+        
+        return `
+            <h5 class="mb-4"><i class="fas fa-paint-brush me-2"></i>Boya Fiyatı Belirle</h5>
+            <form id="set-paint-price-action-form">
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-money-bill-wave me-1"></i>Fiyat/kg <span class="text-danger">*</span>
+                        </label>
+                        <input type="number" class="form-control" id="paint-price" name="price_per_kg" value="${paintingTier.price_per_kg || ''}" step="0.01" min="0" required>
+                        <small class="form-text text-muted">Mevcut fiyat: ${paintingTier.price_per_kg || '0'} ${paintingTier.currency || 'TRY'}/kg</small>
+                    </div>
+                    <div class="col-md-12">
+                        <button type="submit" class="btn btn-info">
+                            <i class="fas fa-save me-1"></i>Fiyatı Güncelle
+                        </button>
+                    </div>
+                </div>
+            </form>
+        `;
+    } catch (error) {
+        console.error('Error loading paint price form data:', error);
+        return '<p class="text-danger">Form yüklenirken hata oluştu</p>';
+    }
+}
+
+// Attach form submission listeners
+function attachActionFormListeners(task, action) {
+    const contentContainer = taskDetailsModal.container.querySelector(`#action-content-${action.key}`);
+    if (!contentContainer) return;
+    
+    // Handle form submission for actions with forms
+    const form = contentContainer.querySelector(`#${action.handler}-action-form`);
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            try {
+                switch (action.handler) {
+                    case 'edit':
+                        await handleEditActionSubmit(task);
+                        break;
+                    case 'start':
+                        await handleStartTask(task.id);
+                        taskDetailsModal.hide();
+                        break;
+                    case 'complete':
+                        await handleCompleteTask(task.id, task);
+                        taskDetailsModal.hide();
+                        break;
+                    case 'uncomplete':
+                        await handleUncompleteTask(task.id);
+                        taskDetailsModal.hide();
+                        break;
+                    case 'skip':
+                        await handleSkipTask(task.id);
+                        taskDetailsModal.hide();
+                        break;
+                    case 'unskip':
+                        await handleUnskipTask(task.id);
+                        taskDetailsModal.hide();
+                        break;
+                    case 'add-subtask':
+                        await handleAddSubtaskActionSubmit(task);
+                        break;
+                    case 'submit-qc':
+                        await handleSubmitQCActionSubmit(task);
+                        break;
+                    case 'assign-subcontractor':
+                        await handleAssignSubcontractorActionSubmit(task);
+                        break;
+                    case 'set-paint-price':
+                        await handleSetPaintPriceActionSubmit(task);
+                        break;
+                    case 'bulk-subtask':
+                        await handleBulkSubtaskActionSubmit(task);
+                        break;
+                }
+                await loadTasks();
+            } catch (error) {
+                console.error(`Error submitting ${action.handler} action:`, error);
+            }
+        });
+    }
+    
+}
+
+// Handle edit action form submission
+async function handleEditActionSubmit(task) {
+    const updateData = {};
+    const isSubtask = !!task.parent;
+    
+    // Title can only be changed for subtasks
+    if (isSubtask) {
+        const titleInput = taskDetailsModal.container.querySelector('#edit-title');
+        if (titleInput && titleInput.value.trim()) {
+            updateData.title = titleInput.value.trim();
+        }
+    }
+    
+    const descriptionInput = taskDetailsModal.container.querySelector('#edit-description');
+    if (descriptionInput) {
+        updateData.description = descriptionInput.value || null;
+    }
+    
+    const assignedInput = taskDetailsModal.container.querySelector('#edit-assigned-to');
+    if (assignedInput) {
+        updateData.assigned_to = assignedInput.value === '' ? null : parseInt(assignedInput.value);
+    }
+    
+    const targetDateInput = taskDetailsModal.container.querySelector('#edit-target-completion-date');
+    if (targetDateInput) {
+        updateData.target_completion_date = targetDateInput.value || null;
+    }
+    
+    const notesInput = taskDetailsModal.container.querySelector('#edit-notes');
+    if (notesInput) {
+        updateData.notes = notesInput.value || null;
+    }
+    
+    await patchDepartmentTask(task.id, updateData);
+    showNotification('Görev güncellendi', 'success');
+    taskDetailsModal.hide();
+    await loadTasks();
+}
+
+// Handle add subtask action form submission
+async function handleAddSubtaskActionSubmit(task) {
+    const titleInput = taskDetailsModal.container.querySelector('#subtask-title');
+    const descriptionInput = taskDetailsModal.container.querySelector('#subtask-description');
+    const sequenceInput = taskDetailsModal.container.querySelector('#subtask-sequence');
+    const weightInput = taskDetailsModal.container.querySelector('#subtask-weight');
+    
+    const subtaskData = {
+        parent: task.id,
+        title: titleInput ? titleInput.value.trim() : null,
+        description: descriptionInput ? descriptionInput.value.trim() || null : null,
+        sequence: sequenceInput ? parseInt(sequenceInput.value) || 1 : 1,
+        weight: weightInput ? parseFloat(weightInput.value) || null : null
+    };
+    
+    try {
+        await createDepartmentTask(subtaskData);
+        showNotification('Alt görev eklendi', 'success');
+        taskDetailsModal.hide();
+        await loadTasks();
+    } catch (error) {
+        console.error('Error creating subtask:', error);
+        showNotification(error.message || 'Alt görev eklenirken hata oluştu', 'error');
+    }
+}
+
+// Setup QC reviews builder inline
+function setupQCReviewsBuilderInline(task, contentContainer) {
+    const reviewsContainerId = `qc-reviews-container-${task.id}`;
+    const container = contentContainer.querySelector(`#${reviewsContainerId}`);
+    const addBtn = contentContainer.querySelector(`#add-qc-review-btn-${task.id}`);
+    const excelImportBtn = contentContainer.querySelector(`#excel-import-qc-btn-${task.id}`);
+    
+    if (!container) {
+        console.error('QC reviews container not found');
+        return;
+    }
+    
+    let reviewCounter = 0;
+    
+    // Function to create a review row HTML
+    function createReviewRowHTML(reviewId, reviewData = {}) {
+        return `
+            <div class="qc-review-row mb-2" data-review-id="${reviewId}">
+                <div class="row g-2">
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm qc-location-input" 
+                               data-review-id="${reviewId}" 
+                               placeholder="Örn: Atölye B, Raf 3"
+                               value="${reviewData.location || ''}">
+                    </div>
+                    <div class="col-md-2">
+                        <input type="number" class="form-control form-control-sm qc-quantity-input" 
+                               data-review-id="${reviewId}" 
+                               placeholder="0" min="0"
+                               value="${reviewData.quantity_inspected || ''}">
+                    </div>
+                    <div class="col-md-3">
+                        <input type="text" class="form-control form-control-sm qc-drawing-input" 
+                               data-review-id="${reviewId}" 
+                               placeholder="Örn: GEM-254-01-A"
+                               value="${reviewData.drawing_no || ''}">
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm qc-position-input" 
+                               data-review-id="${reviewId}" 
+                               placeholder="Örn: POS-07"
+                               value="${reviewData.position_no || ''}">
+                    </div>
+                    <div class="col-md-2">
+                        <input type="text" class="form-control form-control-sm qc-notes-input" 
+                               data-review-id="${reviewId}" 
+                               placeholder="Notlar"
+                               value="${reviewData.notes || ''}">
+                    </div>
+                    <div class="col-md-1">
+                        <button type="button" class="btn btn-outline-danger btn-sm w-100 remove-review-btn" data-review-id="${reviewId}" title="İncelemeyi Kaldır">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+    
+    // Function to add a new review
+    function addReview(reviewData = {}) {
+        reviewCounter++;
+        const reviewHTML = createReviewRowHTML(reviewCounter, reviewData);
+        container.insertAdjacentHTML('beforeend', reviewHTML);
+        
+        // Attach remove listener
+        const reviewRow = container.querySelector(`[data-review-id="${reviewCounter}"]`);
+        if (reviewRow) {
+            const removeBtn = reviewRow.querySelector('.remove-review-btn');
+            if (removeBtn) {
+                removeBtn.addEventListener('click', () => {
+                    reviewRow.remove();
+                });
+            }
+        }
+    }
+    
+    // Add review button listener
+    if (addBtn) {
+        addBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            addReview();
+        });
+    }
+    
+    // Excel import button listener
+    if (excelImportBtn) {
+        excelImportBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            window.currentQCTaskId = task.id;
+            window.currentQCReviewsContainer = container;
+            window.currentQCAddReview = addReview;
+            const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('qc-excel-import-modal'));
+            modal.show();
+        });
+    }
+    
+    // Add initial review
+    addReview();
+}
+
+// Handle submit QC action form submission
+async function handleSubmitQCActionSubmit(task) {
+    const reviewsContainerId = `qc-reviews-container-${task.id}`;
+    const container = taskDetailsModal.container.querySelector(`#${reviewsContainerId}`);
+    
+    if (!container) {
+        showNotification('İnceleme listesi bulunamadı', 'error');
+        return;
+    }
+    
+    // Build reviews array from rows
+    const reviewRows = Array.from(container.querySelectorAll('.qc-review-row'));
+    const reviews = [];
+    
+    for (const row of reviewRows) {
+        const reviewId = row.dataset.reviewId;
+        const locationInput = row.querySelector('.qc-location-input');
+        const quantityInput = row.querySelector('.qc-quantity-input');
+        const positionInput = row.querySelector('.qc-position-input');
+        const drawingInput = row.querySelector('.qc-drawing-input');
+        const notesInput = row.querySelector('.qc-notes-input');
+        
+        const reviewData = {};
+        
+        if (locationInput && locationInput.value.trim()) {
+            reviewData.location = locationInput.value.trim();
+        }
+        if (quantityInput && quantityInput.value) {
+            reviewData.quantity_inspected = parseInt(quantityInput.value) || null;
+        }
+        if (positionInput && positionInput.value.trim()) {
+            reviewData.position_no = positionInput.value.trim();
+        }
+        if (drawingInput && drawingInput.value.trim()) {
+            reviewData.drawing_no = drawingInput.value.trim();
+        }
+        if (notesInput && notesInput.value.trim()) {
+            reviewData.notes = notesInput.value.trim();
+        }
+        
+        reviews.push(reviewData);
+    }
+    
+    if (reviews.length === 0) {
+        showNotification('En az bir inceleme eklemelisiniz', 'error');
+        return;
+    }
+    
+    try {
+        const response = await bulkSubmitQCReviews(task.id, reviews);
+        const count = Array.isArray(response) ? response.length : 1;
+        showNotification(`${count} inceleme kalite kontrolüne gönderildi`, 'success');
+        taskDetailsModal.hide();
+        await loadTasks();
+    } catch (error) {
+        console.error('Error bulk submitting QC reviews:', error);
+        let errorMessage = 'Kalite kontrolüne gönderilirken hata oluştu';
+        try {
+            if (error.message) {
+                const errorData = JSON.parse(error.message);
+                if (typeof errorData === 'object') {
+                    if (errorData.message) {
+                        errorMessage = errorData.message;
+                    } else {
+                        const errors = Object.values(errorData).flat();
+                        errorMessage = errors.join(', ') || errorMessage;
+                    }
+                } else {
+                    errorMessage = error.message;
+                }
+            }
+        } catch (e) {
+            // If parsing fails, use default message
+        }
+        showNotification(errorMessage, 'error');
+    }
+}
+
+// Handle assign subcontractor action form submission
+async function handleAssignSubcontractorActionSubmit(task) {
+    const subcontractorInput = taskDetailsModal.container.querySelector('#assignment-subtask-subcontractor');
+    const priceTierInput = taskDetailsModal.container.querySelector('#assignment-subtask-price-tier');
+    const weightInput = taskDetailsModal.container.querySelector('#assignment-subtask-weight');
+    const titleInput = taskDetailsModal.container.querySelector('#assignment-subtask-title');
+    
+    if (!subcontractorInput || !subcontractorInput.value) {
+        showNotification('Lütfen bir taşeron seçin', 'error');
+        return;
+    }
+    
+    if (!priceTierInput || !priceTierInput.value) {
+        showNotification('Lütfen bir fiyat kademesi seçin', 'error');
+        return;
+    }
+    
+    if (!weightInput || !weightInput.value) {
+        showNotification('Lütfen ayrılan ağırlığı girin', 'error');
+        return;
+    }
+    
+    const assignmentData = {
+        task_id: task.id,
+        subcontractor_id: parseInt(subcontractorInput.value),
+        price_tier_id: parseInt(priceTierInput.value),
+        allocated_weight_kg: parseFloat(weightInput.value),
+        subtask_title: titleInput ? titleInput.value.trim() || null : null
+    };
+    
+    try {
+        await createAssignmentWithSubtask(assignmentData);
+        showNotification('Taşeron ataması ve alt görev oluşturuldu', 'success');
+        taskDetailsModal.hide();
+        await loadTasks();
+    } catch (error) {
+        console.error('Error creating assignment with subtask:', error);
+        showNotification(error.message || 'Taşeron ataması oluşturulurken hata oluştu', 'error');
+    }
+}
+
+// Handle set paint price action form submission
+async function handleSetPaintPriceActionSubmit(task) {
+    const priceInput = taskDetailsModal.container.querySelector('#paint-price');
+    
+    if (!priceInput || !priceInput.value) {
+        showNotification('Lütfen fiyat girin', 'error');
+        return;
+    }
+    
+    try {
+        // Fetch price tiers to find the painting tier
+        const tiersResponse = await fetchPriceTiers({ job_order: task.job_order });
+        const tiers = tiersResponse.results || tiersResponse || [];
+        
+        const paintingTier = tiers.find(t => {
+            const tierName = (t.name || '').toLowerCase();
+            return tierName.includes('boya') || tierName.includes('painting');
+        });
+        
+        if (!paintingTier) {
+            showNotification('Boya fiyat kademesi bulunamadı', 'error');
+            return;
+        }
+        
+        await updatePriceTier(paintingTier.id, {
+            price_per_kg: parseFloat(priceInput.value)
+        });
+        
+        showNotification('Boya fiyatı güncellendi', 'success');
+        taskDetailsModal.hide();
+        await loadTasks();
+    } catch (error) {
+        console.error('Error updating paint price:', error);
+        showNotification(error.message || 'Boya fiyatı güncellenirken hata oluştu', 'error');
+    }
+}
+
+// Setup bulk subtask builder inline
+function setupBulkSubtaskBuilderInline(task, contentContainer) {
+    const tasksContainerId = `bulk-subtasks-container-${task.id}`;
+    const container = contentContainer.querySelector(`#${tasksContainerId}`);
+    const addBtn = contentContainer.querySelector(`#add-bulk-task-btn-${task.id}`);
+    
+    if (!container) {
+        console.error('Bulk subtasks container not found');
+        return;
+    }
+    
+    let taskCounter = 0;
+    
+    // Function to create a task row HTML
+    function createTaskRowHTML(taskId) {
+        return `
+            <div class="bulk-task-row mb-2 d-flex align-items-center gap-2" data-task-id="${taskId}">
+                <div class="flex-grow-1">
+                    <input type="text" class="form-control form-control-sm task-title-input" 
+                           data-task-id="${taskId}" 
+                           placeholder="Görev başlığı" 
+                           required>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline-danger remove-task-btn" data-task-id="${taskId}">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+    }
+    
+    // Function to add a new task
+    function addTask() {
+        taskCounter++;
+        const taskHTML = createTaskRowHTML(taskCounter);
+        container.insertAdjacentHTML('beforeend', taskHTML);
+        
+        // Attach remove listener
+        const taskRow = container.querySelector(`[data-task-id="${taskCounter}"]`);
+        if (taskRow) {
+            const removeBtn = taskRow.querySelector('.remove-task-btn');
+            if (removeBtn) {
+                removeBtn.addEventListener('click', () => {
+                    taskRow.remove();
+                });
+            }
+        }
+    }
+    
+    // Add task button listener
+    if (addBtn) {
+        addBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            addTask();
+        });
+    }
+    
+    // Add initial task
+    addTask();
+}
+
+// Handle bulk subtask action form submission
+async function handleBulkSubtaskActionSubmit(task) {
+    const tasksContainerId = `bulk-subtasks-container-${task.id}`;
+    const container = taskDetailsModal.container.querySelector(`#${tasksContainerId}`);
+    
+    if (!container) {
+        showNotification('Görev listesi bulunamadı', 'error');
+        return;
+    }
+    
+    // Get parent task to determine next sequence number
+    const parentTask = await getDepartmentTaskById(task.id);
+    const nextSequence = (parentTask.subtasks_count || 0) + 1;
+    
+    // Build task array from rows
+    const taskRows = Array.from(container.querySelectorAll('.bulk-task-row'));
+    const taskTree = [];
+    let sequence = nextSequence;
+    
+    for (const row of taskRows) {
+        const titleInput = row.querySelector('.task-title-input');
+        if (!titleInput || !titleInput.value.trim()) {
+            showNotification('Tüm görevler için başlık gereklidir', 'error');
+            return;
+        }
+        
+        taskTree.push({
+            title: titleInput.value.trim(),
+            task_type: 'part', // Always "part"
+            sequence: sequence++,
+            weight: 10, // Default weight
+            subtasks: [] // No nested subtasks in simplified version
+        });
+    }
+    
+    if (taskTree.length === 0) {
+        showNotification('En az bir görev eklemelisiniz', 'error');
+        return;
+    }
+    
+    try {
+        const response = await bulkCreateSubtasks(task.id, { tasks: taskTree });
+        showNotification(response.message || `${response.tasks?.length || 0} alt görev oluşturuldu`, 'success');
+        taskDetailsModal.hide();
+        
+        // Clear subtasks cache for parent to force refresh
+        if (task.id && subtasksCache && subtasksCache.has(task.id)) {
+            subtasksCache.delete(task.id);
+        }
+        
+        // If parent was expanded, refresh subtasks
+        if (task.id && expandedRows && expandedRows.has(task.id)) {
+            await fetchTaskSubtasks(task.id);
+        }
+        
+        await loadTasks();
+    } catch (error) {
+        console.error('Error bulk creating subtasks:', error);
+        let errorMessage = 'Alt görevler oluşturulurken hata oluştu';
+        try {
+            if (error.message) {
+                const errorData = JSON.parse(error.message);
+                if (typeof errorData === 'object') {
+                    if (errorData.message) {
+                        errorMessage = errorData.message;
+                    } else {
+                        const errors = Object.values(errorData).flat();
+                        errorMessage = errors.join(', ') || errorMessage;
+                    }
+                } else {
+                    errorMessage = error.message;
+                }
+            }
+        } catch (e) {
+            // If parsing fails, use default message
+        }
+        showNotification(errorMessage, 'error');
     }
 }
 
@@ -2853,6 +4059,199 @@ async function showAddSubtaskModal(parentTaskId) {
         addSubtaskModal.show();
     } catch (error) {
         console.error('Error loading parent task for subtask creation:', error);
+        showNotification('Üst görev bilgileri yüklenirken hata oluştu', 'error');
+    }
+}
+
+async function showBulkSubtaskModal(parentTaskId) {
+    window.pendingBulkSubtaskParentId = parentTaskId;
+
+    try {
+        // Get parent task to determine next sequence number
+        const parentTask = await getDepartmentTaskById(parentTaskId);
+        const nextSequence = (parentTask.subtasks_count || 0) + 1;
+
+        bulkSubtaskModal.clearAll();
+
+        // Add section with title only (like "Ürün Bilgileri")
+        bulkSubtaskModal.addSection({
+            id: 'subtasks-info',
+            title: 'Alt Görevler',
+            icon: 'fas fa-layer-group',
+            iconColor: 'text-primary',
+            fields: []
+        });
+
+        bulkSubtaskModal.render();
+
+        // Add custom HTML for tasks container after rendering
+        const tasksContainerId = 'bulk-subtasks-container';
+        setTimeout(() => {
+            const itemsSection = bulkSubtaskModal.container.querySelector('[data-section-id="subtasks-info"]');
+            if (itemsSection) {
+                const sectionContent = itemsSection.querySelector('.section-content') || itemsSection;
+                const tasksHtml = `
+                    <div class="mt-3">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <button type="button" class="btn btn-sm btn-outline-primary" id="add-bulk-task-btn">
+                                <i class="fas fa-plus me-1"></i>Görev Ekle
+                            </button>
+                        </div>
+                        <div id="${tasksContainerId}" class="bulk-subtasks-container">
+                            <!-- Tasks will be added here -->
+                        </div>
+                    </div>
+                `;
+                sectionContent.insertAdjacentHTML('beforeend', tasksHtml);
+                
+                // Setup the dynamic task builder
+                setupBulkSubtaskBuilder();
+            }
+        }, 100);
+
+        function setupBulkSubtaskBuilder() {
+            const container = document.getElementById(tasksContainerId);
+            if (!container) {
+                console.error('Container not found');
+                return;
+            }
+
+            let taskCounter = 0;
+            let sequenceCounter = nextSequence;
+
+            // Function to create a simple task row HTML (just title)
+            function createTaskRowHTML(taskId) {
+                const sequence = sequenceCounter++;
+                return `
+                    <div class="bulk-task-row mb-2 d-flex align-items-center gap-2" data-task-id="${taskId}">
+                        <div class="flex-grow-1">
+                            <input type="text" class="form-control form-control-sm task-title-input" 
+                                   data-task-id="${taskId}" 
+                                   placeholder="Görev başlığı" 
+                                   required>
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-danger remove-task-btn" data-task-id="${taskId}">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </div>
+                `;
+            }
+
+            // Function to add a new task
+            function addTask() {
+                taskCounter++;
+                const taskHTML = createTaskRowHTML(taskCounter);
+                container.insertAdjacentHTML('beforeend', taskHTML);
+                attachTaskListeners(taskCounter);
+            }
+
+            // Function to attach event listeners
+            function attachTaskListeners(taskId) {
+                const taskRow = container.querySelector(`[data-task-id="${taskId}"]`);
+                if (!taskRow) return;
+
+                // Remove task button
+                const removeBtn = taskRow.querySelector('.remove-task-btn');
+                if (removeBtn) {
+                    removeBtn.addEventListener('click', () => {
+                        taskRow.remove();
+                    });
+                }
+            }
+
+            // Add initial task
+            addTask();
+
+            // Add task button listener
+            const addTaskBtn = document.getElementById('add-bulk-task-btn');
+            if (addTaskBtn) {
+                addTaskBtn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    addTask();
+                });
+            }
+        }
+
+        // Setup save callback
+        bulkSubtaskModal.onSaveCallback(async () => {
+            // Get container - it should exist by now
+            const container = document.getElementById(tasksContainerId);
+            if (!container) {
+                showNotification('Görev listesi bulunamadı', 'error');
+                return;
+            }
+            
+            // Build simple task array from rows (just title, task_type is always "part")
+            const taskRows = Array.from(container.querySelectorAll('.bulk-task-row'));
+            const taskTree = [];
+            let sequence = nextSequence;
+
+            for (const row of taskRows) {
+                const titleInput = row.querySelector('.task-title-input');
+                if (!titleInput || !titleInput.value.trim()) {
+                    showNotification('Tüm görevler için başlık gereklidir', 'error');
+                    return;
+                }
+
+                taskTree.push({
+                    title: titleInput.value.trim(),
+                    task_type: 'part', // Always "part"
+                    sequence: sequence++,
+                    weight: 10, // Default weight
+                    subtasks: [] // No nested subtasks in simplified version
+                });
+            }
+
+            if (taskTree.length === 0) {
+                showNotification('En az bir görev eklemelisiniz', 'error');
+                return;
+            }
+
+            try {
+                const response = await bulkCreateSubtasks(parentTaskId, { tasks: taskTree });
+                showNotification(response.message || `${response.tasks?.length || 0} alt görev oluşturuldu`, 'success');
+                bulkSubtaskModal.hide();
+                window.pendingBulkSubtaskParentId = null;
+
+                // Clear subtasks cache for parent to force refresh
+                if (parentTaskId && subtasksCache.has(parentTaskId)) {
+                    subtasksCache.delete(parentTaskId);
+                }
+
+                // If parent was expanded, refresh subtasks
+                if (parentTaskId && expandedRows.has(parentTaskId)) {
+                    await fetchTaskSubtasks(parentTaskId);
+                }
+
+                await loadTasks();
+            } catch (error) {
+                console.error('Error bulk creating subtasks:', error);
+                let errorMessage = 'Alt görevler oluşturulurken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            if (errorData.message) {
+                                errorMessage = errorData.message;
+                            } else {
+                                const errors = Object.values(errorData).flat();
+                                errorMessage = errors.join(', ') || errorMessage;
+                            }
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                showNotification(errorMessage, 'error');
+            }
+        });
+
+        bulkSubtaskModal.show();
+    } catch (error) {
+        console.error('Error loading parent task for bulk subtask creation:', error);
         showNotification('Üst görev bilgileri yüklenirken hata oluştu', 'error');
     }
 }
@@ -4447,4 +5846,321 @@ async function showSetPaintPriceModal(taskId, taskRow = null) {
     }
 }
 
+    // Setup QC Excel import listeners
+    setupQCExcelImportListeners();
 } // end initDepartmentTasksPage
+
+// QC Excel Import functionality
+let qcExcelImportData = null;
+
+function setupQCExcelImportListeners() {
+    // Use setTimeout to ensure DOM is ready
+    setTimeout(() => {
+        const previewBtn = document.getElementById('preview-qc-excel-import-btn');
+        const clearBtn = document.getElementById('clear-qc-excel-import-btn');
+        const importBtn = document.getElementById('import-qc-excel-btn');
+        
+        if (previewBtn) {
+            previewBtn.addEventListener('click', previewQCExcelImport);
+        }
+        
+        if (clearBtn) {
+            clearBtn.addEventListener('click', clearQCExcelImport);
+        }
+        
+        if (importBtn) {
+            importBtn.addEventListener('click', importQCExcelReviews);
+        }
+    }, 100);
+}
+
+function previewQCExcelImport() {
+    const fileInput = document.getElementById('qc-excel-file-input');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showNotification('Lütfen bir dosya seçin', 'warning');
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            let jsonData;
+            
+            if (file.name.toLowerCase().endsWith('.csv')) {
+                const csvText = e.target.result;
+                jsonData = parseCSV(csvText);
+            } else {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+            }
+
+            if (jsonData.length < 2) {
+                showNotification('Dosya boş veya geçersiz format', 'error');
+                return;
+            }
+
+            processQCExcelData(jsonData);
+        } catch (error) {
+            console.error('Dosya okuma hatası:', error);
+            showNotification('Dosya okunamadı. Lütfen geçerli bir Excel veya CSV dosyası seçin', 'error');
+        }
+    };
+    
+    if (file.name.toLowerCase().endsWith('.csv')) {
+        reader.readAsText(file, 'UTF-8');
+    } else {
+        reader.readAsArrayBuffer(file);
+    }
+}
+
+function parseCSV(csvText) {
+    const result = [];
+    const lines = csvText.split('\n');
+    
+    lines.forEach(line => {
+        if (line.trim()) {
+            // Simple CSV parsing - handle quoted fields
+            const fields = [];
+            let currentField = '';
+            let inQuotes = false;
+            
+            for (let i = 0; i < line.length; i++) {
+                const char = line[i];
+                
+                if (char === '"') {
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    fields.push(currentField.trim());
+                    currentField = '';
+                } else {
+                    currentField += char;
+                }
+            }
+            fields.push(currentField.trim());
+            result.push(fields);
+        }
+    });
+    
+    return result;
+}
+
+function processQCExcelData(data) {
+    const headers = data[0];
+    const dataRows = data.slice(1);
+    
+    // Auto-detect column mappings
+    const columnMapping = detectQCExcelColumnMapping(headers);
+    
+    // Process data with mapping
+    const processedReviews = [];
+    const errors = [];
+    
+    dataRows.forEach((row, index) => {
+        if (!row || row.length === 0) return;
+        
+        try {
+            const review = {
+                location: getExcelCellValue(row, columnMapping.location),
+                quantity_inspected: getExcelCellValue(row, columnMapping.quantity_inspected) ? parseInt(getExcelCellValue(row, columnMapping.quantity_inspected)) : null,
+                position_no: getExcelCellValue(row, columnMapping.position_no),
+                drawing_no: getExcelCellValue(row, columnMapping.drawing_no),
+                notes: getExcelCellValue(row, columnMapping.notes)
+            };
+            
+            // All fields are optional, so we accept empty reviews
+            processedReviews.push(review);
+        } catch (error) {
+            errors.push(`Satır ${index + 2}: ${error.message}`);
+        }
+    });
+    
+    if (processedReviews.length === 0) {
+        showNotification('İşlenecek veri bulunamadı', 'error');
+        return;
+    }
+    
+    qcExcelImportData = { processedReviews, errors };
+    displayQCExcelImportPreview(processedReviews);
+    
+    if (errors.length > 0) {
+        showQCExcelImportErrors(errors);
+    }
+}
+
+function detectQCExcelColumnMapping(headers) {
+    const mapping = {
+        location: -1,
+        quantity_inspected: -1,
+        position_no: -1,
+        drawing_no: -1,
+        notes: -1
+    };
+    
+    const columnKeywords = {
+        location: ['konum', 'location', 'lokasyon', 'yer'],
+        quantity_inspected: ['miktar', 'quantity', 'incelenen', 'adet', 'sayi', 'qty'],
+        position_no: ['pozisyon', 'position', 'pos', 'pozisyonno', 'positionno'],
+        drawing_no: ['cizim', 'drawing', 'cizimno', 'drawingno', 'resim', 'dwg'],
+        notes: ['not', 'notes', 'notlar', 'aciklama', 'description', 'comment']
+    };
+    
+    headers.forEach((header, index) => {
+        if (!header) return;
+        
+        const headerNormalized = normalizeTurkish(header.toString().trim().toLowerCase());
+        
+        for (const [field, keywords] of Object.entries(columnKeywords)) {
+            if (mapping[field] === -1) {
+                for (const keyword of keywords) {
+                    const keywordNormalized = normalizeTurkish(keyword);
+                    if (headerNormalized === keywordNormalized || headerNormalized.includes(keywordNormalized)) {
+                        mapping[field] = index;
+                        break;
+                    }
+                }
+            }
+        }
+    });
+    
+    return mapping;
+}
+
+function normalizeTurkish(text) {
+    return text
+        .toLowerCase()
+        .replace(/ı/g, 'i')
+        .replace(/ğ/g, 'g')
+        .replace(/ü/g, 'u')
+        .replace(/ş/g, 's')
+        .replace(/ö/g, 'o')
+        .replace(/ç/g, 'c')
+        .replace(/İ/g, 'i')
+        .replace(/Ğ/g, 'g')
+        .replace(/Ü/g, 'u')
+        .replace(/Ş/g, 's')
+        .replace(/Ö/g, 'o')
+        .replace(/Ç/g, 'c')
+        .replace(/\s+/g, '')
+        .replace(/\./g, '');
+}
+
+function getExcelCellValue(row, columnIndex) {
+    if (columnIndex === -1 || columnIndex >= row.length) return '';
+    const value = row[columnIndex];
+    return value !== null && value !== undefined ? String(value).trim() : '';
+}
+
+function displayQCExcelImportPreview(reviews) {
+    const previewDiv = document.getElementById('qc-excel-import-preview');
+    const previewTbody = document.getElementById('qc-excel-preview-tbody');
+    const importBtn = document.getElementById('import-qc-excel-btn');
+    
+    if (!previewDiv || !previewTbody) return;
+    
+    previewTbody.innerHTML = '';
+    
+    reviews.forEach((review, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${review.location || '-'}</td>
+            <td>${review.quantity_inspected || '-'}</td>
+            <td>${review.drawing_no || '-'}</td>
+            <td>${review.position_no || '-'}</td>
+            <td>${review.notes || '-'}</td>
+            <td>
+                <button type="button" class="btn btn-sm btn-outline-danger" onclick="deleteQCExcelPreviewItem(${index})">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </td>
+        `;
+        previewTbody.appendChild(row);
+    });
+    
+    previewDiv.style.display = 'block';
+    if (importBtn) {
+        importBtn.style.display = 'inline-block';
+    }
+}
+
+function deleteQCExcelPreviewItem(index) {
+    if (!qcExcelImportData || !qcExcelImportData.processedReviews || 
+        index < 0 || index >= qcExcelImportData.processedReviews.length) {
+        return;
+    }
+    
+    qcExcelImportData.processedReviews.splice(index, 1);
+    displayQCExcelImportPreview(qcExcelImportData.processedReviews);
+    
+    if (qcExcelImportData.processedReviews.length === 0) {
+        const previewDiv = document.getElementById('qc-excel-import-preview');
+        const importBtn = document.getElementById('import-qc-excel-btn');
+        if (previewDiv) previewDiv.style.display = 'none';
+        if (importBtn) importBtn.style.display = 'none';
+    }
+}
+
+function showQCExcelImportErrors(errors) {
+    const errorContainer = document.getElementById('qc-excel-import-errors');
+    if (!errorContainer) return;
+    
+    errorContainer.innerHTML = `
+        <div class="alert alert-warning">
+            <strong>Uyarılar:</strong>
+            <ul class="mb-0">
+                ${errors.map(err => `<li>${err}</li>`).join('')}
+            </ul>
+        </div>
+    `;
+    errorContainer.style.display = 'block';
+}
+
+function clearQCExcelImport() {
+    document.getElementById('qc-excel-file-input').value = '';
+    const previewDiv = document.getElementById('qc-excel-import-preview');
+    const errorDiv = document.getElementById('qc-excel-import-errors');
+    const importBtn = document.getElementById('import-qc-excel-btn');
+    
+    if (previewDiv) previewDiv.style.display = 'none';
+    if (errorDiv) errorDiv.style.display = 'none';
+    if (importBtn) importBtn.style.display = 'none';
+    
+    qcExcelImportData = null;
+}
+
+function importQCExcelReviews() {
+    if (!qcExcelImportData || !qcExcelImportData.processedReviews) return;
+    
+    const container = window.currentQCReviewsContainer;
+    const addReview = window.currentQCAddReview;
+    
+    if (!container || !addReview) {
+        showNotification('İçe aktarma başarısız', 'error');
+        return;
+    }
+    
+    let addedCount = 0;
+    
+    qcExcelImportData.processedReviews.forEach(review => {
+        addReview(review);
+        addedCount++;
+    });
+    
+    // Close the Excel import modal
+    const excelModal = bootstrap.Modal.getInstance(document.getElementById('qc-excel-import-modal'));
+    if (excelModal) {
+        excelModal.hide();
+    }
+    
+    // Clear import data
+    clearQCExcelImport();
+    
+    showNotification(`${addedCount} inceleme başarıyla içe aktarıldı`, 'success');
+}
+
+// Make function globally available
+window.deleteQCExcelPreviewItem = deleteQCExcelPreviewItem;

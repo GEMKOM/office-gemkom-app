@@ -53,10 +53,96 @@
     <div id="task-details-modal-container"></div>
     <div id="edit-task-modal-container"></div>
     <div id="add-subtask-modal-container"></div>
+    <div id="bulk-subtask-modal-container"></div>
     <div id="assignment-modal-container"></div>
+    <div id="submit-qc-modal-container"></div>
+    
+    <!-- Excel Import Modal for QC Reviews -->
+    <div class="modal fade" id="qc-excel-import-modal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-file-excel me-2"></i>Excel'den İnceleme İçe Aktarma
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Kullanım:</strong> Excel dosyanızı yükleyin. Sistem otomatik olarak sütunları algılamaya çalışacaktır.
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label class="form-label">Sütunlar (Tümü Opsiyonel):</label>
+                            <div class="form-control-plaintext small bg-light p-2 rounded">
+                                <code>
+                                    Konum → Konum<br>
+                                    Miktar / İncelenen Miktar → İncelenen Miktar<br>
+                                    Çizim / Çizim No → Çizim No<br>
+                                    Pozisyon / Pozisyon No → Pozisyon No<br>
+                                    Notlar / Not → Notlar
+                                </code>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Excel Dosyası Seçin:</label>
+                        <input type="file" class="form-control" id="qc-excel-file-input" 
+                               accept=".xlsx,.xls,.csv" placeholder="Excel veya CSV dosyası seçin...">
+                        <div class="form-text">Desteklenen formatlar: .xlsx, .xls, .csv</div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <button type="button" class="btn btn-outline-primary btn-sm" id="preview-qc-excel-import-btn">
+                            <i class="fas fa-eye me-1"></i>Önizleme
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="clear-qc-excel-import-btn">
+                            <i class="fas fa-trash me-1"></i>Temizle
+                        </button>
+                    </div>
+                    
+                    <div id="qc-excel-import-errors" style="display: none;">
+                        <!-- Error messages will be displayed here -->
+                    </div>
+                    
+                    <div id="qc-excel-import-preview" style="display: none;">
+                        <h6>Önizleme:</h6>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered" id="qc-excel-preview-table">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>Konum</th>
+                                        <th>İncelenen Miktar</th>
+                                        <th>Çizim No</th>
+                                        <th>Pozisyon No</th>
+                                        <th>Notlar</th>
+                                        <th>İşlem</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="qc-excel-preview-tbody">
+                                    <!-- Preview rows will be added here -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-primary" id="import-qc-excel-btn" style="display: none;">
+                        <i class="fas fa-download me-1"></i>İçe Aktar
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- SheetJS for Excel parsing -->
+    <script src="https://cdn.sheetjs.com/xlsx-0.19.3/package/dist/xlsx.full.min.js"></script>
     <!-- Components -->
     <script type="module" src="../../../components/header/header.js"></script>
     <script type="module" src="../../../components/table/table.js"></script>

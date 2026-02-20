@@ -504,5 +504,21 @@ export const NAVIGATION_STRUCTURE = {
                 children: {}
             }
         }
+    },
+    '/quality-control': {
+        label: 'Kalite Kontrol',
+        icon: 'fas fa-clipboard-check',
+        children: {
+            '/quality-control/qc-reviews': {
+                label: 'KK İncelemeleri',
+                icon: 'fas fa-search',
+                children: {}
+            },
+            '/quality-control/ncrs': {
+                label: 'Uygunsuzluk Raporları',
+                icon: 'fas fa-exclamation-triangle',
+                children: {}
+            }
+        }
     }
 };
