@@ -473,29 +473,13 @@ function initializeTableComponent() {
                     
                     if (!value) return '-';
                     
-                    // Clean, integrated styling for job number
+                    // Badge-style styling for job number (similar to talep_no in purchase requests)
                     if (hierarchyLevel > 0) {
-                        // Child jobs - subtle styling
-                        return `
-                            <div style="
-                                color: #6c757d;
-                                font-weight: 500;
-                                font-size: 0.9rem;
-                                font-family: 'Courier New', monospace;
-                                letter-spacing: 0.3px;
-                            ">${value}</div>
-                        `;
+                        // Child jobs - subtle badge styling
+                        return `<span style="font-weight: 600; color: #6c757d; font-family: 'Courier New', monospace; font-size: 0.9rem; background: rgba(108, 117, 125, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(108, 117, 125, 0.2);">${value}</span>`;
                     } else {
-                        // Root jobs - prominent but clean
-                        return `
-                            <div style="
-                                color: #0d6efd;
-                                font-weight: 700;
-                                font-size: 0.95rem;
-                                font-family: 'Courier New', monospace;
-                                letter-spacing: 0.5px;
-                            ">${value}</div>
-                        `;
+                        // Root jobs - prominent badge styling
+                        return `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value}</span>`;
                     }
                 }
             },
@@ -540,29 +524,10 @@ function initializeTableComponent() {
                     if (row._isDepartmentTasksRow) return '';
                     
                     const customerDisplayName = row.customer_short_name || row.customer_name || value;
-                    const customerCode = row.customer_code;
                     
                     if (!customerDisplayName) return '-';
                     
-                    return `
-                        <div style="display: flex; flex-direction: column; gap: 4px;">
-                            <div style="
-                                color: #212529;
-                                font-weight: 600;
-                                font-size: 0.9rem;
-                                line-height: 1.3;
-                            ">${customerDisplayName}</div>
-                            ${customerCode ? `
-                                <div style="
-                                    color: #6c757d;
-                                    font-size: 0.75rem;
-                                    font-weight: 500;
-                                    font-family: 'Courier New', monospace;
-                                    letter-spacing: 0.3px;
-                                ">${customerCode}</div>
-                            ` : ''}
-                        </div>
-                    `;
+                    return `<span class="status-badge status-grey">${customerDisplayName}</span>`;
                 }
             },
             {
@@ -582,13 +547,13 @@ function initializeTableComponent() {
                     if (row._isDepartmentTasksRow) return '';
                     const status = row.status;
                     if (status === 'active') {
-                        return '<span class="status-badge status-green">Aktif</span>';
+                        return '<span class="status-badge status-blue">Aktif</span>';
                     } else if (status === 'draft') {
                         return '<span class="status-badge status-grey">Taslak</span>';
                     } else if (status === 'on_hold') {
                         return '<span class="status-badge status-yellow">Beklemede</span>';
                     } else if (status === 'completed') {
-                        return '<span class="status-badge status-blue">Tamamlandı</span>';
+                        return '<span class="status-badge status-green">Tamamlandı</span>';
                     } else if (status === 'cancelled') {
                         return '<span class="status-badge status-red">İptal Edildi</span>';
                     }
@@ -600,15 +565,39 @@ function initializeTableComponent() {
                 label: 'Hedef Tamamlanma',
                 sortable: true,
                 type: 'date',
-                formatter: (value) => {
+                formatter: (value, row) => {
+                    if (row._isDepartmentTasksRow) return '';
                     if (!value) return '-';
                     const date = new Date(value);
+                    const today = new Date();
+                    today.setHours(0, 0, 0, 0);
+                    const completionDate = new Date(date);
+                    completionDate.setHours(0, 0, 0, 0);
+                    const daysRemaining = Math.ceil((completionDate - today) / (1000 * 60 * 60 * 24));
+                    
                     const formattedDate = date.toLocaleDateString('tr-TR', {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric'
                     });
-                    return `<strong>${formattedDate}</strong>`;
+                    
+                    // Color code based on urgency
+                    // Use darker colors for better contrast, especially on yellow backgrounds
+                    let dateClass = 'text-muted';
+                    let fontWeight = '500';
+                    if (completionDate < today) {
+                        dateClass = 'text-danger';
+                        fontWeight = '700';
+                    } else if (daysRemaining <= 7) {
+                        // Use dark brown/black for yellow background rows for better visibility
+                        dateClass = '';
+                        fontWeight = '700';
+                        return `<span style="color: #92400e; font-size: 0.875rem; font-weight: ${fontWeight};">${formattedDate}</span>`;
+                    } else {
+                        dateClass = 'text-dark';
+                    }
+                    
+                    return `<span class="${dateClass}" style="font-size: 0.875rem; font-weight: ${fontWeight};">${formattedDate}</span>`;
                 }
             },
             {
@@ -693,14 +682,16 @@ function initializeTableComponent() {
                 label: 'Oluşturulma',
                 sortable: true,
                 type: 'date',
-                formatter: (value) => {
+                formatter: (value, row) => {
+                    if (row._isDepartmentTasksRow) return '';
                     if (!value) return '-';
                     const date = new Date(value);
-                    return date.toLocaleDateString('tr-TR', {
+                    const formattedDate = date.toLocaleDateString('tr-TR', {
                         year: 'numeric',
                         month: 'short',
                         day: 'numeric'
                     });
+                    return `<span class="text-dark" style="font-size: 0.875rem; font-weight: 500;">${formattedDate}</span>`;
                 }
             }
         ],
@@ -1589,10 +1580,10 @@ window.viewJobOrder = async function(jobNo) {
         // Helper functions for badge classes
         const getStatusBadgeClass = (status) => {
             switch (status) {
-                case 'active': return 'status-green';
+                case 'active': return 'status-blue';
                 case 'draft': return 'status-grey';
                 case 'on_hold': return 'status-yellow';
-                case 'completed': return 'status-blue';
+                case 'completed': return 'status-green';
                 case 'cancelled': return 'status-red';
                 default: return 'status-grey';
             }
