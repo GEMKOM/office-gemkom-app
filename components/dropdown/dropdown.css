@@ -105,23 +105,30 @@
 /* Search Input */
 .modern-dropdown .dropdown-search {
     width: 100%;
-    padding: 0.75rem 1rem;
-    border: none;
-    border-bottom: 1px solid #e9ecef;
-    background: #f8f9fa;
-    font-size: 0.9rem;
+    padding: 0.625rem 2.5rem 0.625rem 0.875rem;
+    border: 1px solid #e9ecef;
+    border-top: none;
+    border-left: none;
+    border-right: none;
+    background: #ffffff;
+    font-size: 0.875rem;
     color: var(--text-color);
-    transition: all 0.3s ease;
+    transition: all 0.2s ease;
+    box-sizing: border-box;
+    position: relative;
 }
 
 .modern-dropdown .dropdown-search:focus {
     outline: none;
-    background: var(--white);
+    background: #ffffff;
     border-bottom-color: var(--secondary-color);
+    border-bottom-width: 2px;
+    padding-bottom: calc(0.625rem - 1px);
 }
 
 .modern-dropdown .dropdown-search::placeholder {
-    color: var(--text-light);
+    color: #adb5bd;
+    font-style: normal;
 }
 
 /* Dropdown Items Container */
@@ -326,7 +333,13 @@
     }
     
     .dropdown-search {
-        padding: 0.625rem 0.875rem;
+        padding: 0.625rem 2.25rem 0.625rem 0.75rem;
+        font-size: 0.8rem;
+    }
+    
+    .dropdown-search-icon {
+        right: 0.75rem !important;
+        font-size: 0.8rem !important;
     }
     
     .selected-text {
@@ -586,19 +599,32 @@
     color: #2c3e50 !important;
 }
 
+/* Search wrapper */
+.modern-dropdown .dropdown-search-wrapper {
+    position: relative;
+    width: 100%;
+}
+
 /* Ensure search input has proper colors */
 .modern-dropdown .dropdown-search {
     color: #2c3e50 !important;
-    background: #f8f9fa !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #e9ecef !important;
 }
 
 .modern-dropdown .dropdown-search:focus {
     color: #2c3e50 !important;
     background: #ffffff !important;
+    border-bottom-color: #DC143C !important;
+    border-bottom-width: 2px !important;
 }
 
 .modern-dropdown .dropdown-search::placeholder {
-    color: #6c757d !important;
+    color: #adb5bd !important;
+}
+
+.modern-dropdown .dropdown-search-icon {
+    color: #adb5bd !important;
 }
 
 /* Portal wrapper styles */
@@ -677,13 +703,30 @@
     font-weight: 600 !important;
 }
 
+.modern-dropdown-menu-portal .dropdown-search-wrapper {
+    position: relative !important;
+    width: 100% !important;
+}
+
 .modern-dropdown-menu-portal .dropdown-search {
     color: #2c3e50 !important;
-    background: #f8f9fa !important;
+    background: #ffffff !important;
     border-bottom: 1px solid #e9ecef !important;
+    padding: 0.625rem 2.5rem 0.625rem 0.875rem !important;
 }
 
 .modern-dropdown-menu-portal .dropdown-search:focus {
     background: #ffffff !important;
     border-bottom-color: #DC143C !important;
+    border-bottom-width: 2px !important;
+    padding-bottom: calc(0.625rem - 1px) !important;
+}
+
+.modern-dropdown-menu-portal .dropdown-search-icon {
+    color: #adb5bd !important;
+    position: absolute !important;
+    right: 0.875rem !important;
+    top: 50% !important;
+    transform: translateY(-50%) !important;
+    pointer-events: none !important;
 }

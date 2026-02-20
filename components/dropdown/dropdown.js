@@ -57,11 +57,22 @@ export class ModernDropdown {
         
         // Search input (if searchable)
         if (this.options.searchable) {
+            const searchWrapper = document.createElement('div');
+            searchWrapper.className = 'dropdown-search-wrapper';
+            searchWrapper.style.position = 'relative';
+            
             this.searchInput = document.createElement('input');
             this.searchInput.className = 'dropdown-search';
             this.searchInput.placeholder = 'Ara...';
             this.searchInput.type = 'text';
-            this.menu.appendChild(this.searchInput);
+            
+            const searchIcon = document.createElement('i');
+            searchIcon.className = 'fas fa-search dropdown-search-icon';
+            searchIcon.style.cssText = 'position: absolute; right: 0.875rem; top: 50%; transform: translateY(-50%); color: #adb5bd; font-size: 0.875rem; pointer-events: none;';
+            
+            searchWrapper.appendChild(this.searchInput);
+            searchWrapper.appendChild(searchIcon);
+            this.menu.appendChild(searchWrapper);
         }
         
         // Items container
