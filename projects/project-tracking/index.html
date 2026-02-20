@@ -166,6 +166,40 @@
             0% { transform: translateX(-100%); }
             100% { transform: translateX(200%); }
         }
+        
+        /* Enhanced Row Separation for Job Orders Table */
+        #job-orders-table-container .table tbody tr {
+            border-top: 1px solid #e0e0e0;
+            border-bottom: 2px solid #e0e0e0;
+            margin-bottom: 2px;
+        }
+        
+        #job-orders-table-container .table tbody tr:first-child {
+            border-top: 2px solid #e0e0e0;
+        }
+        
+        #job-orders-table-container .table tbody tr:last-child {
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        #job-orders-table-container .table tbody td {
+            border-bottom: none;
+            padding-top: 0.875rem;
+            padding-bottom: 0.875rem;
+        }
+        
+        /* Ensure row highlighting still works with better borders */
+        #job-orders-table-container .table tbody tr.job-order-past-due,
+        #job-orders-table-container .table tbody tr.job-order-due-soon {
+            border-top-color: rgba(0, 0, 0, 0.15);
+            border-bottom-color: rgba(0, 0, 0, 0.15);
+        }
+        
+        /* Department tasks row separation */
+        #job-orders-table-container .table tbody tr.department-tasks-row {
+            border-top: 1px solid #d0d0d0;
+            border-bottom: 1px solid #d0d0d0;
+        }
     </style>
 </head>
 <body>

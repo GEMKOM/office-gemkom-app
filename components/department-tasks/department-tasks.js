@@ -34,7 +34,7 @@ import {
     createAssignmentWithSubtask
 } from '../../apis/subcontracting/assignments.js';
 import { fetchSubcontractors } from '../../apis/subcontracting/subcontractors.js';
-import { fetchPriceTiers, getPriceTierRemainingWeight } from '../../apis/subcontracting/priceTiers.js';
+import { fetchPriceTiers, getPriceTierRemainingWeight, updatePriceTier } from '../../apis/subcontracting/priceTiers.js';
 
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
@@ -872,6 +872,18 @@ function initializeTableComponent() {
                     if (department !== 'manufacturing') return false;
                     // Check if this task itself has task_type === 'welding' (regardless of hierarchy level)
                     return row.task_type === 'welding';
+                }
+            },
+            {
+                key: 'set-paint-price',
+                label: 'Boya Fiyatı Belirle',
+                icon: 'fas fa-paint-brush',
+                class: 'btn-outline-info',
+                onClick: (row) => showSetPaintPriceModal(row.id, row),
+                visible: (row) => {
+                    // Show for all painting tasks
+                    // Works at any hierarchy level
+                    return row.task_type === 'painting';
                 }
             }
         ],
@@ -3788,6 +3800,7 @@ async function addSubcontractingAssignmentSection(modal, task) {
                                 <strong>Toplam Maliyet:</strong> ${assignment.allocated_weight_kg || 0} × ${assignment.current_progress || 0}% × ${formatCurrency(assignment.price_per_kg, assignment.cost_currency)} = ${formatCurrency(assignment.current_cost, assignment.cost_currency)}
                             </div>
                         </div>
+                        ${task.task_type !== 'painting' ? `
                         <div class="mt-3">
                             <button type="button" class="btn btn-sm btn-primary" id="edit-assignment-btn-${task.id}">
                                 <i class="fas fa-edit me-1"></i>Düzenle
@@ -3796,6 +3809,7 @@ async function addSubcontractingAssignmentSection(modal, task) {
                                 <i class="fas fa-trash me-1"></i>Sil
                             </button>
                         </div>
+                        ` : ''}
                     </div>
                 `
             });
@@ -3817,32 +3831,35 @@ async function addSubcontractingAssignmentSection(modal, task) {
         }
         
         // Set up event listeners after modal is rendered
-        setTimeout(() => {
-            const editBtn = document.getElementById(`edit-assignment-btn-${task.id}`);
-            if (editBtn) {
-                editBtn.addEventListener('click', () => {
-                    modal.hide();
-                    showEditAssignmentModal(task, assignment);
-                });
-            }
-            
-            const deleteBtn = document.getElementById(`delete-assignment-btn-${task.id}`);
-            if (deleteBtn) {
-                deleteBtn.addEventListener('click', async () => {
-                    if (confirm('Taşeron atamasını silmek istediğinizden emin misiniz?')) {
-                        try {
-                            await deleteAssignment(assignment.id);
-                            showNotification('Taşeron ataması silindi', 'success');
-                            modal.hide();
-                            viewTaskDetails(task.id);
-                        } catch (error) {
-                            console.error('Error deleting assignment:', error);
-                            showNotification(error.message || 'Taşeron ataması silinirken hata oluştu', 'error');
+        // Skip edit/delete buttons for painting tasks (they have their own button)
+        if (task.task_type !== 'painting') {
+            setTimeout(() => {
+                const editBtn = document.getElementById(`edit-assignment-btn-${task.id}`);
+                if (editBtn) {
+                    editBtn.addEventListener('click', () => {
+                        modal.hide();
+                        showEditAssignmentModal(task, assignment);
+                    });
+                }
+                
+                const deleteBtn = document.getElementById(`delete-assignment-btn-${task.id}`);
+                if (deleteBtn) {
+                    deleteBtn.addEventListener('click', async () => {
+                        if (confirm('Taşeron atamasını silmek istediğinizden emin misiniz?')) {
+                            try {
+                                await deleteAssignment(assignment.id);
+                                showNotification('Taşeron ataması silindi', 'success');
+                                modal.hide();
+                                viewTaskDetails(task.id);
+                            } catch (error) {
+                                console.error('Error deleting assignment:', error);
+                                showNotification(error.message || 'Taşeron ataması silinirken hata oluştu', 'error');
+                            }
                         }
-                    }
-                });
-            }
-        }, 100);
+                    });
+                }
+            }, 100);
+        }
     } catch (error) {
         console.error('Error loading assignment:', error);
         // Don't show error to user, just skip the section
@@ -3972,6 +3989,77 @@ async function showCreateAssignmentModal(task) {
 // Show Edit Assignment Modal
 async function showEditAssignmentModal(task, assignment) {
     try {
+        // For painting tasks, only allow editing the price (via price tier)
+        if (task.task_type === 'painting') {
+            if (!task.job_order) {
+                showNotification('İş emri bulunamadı', 'error');
+                return;
+            }
+            
+            // Fetch price tiers for this job order
+            const tiersResponse = await fetchPriceTiers({ job_order: task.job_order });
+            const tiers = tiersResponse.results || tiersResponse || [];
+            
+            // Find the painting tier (usually named "Boya" or contains "painting")
+            const paintingTier = tiers.find(t => {
+                const tierName = (t.name || '').toLowerCase();
+                return tierName.includes('boya') || tierName.includes('painting');
+            });
+            
+            if (!paintingTier) {
+                showNotification('Boya fiyat kademesi bulunamadı', 'error');
+                return;
+            }
+            
+            const modal = new EditModal('assignment-modal-container', {
+                title: 'Boya Fiyatı Düzenle',
+                icon: 'fas fa-paint-brush',
+                size: 'md',
+                showEditButton: false
+            });
+            
+            modal.clearAll();
+            modal.addSection({
+                title: 'Fiyat Bilgisi',
+                icon: 'fas fa-money-bill-wave',
+                iconColor: 'text-primary'
+            });
+            
+            modal.addField({
+                id: 'edit-paint-price',
+                name: 'price_per_kg',
+                label: 'Fiyat/kg',
+                type: 'number',
+                value: paintingTier.price_per_kg || '',
+                required: true,
+                step: '0.01',
+                min: '0',
+                icon: 'fas fa-money-bill-wave',
+                colSize: 12,
+                helpText: `Mevcut fiyat: ${paintingTier.price_per_kg || '0'} ${paintingTier.currency || 'TRY'}/kg`
+            });
+            
+            modal.render();
+            modal.show();
+            
+            modal.onSaveCallback(async (formData) => {
+                try {
+                    await updatePriceTier(paintingTier.id, {
+                        price_per_kg: formData.price_per_kg
+                    });
+                    showNotification('Boya fiyatı güncellendi', 'success');
+                    modal.hide();
+                    viewTaskDetails(task.id);
+                } catch (error) {
+                    console.error('Error updating paint price:', error);
+                    showNotification(error.message || 'Boya fiyatı güncellenirken hata oluştu', 'error');
+                }
+            });
+            
+            return;
+        }
+        
+        // For non-painting tasks, show the full assignment edit form
         // Fetch subcontractors and price tiers
         const [subcontractorsResponse, tiersResponse] = await Promise.all([
             fetchSubcontractors({ is_active: true }),
@@ -4272,6 +4360,90 @@ async function showCreateAssignmentWithSubtaskModal(taskId, taskRow = null) {
     } catch (error) {
         console.error('Error showing create assignment with subtask modal:', error);
         showNotification('Atama formu yüklenirken hata oluştu', 'error');
+    }
+}
+
+// Show Set Paint Price Modal
+async function showSetPaintPriceModal(taskId, taskRow = null) {
+    try {
+        // Get task to ensure we have the latest data
+        const task = taskRow || await getDepartmentTaskById(taskId);
+        
+        // Verify this is a painting task
+        if (task.task_type !== 'painting') {
+            showNotification('Bu işlem sadece Boya görevleri için kullanılabilir', 'error');
+            return;
+        }
+        
+        if (!task.job_order) {
+            showNotification('İş emri bulunamadı', 'error');
+            return;
+        }
+        
+        // Fetch price tiers for this job order
+        const tiersResponse = await fetchPriceTiers({ job_order: task.job_order });
+        const tiers = tiersResponse.results || tiersResponse || [];
+        
+        // Find the painting tier (usually named "Boya" or contains "painting")
+        const paintingTier = tiers.find(t => {
+            const tierName = (t.name || '').toLowerCase();
+            return tierName.includes('boya') || tierName.includes('painting');
+        });
+        
+        if (!paintingTier) {
+            showNotification('Boya fiyat kademesi bulunamadı', 'error');
+            return;
+        }
+        
+        const modal = new EditModal('assignment-modal-container', {
+            title: 'Boya Fiyatı Belirle',
+            icon: 'fas fa-paint-brush',
+            size: 'md',
+            showEditButton: false
+        });
+        
+        modal.clearAll();
+        modal.addSection({
+            title: 'Fiyat Bilgisi',
+            icon: 'fas fa-money-bill-wave',
+            iconColor: 'text-primary'
+        });
+        
+        modal.addField({
+            id: 'paint-price',
+            name: 'price_per_kg',
+            label: 'Fiyat/kg',
+            type: 'number',
+            value: paintingTier.price_per_kg || '',
+            required: true,
+            step: '0.01',
+            min: '0',
+            icon: 'fas fa-money-bill-wave',
+            colSize: 12,
+            helpText: `Mevcut fiyat: ${paintingTier.price_per_kg || '0'} ${paintingTier.currency || 'TRY'}/kg`
+        });
+        
+        modal.render();
+        modal.show();
+        
+        modal.onSaveCallback(async (formData) => {
+            try {
+                await updatePriceTier(paintingTier.id, {
+                    price_per_kg: formData.price_per_kg
+                });
+                showNotification('Boya fiyatı güncellendi', 'success');
+                modal.hide();
+                
+                // Reload tasks to refresh any displayed price information
+                await loadTasks();
+            } catch (error) {
+                console.error('Error updating paint price:', error);
+                showNotification(error.message || 'Boya fiyatı güncellenirken hata oluştu', 'error');
+            }
+        });
+    } catch (error) {
+        console.error('Error showing set paint price modal:', error);
+        showNotification('Fiyat formu yüklenirken hata oluştu', 'error');
     }
 }
 
