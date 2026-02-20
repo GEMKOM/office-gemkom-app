@@ -15,6 +15,7 @@ import {
     completeDepartmentTask,
     uncompleteDepartmentTask,
     skipDepartmentTask,
+    unskipDepartmentTask,
     patchDepartmentTask,
     createDepartmentTask,
     getStatusChoices,
@@ -788,8 +789,8 @@ function initializeTableComponent() {
                 class: 'btn-outline-info',
                 onClick: (row) => showAddSubtaskModal(row.id),
                 visible: (row) => {
-                    // Hide for subtasks, machining_part, cnc_part
-                    if (row.parent) return false;
+                    // Available at all hierarchy levels (top-level, subtasks, subtasks of subtasks, etc.)
+                    // Hide only for machining_part, cnc_part, and procurement_item tasks
                     if (row.type === 'machining_part' || row.type === 'cnc_part') return false;
                     // Hide for procurement_item tasks (with or without purchase_order_id)
                     if (row.task_type === 'procurement_item') return false;
@@ -848,15 +849,28 @@ function initializeTableComponent() {
                 }
             },
             {
+                key: 'unskip',
+                label: 'Atlamayı Geri Al',
+                icon: 'fas fa-undo',
+                class: 'btn-outline-warning',
+                onClick: (row) => handleUnskipTask(row.id),
+                visible: (row) => {
+                    // Hide for procurement_item tasks (with or without purchase_order_id)
+                    if (row.task_type === 'procurement_item') return false;
+                    return row.status === 'skipped' && row.type !== 'machining_part' && row.type !== 'cnc_part';
+                }
+            },
+            {
                 key: 'assign-subcontractor',
                 label: 'Taşeron Ata',
                 icon: 'fas fa-handshake',
                 class: 'btn-outline-primary',
                 onClick: (row) => showCreateAssignmentWithSubtaskModal(row.id, row),
                 visible: (row) => {
-                    // Only show for welding (Kaynaklı İmalat) tasks in manufacturing department
+                    // Show for all welding (Kaynaklı İmalat) tasks in manufacturing department
+                    // Works at any hierarchy level (top-level, subtasks, subtasks of subtasks, etc.)
                     if (department !== 'manufacturing') return false;
-                    // Check if this task itself has task_type === 'welding'
+                    // Check if this task itself has task_type === 'welding' (regardless of hierarchy level)
                     return row.task_type === 'welding';
                 }
             }
@@ -3579,6 +3593,52 @@ async function handleSkipTask(taskId) {
     });
 }
 
+async function handleUnskipTask(taskId) {
+    confirmationModal.show({
+        message: 'Bu görevin atlama durumunu geri almak istediğinize emin misiniz?',
+        confirmText: 'Evet, Geri Al',
+        onConfirm: async () => {
+            try {
+                const response = await unskipDepartmentTask(taskId);
+                showNotification('Görev atlama durumu geri alındı', 'success');
+                confirmationModal.hide();
+                
+                // Update the task in the local data without reloading all tasks
+                if (response && response.task) {
+                    const updatedTask = response.task;
+                    if (updateTaskInLocalData(taskId, updatedTask)) {
+                        // Update the table without full reload
+                        updateTableDataOnly();
+                    } else {
+                        // Task not found, fallback to full reload
+                        await loadTasks();
+                    }
+                } else {
+                    // Fallback to full reload if response doesn't have task data
+                    await loadTasks();
+                }
+            } catch (error) {
+                console.error('Error unskipping task:', error);
+                let errorMessage = 'Görev atlama durumu geri alınırken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                showNotification(errorMessage, 'error');
+            }
+        }
+    });
+}
+
 async function exportTasks(format) {
     try {
         if (tasksTable) {
@@ -4038,6 +4098,7 @@ async function showCreateAssignmentWithSubtaskModal(taskId, taskRow = null) {
         const task = taskRow || await getDepartmentTaskById(taskId);
         
         // Verify this is a welding (Kaynaklı İmalat) task
+        // Works for tasks at any hierarchy level (top-level, subtasks, subtasks of subtasks, etc.)
         if (task.task_type !== 'welding') {
             showNotification('Bu işlem sadece Kaynaklı İmalat görevleri için kullanılabilir', 'error');
             return;

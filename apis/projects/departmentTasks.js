@@ -456,6 +456,34 @@ export async function skipDepartmentTask(taskId) {
 }
 
 /**
+ * Unskip task (skipped → pending)
+ * Revert a skipped task back to pending status
+ * @param {number} taskId - Task ID
+ * @returns {Promise<Object>} Response with status, message, and task
+ */
+export async function unskipDepartmentTask(taskId) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/department-tasks/${taskId}/unskip/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error unskipping department task ${taskId}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Get status choices for department tasks
  * @returns {Promise<Array>} Array of status options with value, label, and color
  */
