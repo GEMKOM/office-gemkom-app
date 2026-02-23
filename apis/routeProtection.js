@@ -135,6 +135,8 @@ function getDefaultRedirectForUser() {
                 return '/manufacturing/machining/capacity/planning';
             case 'finance':
                 return '/finance/purchase-orders';
+            case 'qualitycontrol':
+                return '/quality-control';
             default:
                 return ROUTES.HOME;
         }

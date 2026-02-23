@@ -264,6 +264,16 @@ export const TEAM_ACCESS_CONFIG = {
         allowedSections: ['design', 'general', 'general_overtime']
     },
     
+    // Quality Control team - access to quality control and related areas
+    qualitycontrol: {
+        allowedRoutes: mergeWithBaseRoutes([
+            '/quality-control',
+            '/quality-control/qc-reviews',
+            '/quality-control/ncrs'
+        ]),
+        allowedSections: ['quality_control', 'general', 'general_overtime']
+    },
+    
     // Default/other teams - minimal access
     other: {
         allowedRoutes: mergeWithBaseRoutes([]),
