@@ -176,6 +176,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                         link: '/manufacturing/subcontracting/statements'
                     }
                 ]
+            },
+            {
+                title: 'Malzeme Takibi',
+                description: 'Teslim edilmiş planlama talebi kalemlerini görüntüleyin ve takip edin.',
+                icon: 'fas fa-box',
+                iconColor: 'info',
+                link: '/manufacturing/material-tracking'
             }
         ]
     });

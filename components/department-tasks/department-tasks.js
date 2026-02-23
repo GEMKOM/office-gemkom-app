@@ -36,7 +36,7 @@ import {
 } from '../../apis/subcontracting/assignments.js';
 import { fetchSubcontractors } from '../../apis/subcontracting/subcontractors.js';
 import { fetchPriceTiers, getPriceTierRemainingWeight, updatePriceTier } from '../../apis/subcontracting/priceTiers.js';
-import { submitQCReview, bulkSubmitQCReviews, listQCReviews } from '../../apis/qualityControl.js';
+import { submitQCReview, bulkSubmitQCReviews, listQCReviews, listNCRs } from '../../apis/qualityControl.js';
 
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
@@ -2764,6 +2764,14 @@ function getAvailableActions(task) {
         });
     }
     
+    // NCRs tab - show for all tasks (NCRs can be created for any task)
+    actions.push({
+        key: 'ncrs',
+        label: 'Uygunsuzluk Raporları',
+        icon: 'fas fa-exclamation-triangle',
+        handler: 'ncrs'
+    });
+    
     // Uncomplete action
     if (task.status === 'completed' && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
         actions.push({
@@ -2894,6 +2902,9 @@ async function loadActionContent(task, action) {
                 break;
             case 'subcontractor':
                 content = await renderSubcontractorTab(task);
+                break;
+            case 'ncrs':
+                content = await renderNCRsTab(task);
                 break;
             default:
                 content = '<p>İşlem formu yüklenemedi</p>';
@@ -3521,6 +3532,88 @@ async function renderSubcontractorTab(task) {
     } catch (error) {
         console.error('Error loading subcontractor assignments:', error);
         return '<p class="text-danger">Taşeron atamaları yüklenirken hata oluştu</p>';
+    }
+}
+
+// Render NCRs tab
+async function renderNCRsTab(task) {
+    try {
+        // Fetch NCRs for this task
+        const ncrsResponse = await listNCRs({ department_task: task.id }, '', '-created_at', 1, 100);
+        const ncrs = ncrsResponse.results || [];
+        
+        if (ncrs.length === 0) {
+            return `
+                <h5 class="mb-4"><i class="fas fa-exclamation-triangle me-2"></i>Uygunsuzluk Raporları</h5>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Bu görev için henüz uygunsuzluk raporu bulunmamaktadır.
+                </div>
+            `;
+        }
+        
+        // Status badge mapping
+        const statusBadgeMap = {
+            'draft': '<span class="badge bg-secondary">Taslak</span>',
+            'submitted': '<span class="badge bg-warning">Gönderildi</span>',
+            'approved': '<span class="badge bg-success">Onaylandı</span>',
+            'rejected': '<span class="badge bg-danger">Reddedildi</span>',
+            'closed': '<span class="badge bg-info">Kapatıldı</span>'
+        };
+        
+        // Severity badge mapping
+        const severityBadgeMap = {
+            'minor': '<span class="badge bg-warning">Minör</span>',
+            'major': '<span class="badge bg-orange">Majör</span>',
+            'critical': '<span class="badge bg-danger">Kritik</span>'
+        };
+        
+        const ncrsTable = ncrs.map(ncr => {
+            const createdAt = ncr.created_at 
+                ? new Date(ncr.created_at).toLocaleString('tr-TR')
+                : '-';
+            const statusBadge = statusBadgeMap[ncr.status] || `<span class="badge bg-secondary">${ncr.status_display || ncr.status || '-'}</span>`;
+            const severityBadge = severityBadgeMap[ncr.severity] || `<span class="badge bg-secondary">${ncr.severity_display || ncr.severity || '-'}</span>`;
+            
+            return `
+                <tr>
+                    <td>${ncr.ncr_number || ncr.id || '-'}</td>
+                    <td>${ncr.title || '-'}</td>
+                    <td>${statusBadge}</td>
+                    <td>${severityBadge}</td>
+                    <td>${ncr.defect_type_display || ncr.defect_type || '-'}</td>
+                    <td>${ncr.affected_quantity || '-'}</td>
+                    <td>${ncr.assigned_team || '-'}</td>
+                    <td>${createdAt}</td>
+                </tr>
+            `;
+        }).join('');
+        
+        return `
+            <h5 class="mb-4"><i class="fas fa-exclamation-triangle me-2"></i>Uygunsuzluk Raporları</h5>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>NCR No</th>
+                            <th>Başlık</th>
+                            <th>Durum</th>
+                            <th>Önem Derecesi</th>
+                            <th>Kusur Tipi</th>
+                            <th>Etkilenen Miktar</th>
+                            <th>Atanan Takım</th>
+                            <th>Oluşturulma Tarihi</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${ncrsTable}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading NCRs:', error);
+        return '<p class="text-danger">Uygunsuzluk raporları yüklenirken hata oluştu</p>';
     }
 }
 

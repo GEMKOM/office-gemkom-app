@@ -71,6 +71,31 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadUsers();
     await initializeComponents();
     await loadNCRs();
+    
+    // Check if there's an NCR ID in the URL to auto-open the modal
+    const ncrIdParam = urlParams.get('ncr');
+    if (ncrIdParam) {
+        const ncrId = parseInt(ncrIdParam);
+        if (!isNaN(ncrId)) {
+            // Wait a bit for the table to load, then open the modal
+            setTimeout(async () => {
+                try {
+                    const ncr = await getNCR(ncrId);
+                    if (ncr) {
+                        await showNCRDetails(ncr);
+                        // Remove the ncr parameter from URL after opening
+                        const newParams = new URLSearchParams(window.location.search);
+                        newParams.delete('ncr');
+                        const newUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
+                        window.history.replaceState({}, '', newUrl);
+                    }
+                } catch (error) {
+                    console.error('Error loading NCR from URL parameter:', error);
+                    showNotification('NCR yüklenirken hata oluştu', 'error');
+                }
+            }, 500);
+        }
+    }
 });
 
 async function loadUsers() {
@@ -501,39 +526,33 @@ async function showNCRDetails(ncr) {
         ncrDetailsModal.clearData();
         ncrDetailsModal.setTitle(fullNCR.ncr_number || `NCR #${fullNCR.id}`);
 
-        // Add sections - compact format with 2 fields per row
+        // Title section - most important, shown prominently
         ncrDetailsModal.addSection({
-            title: 'Genel Bilgiler',
-            icon: 'fas fa-info-circle',
+            title: 'Başlık',
+            icon: 'fas fa-heading',
             fields: [
-                { 
-                    label: 'NCR Numarası', 
-                    value: fullNCR.ncr_number || '-',
-                    colSize: 6
-                },
-                { 
-                    label: 'İş Emri', 
-                    value: fullNCR.job_order || '-',
-                    colSize: 6
-                },
                 { 
                     label: 'Başlık', 
                     value: fullNCR.title || '-',
                     colSize: 12
-                },
-                { 
-                    label: 'Durum', 
-                    value: STATUS_BADGE_MAP[fullNCR.status]?.label || fullNCR.status_display || '-',
-                    colSize: 6
-                },
-                { 
-                    label: 'Tespit Eden', 
-                    value: fullNCR.detected_by_name || '-',
-                    colSize: 6
                 }
             ]
         });
 
+        // Description section - important, shown early
+        ncrDetailsModal.addSection({
+            title: 'Açıklama',
+            icon: 'fas fa-align-left',
+            fields: [
+                { 
+                    label: 'Açıklama', 
+                    value: fullNCR.description || '-',
+                    colSize: 12
+                }
+            ]
+        });
+
+        // Kusur Bilgileri section - important defect information
         ncrDetailsModal.addSection({
             title: 'Kusur Bilgileri',
             icon: 'fas fa-exclamation-triangle',
@@ -561,6 +580,7 @@ async function showNCRDetails(ncr) {
             ]
         });
 
+        // Düzeltici Faaliyet section - root cause and corrective action
         if (fullNCR.root_cause || fullNCR.corrective_action || fullNCR.disposition) {
             ncrDetailsModal.addSection({
                 title: 'Düzeltici Faaliyet',
@@ -585,15 +605,30 @@ async function showNCRDetails(ncr) {
             });
         }
 
-        // Add description at the bottom
+        // Genel Bilgiler section - additional information
         ncrDetailsModal.addSection({
-            title: 'Açıklama',
-            icon: 'fas fa-align-left',
+            title: 'Genel Bilgiler',
+            icon: 'fas fa-info-circle',
             fields: [
                 { 
-                    label: 'Açıklama', 
-                    value: fullNCR.description || '-',
-                    colSize: 12
+                    label: 'NCR Numarası', 
+                    value: fullNCR.ncr_number || '-',
+                    colSize: 6
+                },
+                { 
+                    label: 'İş Emri', 
+                    value: fullNCR.job_order || '-',
+                    colSize: 6
+                },
+                { 
+                    label: 'Durum', 
+                    value: STATUS_BADGE_MAP[fullNCR.status]?.label || fullNCR.status_display || '-',
+                    colSize: 6
+                },
+                { 
+                    label: 'Tespit Eden', 
+                    value: fullNCR.detected_by_name || '-',
+                    colSize: 6
                 }
             ]
         });

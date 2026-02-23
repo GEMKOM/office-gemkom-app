@@ -333,6 +333,11 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     }
                 }
+            },
+            '/manufacturing/material-tracking': {
+                label: 'Malzeme Takibi',
+                icon: 'fas fa-box',
+                children: {}
             }
 
 

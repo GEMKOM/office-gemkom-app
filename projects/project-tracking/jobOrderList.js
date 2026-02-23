@@ -55,6 +55,7 @@ import {
     updatePriceTier, 
     deletePriceTier 
 } from '../../apis/subcontracting/priceTiers.js';
+import { listNCRs } from '../../apis/qualityControl.js';
 
 // State management
 // Read initial page and page_size from URL
@@ -668,8 +669,8 @@ function initializeTableComponent() {
                 }
             },
             {
-                field: 'children_count',
-                label: 'Alt İşler',
+                field: 'ncr_count',
+                label: 'NCR Sayısı',
                 sortable: false,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
@@ -1077,7 +1078,8 @@ function initializeModalComponents() {
             topics: null,
             drawingReleases: null,
             currentRelease: null,
-            drawingReleasesJobNo: null
+            drawingReleasesJobNo: null,
+            ncrs: null
         };
         
         // Remove deep-link parameters from URL
@@ -1551,7 +1553,8 @@ let jobOrderTabCache = {
     topics: null,
     drawingReleases: null,
     currentRelease: null,
-    drawingReleasesJobNo: null
+    drawingReleasesJobNo: null,
+    ncrs: null
 };
 
 window.viewJobOrder = async function(jobNo) {
@@ -1566,7 +1569,8 @@ window.viewJobOrder = async function(jobNo) {
             topics: null,
             drawingReleases: null,
             currentRelease: null,
-            drawingReleasesJobNo: null
+            drawingReleasesJobNo: null,
+            ncrs: null
         };
         
         // Fetch only basic job order data
@@ -1833,6 +1837,15 @@ window.viewJobOrder = async function(jobNo) {
             });
         }
         
+        // Add Kalite Kontrol tab (show NCRs for this job order)
+        viewJobOrderModal.addTab({
+            id: 'kalite-kontrol',
+            label: 'Kalite Kontrol',
+            icon: 'fas fa-clipboard-check',
+            iconColor: 'text-primary',
+            customContent: '<div id="ncrs-container" style="padding: 20px;"></div>'
+        });
+        
         // Render the modal
         viewJobOrderModal.render();
         
@@ -1896,6 +1909,9 @@ function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate) {
                     break;
                 case 'taseronluk':
                     await loadPriceTiersTab(jobNo);
+                    break;
+                case 'kalite-kontrol':
+                    await loadNCRsTab(jobNo);
                     break;
             }
         });
@@ -2726,6 +2742,157 @@ function renderPriceTiersUI(container, tiers, jobOrder, jobNo) {
     }
 }
 
+// Load NCRs Tab
+async function loadNCRsTab(jobNo) {
+    // Check cache first
+    if (jobOrderTabCache.ncrs !== null) {
+        renderNCRsTab(jobOrderTabCache.ncrs);
+        return;
+    }
+    
+    const container = viewJobOrderModal.content.querySelector('#ncrs-container');
+    if (!container) return;
+    
+    // Show loading state
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
+    
+    try {
+        // Fetch NCRs for this job order
+        const response = await listNCRs({ job_order: jobNo }, '', '-created_at', 1, 100);
+        const ncrs = response.results || [];
+        
+        // Cache the data
+        jobOrderTabCache.ncrs = ncrs;
+        
+        // Render the table
+        renderNCRsTab(ncrs);
+    } catch (error) {
+        console.error('Error loading NCRs:', error);
+        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Uygunsuzluk raporları yüklenirken hata oluştu.</div>';
+    }
+}
+
+// Render NCRs Tab
+function renderNCRsTab(ncrs) {
+    const container = viewJobOrderModal.content.querySelector('#ncrs-container');
+    if (!container) return;
+    
+    if (ncrs.length === 0) {
+        container.innerHTML = '<p class="text-muted text-center py-3">Bu iş emri için henüz uygunsuzluk raporu bulunmamaktadır.</p>';
+        return;
+    }
+    
+    // Status badge mapping
+    const statusBadgeMap = {
+        'draft': '<span class="status-badge status-grey">Taslak</span>',
+        'submitted': '<span class="status-badge status-yellow">Gönderildi</span>',
+        'approved': '<span class="status-badge status-green">Onaylandı</span>',
+        'rejected': '<span class="status-badge status-red">Reddedildi</span>',
+        'closed': '<span class="status-badge status-blue">Kapatıldı</span>'
+    };
+    
+    // Severity badge mapping
+    const severityBadgeMap = {
+        'minor': '<span class="status-badge status-yellow">Minör</span>',
+        'major': '<span class="status-badge status-orange">Majör</span>',
+        'critical': '<span class="status-badge status-red">Kritik</span>'
+    };
+    
+    const formatDate = (dateString) => {
+        if (!dateString) return '-';
+        const date = new Date(dateString);
+        return date.toLocaleString('tr-TR', {
+            year: 'numeric',
+            month: 'short',
+            day: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+    
+    const ncrsTable = new TableComponent('ncrs-container', {
+        title: 'Uygunsuzluk Raporları',
+        icon: 'fas fa-exclamation-triangle',
+        iconColor: 'text-primary',
+        columns: [
+            {
+                field: 'ncr_number',
+                label: 'NCR No',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'title',
+                label: 'Başlık',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'status',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value) => {
+                    return statusBadgeMap[value] || `<span class="status-badge status-grey">${value || '-'}</span>`;
+                }
+            },
+            {
+                field: 'severity',
+                label: 'Önem Derecesi',
+                sortable: true,
+                formatter: (value) => {
+                    return severityBadgeMap[value] || `<span class="status-badge status-grey">${value || '-'}</span>`;
+                }
+            },
+            {
+                field: 'defect_type_display',
+                label: 'Kusur Tipi',
+                sortable: false,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'affected_quantity',
+                label: 'Etkilenen Miktar',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'assigned_team',
+                label: 'Atanan Takım',
+                sortable: false,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'created_at',
+                label: 'Oluşturulma Tarihi',
+                sortable: true,
+                type: 'datetime',
+                formatter: (value) => formatDate(value)
+            }
+        ],
+        data: ncrs,
+        sortable: true,
+        pagination: false,
+        exportable: false,
+        refreshable: false,
+        small: true,
+        striped: true,
+        emptyMessage: 'Uygunsuzluk raporu bulunamadı',
+        emptyIcon: 'fas fa-exclamation-triangle',
+        actions: [
+            {
+                key: 'view',
+                label: 'Detay',
+                icon: 'fas fa-eye',
+                class: 'btn-outline-info',
+                onClick: (row) => {
+                    // Open NCR details page in a new tab
+                    window.open(`/quality-control/ncrs/?ncr=${row.id}`, '_blank');
+                }
+            }
+        ]
+    });
+}
+
 // Show Add Tier Modal
 function showAddTierModal(jobNo, jobOrder) {
     if (!jobOrder.total_weight_kg) {
@@ -3011,10 +3178,10 @@ function renderTopicsUI(container, topics, jobNo) {
                                         <span>${topic.created_by_name || 'Bilinmeyen'}</span>
                                         <span class="mx-1">•</span>
                                         <span>${formatDateTime(topic.created_at)}</span>
-                                        ${topic.comment_count > 0 ? `
-                                            <span class="mx-1">•</span>
-                                            <span><i class="fas fa-comments me-1"></i>${topic.comment_count} yorum</span>
-                                        ` : ''}
+                                        <span class="mx-1">•</span>
+                                        <span><i class="fas fa-comments me-1"></i>${topic.comment_count || 0} yorum</span>
+                                        <span class="mx-1">•</span>
+                                        <span><i class="fas fa-users me-1"></i>${topic.participant_count || 0} katılımcı</span>
                                     </div>
                                 </div>
                             </div>

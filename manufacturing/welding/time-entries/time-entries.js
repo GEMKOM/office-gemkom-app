@@ -592,8 +592,8 @@ function setupBulkCreateForm(bulkCreateModal) {
                     }
                     html += `</select></td>`;
                 } else if (col.key === 'job_no') {
-                    // Use dropdown container for job_no
-                    html += `<td><div id="job-no-dropdown-${i}" class="job-no-dropdown-container"></div></td>`;
+                    // Use text input for job_no (temporarily replaced dropdown)
+                    html += `<td><input type="text" class="form-control form-control-sm bulk-input" data-row="${i}" data-key="${col.key}" value="${row[col.key] || ''}" ${col.required ? 'required' : ''}></td>`;
                 } else {
                     const inputType = col.type === 'number' ? 'number' : (col.type === 'date' ? 'date' : 'text');
                     let inputAttrs = '';
@@ -696,12 +696,12 @@ function setupBulkCreateForm(bulkCreateModal) {
                 customContentDiv.innerHTML = customContent;
                 setupBulkCreateEventListeners();
                 
-                // Initialize job order dropdowns for all rows after rendering
-                setTimeout(() => {
-                    rows.forEach((row, i) => {
-                        initializeJobOrderDropdown(i, row.job_no);
-                    });
-                }, 100);
+                // Job order dropdown initialization temporarily disabled - using text field instead
+                // setTimeout(() => {
+                //     rows.forEach((row, i) => {
+                //         initializeJobOrderDropdown(i, row.job_no);
+                //     });
+                // }, 100);
             }
         }
     }
@@ -735,16 +735,16 @@ function setupBulkCreateForm(bulkCreateModal) {
                     return;
                 }
                 const rowIdx = parseInt(btn.getAttribute('data-row'));
-                // Get job_no from dropdown before duplicating
-                const dropdown = jobOrderDropdowns.get(rowIdx);
-                const jobNo = dropdown?.getValue() || rows[rowIdx].job_no || '';
+                // Get job_no from input field before duplicating (temporarily using text field)
+                const jobNoInput = document.querySelector(`input[data-row="${rowIdx}"][data-key="job_no"]`);
+                const jobNo = jobNoInput?.value || rows[rowIdx].job_no || '';
                 
                 const newRow = { ...rows[rowIdx] };
                 newRow.job_no = jobNo; // Preserve job_no value
                 rows.splice(rowIdx + 1, 0, newRow);
                 
-                // Clear dropdown references (will be recreated in reRenderTable)
-                jobOrderDropdowns.clear();
+                // Dropdown references cleared (temporarily using text field)
+                // jobOrderDropdowns.clear();
                 checkForUnsavedChanges();
                 reRenderTable();
             });
@@ -756,20 +756,20 @@ function setupBulkCreateForm(bulkCreateModal) {
                 e.stopPropagation();
                 const rowIdx = parseInt(btn.getAttribute('data-row'));
                 if (rows.length > 1) {
-                    // Clean up dropdown reference
-                    jobOrderDropdowns.delete(rowIdx);
+                    // Dropdown cleanup temporarily disabled (using text field)
+                    // jobOrderDropdowns.delete(rowIdx);
                     rows.splice(rowIdx, 1);
                     
-                    // Re-index dropdown references for remaining rows
-                    const newDropdowns = new Map();
-                    jobOrderDropdowns.forEach((dropdown, oldIndex) => {
-                        if (oldIndex < rowIdx) {
-                            newDropdowns.set(oldIndex, dropdown);
-                        } else if (oldIndex > rowIdx) {
-                            newDropdowns.set(oldIndex - 1, dropdown);
-                        }
-                    });
-                    jobOrderDropdowns = newDropdowns;
+                    // Re-index dropdown references for remaining rows (temporarily disabled)
+                    // const newDropdowns = new Map();
+                    // jobOrderDropdowns.forEach((dropdown, oldIndex) => {
+                    //     if (oldIndex < rowIdx) {
+                    //         newDropdowns.set(oldIndex, dropdown);
+                    //     } else if (oldIndex > rowIdx) {
+                    //         newDropdowns.set(oldIndex - 1, dropdown);
+                    //     }
+                    // });
+                    // jobOrderDropdowns = newDropdowns;
                     
                     checkForUnsavedChanges();
                     reRenderTable();
@@ -800,8 +800,8 @@ function setupBulkCreateForm(bulkCreateModal) {
                 if (confirm('Tüm satırları temizlemek istediğinize emin misiniz?')) {
                     // Keep only one empty row
                     rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
-                    // Clear dropdown references
-                    jobOrderDropdowns.clear();
+                    // Clear dropdown references (temporarily disabled - using text field)
+                    // jobOrderDropdowns.clear();
                     updateInitialState();
                     reRenderTable();
                     showModalNotification('Tüm satırlar temizlendi', 'info');
@@ -1101,20 +1101,15 @@ function setupBulkCreateForm(bulkCreateModal) {
         // Re-render table
         reRenderTable();
         
-        // Set job_no values in dropdowns after rendering
+        // Set job_no values in input fields after rendering (temporarily using text field)
         setTimeout(() => {
             rowsToAdd.forEach((row, i) => {
                 const rowIndex = startIndex + i;
                 if (row.job_no) {
-                    const checkDropdown = setInterval(() => {
-                        const dropdown = jobOrderDropdowns.get(rowIndex);
-                        if (dropdown) {
-                            dropdown.setValue(row.job_no);
-                            clearInterval(checkDropdown);
-                        }
-                    }, 50);
-                    // Clear interval after 2 seconds if dropdown still not ready
-                    setTimeout(() => clearInterval(checkDropdown), 2000);
+                    const jobNoInput = document.querySelector(`input[data-row="${rowIndex}"][data-key="job_no"]`);
+                    if (jobNoInput) {
+                        jobNoInput.value = row.job_no;
+                    }
                 }
             });
         }, 200);
@@ -1139,8 +1134,8 @@ function setupBulkCreateForm(bulkCreateModal) {
     // Set up cancel callback
     bulkCreateModal.onCancelCallback(() => {
         rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
-        // Clear dropdown references
-        jobOrderDropdowns.clear();
+        // Clear dropdown references (temporarily disabled - using text field)
+        // jobOrderDropdowns.clear();
         updateInitialState();
     });
     
@@ -1164,12 +1159,12 @@ function setupBulkCreateForm(bulkCreateModal) {
         
         setupBulkCreateEventListeners();
         
-        // Initialize job order dropdowns for all rows
-        setTimeout(() => {
-            rows.forEach((row, i) => {
-                initializeJobOrderDropdown(i, row.job_no);
-            });
-        }, 100);
+        // Job order dropdown initialization temporarily disabled - using text field instead
+        // setTimeout(() => {
+        //     rows.forEach((row, i) => {
+        //         initializeJobOrderDropdown(i, row.job_no);
+        //     });
+        // }, 100);
     }, 100);
 }
 
@@ -1186,10 +1181,10 @@ async function handleBulkCreateSave(rows, columns, showModalNotification) {
     rows.forEach((row, index) => {
         requiredFields.forEach(field => {
             let value = row[field];
-            // Get job_no from dropdown if it's job_no field
+            // Get job_no from input field (temporarily using text field instead of dropdown)
             if (field === 'job_no') {
-                const dropdown = jobOrderDropdowns.get(index);
-                value = dropdown?.getValue() || row[field];
+                const jobNoInput = document.querySelector(`input[data-row="${index}"][data-key="job_no"]`);
+                value = jobNoInput?.value || row[field];
             }
             if (!value || value.toString().trim() === '') {
                 missingFields.push(`Satır ${index + 1}: ${columns.find(col => col.key === field)?.label}`);
@@ -1219,9 +1214,9 @@ async function handleBulkCreateSave(rows, columns, showModalNotification) {
     
     const payload = {
         entries: rows.map((row, index) => {
-            // Get job_no from dropdown
-            const dropdown = jobOrderDropdowns.get(index);
-            const jobNo = dropdown?.getValue() || row.job_no || '';
+            // Get job_no from input field (temporarily using text field instead of dropdown)
+            const jobNoInput = document.querySelector(`input[data-row="${index}"][data-key="job_no"]`);
+            const jobNo = jobNoInput?.value || row.job_no || '';
             
             return {
                 employee: parseInt(row.employee),
