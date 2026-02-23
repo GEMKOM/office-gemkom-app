@@ -208,15 +208,22 @@ export async function rejectRevision(releaseId, rejectionData) {
 /**
  * Self-start revision (designer starts revision without external request)
  * @param {number} releaseId - Release ID
+ * @param {string} [reason] - Reason for starting the revision
  * @returns {Promise<Object>} Response with status, message, and updated release
  */
-export async function selfStartRevision(releaseId) {
+export async function selfStartRevision(releaseId, reason) {
     try {
+        const body = {};
+        if (reason) {
+            body.reason = reason;
+        }
+        
         const response = await authedFetch(`${backendBase}/projects/drawing-releases/${releaseId}/self_revision/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-            }
+            },
+            body: Object.keys(body).length > 0 ? JSON.stringify(body) : undefined
         });
         
         if (!response.ok) {

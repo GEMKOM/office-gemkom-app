@@ -25,7 +25,7 @@ import {
     DEPARTMENT_OPTIONS
 } from '../../apis/projects/departmentTasks.js';
 import { authFetchUsers } from '../../apis/users.js';
-import { createRelease, completeRevision } from '../../apis/projects/design.js';
+import { createRelease, completeRevision, selfStartRevision } from '../../apis/projects/design.js';
 import { markPlanningRequestItemDelivered } from '../../apis/planning/planningRequestItems.js';
 import { 
     fetchAssignments, 
@@ -810,6 +810,24 @@ function initializeTableComponent() {
                     if (row.qc_required === true && row.has_qc_approval !== true) {
                         return false;
                     }
+                    return true;
+                }
+            },
+            {
+                key: 'self-start-revision',
+                label: 'Revizyonu Başlat',
+                icon: 'fas fa-rotate',
+                class: 'btn-outline-warning',
+                onClick: (row) => handleSelfStartRevisionFromTable(row),
+                visible: (row) => {
+                    // Only for design department tasks
+                    if (department !== 'design') return false;
+                    // Must have a current release ID
+                    if (!row.current_release_id) return false;
+                    // Must not be under revision
+                    if (row.is_under_revision) return false;
+                    // Exclude certain task types
+                    if (row.type === 'machining_part' || row.type === 'cnc_part' || row.task_type === 'procurement_item') return false;
                     return true;
                 }
             },
@@ -2848,6 +2866,16 @@ function getAvailableActions(task) {
         });
     }
     
+    // Self-start revision action - only for design department tasks with a current release that is not under revision
+    if (department === 'design' && task.current_release_id && !task.is_under_revision && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
+        actions.push({
+            key: 'self-start-revision',
+            label: 'Revizyonu Kendi Başlat',
+            icon: 'fas fa-rotate',
+            handler: 'self-start-revision'
+        });
+    }
+    
     return actions;
 }
 
@@ -2905,6 +2933,9 @@ async function loadActionContent(task, action) {
                 break;
             case 'ncrs':
                 content = await renderNCRsTab(task);
+                break;
+            case 'self-start-revision':
+                content = await renderSelfStartRevisionActionForm(task);
                 break;
             default:
                 content = '<p>İşlem formu yüklenemedi</p>';
@@ -3144,6 +3175,47 @@ async function renderUnskipActionForm(task) {
         <form id="unskip-action-form">
             <button type="submit" class="btn btn-warning">
                 <i class="fas fa-undo me-1"></i>Atlamayı Geri Al
+            </button>
+        </form>
+    `;
+}
+
+// Render form for self-start revision action
+async function renderSelfStartRevisionActionForm(task) {
+    return `
+        <h5 class="mb-4"><i class="fas fa-rotate me-2"></i>Revizyonu Kendi Başlat</h5>
+        <div class="alert alert-info">
+            <i class="fas fa-info-circle me-2"></i>
+            Bu yayın için revizyonu dış talep olmadan kendi başınıza başlatmak istediğinize emin misiniz?
+        </div>
+        <div class="mb-3">
+            <label class="form-label">
+                <i class="fas fa-file-invoice me-1"></i>İş Emri
+            </label>
+            <input type="text" class="form-control" value="${task.job_order ? `${task.job_order} - ${task.job_order_title || ''}` : '-'}" readonly>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">
+                <i class="fas fa-tasks me-1"></i>Görev
+            </label>
+            <input type="text" class="form-control" value="${task.title || '-'}" readonly>
+        </div>
+        <div class="mb-3">
+            <label class="form-label">
+                <i class="fas fa-comment me-1"></i>Revizyon Nedeni <span class="text-danger">*</span>
+            </label>
+            <textarea 
+                class="form-control" 
+                id="self-revision-reason" 
+                name="reason"
+                rows="3" 
+                placeholder="Revizyon nedenini açıklayın..."
+                required></textarea>
+            <small class="form-text text-muted">Revizyon nedenini belirtmek zorunludur.</small>
+        </div>
+        <form id="self-start-revision-action-form">
+            <button type="submit" class="btn btn-primary">
+                <i class="fas fa-rotate me-1"></i>Revizyonu Başlat
             </button>
         </form>
     `;
@@ -3668,6 +3740,10 @@ function attachActionFormListeners(task, action) {
                     case 'bulk-subtask':
                         await handleBulkSubtaskActionSubmit(task);
                         break;
+                    case 'self-start-revision':
+                        await handleSelfStartRevisionActionSubmit(task);
+                        taskDetailsModal.hide();
+                        break;
                 }
                 await loadTasks();
             } catch (error) {
@@ -4000,6 +4076,115 @@ async function handleSetPaintPriceActionSubmit(task) {
         console.error('Error updating paint price:', error);
         showNotification(error.message || 'Boya fiyatı güncellenirken hata oluştu', 'error');
     }
+}
+
+// Handle self-start revision action submit (for modal)
+async function handleSelfStartRevisionActionSubmit(task) {
+    if (!task.current_release_id) {
+        showNotification('Mevcut yayın bulunamadı', 'error');
+        return;
+    }
+    
+    // Get the reason from the form
+    const reasonInput = taskDetailsModal.container.querySelector('#self-revision-reason');
+    if (!reasonInput || !reasonInput.value.trim()) {
+        showNotification('Lütfen revizyon nedenini girin', 'error');
+        return;
+    }
+    
+    const reason = reasonInput.value.trim();
+    
+    try {
+        // Use the current_release_id from the task
+        await selfStartRevision(task.current_release_id, reason);
+        showNotification('Revizyon başlatıldı', 'success');
+        taskDetailsModal.hide();
+        
+        // Reload tasks to reflect the updated revision status
+        await loadTasks();
+    } catch (error) {
+        console.error('Error self-starting revision:', error);
+        let errorMessage = 'Revizyon başlatılırken hata oluştu';
+        try {
+            if (error.message) {
+                const errorData = JSON.parse(error.message);
+                if (typeof errorData === 'object') {
+                    const errors = Object.values(errorData).flat();
+                    errorMessage = errors.join(', ') || errorMessage;
+                } else {
+                    errorMessage = error.message;
+                }
+            }
+        } catch (e) {
+            // If parsing fails, use default message
+        }
+        showNotification(errorMessage, 'error');
+    }
+}
+
+// Handle self-start revision from table button
+async function handleSelfStartRevisionFromTable(row) {
+    if (!row.current_release_id) {
+        showNotification('Mevcut yayın bulunamadı', 'error');
+        return;
+    }
+    
+    confirmationModal.show({
+        message: 'Bu yayın için revizyonu dış talep olmadan kendi başınıza başlatmak istediğinize emin misiniz?',
+        confirmText: 'Evet, Başlat',
+        details: `
+            <div class="mt-3">
+                <label for="self-revision-reason" class="form-label">
+                    <i class="fas fa-comment me-1"></i>Revizyon Nedeni <span class="text-danger">*</span>
+                </label>
+                <textarea 
+                    class="form-control" 
+                    id="self-revision-reason" 
+                    rows="3" 
+                    placeholder="Revizyon nedenini açıklayın..."
+                    required></textarea>
+                <small class="form-text text-muted">Revizyon nedenini belirtmek zorunludur.</small>
+            </div>
+        `,
+        onConfirm: async () => {
+            try {
+                // Get the reason from the textarea
+                const reasonInput = document.getElementById('self-revision-reason');
+                if (!reasonInput || !reasonInput.value.trim()) {
+                    showNotification('Lütfen revizyon nedenini girin', 'error');
+                    return; // Don't hide modal, let user enter reason
+                }
+                
+                const reason = reasonInput.value.trim();
+                
+                // Use the current_release_id from the row
+                await selfStartRevision(row.current_release_id, reason);
+                showNotification('Revizyon başlatıldı', 'success');
+                confirmationModal.hide();
+                
+                // Reload tasks to reflect the updated revision status
+                await loadTasks();
+            } catch (error) {
+                console.error('Error self-starting revision:', error);
+                let errorMessage = 'Revizyon başlatılırken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // If parsing fails, use default message
+                }
+                showNotification(errorMessage, 'error');
+                confirmationModal.hide();
+            }
+        }
+    });
 }
 
 // Setup bulk subtask builder inline
