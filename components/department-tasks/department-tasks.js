@@ -36,7 +36,7 @@ import {
 } from '../../apis/subcontracting/assignments.js';
 import { fetchSubcontractors } from '../../apis/subcontracting/subcontractors.js';
 import { fetchPriceTiers, getPriceTierRemainingWeight, updatePriceTier } from '../../apis/subcontracting/priceTiers.js';
-import { submitQCReview, bulkSubmitQCReviews } from '../../apis/qualityControl.js';
+import { submitQCReview, bulkSubmitQCReviews, listQCReviews } from '../../apis/qualityControl.js';
 
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
@@ -2754,6 +2754,16 @@ function getAvailableActions(task) {
         });
     }
     
+    // QC Reviews tab - show whenever task has qc_required, regardless of department
+    if (task.qc_required === true) {
+        actions.push({
+            key: 'qc-reviews',
+            label: 'KK İncelemeleri',
+            icon: 'fas fa-clipboard-list',
+            handler: 'qc-reviews'
+        });
+    }
+    
     // Uncomplete action
     if (task.status === 'completed' && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
         actions.push({
@@ -2802,6 +2812,14 @@ function getAvailableActions(task) {
             icon: 'fas fa-handshake',
             handler: 'assign-subcontractor'
         });
+        
+        // Subcontractor tab - show right after "Taşeron Ata" tab
+        actions.push({
+            key: 'subcontractor',
+            label: 'Taşeron Ataması',
+            icon: 'fas fa-handshake',
+            handler: 'subcontractor'
+        });
     }
     
     // Set paint price action
@@ -2811,6 +2829,14 @@ function getAvailableActions(task) {
             label: 'Boya Fiyatı Belirle',
             icon: 'fas fa-paint-brush',
             handler: 'set-paint-price'
+        });
+        
+        // Subcontractor tab - show right after "Boya Fiyatı Belirle" tab
+        actions.push({
+            key: 'subcontractor',
+            label: 'Taşeron Ataması',
+            icon: 'fas fa-handshake',
+            handler: 'subcontractor'
         });
     }
     
@@ -2862,6 +2888,12 @@ async function loadActionContent(task, action) {
                 break;
             case 'set-paint-price':
                 content = await renderSetPaintPriceActionForm(task);
+                break;
+            case 'qc-reviews':
+                content = await renderQCReviewsTab(task);
+                break;
+            case 'subcontractor':
+                content = await renderSubcontractorTab(task);
                 break;
             default:
                 content = '<p>İşlem formu yüklenemedi</p>';
@@ -3325,6 +3357,170 @@ async function renderSetPaintPriceActionForm(task) {
     } catch (error) {
         console.error('Error loading paint price form data:', error);
         return '<p class="text-danger">Form yüklenirken hata oluştu</p>';
+    }
+}
+
+// Render QC Reviews tab
+async function renderQCReviewsTab(task) {
+    try {
+        // Fetch QC reviews for this task
+        const reviewsResponse = await listQCReviews({ task: task.id }, '', '-submitted_at', 1, 100);
+        const reviews = reviewsResponse.results || [];
+        
+        if (reviews.length === 0) {
+            return `
+                <h5 class="mb-4"><i class="fas fa-clipboard-check me-2"></i>KK İncelemeleri</h5>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Bu görev için henüz kalite kontrol incelemesi bulunmamaktadır.
+                </div>
+            `;
+        }
+        
+        // Status badge mapping
+        const statusBadgeMap = {
+            'pending': '<span class="badge bg-warning">Beklemede</span>',
+            'approved': '<span class="badge bg-success">Onaylandı</span>',
+            'rejected': '<span class="badge bg-danger">Reddedildi</span>'
+        };
+        
+        const reviewsTable = reviews.map(review => {
+            const submittedAt = review.submitted_at 
+                ? new Date(review.submitted_at).toLocaleString('tr-TR')
+                : '-';
+            const reviewedAt = review.reviewed_at 
+                ? new Date(review.reviewed_at).toLocaleString('tr-TR')
+                : '-';
+            const statusBadge = statusBadgeMap[review.status] || `<span class="badge bg-secondary">${review.status || '-'}</span>`;
+            
+            return `
+                <tr>
+                    <td>${review.id || '-'}</td>
+                    <td>${review.part_data?.location || '-'}</td>
+                    <td>${review.part_data?.quantity_inspected || '-'}</td>
+                    <td>${review.part_data?.drawing_no || '-'}</td>
+                    <td>${review.part_data?.position_no || '-'}</td>
+                    <td>${statusBadge}</td>
+                    <td>${review.submitted_by_name || '-'}</td>
+                    <td>${submittedAt}</td>
+                    <td>${review.reviewed_by_name || '-'}</td>
+                    <td>${reviewedAt}</td>
+                    <td>${review.comment || '-'}</td>
+                </tr>
+            `;
+        }).join('');
+        
+        return `
+            <h5 class="mb-4"><i class="fas fa-clipboard-check me-2"></i>KK İncelemeleri</h5>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>ID</th>
+                            <th>Konum</th>
+                            <th>İncelenen Miktar</th>
+                            <th>Çizim No</th>
+                            <th>Pozisyon No</th>
+                            <th>Durum</th>
+                            <th>Gönderen</th>
+                            <th>Gönderilme Tarihi</th>
+                            <th>İnceleyen</th>
+                            <th>İnceleme Tarihi</th>
+                            <th>Yorum</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${reviewsTable}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading QC reviews:', error);
+        return '<p class="text-danger">KK incelemeleri yüklenirken hata oluştu</p>';
+    }
+}
+
+// Render Subcontractor tab
+async function renderSubcontractorTab(task) {
+    try {
+        // Fetch assignments for this task
+        const assignmentsResponse = await fetchAssignments({ department_task: task.id });
+        const assignments = assignmentsResponse.results || assignmentsResponse || [];
+        
+        if (assignments.length === 0) {
+            return `
+                <h5 class="mb-4"><i class="fas fa-handshake me-2"></i>Taşeron Ataması</h5>
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Bu görev için henüz taşeron ataması bulunmamaktadır.
+                </div>
+            `;
+        }
+        
+        // Format currency
+        const formatCurrency = (amount, currency = 'TRY') => {
+            if (!amount) return '0';
+            return new Intl.NumberFormat('tr-TR', {
+                style: 'currency',
+                currency: currency,
+                minimumFractionDigits: 2
+            }).format(amount);
+        };
+        
+        const assignmentsTable = assignments.map(assignment => {
+            const allocatedWeight = assignment.allocated_weight_kg || 0;
+            const currentProgress = assignment.current_progress || 0;
+            const pricePerKg = assignment.price_per_kg || 0;
+            const currentCost = (allocatedWeight * currentProgress / 100 * pricePerKg) || 0;
+            const unbilledProgress = assignment.unbilled_progress || 0;
+            const unbilledWeight = assignment.unbilled_weight_kg || 0;
+            const unbilledCost = assignment.unbilled_cost || 0;
+            const lastBilledProgress = assignment.last_billed_progress || 0;
+            
+            return `
+                <tr>
+                    <td>${assignment.subcontractor_name || '-'}</td>
+                    <td>${assignment.price_tier_name || '-'}</td>
+                    <td>${formatCurrency(pricePerKg, assignment.cost_currency || 'TRY')}/kg</td>
+                    <td>${allocatedWeight} kg</td>
+                    <td>${currentProgress}%</td>
+                    <td>${lastBilledProgress}%</td>
+                    <td>${unbilledProgress}%</td>
+                    <td>${unbilledWeight} kg</td>
+                    <td>${formatCurrency(unbilledCost, assignment.cost_currency || 'TRY')}</td>
+                    <td>${formatCurrency(currentCost, assignment.cost_currency || 'TRY')}</td>
+                </tr>
+            `;
+        }).join('');
+        
+        return `
+            <h5 class="mb-4"><i class="fas fa-handshake me-2"></i>Taşeron Ataması</h5>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered table-hover">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Taşeron</th>
+                            <th>Fiyat Kademesi</th>
+                            <th>Fiyat/kg</th>
+                            <th>Ayrılan Ağırlık</th>
+                            <th>Mevcut İlerleme</th>
+                            <th>Faturalanmış İlerleme</th>
+                            <th>Faturalanmamış İlerleme</th>
+                            <th>Faturalanmamış Ağırlık</th>
+                            <th>Faturalanmamış Maliyet</th>
+                            <th>Toplam Maliyet</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${assignmentsTable}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading subcontractor assignments:', error);
+        return '<p class="text-danger">Taşeron atamaları yüklenirken hata oluştu</p>';
     }
 }
 
