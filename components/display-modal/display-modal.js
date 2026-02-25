@@ -447,9 +447,10 @@ export class DisplayModal {
             link.textContent = field.value;
             valueDiv.appendChild(link);
         } else if (field.format && typeof field.format === 'function') {
-            const formattedValue = field.format(displayValue);
+            // displayValue is already the result of formatValue(field) which applied field.format(field.value)
+            const formattedValue = displayValue;
             // Check if formatted value contains HTML tags
-            if (formattedValue.includes('<') && formattedValue.includes('>')) {
+            if (typeof formattedValue === 'string' && formattedValue.includes('<') && formattedValue.includes('>')) {
                 valueDiv.innerHTML = formattedValue;
             } else {
                 valueDiv.textContent = formattedValue;

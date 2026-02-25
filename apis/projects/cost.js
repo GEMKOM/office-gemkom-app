@@ -1,0 +1,227 @@
+import { authedFetch } from '../../authService.js';
+import { backendBase } from '../../base.js';
+
+/**
+ * Cost Table API Service
+ * GET /projects/job-orders/cost_table/
+ * Main overview table showing all job orders with their full cost breakdown.
+ */
+
+/**
+ * Fetch the cost table (paginated list of job orders with cost breakdown)
+ * @param {Object} options - Query parameters (same as job order list)
+ * @param {string} [options.status] - Filter by job status (e.g. active, draft)
+ * @param {string} [options.status__in] - Multiple statuses comma-separated (e.g. active,draft)
+ * @param {number} [options.customer] - Filter by customer ID
+ * @param {string} [options.search] - Search in title / job_no
+ * @param {string} [options.ordering] - Order by any field (e.g. -actual_total_cost, job_no)
+ * @param {number} [options.page] - Page number
+ * @param {number} [options.page_size] - Page size
+ * @returns {Promise<{ count: number, next: string|null, previous: string|null, results: Array }>}
+ */
+export async function getCostTable(options = {}) {
+    const queryParams = new URLSearchParams();
+
+    if (options.status != null && options.status !== '') {
+        queryParams.append('status', options.status);
+    }
+    if (options.status__in != null && options.status__in !== '') {
+        queryParams.append('status__in', options.status__in);
+    }
+    if (options.customer != null && options.customer !== '') {
+        queryParams.append('customer', String(options.customer));
+    }
+    if (options.search != null && options.search !== '') {
+        queryParams.append('search', options.search);
+    }
+    if (options.ordering != null && options.ordering !== '') {
+        queryParams.append('ordering', options.ordering);
+    }
+    if (options.page != null) {
+        queryParams.append('page', String(options.page));
+    }
+    if (options.page_size != null) {
+        queryParams.append('page_size', String(options.page_size));
+    }
+
+    const url = `${backendBase}/projects/job-orders/cost_table/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await authedFetch(url);
+
+    if (!response.ok) {
+        throw new Error(`Cost table request failed: ${response.status}`);
+    }
+
+    return response.json();
+}
+
+/** Valid values for selling_price_currency */
+export const COST_SUMMARY_CURRENCIES = ['EUR', 'USD', 'GBP', 'TRY'];
+
+/**
+ * Cost Summary for a single job order
+ * GET /projects/job-orders/{job_no}/cost_summary/
+ * @param {string} jobNo - Job order number (e.g. "254-01")
+ * @returns {Promise<{
+ *   job_order: string,
+ *   labor_cost: string,
+ *   material_cost: string,
+ *   subcontractor_cost: string,
+ *   paint_cost: string,
+ *   qc_cost: string,
+ *   shipping_cost: string,
+ *   actual_total_cost: string,
+ *   selling_price: string,
+ *   selling_price_currency: string,
+ *   last_updated: string
+ * }>}
+ */
+export async function getJobCostSummary(jobNo) {
+    const url = `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/cost_summary/`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`Cost summary request failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * Update cost summary (only selling_price and selling_price_currency are writable)
+ * PATCH /projects/job-orders/{job_no}/cost_summary/
+ * @param {string} jobNo - Job order number
+ * @param {Object} payload
+ * @param {string} [payload.selling_price] - e.g. "90000.00"
+ * @param {string} [payload.selling_price_currency] - One of "EUR", "USD", "GBP", "TRY"
+ * @returns {Promise<Object>} Full updated cost summary object
+ */
+export async function patchJobCostSummary(jobNo, payload) {
+    const validKeys = ['selling_price', 'selling_price_currency'];
+    const body = {};
+    if (payload.selling_price !== undefined) body.selling_price = payload.selling_price;
+    if (payload.selling_price_currency !== undefined) {
+        if (!COST_SUMMARY_CURRENCIES.includes(payload.selling_price_currency)) {
+            throw new Error(`Invalid selling_price_currency. Valid values: ${COST_SUMMARY_CURRENCIES.join(', ')}`);
+        }
+        body.selling_price_currency = payload.selling_price_currency;
+    }
+    const url = `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/cost_summary/`;
+    const response = await authedFetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        let errMsg = `Cost summary update failed: ${response.status}`;
+        try {
+            const data = JSON.parse(text);
+            if (data && typeof data === 'object' && Object.keys(data).length) errMsg = JSON.stringify(data);
+        } catch (_) {
+            if (text) errMsg = text;
+        }
+        throw new Error(errMsg);
+    }
+    return response.json();
+}
+
+// ─── Procurement (Material Cost) Lines ─────────────────────────────────────
+
+/**
+ * Job orders pending procurement submission (zero saved procurement lines, excluding cancelled).
+ * GET /api/projects/job-orders/procurement_pending/
+ * Same response shape as standard job order list (job_no, title, customer_name, status, target_completion_date, etc.).
+ * @param {Object} options - Query parameters
+ * @param {string} [options.status] - e.g. active
+ * @param {string} [options.search] - Search in job_no, title, etc.
+ * @param {number} [options.customer] - Customer ID
+ * @param {string} [options.ordering] - e.g. job_no, -target_completion_date
+ * @param {number} [options.page] - Page number
+ * @param {number} [options.page_size] - Page size
+ * @returns {Promise<{ count: number, next: string|null, previous: string|null, results: Array }>}
+ */
+export async function getProcurementPendingJobOrders(options = {}) {
+    const queryParams = new URLSearchParams();
+    if (options.status != null && options.status !== '') queryParams.append('status', options.status);
+    if (options.search != null && options.search !== '') queryParams.append('search', options.search);
+    if (options.customer != null && options.customer !== '') queryParams.append('customer', String(options.customer));
+    if (options.ordering != null && options.ordering !== '') queryParams.append('ordering', options.ordering);
+    if (options.page != null) queryParams.append('page', String(options.page));
+    if (options.page_size != null) queryParams.append('page_size', String(options.page_size));
+
+    const url = `${backendBase}/projects/job-orders/procurement_pending/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`Procurement pending job orders request failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * Get saved procurement lines for a job order.
+ * GET /api/projects/procurement-lines/?job_order=254-01
+ * @param {string} jobOrder - Job order number (e.g. "254-01")
+ * @returns {Promise<Array<{...}>>}
+ */
+export async function getProcurementLines(jobOrder) {
+    const queryParams = new URLSearchParams({ job_order: jobOrder });
+    const url = `${backendBase}/projects/procurement-lines/?${queryParams.toString()}`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`Get procurement lines failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * Preview procurement lines (pre-filled from planning + purchase history, not saved).
+ * GET /api/projects/procurement-lines/preview/?job_order=254-01
+ * price_source: "po_line" | "recommended_offer" | "any_offer" | "none"
+ * @param {string} jobOrder - Job order number
+ * @returns {Promise<Array<{...}>>}
+ */
+export async function getProcurementLinesPreview(jobOrder) {
+    const queryParams = new URLSearchParams({ job_order: jobOrder });
+    const url = `${backendBase}/projects/procurement-lines/preview/?${queryParams.toString()}`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`Procurement lines preview failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+/** price_source values for preview lines */
+export const PROCUREMENT_PRICE_SOURCE = {
+    PO_LINE: 'po_line',
+    RECOMMENDED_OFFER: 'recommended_offer',
+    ANY_OFFER: 'any_offer',
+    NONE: 'none'
+};
+
+/**
+ * Submit procurement lines (atomically replace all lines for the job order).
+ * POST /api/projects/procurement-lines/submit/
+ * Either item or item_description must be provided per line. unit_price in EUR; server computes amount_eur.
+ * Pass lines: [] to clear all (material_cost becomes 0).
+ * @param {string} jobOrder - Job order number
+ * @param {Array<{ item?: number|null, item_description?: string|null, quantity: string, unit_price: string, planning_request_item?: number|null, order: number }>} lines
+ * @returns {Promise<Array>} 201 with array of saved lines
+ */
+export async function submitProcurementLines(jobOrder, lines) {
+    const url = `${backendBase}/projects/procurement-lines/submit/`;
+    const response = await authedFetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_order: jobOrder, lines })
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        let errMsg = `Submit procurement lines failed: ${response.status}`;
+        try {
+            const data = JSON.parse(text);
+            if (data && typeof data === 'object' && Object.keys(data).length) errMsg = JSON.stringify(data);
+        } catch (_) {
+            if (text) errMsg = text;
+        }
+        throw new Error(errMsg);
+    }
+    return response.json();
+}

@@ -20,6 +20,36 @@ function findNavigationItem(path, structure = NAVIGATION_STRUCTURE) {
 }
 
 
+// Maximum number of top-level nav items shown in the bar; rest go into "Daha Fazla" dropdown
+const MAX_VISIBLE_NAV_ITEMS = 6;
+
+// Helper: split filtered nav into visible + more, return HTML for both (more as one dropdown)
+function renderNavigationWithMore(items, currentPath) {
+    const entries = Object.entries(items);
+    if (entries.length === 0) return '';
+    const visibleEntries = entries.slice(0, MAX_VISIBLE_NAV_ITEMS);
+    const moreEntries = entries.slice(MAX_VISIBLE_NAV_ITEMS);
+    const visibleObj = Object.fromEntries(visibleEntries);
+    let html = renderNavigationItems(visibleObj, currentPath);
+    if (moreEntries.length > 0) {
+        const moreObj = Object.fromEntries(moreEntries);
+        const moreMenuContent = renderNavigationItems(moreObj, currentPath, 1);
+        html += `
+            <li class="nav-item dropdown">
+                <a class="nav-link dropdown-toggle" href="#" role="button" 
+                   data-bs-toggle="dropdown" aria-expanded="false" data-nav-more>
+                    <i class="fas fa-ellipsis-h me-1"></i>
+                    <span>Daha Fazla</span>
+                </a>
+                <ul class="dropdown-menu">
+                    ${moreMenuContent}
+                </ul>
+            </li>
+        `;
+    }
+    return html;
+}
+
 // Helper function to render navigation items recursively
 function renderNavigationItems(items, currentPath, level = 0) {
     let html = '';
@@ -198,7 +228,7 @@ export function initNavbar() {
       // Filter navigation based on user team access
       const userTeam = user.team || 'other';
       const filteredNavigation = filterNavigationByAccess(NAVIGATION_STRUCTURE, userTeam);
-      const navigationItems = renderNavigationItems(filteredNavigation, currentPath);
+      const navigationItems = renderNavigationWithMore(filteredNavigation, currentPath);
       
       const navHTML = `
         <nav class="navbar navbar-expand-lg navbar-dark bg-dark">

@@ -56,6 +56,7 @@ import {
     deletePriceTier 
 } from '../../apis/subcontracting/priceTiers.js';
 import { listNCRs } from '../../apis/qualityControl.js';
+import { getJobCostSummary } from '../../apis/projects/cost.js';
 
 // State management
 // Read initial page and page_size from URL
@@ -1079,7 +1080,8 @@ function initializeModalComponents() {
             drawingReleases: null,
             currentRelease: null,
             drawingReleasesJobNo: null,
-            ncrs: null
+            ncrs: null,
+            costSummary: null
         };
         
         // Remove deep-link parameters from URL
@@ -1554,7 +1556,8 @@ let jobOrderTabCache = {
     drawingReleases: null,
     currentRelease: null,
     drawingReleasesJobNo: null,
-    ncrs: null
+    ncrs: null,
+    costSummary: null
 };
 
 window.viewJobOrder = async function(jobNo) {
@@ -1570,7 +1573,8 @@ window.viewJobOrder = async function(jobNo) {
             drawingReleases: null,
             currentRelease: null,
             drawingReleasesJobNo: null,
-            ncrs: null
+            ncrs: null,
+            costSummary: null
         };
         
         // Fetch only basic job order data
@@ -1846,12 +1850,21 @@ window.viewJobOrder = async function(jobNo) {
             customContent: '<div id="ncrs-container" style="padding: 20px;"></div>'
         });
         
+        // Add Maliyet (Cost) tab
+        viewJobOrderModal.addTab({
+            id: 'maliyet',
+            label: 'Maliyet',
+            icon: 'fas fa-calculator',
+            iconColor: 'text-primary',
+            customContent: '<div id="cost-summary-container" style="padding: 20px;"></div>'
+        });
+        
         // Render the modal
         viewJobOrderModal.render();
         
         // Set up tab click handlers for lazy loading
         setTimeout(() => {
-            setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate);
+            setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate, formatCurrency);
         }, 100);
         
         // Data will be loaded on tab click (lazy loading)
@@ -1873,7 +1886,7 @@ window.viewJobOrder = async function(jobNo) {
 };
 
 // Setup tab click handlers for lazy loading
-function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate) {
+function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate, formatCurrency) {
     const modal = viewJobOrderModal.modal;
     if (!modal) return;
     
@@ -1912,6 +1925,9 @@ function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate) {
                     break;
                 case 'kalite-kontrol':
                     await loadNCRsTab(jobNo);
+                    break;
+                case 'maliyet':
+                    await loadCostSummaryTab(jobNo, formatCurrency);
                     break;
             }
         });
@@ -2000,6 +2016,25 @@ function renderDepartmentTasksTable(tasks, getStatusBadgeClass, formatDate) {
                     }
                     
                     return `<strong>${value}</strong>`;
+                }
+            },
+            {
+                field: 'weight',
+                label: 'Ağırlık',
+                sortable: true,
+                formatter: (value, row) => {
+                    const isEditable = row.type !== 'machining_part' && row.type !== 'cnc_part';
+                    const cursorStyle = isEditable ? 'cursor: pointer;' : '';
+                    const taskId = row.id;
+                    let displayValue = '-';
+                    if (value !== null && value !== undefined && value !== '') {
+                        displayValue = parseFloat(value).toFixed(2);
+                    }
+                    return `
+                        <div class="text-center editable-weight" data-task-id="${taskId}" data-weight-value="${value != null && value !== '' ? value : ''}" data-editable="${isEditable ? '1' : '0'}" style="${cursorStyle}" ${isEditable ? 'title="Ağırlığı düzenlemek için tıklayın"' : ''}>
+                            ${displayValue}
+                        </div>
+                    `;
                 }
             },
             {
@@ -2111,22 +2146,132 @@ function renderDepartmentTasksTable(tasks, getStatusBadgeClass, formatDate) {
         emptyIcon: 'fas fa-tasks'
     });
     
-    // Add click event delegation for department links
+    // Add click event delegation for department links and weight editing
     setTimeout(() => {
         const tableContainer = document.getElementById('department-tasks-table-container');
-        if (tableContainer) {
-            tableContainer.addEventListener('click', (e) => {
-                const departmentLink = e.target.closest('.department-link');
-                if (departmentLink) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    const url = departmentLink.getAttribute('data-href');
-                    if (url) {
-                        window.location.href = url;
+        if (!tableContainer) return;
+
+        tableContainer.addEventListener('click', (e) => {
+            const departmentLink = e.target.closest('.department-link');
+            if (departmentLink) {
+                e.preventDefault();
+                e.stopPropagation();
+                const url = departmentLink.getAttribute('data-href');
+                if (url) {
+                    window.location.href = url;
+                }
+                return;
+            }
+
+            const weightCell = e.target.closest('.editable-weight');
+            if (!weightCell || e.target.tagName === 'INPUT') return;
+            if (weightCell.getAttribute('data-editable') !== '1') return; // not editable (e.g. machining_part)
+
+            e.preventDefault();
+            e.stopPropagation();
+            const taskIdAttr = weightCell.getAttribute('data-task-id');
+            const currentWeightValue = weightCell.getAttribute('data-weight-value') || '';
+            if (!taskIdAttr) return;
+
+            const originalContent = weightCell.innerHTML;
+            const displayText = weightCell.textContent.trim();
+            let currentValue = displayText && displayText !== '-' ? displayText : (currentWeightValue ? parseFloat(currentWeightValue).toFixed(2) : '');
+
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.step = '0.01';
+            input.min = '0';
+            input.value = currentValue;
+            input.className = 'form-control form-control-sm';
+            input.style.cssText = 'width: 100px; margin: 0 auto; z-index: 10; position: relative; text-align: center;';
+            weightCell.innerHTML = '';
+            weightCell.style.display = 'flex';
+            weightCell.style.justifyContent = 'center';
+            weightCell.style.alignItems = 'center';
+            weightCell.appendChild(input);
+            input.focus();
+            input.select();
+
+            const updateWeightDisplay = (weightValue) => {
+                let displayValue = '-';
+                if (weightValue !== null && weightValue !== undefined && weightValue !== '') {
+                    const numValue = parseFloat(weightValue);
+                    if (!isNaN(numValue)) displayValue = numValue.toFixed(2);
+                }
+                weightCell.innerHTML = displayValue;
+                weightCell.setAttribute('data-weight-value', weightValue || '');
+                weightCell.style.display = '';
+                weightCell.style.justifyContent = '';
+                weightCell.style.alignItems = '';
+            };
+
+            const saveWeight = async () => {
+                const newValue = input.value.trim();
+                const originalNum = currentWeightValue ? parseFloat(currentWeightValue) : null;
+                const newNum = newValue ? parseFloat(newValue) : null;
+                if ((originalNum === null && newNum === null) || (originalNum !== null && newNum !== null && Math.abs(originalNum - newNum) < 0.001)) {
+                    weightCell.innerHTML = originalContent;
+                    weightCell.style.display = '';
+                    weightCell.style.justifyContent = '';
+                    weightCell.style.alignItems = '';
+                    return;
+                }
+                if (newValue && (isNaN(parseFloat(newValue)) || parseFloat(newValue) < 0)) {
+                    showNotification('Geçerli bir ağırlık değeri girin (0 veya pozitif sayı)', 'error');
+                    weightCell.innerHTML = originalContent;
+                    weightCell.style.display = '';
+                    weightCell.style.justifyContent = '';
+                    weightCell.style.alignItems = '';
+                    return;
+                }
+                const taskId = parseInt(taskIdAttr, 10);
+                try {
+                    await patchDepartmentTask(taskId, { weight: newValue === '' ? null : parseFloat(newValue) });
+                    showNotification('Ağırlık güncellendi', 'success');
+                    updateWeightDisplay(newValue);
+                    const cached = jobOrderTabCache.departmentTasks;
+                    if (Array.isArray(cached)) {
+                        const task = cached.find(t => t.id === taskId);
+                        if (task) task.weight = newValue === '' ? null : parseFloat(newValue);
                     }
+                } catch (err) {
+                    console.error('Error updating weight:', err);
+                    let errMsg = 'Ağırlık güncellenirken hata oluştu';
+                    try {
+                        if (err.message) {
+                            const data = JSON.parse(err.message);
+                            if (typeof data === 'object') {
+                                const errors = Object.values(data).flat();
+                                if (errors.length) errMsg = errors.join(', ');
+                            }
+                        }
+                    } catch (_) {}
+                    showNotification(errMsg, 'error');
+                    weightCell.innerHTML = originalContent;
+                    weightCell.style.display = '';
+                    weightCell.style.justifyContent = '';
+                    weightCell.style.alignItems = '';
+                }
+            };
+
+            const cancelEdit = () => {
+                weightCell.innerHTML = originalContent;
+                weightCell.style.display = '';
+                weightCell.style.justifyContent = '';
+                weightCell.style.alignItems = '';
+            };
+
+            input.addEventListener('blur', saveWeight);
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    input.blur();
+                } else if (e.key === 'Escape') {
+                    e.preventDefault();
+                    cancelEdit();
                 }
             });
-        }
+        });
     }, 200);
 }
 
@@ -2770,6 +2915,54 @@ async function loadNCRsTab(jobNo) {
         console.error('Error loading NCRs:', error);
         container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Uygunsuzluk raporları yüklenirken hata oluştu.</div>';
     }
+}
+
+// Load Cost Summary Tab
+async function loadCostSummaryTab(jobNo, formatCurrency) {
+    if (jobOrderTabCache.costSummary !== null) {
+        renderCostSummaryTab(jobOrderTabCache.costSummary, jobNo, formatCurrency);
+        return;
+    }
+    const container = viewJobOrderModal.content.querySelector('#cost-summary-container');
+    if (!container) return;
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
+    try {
+        const data = await getJobCostSummary(jobNo);
+        jobOrderTabCache.costSummary = data;
+        renderCostSummaryTab(data, jobNo, formatCurrency);
+    } catch (error) {
+        console.error('Error loading cost summary:', error);
+        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Maliyet özeti yüklenirken hata oluştu.</div>';
+    }
+}
+
+// Render Cost Summary Tab
+function renderCostSummaryTab(data, jobNo, formatCurrency) {
+    const container = viewJobOrderModal.content.querySelector('#cost-summary-container');
+    if (!container) return;
+    const costRows = [
+        { label: 'İşçilik', value: data.labor_cost },
+        { label: 'Malzeme', value: data.material_cost },
+        { label: 'Taşeron', value: data.subcontractor_cost },
+        { label: 'Boya', value: data.paint_cost },
+        { label: 'Kalite Kontrol', value: data.qc_cost },
+        { label: 'Sevkiyat', value: data.shipping_cost }
+    ];
+    container.innerHTML = `
+        <div class="card mb-4">
+            <div class="card-header"><h6 class="mb-0"><i class="fas fa-list me-2"></i>Maliyet Dağılımı</h6></div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered">
+                        <tbody>
+                            ${costRows.map(r => `<tr><td class="text-muted">${r.label}</td><td class="text-end">${formatCurrency(r.value, 'EUR')}</td></tr>`).join('')}
+                            <tr class="table-light"><td><strong>Toplam Maliyet</strong></td><td class="text-end"><strong>${formatCurrency(data.actual_total_cost, 'EUR')}</strong></td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    `;
 }
 
 // Render NCRs Tab

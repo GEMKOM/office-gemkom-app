@@ -65,6 +65,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Proje Takibi',
                 icon: 'fas fa-tasks',
                 children: {}
+            },
+            '/projects/cost-table': {
+                label: 'Maliyet Tablosu',
+                icon: 'fas fa-calculator',
+                children: {}
             }
         }
     },
@@ -112,6 +117,11 @@ export const NAVIGATION_STRUCTURE = {
             '/planning/projects': {
                 label: 'Projeler',
                 icon: 'fas fa-project-diagram',
+                children: {}
+            },
+            '/planning/procurement-lines': {
+                label: 'Malzeme Maliyeti Satırları',
+                icon: 'fas fa-shopping-cart',
                 children: {}
             }
         }

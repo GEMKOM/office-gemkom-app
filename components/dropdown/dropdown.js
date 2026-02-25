@@ -13,6 +13,9 @@ export class ModernDropdown {
             multiple: false,
             maxHeight: 300,
             width: '100%',
+            remoteSearch: null,      // async (term) => Promise<Array<{value, text}>>
+            minSearchLength: 3,
+            remoteSearchPlaceholder: 'En az 3 karakter yazın',
             ...options
         };
         
@@ -21,6 +24,9 @@ export class ModernDropdown {
         this.selectedValues = [];
         this.items = [];
         this.currentZIndex = 1; // Start with low z-index
+        this.searchTerm = '';
+        this.remoteSearchLoading = false;
+        this.remoteSearchDebounce = null;
         
         this.init();
         
@@ -63,7 +69,9 @@ export class ModernDropdown {
             
             this.searchInput = document.createElement('input');
             this.searchInput.className = 'dropdown-search';
-            this.searchInput.placeholder = 'Ara...';
+            this.searchInput.placeholder = this.options.remoteSearch
+                ? (this.options.remoteSearchPlaceholder || 'En az 3 karakter yazın')
+                : 'Ara...';
             this.searchInput.type = 'text';
             
             const searchIcon = document.createElement('i');
@@ -115,7 +123,13 @@ export class ModernDropdown {
         if (this.options.searchable && this.searchInput) {
             this.searchInput.addEventListener('input', (e) => {
                 e.stopPropagation();
-                this.filterItems(e.target.value);
+                const term = (e.target.value || '').trim();
+                this.searchTerm = term;
+                if (this.options.remoteSearch && typeof this.options.remoteSearch === 'function') {
+                    this.handleRemoteSearchInput(term);
+                } else {
+                    this.filterItems(term);
+                }
             });
             
             this.searchInput.addEventListener('click', (e) => {
@@ -408,10 +422,22 @@ export class ModernDropdown {
     renderItems() {
         this.itemsContainer.innerHTML = '';
         
+        if (this.options.remoteSearch && this.remoteSearchLoading) {
+            const loading = document.createElement('div');
+            loading.className = 'dropdown-item no-items';
+            loading.textContent = 'Yükleniyor...';
+            this.itemsContainer.appendChild(loading);
+            return;
+        }
         if (this.items.length === 0) {
             const noItems = document.createElement('div');
             noItems.className = 'dropdown-item no-items';
-            noItems.textContent = 'Seçenek bulunamadı';
+            const minLen = this.options.minSearchLength != null ? this.options.minSearchLength : 3;
+            if (this.options.remoteSearch && this.searchTerm.length < minLen) {
+                noItems.textContent = this.options.remoteSearchPlaceholder || 'En az 3 karakter yazın';
+            } else {
+                noItems.textContent = 'Seçenek bulunamadı';
+            }
             this.itemsContainer.appendChild(noItems);
             return;
         }
@@ -557,6 +583,30 @@ export class ModernDropdown {
         });
     }
     
+    async handleRemoteSearchInput(term) {
+        const minLen = this.options.minSearchLength != null ? this.options.minSearchLength : 3;
+        if (term.length < minLen) {
+            this.items = [];
+            this.remoteSearchLoading = false;
+            this.renderItems();
+            return;
+        }
+        if (this.remoteSearchDebounce) clearTimeout(this.remoteSearchDebounce);
+        this.remoteSearchDebounce = setTimeout(async () => {
+            this.remoteSearchLoading = true;
+            this.renderItems();
+            try {
+                const result = await this.options.remoteSearch(term);
+                this.items = Array.isArray(result) ? result.map(it => ({ value: it.value, text: it.text || it.label || String(it.value) })) : [];
+            } catch (err) {
+                console.warn('Remote search failed:', err);
+                this.items = [];
+            }
+            this.remoteSearchLoading = false;
+            this.renderItems();
+        }, 350);
+    }
+
     filterItems(searchTerm) {
         if (!this.itemsContainer) return;
         

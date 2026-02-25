@@ -38,6 +38,10 @@ export const TEAM_ACCESS_CONFIG = {
             '/planning',
             '/planning/department-requests',
             '/planning/task-templates',
+            '/planning/projects',
+            '/planning/procurement-lines',
+            '/planning/inventory',
+            '/planning/inventory/cards',
             '/manufacturing',
             '/manufacturing/machining',
             '/manufacturing/machining/dashboard',
@@ -73,7 +77,8 @@ export const TEAM_ACCESS_CONFIG = {
             '/finance/purchase-orders',
             '/finance/reports',
             '/finance/reports/executive-overview',
-            '/finance/reports/projects'
+            '/finance/reports/projects',
+            '/projects/cost-table'
         ]),
         allowedSections: ['planning', 'general', 'manufacturing', 'procurement', 'finance']
     },
@@ -189,6 +194,10 @@ export const TEAM_ACCESS_CONFIG = {
             '/planning',
             '/planning/department-requests',
             '/planning/task-templates',
+            '/planning/projects',
+            '/planning/procurement-lines',
+            '/planning/inventory',
+            '/planning/inventory/cards',
             '/manufacturing',
             '/manufacturing/machining',
             '/manufacturing/machining/capacity',

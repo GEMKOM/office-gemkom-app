@@ -435,26 +435,31 @@ export class FiltersComponent {
             if (filter.type === 'dropdown') {
                 const container = document.getElementById(`${filter.id}-container`);
                 if (container) {
-                    const dropdown = new ModernDropdown(container, {
+                    const dropdownOptions = {
                         placeholder: filter.placeholder,
-                        searchable: filter.searchable
-                    });
+                        searchable: filter.searchable !== false
+                    };
+                    if (filter.remoteSearch && typeof filter.remoteSearch === 'function') {
+                        dropdownOptions.remoteSearch = filter.remoteSearch;
+                        dropdownOptions.minSearchLength = filter.minSearchLength != null ? filter.minSearchLength : 3;
+                        if (filter.remoteSearchPlaceholder) {
+                            dropdownOptions.remoteSearchPlaceholder = filter.remoteSearchPlaceholder;
+                        }
+                    }
+                    const dropdown = new ModernDropdown(container, dropdownOptions);
                     
-                    // Convert options to items format for ModernDropdown
-                    const items = filter.options.map(option => ({
-                        value: option.value,
-                        text: option.label
-                    }));
+                    // Use remote search results only when remoteSearch is set; otherwise use static options
+                    const items = dropdownOptions.remoteSearch
+                        ? []
+                        : (filter.options || []).map(option => ({ value: option.value, text: option.label }));
                     dropdown.setItems(items);
                     
-                    // Set initial value if provided
                     if (filter.value) {
                         dropdown.setValue(filter.value);
                     }
                     
                     this.dropdowns.set(filter.id, dropdown);
                     
-                    // Add change event listener
                     dropdown.onChange = (value) => {
                         if (this.options.onFilterChange) {
                             this.options.onFilterChange(filter.id, value);

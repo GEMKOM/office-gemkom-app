@@ -628,7 +628,7 @@ async function showMachiningDetails(jobNo) {
                     value: totalCost,
                     type: 'currency',
                     icon: 'fas fa-euro-sign',
-                    format: (value) => `€${value.toFixed(2)}`,
+                    format: (value) => `€${(Number(value) || 0).toFixed(2)}`,
                     colSize: 3
                 },
                 {
@@ -637,7 +637,7 @@ async function showMachiningDetails(jobNo) {
                     value: overtimeCost,
                     type: 'currency',
                     icon: 'fas fa-clock',
-                    format: (value) => `€${value.toFixed(2)}`,
+                    format: (value) => `€${(Number(value) || 0).toFixed(2)}`,
                     colSize: 3
                 },
                 {
@@ -646,7 +646,7 @@ async function showMachiningDetails(jobNo) {
                     value: costPerHour,
                     type: 'currency',
                     icon: 'fas fa-calculator',
-                    format: (value) => `€${value.toFixed(2)}`,
+                    format: (value) => `€${(Number(value) || 0).toFixed(2)}`,
                     colSize: 3
                 },
                 {
@@ -655,7 +655,7 @@ async function showMachiningDetails(jobNo) {
                     value: totalWeekdayHours,
                     type: 'number',
                     icon: 'fas fa-calendar-day',
-                    format: (value) => `${value.toFixed(1)} saat`,
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
                     colSize: 3
                 },
                 {
@@ -664,7 +664,7 @@ async function showMachiningDetails(jobNo) {
                     value: totalAfterHours,
                     type: 'number',
                     icon: 'fas fa-clock',
-                    format: (value) => `${value.toFixed(1)} saat`,
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
                     colSize: 3
                 },
                 {
@@ -673,7 +673,7 @@ async function showMachiningDetails(jobNo) {
                     value: totalSundayHours,
                     type: 'number',
                     icon: 'fas fa-calendar',
-                    format: (value) => `${value.toFixed(1)} saat`,
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
                     colSize: 3
                 },
                 {
@@ -682,7 +682,7 @@ async function showMachiningDetails(jobNo) {
                     value: totalHours,
                     type: 'number',
                     icon: 'fas fa-clock',
-                    format: (value) => `${value.toFixed(1)} saat`,
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
                     colSize: 3
                 },
             ]
@@ -918,7 +918,7 @@ async function showWeldingDetails(jobNo) {
                     value: summary.total_hours || 0,
                     type: 'number',
                     icon: 'fas fa-clock',
-                    format: (value) => `${value.toFixed(1)} saat`,
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
                     colSize: 3
                 },
                 {
@@ -927,7 +927,7 @@ async function showWeldingDetails(jobNo) {
                     value: summary.breakdown_by_type?.regular || 0,
                     type: 'number',
                     icon: 'fas fa-calendar-day',
-                    format: (value) => `${value.toFixed(1)} saat`,
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
                     colSize: 2
                 },
                 {
@@ -936,7 +936,7 @@ async function showWeldingDetails(jobNo) {
                     value: summary.breakdown_by_type?.after_hours || 0,
                     type: 'number',
                     icon: 'fas fa-clock',
-                    format: (value) => `${value.toFixed(1)} saat`,
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
                     colSize: 2
                 },
                 {
@@ -945,7 +945,7 @@ async function showWeldingDetails(jobNo) {
                     value: summary.breakdown_by_type?.holiday || 0,
                     type: 'number',
                     icon: 'fas fa-calendar',
-                    format: (value) => `${value.toFixed(1)} saat`,
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
                     colSize: 2
                 }
             ]

@@ -47,6 +47,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-project-diagram',
                 iconColor: 'primary',
                 link: '/planning/projects'
+            },
+            {
+                title: 'Malzeme Maliyeti Satırları',
+                description: 'Satın alma bekleyen iş emirleri ve malzeme maliyeti satırlarını yönetin.',
+                icon: 'fas fa-shopping-cart',
+                iconColor: 'primary',
+                link: '/planning/procurement-lines'
             }
         ]
     });
