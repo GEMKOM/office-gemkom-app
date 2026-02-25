@@ -4063,7 +4063,6 @@ async function handleSetPaintPriceActionSubmit(task) {
         
         showNotification('Boya fiyatı güncellendi', 'success');
         taskDetailsModal.hide();
-        await loadTasks();
     } catch (error) {
         console.error('Error updating paint price:', error);
         showNotification(error.message || 'Boya fiyatı güncellenirken hata oluştu', 'error');
@@ -4091,9 +4090,6 @@ async function handleSelfStartRevisionActionSubmit(task) {
         await selfStartRevision(task.current_release_id, reason);
         showNotification('Revizyon başlatıldı', 'success');
         taskDetailsModal.hide();
-        
-        // Reload tasks to reflect the updated revision status
-        await loadTasks();
     } catch (error) {
         console.error('Error self-starting revision:', error);
         let errorMessage = 'Revizyon başlatılırken hata oluştu';
@@ -4153,9 +4149,6 @@ async function handleSelfStartRevisionFromTable(row) {
                 await selfStartRevision(row.current_release_id, reason);
                 showNotification('Revizyon başlatıldı', 'success');
                 confirmationModal.hide();
-                
-                // Reload tasks to reflect the updated revision status
-                await loadTasks();
             } catch (error) {
                 console.error('Error self-starting revision:', error);
                 let errorMessage = 'Revizyon başlatılırken hata oluştu';
