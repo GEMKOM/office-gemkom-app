@@ -185,7 +185,8 @@ function initLinesModal() {
                                         <th style="width:100px;">Miktar</th>
                                         <th style="width:100px;">Birim Fiyat (EUR)</th>
                                         <th style="width:100px;">Tutar (EUR)</th>
-                                        <th style="width:60px;">Sıra</th>
+                                        <th>Fiyat Kaynağı</th>
+                                        <th>Fiyat Tarihi</th>
                                         <th style="width:60px;"></th>
                                     </tr>
                                 </thead>
@@ -223,7 +224,7 @@ async function openLinesModal(jobNo) {
 
     editingLines = [];
     const tbody = document.getElementById(linesTableContainerId);
-    if (tbody) tbody.innerHTML = '<tr><td colspan="8" class="text-center text-muted">Yükleniyor...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Yükleniyor...</td></tr>';
 
     linesModalBootstrap.show();
 
@@ -235,12 +236,15 @@ async function openLinesModal(jobNo) {
                 item: line.item ?? null,
                 item_code: line.item_code ?? '',
                 item_name: line.item_name ?? '',
+                item_unit: line.item_unit ?? '',
                 item_description: line.item_description ?? '',
                 quantity: line.quantity ?? '0',
                 unit_price: line.unit_price ?? '0',
                 amount_eur: line.amount_eur ?? '0',
                 planning_request_item: line.planning_request_item ?? null,
-                order: line.order ?? idx
+                order: line.order ?? idx,
+                price_source: line.price_source ?? null,
+                price_date: line.price_date ?? null
             }));
         } else {
             const preview = await getProcurementLinesPreview(jobNo);
@@ -249,13 +253,15 @@ async function openLinesModal(jobNo) {
                     item: p.item ?? null,
                     item_code: p.item_code ?? '',
                     item_name: p.item_name ?? '',
+                    item_unit: p.item_unit ?? '',
                     item_description: p.item_description ?? '',
                     quantity: p.quantity ?? '0',
                     unit_price: p.unit_price_eur != null && p.unit_price_eur !== '' ? String(p.unit_price_eur) : '0',
                     amount_eur: '0',
                     planning_request_item: p.planning_request_item ?? null,
                     order: p.order ?? idx,
-                    price_source: p.price_source
+                    price_source: p.price_source ?? null,
+                    price_date: p.price_date ?? null
                 }));
                 editingLines.forEach((line, i) => {
                     const q = parseFloat(line.quantity) || 0;
@@ -263,7 +269,7 @@ async function openLinesModal(jobNo) {
                     line.amount_eur = (q * u).toFixed(2);
                 });
             } else {
-                editingLines = [{ item: null, item_code: '', item_name: '', item_description: '', quantity: '0', unit_price: '0', amount_eur: '0', planning_request_item: null, order: 0 }];
+                editingLines = [{ item: null, item_code: '', item_name: '', item_unit: '', item_description: '', quantity: '0', unit_price: '0', amount_eur: '0', planning_request_item: null, order: 0, price_source: null, price_date: null }];
             }
         }
     } catch (err) {
@@ -281,12 +287,15 @@ function addLineRow() {
         item: null,
         item_code: '',
         item_name: '',
+        item_unit: '',
         item_description: '',
         quantity: '0',
         unit_price: '0',
         amount_eur: '0',
         planning_request_item: null,
-        order
+        order,
+        price_source: null,
+        price_date: null
     });
     renderLinesTable();
 }
@@ -309,10 +318,11 @@ function renderLinesTable() {
                 <td class="text-muted">${escapeHtml(line.item_code || '–')}</td>
                 <td class="text-muted">${escapeHtml(line.item_name || '–')}</td>
                 <td><input type="text" class="form-control form-control-sm" data-field="item_description" data-index="${index}" value="${escapeHtml(line.item_description || '')}" placeholder="Açıklama"></td>
-                <td><input type="text" class="form-control form-control-sm" data-field="quantity" data-index="${index}" value="${escapeHtml(line.quantity)}" placeholder="0"></td>
+                <td><input type="text" class="form-control form-control-sm d-inline-block" data-field="quantity" data-index="${index}" value="${escapeHtml(line.quantity)}" placeholder="0" style="width:5rem"> <span class="text-muted small ms-1">${escapeHtml(line.item_unit || '–')}</span></td>
                 <td><input type="text" class="form-control form-control-sm" data-field="unit_price" data-index="${index}" value="${escapeHtml(line.unit_price)}" placeholder="0"></td>
                 <td class="align-middle">${amountStr}</td>
-                <td><input type="number" class="form-control form-control-sm" data-field="order" data-index="${index}" value="${line.order}" min="0" style="width:60px"></td>
+                <td class="text-muted small">${escapeHtml(formatPriceSource(line.price_source))}</td>
+                <td class="text-muted small">${escapeHtml(formatPriceDate(line.price_date))}</td>
                 <td>
                     <button type="button" class="btn btn-outline-danger btn-sm" data-remove-index="${index}" title="Satırı sil">
                         <i class="fas fa-trash"></i>
@@ -357,6 +367,31 @@ function escapeHtml(s) {
     const div = document.createElement('div');
     div.textContent = s;
     return div.innerHTML;
+}
+
+/** Turkish labels for price_source (read-only info in modal) */
+const PRICE_SOURCE_LABELS = {
+    po_line: 'PO satırı (bu planlama kalemi)',
+    recommended_offer: 'Önerilen tedarikçi teklifi',
+    any_offer: 'Herhangi bir tedarikçi teklifi',
+    historical_po: 'Aynı katalog kalemi, son PO (herhangi bir iş)',
+    none: 'Fiyat yok (serbest metin veya hiç satın alınmamış)'
+};
+
+function formatPriceSource(value) {
+    if (value == null || value === '') return '–';
+    return PRICE_SOURCE_LABELS[value] || value;
+}
+
+function formatPriceDate(value) {
+    if (value == null || value === '') return '–';
+    try {
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return value;
+        return d.toLocaleDateString('tr-TR');
+    } catch {
+        return value;
+    }
 }
 
 function syncLinesFromDom() {
