@@ -16,7 +16,7 @@ const STATUS_OPTIONS = [
 ];
 
 let currentPage = 1;
-let pageSize = 50;
+let pageSize = 20;
 let currentOrdering = 'job_no';
 let costTable = null;
 let filtersComponent = null;
@@ -253,6 +253,9 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'paint_cost', label: 'Boya', sortable: true, formatter: formatMoney },
             { field: 'qc_cost', label: 'KK', sortable: true, formatter: formatMoney },
             { field: 'shipping_cost', label: 'Sevkiyat', sortable: true, formatter: formatMoney },
+            { field: 'paint_material_cost', label: 'Boya Malzemesi', sortable: true, formatter: formatMoney },
+            { field: 'general_expenses_cost', label: 'Genel Giderler', sortable: true, formatter: formatMoney },
+            { field: 'employee_overhead_cost', label: 'Personel Gen. Gider', sortable: true, formatter: formatMoney },
             { field: 'actual_total_cost', label: 'Toplam Maliyet', sortable: true, formatter: v => `<span class="fw-bold">${formatMoney(v)}</span>` },
             { field: 'estimated_cost', label: 'Tahmini', sortable: true, formatter: formatMoney },
             { field: 'selling_price', label: 'Satış Fiyatı', sortable: true, formatter: (v, row) => (v != null && v !== '' ? formatMoney(v) + (row.selling_price_currency ? ` <small class="text-muted">${row.selling_price_currency}</small>` : '') : '<span class="text-muted">-</span>') },
