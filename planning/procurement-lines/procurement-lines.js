@@ -7,6 +7,7 @@ import { showNotification } from '../../../components/notification/notification.
 import { initRouteProtection } from '../../../apis/routeProtection.js';
 import {
     getProcurementPendingJobOrders,
+    getJobOrdersHasProcurement,
     getProcurementLines,
     getProcurementLinesPreview,
     submitProcurementLines
@@ -20,6 +21,13 @@ let currentPage = 1;
 let currentPageSize = 20;
 let currentFilters = { status: '', search: '' };
 let pendingTable = null;
+let hasEntriesTable = null;
+let hasEntriesFiltersComponent = null;
+let hasEntriesFilters = { status: '', search: '' };
+let hasEntriesData = [];
+let hasEntriesTotal = 0;
+let hasEntriesPage = 1;
+let hasEntriesPageSize = 20;
 let filtersComponent = null;
 let confirmationModal = null;
 let linesModal = null;
@@ -35,24 +43,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const header = new HeaderComponent({
         title: 'Malzeme Maliyeti Satırları',
-        subtitle: 'Satın alma bekleyen iş emirleri ve malzeme maliyeti satırları',
+        subtitle: 'Satın alma bekleyen ve satır girilmiş iş emirleri',
         icon: 'project-diagram',
         showBackButton: 'block',
         showCreateButton: 'none',
+        showRefreshButton: 'block',
+        onRefreshClick: refreshAll,
         backUrl: '/planning/'
     });
 
-    initFilters();
+    initPendingFilters();
     initPendingTable();
+    initHasEntriesFilters();
+    initHasEntriesTable();
     initConfirmationModal();
     initLinesModal();
 
     await loadPendingJobOrders();
 });
 
-function initFilters() {
+function refreshAll() {
+    currentPage = 1;
+    hasEntriesPage = 1;
+    loadPendingJobOrders();
+    loadHasEntries();
+}
+
+function initPendingFilters() {
     filtersComponent = new FiltersComponent('filters-placeholder', {
-        title: 'Filtreler',
+        title: 'Filtreler (Bekleyen)',
         onApply: (values) => {
             currentPage = 1;
             currentFilters = {
@@ -75,6 +94,44 @@ function initFilters() {
     });
     filtersComponent.addDropdownFilter({
         id: 'status-filter',
+        label: 'Durum',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'active', label: 'Aktif' },
+            { value: 'draft', label: 'Taslak' },
+            { value: 'on_hold', label: 'Beklemede' },
+            { value: 'completed', label: 'Tamamlandı' }
+        ],
+        placeholder: 'Tümü',
+        colSize: 2
+    });
+}
+
+function initHasEntriesFilters() {
+    hasEntriesFiltersComponent = new FiltersComponent('has-entries-filters-placeholder', {
+        title: 'Filtreler (Satır Girilmiş)',
+        onApply: (values) => {
+            hasEntriesPage = 1;
+            hasEntriesFilters = {
+                status: values['has-status-filter'] ?? '',
+                search: values['has-search-filter'] ?? ''
+            };
+            loadHasEntries();
+        },
+        onClear: () => {
+            hasEntriesPage = 1;
+            hasEntriesFilters = { status: '', search: '' };
+            loadHasEntries();
+        }
+    });
+    hasEntriesFiltersComponent.addTextFilter({
+        id: 'has-search-filter',
+        label: 'Arama',
+        placeholder: 'İş emri no, başlık, müşteri...',
+        colSize: 3
+    });
+    hasEntriesFiltersComponent.addDropdownFilter({
+        id: 'has-status-filter',
         label: 'Durum',
         options: [
             { value: '', label: 'Tümü' },
@@ -122,16 +179,53 @@ function initPendingTable() {
                 onClick: (row) => openLinesModal(row.job_no)
             }
         ],
-        emptyMessage: 'Satın alma bekleyen iş emri yok.',
-        emptyIcon: 'fas fa-inbox'
+        emptyMessage: 'Listeyi yüklemek veya güncellemek için Filtrele veya Yenile butonuna tıklayın.',
+        emptyIcon: 'fas fa-inbox',
+        refreshable: true,
+        onRefresh: () => { currentPage = 1; loadPendingJobOrders(); }
+    });
+}
+
+function initHasEntriesTable() {
+    hasEntriesTable = new TableComponent('procurement-has-entries-table-container', {
+        title: 'Malzeme Maliyeti Girilmiş İş Emirleri',
+        icon: 'fas fa-check-double',
+        columns: [
+            { field: 'job_no', label: 'İş Emri No', sortable: true },
+            { field: 'title', label: 'Başlık', sortable: true },
+            { field: 'customer_name', label: 'Müşteri', sortable: false },
+            { field: 'status', label: 'Durum', sortable: true, formatter: formatStatus },
+            { field: 'target_completion_date', label: 'Hedef Bitiş', sortable: true, formatter: formatDate }
+        ],
+        data: [],
+        sortable: true,
+        currentSortField: 'job_no',
+        currentSortDirection: 'asc',
+        pagination: true,
+        serverSidePagination: true,
+        itemsPerPage: 20,
+        currentPage: 1,
+        totalItems: 0,
+        onPageChange: (page) => { hasEntriesPage = page; loadHasEntries(); },
+        onSort: (field, direction) => {
+            hasEntriesPage = 1;
+            loadHasEntries({ ordering: direction === 'desc' ? `-${field}` : field });
+        },
+        actions: [
+            { key: 'open-lines', label: 'Satırları Aç', icon: 'fas fa-list', class: 'btn-outline-primary', onClick: (row) => openLinesModal(row.job_no) }
+        ],
+        emptyMessage: 'Listeyi yüklemek için Filtrele veya Yenile butonuna tıklayın.',
+        emptyIcon: 'fas fa-filter',
+        refreshable: true,
+        onRefresh: () => { hasEntriesPage = 1; loadHasEntries(); }
     });
 }
 
 function formatStatus(value) {
-    const map = { active: 'Aktif', draft: 'Taslak', on_hold: 'Beklemede', completed: 'Tamamlandı', cancelled: 'İptal' };
-    const label = map[value] || value;
-    const cls = value === 'active' ? 'success' : value === 'completed' ? 'info' : value === 'on_hold' ? 'warning' : 'secondary';
-    return `<span class="badge bg-${cls}">${label}</span>`;
+    const labels = { active: 'Aktif', draft: 'Taslak', on_hold: 'Beklemede', completed: 'Tamamlandı', cancelled: 'İptal' };
+    const label = labels[value] || value || '–';
+    const colorClass = value === 'active' ? 'status-green' : value === 'completed' ? 'status-blue' : value === 'on_hold' ? 'status-yellow' : value === 'cancelled' ? 'status-red' : 'status-grey';
+    return `<span class="status-badge ${colorClass}">${label}</span>`;
 }
 
 function formatDate(value) {
@@ -447,6 +541,7 @@ async function saveLines() {
         showNotification('Satırlar kaydedildi.', 'success');
         linesModalBootstrap.hide();
         await loadPendingJobOrders();
+        loadHasEntries();
     } catch (err) {
         console.error(err);
         showNotification(err.message || 'Kaydetme başarısız', 'error');
@@ -482,6 +577,36 @@ async function loadPendingJobOrders(options = {}) {
             pendingTable.options.data = [];
             pendingTable.options.totalItems = 0;
             pendingTable.render();
+        }
+    }
+}
+
+async function loadHasEntries(options = {}) {
+    const params = {
+        page: options.page ?? hasEntriesPage,
+        page_size: options.page_size ?? hasEntriesPageSize,
+        status: hasEntriesFilters.status,
+        search: hasEntriesFilters.search,
+        ordering: options.ordering ?? 'job_no'
+    };
+    try {
+        const response = await getJobOrdersHasProcurement(params);
+        const results = extractResultsFromResponse(response);
+        hasEntriesData = Array.isArray(results) ? results : (response.results || []);
+        hasEntriesTotal = response.count ?? hasEntriesData.length;
+        if (hasEntriesTable) {
+            hasEntriesTable.options.data = hasEntriesData;
+            hasEntriesTable.options.totalItems = hasEntriesTotal;
+            hasEntriesTable.options.currentPage = hasEntriesPage;
+            hasEntriesTable.render();
+        }
+    } catch (err) {
+        console.error(err);
+        showNotification(err.message || 'Satır girilmiş liste yüklenemedi', 'error');
+        if (hasEntriesTable) {
+            hasEntriesTable.options.data = [];
+            hasEntriesTable.options.totalItems = 0;
+            hasEntriesTable.render();
         }
     }
 }

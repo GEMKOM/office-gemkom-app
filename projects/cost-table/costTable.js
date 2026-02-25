@@ -49,13 +49,6 @@ function formatDate(value) {
 }
 
 function statusBadge(status) {
-    const map = {
-        draft: 'secondary',
-        active: 'success',
-        on_hold: 'warning',
-        completed: 'primary',
-        cancelled: 'danger'
-    };
     const labels = {
         draft: 'Taslak',
         active: 'Aktif',
@@ -63,9 +56,9 @@ function statusBadge(status) {
         completed: 'Tamamlandı',
         cancelled: 'İptal Edildi'
     };
-    const c = map[status] || 'secondary';
-    const label = labels[status] || status || '-';
-    return `<span class="badge bg-${c}">${label}</span>`;
+    const label = labels[status] || status || '–';
+    const colorClass = status === 'active' ? 'status-green' : status === 'completed' ? 'status-blue' : status === 'on_hold' ? 'status-yellow' : status === 'cancelled' ? 'status-red' : 'status-grey';
+    return `<span class="status-badge ${colorClass}">${label}</span>`;
 }
 
 // Flatten tree for display: roots + expanded children from childrenCache (recursive).

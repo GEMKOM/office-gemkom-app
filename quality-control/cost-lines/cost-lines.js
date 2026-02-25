@@ -6,9 +6,9 @@ import { showNotification } from '../../../components/notification/notification.
 import { initRouteProtection } from '../../../apis/routeProtection.js';
 import {
     getQcPendingJobOrders,
+    getJobOrdersHasQc,
     getQcCostLines,
-    createQcCostLine,
-    COST_SUMMARY_CURRENCIES
+    submitQcCostLines
 } from '../../../apis/projects/cost.js';
 import { extractResultsFromResponse } from '../../../apis/paginationHelper.js';
 
@@ -18,10 +18,21 @@ let currentPage = 1;
 let currentPageSize = 20;
 let currentFilters = { status: '', search: '' };
 let pendingTable = null;
+
+let hasEntriesTable = null;
+let hasEntriesFiltersComponent = null;
+let hasEntriesFilters = { status: '', search: '' };
+let hasEntriesData = [];
+let hasEntriesTotal = 0;
+let hasEntriesPage = 1;
+let hasEntriesPageSize = 20;
+
 let linesModal = null;
 let linesModalBootstrap = null;
 let currentJobOrderForLines = null;
 let linesTableBodyId = 'qc-lines-tbody';
+/** @type {Array<{ description: string, amount_eur: string, date: string, notes: string }>} */
+let editingLines = [];
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) return;
@@ -29,22 +40,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     new HeaderComponent({
         title: 'KK Maliyet Satırları',
-        subtitle: 'Kalite kontrol maliyeti girilmemiş iş emirleri',
+        subtitle: 'Kalite kontrol maliyeti girilmemiş ve girilmiş iş emirleri',
         icon: 'project-diagram',
         showBackButton: 'block',
         showCreateButton: 'none',
+        showRefreshButton: 'block',
+        onRefreshClick: refreshAll,
         backUrl: '/quality-control/'
     });
 
-    initFilters();
+    initPendingFilters();
     initPendingTable();
+    initHasEntriesFilters();
+    initHasEntriesTable();
     initLinesModal();
     await loadPending();
 });
 
-function initFilters() {
+function refreshAll() {
+    currentPage = 1;
+    hasEntriesPage = 1;
+    loadPending();
+    loadHasEntries();
+}
+
+function initPendingFilters() {
     const filtersComponent = new FiltersComponent('filters-placeholder', {
-        title: 'Filtreler',
+        title: 'Filtreler (Bekleyen)',
         onApply: (values) => {
             currentPage = 1;
             currentFilters = { status: values['status-filter'] ?? '', search: values['search-filter'] ?? '' };
@@ -59,6 +81,36 @@ function initFilters() {
     filtersComponent.addTextFilter({ id: 'search-filter', label: 'Arama', placeholder: 'İş emri no, başlık, müşteri...', colSize: 3 });
     filtersComponent.addDropdownFilter({
         id: 'status-filter',
+        label: 'Durum',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'active', label: 'Aktif' },
+            { value: 'draft', label: 'Taslak' },
+            { value: 'on_hold', label: 'Beklemede' },
+            { value: 'completed', label: 'Tamamlandı' }
+        ],
+        placeholder: 'Tümü',
+        colSize: 2
+    });
+}
+
+function initHasEntriesFilters() {
+    hasEntriesFiltersComponent = new FiltersComponent('has-entries-filters-placeholder', {
+        title: 'Filtreler (Satır Girilmiş)',
+        onApply: (values) => {
+            hasEntriesPage = 1;
+            hasEntriesFilters = { status: values['has-status-filter'] ?? '', search: values['has-search-filter'] ?? '' };
+            loadHasEntries();
+        },
+        onClear: () => {
+            hasEntriesPage = 1;
+            hasEntriesFilters = { status: '', search: '' };
+            loadHasEntries();
+        }
+    });
+    hasEntriesFiltersComponent.addTextFilter({ id: 'has-search-filter', label: 'Arama', placeholder: 'İş emri no, başlık, müşteri...', colSize: 3 });
+    hasEntriesFiltersComponent.addDropdownFilter({
+        id: 'has-status-filter',
         label: 'Durum',
         options: [
             { value: '', label: 'Tümü' },
@@ -95,16 +147,48 @@ function initPendingTable() {
         onPageChange: (page) => { currentPage = page; loadPending(); },
         onSort: (field, direction) => loadPending({ ordering: direction === 'desc' ? `-${field}` : field }),
         actions: [{ key: 'open', label: 'Satırları Aç', icon: 'fas fa-list', class: 'btn-outline-primary', onClick: (row) => openLinesModal(row.job_no) }],
-        emptyMessage: 'KK maliyeti bekleyen iş emri yok.',
-        emptyIcon: 'fas fa-inbox'
+        emptyMessage: 'Listeyi yüklemek veya güncellemek için Filtrele veya Yenile butonuna tıklayın.',
+        emptyIcon: 'fas fa-inbox',
+        refreshable: true,
+        onRefresh: () => { currentPage = 1; loadPending(); }
+    });
+}
+
+function initHasEntriesTable() {
+    hasEntriesTable = new TableComponent('has-entries-table-container', {
+        title: 'KK Maliyeti Girilmiş İş Emirleri',
+        icon: 'fas fa-check-double',
+        columns: [
+            { field: 'job_no', label: 'İş Emri No', sortable: true },
+            { field: 'title', label: 'Başlık', sortable: true },
+            { field: 'customer_name', label: 'Müşteri', sortable: false },
+            { field: 'status', label: 'Durum', sortable: true, formatter: formatStatus },
+            { field: 'target_completion_date', label: 'Hedef Bitiş', sortable: true, formatter: formatDate }
+        ],
+        data: [],
+        sortable: true,
+        currentSortField: 'job_no',
+        currentSortDirection: 'asc',
+        pagination: true,
+        serverSidePagination: true,
+        itemsPerPage: 20,
+        currentPage: 1,
+        totalItems: 0,
+        onPageChange: (page) => { hasEntriesPage = page; loadHasEntries(); },
+        onSort: (field, direction) => loadHasEntries({ ordering: direction === 'desc' ? `-${field}` : field }),
+        actions: [{ key: 'open', label: 'Satırları Aç', icon: 'fas fa-list', class: 'btn-outline-primary', onClick: (row) => openLinesModal(row.job_no) }],
+        emptyMessage: 'Listeyi yüklemek için Filtrele veya Yenile butonuna tıklayın.',
+        emptyIcon: 'fas fa-filter',
+        refreshable: true,
+        onRefresh: () => { hasEntriesPage = 1; loadHasEntries(); }
     });
 }
 
 function formatStatus(value) {
-    const map = { active: 'Aktif', draft: 'Taslak', on_hold: 'Beklemede', completed: 'Tamamlandı', cancelled: 'İptal' };
-    const label = map[value] || value;
-    const cls = value === 'active' ? 'success' : value === 'completed' ? 'info' : value === 'on_hold' ? 'warning' : 'secondary';
-    return `<span class="badge bg-${cls}">${label}</span>`;
+    const labels = { active: 'Aktif', draft: 'Taslak', on_hold: 'Beklemede', completed: 'Tamamlandı', cancelled: 'İptal' };
+    const label = labels[value] || value || '–';
+    const colorClass = value === 'active' ? 'status-green' : value === 'completed' ? 'status-blue' : value === 'on_hold' ? 'status-yellow' : value === 'cancelled' ? 'status-red' : 'status-grey';
+    return `<span class="status-badge ${colorClass}">${label}</span>`;
 }
 
 function formatDate(value) {
@@ -125,29 +209,20 @@ function initLinesModal() {
                     </div>
                     <div class="modal-body">
                         <div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
-                            <button type="button" class="btn btn-sm btn-primary" id="lines-add-line-btn"><i class="fas fa-plus me-1"></i>Yeni Satır Ekle</button>
+                            <button type="button" class="btn btn-sm btn-primary" id="lines-add-line-btn"><i class="fas fa-plus me-1"></i>Satır Ekle</button>
                             <span class="text-muted small" id="lines-summary"></span>
-                        </div>
-                        <div id="add-line-form-container" style="display:none;" class="mb-3 p-3 border rounded bg-light">
-                            <h6 class="mb-3">Yeni satır</h6>
-                            <div class="row g-2">
-                                <div class="col-12"><label class="form-label">Açıklama <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="line-description" placeholder="Örn: Üçüncü taraf muayene"></div>
-                                <div class="col-md-2"><label class="form-label">Tutar <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="line-amount" placeholder="0.00"></div>
-                                <div class="col-md-2"><label class="form-label">Para birimi <span class="text-danger">*</span></label><select class="form-select form-select-sm" id="line-currency">${COST_SUMMARY_CURRENCIES.map(c => `<option value="${c}">${c}</option>`).join('')}</select></div>
-                                <div class="col-md-2"><label class="form-label">Tutar (EUR) <span class="text-danger">*</span></label><input type="text" class="form-control form-control-sm" id="line-amount-eur" placeholder="0.00"></div>
-                                <div class="col-md-2"><label class="form-label">Tarih</label><input type="date" class="form-control form-control-sm" id="line-date"></div>
-                                <div class="col-md-2"><label class="form-label">Notlar</label><input type="text" class="form-control form-control-sm" id="line-notes" placeholder="Opsiyonel"></div>
-                                <div class="col-md-2 d-flex align-items-end gap-1"><button type="button" class="btn btn-sm btn-primary" id="line-submit-btn">Kaydet</button><button type="button" class="btn btn-sm btn-outline-secondary" id="line-cancel-btn">İptal</button></div>
-                            </div>
                         </div>
                         <div class="table-responsive">
                             <table class="table table-bordered table-sm">
-                                <thead><tr><th>Açıklama</th><th>Tutar</th><th>Birim</th><th>Tutar (EUR)</th><th>Tarih</th><th>Notlar</th></tr></thead>
+                                <thead><tr><th>Açıklama</th><th>Tutar (EUR)</th><th>Tarih</th><th>Notlar</th><th style="width:60px;"></th></tr></thead>
                                 <tbody id="${linesTableBodyId}"></tbody>
                             </table>
                         </div>
                     </div>
-                    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button></div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
+                        <button type="button" class="btn btn-primary" id="lines-save-btn"><i class="fas fa-save me-1"></i>Kaydet</button>
+                    </div>
                 </div>
             </div>
         </div>
@@ -156,26 +231,10 @@ function initLinesModal() {
     linesModalBootstrap = new bootstrap.Modal(linesModal);
 
     document.getElementById('lines-add-line-btn').addEventListener('click', () => {
-        document.getElementById('add-line-form-container').style.display = 'block';
-        document.getElementById('line-description').value = '';
-        document.getElementById('line-amount').value = '';
-        document.getElementById('line-currency').value = 'EUR';
-        document.getElementById('line-amount-eur').value = '';
-        document.getElementById('line-date').value = '';
-        document.getElementById('line-notes').value = '';
+        editingLines.push({ description: '', amount_eur: '0.00', date: '', notes: '' });
+        renderLinesTable();
     });
-    document.getElementById('line-currency').addEventListener('change', () => {
-        if (document.getElementById('line-currency').value === 'EUR' && document.getElementById('line-amount').value) {
-            document.getElementById('line-amount-eur').value = document.getElementById('line-amount').value;
-        }
-    });
-    document.getElementById('line-amount').addEventListener('input', () => {
-        if (document.getElementById('line-currency').value === 'EUR') {
-            document.getElementById('line-amount-eur').value = document.getElementById('line-amount').value;
-        }
-    });
-    document.getElementById('line-cancel-btn').addEventListener('click', () => { document.getElementById('add-line-form-container').style.display = 'none'; });
-    document.getElementById('line-submit-btn').addEventListener('click', submitNewLine);
+    document.getElementById('lines-save-btn').addEventListener('click', saveLines);
     linesModal.addEventListener('shown.bs.modal', () => renderLinesTable());
 }
 
@@ -183,48 +242,65 @@ async function openLinesModal(jobNo) {
     currentJobOrderForLines = jobNo;
     const titleEl = document.getElementById('lines-modal-title');
     if (titleEl) titleEl.textContent = `KK Maliyet Satırları — ${jobNo}`;
-    document.getElementById('add-line-form-container').style.display = 'none';
     const tbody = document.getElementById(linesTableBodyId);
-    if (tbody) tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Yükleniyor...</td></tr>';
+    if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Yükleniyor...</td></tr>';
     linesModalBootstrap.show();
-    await loadLines();
-}
 
-async function loadLines() {
-    const tbody = document.getElementById(linesTableBodyId);
-    if (!tbody || !currentJobOrderForLines) return;
     try {
-        const lines = await getQcCostLines(currentJobOrderForLines);
-        window._currentLines = Array.isArray(lines) ? lines : [];
-        renderLinesTable();
+        const lines = await getQcCostLines(jobNo);
+        editingLines = (Array.isArray(lines) ? lines : []).map((line) => ({
+            description: line.description ?? '',
+            amount_eur: line.amount_eur != null ? String(line.amount_eur) : '0.00',
+            date: line.date ? (line.date.slice ? line.date.slice(0, 10) : line.date) : '',
+            notes: line.notes ?? ''
+        }));
+        if (editingLines.length === 0) {
+            editingLines = [{ description: '', amount_eur: '0.00', date: '', notes: '' }];
+        }
     } catch (err) {
         console.error(err);
         showNotification(err.message || 'Satırlar yüklenemedi', 'error');
-        window._currentLines = [];
-        renderLinesTable();
+        editingLines = [{ description: '', amount_eur: '0.00', date: '', notes: '' }];
     }
+    renderLinesTable();
+}
+
+function removeLineRow(index) {
+    editingLines.splice(index, 1);
+    if (editingLines.length === 0) editingLines = [{ description: '', amount_eur: '0.00', date: '', notes: '' }];
+    renderLinesTable();
 }
 
 function renderLinesTable() {
     const tbody = document.getElementById(linesTableBodyId);
-    const lines = window._currentLines || [];
     if (!tbody) return;
-    if (lines.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted">Henüz satır yok. Yeni satır ekleyin.</td></tr>';
-    } else {
-        tbody.innerHTML = lines.map(line => `
-            <tr>
-                <td>${escapeHtml(line.description || '–')}</td>
-                <td>${escapeHtml(line.amount != null ? line.amount : '–')}</td>
-                <td>${escapeHtml(line.currency || '–')}</td>
-                <td>${escapeHtml(line.amount_eur != null ? line.amount_eur : '–')}</td>
-                <td>${line.date ? formatDate(line.date) : '–'}</td>
-                <td>${escapeHtml(line.notes || '–')}</td>
-            </tr>
-        `).join('');
-    }
+
+    tbody.innerHTML = editingLines.map((line, index) => `
+        <tr data-index="${index}">
+            <td><input type="text" class="form-control form-control-sm" data-field="description" data-index="${index}" value="${escapeHtml(line.description)}" placeholder="Açıklama"></td>
+            <td><input type="text" class="form-control form-control-sm" data-field="amount_eur" data-index="${index}" value="${escapeHtml(line.amount_eur)}" placeholder="0.00" style="width:6rem"></td>
+            <td><input type="date" class="form-control form-control-sm" data-field="date" data-index="${index}" value="${escapeHtml(line.date)}" style="width:10rem"></td>
+            <td><input type="text" class="form-control form-control-sm" data-field="notes" data-index="${index}" value="${escapeHtml(line.notes)}" placeholder="Notlar"></td>
+            <td><button type="button" class="btn btn-outline-danger btn-sm" data-remove-index="${index}" title="Satırı sil"><i class="fas fa-trash"></i></button></td>
+        </tr>
+    `).join('');
+
+    const total = editingLines.reduce((sum, line) => sum + (parseFloat(line.amount_eur) || 0), 0);
     const summaryEl = document.getElementById('lines-summary');
-    if (summaryEl) summaryEl.textContent = `${lines.length} satır`;
+    if (summaryEl) summaryEl.textContent = `${editingLines.length} satır, Toplam: €${total.toFixed(2)}`;
+
+    tbody.querySelectorAll('input').forEach((input) => {
+        input.addEventListener('change', (e) => {
+            const index = parseInt(e.target.dataset.index, 10);
+            const field = e.target.dataset.field;
+            if (editingLines[index] != null) editingLines[index][field] = e.target.value;
+        });
+    });
+    tbody.querySelectorAll('[data-remove-index]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            removeLineRow(parseInt(btn.dataset.removeIndex, 10));
+        });
+    });
 }
 
 function escapeHtml(s) {
@@ -234,35 +310,37 @@ function escapeHtml(s) {
     return div.innerHTML;
 }
 
-async function submitNewLine() {
+function syncLinesFromDom() {
+    const tbody = document.getElementById(linesTableBodyId);
+    if (!tbody) return;
+    tbody.querySelectorAll('tr[data-index]').forEach((tr) => {
+        const index = parseInt(tr.dataset.index, 10);
+        if (editingLines[index] == null) return;
+        tr.querySelectorAll('input').forEach((input) => {
+            editingLines[index][input.dataset.field] = input.value;
+        });
+    });
+}
+
+async function saveLines() {
     if (!currentJobOrderForLines) return;
-    const description = (document.getElementById('line-description').value || '').trim();
-    const amount = (document.getElementById('line-amount').value || '').trim();
-    const currency = document.getElementById('line-currency').value;
-    let amountEur = (document.getElementById('line-amount-eur').value || '').trim();
-    const date = (document.getElementById('line-date').value || '').trim();
-    const notes = (document.getElementById('line-notes').value || '').trim();
+    syncLinesFromDom();
 
-    if (!description) { showNotification('Açıklama zorunludur.', 'error'); return; }
-    if (!amount) { showNotification('Tutar zorunludur.', 'error'); return; }
-    if (currency === 'EUR' && !amountEur) amountEur = amount;
-
-    if (!amountEur) { showNotification('Tutar (EUR) zorunludur.', 'error'); return; }
-    if (isNaN(parseFloat(amount)) || isNaN(parseFloat(amountEur))) { showNotification('Geçerli sayı girin.', 'error'); return; }
+    const lines = editingLines
+        .map((line) => ({
+            description: (line.description || '').trim(),
+            amount_eur: (line.amount_eur != null && line.amount_eur !== '') ? String(line.amount_eur) : '0.00',
+            date: (line.date || '').trim() || undefined,
+            notes: (line.notes || '').trim() || undefined
+        }))
+        .filter((l) => l.description !== '');
 
     try {
-        await createQcCostLine({
-            job_order: currentJobOrderForLines,
-            description,
-            amount,
-            currency,
-            amount_eur: amountEur,
-            date: date || undefined,
-            notes: notes || undefined
-        });
-        showNotification('Satır eklendi.', 'success');
-        document.getElementById('add-line-form-container').style.display = 'none';
-        await loadLines();
+        await submitQcCostLines(currentJobOrderForLines, lines);
+        showNotification('Satırlar kaydedildi.', 'success');
+        linesModalBootstrap.hide();
+        await loadPending();
+        loadHasEntries();
     } catch (err) {
         console.error(err);
         showNotification(err.message || 'Kaydetme başarısız', 'error');
@@ -291,5 +369,34 @@ async function loadPending(options = {}) {
         console.error(err);
         showNotification(err.message || 'Liste yüklenemedi', 'error');
         if (pendingTable) { pendingTable.options.data = []; pendingTable.options.totalItems = 0; pendingTable.render(); }
+    }
+}
+
+async function loadHasEntries(options = {}) {
+    const params = {
+        page: options.page ?? hasEntriesPage,
+        page_size: options.page_size ?? hasEntriesPageSize,
+        ...hasEntriesFilters,
+        ordering: options.ordering ?? 'job_no'
+    };
+    try {
+        const response = await getJobOrdersHasQc(params);
+        const results = extractResultsFromResponse(response);
+        hasEntriesData = Array.isArray(results) ? results : (response.results || []);
+        hasEntriesTotal = response.count ?? hasEntriesData.length;
+        if (hasEntriesTable) {
+            hasEntriesTable.options.data = hasEntriesData;
+            hasEntriesTable.options.totalItems = hasEntriesTotal;
+            hasEntriesTable.options.currentPage = hasEntriesPage;
+            hasEntriesTable.render();
+        }
+    } catch (err) {
+        console.error(err);
+        showNotification(err.message || 'Satır girilmiş liste yüklenemedi', 'error');
+        if (hasEntriesTable) {
+            hasEntriesTable.options.data = [];
+            hasEntriesTable.options.totalItems = 0;
+            hasEntriesTable.render();
+        }
     }
 }

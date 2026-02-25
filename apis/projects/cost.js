@@ -243,6 +243,72 @@ export async function submitProcurementLines(jobOrder, lines) {
     return response.json();
 }
 
+// ─── Job orders that have QC/Shipping/Procurement entries (for review/update) ─
+
+/**
+ * Job orders that have at least one QC cost line.
+ * GET /projects/job-orders/has_qc/
+ * Paginated, same shape as job order list. Use ?search=, ?status= etc.
+ * @param {Object} options - status, search, customer, ordering, page, page_size
+ * @returns {Promise<{ count: number, next: string|null, previous: string|null, results: Array }>}
+ */
+export async function getJobOrdersHasQc(options = {}) {
+    const queryParams = new URLSearchParams();
+    if (options.status != null && options.status !== '') queryParams.append('status', options.status);
+    if (options.search != null && options.search !== '') queryParams.append('search', options.search);
+    if (options.customer != null && options.customer !== '') queryParams.append('customer', String(options.customer));
+    if (options.ordering != null && options.ordering !== '') queryParams.append('ordering', options.ordering);
+    if (options.page != null) queryParams.append('page', String(options.page));
+    if (options.page_size != null) queryParams.append('page_size', String(options.page_size));
+
+    const url = `${backendBase}/projects/job-orders/has_qc/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await authedFetch(url);
+    if (!response.ok) throw new Error(`Has QC job orders request failed: ${response.status}`);
+    return response.json();
+}
+
+/**
+ * Job orders that have at least one shipping cost line.
+ * GET /projects/job-orders/has_shipping/
+ * @param {Object} options - Same as getJobOrdersHasQc
+ * @returns {Promise<{ count: number, next: string|null, previous: string|null, results: Array }>}
+ */
+export async function getJobOrdersHasShipping(options = {}) {
+    const queryParams = new URLSearchParams();
+    if (options.status != null && options.status !== '') queryParams.append('status', options.status);
+    if (options.search != null && options.search !== '') queryParams.append('search', options.search);
+    if (options.customer != null && options.customer !== '') queryParams.append('customer', String(options.customer));
+    if (options.ordering != null && options.ordering !== '') queryParams.append('ordering', options.ordering);
+    if (options.page != null) queryParams.append('page', String(options.page));
+    if (options.page_size != null) queryParams.append('page_size', String(options.page_size));
+
+    const url = `${backendBase}/projects/job-orders/has_shipping/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await authedFetch(url);
+    if (!response.ok) throw new Error(`Has shipping job orders request failed: ${response.status}`);
+    return response.json();
+}
+
+/**
+ * Job orders that have at least one procurement line.
+ * GET /projects/job-orders/has_procurement/
+ * @param {Object} options - Same as getJobOrdersHasQc
+ * @returns {Promise<{ count: number, next: string|null, previous: string|null, results: Array }>}
+ */
+export async function getJobOrdersHasProcurement(options = {}) {
+    const queryParams = new URLSearchParams();
+    if (options.status != null && options.status !== '') queryParams.append('status', options.status);
+    if (options.search != null && options.search !== '') queryParams.append('search', options.search);
+    if (options.customer != null && options.customer !== '') queryParams.append('customer', String(options.customer));
+    if (options.ordering != null && options.ordering !== '') queryParams.append('ordering', options.ordering);
+    if (options.page != null) queryParams.append('page', String(options.page));
+    if (options.page_size != null) queryParams.append('page_size', String(options.page_size));
+
+    const url = `${backendBase}/projects/job-orders/has_procurement/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await authedFetch(url);
+    if (!response.ok) throw new Error(`Has procurement job orders request failed: ${response.status}`);
+    return response.json();
+}
+
 // ─── QC Cost Lines (job orders with zero QC lines = qc_pending) ─────────────
 
 /**
@@ -272,8 +338,9 @@ export async function getQcPendingJobOrders(options = {}) {
 /**
  * List QC cost lines for a job order.
  * GET /projects/qc-cost-lines/?job_order=254-01
+ * Response fields: id, description, amount_eur, date, notes, created_by_name, created_at, updated_at
  * @param {string} jobOrder - Job order number
- * @returns {Promise<Array>}
+ * @returns {Promise<Array<{ id, description, amount_eur, date, notes, ... }>>}
  */
 export async function getQcCostLines(jobOrder) {
     const queryParams = new URLSearchParams({ job_order: jobOrder });
@@ -281,6 +348,36 @@ export async function getQcCostLines(jobOrder) {
     const response = await authedFetch(url);
     if (!response.ok) {
         throw new Error(`Get QC cost lines failed: ${response.status}`);
+    }
+    const data = await response.json();
+    return Array.isArray(data) ? data : (data.results != null ? data.results : []);
+}
+
+/**
+ * Submit QC cost lines (atomically replace all lines for the job order).
+ * POST /projects/qc-cost-lines/submit/
+ * Body: { job_order, lines: [ { description, amount_eur, date?, notes? } ] }. lines: [] clears all.
+ * @param {string} jobOrder - Job order number
+ * @param {Array<{ description: string, amount_eur: string, date?: string, notes?: string }>} lines
+ * @returns {Promise<Array>}
+ */
+export async function submitQcCostLines(jobOrder, lines) {
+    const url = `${backendBase}/projects/qc-cost-lines/submit/`;
+    const response = await authedFetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_order: jobOrder, lines: lines || [] })
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        let errMsg = `Submit QC cost lines failed: ${response.status}`;
+        try {
+            const data = JSON.parse(text);
+            if (data && typeof data === 'object' && Object.keys(data).length) errMsg = JSON.stringify(data);
+        } catch (_) {
+            if (text) errMsg = text;
+        }
+        throw new Error(errMsg);
     }
     return response.json();
 }
@@ -353,6 +450,7 @@ export async function getShippingPendingJobOrders(options = {}) {
 /**
  * List shipping cost lines for a job order.
  * GET /projects/shipping-cost-lines/?job_order=254-01
+ * Response fields: id, description, amount_eur, date, notes, created_by_name, created_at, updated_at
  * @param {string} jobOrder - Job order number
  * @returns {Promise<Array>}
  */
@@ -362,6 +460,36 @@ export async function getShippingCostLines(jobOrder) {
     const response = await authedFetch(url);
     if (!response.ok) {
         throw new Error(`Get shipping cost lines failed: ${response.status}`);
+    }
+    const data = await response.json();
+    return Array.isArray(data) ? data : (data.results != null ? data.results : []);
+}
+
+/**
+ * Submit shipping cost lines (atomically replace all lines for the job order).
+ * POST /projects/shipping-cost-lines/submit/
+ * Body: { job_order, lines: [ { description, amount_eur, date?, notes? } ] }. lines: [] clears all.
+ * @param {string} jobOrder - Job order number
+ * @param {Array<{ description: string, amount_eur: string, date?: string, notes?: string }>} lines
+ * @returns {Promise<Array>}
+ */
+export async function submitShippingCostLines(jobOrder, lines) {
+    const url = `${backendBase}/projects/shipping-cost-lines/submit/`;
+    const response = await authedFetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ job_order: jobOrder, lines: lines || [] })
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        let errMsg = `Submit shipping cost lines failed: ${response.status}`;
+        try {
+            const data = JSON.parse(text);
+            if (data && typeof data === 'object' && Object.keys(data).length) errMsg = JSON.stringify(data);
+        } catch (_) {
+            if (text) errMsg = text;
+        }
+        throw new Error(errMsg);
     }
     return response.json();
 }
