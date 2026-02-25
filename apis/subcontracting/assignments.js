@@ -152,6 +152,7 @@ export async function createAssignmentWithSubtask(assignmentData) {
     const url = `${backendBase}/subcontracting/assignments/create-with-subtask/`;
     const resp = await authedFetch(url, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(assignmentData)
     });
     

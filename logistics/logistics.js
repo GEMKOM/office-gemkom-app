@@ -26,6 +26,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-project-diagram',
                 iconColor: 'primary',
                 link: '/logistics/projects'
+            },
+            {
+                title: 'Maliyet Satırları',
+                description: 'Sevkiyat maliyeti girilmemiş iş emirleri ve maliyet satırları.',
+                icon: 'fas fa-euro-sign',
+                iconColor: 'primary',
+                link: '/logistics/cost-lines'
             }
         ]
     });

@@ -361,6 +361,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Projeler',
                 icon: 'fas fa-project-diagram',
                 children: {}
+            },
+            '/logistics/cost-lines': {
+                label: 'Maliyet Satırları',
+                icon: 'fas fa-euro-sign',
+                children: {}
             }
         }
     },
@@ -532,6 +537,11 @@ export const NAVIGATION_STRUCTURE = {
             '/quality-control/ncrs': {
                 label: 'Uygunsuzluk Raporları',
                 icon: 'fas fa-exclamation-triangle',
+                children: {}
+            },
+            '/quality-control/cost-lines': {
+                label: 'Maliyet Satırları',
+                icon: 'fas fa-euro-sign',
                 children: {}
             }
         }

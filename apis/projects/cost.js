@@ -225,3 +225,157 @@ export async function submitProcurementLines(jobOrder, lines) {
     }
     return response.json();
 }
+
+// ─── QC Cost Lines (job orders with zero QC lines = qc_pending) ─────────────
+
+/**
+ * Job orders with zero QC cost lines (excluding cancelled).
+ * GET /projects/job-orders/qc_pending/
+ * Paginated, supports standard filters: status, search, customer, ordering, page, page_size.
+ * @param {Object} options - Query parameters
+ * @returns {Promise<{ count: number, next: string|null, previous: string|null, results: Array }>}
+ */
+export async function getQcPendingJobOrders(options = {}) {
+    const queryParams = new URLSearchParams();
+    if (options.status != null && options.status !== '') queryParams.append('status', options.status);
+    if (options.search != null && options.search !== '') queryParams.append('search', options.search);
+    if (options.customer != null && options.customer !== '') queryParams.append('customer', String(options.customer));
+    if (options.ordering != null && options.ordering !== '') queryParams.append('ordering', options.ordering);
+    if (options.page != null) queryParams.append('page', String(options.page));
+    if (options.page_size != null) queryParams.append('page_size', String(options.page_size));
+
+    const url = `${backendBase}/projects/job-orders/qc_pending/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`QC pending job orders request failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * List QC cost lines for a job order.
+ * GET /projects/qc-cost-lines/?job_order=254-01
+ * @param {string} jobOrder - Job order number
+ * @returns {Promise<Array>}
+ */
+export async function getQcCostLines(jobOrder) {
+    const queryParams = new URLSearchParams({ job_order: jobOrder });
+    const url = `${backendBase}/projects/qc-cost-lines/?${queryParams.toString()}`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`Get QC cost lines failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * Create a QC cost line.
+ * POST /projects/qc-cost-lines/
+ * description required; amount and currency required; amount_eur required (if currency is EUR can be omitted, server fills from amount).
+ * created_by set from auth.
+ * @param {Object} payload
+ * @param {string} payload.job_order - e.g. "254-01"
+ * @param {string} payload.description - required
+ * @param {string} payload.amount - required, amount in original currency
+ * @param {string} payload.currency - required, one of EUR, USD, GBP, TRY
+ * @param {string} [payload.amount_eur] - required unless currency is EUR (then auto-filled from amount)
+ * @param {string} [payload.date] - optional, e.g. "2026-02-10"
+ * @param {string} [payload.notes] - optional
+ * @returns {Promise<Object>} Created line
+ */
+export async function createQcCostLine(payload) {
+    if (!COST_SUMMARY_CURRENCIES.includes(payload.currency)) {
+        throw new Error(`Invalid currency. Valid: ${COST_SUMMARY_CURRENCIES.join(', ')}`);
+    }
+    const url = `${backendBase}/projects/qc-cost-lines/`;
+    const response = await authedFetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        let errMsg = `Create QC cost line failed: ${response.status}`;
+        try {
+            const data = JSON.parse(text);
+            if (data && typeof data === 'object' && Object.keys(data).length) errMsg = JSON.stringify(data);
+        } catch (_) {
+            if (text) errMsg = text;
+        }
+        throw new Error(errMsg);
+    }
+    return response.json();
+}
+
+// ─── Shipping Cost Lines (job orders with zero shipping lines = shipping_pending) ─
+
+/**
+ * Job orders with zero shipping cost lines (excluding cancelled).
+ * GET /projects/job-orders/shipping_pending/
+ * Paginated, supports standard filters.
+ * @param {Object} options - Query parameters
+ * @returns {Promise<{ count: number, next: string|null, previous: string|null, results: Array }>}
+ */
+export async function getShippingPendingJobOrders(options = {}) {
+    const queryParams = new URLSearchParams();
+    if (options.status != null && options.status !== '') queryParams.append('status', options.status);
+    if (options.search != null && options.search !== '') queryParams.append('search', options.search);
+    if (options.customer != null && options.customer !== '') queryParams.append('customer', String(options.customer));
+    if (options.ordering != null && options.ordering !== '') queryParams.append('ordering', options.ordering);
+    if (options.page != null) queryParams.append('page', String(options.page));
+    if (options.page_size != null) queryParams.append('page_size', String(options.page_size));
+
+    const url = `${backendBase}/projects/job-orders/shipping_pending/${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`Shipping pending job orders request failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * List shipping cost lines for a job order.
+ * GET /projects/shipping-cost-lines/?job_order=254-01
+ * @param {string} jobOrder - Job order number
+ * @returns {Promise<Array>}
+ */
+export async function getShippingCostLines(jobOrder) {
+    const queryParams = new URLSearchParams({ job_order: jobOrder });
+    const url = `${backendBase}/projects/shipping-cost-lines/?${queryParams.toString()}`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`Get shipping cost lines failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * Create a shipping cost line.
+ * POST /projects/shipping-cost-lines/
+ * Same field rules as QC: description, amount, currency required; amount_eur required (or omit if EUR).
+ * @param {Object} payload - Same shape as createQcCostLine
+ * @returns {Promise<Object>}
+ */
+export async function createShippingCostLine(payload) {
+    if (!COST_SUMMARY_CURRENCIES.includes(payload.currency)) {
+        throw new Error(`Invalid currency. Valid: ${COST_SUMMARY_CURRENCIES.join(', ')}`);
+    }
+    const url = `${backendBase}/projects/shipping-cost-lines/`;
+    const response = await authedFetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+        const text = await response.text();
+        let errMsg = `Create shipping cost line failed: ${response.status}`;
+        try {
+            const data = JSON.parse(text);
+            if (data && typeof data === 'object' && Object.keys(data).length) errMsg = JSON.stringify(data);
+        } catch (_) {
+            if (text) errMsg = text;
+        }
+        throw new Error(errMsg);
+    }
+    return response.json();
+}

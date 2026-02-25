@@ -78,7 +78,14 @@ export const TEAM_ACCESS_CONFIG = {
             '/finance/reports',
             '/finance/reports/executive-overview',
             '/finance/reports/projects',
-            '/projects/cost-table'
+            '/projects/cost-table',
+            '/logistics',
+            '/logistics/projects',
+            '/logistics/cost-lines',
+            '/quality-control',
+            '/quality-control/qc-reviews',
+            '/quality-control/ncrs',
+            '/quality-control/cost-lines'
         ]),
         allowedSections: ['planning', 'general', 'manufacturing', 'procurement', 'finance']
     },
@@ -278,7 +285,8 @@ export const TEAM_ACCESS_CONFIG = {
         allowedRoutes: mergeWithBaseRoutes([
             '/quality-control',
             '/quality-control/qc-reviews',
-            '/quality-control/ncrs'
+            '/quality-control/ncrs',
+            '/quality-control/cost-lines'
         ]),
         allowedSections: ['quality_control', 'general', 'general_overtime']
     },

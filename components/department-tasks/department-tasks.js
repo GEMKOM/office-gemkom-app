@@ -924,7 +924,6 @@ function initializeModalComponents() {
             showNotification('Görev güncellendi', 'success');
             editTaskModal.hide();
             window.editingTaskId = null;
-            await loadTasks();
         } catch (error) {
             console.error('Error updating task:', error);
             let errorMessage = 'Görev güncellenirken hata oluştu';
@@ -997,8 +996,6 @@ function initializeModalComponents() {
             if (parentTaskId && expandedRows.has(parentTaskId)) {
                 await fetchTaskSubtasks(parentTaskId);
             }
-            
-            await loadTasks();
         } catch (error) {
             console.error('Error creating subtask:', error);
             let errorMessage = 'Alt görev eklenirken hata oluştu';
@@ -1181,7 +1178,6 @@ function initializeReleaseModal() {
             showNotification('Revizyon tamamlandı', 'success');
             completeRevisionModal.hide();
             window.pendingRevisionCompletionTaskId = null;
-            await loadTasks();
         } catch (error) {
             console.error('Error completing revision:', error);
             let errorMessage = 'Revizyon tamamlanırken hata oluştu';
@@ -1248,7 +1244,6 @@ function initializeQCSubmitModal() {
             showNotification('Görev kalite kontrole gönderildi', 'success');
             submitQCModal.hide();
             window.pendingQCTaskId = null;
-            await loadTasks();
         } catch (error) {
             console.error('Error submitting QC review:', error);
             let errorMessage = 'Kalite kontrole gönderilirken hata oluştu';
@@ -3745,7 +3740,6 @@ function attachActionFormListeners(task, action) {
                         taskDetailsModal.hide();
                         break;
                 }
-                await loadTasks();
             } catch (error) {
                 console.error(`Error submitting ${action.handler} action:`, error);
             }
@@ -3790,7 +3784,6 @@ async function handleEditActionSubmit(task) {
     await patchDepartmentTask(task.id, updateData);
     showNotification('Görev güncellendi', 'success');
     taskDetailsModal.hide();
-    await loadTasks();
 }
 
 // Handle add subtask action form submission
@@ -3812,7 +3805,6 @@ async function handleAddSubtaskActionSubmit(task) {
         await createDepartmentTask(subtaskData);
         showNotification('Alt görev eklendi', 'success');
         taskDetailsModal.hide();
-        await loadTasks();
     } catch (error) {
         console.error('Error creating subtask:', error);
         showNotification(error.message || 'Alt görev eklenirken hata oluştu', 'error');
@@ -3975,7 +3967,6 @@ async function handleSubmitQCActionSubmit(task) {
         const count = Array.isArray(response) ? response.length : 1;
         showNotification(`${count} inceleme kalite kontrolüne gönderildi`, 'success');
         taskDetailsModal.hide();
-        await loadTasks();
     } catch (error) {
         console.error('Error bulk submitting QC reviews:', error);
         let errorMessage = 'Kalite kontrolüne gönderilirken hata oluştu';
@@ -4023,18 +4014,19 @@ async function handleAssignSubcontractorActionSubmit(task) {
     }
     
     const assignmentData = {
-        task_id: task.id,
-        subcontractor_id: parseInt(subcontractorInput.value),
-        price_tier_id: parseInt(priceTierInput.value),
-        allocated_weight_kg: parseFloat(weightInput.value),
-        subtask_title: titleInput ? titleInput.value.trim() || null : null
+        kaynak_task_id: task.id,
+        subcontractor: parseInt(subcontractorInput.value),
+        price_tier: parseInt(priceTierInput.value),
+        allocated_weight_kg: parseFloat(weightInput.value)
     };
-    
+    if (titleInput && titleInput.value.trim()) {
+        assignmentData.title = titleInput.value.trim();
+    }
+
     try {
         await createAssignmentWithSubtask(assignmentData);
         showNotification('Taşeron ataması ve alt görev oluşturuldu', 'success');
         taskDetailsModal.hide();
-        await loadTasks();
     } catch (error) {
         console.error('Error creating assignment with subtask:', error);
         showNotification(error.message || 'Taşeron ataması oluşturulurken hata oluştu', 'error');
@@ -6198,7 +6190,7 @@ async function showCreateAssignmentWithSubtaskModal(taskId, taskRow = null) {
                     kaynak_task_id: taskId,
                     subcontractor: parseInt(formData.subcontractor),
                     price_tier: parseInt(formData.price_tier),
-                    allocated_weight_kg: formData.allocated_weight_kg
+                    allocated_weight_kg: parseFloat(formData.allocated_weight_kg)
                 };
                 
                 // Add optional fields if provided

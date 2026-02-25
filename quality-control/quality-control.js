@@ -33,6 +33,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-exclamation-triangle',
                 iconColor: 'warning',
                 link: '/quality-control/ncrs'
+            },
+            {
+                title: 'Maliyet Satırları',
+                description: 'KK maliyeti girilmemiş iş emirleri ve maliyet satırları.',
+                icon: 'fas fa-euro-sign',
+                iconColor: 'primary',
+                link: '/quality-control/cost-lines'
             }
         ]
     });
