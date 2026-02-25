@@ -101,6 +101,8 @@ function initPendingTable() {
         ],
         data: [],
         sortable: true,
+        currentSortField: 'job_no',
+        currentSortDirection: 'asc',
         pagination: true,
         serverSidePagination: true,
         itemsPerPage: 20,
@@ -424,7 +426,7 @@ async function loadPendingJobOrders(options = {}) {
     };
     if (params.status) params.status = params.status;
     if (params.search) params.search = params.search;
-    if (options.ordering) params.ordering = options.ordering;
+    params.ordering = options.ordering ?? 'job_no';
 
     try {
         const response = await getProcurementPendingJobOrders(params);
