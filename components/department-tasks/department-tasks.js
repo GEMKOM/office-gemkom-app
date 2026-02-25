@@ -4287,8 +4287,6 @@ async function handleBulkSubtaskActionSubmit(task) {
         if (task.id && expandedRows && expandedRows.has(task.id)) {
             await fetchTaskSubtasks(task.id);
         }
-        
-        await loadTasks();
     } catch (error) {
         console.error('Error bulk creating subtasks:', error);
         let errorMessage = 'Alt görevler oluşturulurken hata oluştu';
@@ -4682,8 +4680,6 @@ async function showBulkSubtaskModal(parentTaskId) {
                 if (parentTaskId && expandedRows.has(parentTaskId)) {
                     await fetchTaskSubtasks(parentTaskId);
                 }
-
-                await loadTasks();
             } catch (error) {
                 console.error('Error bulk creating subtasks:', error);
                 let errorMessage = 'Alt görevler oluşturulurken hata oluştu';
@@ -4724,7 +4720,6 @@ async function handleStartTask(taskId) {
                 await startDepartmentTask(taskId);
                 showNotification('Görev başlatıldı', 'success');
                 confirmationModal.hide();
-                await loadTasks();
             } catch (error) {
                 console.error('Error starting task:', error);
                 let errorMessage = 'Görev başlatılırken hata oluştu';
@@ -4767,7 +4762,6 @@ async function handleCompleteTask(taskId, taskRow = null) {
                     await markPlanningRequestItemDelivered(task.planning_request_item_id);
                     showNotification('Planlama talebi kalemi teslim edildi olarak işaretlendi', 'success');
                     confirmationModal.hide();
-                    await loadTasks();
                 } catch (error) {
                     console.error('Error marking planning request item as delivered:', error);
                     let errorMessage = 'Planlama talebi kalemi işaretlenirken hata oluştu';
@@ -4821,15 +4815,8 @@ async function handleCompleteTask(taskId, taskRow = null) {
                     if (response && response.task) {
                         const updatedTask = response.task;
                         if (updateTaskInLocalData(taskId, updatedTask)) {
-                            // Update the table without full reload
                             updateTableDataOnly();
-                        } else {
-                            // Task not found, fallback to full reload
-                            await loadTasks();
                         }
-                    } else {
-                        // Fallback to full reload if response doesn't have task data
-                        await loadTasks();
                     }
                 } catch (error) {
                     console.error('Error completing task:', error);
@@ -5384,15 +5371,8 @@ async function handleUncompleteTask(taskId) {
                 if (response && response.task) {
                     const updatedTask = response.task;
                     if (updateTaskInLocalData(taskId, updatedTask)) {
-                        // Update the table without full reload
                         updateTableDataOnly();
-                    } else {
-                        // Task not found, fallback to full reload
-                        await loadTasks();
                     }
-                } else {
-                    // Fallback to full reload if response doesn't have task data
-                    await loadTasks();
                 }
             } catch (error) {
                 console.error('Error uncompleting task:', error);
@@ -5431,15 +5411,8 @@ async function handleSkipTask(taskId) {
                 if (response && response.task) {
                     const updatedTask = response.task;
                     if (updateTaskInLocalData(taskId, updatedTask)) {
-                        // Update the table without full reload
                         updateTableDataOnly();
-                    } else {
-                        // Task not found, fallback to full reload
-                        await loadTasks();
                     }
-                } else {
-                    // Fallback to full reload if response doesn't have task data
-                    await loadTasks();
                 }
             } catch (error) {
                 console.error('Error skipping task:', error);
@@ -5477,15 +5450,8 @@ async function handleUnskipTask(taskId) {
                 if (response && response.task) {
                     const updatedTask = response.task;
                     if (updateTaskInLocalData(taskId, updatedTask)) {
-                        // Update the table without full reload
                         updateTableDataOnly();
-                    } else {
-                        // Task not found, fallback to full reload
-                        await loadTasks();
                     }
-                } else {
-                    // Fallback to full reload if response doesn't have task data
-                    await loadTasks();
                 }
             } catch (error) {
                 console.error('Error unskipping task:', error);
@@ -6207,9 +6173,6 @@ async function showCreateAssignmentWithSubtaskModal(taskId, taskRow = null) {
                 if (expandedRows.has(taskId)) {
                     await fetchTaskSubtasks(taskId);
                 }
-                
-                // Reload tasks to show the new subtask
-                await loadTasks();
             } catch (error) {
                 console.error('Error creating assignment with subtask:', error);
                 showNotification(error.message || 'Taşeron ataması ve alt görev oluşturulurken hata oluştu', 'error');
@@ -6291,9 +6254,6 @@ async function showSetPaintPriceModal(taskId, taskRow = null) {
                 });
                 showNotification('Boya fiyatı güncellendi', 'success');
                 modal.hide();
-                
-                // Reload tasks to refresh any displayed price information
-                await loadTasks();
             } catch (error) {
                 console.error('Error updating paint price:', error);
                 showNotification(error.message || 'Boya fiyatı güncellenirken hata oluştu', 'error');
