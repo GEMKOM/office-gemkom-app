@@ -1535,6 +1535,19 @@ window.editJobOrder = async function(jobNo) {
             helpText: 'Tahmini maliyet'
         });
 
+        editJobOrderModal.addField({
+            id: 'general_expenses_rate',
+            name: 'general_expenses_rate',
+            label: 'Genel Gider Oranı',
+            type: 'number',
+            value: jobOrder.general_expenses_rate ?? '',
+            icon: 'fas fa-percent',
+            colSize: 12,
+            required: true,
+            step: '0.0001',
+            placeholder: '0.0000',
+            helpText: 'Genel gider oranı (zorunlu)'
+        });
 
         // Render and show modal
         editJobOrderModal.render();
@@ -2940,23 +2953,55 @@ async function loadCostSummaryTab(jobNo, formatCurrency) {
 function renderCostSummaryTab(data, jobNo, formatCurrency) {
     const container = viewJobOrderModal.content.querySelector('#cost-summary-container');
     if (!container) return;
+
+    const rateSuffix = (rate) => {
+        if (rate == null || rate === '' || rate === undefined) return '';
+        const n = parseFloat(rate);
+        if (Number.isNaN(n)) return '';
+        return ` (${n})`;
+    };
+    const paintMaterialRateSuffix = (rate) => {
+        if (rate == null || rate === '' || rate === undefined) return '';
+        const n = parseFloat(rate);
+        if (Number.isNaN(n)) return '';
+        return ` (${formatCurrency(String(n), 'TRY')})`;
+    };
+
+    // Rows that have an at_100 estimate from API; others use actual cost in the estimate column
     const costRows = [
-        { label: 'İşçilik', value: data.labor_cost },
-        { label: 'Malzeme', value: data.material_cost },
-        { label: 'Taşeron', value: data.subcontractor_cost },
-        { label: 'Boya', value: data.paint_cost },
-        { label: 'Kalite Kontrol', value: data.qc_cost },
-        { label: 'Sevkiyat', value: data.shipping_cost }
+        { label: 'İşçilik', value: data.labor_cost, valueAt100: null },
+        { label: 'Malzeme', value: data.material_cost, valueAt100: null },
+        { label: 'Taşeron', value: data.subcontractor_cost, valueAt100: data.subcontractor_cost_at_100 },
+        { label: 'Boya', value: data.paint_cost, valueAt100: data.paint_cost_at_100 },
+        { label: `Boya Malzemesi${paintMaterialRateSuffix(data.paint_material_rate)}`, value: data.paint_material_cost, valueAt100: data.paint_material_cost_at_100 },
+        { label: 'Kalite Kontrol', value: data.qc_cost, valueAt100: null },
+        { label: 'Sevkiyat', value: data.shipping_cost, valueAt100: null },
+        { label: `Genel Giderler${rateSuffix(data.general_expenses_rate)}`, value: data.general_expenses_cost, valueAt100: null },
+        { label: `Personel Genel Giderleri${rateSuffix(data.employee_overhead_rate)}`, value: data.employee_overhead_cost, valueAt100: null }
     ];
+
+    const fmt = (v) => (v != null && v !== '') ? formatCurrency(v, 'EUR') : formatCurrency('0', 'EUR');
+    const estimateValue = (r) => (r.valueAt100 != null && r.valueAt100 !== '') ? parseFloat(r.valueAt100) : (parseFloat(r.value) || 0);
+    const displayEstimate = (r) => (r.valueAt100 != null && r.valueAt100 !== '') ? r.valueAt100 : (r.value ?? '0');
+    const at100Sum = costRows.reduce((acc, r) => acc + estimateValue(r), 0);
+    const at100SumStr = at100Sum.toFixed(2);
+
     container.innerHTML = `
         <div class="card mb-4">
             <div class="card-header"><h6 class="mb-0"><i class="fas fa-list me-2"></i>Maliyet Dağılımı</h6></div>
             <div class="card-body">
                 <div class="table-responsive">
                     <table class="table table-sm table-bordered">
+                        <thead>
+                            <tr>
+                                <th class="text-muted">Kalem</th>
+                                <th class="text-end">Mevcut</th>
+                                <th class="text-end">Tahmini (%100)</th>
+                            </tr>
+                        </thead>
                         <tbody>
-                            ${costRows.map(r => `<tr><td class="text-muted">${r.label}</td><td class="text-end">${formatCurrency(r.value, 'EUR')}</td></tr>`).join('')}
-                            <tr class="table-light"><td><strong>Toplam Maliyet</strong></td><td class="text-end"><strong>${formatCurrency(data.actual_total_cost, 'EUR')}</strong></td></tr>
+                            ${costRows.map(r => `<tr><td class="text-muted">${r.label}</td><td class="text-end">${fmt(r.value)}</td><td class="text-end">${fmt(displayEstimate(r))}</td></tr>`).join('')}
+                            <tr class="table-light"><td><strong>Toplam Maliyet</strong></td><td class="text-end"><strong>${formatCurrency(data.actual_total_cost, 'EUR')}</strong></td><td class="text-end"><strong>${formatCurrency(at100SumStr, 'EUR')}</strong></td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -4552,6 +4597,26 @@ window.showCreateChildJobOrderModal = async function(parentJobNo) {
         helpText: 'Hedef tamamlanma tarihi'
     });
 
+    createJobOrderModal.addSection({
+        title: 'Maliyet Bilgileri',
+        icon: 'fas fa-dollar-sign',
+        iconColor: 'text-warning'
+    });
+
+    createJobOrderModal.addField({
+        id: 'general_expenses_rate',
+        name: 'general_expenses_rate',
+        label: 'Genel Gider Oranı',
+        type: 'number',
+        value: parentJob.general_expenses_rate ?? '0.0000',
+        placeholder: '0.0000',
+        required: true,
+        icon: 'fas fa-percent',
+        colSize: 12,
+        step: '0.0001',
+        helpText: 'Genel gider oranı (zorunlu)'
+    });
+
     // Store parent job no for form submission
     window.creatingChildForParent = parentJobNo;
 
@@ -4985,6 +5050,19 @@ function showCreateJobOrderModal() {
         icon: 'fas fa-calculator',
         colSize: 12,
         helpText: 'Tahmini maliyet'
+    });
+
+    createJobOrderModal.addField({
+        id: 'general_expenses_rate',
+        name: 'general_expenses_rate',
+        label: 'Genel Gider Oranı',
+        type: 'number',
+        placeholder: '0.0000',
+        required: true,
+        icon: 'fas fa-percent',
+        colSize: 12,
+        step: '0.0001',
+        helpText: 'Genel gider oranı (zorunlu)'
     });
 
     // Render and show modal

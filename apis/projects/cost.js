@@ -54,6 +54,23 @@ export async function getCostTable(options = {}) {
     return response.json();
 }
 
+/**
+ * Fetch direct cost children of a job order (for hierarchical cost table).
+ * GET /projects/job-orders/{job_no}/cost_children/
+ * No pagination; each child includes has_children for nested expand.
+ * @param {string} jobNo - Parent job order number (e.g. "094-174")
+ * @returns {Promise<Array<{ job_no: string, has_children: boolean, ... }>>} Direct children with cost fields and has_children
+ */
+export async function getCostChildren(jobNo) {
+    const url = `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/cost_children/`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`Cost children request failed: ${response.status}`);
+    }
+    const data = await response.json();
+    return Array.isArray(data) ? data : (data.results != null ? data.results : []);
+}
+
 /** Valid values for selling_price_currency */
 export const COST_SUMMARY_CURRENCIES = ['EUR', 'USD', 'GBP', 'TRY'];
 
