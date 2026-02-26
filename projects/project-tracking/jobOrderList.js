@@ -45,7 +45,7 @@ import { ConfirmationModal } from '../../components/confirmation-modal/confirmat
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { backendBase } from '../../base.js';
-import { isAdmin } from '../../authService.js';
+import { isAdmin, canViewCostTab } from '../../authService.js';
 import { listDrawingReleases, getCurrentRelease, requestRevision } from '../../apis/projects/design.js';
 import { fetchAllUsers } from '../../apis/users.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
@@ -1863,14 +1863,16 @@ window.viewJobOrder = async function(jobNo) {
             customContent: '<div id="ncrs-container" style="padding: 20px;"></div>'
         });
         
-        // Add Maliyet (Cost) tab
-        viewJobOrderModal.addTab({
-            id: 'maliyet',
-            label: 'Maliyet',
-            icon: 'fas fa-calculator',
-            iconColor: 'text-primary',
-            customContent: '<div id="cost-summary-container" style="padding: 20px;"></div>'
-        });
+        // Add Maliyet (Cost) tab — only for management, superusers, or planning managers
+        if (canViewCostTab()) {
+            viewJobOrderModal.addTab({
+                id: 'maliyet',
+                label: 'Maliyet',
+                icon: 'fas fa-calculator',
+                iconColor: 'text-primary',
+                customContent: '<div id="cost-summary-container" style="padding: 20px;"></div>'
+            });
+        }
         
         // Render the modal
         viewJobOrderModal.render();

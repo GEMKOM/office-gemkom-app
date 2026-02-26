@@ -146,6 +146,20 @@ export function isAdmin() {
     }
 }
 
+/** Maliyet tab / cost table: only management, superusers, or (planning + occupation manager) */
+export function canViewCostTab() {
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (isAdmin()) return true;
+        if (user.team === 'management') return true;
+        if (user.team === 'planning' && (user.occupation === 'manager' || user.occupation === 'Manager')) return true;
+        return false;
+    } catch (error) {
+        console.warn('Failed to parse user data for cost tab check:', error);
+        return false;
+    }
+}
+
 export function isLead() {
     try {
         const user = JSON.parse(localStorage.getItem('user') || '{}');

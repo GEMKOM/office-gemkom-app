@@ -195,7 +195,7 @@ export const TEAM_ACCESS_CONFIG = {
         allowedSections: ['procurement', 'finance_purchase_orders', 'general', 'general_overtime']
     },
     
-    // Planning team - access to planning and related areas
+    // Planning team - access to planning and related areas (cost-table access checked in-app for planning+manager only)
     planning: {
         allowedRoutes: mergeWithBaseRoutes([
             '/planning',
@@ -205,6 +205,7 @@ export const TEAM_ACCESS_CONFIG = {
             '/planning/procurement-lines',
             '/planning/inventory',
             '/planning/inventory/cards',
+            '/projects/cost-table',
             '/manufacturing',
             '/manufacturing/machining',
             '/manufacturing/machining/capacity',

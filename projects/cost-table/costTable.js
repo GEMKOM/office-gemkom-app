@@ -3,6 +3,7 @@ import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { TableComponent } from '../../components/table/table.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
+import { canViewCostTab } from '../../authService.js';
 import { getCostTable, getCostChildren } from '../../apis/projects/cost.js';
 import { listCustomers } from '../../apis/projects/customers.js';
 
@@ -125,6 +126,11 @@ function setupExpandButtonListeners() {
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) return;
+    if (!canViewCostTab()) {
+        alert('Maliyet tablosuna erişim yetkiniz bulunmamaktadır.');
+        window.location.href = '/projects';
+        return;
+    }
     await initNavbar();
 
     const header = new HeaderComponent({
