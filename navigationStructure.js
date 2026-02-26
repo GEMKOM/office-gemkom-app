@@ -501,6 +501,16 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Müşteriler',
                 icon: 'fas fa-users',
                 children: {}
+            },
+            '/sales/offers': {
+                label: 'Teklifler',
+                icon: 'fas fa-file-invoice-dollar',
+                children: {}
+            },
+            '/sales/catalog': {
+                label: 'Ürün Kataloğu',
+                icon: 'fas fa-book',
+                children: {}
             }
         }
     },

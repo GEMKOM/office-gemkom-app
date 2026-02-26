@@ -246,7 +246,7 @@ async function handleLandingPage() {
                 },
                 {
                     title: 'Satış',
-                    description: 'Müşteri yönetimi ve satış işlemlerini gerçekleştirin.',
+                    description: 'Müşteri yönetimi, teklif oluşturma ve satış süreçlerini yönetin.',
                     icon: 'fas fa-handshake',
                     iconColor: 'success',
                     link: '/sales',
@@ -256,6 +256,18 @@ async function handleLandingPage() {
                             icon: 'fas fa-users',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/sales/customers'
+                        },
+                        {
+                            label: 'Teklifler',
+                            icon: 'fas fa-file-invoice-dollar',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/sales/offers'
+                        },
+                        {
+                            label: 'Ürün Kataloğu',
+                            icon: 'fas fa-book',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/sales/catalog'
                         }
                     ]
                 },

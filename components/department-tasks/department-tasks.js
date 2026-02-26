@@ -534,25 +534,24 @@ function initializeTableComponent() {
                 label: 'Görev Başlığı',
                 sortable: true,
                 formatter: (value, row) => {
-                    // Check if this is a subtask (has a parent)
-                    // Consistent with other column formatters (line 446, 509, 533)
                     const isSubtask = !!row.parent;
                     const indent = isSubtask ? 30 : 0;
-                    // Main tasks: show job order title; subtasks: show task title
                     const displayText = isSubtask ? (value || '-') : (row.job_order_title || value || '-');
+                    const consultationBadge = row.is_consultation
+                        ? `<span class="badge bg-info text-white ms-1" title="Teklif Danışma"><i class="fas fa-handshake"></i></span>` : '';
+                    const offerRef = row.is_consultation && row.offer_summary
+                        ? `<br><small class="text-muted">${row.offer_summary.offer_no || ''}</small>` : '';
                     
-                    // Make title editable only for subtasks
                     if (isSubtask) {
                         const taskId = row.id;
-                        const cursorStyle = 'cursor: pointer;';
                         return `
-                            <div class="editable-title" data-task-id="${taskId}" data-title-value="${value || ''}" style="padding-left: ${indent}px; ${cursorStyle}" title="Başlığı düzenlemek için tıklayın">
-                                ${displayText}
+                            <div class="editable-title" data-task-id="${taskId}" data-title-value="${value || ''}" style="padding-left: ${indent}px; cursor: pointer;" title="Başlığı düzenlemek için tıklayın">
+                                ${displayText}${consultationBadge}${offerRef}
                             </div>
                         `;
                     }
                     
-                    return `<div style="padding-left: ${indent}px;">${displayText}</div>`;
+                    return `<div style="padding-left: ${indent}px;">${displayText}${consultationBadge}${offerRef}</div>`;
                 }
             },
             {
@@ -2870,6 +2869,16 @@ function getAvailableActions(task) {
             handler: 'self-start-revision'
         });
     }
+
+    // Consultation tab - show for tasks linked to a sales offer
+    if (task.is_consultation) {
+        actions.unshift({
+            key: 'consultation',
+            label: 'Teklif Danışma',
+            icon: 'fas fa-handshake',
+            handler: 'consultation'
+        });
+    }
     
     return actions;
 }
@@ -2931,6 +2940,9 @@ async function loadActionContent(task, action) {
                 break;
             case 'self-start-revision':
                 content = await renderSelfStartRevisionActionForm(task);
+                break;
+            case 'consultation':
+                content = await renderConsultationTab(task);
                 break;
             default:
                 content = '<p>İşlem formu yüklenemedi</p>';
@@ -3685,9 +3697,192 @@ async function renderNCRsTab(task) {
 }
 
 // Attach form submission listeners
+// Render consultation tab for sales offer consultation tasks
+async function renderConsultationTab(task) {
+    const summary = task.offer_summary || {};
+    const sharedFiles = task.shared_files || [];
+    const completionFiles = task.completion_files || [];
+
+    let html = `<h5 class="mb-4"><i class="fas fa-handshake me-2"></i>Teklif Danışma</h5>`;
+
+    // Offer summary
+    html += `
+        <div class="card mb-3">
+            <div class="card-header bg-light"><i class="fas fa-file-invoice-dollar me-2"></i>Teklif Bilgisi</div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6"><strong>Teklif No:</strong> ${summary.offer_no || '-'}</div>
+                    <div class="col-md-6"><strong>Termin:</strong> ${summary.delivery_date_requested ? new Date(summary.delivery_date_requested).toLocaleDateString('tr-TR') : '-'}</div>
+                </div>
+                <div class="mt-2"><strong>Başlık:</strong> ${summary.title || '-'}</div>
+                ${summary.description ? `<div class="mt-1"><strong>Açıklama:</strong> ${summary.description}</div>` : ''}
+            </div>
+        </div>
+    `;
+
+    // Shared files from the offer
+    if (sharedFiles.length > 0) {
+        html += `
+            <div class="card mb-3">
+                <div class="card-header bg-light"><i class="fas fa-folder-open me-2"></i>Paylaşılan Dosyalar</div>
+                <div class="card-body">
+                    ${sharedFiles.map(f => `
+                        <div class="d-flex align-items-center gap-2 mb-2">
+                            <i class="fas fa-file text-primary"></i>
+                            <a href="${f.file_url}" target="_blank">${f.name || f.filename}</a>
+                            <span class="badge bg-light text-dark">${f.file_type || ''}</span>
+                            ${f.file_size ? `<small class="text-muted">${(f.file_size / 1024).toFixed(0)} KB</small>` : ''}
+                        </div>
+                    `).join('')}
+                </div>
+            </div>
+        `;
+    }
+
+    // Completion files uploaded by this department
+    html += `
+        <div class="card mb-3">
+            <div class="card-header bg-light"><i class="fas fa-upload me-2"></i>Yanıt Dosyaları</div>
+            <div class="card-body">
+                ${completionFiles.length > 0 ? completionFiles.map(f => `
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="fas fa-file-alt text-success"></i>
+                        <a href="${f.file_url}" target="_blank">${f.name || f.filename}</a>
+                        <span class="badge bg-light text-dark">${f.file_type_display || f.file_type || ''}</span>
+                        ${f.file_size ? `<small class="text-muted">${(f.file_size / 1024).toFixed(0)} KB</small>` : ''}
+                        <button class="btn btn-sm btn-outline-danger consultation-delete-file-btn" data-task-id="${task.id}" data-file-id="${f.id}"><i class="fas fa-trash"></i></button>
+                    </div>
+                `).join('') : '<p class="text-muted mb-0">Henüz dosya yüklenmemiş.</p>'}
+                <div class="mt-3 border-top pt-3">
+                    <div class="row g-2">
+                        <div class="col-md-5">
+                            <input type="file" class="form-control form-control-sm" id="consultation-file-input">
+                        </div>
+                        <div class="col-md-4">
+                            <select class="form-select form-select-sm" id="consultation-file-type">
+                                <option value="report">Rapor</option>
+                                <option value="drawing">Çizim</option>
+                                <option value="specification">Şartname</option>
+                                <option value="photo">Fotoğraf</option>
+                                <option value="other">Diğer</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <button class="btn btn-sm btn-success w-100" id="consultation-upload-btn" data-task-id="${task.id}"><i class="fas fa-upload me-1"></i>Yükle</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Task actions (start, complete)
+    if (task.status === 'pending') {
+        html += `
+            <button class="btn btn-primary me-2" id="consultation-start-btn" data-task-id="${task.id}">
+                <i class="fas fa-play me-1"></i>Göreve Başla
+            </button>
+        `;
+    }
+    if (task.status === 'in_progress') {
+        html += `
+            <div class="mt-3">
+                <label class="form-label"><i class="fas fa-sticky-note me-1"></i>Yanıt Notu</label>
+                <textarea class="form-control mb-2" id="consultation-notes" rows="3" placeholder="Değerlendirme notlarınızı yazın...">${task.notes || ''}</textarea>
+                <button class="btn btn-success" id="consultation-complete-btn" data-task-id="${task.id}">
+                    <i class="fas fa-check me-1"></i>Görevi Tamamla
+                </button>
+            </div>
+        `;
+    }
+
+    return html;
+}
+
+// Setup consultation tab event listeners after content is loaded
+function setupConsultationTabListeners(task) {
+    const contentContainer = taskDetailsModal.container.querySelector('#action-content-consultation');
+    if (!contentContainer) return;
+
+    contentContainer.querySelector('#consultation-upload-btn')?.addEventListener('click', async () => {
+        const fileInput = contentContainer.querySelector('#consultation-file-input');
+        const fileType = contentContainer.querySelector('#consultation-file-type')?.value || 'report';
+        if (!fileInput || !fileInput.files[0]) {
+            showNotification('Lütfen dosya seçin', 'warning');
+            return;
+        }
+        try {
+            const { uploadTaskFile } = await import('../../apis/sales/departmentTasks.js');
+            await uploadTaskFile(task.id, fileInput.files[0], fileType);
+            showNotification('Dosya yüklendi', 'success');
+            // Refresh the consultation tab
+            contentContainer.dataset.loaded = 'false';
+            const updatedTask = await getDepartmentTaskById(task.id);
+            contentContainer.innerHTML = await renderConsultationTab(updatedTask);
+            contentContainer.dataset.loaded = 'true';
+            setupConsultationTabListeners(updatedTask);
+        } catch (e) {
+            showNotification('Dosya yükleme hatası', 'error');
+        }
+    });
+
+    contentContainer.querySelectorAll('.consultation-delete-file-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            if (!confirm('Bu dosyayı silmek istediğinize emin misiniz?')) return;
+            try {
+                const { deleteTaskFile } = await import('../../apis/sales/departmentTasks.js');
+                await deleteTaskFile(btn.dataset.taskId, btn.dataset.fileId);
+                showNotification('Dosya silindi', 'success');
+                contentContainer.dataset.loaded = 'false';
+                const updatedTask = await getDepartmentTaskById(task.id);
+                contentContainer.innerHTML = await renderConsultationTab(updatedTask);
+                contentContainer.dataset.loaded = 'true';
+                setupConsultationTabListeners(updatedTask);
+            } catch (e) {
+                showNotification('Silme hatası', 'error');
+            }
+        });
+    });
+
+    contentContainer.querySelector('#consultation-start-btn')?.addEventListener('click', async () => {
+        try {
+            const { startTask } = await import('../../apis/sales/departmentTasks.js');
+            await startTask(task.id);
+            showNotification('Görev başlatıldı', 'success');
+            contentContainer.dataset.loaded = 'false';
+            const updatedTask = await getDepartmentTaskById(task.id);
+            contentContainer.innerHTML = await renderConsultationTab(updatedTask);
+            contentContainer.dataset.loaded = 'true';
+            setupConsultationTabListeners(updatedTask);
+            await loadTasks();
+        } catch (e) {
+            showNotification(e.message || 'Başlatma hatası', 'error');
+        }
+    });
+
+    contentContainer.querySelector('#consultation-complete-btn')?.addEventListener('click', async () => {
+        try {
+            const notes = contentContainer.querySelector('#consultation-notes')?.value || '';
+            const { completeTask } = await import('../../apis/sales/departmentTasks.js');
+            await completeTask(task.id, notes);
+            showNotification('Görev tamamlandı', 'success');
+            taskDetailsModal.hide();
+            await loadTasks();
+        } catch (e) {
+            showNotification(e.message || 'Tamamlama hatası', 'error');
+        }
+    });
+}
+
 function attachActionFormListeners(task, action) {
     const contentContainer = taskDetailsModal.container.querySelector(`#action-content-${action.key}`);
     if (!contentContainer) return;
+
+    // Setup consultation tab listeners separately
+    if (action.handler === 'consultation') {
+        setupConsultationTabListeners(task);
+        return;
+    }
     
     // Handle form submission for actions with forms
     const form = contentContainer.querySelector(`#${action.handler}-action-form`);
