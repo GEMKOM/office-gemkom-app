@@ -2884,19 +2884,23 @@ function renderPriceTiersUI(container, tiers, jobOrder, jobNo) {
         
         // Delete tier buttons
         container.querySelectorAll('.delete-tier-btn').forEach(btn => {
-            btn.addEventListener('click', async () => {
+            btn.addEventListener('click', () => {
                 const tierId = parseInt(btn.dataset.tierId);
                 const tier = tiers.find(t => t.id === tierId);
-                if (tier && confirm(`"${tier.name}" kademesini silmek istediğinizden emin misiniz?`)) {
-                    try {
-                        await deletePriceTier(tierId);
-                        showNotification('Fiyat kademesi silindi', 'success');
-                        await loadPriceTiersTab(jobNo);
-                    } catch (error) {
-                        console.error('Error deleting tier:', error);
-                        showNotification(error.message || 'Fiyat kademesi silinirken hata oluştu', 'error');
+                if (!tier) return;
+                confirmationModal.show({
+                    message: `"${tier.name}" kademesini silmek istediğinizden emin misiniz?`,
+                    onConfirm: async () => {
+                        try {
+                            await deletePriceTier(tierId);
+                            showNotification('Fiyat kademesi silindi', 'success');
+                            await loadPriceTiersTab(jobNo);
+                        } catch (error) {
+                            console.error('Error deleting tier:', error);
+                            showNotification(error.message || 'Fiyat kademesi silinirken hata oluştu', 'error');
+                        }
                     }
-                }
+                });
             });
         });
     }

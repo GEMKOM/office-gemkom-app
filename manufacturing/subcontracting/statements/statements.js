@@ -20,6 +20,7 @@ import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { TableComponent } from '../../../../components/table/table.js';
 import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
 import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
+import { ConfirmationModal } from '../../../../components/confirmation-modal/confirmation-modal.js';
 import { initRouteProtection } from '../../../../apis/routeProtection.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 
@@ -37,6 +38,7 @@ let generateStatementModal = null;
 let statementDetailModal = null;
 let adjustmentModal = null;
 let decideModal = null;
+let actionConfirmModal = null;
 
 // State management
 let currentPage = 1;
@@ -59,7 +61,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     await initNavbar();
-    
+    actionConfirmModal = new ConfirmationModal('action-confirm-modal-container', {
+        title: 'Onay',
+        icon: 'fas fa-exclamation-triangle',
+        message: 'Bu işlemi yapmak istediğinize emin misiniz?',
+        confirmText: 'Evet',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-danger'
+    });
     // Initialize header component
     initHeaderComponent();
     
@@ -716,18 +725,22 @@ function setupStatementDetailActions(statement, adjustments) {
     
     // Delete adjustment buttons
     document.querySelectorAll('.delete-adj-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
+        btn.addEventListener('click', () => {
             const adjId = parseInt(btn.dataset.adjId);
-            if (confirm('Düzeltmeyi silmek istediğinizden emin misiniz?')) {
-                try {
-                    await deleteStatementAdjustment(statement.id, adjId);
-                    showNotification('Düzeltme silindi', 'success');
-                    viewStatementDetail(statement.id);
-                } catch (error) {
-                    console.error('Error deleting adjustment:', error);
-                    showNotification(error.message || 'Düzeltme silinirken hata oluştu', 'error');
+            const stId = statement.id;
+            actionConfirmModal.show({
+                message: 'Düzeltmeyi silmek istediğinizden emin misiniz?',
+                onConfirm: async () => {
+                    try {
+                        await deleteStatementAdjustment(stId, adjId);
+                        showNotification('Düzeltme silindi', 'success');
+                        viewStatementDetail(stId);
+                    } catch (error) {
+                        console.error('Error deleting adjustment:', error);
+                        showNotification(error.message || 'Düzeltme silinirken hata oluştu', 'error');
+                    }
                 }
-            }
+            });
         });
     });
     
@@ -795,17 +808,21 @@ function setupStatementDetailActions(statement, adjustments) {
         // Set up button handlers
         const refreshBtn = document.getElementById('refresh-statement-btn');
         if (refreshBtn) {
-            refreshBtn.addEventListener('click', async () => {
-                if (confirm('Mevcut kalemler silinip güncel verilerden yeniden oluşturulacak. Düzeltmeler korunacaktır. Devam edilsin mi?')) {
-                    try {
-                        await refreshStatement(statement.id);
-                        showNotification('Hakediş yenilendi', 'success');
-                        viewStatementDetail(statement.id);
-                    } catch (error) {
-                        console.error('Error refreshing statement:', error);
-                        showNotification(error.message || 'Hakediş yenilenirken hata oluştu', 'error');
+            refreshBtn.addEventListener('click', () => {
+                const stId = statement.id;
+                actionConfirmModal.show({
+                    message: 'Mevcut kalemler silinip güncel verilerden yeniden oluşturulacak. Düzeltmeler korunacaktır. Devam edilsin mi?',
+                    onConfirm: async () => {
+                        try {
+                            await refreshStatement(stId);
+                            showNotification('Hakediş yenilendi', 'success');
+                            viewStatementDetail(stId);
+                        } catch (error) {
+                            console.error('Error refreshing statement:', error);
+                            showNotification(error.message || 'Hakediş yenilenirken hata oluştu', 'error');
+                        }
                     }
-                }
+                });
             });
         }
         
@@ -840,18 +857,22 @@ function setupStatementDetailActions(statement, adjustments) {
         
         const markPaidBtn = document.getElementById('mark-paid-btn');
         if (markPaidBtn) {
-            markPaidBtn.addEventListener('click', async () => {
-                if (confirm('Hakedişi ödendi olarak işaretlemek istediğinizden emin misiniz?')) {
-                    try {
-                        await markStatementAsPaid(statement.id);
-                        showNotification('Hakediş ödendi olarak işaretlendi', 'success');
-                        viewStatementDetail(statement.id);
-                        await loadStatements();
-                    } catch (error) {
-                        console.error('Error marking as paid:', error);
-                        showNotification(error.message || 'Hakediş işaretlenirken hata oluştu', 'error');
+            markPaidBtn.addEventListener('click', () => {
+                const stId = statement.id;
+                actionConfirmModal.show({
+                    message: 'Hakedişi ödendi olarak işaretlemek istediğinizden emin misiniz?',
+                    onConfirm: async () => {
+                        try {
+                            await markStatementAsPaid(stId);
+                            showNotification('Hakediş ödendi olarak işaretlendi', 'success');
+                            viewStatementDetail(stId);
+                            await loadStatements();
+                        } catch (error) {
+                            console.error('Error marking as paid:', error);
+                            showNotification(error.message || 'Hakediş işaretlenirken hata oluştu', 'error');
+                        }
                     }
-                }
+                });
             });
         }
     }

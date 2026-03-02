@@ -3827,20 +3827,27 @@ function setupConsultationTabListeners(task) {
     });
 
     contentContainer.querySelectorAll('.consultation-delete-file-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            if (!confirm('Bu dosyayı silmek istediğinize emin misiniz?')) return;
-            try {
-                const { deleteTaskFile } = await import('../../apis/sales/departmentTasks.js');
-                await deleteTaskFile(btn.dataset.taskId, btn.dataset.fileId);
-                showNotification('Dosya silindi', 'success');
-                contentContainer.dataset.loaded = 'false';
-                const updatedTask = await getDepartmentTaskById(task.id);
-                contentContainer.innerHTML = await renderConsultationTab(updatedTask);
-                contentContainer.dataset.loaded = 'true';
-                setupConsultationTabListeners(updatedTask);
-            } catch (e) {
-                showNotification('Silme hatası', 'error');
-            }
+        btn.addEventListener('click', () => {
+            const taskId = btn.dataset.taskId;
+            const fileId = btn.dataset.fileId;
+            const taskIdRef = task.id;
+            confirmationModal.show({
+                message: 'Bu dosyayı silmek istediğinize emin misiniz?',
+                onConfirm: async () => {
+                    try {
+                        const { deleteTaskFile } = await import('../../apis/sales/departmentTasks.js');
+                        await deleteTaskFile(taskId, fileId);
+                        showNotification('Dosya silindi', 'success');
+                        contentContainer.dataset.loaded = 'false';
+                        const updatedTask = await getDepartmentTaskById(taskIdRef);
+                        contentContainer.innerHTML = await renderConsultationTab(updatedTask);
+                        contentContainer.dataset.loaded = 'true';
+                        setupConsultationTabListeners(updatedTask);
+                    } catch (e) {
+                        showNotification('Silme hatası', 'error');
+                    }
+                }
+            });
         });
     });
 
@@ -5863,18 +5870,23 @@ async function addSubcontractingAssignmentSection(modal, task) {
                 
                 const deleteBtn = document.getElementById(`delete-assignment-btn-${task.id}`);
                 if (deleteBtn) {
-                    deleteBtn.addEventListener('click', async () => {
-                        if (confirm('Taşeron atamasını silmek istediğinizden emin misiniz?')) {
-                            try {
-                                await deleteAssignment(assignment.id);
-                                showNotification('Taşeron ataması silindi', 'success');
-                                modal.hide();
-                                viewTaskDetails(task.id);
-                            } catch (error) {
-                                console.error('Error deleting assignment:', error);
-                                showNotification(error.message || 'Taşeron ataması silinirken hata oluştu', 'error');
+                    deleteBtn.addEventListener('click', () => {
+                        const assignmentId = assignment.id;
+                        const taskId = task.id;
+                        confirmationModal.show({
+                            message: 'Taşeron atamasını silmek istediğinizden emin misiniz?',
+                            onConfirm: async () => {
+                                try {
+                                    await deleteAssignment(assignmentId);
+                                    showNotification('Taşeron ataması silindi', 'success');
+                                    modal.hide();
+                                    viewTaskDetails(taskId);
+                                } catch (error) {
+                                    console.error('Error deleting assignment:', error);
+                                    showNotification(error.message || 'Taşeron ataması silinirken hata oluştu', 'error');
+                                }
                             }
-                        }
+                        });
                     });
                 }
             }, 100);

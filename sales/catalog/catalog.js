@@ -1,6 +1,7 @@
 import { initNavbar } from '../../components/navbar.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { EditModal } from '../../components/edit-modal/edit-modal.js';
+import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import {
@@ -12,6 +13,7 @@ import {
 let templates = [];
 let selectedTemplateId = null;
 let selectedTemplate = null;
+let actionConfirmModal = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) return;
@@ -28,6 +30,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         onCreateClick: () => showCreateTemplateModal()
     });
 
+    actionConfirmModal = new ConfirmationModal('action-confirm-modal-container', {
+        title: 'Onay',
+        icon: 'fas fa-exclamation-triangle',
+        message: 'Bu işlemi yapmak istediğinize emin misiniz?',
+        confirmText: 'Evet',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-danger'
+    });
     await loadTemplates();
 });
 
@@ -123,14 +133,20 @@ function renderTree() {
         });
     });
     panel.querySelectorAll('.delete-node-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
+        btn.addEventListener('click', (e) => {
             e.stopPropagation();
-            if (!confirm('Bu düğümü ve alt düğümlerini silmek istediğinize emin misiniz?')) return;
-            try {
-                await deleteTemplateNode(selectedTemplateId, parseInt(btn.dataset.nodeId));
-                showNotification('Düğüm silindi', 'success');
-                await selectTemplate(selectedTemplateId);
-            } catch (_) { showNotification('Silme hatası', 'error'); }
+            const nodeId = parseInt(btn.dataset.nodeId);
+            const templateId = selectedTemplateId;
+            actionConfirmModal.show({
+                message: 'Bu düğümü ve alt düğümlerini silmek istediğinize emin misiniz?',
+                onConfirm: async () => {
+                    try {
+                        await deleteTemplateNode(templateId, nodeId);
+                        showNotification('Düğüm silindi', 'success');
+                        await selectTemplate(templateId);
+                    } catch (_) { showNotification('Silme hatası', 'error'); }
+                }
+            });
         });
     });
 }

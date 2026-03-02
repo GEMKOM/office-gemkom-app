@@ -11,6 +11,7 @@ import { HeaderComponent } from '../../components/header/header.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { TableComponent } from '../../components/table/table.js';
+import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
 import { backendBase } from '../../base.js';
 
 // Global variables
@@ -20,9 +21,18 @@ let currentPage = 1;
 let itemsPerPage = 20;
 let selectedPurchaseOrder = null;
 let selectedPaymentSchedule = null;
+let actionConfirmModal = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async function() {
+    actionConfirmModal = new ConfirmationModal('action-confirm-modal-container', {
+        title: 'Onay',
+        icon: 'fas fa-exclamation-triangle',
+        message: 'Bu işlemi yapmak istediğinize emin misiniz?',
+        confirmText: 'Evet',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-danger'
+    });
     initNavbar();
     // Initialize header component
     new HeaderComponent({
@@ -597,31 +607,30 @@ async function confirmMarkPaid() {
 
 
 // Delete purchase order (admin only)
-async function confirmAndDeletePurchaseOrder(orderId) {
-    try {
-        if (!isAdmin()) {
-            showErrorMessage('Bu işlem için yetkiniz yok.');
-            return;
-        }
-        const confirmed = confirm('Bu satın alma siparişini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.');
-        if (!confirmed) return;
-
-        await deletePurchaseOrder(orderId);
-
-        // If details modal is open for this order, close it
-        if (selectedPurchaseOrder && selectedPurchaseOrder.id === orderId) {
-            const modalEl = document.getElementById('purchaseOrderDetailsModal');
-            const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
-            modal.hide();
-            selectedPurchaseOrder = null;
-        }
-
-        showSuccessMessage('Satın alma siparişi silindi.');
-        loadPurchaseOrders();
-    } catch (error) {
-        console.error('Error deleting purchase order:', error);
-        showErrorMessage(error.message || 'Sipariş silinirken hata oluştu.');
+function confirmAndDeletePurchaseOrder(orderId) {
+    if (!isAdmin()) {
+        showErrorMessage('Bu işlem için yetkiniz yok.');
+        return;
     }
+    actionConfirmModal.show({
+        message: 'Bu satın alma siparişini silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+        onConfirm: async () => {
+            try {
+                await deletePurchaseOrder(orderId);
+                if (selectedPurchaseOrder && selectedPurchaseOrder.id === orderId) {
+                    const modalEl = document.getElementById('purchaseOrderDetailsModal');
+                    const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
+                    modal.hide();
+                    selectedPurchaseOrder = null;
+                }
+                showSuccessMessage('Satın alma siparişi silindi.');
+                loadPurchaseOrders();
+            } catch (error) {
+                console.error('Error deleting purchase order:', error);
+                showErrorMessage(error.message || 'Sipariş silinirken hata oluştu.');
+            }
+        }
+    });
 }
 
 // View purchase order details

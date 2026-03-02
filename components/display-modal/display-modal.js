@@ -694,7 +694,18 @@ export class DisplayModal {
         }
         return this;
     }
-    
+
+    /**
+     * Set custom footer HTML (e.g. tab-specific actions). Replaces the entire footer content.
+     */
+    setFooterContent(html) {
+        const modalFooter = this.container.querySelector('.modal-footer');
+        if (modalFooter) {
+            modalFooter.innerHTML = html;
+        }
+        return this;
+    }
+
     // Clear all data
     clearData() {
         // Clear fields

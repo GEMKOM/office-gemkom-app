@@ -16,6 +16,7 @@ import { FileAttachments } from '../../../components/file-attachments/file-attac
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
+import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { ITEM_CODE_NAMES, UNIT_CHOICES } from '../../../apis/constants.js';
 import { showNotification } from '../../../components/notification/notification.js';
 
@@ -27,6 +28,7 @@ let comparisonTable;
 let dataManager;
 let validationManager;
 
+let actionConfirmModal = null;
 let requestData = {
     requestNumber: '',
     requestDate: '',
@@ -191,7 +193,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
         return;
     }
-
+    actionConfirmModal = new ConfirmationModal('action-confirm-modal-container', {
+        title: 'Onay',
+        icon: 'fas fa-exclamation-triangle',
+        message: 'Bu işlemi yapmak istediğinize emin misiniz?',
+        confirmText: 'Evet',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-danger'
+    });
     initNavbar();
     
     // Initialize unit dropdown from constants
@@ -276,7 +285,7 @@ function initializeManagers() {
     suppliersManager = new SuppliersManager(requestData, async () => {
         dataManager.autoSave();
         await renderAll();
-    }, currencySymbols);
+    }, currencySymbols, actionConfirmModal);
     
     comparisonTable = new ComparisonTable('comparison-table-container', {
         currencyRates: currencyRates,
@@ -855,36 +864,27 @@ async function loadDraftData(draft) {
     
 }
 
-async function deleteDraftRequest(draftId) {
-    try {
-        // Show confirmation dialog
-        if (!confirm('Bu taslağı silmek istediğinizden emin misiniz?')) {
-            return;
+function deleteDraftRequest(draftId) {
+    actionConfirmModal.show({
+        message: 'Bu taslağı silmek istediğinizden emin misiniz?',
+        onConfirm: async () => {
+            try {
+                await deletePurchaseRequestDraft(draftId);
+                showNotification('Taslak başarıyla silindi!', 'success');
+                const modalElement = document.getElementById('draftRequestsModal');
+                const existingModal = bootstrap.Modal.getInstance(modalElement);
+                if (existingModal) {
+                    existingModal.hide();
+                }
+                setTimeout(async () => {
+                    await showDraftRequestsModal();
+                }, 150);
+            } catch (error) {
+                console.error('Error deleting draft request:', error);
+                showNotification('Taslak silinirken hata oluştu: ' + error.message, 'error');
+            }
         }
-        
-        // Delete the draft
-        await deletePurchaseRequestDraft(draftId);
-        
-        // Show success notification
-        showNotification('Taslak başarıyla silindi!', 'success');
-        
-        // Refresh the modal to show updated list
-        // First, close the current modal instance if it exists
-        const modalElement = document.getElementById('draftRequestsModal');
-        const existingModal = bootstrap.Modal.getInstance(modalElement);
-        if (existingModal) {
-            existingModal.hide();
-        }
-        
-        // Wait a bit for the modal to close, then refresh
-        setTimeout(async () => {
-            await showDraftRequestsModal();
-        }, 150);
-        
-    } catch (error) {
-        console.error('Error deleting draft request:', error);
-        showNotification('Taslak silinirken hata oluştu: ' + error.message, 'error');
-    }
+    });
 }
 
 function updateComparisonTableRates() {

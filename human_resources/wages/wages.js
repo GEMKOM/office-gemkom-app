@@ -10,6 +10,7 @@ import { FiltersComponent } from '../../components/filters/filters.js';
 import { StatisticsCards} from '../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../components/table/table.js';
 import { EditModal } from '../../components/edit-modal/edit-modal.js';
+import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
 import { 
     fetchCurrentWageRates,
     fetchWageRates,
@@ -33,6 +34,7 @@ class WagesManager {
         this.wageRates = [];
         this.statistics = {};
         this.currentUserId = null; // Store current user ID for editing
+        this.actionConfirmModal = null;
         
         this.init();
     }
@@ -71,6 +73,14 @@ class WagesManager {
     }
 
     async initializeComponents() {
+        this.actionConfirmModal = new ConfirmationModal('action-confirm-modal-container', {
+            title: 'Onay',
+            icon: 'fas fa-exclamation-triangle',
+            message: 'Bu işlemi yapmak istediğinize emin misiniz?',
+            confirmText: 'Evet',
+            cancelText: 'İptal',
+            confirmButtonClass: 'btn-danger'
+        });
         // Initialize navbar
         await initNavbar();
 
@@ -801,66 +811,49 @@ class WagesManager {
         this.initializeEditModal();
     }
 
-    async deleteWageEntry(wageRateId, index) {
-        try {
-            // Confirm deletion
-            if (!confirm('Bu ücret kaydını silmek istediğinizden emin misiniz?')) {
-                return;
-            }
-
-            // Show loading state
-            this.editModalComponent.setLoading(true);
-
-            // Delete the wage rate
-            await deleteWageRate(wageRateId);
-
-            // Show success message
-            this.showNotification('Ücret kaydı başarıyla silindi', 'success');
-
-            // Refresh the wage history
-            const currentUserId = this.currentUserId;
-            if (currentUserId) {
-                const wageHistoryResponse = await fetchWageRatesForUser(currentUserId);
-                if (wageHistoryResponse && wageHistoryResponse.results) {
-                    // Clear existing wage history section first
-                    const existingSection = this.editModalComponent.container.querySelector('[data-section-id="wage-history"]');
-                    if (existingSection) {
-                        existingSection.remove();
+    deleteWageEntry(wageRateId, index) {
+        const self = this;
+        this.actionConfirmModal.show({
+            message: 'Bu ücret kaydını silmek istediğinizden emin misiniz?',
+            onConfirm: async () => {
+                try {
+                    self.editModalComponent.setLoading(true);
+                    await deleteWageRate(wageRateId);
+                    self.showNotification('Ücret kaydı başarıyla silindi', 'success');
+                    const currentUserId = self.currentUserId;
+                    if (currentUserId) {
+                        const wageHistoryResponse = await fetchWageRatesForUser(currentUserId);
+                        if (wageHistoryResponse && wageHistoryResponse.results) {
+                            const existingSection = self.editModalComponent.container.querySelector('[data-section-id="wage-history"]');
+                            if (existingSection) {
+                                existingSection.remove();
+                            }
+                            self.addWageHistoryFields(wageHistoryResponse.results);
+                        } else {
+                            const existingSection = self.editModalComponent.container.querySelector('[data-section-id="wage-history"]');
+                            if (existingSection) {
+                                existingSection.remove();
+                            }
+                        }
                     }
-                    
-                    // Add the updated wage history
-                    this.addWageHistoryFields(wageHistoryResponse.results);
-                } else {
-                    // If no wage history, remove the section
-                    const existingSection = this.editModalComponent.container.querySelector('[data-section-id="wage-history"]');
-                    if (existingSection) {
-                        existingSection.remove();
+                    await self.loadWageRates();
+                    await self.calculateStatistics();
+                } catch (error) {
+                    console.error('Error deleting wage rate:', error);
+                    let errorMessage = 'Ücret kaydı silinirken hata oluştu';
+                    if (error.response && error.response.detail) {
+                        errorMessage = Array.isArray(error.response.detail)
+                            ? error.response.detail.join(', ')
+                            : error.response.detail;
+                    } else if (error.message) {
+                        errorMessage = error.message;
                     }
+                    self.showNotification(errorMessage, 'error');
+                } finally {
+                    self.editModalComponent.setLoading(false);
                 }
             }
-
-            // Refresh main data
-            await this.loadWageRates();
-            await this.calculateStatistics();
-
-        } catch (error) {
-            console.error('Error deleting wage rate:', error);
-            
-            // Extract error message from API response
-            let errorMessage = 'Ücret kaydı silinirken hata oluştu';
-            if (error.response && error.response.detail) {
-                errorMessage = Array.isArray(error.response.detail) 
-                    ? error.response.detail.join(', ') 
-                    : error.response.detail;
-            } else if (error.message) {
-                errorMessage = error.message;
-            }
-            
-            this.showNotification(errorMessage, 'error');
-        } finally {
-            // Clear loading state
-            this.editModalComponent.setLoading(false);
-        }
+        });
     }
 
     getDemoWageRates() {

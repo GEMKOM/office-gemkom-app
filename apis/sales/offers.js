@@ -42,7 +42,6 @@ export const DEPARTMENT_CHOICES = [
     { value: 'planning', label: 'Planlama' },
     { value: 'procurement', label: 'Satın Alma' },
     { value: 'manufacturing', label: 'İmalat' },
-    { value: 'painting', label: 'Boyahane' },
     { value: 'logistics', label: 'Lojistik' }
 ];
 
@@ -112,6 +111,12 @@ export async function patchOffer(id, data) {
 }
 
 // ── Offer Items ──────────────────────────────────────────────────────
+export async function getOfferItems(offerId) {
+    const response = await authedFetch(`${BASE}/${offerId}/items/`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+}
+
 export async function addOfferItems(offerId, items) {
     const response = await authedFetch(`${BASE}/${offerId}/add-items/`, {
         method: 'POST',
@@ -197,6 +202,28 @@ export async function getConsultations(offerId) {
     return response.json();
 }
 
+export async function getOfferConsultationTask(offerId, taskId) {
+    const response = await authedFetch(`${BASE}/${offerId}/consultations/${taskId}/`);
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${response.status}`);
+    }
+    return response.json();
+}
+
+export async function patchOfferConsultationTask(offerId, taskId, data) {
+    const response = await authedFetch(`${BASE}/${offerId}/consultations/${taskId}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || JSON.stringify(err));
+    }
+    return response.json();
+}
+
 export async function proposePrice(offerId, data) {
     const response = await authedFetch(`${BASE}/${offerId}/propose-price/`, {
         method: 'POST',
@@ -216,11 +243,11 @@ export async function getPriceHistory(offerId) {
     return response.json();
 }
 
-export async function submitApproval(offerId, policyId) {
+export async function submitApproval(offerId) {
     const response = await authedFetch(`${BASE}/${offerId}/submit-approval/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ policy: policyId })
+        body: JSON.stringify({})
     });
     if (!response.ok) {
         const err = await response.json().catch(() => ({}));

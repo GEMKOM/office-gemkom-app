@@ -4,10 +4,11 @@ import { showNotification } from '../../../components/notification/notification.
 
 // Suppliers Manager Module
 export class SuppliersManager {
-    constructor(requestData, autoSave, currencySymbols) {
+    constructor(requestData, autoSave, currencySymbols, confirmModal = null) {
         this.requestData = requestData;
         this.autoSave = autoSave;
         this.currencySymbols = currencySymbols;
+        this.confirmModal = confirmModal;
         this.availableSuppliers = []; // Store available suppliers from API
         this.availablePaymentTerms = []; // Store available payment terms from API
         this.supplierDropdown = null; // Modern dropdown instance
@@ -548,26 +549,47 @@ export class SuppliersManager {
     }
 
     deleteSupplier(index) {
-        if (confirm('Bu tedarikçiyi silmek istediğinizden emin misiniz? Tüm teklif verileri de silinecektir.')) {
-            const supplier = this.requestData.suppliers[index];
-            delete this.requestData.offers[supplier.id];
-            delete this.requestData.recommendations[supplier.id];
-            this.requestData.suppliers.splice(index, 1);
-            
-            this.renderSuppliersContainer();
-            this.saveImmediately();
+        if (!this.confirmModal) {
+            if (confirm('Bu tedarikçiyi silmek istediğinizden emin misiniz? Tüm teklif verileri de silinecektir.')) {
+                this.doDeleteSupplier(index);
+            }
+            return;
         }
+        this.confirmModal.show({
+            message: 'Bu tedarikçiyi silmek istediğinizden emin misiniz? Tüm teklif verileri de silinecektir.',
+            onConfirm: () => this.doDeleteSupplier(index)
+        });
+    }
+
+    doDeleteSupplier(index) {
+        const supplier = this.requestData.suppliers[index];
+        delete this.requestData.offers[supplier.id];
+        delete this.requestData.recommendations[supplier.id];
+        this.requestData.suppliers.splice(index, 1);
+        this.renderSuppliersContainer();
+        this.saveImmediately();
     }
 
     clearAllSuppliers() {
         if (!this.requestData.suppliers.length) return;
-        if (confirm('Tüm tedarikçileri ve ilişkili teklif verilerini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
-            this.requestData.suppliers = [];
-            this.requestData.offers = {};
-            this.requestData.recommendations = {};
-            this.renderSuppliersContainer();
-            this.saveImmediately();
+        if (!this.confirmModal) {
+            if (confirm('Tüm tedarikçileri ve ilişkili teklif verilerini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.')) {
+                this.doClearAllSuppliers();
+            }
+            return;
         }
+        this.confirmModal.show({
+            message: 'Tüm tedarikçileri ve ilişkili teklif verilerini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.',
+            onConfirm: () => this.doClearAllSuppliers()
+        });
+    }
+
+    doClearAllSuppliers() {
+        this.requestData.suppliers = [];
+        this.requestData.offers = {};
+        this.requestData.recommendations = {};
+        this.renderSuppliersContainer();
+        this.saveImmediately();
     }
 
     renderSuppliersContainer() {

@@ -28,6 +28,7 @@ let timeEntriesTable = null;
 let users = [];
 let editTimeEntryModal = null;
 let deleteTimeEntryModal = null;
+let actionConfirmModal = null;
 
 // Job order dropdown state
 let jobOrderDropdowns = new Map(); // Store dropdown references by row index
@@ -56,6 +57,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     initializeTableComponent();
     initializeEditModal();
     initializeDeleteModal();
+    actionConfirmModal = new ConfirmationModal('action-confirm-modal-container', {
+        title: 'Onay',
+        icon: 'fas fa-exclamation-triangle',
+        message: 'Bu işlemi yapmak istediğinize emin misiniz?',
+        confirmText: 'Evet',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-danger'
+    });
     await loadTimeEntries();
 });
 
@@ -797,15 +806,15 @@ function setupBulkCreateForm(bulkCreateModal) {
             clearAllBtn.addEventListener('click', (e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                if (confirm('Tüm satırları temizlemek istediğinize emin misiniz?')) {
-                    // Keep only one empty row
-                    rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
-                    // Clear dropdown references (temporarily disabled - using text field)
-                    // jobOrderDropdowns.clear();
-                    updateInitialState();
-                    reRenderTable();
-                    showModalNotification('Tüm satırlar temizlendi', 'info');
-                }
+                actionConfirmModal.show({
+                    message: 'Tüm satırları temizlemek istediğinize emin misiniz?',
+                    onConfirm: () => {
+                        rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
+                        updateInitialState();
+                        reRenderTable();
+                        showModalNotification('Tüm satırlar temizlendi', 'info');
+                    }
+                });
             });
         }
         

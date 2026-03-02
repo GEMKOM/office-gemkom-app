@@ -10,6 +10,7 @@ import {
     getBasisChoices
 } from '../../../apis/procurement.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
+import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
 
 // State management
@@ -25,6 +26,7 @@ let isLoading = false;
 let paymentTermsStats = null; // Statistics Cards component instance
 let paymentTermFilters = null; // Filters component instance
 let basisChoices = {}; // Store basis choices from API
+let actionConfirmModal = null;
 // No edit mode needed - only create and delete functionality
 
 // Initialize the page
@@ -32,6 +34,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
         return;
     }
+    actionConfirmModal = new ConfirmationModal('action-confirm-modal-container', {
+        title: 'Onay',
+        icon: 'fas fa-exclamation-triangle',
+        message: 'Bu işlemi yapmak istediğinize emin misiniz?',
+        confirmText: 'Evet',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-danger'
+    });
 
     await initNavbar();
     
@@ -644,29 +654,25 @@ async function handleDeletePaymentTerm() {
         return;
     }
 
-    const confirmed = confirm(`"${currentPaymentTerm.name}" ödeme koşulunu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`);
-    
-    if (!confirmed) {
-        return;
-    }
-
-    try {
-        showLoading(true);
-        
-        await deletePaymentTerm(currentPaymentTerm.id);
-        
-        showNotification('Ödeme koşulu başarıyla silindi', 'success');
-        
-        // Refresh the payment terms list
-        await loadPaymentTerms();
-        updatePaymentTermCounts();
-        
-    } catch (error) {
-        console.error('Error deleting payment term:', error);
-        showNotification('Ödeme koşulu silinirken hata oluştu: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
-    }
+    const name = currentPaymentTerm.name;
+    const id = currentPaymentTerm.id;
+    actionConfirmModal.show({
+        message: `"${name}" ödeme koşulunu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`,
+        onConfirm: async () => {
+            try {
+                showLoading(true);
+                await deletePaymentTerm(id);
+                showNotification('Ödeme koşulu başarıyla silindi', 'success');
+                await loadPaymentTerms();
+                updatePaymentTermCounts();
+            } catch (error) {
+                console.error('Error deleting payment term:', error);
+                showNotification('Ödeme koşulu silinirken hata oluştu: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
+        }
+    });
 }
 
 // Action functions

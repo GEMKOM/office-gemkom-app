@@ -1355,21 +1355,21 @@ function openAddChildItemModal(templateId, parentItemId) {
 }
 
 // Remove item
-async function removeItem(itemId) {
-    if (!confirm('Bu görevi silmek istediğinizden emin misiniz? Alt görevler de silinecektir.')) {
-        return;
-    }
-
-    try {
-        await removeTemplateItem(currentTemplate.id, itemId);
-        showNotification('Görev başarıyla silindi', 'success');
-        
-        // Reload items and refresh the manage items modal
-        await refreshManageItemsModal();
-    } catch (error) {
-        console.error('Error removing item:', error);
-        showNotification('Görev silinirken bir hata oluştu', 'error');
-    }
+function removeItem(itemId) {
+    const templateId = currentTemplate.id;
+    deleteTemplateModal.show({
+        message: 'Bu görevi silmek istediğinizden emin misiniz? Alt görevler de silinecektir.',
+        onConfirm: async () => {
+            try {
+                await removeTemplateItem(templateId, itemId);
+                showNotification('Görev başarıyla silindi', 'success');
+                await refreshManageItemsModal();
+            } catch (error) {
+                console.error('Error removing item:', error);
+                showNotification('Görev silinirken bir hata oluştu', 'error');
+            }
+        }
+    });
 }
 
 // Utility functions

@@ -12,6 +12,7 @@ import {
     getPaymentTerms
 } from '../../../apis/procurement.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
+import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
 
 // State management
@@ -28,13 +29,21 @@ let suppliersStats = null; // Statistics Cards component instance
 let supplierFilters = null; // Filters component instance
 let isEditMode = false; // Track if we're editing an existing supplier
 let paymentTerms = []; // Payment terms for dropdown
+let actionConfirmModal = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
         return;
     }
-
+    actionConfirmModal = new ConfirmationModal('action-confirm-modal-container', {
+        title: 'Onay',
+        icon: 'fas fa-exclamation-triangle',
+        message: 'Bu işlemi yapmak istediğinize emin misiniz?',
+        confirmText: 'Evet',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-danger'
+    });
     await initNavbar();
     
     // Initialize header component
@@ -677,35 +686,29 @@ async function handleToggleStatus() {
     }
 
     const action = currentSupplier.is_active ? 'pasif' : 'aktif';
-    const confirmed = confirm(`"${currentSupplier.name}" tedarikçisini ${action} yapmak istediğinizden emin misiniz?`);
-    
-    if (!confirmed) {
-        return;
-    }
-
-    try {
-        showLoading(true);
-        
-        await toggleSupplierStatus(currentSupplier.id);
-        
-        showNotification(`Tedarikçi başarıyla ${action} yapıldı`, 'success');
-        
-        // Close the modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('supplierDetailsModal'));
-        if (modal) {
-            modal.hide();
+    const name = currentSupplier.name;
+    const id = currentSupplier.id;
+    actionConfirmModal.show({
+        message: `"${name}" tedarikçisini ${action} yapmak istediğinizden emin misiniz?`,
+        onConfirm: async () => {
+            try {
+                showLoading(true);
+                await toggleSupplierStatus(id);
+                showNotification(`Tedarikçi başarıyla ${action} yapıldı`, 'success');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('supplierDetailsModal'));
+                if (modal) {
+                    modal.hide();
+                }
+                await loadSuppliers();
+                updateSupplierCounts();
+            } catch (error) {
+                console.error('Error toggling supplier status:', error);
+                showNotification('Tedarikçi durumu değiştirilirken hata oluştu: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
         }
-        
-        // Refresh the suppliers list
-        await loadSuppliers();
-        updateSupplierCounts();
-        
-    } catch (error) {
-        console.error('Error toggling supplier status:', error);
-        showNotification('Tedarikçi durumu değiştirilirken hata oluştu: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
-    }
+    });
 }
 
 async function handleDeleteSupplier() {
@@ -714,35 +717,29 @@ async function handleDeleteSupplier() {
         return;
     }
 
-    const confirmed = confirm(`"${currentSupplier.name}" tedarikçisini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`);
-    
-    if (!confirmed) {
-        return;
-    }
-
-    try {
-        showLoading(true);
-        
-        await deleteSupplier(currentSupplier.id);
-        
-        showNotification('Tedarikçi başarıyla silindi', 'success');
-        
-        // Close the modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('supplierDetailsModal'));
-        if (modal) {
-            modal.hide();
+    const name = currentSupplier.name;
+    const id = currentSupplier.id;
+    actionConfirmModal.show({
+        message: `"${name}" tedarikçisini silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`,
+        onConfirm: async () => {
+            try {
+                showLoading(true);
+                await deleteSupplier(id);
+                showNotification('Tedarikçi başarıyla silindi', 'success');
+                const modal = bootstrap.Modal.getInstance(document.getElementById('supplierDetailsModal'));
+                if (modal) {
+                    modal.hide();
+                }
+                await loadSuppliers();
+                updateSupplierCounts();
+            } catch (error) {
+                console.error('Error deleting supplier:', error);
+                showNotification('Tedarikçi silinirken hata oluştu: ' + error.message, 'error');
+            } finally {
+                showLoading(false);
+            }
         }
-        
-        // Refresh the suppliers list
-        await loadSuppliers();
-        updateSupplierCounts();
-        
-    } catch (error) {
-        console.error('Error deleting supplier:', error);
-        showNotification('Tedarikçi silinirken hata oluştu: ' + error.message, 'error');
-    } finally {
-        showLoading(false);
-    }
+    });
 }
 
 // Action functions

@@ -6,6 +6,7 @@ import { TableComponent } from '../../../components/table/table.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
+import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { 
@@ -38,6 +39,7 @@ let currencySymbols = {
     'EUR': '€',
     'GBP': '£'
 };
+let actionConfirmModal = null;
 let comparisonTable = null; // Comparison table component instance
 let displayModal = null; // DisplayModal component instance
 let isModalLoading = false; // Prevent multiple modal openings
@@ -49,6 +51,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         return;
     }
 
+    actionConfirmModal = new ConfirmationModal('action-confirm-modal-container', {
+        title: 'Onay',
+        icon: 'fas fa-exclamation-triangle',
+        message: 'Bu işlemi yapmak istediğinize emin misiniz?',
+        confirmText: 'Evet',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-danger'
+    });
     await initNavbar();
     
     // Fetch currency rates
@@ -561,33 +571,25 @@ async function handleCancelRequest() {
         return;
     }
 
-    // Confirm cancellation
-    const confirmed = confirm(`"${currentRequest.request_number}" numaralı talebi iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`);
-    
-    if (!confirmed) {
-        return;
-    }
-
-    try {
-        // Call the cancel API
-        await cancelPurchaseRequest(currentRequest.id);
-        
-        // Show success message
-        showNotification('Talep başarıyla iptal edildi', 'success');
-        
-        // Close the modal
-        if (displayModal) {
-            displayModal.hide();
+    const requestNumber = currentRequest.request_number;
+    const requestId = currentRequest.id;
+    actionConfirmModal.show({
+        message: `"${requestNumber}" numaralı talebi iptal etmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`,
+        onConfirm: async () => {
+            try {
+                await cancelPurchaseRequest(requestId);
+                showNotification('Talep başarıyla iptal edildi', 'success');
+                if (displayModal) {
+                    displayModal.hide();
+                }
+                await loadRequests();
+                updateRequestCounts();
+            } catch (error) {
+                console.error('Error canceling request:', error);
+                showNotification('Talep iptal edilirken hata oluştu: ' + error.message, 'error');
+            }
         }
-        
-        // Refresh the requests list to update the status
-        await loadRequests();
-        updateRequestCounts();
-        
-    } catch (error) {
-        console.error('Error canceling request:', error);
-        showNotification('Talep iptal edilirken hata oluştu: ' + error.message, 'error');
-    }
+    });
 }
 
 async function showRequestDetailsModal() {
