@@ -122,9 +122,10 @@ export class FiltersComponent {
      * @param {string} config.label - Filter label
      * @param {Array} config.options - Dropdown options array
      * @param {string} config.placeholder - Dropdown placeholder
-     * @param {string} config.value - Default selected value
+     * @param {string|Array} config.value - Default selected value (string for single, array for multiple)
      * @param {number} config.colSize - Bootstrap column size (default: 2)
      * @param {boolean} config.searchable - Enable search in dropdown (default: true)
+     * @param {boolean} config.multiple - Enable multiple selection (default: false); getValue() returns array when true
      */
     addDropdownFilter(config) {
         const filter = {
@@ -133,9 +134,10 @@ export class FiltersComponent {
             label: config.label,
             options: config.options || [],
             placeholder: config.placeholder || 'Seçiniz',
-            value: config.value || '',
+            value: config.value ?? (config.multiple ? [] : ''),
             colSize: config.colSize || 2,
             searchable: config.searchable !== false,
+            multiple: config.multiple || false,
             ...config
         };
 
@@ -437,7 +439,8 @@ export class FiltersComponent {
                 if (container) {
                     const dropdownOptions = {
                         placeholder: filter.placeholder,
-                        searchable: filter.searchable !== false
+                        searchable: filter.searchable !== false,
+                        multiple: filter.multiple || false
                     };
                     if (filter.remoteSearch && typeof filter.remoteSearch === 'function') {
                         dropdownOptions.remoteSearch = filter.remoteSearch;
@@ -454,7 +457,7 @@ export class FiltersComponent {
                         : (filter.options || []).map(option => ({ value: option.value, text: option.label }));
                     dropdown.setItems(items);
                     
-                    if (filter.value) {
+                    if (filter.value !== undefined && filter.value !== null && (filter.multiple ? (Array.isArray(filter.value) && filter.value.length) : filter.value !== '')) {
                         dropdown.setValue(filter.value);
                     }
                     
@@ -593,7 +596,7 @@ export class FiltersComponent {
             if (filter.type === 'dropdown') {
                 const dropdown = this.dropdowns.get(filter.id);
                 if (dropdown) {
-                    dropdown.setValue('');
+                    dropdown.setValue(filter.multiple ? [] : '');
                 }
             } else if (filter.type === 'checkbox') {
                 const element = document.getElementById(filter.id);

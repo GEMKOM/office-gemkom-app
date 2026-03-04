@@ -21,7 +21,7 @@ import { backendBase } from '../../base.js';
  * @param {boolean} options.is_blocked - Filter blocked tasks (true)
  * @param {boolean} options.main_only - Custom filter for main tasks only (true)
  * @param {string} options.search - Search in title, description
- * @param {string} options.ordering - Sort: sequence, created_at, -created_at, target_completion_date
+ * @param {string} options.ordering - Sort: sequence, created_at, -created_at, target_completion_date, job_order__job_no, -job_order__job_no
  * @param {number} options.page - Page number for pagination
  * @returns {Promise<Object>} Paginated response with count, next, previous, and results
  */

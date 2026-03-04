@@ -906,14 +906,12 @@ function initializeFiltersComponent() {
         colSize: 3
     });
 
-    // Add dropdown filters
+    // Add dropdown filters (status: multiselect for status__in=active,completed)
     jobOrderFilters.addDropdownFilter({
         id: 'status-filter',
         label: 'Durum',
-        options: [
-            { value: '', label: 'Tümü' },
-            ...statusOptions.map(s => ({ value: s.value, label: s.label }))
-        ],
+        multiple: true,
+        options: statusOptions.map(s => ({ value: s.value, label: s.label })),
         placeholder: 'Tümü',
         colSize: 2
     });
@@ -1140,8 +1138,11 @@ async function loadJobOrders() {
         if (filterValues['search-filter']) {
             options.search = filterValues['search-filter'];
         }
-        if (filterValues['status-filter']) {
-            options.status = filterValues['status-filter'];
+        const statusVal = filterValues['status-filter'];
+        if (Array.isArray(statusVal) && statusVal.length > 0) {
+            options.status__in = statusVal.join(',');
+        } else if (!Array.isArray(statusVal) && statusVal) {
+            options.status = statusVal;
         }
         if (filterValues['customer-filter']) {
             options.customer = parseInt(filterValues['customer-filter']);
@@ -5535,8 +5536,11 @@ async function exportJobOrders(format) {
         if (filterValues['search-filter']) {
             options.search = filterValues['search-filter'];
         }
-        if (filterValues['status-filter']) {
-            options.status = filterValues['status-filter'];
+        const statusVal = filterValues['status-filter'];
+        if (Array.isArray(statusVal) && statusVal.length > 0) {
+            options.status__in = statusVal.join(',');
+        } else if (!Array.isArray(statusVal) && statusVal) {
+            options.status = statusVal;
         }
         if (filterValues['customer-filter']) {
             options.customer = parseInt(filterValues['customer-filter']);
