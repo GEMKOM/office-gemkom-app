@@ -1652,139 +1652,175 @@ window.viewJobOrder = async function(jobNo) {
         // Build Temel Bilgiler tab content
         const temelBilgilerHtml = `
             <div style="padding: 20px;">
-                <!-- Temel Bilgiler Section -->
+                <!-- Genel Bilgiler Section -->
                 <div class="mb-4">
-                    <h6 class="mb-3 d-flex align-items-center">
-                        <i class="fas fa-info-circle me-2 text-primary"></i>
-                        Temel Bilgiler
+                    <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                        <i class="fas fa-info-circle me-2"></i>
+                        Genel Bilgiler
                     </h6>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
+                    <div class="field-list">
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                                 <i class="fas fa-barcode me-1"></i>İş Emri No
-                            </label>
-                            <div class="field-value fw-medium">${jobOrder.job_no || '-'}</div>
+                            </div>
+                            <div class="field-value fw-medium flex-grow-1">${jobOrder.job_no || '-'}</div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                                 <i class="fas fa-heading me-1"></i>Başlık
-                            </label>
-                            <div class="field-value">${jobOrder.title || '-'}</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-users me-1"></i>Müşteri
-                            </label>
-                            <div class="field-value">${(jobOrder.customer_short_name || jobOrder.customer_name) ? `${jobOrder.customer_short_name || jobOrder.customer_name}${jobOrder.customer_code ? ' (' + jobOrder.customer_code + ')' : ''}` : '-'}</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-tasks me-1"></i>Durum
-                            </label>
-                            <div class="field-value">
-                                ${jobOrder.status_display ? `<span class="status-badge ${getStatusBadgeClass(jobOrder.status)}">${jobOrder.status_display}</span>` : '-'}
                             </div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-file-invoice me-1"></i>Müşteri Sipariş No
-                            </label>
-                            <div class="field-value">${jobOrder.customer_order_no || '-'}</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-hashtag me-1"></i>Miktar
-                            </label>
-                            <div class="field-value">${jobOrder.quantity || jobOrder.quantity === 0 ? jobOrder.quantity : '-'}</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-globe me-1"></i>Teslim Şekli
-                            </label>
-                            <div class="field-value">${jobOrder.incoterms || '-'}</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-calendar-check me-1"></i>Hedef Tamamlanma
-                            </label>
-                            <div class="field-value fw-bold">${formatDate(jobOrder.target_completion_date)}</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-play-circle me-1"></i>Başlangıç Tarihi
-                            </label>
-                            <div class="field-value">${formatDateTime(jobOrder.started_at)}</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-check-circle me-1"></i>Tamamlanma Tarihi
-                            </label>
-                            <div class="field-value">${formatDateTime(jobOrder.completed_at)}</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-percentage me-1"></i>Tamamlanma Oranı
-                            </label>
-                            <div class="field-value">
-                                ${jobOrder.completion_percentage ? `${parseFloat(jobOrder.completion_percentage)}%` : '0%'}
-                            </div>
+                            <div class="field-value flex-grow-1">${jobOrder.title || '-'}</div>
                         </div>
                         ${jobOrder.description ? `
-                        <div class="col-12">
-                            <label class="field-label small text-muted mb-1">
+                        <div class="field-row d-flex align-items-start py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                                 <i class="fas fa-align-left me-1"></i>Açıklama
-                            </label>
-                            <div class="field-value">${jobOrder.description}</div>
-                        </div>
-                        ` : ''}
-                        ${(jobOrder.estimated_cost || jobOrder.total_cost) ? `
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-calculator me-1"></i>Tahmini Maliyet
-                            </label>
-                            <div class="field-value">${formatCurrency(jobOrder.estimated_cost, jobOrder.cost_currency)}</div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
-                                <i class="fas fa-money-bill-wave me-1"></i>Toplam Maliyet
-                            </label>
-                            <div class="field-value">${formatCurrency(jobOrder.total_cost, jobOrder.cost_currency)}</div>
+                            </div>
+                            <div class="field-value flex-grow-1">${jobOrder.description}</div>
                         </div>
                         ` : ''}
                     </div>
                 </div>
                 
+                <!-- Müşteri Bilgileri Section -->
+                <div class="mb-4">
+                    <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                        <i class="fas fa-users me-2"></i>
+                        Müşteri Bilgileri
+                    </h6>
+                    <div class="field-list">
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-users me-1"></i>Müşteri
+                            </div>
+                            <div class="field-value flex-grow-1">${(jobOrder.customer_short_name || jobOrder.customer_name) ? `${jobOrder.customer_short_name || jobOrder.customer_name}${jobOrder.customer_code ? ' (' + jobOrder.customer_code + ')' : ''}` : '-'}</div>
+                        </div>
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-file-invoice me-1"></i>Müşteri Sipariş No
+                            </div>
+                            <div class="field-value flex-grow-1">${jobOrder.customer_order_no || '-'}</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Sipariş Detayları Section -->
+                <div class="mb-4">
+                    <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                        <i class="fas fa-clipboard-list me-2"></i>
+                        Sipariş Detayları
+                    </h6>
+                    <div class="field-list">
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-hashtag me-1"></i>Miktar
+                            </div>
+                            <div class="field-value flex-grow-1">${jobOrder.quantity || jobOrder.quantity === 0 ? jobOrder.quantity : '-'}</div>
+                        </div>
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-globe me-1"></i>Teslim Şekli
+                            </div>
+                            <div class="field-value flex-grow-1">${jobOrder.incoterms || '-'}</div>
+                        </div>
+                        ${jobOrder.total_weight_kg ? `
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-weight me-1"></i>Toplam Ağırlık
+                            </div>
+                            <div class="field-value flex-grow-1">${parseFloat(jobOrder.total_weight_kg).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} kg</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                <!-- Tarih Bilgileri Section -->
+                <div class="mb-4">
+                    <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                        <i class="fas fa-calendar-alt me-2"></i>
+                        Tarih Bilgileri
+                    </h6>
+                    <div class="field-list">
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-calendar-check me-1"></i>Hedef Tamamlanma
+                            </div>
+                            <div class="field-value fw-bold flex-grow-1">${formatDate(jobOrder.target_completion_date)}</div>
+                        </div>
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-play-circle me-1"></i>Başlangıç Tarihi
+                            </div>
+                            <div class="field-value flex-grow-1">${formatDateTime(jobOrder.started_at)}</div>
+                        </div>
+                        ${jobOrder.completed_at ? `
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-check-circle me-1"></i>Tamamlanma Tarihi
+                            </div>
+                            <div class="field-value flex-grow-1">${formatDateTime(jobOrder.completed_at)}</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                
+                ${jobOrder.total_cost ? `
+                <!-- Maliyet Bilgileri Section -->
+                <div class="mb-4">
+                    <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                        <i class="fas fa-money-bill-wave me-2"></i>
+                        Maliyet Bilgileri
+                    </h6>
+                    <div class="field-list">
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-money-bill-wave me-1"></i>Toplam Maliyet
+                            </div>
+                            <div class="field-value flex-grow-1">${formatCurrency(jobOrder.total_cost, jobOrder.cost_currency)}</div>
+                        </div>
+                        ${jobOrder.general_expenses_rate ? `
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-percent me-1"></i>Genel Gider Oranı
+                            </div>
+                            <div class="field-value flex-grow-1">${(parseFloat(jobOrder.general_expenses_rate) * 100).toFixed(2)}%</div>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+                ` : ''}
+                
                 <!-- Sistem Bilgileri Section -->
-                <div>
-                    <h6 class="mb-3 d-flex align-items-center">
-                        <i class="fas fa-info me-2 text-secondary"></i>
+                <div class="mb-4">
+                    <h6 class="mb-3 d-flex align-items-center text-secondary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                        <i class="fas fa-info-circle me-2"></i>
                         Sistem Bilgileri
                     </h6>
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
+                    <div class="field-list">
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                                 <i class="fas fa-calendar-plus me-1"></i>Oluşturulma Tarihi
-                            </label>
-                            <div class="field-value">${formatDateTime(jobOrder.created_at)}</div>
+                            </div>
+                            <div class="field-value flex-grow-1">${formatDateTime(jobOrder.created_at)}</div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                                 <i class="fas fa-user me-1"></i>Oluşturan
-                            </label>
-                            <div class="field-value">${jobOrder.created_by_name || '-'}</div>
+                            </div>
+                            <div class="field-value flex-grow-1">${jobOrder.created_by_name || '-'}</div>
                         </div>
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                                 <i class="fas fa-calendar-edit me-1"></i>Güncellenme Tarihi
-                            </label>
-                            <div class="field-value">${formatDateTime(jobOrder.updated_at)}</div>
+                            </div>
+                            <div class="field-value flex-grow-1">${formatDateTime(jobOrder.updated_at)}</div>
                         </div>
                         ${jobOrder.completed_by_name ? `
-                        <div class="col-md-6">
-                            <label class="field-label small text-muted mb-1">
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                                 <i class="fas fa-user-check me-1"></i>Tamamlayan
-                            </label>
-                            <div class="field-value">${jobOrder.completed_by_name}</div>
+                            </div>
+                            <div class="field-value flex-grow-1">${jobOrder.completed_by_name}</div>
                         </div>
                         ` : ''}
                     </div>
