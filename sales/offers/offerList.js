@@ -269,25 +269,12 @@ function initTable() {
                 onClick: (row) => viewOffer(row.id)
             },
             {
-                key: 'propose_price',
-                label: 'Fiyat Teklif Et',
-                title: 'Fiyat teklif et',
-                icon: 'fas fa-tag',
-                class: 'btn-outline-warning',
-                visible: (row) => !['won', 'cancelled'].includes(row.status),
-                onClick: async (row) => {
-                    offerId = row.id;
-                    offer = await getOffer(row.id);
-                    showPriceModal(refreshList);
-                }
-            },
-            {
                 key: 'submit_approval',
                 label: 'Onaya Gönder',
                 title: 'Onaya gönder (fiyat gerekli)',
                 icon: 'fas fa-gavel',
                 class: 'btn-outline-primary',
-                visible: (row) => row.status === 'pricing' && row.current_price && (row.current_price.amount != null),
+                visible: (row) => row.status === 'pricing' && row.total_price && parseFloat(row.total_price) > 0,
                 onClick: async (row) => {
                     offerId = row.id;
                     showSubmitApprovalConfirm(refreshList);
@@ -475,14 +462,15 @@ function initModals() {
     // Single delegation for tab-specific footer buttons (offer/offerId set when modal is opened)
     const footer = viewOfferModal.container?.querySelector('.modal-footer');
     if (footer) {
-        footer.addEventListener('click', (e) => {
+        footer.addEventListener('click', async (e) => {
             if (!offerId || !offer) return;
             const refreshOffer = () => viewOffer(offerId);
             if (e.target.closest('#edit-offer-btn')) { showEditModal(refreshOffer); return; }
             if (e.target.closest('#add-items-btn')) { showAddItemsModal(refreshOffer); return; }
             if (e.target.closest('#upload-file-btn')) { showFileUploadModal(refreshOffer); return; }
             if (e.target.closest('#send-consultations-btn')) { showConsultationModal(refreshOffer); return; }
-            if (e.target.closest('#propose-price-btn')) { showPriceModal(refreshOffer); return; }
+            if (e.target.closest('#save-prices-btn')) { await saveAllPrices(); await refreshOffer(); return; }
+            if (e.target.closest('#submit-approval-from-pricing-btn')) { showSubmitApprovalConfirm(refreshOffer); return; }
             if (e.target.closest('#submit-approval-btn')) { showSubmitApprovalConfirm(refreshOffer); return; }
             if (e.target.closest('#decide-btn')) { showDecisionModal(refreshOffer); return; }
             if (e.target.closest('#refresh-approval-btn')) { loadApprovalStatus(); return; }
@@ -611,12 +599,17 @@ async function loadTabDataIfNeeded(tabId) {
 
     if (tabId === 'pricing' && !offerTabLoaded.pricing) {
         try {
-            const data = await getPriceHistory(offerId);
-            offer.price_revisions = Array.isArray(data) ? data : (data.results || []);
+            const [priceHistoryData, itemsData] = await Promise.all([
+                getPriceHistory(offerId),
+                getOfferItems(offerId)
+            ]);
+            offer.price_revisions = Array.isArray(priceHistoryData) ? priceHistoryData : (priceHistoryData.results || []);
+            offer.items = Array.isArray(itemsData) ? itemsData : (itemsData.results || []);
             offerTabLoaded.pricing = true;
             pane.innerHTML = `<div class="offer-tab-content">${buildPricingTab()}</div>`;
+            attachPricingTabListeners();
         } catch (e) {
-            pane.innerHTML = `<div class="offer-tab-content"><div class="text-danger text-center py-4">Fiyat geçmişi yüklenemedi.</div></div>`;
+            pane.innerHTML = `<div class="offer-tab-content"><div class="text-danger text-center py-4">Fiyatlandırma verileri yüklenemedi.</div></div>`;
         }
         return;
     }
@@ -781,10 +774,11 @@ function renderApprovalWorkflow(approval) {
 
 // Genel tab: structured data + edit & outcome actions only
 function buildGenelTab(statusLabel, statusColor) {
-    const priceText = offer.current_price
-        ? `${CURRENCY_SYMBOLS[offer.current_price.currency] || offer.current_price.currency} ${parseFloat(offer.current_price.amount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`
+    const totalPrice = offer.total_price ? parseFloat(offer.total_price) : 0;
+    const totalWeight = offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0;
+    const priceText = totalPrice > 0 
+        ? `€ ${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`
         : '—';
-    const priceSub = offer.current_price ? (REVISION_TYPE_MAP[offer.current_price.revision_type] || '') : '';
 
     let html = `
         <div class="px-2">
@@ -821,9 +815,12 @@ function buildGenelTab(statusLabel, statusColor) {
                     <div class="field-value">${offer.offer_expiry_date ? formatDate(offer.offer_expiry_date) : '—'}</div>
                 </div>
                 <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-money-bill-wave me-1"></i>Güncel Fiyat</label>
+                    <label class="field-label small text-muted mb-1"><i class="fas fa-money-bill-wave me-1"></i>Toplam Fiyat</label>
                     <div class="field-value fw-bold text-primary">${priceText}</div>
-                    ${priceSub ? `<small class="text-muted">${priceSub}</small>` : ''}
+                </div>
+                <div class="col-md-6">
+                    <label class="field-label small text-muted mb-1"><i class="fas fa-weight me-1"></i>Toplam Ağırlık</label>
+                    <div class="field-value fw-medium">${totalWeight > 0 ? `${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kg` : '—'}</div>
                 </div>
                 <div class="col-md-6">
                     <label class="field-label small text-muted mb-1"><i class="fas fa-list me-1"></i>Kalem Sayısı</label>
@@ -1152,61 +1149,261 @@ function renderConsultationsTable() {
     });
 }
 
+// Flatten items tree for pricing display (show all items)
+function flattenItemsForPricing(items) {
+    const flattened = [];
+    function walk(nodes) {
+        (nodes || []).forEach(node => {
+            flattened.push(node);
+            if (node.children && node.children.length > 0) {
+                walk(node.children);
+            }
+        });
+    }
+    walk(items);
+    return flattened;
+}
+
 function buildPricingTab() {
+    const allItems = offer.items || [];
+    // Flatten items to show all priceable items
+    const items = flattenItemsForPricing(allItems);
     const revisions = offer.price_revisions || [];
-    const emptyState = `
-        <h6 class="mb-3 d-flex align-items-center">
-            <i class="fas fa-coins me-2 text-primary"></i>Fiyatlandırma Geçmişi
-        </h6>
-        <div class="text-center text-muted py-4">
-            <i class="fas fa-coins fa-2x mb-2 d-block"></i>
-            Henüz fiyat teklifi yapılmamış. Fiyatlandırma aşamasında teklif tutarını girebilirsiniz.
-        </div>`;
-    if (revisions.length === 0) return emptyState;
-
+    const totalPrice = offer.total_price ? parseFloat(offer.total_price) : 0;
+    const totalWeight = offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0;
+    
     let html = `
-        <h6 class="mb-3 d-flex align-items-center">
-            <i class="fas fa-coins me-2 text-primary"></i>Fiyatlandırma Geçmişi
-        </h6>`;
-
-    revisions.forEach((r, index) => {
-        const sym = CURRENCY_SYMBOLS[r.currency] || r.currency;
-        const counterSym = CURRENCY_SYMBOLS[r.counter_currency] || r.counter_currency || '';
-        const isCurrent = r.is_current;
-        const revisionLabel = r.revision_type_display || REVISION_TYPE_MAP[r.revision_type] || '';
-        const borderClass = isCurrent ? 'border-primary border-2' : 'border-secondary';
-        html += `
-        <div class="card mb-3 ${borderClass}">
-            <div class="card-body">
-                <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-                    <div class="d-flex align-items-center flex-wrap gap-2">
-                        <span class="badge bg-light text-dark">${revisionLabel}</span>
-                        ${isCurrent ? '<span class="badge bg-success">Güncel</span>' : ''}
-                    </div>
-                    <small class="text-muted">${formatDateTime(r.created_at)} · ${r.created_by_name || '—'}</small>
+        <div class="mb-4">
+            <h6 class="mb-3 d-flex align-items-center">
+                <i class="fas fa-tag me-2 text-primary"></i>Kalem Fiyatlandırması
+            </h6>
+            ${items.length === 0 ? `
+                <div class="text-center text-muted py-4">
+                    <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                    Henüz kalem eklenmemiş. Önce kalemler sekmesinden kalem ekleyin.
                 </div>
-                <div class="d-flex align-items-baseline flex-wrap gap-2 mb-1">
-                    <span class="fs-5 fw-bold ${isCurrent ? 'text-primary' : ''}">${sym} ${parseFloat(r.amount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                </div>`;
-        if (r.counter_amount != null && parseFloat(r.counter_amount) > 0) {
-            html += `
-                <div class="mt-2 pt-2 border-top border-light">
-                    <small class="text-muted">Karşı teklif:</small>
-                    <span class="ms-2 text-warning fw-medium">${counterSym} ${parseFloat(r.counter_amount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                </div>`;
-        }
-        if (r.notes) {
-            html += `
-                <div class="mt-2 pt-2 border-top border-light">
-                    <small class="text-muted d-block mb-1">Yorum</small>
-                    <p class="mb-0 small">${r.notes}</p>
-                </div>`;
-        }
+            ` : `
+                <div class="table-responsive">
+                    <table class="table table-bordered">
+                        <thead class="table-light">
+                            <tr>
+                                <th style="width: 40%;">Kalem</th>
+                                <th style="width: 10%;" class="text-center">Adet</th>
+                                <th style="width: 20%;">Birim Fiyat (€)</th>
+                                <th style="width: 15%;">Ağırlık (kg)</th>
+                                <th style="width: 15%;" class="text-end">Ara Toplam (€)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="pricing-items-tbody">
+                            ${items.map(item => {
+                                const unitPrice = item.unit_price ? parseFloat(item.unit_price) : '';
+                                const weightKg = item.weight_kg ? parseFloat(item.weight_kg) : '';
+                                const subtotal = item.subtotal ? parseFloat(item.subtotal) : '';
+                                const quantity = item.quantity || 1;
+                                const title = item.resolved_title || item.title_override || item.title || '-';
+                                return `
+                                    <tr class="pricing-item-row" data-item-id="${item.id}">
+                                        <td>${escapeHtml(title)}</td>
+                                        <td class="text-center">${quantity}</td>
+                                        <td>
+                                            <input type="number" 
+                                                   class="form-control form-control-sm pricing-unit-price" 
+                                                   data-item-id="${item.id}"
+                                                   value="${unitPrice}" 
+                                                   placeholder="0.00" 
+                                                   step="0.01" 
+                                                   min="0">
+                                        </td>
+                                        <td>
+                                            <input type="number" 
+                                                   class="form-control form-control-sm pricing-weight-kg" 
+                                                   data-item-id="${item.id}"
+                                                   value="${weightKg}" 
+                                                   placeholder="0.00" 
+                                                   step="0.01" 
+                                                   min="0">
+                                        </td>
+                                        <td class="text-end">
+                                            <span class="pricing-subtotal" data-item-id="${item.id}">
+                                                ${subtotal ? subtotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                        <tfoot class="table-light">
+                            <tr>
+                                <th colspan="4" class="text-end">Toplam:</th>
+                                <th class="text-end">
+                                    <span id="pricing-total-price">${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span> €
+                                </th>
+                            </tr>
+                            <tr>
+                                <th colspan="4" class="text-end">Toplam Ağırlık:</th>
+                                <th class="text-end">
+                                    <span id="pricing-total-weight">${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span> kg
+                                </th>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            `}
+        </div>
+    `;
+
+    if (revisions.length > 0) {
         html += `
-            </div>
-        </div>`;
-    });
+            <div class="mt-4">
+                <h6 class="mb-3 d-flex align-items-center">
+                    <i class="fas fa-history me-2 text-primary"></i>Fiyatlandırma Geçmişi
+                </h6>`;
+        revisions.forEach((r) => {
+            const sym = CURRENCY_SYMBOLS[r.currency] || r.currency;
+            const counterSym = CURRENCY_SYMBOLS[r.counter_currency] || r.counter_currency || '';
+            const isCurrent = r.is_current;
+            const revisionLabel = r.revision_type_display || REVISION_TYPE_MAP[r.revision_type] || '';
+            const borderClass = isCurrent ? 'border-primary border-2' : 'border-secondary';
+            html += `
+            <div class="card mb-3 ${borderClass}">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
+                        <div class="d-flex align-items-center flex-wrap gap-2">
+                            <span class="badge bg-light text-dark">${revisionLabel}</span>
+                            ${isCurrent ? '<span class="badge bg-success">Güncel</span>' : ''}
+                        </div>
+                        <small class="text-muted">${formatDateTime(r.created_at)} · ${r.created_by_name || '—'}</small>
+                    </div>
+                    <div class="d-flex align-items-baseline flex-wrap gap-2 mb-1">
+                        <span class="fs-5 fw-bold ${isCurrent ? 'text-primary' : ''}">${sym} ${parseFloat(r.amount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    </div>`;
+            if (r.counter_amount != null && parseFloat(r.counter_amount) > 0) {
+                html += `
+                    <div class="mt-2 pt-2 border-top border-light">
+                        <small class="text-muted">Karşı teklif:</small>
+                        <span class="ms-2 text-warning fw-medium">${counterSym} ${parseFloat(r.counter_amount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
+                    </div>`;
+            }
+            if (r.notes) {
+                html += `
+                    <div class="mt-2 pt-2 border-top border-light">
+                        <small class="text-muted d-block mb-1">Yorum</small>
+                        <p class="mb-0 small">${r.notes}</p>
+                    </div>`;
+            }
+            html += `
+                </div>
+            </div>`;
+        });
+        html += `</div>`;
+    }
+
     return html;
+}
+
+function attachPricingTabListeners() {
+    const tbody = document.getElementById('pricing-items-tbody');
+    if (!tbody) return;
+
+    // Only update subtotal display on input (no auto-save)
+    tbody.addEventListener('input', (e) => {
+        const input = e.target;
+        if (!input.classList.contains('pricing-unit-price') && !input.classList.contains('pricing-weight-kg')) return;
+        
+        const row = input.closest('tr');
+        const quantity = parseInt(row.querySelector('td:nth-child(2)').textContent.trim(), 10) || 1;
+        
+        const unitPriceInput = row.querySelector('.pricing-unit-price');
+        const subtotalEl = row.querySelector('.pricing-subtotal');
+        
+        const unitPrice = unitPriceInput.value ? parseFloat(unitPriceInput.value) : null;
+        
+        // Update subtotal display immediately (for UI feedback only)
+        if (unitPrice !== null && !isNaN(unitPrice)) {
+            const subtotal = unitPrice * quantity;
+            if (subtotalEl) {
+                subtotalEl.textContent = subtotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+            }
+        } else if (subtotalEl) {
+            subtotalEl.textContent = '-';
+        }
+    });
+}
+
+async function saveAllPrices() {
+    const tbody = document.getElementById('pricing-items-tbody');
+    if (!tbody) return;
+
+    const rows = tbody.querySelectorAll('.pricing-item-row');
+    const savePromises = [];
+
+    for (const row of rows) {
+        const itemId = parseInt(row.dataset.itemId, 10);
+        const unitPriceInput = row.querySelector('.pricing-unit-price');
+        const weightInput = row.querySelector('.pricing-weight-kg');
+        
+        const unitPrice = unitPriceInput.value ? parseFloat(unitPriceInput.value) : null;
+        const weightKg = weightInput.value ? parseFloat(weightInput.value) : null;
+        
+        // Prepare data for API (only send fields that have values)
+        const data = {};
+        if (unitPrice !== null && !isNaN(unitPrice) && unitPrice >= 0) {
+            data.unit_price = unitPrice.toFixed(2);
+        }
+        if (weightKg !== null && !isNaN(weightKg) && weightKg >= 0) {
+            data.weight_kg = weightKg.toFixed(2);
+        }
+        
+        // Only save if there's data to send
+        if (Object.keys(data).length > 0) {
+            savePromises.push(patchOfferItem(offerId, itemId, data));
+        }
+    }
+
+    if (savePromises.length === 0) {
+        showNotification('Kaydedilecek fiyat bulunamadı', 'info');
+        return;
+    }
+
+    try {
+        await Promise.all(savePromises);
+        // Refresh offer to get updated totals and items
+        const updatedOffer = await getOffer(offerId);
+        offer.total_price = updatedOffer.total_price;
+        offer.total_weight_kg = updatedOffer.total_weight_kg;
+        offer.items = updatedOffer.items || [];
+        
+        // Update totals display in pricing tab
+        const totalPriceEl = document.getElementById('pricing-total-price');
+        const totalWeightEl = document.getElementById('pricing-total-weight');
+        if (totalPriceEl) {
+            totalPriceEl.textContent = (offer.total_price ? parseFloat(offer.total_price) : 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+        }
+        if (totalWeightEl) {
+            totalWeightEl.textContent = (offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+        }
+        
+        // Update all subtotals and input values to match server response
+        const allItems = flattenItemsForPricing(offer.items);
+        allItems.forEach(item => {
+            const subtotalEl = document.querySelector(`.pricing-subtotal[data-item-id="${item.id}"]`);
+            if (subtotalEl) {
+                subtotalEl.textContent = item.subtotal ? parseFloat(item.subtotal).toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-';
+            }
+            const unitPriceInput = document.querySelector(`.pricing-unit-price[data-item-id="${item.id}"]`);
+            const weightInput = document.querySelector(`.pricing-weight-kg[data-item-id="${item.id}"]`);
+            if (unitPriceInput) {
+                unitPriceInput.value = item.unit_price ? parseFloat(item.unit_price).toFixed(2) : '';
+            }
+            if (weightInput) {
+                weightInput.value = item.weight_kg ? parseFloat(item.weight_kg).toFixed(2) : '';
+            }
+        });
+        
+        showNotification('Fiyatlar kaydedildi', 'success');
+    } catch (e) {
+        showNotification(parseError(e, 'Fiyatlar kaydedilirken hata oluştu'), 'error');
+    }
 }
 
 function buildApprovalTab() {
@@ -1235,7 +1432,7 @@ function getOfferModalFooterHtml(tabId) {
     const closed = CLOSED_STATUSES.includes(s);
     const canPropose = !['won', 'cancelled'].includes(s);
     const canSendConsultations = !['won', 'lost', 'cancelled'].includes(s);
-    const canSubmitApproval = s === 'pricing' && offer.current_price;
+    const canSubmitApproval = s === 'pricing' && offer.total_price && parseFloat(offer.total_price) > 0;
     const canDecide = s === 'pending_approval';
     const hasRound = offer.approval_round > 0;
 
@@ -1252,7 +1449,8 @@ function getOfferModalFooterHtml(tabId) {
     } else if (tabId === 'consultations') {
         if (canSendConsultations) parts.push(`<button type="button" class="${actionClass}" id="send-consultations-btn"><i class="fas fa-paper-plane me-1"></i>Departman Görüşü Gönder</button>`);
     } else if (tabId === 'pricing') {
-        if (canPropose) parts.push(`<button type="button" class="${actionClass}" id="propose-price-btn"><i class="fas fa-tag me-1"></i>Fiyat Teklif Et</button>`);
+        if (editable) parts.push(`<button type="button" class="${actionClass}" id="save-prices-btn"><i class="fas fa-save me-1"></i>Fiyatları Kaydet</button>`);
+        if (canSubmitApproval) parts.push(`<button type="button" class="${actionClass}" id="submit-approval-from-pricing-btn"><i class="fas fa-gavel me-1"></i>Onaya Gönder</button>`);
     } else if (tabId === 'approval') {
         if (canSubmitApproval) parts.push(`<button type="button" class="${actionClass}" id="submit-approval-btn"><i class="fas fa-gavel me-1"></i>Onaya Gönder</button>`);
         if (canDecide) parts.push(`<button type="button" class="${actionClass}" id="decide-btn"><i class="fas fa-check me-1"></i>Karar Ver</button>`);

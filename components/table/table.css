@@ -94,6 +94,29 @@ tr[draggable="true"]:hover {
     position: relative;
 }
 
+/* Sticky Header Support */
+.table-sticky-header.table-responsive {
+    position: relative;
+}
+
+.table-sticky-header thead.sticky-thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.table-sticky-header thead.sticky-thead th {
+    position: sticky;
+    top: 0;
+    background: #f8f9fa !important;
+    z-index: 11;
+    box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+}
+
+.table-sticky-header thead.sticky-thead th.sortable:hover {
+    background: #e9ecef !important;
+}
+
 .table th.sortable {
     cursor: pointer;
     transition: background-color 0.2s ease;

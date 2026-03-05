@@ -839,6 +839,8 @@ function initializeTableComponent() {
                 visible: (row) => {
                     // Hide for procurement_item tasks (with or without purchase_order_id)
                     if (row.task_type === 'procurement_item') return false;
+                    // Hide for sales_consult tasks
+                    if (row.task_type === 'sales_consult') return false;
                     return row.status !== 'completed' && row.status !== 'skipped' && row.type !== 'machining_part' && row.type !== 'cnc_part';
                 }
             }
@@ -2736,6 +2738,17 @@ async function viewTaskDetails(taskId) {
 function getAvailableActions(task) {
     const actions = [];
     
+    // Special handling for sales_consult tasks - only show consultation tab
+    if (task.task_type === 'sales_consult') {
+        actions.push({
+            key: 'consultation',
+            label: 'Teklif Danışma',
+            icon: 'fas fa-handshake',
+            handler: 'consultation'
+        });
+        return actions;
+    }
+    
     // Edit action - available for most tasks
     if (task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
         actions.push({
@@ -2870,8 +2883,8 @@ function getAvailableActions(task) {
         });
     }
 
-    // Consultation tab - show for tasks linked to a sales offer
-    if (task.is_consultation) {
+    // Consultation tab - show for tasks linked to a sales offer (but not sales_consult, which is handled above)
+    if (task.is_consultation && task.task_type !== 'sales_consult') {
         actions.unshift({
             key: 'consultation',
             label: 'Teklif Danışma',
@@ -3759,13 +3772,7 @@ async function renderConsultationTab(task) {
                             <input type="file" class="form-control form-control-sm" id="consultation-file-input">
                         </div>
                         <div class="col-md-4">
-                            <select class="form-select form-select-sm" id="consultation-file-type">
-                                <option value="report">Rapor</option>
-                                <option value="drawing">Çizim</option>
-                                <option value="specification">Şartname</option>
-                                <option value="photo">Fotoğraf</option>
-                                <option value="other">Diğer</option>
-                            </select>
+                            <input type="text" class="form-control form-control-sm" id="consultation-file-name" placeholder="Dosya adı (opsiyonel)">
                         </div>
                         <div class="col-md-3">
                             <button class="btn btn-sm btn-success w-100" id="consultation-upload-btn" data-task-id="${task.id}"><i class="fas fa-upload me-1"></i>Yükle</button>
@@ -3806,14 +3813,15 @@ function setupConsultationTabListeners(task) {
 
     contentContainer.querySelector('#consultation-upload-btn')?.addEventListener('click', async () => {
         const fileInput = contentContainer.querySelector('#consultation-file-input');
-        const fileType = contentContainer.querySelector('#consultation-file-type')?.value || 'report';
+        const fileNameInput = contentContainer.querySelector('#consultation-file-name');
         if (!fileInput || !fileInput.files[0]) {
             showNotification('Lütfen dosya seçin', 'warning');
             return;
         }
         try {
             const { uploadTaskFile } = await import('../../apis/sales/departmentTasks.js');
-            await uploadTaskFile(task.id, fileInput.files[0], fileType);
+            const fileName = fileNameInput?.value?.trim() || '';
+            await uploadTaskFile(task.id, fileInput.files[0], fileName);
             showNotification('Dosya yüklendi', 'success');
             // Refresh the consultation tab
             contentContainer.dataset.loaded = 'false';
@@ -3821,6 +3829,9 @@ function setupConsultationTabListeners(task) {
             contentContainer.innerHTML = await renderConsultationTab(updatedTask);
             contentContainer.dataset.loaded = 'true';
             setupConsultationTabListeners(updatedTask);
+            // Clear file input
+            fileInput.value = '';
+            if (fileNameInput) fileNameInput.value = '';
         } catch (e) {
             showNotification('Dosya yükleme hatası', 'error');
         }

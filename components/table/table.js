@@ -37,6 +37,7 @@ export class TableComponent {
             striped: false,
             bordered: false,
             small: false,
+            stickyHeader: false, // Make table headers sticky when scrolling
             
             // Callbacks
             onRowClick: null,
@@ -124,9 +125,9 @@ export class TableComponent {
                     </div>
                 </div>
                 <div class="card-body">
-                    ${this.options.responsive ? '<div class="table-responsive">' : ''}
-                        <table class="${tableClass}" id="${this.containerId}-table">
-                            <thead>
+                    ${this.options.responsive ? `<div class="table-responsive ${this.options.stickyHeader ? 'table-sticky-header' : ''}">` : ''}
+                        <table class="${tableClass} ${this.options.stickyHeader ? 'table-sticky-header' : ''}" id="${this.containerId}-table">
+                            <thead class="${this.options.stickyHeader ? 'sticky-thead' : ''}">
                                 ${this.renderHeader()}
                             </thead>
                             <tbody id="${this.containerId}-tbody">

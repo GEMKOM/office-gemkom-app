@@ -1,7 +1,7 @@
 import { authedFetch } from '../../authService.js';
 import { backendBase } from '../../base.js';
 
-const BASE = `${backendBase}/department-tasks`;
+const BASE = `${backendBase}/projects/department-tasks`;
 
 export const TASK_FILE_TYPE_OPTIONS = [
     { value: 'drawing', label: 'Çizim' },
@@ -35,7 +35,9 @@ export async function getConsultationTask(id) {
 
 export async function startTask(id) {
     const response = await authedFetch(`${BASE}/${id}/start/`, {
-        method: 'POST'
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
     });
     if (!response.ok) {
         const err = await response.json().catch(() => ({}));
@@ -57,12 +59,10 @@ export async function completeTask(id, notes = '') {
     return response.json();
 }
 
-export async function uploadTaskFile(taskId, file, fileType, name = '', description = '') {
+export async function uploadTaskFile(taskId, file, name = '') {
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('file_type', fileType);
     if (name) formData.append('name', name);
-    if (description) formData.append('description', description);
 
     const response = await authedFetch(`${BASE}/${taskId}/upload-file/`, {
         method: 'POST',

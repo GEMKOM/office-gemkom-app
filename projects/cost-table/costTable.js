@@ -246,17 +246,36 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'title', label: 'Başlık', sortable: false, formatter: (v, row) => (v || '-') },
             { field: 'customer_name', label: 'Müşteri', sortable: false, formatter: v => (v || '-') },
             { field: 'status', label: 'Durum', sortable: true, formatter: v => statusBadge(v) },
-            { field: 'labor_cost', label: 'İşçilik', sortable: true, formatter: formatMoney },
+            { 
+                field: 'labor_cost', 
+                label: 'İşçilik + Personel Gen. Gider', 
+                sortable: true, 
+                formatter: (v, row) => {
+                    const labor = typeof v === 'string' ? parseFloat(v) : (v || 0);
+                    const overhead = typeof row.employee_overhead_cost === 'string' ? parseFloat(row.employee_overhead_cost) : (row.employee_overhead_cost || 0);
+                    const total = labor + overhead;
+                    return formatMoney(total);
+                }
+            },
             { field: 'material_cost', label: 'Malzeme', sortable: true, formatter: formatMoney },
             { field: 'subcontractor_cost', label: 'Taşeron', sortable: true, formatter: formatMoney },
-            { field: 'paint_cost', label: 'Boya', sortable: true, formatter: formatMoney },
+            { 
+                field: 'paint_cost', 
+                label: 'Boya + Boya Malzemesi', 
+                sortable: true, 
+                formatter: (v, row) => {
+                    const paint = typeof v === 'string' ? parseFloat(v) : (v || 0);
+                    const paintMaterial = typeof row.paint_material_cost === 'string' ? parseFloat(row.paint_material_cost) : (row.paint_material_cost || 0);
+                    const total = paint + paintMaterial;
+                    return formatMoney(total);
+                }
+            },
             { field: 'qc_cost', label: 'KK', sortable: true, formatter: formatMoney },
             { field: 'shipping_cost', label: 'Sevkiyat', sortable: true, formatter: formatMoney },
-            { field: 'paint_material_cost', label: 'Boya Malzemesi', sortable: true, formatter: formatMoney },
             { field: 'general_expenses_cost', label: 'Genel Giderler', sortable: true, formatter: formatMoney },
-            { field: 'employee_overhead_cost', label: 'Personel Gen. Gider', sortable: true, formatter: formatMoney },
+            { field: 'price_per_kg', label: 'Kg Fiyatı', sortable: true, formatter: v => (v != null && v !== '' ? `€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '<span class="text-muted">-</span>') },
+            { field: 'total_weight_kg', label: 'Toplam Ağırlık (kg)', sortable: true, formatter: v => (v != null && v !== '' ? parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '<span class="text-muted">-</span>') },
             { field: 'actual_total_cost', label: 'Toplam Maliyet', sortable: true, formatter: v => `<span class="fw-bold">${formatMoney(v)}</span>` },
-            { field: 'estimated_cost', label: 'Tahmini', sortable: true, formatter: formatMoney },
             { field: 'selling_price', label: 'Satış Fiyatı', sortable: true, formatter: (v, row) => (v != null && v !== '' ? formatMoney(v) + (row.selling_price_currency ? ` <small class="text-muted">${row.selling_price_currency}</small>` : '') : '<span class="text-muted">-</span>') },
             { field: 'margin_eur', label: 'Marj (€)', sortable: true, formatter: v => (v != null && v !== '' ? formatMoney(v) : '<span class="text-muted">-</span>') },
             { field: 'margin_pct', label: 'Marj %', sortable: true, formatter: v => (v != null && v !== '' ? formatPct(v) : '<span class="text-muted">-</span>') },
@@ -288,7 +307,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         refreshable: true,
         onRefresh: () => loadData(),
         exportable: true,
-        exportFileName: 'maliyet-tablosu'
+        exportFileName: 'maliyet-tablosu',
+        stickyHeader: true
     });
 
     await loadData();
