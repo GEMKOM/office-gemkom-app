@@ -410,6 +410,45 @@ export class TableComponent {
             
             if (!isVisible) return '';
             
+            // Handle dropdown action type
+            if (action.type === 'dropdown' && action.subActions) {
+                const visibleSubActions = action.subActions.filter(subAction => {
+                    const subVisible = typeof subAction.visible === 'function' ? 
+                        subAction.visible(row, rowIndex) : 
+                        (subAction.visible !== false);
+                    return subVisible;
+                });
+                
+                if (visibleSubActions.length === 0) return '';
+                
+                const dropdownId = `${this.containerId}-dropdown-${rowIndex}`;
+                return `
+                    <div class="dropdown" style="display: inline-block;">
+                        <button type="button" class="btn btn-sm ${action.class || 'btn-outline-secondary'}" 
+                                id="${dropdownId}-btn"
+                                data-bs-toggle="dropdown" 
+                                aria-expanded="false"
+                                title="${action.title || action.label || 'Diğer İşlemler'}">
+                            <i class="${action.icon || 'fas fa-ellipsis-v'}"></i>
+                        </button>
+                        <ul class="dropdown-menu" aria-labelledby="${dropdownId}-btn">
+                            ${visibleSubActions.map(subAction => {
+                                const subOnClick = subAction.onClick ? 
+                                    `onclick="event.preventDefault(); event.stopPropagation(); document.getElementById('${this.containerId}').dispatchEvent(new CustomEvent('actionClick', {detail: {action: '${subAction.key}', index: ${rowIndex}}})); const dropdownInstance = bootstrap.Dropdown.getInstance(document.getElementById('${dropdownId}-btn')); if (dropdownInstance) dropdownInstance.hide();"` : '';
+                                return `
+                                    <li>
+                                        <a class="dropdown-item" href="#" ${subOnClick}>
+                                            <i class="${subAction.icon} me-2"></i>${subAction.label}
+                                        </a>
+                                    </li>
+                                `;
+                            }).join('')}
+                        </ul>
+                    </div>
+                `;
+            }
+            
+            // Regular button action
             const onClick = action.onClick ? 
                 `onclick="event.preventDefault(); event.stopPropagation(); document.getElementById('${this.containerId}').dispatchEvent(new CustomEvent('actionClick', {detail: {action: '${action.key}', index: ${rowIndex}}}))"` : '';
             
@@ -752,7 +791,22 @@ export class TableComponent {
         this.container.addEventListener('actionClick', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            const action = this.options.actions.find(a => a.key === e.detail.action);
+            // First try to find in main actions
+            let action = this.options.actions.find(a => a.key === e.detail.action);
+            
+            // If not found, check sub-actions in dropdowns
+            if (!action) {
+                for (const mainAction of this.options.actions) {
+                    if (mainAction.type === 'dropdown' && mainAction.subActions) {
+                        const subAction = mainAction.subActions.find(sa => sa.key === e.detail.action);
+                        if (subAction) {
+                            action = subAction;
+                            break;
+                        }
+                    }
+                }
+            }
+            
             if (action && action.onClick) {
                 const index = e.detail.index;
                 const row = this.options.data[index];

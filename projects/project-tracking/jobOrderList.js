@@ -733,46 +733,7 @@ function initializeTableComponent() {
             await loadJobOrders();
         },
         actions: [
-            {
-                key: 'edit',
-                label: 'Düzenle',
-                icon: 'fas fa-edit',
-                class: 'btn-outline-primary',
-                onClick: (row) => {
-                    editJobOrder(row.job_no);
-                },
-                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
-            },
-            {
-                key: 'view',
-                label: 'Detay',
-                icon: 'fas fa-eye',
-                class: 'btn-outline-info',
-                onClick: (row) => {
-                    viewJobOrder(row.job_no);
-                },
-                visible: () => true // Always show detail button
-            },
-            {
-                key: 'create-child',
-                label: 'Alt İş Oluştur',
-                icon: 'fas fa-plus-circle',
-                class: 'btn-outline-success',
-                onClick: (row) => {
-                    showCreateChildJobOrderModal(row.job_no);
-                },
-                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
-            },
-            {
-                key: 'add-department-task',
-                label: 'Görev Ekle',
-                icon: 'fas fa-tasks',
-                class: 'btn-outline-primary',
-                onClick: (row) => {
-                    showAddDepartmentTaskModal(row.job_no);
-                },
-                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
-            },
+            // Primary actions: start, pause, cancel, detail
             {
                 key: 'start',
                 label: 'Başlat',
@@ -794,16 +755,6 @@ function initializeTableComponent() {
                 visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status === 'active'
             },
             {
-                key: 'resume',
-                label: 'Devam Et',
-                icon: 'fas fa-play-circle',
-                class: 'btn-outline-info',
-                onClick: (row) => {
-                    resumeJobOrder(row.job_no);
-                },
-                visible: (row) => !HIDE_ACTION_BUTTONS && row.status === 'on_hold'
-            },
-            {
                 key: 'cancel',
                 label: 'İptal Et',
                 icon: 'fas fa-times',
@@ -814,14 +765,70 @@ function initializeTableComponent() {
                 visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
             },
             {
-                key: 'recalculate-progress',
-                label: 'İlerlemeyi Yeniden Hesapla',
-                icon: 'fas fa-calculator',
+                key: 'view',
+                label: 'Detay',
+                icon: 'fas fa-eye',
                 class: 'btn-outline-info',
                 onClick: (row) => {
-                    recalculateProgress(row.job_no);
+                    viewJobOrder(row.job_no);
                 },
-                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'cancelled'
+                visible: () => true // Always show detail button
+            },
+            // Dropdown for secondary actions
+            {
+                type: 'dropdown',
+                key: 'more-actions',
+                label: 'Diğer İşlemler',
+                icon: 'fas fa-ellipsis-v',
+                class: 'btn-outline-secondary',
+                subActions: [
+                    {
+                        key: 'edit',
+                        label: 'Düzenle',
+                        icon: 'fas fa-edit',
+                        onClick: (row) => {
+                            editJobOrder(row.job_no);
+                        },
+                        visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                    },
+                    {
+                        key: 'create-child',
+                        label: 'Alt İş Oluştur',
+                        icon: 'fas fa-plus-circle',
+                        onClick: (row) => {
+                            showCreateChildJobOrderModal(row.job_no);
+                        },
+                        visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                    },
+                    {
+                        key: 'add-department-task',
+                        label: 'Görev Ekle',
+                        icon: 'fas fa-tasks',
+                        onClick: (row) => {
+                            showAddDepartmentTaskModal(row.job_no);
+                        },
+                        visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                    },
+                    {
+                        key: 'resume',
+                        label: 'Devam Et',
+                        icon: 'fas fa-play-circle',
+                        onClick: (row) => {
+                            resumeJobOrder(row.job_no);
+                        },
+                        visible: (row) => !HIDE_ACTION_BUTTONS && row.status === 'on_hold'
+                    },
+                    {
+                        key: 'recalculate-progress',
+                        label: 'İlerlemeyi Yeniden Hesapla',
+                        icon: 'fas fa-calculator',
+                        onClick: (row) => {
+                            recalculateProgress(row.job_no);
+                        },
+                        visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'cancelled'
+                    }
+                ],
+                visible: () => !HIDE_ACTION_BUTTONS // Visibility of sub-actions is handled in renderActions
             }
         ],
         emptyMessage: 'İş emri bulunamadı',
