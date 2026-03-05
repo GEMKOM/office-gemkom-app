@@ -5718,6 +5718,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                         title: task.title || 'Yeni Görev',
                         sequence: task.sequence ? parseInt(task.sequence) : null,
                         description: task.description || '',
+                        weight: task.weight || 10, // Include weight, default to 10
                         target_start_date: task.target_start_date || null,
                         target_completion_date: task.target_completion_date || null,
                         notes: task.notes || null
@@ -5811,6 +5812,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                             title: childTask.title || 'Alt görev',
                             sequence: childTask.sequence ? parseInt(childTask.sequence) : null,
                             description: childTask.description || '',
+                            weight: childTask.weight || 10, // Include weight, default to 10
                             target_start_date: childTask.target_start_date || null,
                             target_completion_date: childTask.target_completion_date || null,
                             notes: childTask.notes || null
@@ -5974,6 +5976,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                                 sequence: item.sequence || (window.tasksList.length + itemIndex + 1),
                                 description: item.description || '',
                                 depends_on: item.depends_on || [],
+                                weight: item.weight || 10, // Include weight from template, default to 10
                                 fromTemplate: true,
                                 templateItemId: item.id, // Store original template item ID for mapping
                                 children: item.children || [], // Store children for later processing
@@ -6008,6 +6011,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                                         sequence: child.sequence || (childIndex + 1),
                                         description: child.description || '',
                                         depends_on: [],
+                                        weight: child.weight || 10, // Include weight from template, default to 10
                                         fromTemplate: true,
                                         templateItemId: child.id,
                                         parentTemplateItemId: mainTask.templateItemId, // Reference to parent template item
@@ -6103,6 +6107,7 @@ function renderTasksTable() {
                         <th style="width: 60px;">Sıra</th>
                         <th>Başlık</th>
                         <th>Departman</th>
+                        <th style="width: 100px;">Ağırlık</th>
                         <th style="width: 200px;">Bağımlılıklar</th>
                         <th style="width: 100px;">İşlemler</th>
                     </tr>
@@ -6139,6 +6144,15 @@ function renderTasksTable() {
                                         `<option value="${dept.value}" ${task.department === dept.value ? 'selected' : ''}>${dept.label}</option>`
                                     ).join('')}
                                 </select>
+                            </td>
+                            <td>
+                                <input type="number" class="form-control form-control-sm task-weight" 
+                                       value="${task.weight || ''}" 
+                                       data-index="${actualIndex}" 
+                                       min="1" 
+                                       max="100"
+                                       style="width: 80px;"
+                                       placeholder="1-100">
                             </td>
                             <td>
                                 ${isChildTask ? '<span class="text-muted">Alt görev - bağımlılık yok</span>' : `<div id="depends-on-dropdown-${actualIndex}" class="depends-on-dropdown-container" data-index="${actualIndex}"></div>`}
@@ -6182,6 +6196,29 @@ function renderTasksTable() {
         select.addEventListener('change', (e) => {
             const index = parseInt(e.target.dataset.index);
             window.tasksList[index].department = e.target.value;
+        });
+    });
+    
+    container.querySelectorAll('.task-weight').forEach(input => {
+        input.addEventListener('change', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            const weightValue = e.target.value ? parseInt(e.target.value) : null;
+            if (weightValue !== null && (weightValue < 1 || weightValue > 100)) {
+                showNotification('Ağırlık 1-100 arasında olmalıdır', 'warning');
+                e.target.value = window.tasksList[index].weight || '';
+                return;
+            }
+            window.tasksList[index].weight = weightValue;
+        });
+        input.addEventListener('blur', (e) => {
+            const index = parseInt(e.target.dataset.index);
+            const weightValue = e.target.value ? parseInt(e.target.value) : null;
+            if (weightValue !== null && (weightValue < 1 || weightValue > 100)) {
+                showNotification('Ağırlık 1-100 arasında olmalıdır', 'warning');
+                e.target.value = window.tasksList[index].weight || '';
+                return;
+            }
+            window.tasksList[index].weight = weightValue;
         });
     });
     
@@ -6313,6 +6350,7 @@ function addNewTask() {
         sequence: window.tasksList.filter(t => !t.isChildTask).length + 1,
         description: '',
         depends_on: [],
+        weight: 10, // Default weight
         fromTemplate: false,
         isMainTask: true
     };
