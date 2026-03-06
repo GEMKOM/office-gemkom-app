@@ -102,16 +102,16 @@ export async function getJobCostSummary(jobNo) {
 }
 
 /**
- * Update cost summary (only selling_price and selling_price_currency are writable)
+ * Update cost summary (supported write fields: selling_price, selling_price_currency, cost_not_applicable)
  * PATCH /projects/job-orders/{job_no}/cost_summary/
  * @param {string} jobNo - Job order number
  * @param {Object} payload
  * @param {string} [payload.selling_price] - e.g. "90000.00"
  * @param {string} [payload.selling_price_currency] - One of "EUR", "USD", "GBP", "TRY"
+ * @param {boolean} [payload.cost_not_applicable] - Mark job order cost tracking as not applicable (removes from pending lists / cost table)
  * @returns {Promise<Object>} Full updated cost summary object
  */
 export async function patchJobCostSummary(jobNo, payload) {
-    const validKeys = ['selling_price', 'selling_price_currency'];
     const body = {};
     if (payload.selling_price !== undefined) body.selling_price = payload.selling_price;
     if (payload.selling_price_currency !== undefined) {
@@ -119,6 +119,9 @@ export async function patchJobCostSummary(jobNo, payload) {
             throw new Error(`Invalid selling_price_currency. Valid values: ${COST_SUMMARY_CURRENCIES.join(', ')}`);
         }
         body.selling_price_currency = payload.selling_price_currency;
+    }
+    if (payload.cost_not_applicable !== undefined) {
+        body.cost_not_applicable = payload.cost_not_applicable;
     }
     const url = `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/cost_summary/`;
     const response = await authedFetch(url, {

@@ -14,6 +14,9 @@ const BASE_GENERAL_ROUTES = [
     '/general/overtime/pending',
     '/general/overtime/registry',
     '/general/overtime/users',
+    '/general/department-requests',
+    '/general/department-requests/list',
+    '/general/department-requests/pending',
     '/projects',
     '/projects/project-tracking'
 ];
@@ -35,6 +38,8 @@ export const TEAM_ACCESS_CONFIG = {
         allowedRoutes: mergeWithBaseRoutes([
             '/management',
             '/management/dashboard',
+            '/management/reports',
+            '/management/analytics',
             '/planning',
             '/planning/department-requests',
             '/planning/task-templates',
@@ -54,14 +59,39 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/machining/reports',
             '/manufacturing/machining/reports/sum-report',
             '/manufacturing/machining/reports/finished-timers',
+            '/manufacturing/machining/reports/cost-analysis',
+            '/manufacturing/machining/reports/history',
+            '/manufacturing/machining/reports/production-plan',
             '/manufacturing/machining/reports/daily-report',
             '/manufacturing/maintenance',
             '/manufacturing/maintenance/fault-requests',
             '/manufacturing/maintenance/fault-requests/list',
+            '/manufacturing/maintenance/fault-requests/statistics',
+            '/manufacturing/maintenance/reports',
+            '/manufacturing/maintenance/reports/faults',
+            '/manufacturing/maintenance/reports/user-resolution',
             '/manufacturing/cnc-cutting',
+            '/manufacturing/cnc-cutting/dashboard',
             '/manufacturing/cnc-cutting/cuts',
+            '/manufacturing/cnc-cutting/remnants',
+            '/manufacturing/cnc-cutting/reports',
+            '/manufacturing/cnc-cutting/reports/finished-timers',
+            '/manufacturing/cnc-cutting/capacity',
+            '/manufacturing/cnc-cutting/capacity/planning',
             '/manufacturing/welding',
+            '/manufacturing/welding/time-entries',
+            '/manufacturing/welding/reports',
+            '/manufacturing/welding/reports/user-work-hours',
+            '/manufacturing/welding/reports/cost-analysis',
+            '/manufacturing/reports',
+            '/manufacturing/reports/combined-job-costs',
+            '/manufacturing/projects',
+            '/manufacturing/subcontracting',
+            '/manufacturing/subcontracting/subcontractors',
+            '/manufacturing/subcontracting/statements',
+            '/manufacturing/material-tracking',
             '/procurement',
+            '/procurement/projects',
             '/procurement/purchase-requests',
             '/procurement/purchase-requests/create',
             '/procurement/purchase-requests/pending',
@@ -105,13 +135,37 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/machining/reports',
             '/manufacturing/machining/reports/sum-report',
             '/manufacturing/machining/reports/finished-timers',
+            '/manufacturing/machining/reports/cost-analysis',
+            '/manufacturing/machining/reports/history',
+            '/manufacturing/machining/reports/production-plan',
             '/manufacturing/machining/reports/daily-report',
             '/manufacturing/maintenance',
             '/manufacturing/maintenance/fault-requests',
             '/manufacturing/maintenance/fault-requests/list',
+            '/manufacturing/maintenance/fault-requests/statistics',
+            '/manufacturing/maintenance/reports',
+            '/manufacturing/maintenance/reports/faults',
+            '/manufacturing/maintenance/reports/user-resolution',
             '/manufacturing/cnc-cutting',
+            '/manufacturing/cnc-cutting/dashboard',
             '/manufacturing/cnc-cutting/cuts',
-            '/manufacturing/welding'
+            '/manufacturing/cnc-cutting/remnants',
+            '/manufacturing/cnc-cutting/reports',
+            '/manufacturing/cnc-cutting/reports/finished-timers',
+            '/manufacturing/cnc-cutting/capacity',
+            '/manufacturing/cnc-cutting/capacity/planning',
+            '/manufacturing/welding',
+            '/manufacturing/welding/time-entries',
+            '/manufacturing/welding/reports',
+            '/manufacturing/welding/reports/user-work-hours',
+            '/manufacturing/welding/reports/cost-analysis',
+            '/manufacturing/reports',
+            '/manufacturing/reports/combined-job-costs',
+            '/manufacturing/projects',
+            '/manufacturing/subcontracting',
+            '/manufacturing/subcontracting/subcontractors',
+            '/manufacturing/subcontracting/statements',
+            '/manufacturing/material-tracking'
         ]),
         allowedSections: ['manufacturing', 'general', 'general_overtime']
     },
@@ -130,9 +184,18 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/machining/reports',
             '/manufacturing/machining/reports/sum-report',
             '/manufacturing/machining/reports/finished-timers',
+            '/manufacturing/machining/reports/cost-analysis',
+            '/manufacturing/machining/reports/history',
+            '/manufacturing/machining/reports/production-plan',
             '/manufacturing/machining/reports/daily-report',
             '/manufacturing/cnc-cutting',
-            '/manufacturing/cnc-cutting/cuts'
+            '/manufacturing/cnc-cutting/dashboard',
+            '/manufacturing/cnc-cutting/cuts',
+            '/manufacturing/cnc-cutting/remnants',
+            '/manufacturing/cnc-cutting/reports',
+            '/manufacturing/cnc-cutting/reports/finished-timers',
+            '/manufacturing/cnc-cutting/capacity',
+            '/manufacturing/cnc-cutting/capacity/planning'
         ]),
         allowedSections: ['manufacturing_machining', 'general', 'general_overtime']
     },
@@ -142,7 +205,11 @@ export const TEAM_ACCESS_CONFIG = {
         allowedRoutes: mergeWithBaseRoutes([
             '/manufacturing/maintenance',
             '/manufacturing/maintenance/fault-requests',
-            '/manufacturing/maintenance/fault-requests/list'
+            '/manufacturing/maintenance/fault-requests/list',
+            '/manufacturing/maintenance/fault-requests/statistics',
+            '/manufacturing/maintenance/reports',
+            '/manufacturing/maintenance/reports/faults',
+            '/manufacturing/maintenance/reports/user-resolution'
         ]),
         allowedSections: ['manufacturing_maintenance', 'general', 'general_overtime']
     },
@@ -150,7 +217,11 @@ export const TEAM_ACCESS_CONFIG = {
     // Welding team - access to welding operations
     welding: {
         allowedRoutes: mergeWithBaseRoutes([
-            '/manufacturing/welding'
+            '/manufacturing/welding',
+            '/manufacturing/welding/time-entries',
+            '/manufacturing/welding/reports',
+            '/manufacturing/welding/reports/user-work-hours',
+            '/manufacturing/welding/reports/cost-analysis'
         ]),
         allowedSections: ['manufacturing_welding', 'general', 'general_overtime']
     },
@@ -159,6 +230,7 @@ export const TEAM_ACCESS_CONFIG = {
     procurement: {
         allowedRoutes: mergeWithBaseRoutes([
             '/procurement',
+            '/procurement/projects',
             '/procurement/purchase-requests',
             '/procurement/purchase-requests/create',
             '/procurement/purchase-requests/pending',
@@ -179,6 +251,7 @@ export const TEAM_ACCESS_CONFIG = {
     external_workshops: {
         allowedRoutes: mergeWithBaseRoutes([
             '/procurement',
+            '/procurement/projects',
             '/procurement/purchase-requests',
             '/procurement/purchase-requests/create',
             '/procurement/purchase-requests/pending',
@@ -240,7 +313,9 @@ export const TEAM_ACCESS_CONFIG = {
     sales: {
         allowedRoutes: mergeWithBaseRoutes([
             '/sales',
-            '/sales/customers'
+            '/sales/customers',
+            '/sales/offers',
+            '/sales/catalog'
         ]),
         allowedSections: ['sales', 'general', 'general_overtime']
     },
@@ -249,9 +324,20 @@ export const TEAM_ACCESS_CONFIG = {
     it: {
         allowedRoutes: mergeWithBaseRoutes([
             '/it',
-            '/it/inventory'
+            '/it/inventory',
+            '/it/password-resets'
         ]),
         allowedSections: ['it', 'general', 'general_overtime']
+    },
+
+    // Logistics team - access to logistics and related areas
+    logistics: {
+        allowedRoutes: mergeWithBaseRoutes([
+            '/logistics',
+            '/logistics/projects',
+            '/logistics/cost-lines'
+        ]),
+        allowedSections: ['logistics', 'general', 'general_overtime']
     },
     
     // Human Resources team - access to HR and related areas
@@ -276,7 +362,8 @@ export const TEAM_ACCESS_CONFIG = {
     design: {
         allowedRoutes: mergeWithBaseRoutes([
             '/design',
-            '/design/projects'
+            '/design/projects',
+            '/design/revision-requests'
         ]),
         allowedSections: ['design', 'general', 'general_overtime']
     },

@@ -10,7 +10,8 @@ import {
     getJobOrdersHasProcurement,
     getProcurementLines,
     getProcurementLinesPreview,
-    submitProcurementLines
+    submitProcurementLines,
+    patchJobCostSummary
 } from '../../../apis/projects/cost.js';
 import { extractResultsFromResponse } from '../../../apis/paginationHelper.js';
 
@@ -177,6 +178,14 @@ function initPendingTable() {
                 icon: 'fas fa-list',
                 class: 'btn-outline-primary',
                 onClick: (row) => openLinesModal(row.job_no)
+            },
+            {
+                key: 'mark-cost-na',
+                label: 'Maliyet Uygulanamaz',
+                title: 'Maliyet Uygulanamaz Olarak İşaretle',
+                icon: 'fas fa-ban',
+                class: 'btn-outline-danger',
+                onClick: (row) => confirmMarkCostNotApplicable(row.job_no)
             }
         ],
         emptyMessage: 'Listeyi yüklemek veya güncellemek için Filtrele veya Yenile butonuna tıklayın.',
@@ -212,7 +221,8 @@ function initHasEntriesTable() {
             loadHasEntries({ ordering: direction === 'desc' ? `-${field}` : field });
         },
         actions: [
-            { key: 'open-lines', label: 'Satırları Aç', icon: 'fas fa-list', class: 'btn-outline-primary', onClick: (row) => openLinesModal(row.job_no) }
+            { key: 'open-lines', label: 'Satırları Aç', icon: 'fas fa-list', class: 'btn-outline-primary', onClick: (row) => openLinesModal(row.job_no) },
+            { key: 'mark-cost-na', label: 'Maliyet Uygulanamaz', title: 'Maliyet Uygulanamaz Olarak İşaretle', icon: 'fas fa-ban', class: 'btn-outline-danger', onClick: (row) => confirmMarkCostNotApplicable(row.job_no) }
         ],
         emptyMessage: 'Listeyi yüklemek için Filtrele veya Yenile butonuna tıklayın.',
         emptyIcon: 'fas fa-filter',
@@ -305,6 +315,81 @@ function initLinesModal() {
     document.getElementById('procurement-lines-save').addEventListener('click', saveLines);
 
     linesModal.addEventListener('shown.bs.modal', () => renderLinesTable());
+}
+
+function confirmMarkCostNotApplicable(jobNo) {
+    if (!confirmationModal) return;
+    confirmationModal.show({
+        title: 'Maliyet Uygulanamaz',
+        message: `${jobNo} için maliyet uygulanamaz olarak işaretlensin mi?`,
+        description: 'Bu işlem sonrası iş emri tüm departman bekleyen listelerinden ve maliyet tablosundan kaldırılır.',
+        confirmText: 'Evet, işaretle',
+        confirmButtonClass: 'btn-danger',
+        onConfirm: () => markCostNotApplicable(jobNo)
+    });
+}
+
+async function markCostNotApplicable(jobNo) {
+    const confirmBtn = document.querySelector('#confirmationModal #confirm-action-btn');
+    const prevHtml = confirmBtn ? confirmBtn.innerHTML : null;
+    if (confirmBtn) {
+        confirmBtn.disabled = true;
+        confirmBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Gönderiliyor...';
+    }
+
+    try {
+        await patchJobCostSummary(jobNo, { cost_not_applicable: true });
+        showNotification('İş emri maliyet uygulanamaz olarak işaretlendi.', 'success');
+
+        // Immediate UI feedback
+        removeJobOrderFromLocalLists(jobNo);
+
+        // Ensure counts/pagination are correct
+        await Promise.allSettled([loadPendingJobOrders(), loadHasEntries()]);
+    } catch (err) {
+        console.error(err);
+        showNotification(err.message || 'İşlem başarısız', 'error');
+        throw err; // keep modal open (ConfirmationModal respects rejected promises)
+    } finally {
+        if (confirmBtn) {
+            confirmBtn.disabled = false;
+            if (prevHtml != null) confirmBtn.innerHTML = prevHtml;
+        }
+    }
+}
+
+function removeJobOrderFromLocalLists(jobNo) {
+    let removedPending = 0;
+    let removedHas = 0;
+
+    if (Array.isArray(pendingJobOrders) && pendingJobOrders.length) {
+        const before = pendingJobOrders.length;
+        pendingJobOrders = pendingJobOrders.filter(j => j.job_no !== jobNo);
+        removedPending = before - pendingJobOrders.length;
+        if (removedPending > 0) {
+            totalCount = Math.max(0, (totalCount || 0) - removedPending);
+            if (pendingTable) {
+                pendingTable.options.data = pendingJobOrders;
+                pendingTable.options.totalItems = totalCount;
+                pendingTable.render();
+            }
+        }
+    }
+
+    if (Array.isArray(hasEntriesData) && hasEntriesData.length) {
+        const before = hasEntriesData.length;
+        hasEntriesData = hasEntriesData.filter(j => j.job_no !== jobNo);
+        removedHas = before - hasEntriesData.length;
+        if (removedHas > 0) {
+            hasEntriesTotal = Math.max(0, (hasEntriesTotal || 0) - removedHas);
+            if (hasEntriesTable) {
+                hasEntriesTable.options.data = hasEntriesData;
+                hasEntriesTable.options.totalItems = hasEntriesTotal;
+                hasEntriesTable.options.currentPage = hasEntriesPage;
+                hasEntriesTable.render();
+            }
+        }
+    }
 }
 
 /**
