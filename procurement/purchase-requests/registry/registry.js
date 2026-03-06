@@ -13,7 +13,8 @@ import {
     getPurchaseRequests, 
     getPurchaseRequest, 
     getStatusChoices,
-    cancelPurchaseRequest
+    cancelPurchaseRequest,
+    revisePurchaseRequest
 } from '../../../apis/procurement.js';
 import { fetchCurrencyRates } from '../../../apis/formatters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
@@ -195,6 +196,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-eye',
                 class: 'btn-outline-primary',
                 onClick: (row) => viewRequestDetails(row.id)
+            },
+            {
+                key: 'revise',
+                label: 'Revize Et',
+                icon: 'fas fa-edit',
+                class: 'btn-outline-warning',
+                visible: (row) => row.status !== 'cancelled',
+                onClick: (row) => handleReviseRequest(row)
             }
         ],
         pagination: true,
@@ -587,6 +596,30 @@ async function handleCancelRequest() {
             } catch (error) {
                 console.error('Error canceling request:', error);
                 showNotification('Talep iptal edilirken hata oluştu: ' + error.message, 'error');
+            }
+        }
+    });
+}
+
+async function handleReviseRequest(row) {
+    const requestNumber = row.request_number || row.id;
+    const requestId = row.id;
+    
+    actionConfirmModal.show({
+        title: 'Revize Et',
+        message: `"${requestNumber}" numaralı talebi revize etmek istediğinize emin misiniz?`,
+        confirmText: 'Revize Et',
+        cancelText: 'İptal',
+        confirmButtonClass: 'btn-warning',
+        onConfirm: async () => {
+            try {
+                await revisePurchaseRequest(requestId);
+                showNotification('Talep başarıyla revize edildi', 'success');
+                await loadRequests();
+                updateRequestCounts();
+            } catch (error) {
+                console.error('Error revising request:', error);
+                showNotification('Talep revize edilirken hata oluştu: ' + error.message, 'error');
             }
         }
     });

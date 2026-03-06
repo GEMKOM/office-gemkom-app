@@ -89,6 +89,27 @@ export async function cancelPurchaseRequest(requestId) {
     }
 }
 
+export async function revisePurchaseRequest(requestId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/purchase-requests/${requestId}/revise/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Talep revize edilirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error revising purchase request:', error);
+        throw error;
+    }
+}
+
 export async function getPurchaseRequests(filters = {}) {
     try {
         // Build query parameters
