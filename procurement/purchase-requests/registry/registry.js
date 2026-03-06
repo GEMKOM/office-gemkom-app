@@ -607,7 +607,7 @@ async function handleReviseRequest(row) {
     
     actionConfirmModal.show({
         title: 'Revize Et',
-        message: `"${requestNumber}" numaralı talebi revize etmek istediğinize emin misiniz?`,
+        message: `"${requestNumber}" numaralı talebi revize etmek istediğinize emin misiniz? Talep iptal edilecektir ve talebin bir kopyası taslaklara kaydedilecektir.`,
         confirmText: 'Revize Et',
         cancelText: 'İptal',
         confirmButtonClass: 'btn-warning',
