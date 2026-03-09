@@ -138,6 +138,36 @@ export async function deleteAssignment(assignmentId) {
 }
 
 /**
+ * Update an assignment using the update-assignment endpoint
+ * All fields are optional - send only what you want to change
+ * @param {number} assignmentId - Assignment ID
+ * @param {Object} updateData - Data to update (all fields optional)
+ * @param {number} [updateData.subcontractor] - Subcontractor ID
+ * @param {number} [updateData.price_tier] - Price tier ID
+ * @param {string} [updateData.allocated_weight_kg] - Allocated weight in kg
+ * @param {string} [updateData.title] - Subtask title
+ * @param {number} [updateData.weight] - Subtask progress weight
+ * @returns {Promise<Object>} Updated assignment
+ */
+export async function updateAssignmentWithEndpoint(assignmentId, updateData) {
+    const url = `${backendBase}/subcontracting/assignments/${assignmentId}/update-assignment/`;
+    const resp = await authedFetch(url, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData)
+    });
+    
+    if (!resp.ok) {
+        const errorData = await resp.json();
+        const errorMessage = errorData.detail || errorData.message || Object.values(errorData).flat().join(', ') || 'Taşeron ataması güncellenirken hata oluştu';
+        throw new Error(errorMessage);
+    }
+    
+    const data = await resp.json();
+    return data;
+}
+
+/**
  * Create assignment with subtask atomically
  * @param {Object} assignmentData - Assignment data with subtask creation
  * @param {number} assignmentData.kaynak_task_id - Kaynaklı İmalat task ID (parent)
