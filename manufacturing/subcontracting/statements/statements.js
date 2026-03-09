@@ -590,15 +590,15 @@ async function viewStatementDetail(statementId) {
                                 ${statement.line_items && statement.line_items.length > 0 ? 
                                     statement.line_items.map(item => `
                                         <tr>
-                                            <td>${item.job_order || '-'}</td>
+                                            <td>${item.job_no || '-'}</td>
                                             <td>${item.price_tier_name || '-'}</td>
                                             <td>${item.allocated_weight_kg || 0} kg</td>
                                             <td>${item.previous_progress || 0}%</td>
                                             <td>${item.current_progress || 0}%</td>
                                             <td>${item.delta_progress || 0}%</td>
                                             <td>${item.effective_weight_kg || 0} kg</td>
-                                            <td>${formatCurrency(item.price_per_kg, item.currency)}</td>
-                                            <td><strong>${formatCurrency(item.amount, item.currency)}</strong></td>
+                                            <td>${formatCurrency(item.price_per_kg, statement.currency)}</td>
+                                            <td><strong>${formatCurrency(item.cost_amount, statement.currency)}</strong></td>
                                         </tr>
                                     `).join('') : 
                                     '<tr><td colspan="9" class="text-center text-muted">Kalem bulunmamaktadır</td></tr>'
