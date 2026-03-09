@@ -590,7 +590,10 @@ async function viewStatementDetail(statementId) {
                                 ${statement.line_items && statement.line_items.length > 0 ? 
                                     statement.line_items.map(item => `
                                         <tr>
-                                            <td>${item.job_no || '-'}</td>
+                                            <td>
+                                                <strong>${item.job_no || '-'}</strong>
+                                                ${item.job_title ? `<br><small class="text-muted">${item.job_title}</small>` : ''}
+                                            </td>
                                             <td>${item.price_tier_name || '-'}</td>
                                             <td>${item.allocated_weight_kg || 0} kg</td>
                                             <td>${item.previous_progress || 0}%</td>
