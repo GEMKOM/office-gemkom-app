@@ -27,6 +27,12 @@ export async function getOfferTemplateNodes(id) {
     return response.json();
 }
 
+export async function getOfferTemplateNodeChildren(templateId, nodeId) {
+    const response = await authedFetch(`${BASE}/${templateId}/nodes/${nodeId}/`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+}
+
 export async function createOfferTemplate(data) {
     const response = await authedFetch(`${BASE}/`, {
         method: 'POST',

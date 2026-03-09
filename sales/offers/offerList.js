@@ -42,7 +42,7 @@ import {
     FILE_TYPE_OPTIONS,
     REVISION_TYPE_MAP
 } from '../../apis/sales/offers.js';
-import { listOfferTemplates, getOfferTemplate, getOfferTemplateNodes } from '../../apis/sales/offerTemplates.js';
+import { listOfferTemplates, getOfferTemplate, getOfferTemplateNodes, getOfferTemplateNodeChildren } from '../../apis/sales/offerTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
 import { authFetchUsers } from '../../apis/users.js';
 import { FileViewer } from '../../components/file-viewer/file-viewer.js';
@@ -1545,28 +1545,51 @@ async function showAddItemsModal(onSuccess) {
     });
     modal.clearAll();
     modal.onSaveCallback(async () => {
+        // Read current selections from DOM before processing
+        readCatalogSelectionFromDom();
+        
         const baseSequence = (offer.items || []).length;
         const sequenceRef = { next: baseSequence + 1 };
         const items = [];
-        const catalogChecked = document.querySelectorAll('#add-items-modal-container input.catalog-node-checkbox:checked');
         const selectedByTemplate = new Map();
-        catalogChecked.forEach((cb) => {
-            const templateId = cb.dataset?.templateId || cb.closest('[data-template-id]')?.dataset?.templateId;
-            const nodeId = parseInt(cb.value, 10);
+        
+        // Use catalogSelectionState instead of reading from DOM (handles collapsed nodes)
+        catalogSelectionState.forEach((info, key) => {
+            const [templateId, nodeIdStr] = key.split('::');
+            const nodeId = parseInt(nodeIdStr, 10);
             if (!templateId || isNaN(nodeId)) return;
-            const row = cb.closest('tr');
-            const qtyInput = row?.querySelector('input.catalog-node-qty');
-            const quantity = qtyInput ? (parseInt(qtyInput.value, 10) || 1) : 1;
             if (!selectedByTemplate.has(templateId)) selectedByTemplate.set(templateId, new Map());
-            selectedByTemplate.get(templateId).set(nodeId, quantity);
+            selectedByTemplate.get(templateId).set(nodeId, info.quantity || 1);
         });
-        selectedByTemplate.forEach((nodeQuantityMap, templateId) => {
-            const template = loadedTemplatesMap.get(templateId);
-            if (!template?.root_nodes) return;
+        
+        // Process each template sequentially to ensure all nodes are loaded
+        for (const [templateId, nodeQuantityMap] of selectedByTemplate) {
             const selectedSet = new Set(nodeQuantityMap.keys());
-            const nested = buildNestedOfferItems(template.root_nodes, selectedSet, sequenceRef, nodeQuantityMap);
+            // Ensure we have root nodes loaded
+            if (!catalogChildrenCache.has(templateId)) {
+                try {
+                    const nodes = await getOfferTemplateNodes(templateId);
+                    const nodeList = Array.isArray(nodes) ? nodes : (nodes.results || nodes.children || []);
+                    catalogChildrenCache.set(templateId, nodeList);
+                } catch (err) {
+                    showNotification(parseError(err, 'Katalog yüklenemedi'), 'error');
+                    return;
+                }
+            }
+            
+            // Build tree from cached nodes - recursively fetch children from cache
+            const rootNodes = catalogChildrenCache.get(templateId) || [];
+            if (!rootNodes || rootNodes.length === 0) return;
+            
+            // Ensure we have all ancestors of selected nodes loaded
+            // This function will load missing nodes on-demand
+            await ensureSelectedNodesLoaded(templateId, rootNodes, selectedSet);
+            
+            // Reconstruct tree structure by adding children from cache
+            const fullTree = rootNodes.map(node => addChildrenFromCache(templateId, node));
+            const nested = buildNestedOfferItems(fullTree, selectedSet, sequenceRef, nodeQuantityMap);
             items.push(...nested);
-        });
+        }
         const customTitle = document.getElementById('add-items-custom-title')?.value?.trim();
         const customNotes = document.getElementById('add-items-custom-notes')?.value?.trim() || '';
         const customQty = parseInt(document.getElementById('add-items-custom-quantity')?.value, 10) || 1;
@@ -1650,14 +1673,70 @@ async function showAddItemsModal(onSuccess) {
         has_children: true
     }));
 
+    async function ensureSelectedNodesLoaded(templateId, nodes, selectedSet) {
+        // Check if all selected nodes are already in cache
+        const allSelectedFound = Array.from(selectedSet).every(nodeId => {
+            // Check if this node is in any cached children
+            for (const [key, cachedNodes] of catalogChildrenCache) {
+                if (key === templateId || key.startsWith(`${templateId}-`)) {
+                    if (cachedNodes.some(n => n.id === nodeId)) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        });
+        
+        // If all selected nodes are found, no need to load more
+        if (allSelectedFound) return;
+        
+        // Recursively ensure all ancestors of selected nodes are loaded
+        for (const node of nodes) {
+            const nodeKey = `${templateId}-${node.id}`;
+            const isSelected = selectedSet.has(node.id);
+            
+            // If this node is selected or might have selected descendants, load its children
+            if ((isSelected || (node.children_count > 0)) && !catalogChildrenCache.has(nodeKey)) {
+                try {
+                    const children = await getOfferTemplateNodeChildren(templateId, node.id);
+                    const childList = Array.isArray(children) ? children : (children.results || children.children || []);
+                    catalogChildrenCache.set(nodeKey, childList);
+                    // Recursively load children of children
+                    if (childList.length > 0) {
+                        await ensureSelectedNodesLoaded(templateId, childList, selectedSet);
+                    }
+                } catch (err) {
+                    console.warn(`Failed to load children for node ${node.id}:`, err);
+                }
+            } else if (catalogChildrenCache.has(nodeKey)) {
+                // If already loaded, recursively check children
+                const cachedChildren = catalogChildrenCache.get(nodeKey);
+                if (cachedChildren && cachedChildren.length > 0) {
+                    await ensureSelectedNodesLoaded(templateId, cachedChildren, selectedSet);
+                }
+            }
+        }
+    }
+
+    function addChildrenFromCache(templateId, node) {
+        const nodeKey = `${templateId}-${node.id}`;
+        const cachedChildren = catalogChildrenCache.get(nodeKey);
+        if (cachedChildren && cachedChildren.length > 0) {
+            return {
+                ...node,
+                children: cachedChildren.map(child => addChildrenFromCache(templateId, child))
+            };
+        }
+        return { ...node, children: [] };
+    }
+
     function nodeToRow(node, templateId) {
         return {
             template_id: templateId,
             node_id: node.id,
             title: node.title || '',
             is_template: false,
-            has_children: !!(node.children && node.children.length),
-            children: node.children || []
+            has_children: node.has_children === true || (node.children_count != null && node.children_count > 0) || !!(node.children && node.children.length)
         };
     }
 
@@ -1671,9 +1750,13 @@ async function showAddItemsModal(onSuccess) {
                 const childRows = childNodes.map(n => nodeToRow(n, r.template_id));
                 out.push(...mergeCatalogRows(childRows, level + 1));
             }
-            if (!r.is_template && r.node_id != null && catalogExpanded.has(`${r.template_id}-${r.node_id}`)) {
-                const childRows = (r.children || []).map(n => nodeToRow(n, r.template_id));
-                out.push(...mergeCatalogRows(childRows, level + 1));
+            if (!r.is_template && r.node_id != null) {
+                const nodeKey = `${r.template_id}-${r.node_id}`;
+                if (catalogExpanded.has(nodeKey)) {
+                    const childNodes = catalogChildrenCache.get(nodeKey) || [];
+                    const childRows = childNodes.map(n => nodeToRow(n, r.template_id));
+                    out.push(...mergeCatalogRows(childRows, level + 1));
+                }
             }
         }
         return out;
@@ -1684,6 +1767,7 @@ async function showAddItemsModal(onSuccess) {
     function readCatalogSelectionFromDom() {
         const container = addItemsCatalogTable?.container;
         if (!container) return;
+        // Only update/add selections from visible DOM elements, don't delete entries for collapsed nodes
         container.querySelectorAll('input.catalog-node-checkbox').forEach((cb) => {
             const templateId = cb.dataset?.templateId || cb.getAttribute('data-template-id');
             const nodeId = cb.value;
@@ -1692,8 +1776,13 @@ async function showAddItemsModal(onSuccess) {
             const row = cb.closest('tr');
             const qtyInput = row?.querySelector('input.catalog-node-qty');
             const qty = qtyInput ? (parseInt(qtyInput.value, 10) || 1) : 1;
-            if (cb.checked) catalogSelectionState.set(key, { quantity: qty });
-            else catalogSelectionState.delete(key);
+            if (cb.checked) {
+                catalogSelectionState.set(key, { quantity: qty });
+            } else {
+                // Only delete if explicitly unchecked (user unchecks a visible checkbox)
+                // Don't delete entries for nodes that are just collapsed (not in DOM)
+                catalogSelectionState.delete(key);
+            }
         });
     }
     let addItemsSelectionTable = null;
@@ -1719,7 +1808,10 @@ async function showAddItemsModal(onSuccess) {
                 });
             }
             const nextDepth = isSelected ? depth + 1 : depth;
-            out.push(...getSelectedRowsOnly(node.children || [], templateId, selectedSet, nextDepth));
+            // Get children from cache if available
+            const nodeKey = `${templateId}-${node.id}`;
+            const cachedChildren = catalogChildrenCache.get(nodeKey) || [];
+            out.push(...getSelectedRowsOnly(cachedChildren, templateId, selectedSet, nextDepth));
         });
         return out;
     }
@@ -1914,24 +2006,46 @@ async function showAddItemsModal(onSuccess) {
                 updateAddItemsCatalogTable();
                 return;
             }
-            if (templateId && !catalogChildrenCache.has(templateId)) {
+            
+            // Check if we need to load children
+            const isTemplateRoot = templateId && key === templateId;
+            const needsLoad = isTemplateRoot 
+                ? !catalogChildrenCache.has(templateId)
+                : !catalogChildrenCache.has(key);
+            
+            if (needsLoad) {
                 btn.disabled = true;
                 const icon = btn.querySelector('i');
                 if (icon) icon.className = 'fas fa-spinner fa-spin';
                 try {
-                    let template = await getOfferTemplate(templateId);
-                    loadedTemplatesMap.set(templateId, template);
-                    catalogChildrenCache.set(templateId, template.root_nodes || []);
-                } catch (err) {
-                    try {
+                    if (isTemplateRoot) {
+                        // Load root nodes for template (flat, no recursion)
                         const nodes = await getOfferTemplateNodes(templateId);
                         const nodeList = Array.isArray(nodes) ? nodes : (nodes.results || nodes.children || []);
-                        const rootNodes = buildTreeFromFlatNodes(nodeList);
-                        loadedTemplatesMap.set(templateId, { root_nodes: rootNodes });
-                        catalogChildrenCache.set(templateId, rootNodes);
-                    } catch (nodesErr) {
-                        showNotification(parseError(err, 'Katalog yüklenemedi'), 'error');
+                        catalogChildrenCache.set(templateId, nodeList);
+                        // Store template info if not already stored
+                        if (!loadedTemplatesMap.has(templateId)) {
+                            const templateInfo = await getOfferTemplate(templateId);
+                            loadedTemplatesMap.set(templateId, templateInfo);
+                        }
+                    } else {
+                        // Load direct children of a specific node
+                        const nodeId = btn.getAttribute('data-node-id');
+                        if (!nodeId || !templateId) {
+                            showNotification('Node bilgisi bulunamadı', 'error');
+                            btn.disabled = false;
+                            if (icon) icon.className = 'fas fa-plus';
+                            return;
+                        }
+                        const children = await getOfferTemplateNodeChildren(templateId, nodeId);
+                        const childList = Array.isArray(children) ? children : (children.results || children.children || []);
+                        catalogChildrenCache.set(key, childList);
                     }
+                } catch (err) {
+                    showNotification(parseError(err, 'Katalog yüklenemedi'), 'error');
+                    btn.disabled = false;
+                    if (icon) icon.className = 'fas fa-plus';
+                    return;
                 }
                 btn.disabled = false;
                 if (icon) icon.className = 'fas fa-plus';
@@ -1979,7 +2093,8 @@ async function showAddItemsModal(onSuccess) {
                     let expandBtn = '';
                     if (hasChildren) {
                         const icon = isExpanded ? 'fa-minus' : 'fa-plus';
-                        expandBtn = `<button type="button" class="btn btn-sm add-items-catalog-expand-btn" data-expand-key="${expandKey}" data-template-id="${row.is_template ? row.template_id : ''}" style="position:absolute;left:${buttonLeft}px;top:50%;transform:translateY(-50%);width:${BUTTON_SIZE}px;height:${BUTTON_SIZE}px;padding:0;border-radius:4px;border:1.5px solid #0d6efd;background:${isExpanded ? '#0d6efd' : '#fff'};color:${isExpanded ? '#fff' : '#0d6efd'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;z-index:1;" title="${isExpanded ? 'Daralt' : 'Genişlet'}"><i class="fas ${icon}" style="font-size:10px;"></i></button>`;
+                        const nodeIdAttr = row.is_template ? '' : `data-node-id="${row.node_id}"`;
+                        expandBtn = `<button type="button" class="btn btn-sm add-items-catalog-expand-btn" data-expand-key="${expandKey}" data-template-id="${row.is_template ? row.template_id : row.template_id}" ${nodeIdAttr} style="position:absolute;left:${buttonLeft}px;top:50%;transform:translateY(-50%);width:${BUTTON_SIZE}px;height:${BUTTON_SIZE}px;padding:0;border-radius:4px;border:1.5px solid #0d6efd;background:${isExpanded ? '#0d6efd' : '#fff'};color:${isExpanded ? '#fff' : '#0d6efd'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;z-index:1;" title="${isExpanded ? 'Daralt' : 'Genişlet'}"><i class="fas ${icon}" style="font-size:10px;"></i></button>`;
                     }
                     return `<div style="position:relative;width:100%;height:40px;min-height:40px;">${treeLinesHtml}${expandBtn}</div>`;
                 }
