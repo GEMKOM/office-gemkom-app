@@ -47,8 +47,24 @@ import { listCustomers } from '../../apis/projects/customers.js';
 import { authFetchUsers } from '../../apis/users.js';
 import { FileViewer } from '../../components/file-viewer/file-viewer.js';
 
-const CLOSED_STATUSES = ['won', 'lost', 'cancelled'];
+const CLOSED_STATUSES = ['cancelled']; // Only cancelled status prevents editing
 const EDITABLE_STATUSES = ['draft', 'consultation', 'pricing'];
+
+// INCOTERMS options
+const INCOTERMS_OPTIONS = [
+    { value: '', label: 'Seçiniz' },
+    { value: 'EXW', label: 'EXW - Ex Works' },
+    { value: 'FCA', label: 'FCA - Free Carrier' },
+    { value: 'CPT', label: 'CPT - Carriage Paid To' },
+    { value: 'CIP', label: 'CIP - Carriage and Insurance Paid To' },
+    { value: 'DAP', label: 'DAP - Delivered At Place' },
+    { value: 'DPU', label: 'DPU - Delivered at Place Unloaded' },
+    { value: 'DDP', label: 'DDP - Delivered Duty Paid' },
+    { value: 'FAS', label: 'FAS - Free Alongside Ship' },
+    { value: 'FOB', label: 'FOB - Free On Board' },
+    { value: 'CFR', label: 'CFR - Cost and Freight' },
+    { value: 'CIF', label: 'CIF - Cost, Insurance and Freight' }
+];
 
 // Map Bootstrap color names to components/badges CSS classes
 const BADGE_CLASS_MAP = {
@@ -188,12 +204,20 @@ function initTable() {
                 }
             },
             {
-                field: 'status',
+                field: 'status_display',
                 label: 'Durum',
                 sortable: true,
-                formatter: (v) => {
-                    const label = OFFER_STATUS_MAP[v] || v;
-                    const color = OFFER_STATUS_COLORS[v] || 'secondary';
+                formatter: (v, row) => {
+                    // Prefer backend-provided status_display when available
+                    const display = v || row.status_display;
+                    if (display) {
+                        const color = OFFER_STATUS_COLORS[row.status] || 'secondary';
+                        const badgeClass = BADGE_CLASS_MAP[color] || 'status-grey';
+                        return `<span class="status-badge ${badgeClass}">${display}</span>`;
+                    }
+                    // Fallback to local mapping by status code
+                    const label = OFFER_STATUS_MAP[row.status] || row.status;
+                    const color = OFFER_STATUS_COLORS[row.status] || 'secondary';
                     const badgeClass = BADGE_CLASS_MAP[color] || 'status-grey';
                     return `<span class="status-badge ${badgeClass}">${label}</span>`;
                 }
@@ -778,87 +802,188 @@ function buildGenelTab(statusLabel, statusColor) {
     const totalWeight = offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0;
     const priceText = totalPrice > 0 
         ? `€ ${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`
-        : '—';
+        : '-';
 
     let html = `
-        <div class="px-2">
-            <h6 class="mb-3 d-flex align-items-center">
-                <i class="fas fa-info-circle me-2 text-primary"></i>Teklif Bilgileri
-            </h6>
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-barcode me-1"></i>Teklif No</label>
-                    <div class="field-value fw-medium">${offer.offer_no || '—'}</div>
+        <div style="padding: 20px;">
+            <!-- Genel Bilgiler Section -->
+            <div class="mb-4">
+                <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Genel Bilgiler
+                </h6>
+                <div class="field-list">
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-barcode me-1"></i>Teklif No
+                        </div>
+                        <div class="field-value fw-medium flex-grow-1">${offer.offer_no || '-'}</div>
+                    </div>
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-tasks me-1"></i>Durum
+                        </div>
+                        <div class="field-value flex-grow-1"><span class="status-badge ${BADGE_CLASS_MAP[statusColor] || 'status-grey'}">${statusLabel}</span></div>
+                    </div>
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-heading me-1"></i>Başlık
+                        </div>
+                        <div class="field-value flex-grow-1">${offer.title || '-'}</div>
+                    </div>
+                    ${offer.description ? `
+                    <div class="field-row d-flex align-items-start py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-align-left me-1"></i>Açıklama
+                        </div>
+                        <div class="field-value flex-grow-1">${offer.description}</div>
+                    </div>
+                    ` : ''}
                 </div>
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-tasks me-1"></i>Durum</label>
-                    <div class="field-value"><span class="status-badge ${BADGE_CLASS_MAP[statusColor] || 'status-grey'}">${statusLabel}</span></div>
-                </div>
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-heading me-1"></i>Başlık</label>
-                    <div class="field-value">${offer.title || '—'}</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-building me-1"></i>Müşteri</label>
-                    <div class="field-value">${offer.customer_name || '—'}${offer.customer_code ? ` <span class="text-muted">(${offer.customer_code})</span>` : ''}</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-hashtag me-1"></i>Müşteri Referansı</label>
-                    <div class="field-value">${offer.customer_inquiry_ref || '—'}</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-calendar-alt me-1"></i>İstenen Termin Tarihi</label>
-                    <div class="field-value">${offer.delivery_date_requested ? formatDate(offer.delivery_date_requested) : '—'}</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-calendar-check me-1"></i>Teklif Geçerlilik Tarihi</label>
-                    <div class="field-value">${offer.offer_expiry_date ? formatDate(offer.offer_expiry_date) : '—'}</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-money-bill-wave me-1"></i>Toplam Fiyat</label>
-                    <div class="field-value fw-bold text-primary">${priceText}</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-weight me-1"></i>Toplam Ağırlık</label>
-                    <div class="field-value fw-medium">${totalWeight > 0 ? `${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kg` : '—'}</div>
-                </div>
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-list me-1"></i>Kalem Sayısı</label>
-                    <div class="field-value">${(offer.items || []).length}</div>
-                </div>
-                ${offer.approval_round > 0 ? `
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-sync-alt me-1"></i>Onay Turu</label>
-                    <div class="field-value">${offer.approval_round}</div>
-                </div>
-                ` : ''}
             </div>
-            ${offer.description ? `
-            <h6 class="mb-2 mt-4 d-flex align-items-center">
-                <i class="fas fa-align-left me-2 text-secondary"></i>Açıklama
-            </h6>
-            <div class="field-value text-break">${offer.description}</div>
-            ` : ''}
-            <h6 class="mb-2 mt-4 d-flex align-items-center">
-                <i class="fas fa-info me-2 text-secondary"></i>Sistem Bilgileri
-            </h6>
-            <div class="row g-3">
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-user me-1"></i>Oluşturan</label>
-                    <div class="field-value">${offer.created_by_name || '—'}</div>
+            
+            <!-- Müşteri Bilgileri Section -->
+            <div class="mb-4">
+                <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                    <i class="fas fa-building me-2"></i>
+                    Müşteri Bilgileri
+                </h6>
+                <div class="field-list">
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-building me-1"></i>Müşteri
+                        </div>
+                        <div class="field-value flex-grow-1">${offer.customer_name || '-'}${offer.customer_code ? ` <span class="text-muted">(${offer.customer_code})</span>` : ''}</div>
+                    </div>
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-hashtag me-1"></i>Müşteri Referansı
+                        </div>
+                        <div class="field-value flex-grow-1">${offer.customer_inquiry_ref || '-'}</div>
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-calendar-plus me-1"></i>Oluşturulma</label>
-                    <div class="field-value">${formatDateTime(offer.created_at)}</div>
+            </div>
+            
+            <!-- Teklif Detayları Section -->
+            <div class="mb-4">
+                <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                    <i class="fas fa-clipboard-list me-2"></i>
+                    Teklif Detayları
+                </h6>
+                <div class="field-list">
+                    ${offer.incoterms ? `
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-shipping-fast me-1"></i>Incoterms
+                        </div>
+                        <div class="field-value flex-grow-1">${offer.incoterms}</div>
+                    </div>
+                    ` : ''}
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-calendar-alt me-1"></i>İstenen Termin Tarihi
+                        </div>
+                        <div class="field-value flex-grow-1">${offer.delivery_date_requested ? formatDate(offer.delivery_date_requested) : '-'}</div>
+                    </div>
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-calendar-check me-1"></i>Teklif Geçerlilik Tarihi
+                        </div>
+                        <div class="field-value flex-grow-1">${offer.offer_expiry_date ? formatDate(offer.offer_expiry_date) : '-'}</div>
+                    </div>
                 </div>
-                <div class="col-md-6">
-                    <label class="field-label small text-muted mb-1"><i class="fas fa-calendar-edit me-1"></i>Güncellenme</label>
-                    <div class="field-value">${formatDateTime(offer.updated_at)}</div>
+            </div>
+            
+            <!-- Fiyat ve Ağırlık Bilgileri Section -->
+            <div class="mb-4">
+                <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                    <i class="fas fa-money-bill-wave me-2"></i>
+                    Fiyat ve Ağırlık Bilgileri
+                </h6>
+                <div class="field-list">
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-money-bill-wave me-1"></i>Toplam Fiyat
+                        </div>
+                        <div class="field-value fw-bold text-primary flex-grow-1">${priceText}</div>
+                    </div>
+                    ${totalWeight > 0 ? `
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-weight me-1"></i>Toplam Ağırlık
+                        </div>
+                        <div class="field-value flex-grow-1">${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kg</div>
+                    </div>
+                    ` : ''}
+                    ${offer.approval_round > 0 ? `
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-sync-alt me-1"></i>Onay Turu
+                        </div>
+                        <div class="field-value flex-grow-1">${offer.approval_round}</div>
+                    </div>
+                    ` : ''}
                 </div>
-                ${offer.submitted_to_customer_at ? `<div class="col-md-6"><label class="field-label small text-muted mb-1">Müşteriye Gönderilme</label><div class="field-value">${formatDateTime(offer.submitted_to_customer_at)}</div></div>` : ''}
-                ${offer.won_at ? `<div class="col-md-6"><label class="field-label small text-muted mb-1">Kazanılma</label><div class="field-value">${formatDateTime(offer.won_at)}</div></div>` : ''}
-                ${offer.lost_at ? `<div class="col-md-6"><label class="field-label small text-muted mb-1">Kaybedilme</label><div class="field-value">${formatDateTime(offer.lost_at)}</div></div>` : ''}
-                ${offer.cancelled_at ? `<div class="col-md-6"><label class="field-label small text-muted mb-1">İptal</label><div class="field-value">${formatDateTime(offer.cancelled_at)}</div></div>` : ''}
+            </div>
+            
+            <!-- Sistem Bilgileri Section -->
+            <div class="mb-4">
+                <h6 class="mb-3 d-flex align-items-center text-secondary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Sistem Bilgileri
+                </h6>
+                <div class="field-list">
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-user me-1"></i>Oluşturan
+                        </div>
+                        <div class="field-value flex-grow-1">${offer.created_by_name || '-'}</div>
+                    </div>
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-calendar-plus me-1"></i>Oluşturulma Tarihi
+                        </div>
+                        <div class="field-value flex-grow-1">${formatDateTime(offer.created_at)}</div>
+                    </div>
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-calendar-edit me-1"></i>Güncellenme Tarihi
+                        </div>
+                        <div class="field-value flex-grow-1">${formatDateTime(offer.updated_at)}</div>
+                    </div>
+                    ${offer.submitted_to_customer_at ? `
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-paper-plane me-1"></i>Müşteriye Gönderilme
+                        </div>
+                        <div class="field-value flex-grow-1">${formatDateTime(offer.submitted_to_customer_at)}</div>
+                    </div>
+                    ` : ''}
+                    ${offer.won_at ? `
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-trophy me-1"></i>Kazanılma
+                        </div>
+                        <div class="field-value flex-grow-1">${formatDateTime(offer.won_at)}</div>
+                    </div>
+                    ` : ''}
+                    ${offer.lost_at ? `
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-times-circle me-1"></i>Kaybedilme
+                        </div>
+                        <div class="field-value flex-grow-1">${formatDateTime(offer.lost_at)}</div>
+                    </div>
+                    ` : ''}
+                    ${offer.cancelled_at ? `
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-ban me-1"></i>İptal
+                        </div>
+                        <div class="field-value flex-grow-1">${formatDateTime(offer.cancelled_at)}</div>
+                    </div>
+                    ` : ''}
+                </div>
             </div>
         </div>
     `;
@@ -1427,8 +1552,9 @@ function buildApprovalTab() {
 // Footer HTML for the offer modal; changes by active tab. Uses global offer.
 function getOfferModalFooterHtml(tabId) {
     if (!offer) return '';
-    const s = offer.status;
-    const editable = EDITABLE_STATUSES.includes(s);
+    const s = offer.status || '';
+    // Allow editing in any status except closed ones (won, lost, cancelled)
+    const editable = !CLOSED_STATUSES.includes(s);
     const closed = CLOSED_STATUSES.includes(s);
     const canPropose = !['won', 'cancelled'].includes(s);
     const canSendConsultations = !['won', 'lost', 'cancelled'].includes(s);
@@ -1512,6 +1638,7 @@ function showEditModal(onSuccess) {
     modal.addField({ id: 'title', name: 'title', label: 'Başlık', type: 'text', value: offer.title || '', required: true, icon: 'fas fa-heading', colSize: 12 });
     modal.addField({ id: 'description', name: 'description', label: 'Açıklama', type: 'textarea', value: offer.description || '', icon: 'fas fa-align-left', colSize: 12 });
     modal.addField({ id: 'customer_inquiry_ref', name: 'customer_inquiry_ref', label: 'Müşteri Referansı', type: 'text', value: offer.customer_inquiry_ref || '', icon: 'fas fa-hashtag', colSize: 6 });
+    modal.addField({ id: 'incoterms', name: 'incoterms', label: 'Incoterms', type: 'dropdown', value: offer.incoterms || '', options: INCOTERMS_OPTIONS, icon: 'fas fa-shipping-fast', colSize: 6 });
     modal.addField({ id: 'delivery_date_requested', name: 'delivery_date_requested', label: 'İstenen Termin Tarihi', type: 'date', value: offer.delivery_date_requested || '', icon: 'fas fa-calendar-alt', colSize: 6 });
     modal.addField({ id: 'offer_expiry_date', name: 'offer_expiry_date', label: 'Teklif Geçerlilik Tarihi', type: 'date', value: offer.offer_expiry_date || '', icon: 'fas fa-calendar-check', colSize: 6 });
     modal.onSaveCallback(async (formData) => {
@@ -2706,6 +2833,7 @@ function showCreateOfferModal() {
     createOfferModal.addField({ id: 'description', name: 'description', label: 'Açıklama', type: 'textarea', placeholder: 'Teklif kapsamı...', icon: 'fas fa-align-left', colSize: 12 });
     createOfferModal.addSection({ title: 'Ek Bilgiler', icon: 'fas fa-calendar', iconColor: 'text-success' });
     createOfferModal.addField({ id: 'customer_inquiry_ref', name: 'customer_inquiry_ref', label: 'Müşteri Referansı', type: 'text', placeholder: 'Ör: ABC-RFQ-2026-003', icon: 'fas fa-hashtag', colSize: 6 });
+    createOfferModal.addField({ id: 'incoterms', name: 'incoterms', label: 'Incoterms', type: 'dropdown', options: INCOTERMS_OPTIONS, icon: 'fas fa-shipping-fast', colSize: 6 });
     createOfferModal.addField({ id: 'delivery_date_requested', name: 'delivery_date_requested', label: 'İstenen Termin Tarihi', type: 'date', icon: 'fas fa-calendar-alt', colSize: 6 });
     createOfferModal.addField({ id: 'offer_expiry_date', name: 'offer_expiry_date', label: 'Teklif Geçerlilik Tarihi', type: 'date', icon: 'fas fa-calendar-check', colSize: 6 });
     createOfferModal.render();

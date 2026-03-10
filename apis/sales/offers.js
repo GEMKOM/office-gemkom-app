@@ -6,14 +6,15 @@ const BASE = `${backendBase}/sales/offers`;
 // ── Status & Enum constants ──────────────────────────────────────────
 export const OFFER_STATUS_MAP = {
     draft: 'Taslak',
-    consultation: 'Departman Görüşü',
+    consultation: 'Danışma',
     pricing: 'Fiyatlandırma',
     pending_approval: 'Onay Bekliyor',
     approved: 'Onaylandı',
-    submitted_customer: 'Müşteriye Gönderildi',
+    submitted_customer: 'Müşteriye Sunuldu',
     won: 'Kazanıldı',
+    converted: 'İş Emrine Dönüştürüldü',
     lost: 'Kaybedildi',
-    cancelled: 'İptal'
+    cancelled: 'İptal Edildi'
 };
 
 export const OFFER_STATUS_COLORS = {
