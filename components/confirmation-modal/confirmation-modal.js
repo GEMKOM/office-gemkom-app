@@ -164,9 +164,25 @@ export class ConfirmationModal {
             this.onCancel = options.onCancel;
         }
         
+        // Ensure this confirmation modal stacks ABOVE any currently open modal
+        // (Bootstrap doesn't automatically manage z-index stacking for nested modals)
+        const openModals = Array.from(document.querySelectorAll('.modal.show'));
+        const topModal = openModals.length ? openModals[openModals.length - 1] : null;
+        const topZ = topModal ? parseInt(window.getComputedStyle(topModal).zIndex || '1055', 10) : 1055;
+        const newZ = Number.isFinite(topZ) ? topZ + 20 : 1075;
+        this.modal.style.zIndex = String(newZ);
+
         // Show modal
         const modalInstance = bootstrap.Modal.getOrCreateInstance(this.modal);
         modalInstance.show();
+
+        // After Bootstrap inserts the backdrop, bump backdrop z-index just below the modal
+        // so the dialog remains clickable and the underlying modal is dimmed.
+        setTimeout(() => {
+            const backdrops = Array.from(document.querySelectorAll('.modal-backdrop'));
+            const backdrop = backdrops.length ? backdrops[backdrops.length - 1] : null;
+            if (backdrop) backdrop.style.zIndex = String(newZ - 10);
+        }, 0);
     }
     
     hide() {

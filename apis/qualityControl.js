@@ -349,6 +349,38 @@ export async function closeNCR(ncrId) {
     return await response.json();
 }
 
+// ── NCR Files ─────────────────────────────────────────────────────────
+export async function listNCRFiles(ncrId) {
+    const response = await authedFetch(`${QC_BASE}/ncrs/${ncrId}/files/`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+}
+
+export async function uploadNCRFile(ncrId, file, fileType, name = '', description = '') {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('file_type', fileType);
+    if (name) formData.append('name', name);
+    if (description) formData.append('description', description);
+
+    const response = await authedFetch(`${QC_BASE}/ncrs/${ncrId}/files/upload/`, {
+        method: 'POST',
+        body: formData
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || JSON.stringify(err) || `HTTP ${response.status}`);
+    }
+    return response.json();
+}
+
+export async function deleteNCRFile(ncrId, fileId) {
+    const response = await authedFetch(`${QC_BASE}/ncrs/${ncrId}/files/${fileId}/`, {
+        method: 'DELETE'
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
 // ==================== Choice Values ====================
 
 /**

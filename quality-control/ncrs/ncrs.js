@@ -9,6 +9,7 @@ import { showNotification } from '../../../components/notification/notification.
 import { initRouteProtection } from '../../../apis/routeProtection.js';
 import { getUser } from '../../../authService.js';
 import { fetchAllUsers, authFetchUsers } from '../../../apis/users.js';
+import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import {
     listNCRs,
     getNCR,
@@ -17,6 +18,9 @@ import {
     submitNCR,
     decideNCR,
     closeNCR,
+    listNCRFiles,
+    uploadNCRFile,
+    deleteNCRFile,
     DEFECT_TYPE_CHOICES,
     SEVERITY_CHOICES,
     DISPOSITION_CHOICES,
@@ -45,6 +49,34 @@ let ncrEditModal = null;
 let ncrCreateModal = null;
 let ncrDecisionModal = null;
 let ncrSubmitModal = null;
+let ncrFileUploadModal = null;
+
+const ncrFileViewer = new FileViewer();
+
+const NCR_FILE_TYPE_OPTIONS = [
+    { value: 'photo', label: 'Fotoğraf' },
+    { value: 'drawing', label: 'Çizim' },
+    { value: 'report', label: 'Rapor' },
+    { value: 'specification', label: 'Şartname' },
+    { value: 'other', label: 'Diğer' }
+];
+
+function getFileExtension(fileName) {
+    if (!fileName) return '';
+    return String(fileName).split('.').pop().toLowerCase();
+}
+
+function normalizeNcrFile(file) {
+    // Backend spec says serializer includes `url` (presigned). Some backends may return `file_url`.
+    const fileUrl = file?.url || file?.file_url || file?.file || '';
+    const fileName = file?.name || file?.filename || file?.original_name || 'Dosya';
+    return {
+        ...file,
+        file_url: fileUrl,
+        filename: fileName,
+        uploaded_at: file?.uploaded_at || file?.created_at || null
+    };
+}
 
 // Status badge mapping
 const STATUS_BADGE_MAP = {
@@ -488,6 +520,12 @@ function initializeModalComponents() {
         saveButtonText: 'Gönder',
         size: 'lg'
     });
+    ncrFileUploadModal = new EditModal('ncr-file-upload-modal-container', {
+        title: 'Dosya Yükle',
+        icon: 'fas fa-upload',
+        saveButtonText: 'Yükle',
+        size: 'md'
+    });
 }
 
 async function loadNCRs() {
@@ -516,6 +554,141 @@ async function loadNCRs() {
     } finally {
         isLoading = false;
     }
+}
+
+async function refreshNcrFilesUI(ncrId) {
+    const listEl = document.getElementById('ncr-files-list');
+    if (!listEl) return;
+
+    listEl.innerHTML = `
+        <div class="text-center text-muted py-3">
+            <i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...
+        </div>
+    `;
+
+    let files = [];
+    try {
+        const data = await listNCRFiles(ncrId);
+        const rawList = Array.isArray(data) ? data : (data.results || data.files || []);
+        files = rawList.map(normalizeNcrFile);
+    } catch (e) {
+        console.error('Failed to load NCR files:', e);
+        listEl.innerHTML = `<div class="text-danger small py-2">Dosyalar yüklenemedi.</div>`;
+        return;
+    }
+
+    if (!files.length) {
+        listEl.innerHTML = `<div class="text-muted small py-2">Henüz dosya yok.</div>`;
+        return;
+    }
+
+    listEl.innerHTML = files.map((f) => {
+        const name = f.filename || 'Dosya';
+        const ext = getFileExtension(name);
+        const typeLabel = f.file_type_display || f.file_type || '-';
+        const desc = f.description || '';
+        const url = f.file_url || '';
+        const uploadedBy = f.uploaded_by_username || f.uploaded_by_name || '';
+        const date = f.uploaded_at ? new Date(f.uploaded_at) : null;
+        const dateStr = date && !isNaN(date.getTime())
+            ? date.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' })
+            : '';
+
+        return `
+            <div class="d-flex align-items-start justify-content-between gap-3 p-2 border rounded mb-2" style="background:#fff;">
+                <div class="d-flex align-items-start gap-2 flex-grow-1 min-width-0">
+                    <i class="fas fa-paperclip text-muted mt-1"></i>
+                    <div class="min-width-0">
+                        <div class="fw-medium text-truncate">${name}</div>
+                        <div class="text-muted small">
+                            ${typeLabel}${uploadedBy || dateStr ? ` • ${[uploadedBy, dateStr].filter(Boolean).join(' • ')}` : ''}
+                        </div>
+                        ${desc ? `<div class="text-muted small mt-1">${desc}</div>` : ''}
+                    </div>
+                </div>
+                <div class="d-flex gap-2 flex-shrink-0">
+                    <button type="button" class="btn btn-sm btn-outline-primary ncr-file-preview-btn" data-url="${url}" data-name="${encodeURIComponent(name)}" data-ext="${ext}">
+                        <i class="fas fa-eye me-1"></i>Önizle
+                    </button>
+                    <a class="btn btn-sm btn-outline-secondary" href="${url}" download>
+                        <i class="fas fa-download me-1"></i>İndir
+                    </a>
+                    <button type="button" class="btn btn-sm btn-outline-danger ncr-file-delete-btn" data-file-id="${f.id}">
+                        <i class="fas fa-trash me-1"></i>Sil
+                    </button>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    listEl.querySelectorAll('.ncr-file-preview-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const url = btn.dataset.url || '';
+            const name = decodeURIComponent(btn.dataset.name || 'Dosya');
+            const ext = btn.dataset.ext || getFileExtension(name);
+            if (!url) {
+                showNotification('Dosya URL bulunamadı', 'warning');
+                return;
+            }
+            ncrFileViewer.openFile(url, name, ext);
+        });
+    });
+
+    listEl.querySelectorAll('.ncr-file-delete-btn').forEach((btn) => {
+        btn.addEventListener('click', (e) => {
+            e.preventDefault();
+            const fileId = parseInt(btn.dataset.fileId, 10);
+            if (isNaN(fileId)) return;
+            confirmationModal.show({
+                title: 'Dosya Sil',
+                message: 'Bu dosyayı silmek istiyor musunuz?',
+                confirmText: 'Sil',
+                confirmButtonClass: 'btn-danger',
+                onConfirm: async () => {
+                    await deleteNCRFile(ncrId, fileId);
+                    showNotification('Dosya silindi', 'success');
+                    await refreshNcrFilesUI(ncrId);
+                }
+            });
+        });
+    });
+}
+
+function showNcrFileUploadModal(ncrId, onSuccess) {
+    if (!ncrFileUploadModal) return;
+    ncrFileUploadModal.clearAll();
+    ncrFileUploadModal.addSection({ title: 'Dosya Bilgileri', icon: 'fas fa-file', iconColor: 'text-primary' });
+    ncrFileUploadModal.addField({ id: 'file_type', name: 'file_type', label: 'Dosya Türü', type: 'dropdown', required: true, options: NCR_FILE_TYPE_OPTIONS, icon: 'fas fa-tag', colSize: 6 });
+    ncrFileUploadModal.addField({ id: 'name', name: 'name', label: 'Dosya Adı', type: 'text', placeholder: 'Opsiyonel', icon: 'fas fa-heading', colSize: 6 });
+    ncrFileUploadModal.addField({ id: 'description', name: 'description', label: 'Açıklama', type: 'textarea', icon: 'fas fa-align-left', colSize: 12 });
+
+    ncrFileUploadModal.onSave = async (formData) => {
+        const fileInput = document.getElementById('ncr-file-input-field');
+        if (!fileInput?.files?.[0]) {
+            showNotification('Lütfen dosya seçin', 'warning');
+            return;
+        }
+        try {
+            await uploadNCRFile(ncrId, fileInput.files[0], formData.file_type, formData.name, formData.description);
+            ncrFileUploadModal.hide();
+            showNotification('Dosya yüklendi', 'success');
+            if (onSuccess) await onSuccess();
+        } catch (e) {
+            console.error('Upload NCR file failed:', e);
+            showNotification('Dosya yüklenemedi', 'error');
+        }
+    };
+
+    ncrFileUploadModal.render();
+    const body = ncrFileUploadModal.container?.querySelector('.modal-body');
+    if (body) {
+        const fileDiv = document.createElement('div');
+        fileDiv.className = 'mb-3 px-3';
+        fileDiv.innerHTML = '<label class="form-label">Dosya</label><input type="file" class="form-control" id="ncr-file-input-field">';
+        body.insertBefore(fileDiv, body.firstChild);
+    }
+    ncrFileUploadModal.show();
 }
 
 async function showNCRDetails(ncr) {
@@ -633,9 +806,36 @@ async function showNCRDetails(ncr) {
             ]
         });
 
+        // Files section (upload + list)
+        ncrDetailsModal.addCustomSection({
+            title: 'Dosyalar',
+            icon: 'fas fa-paperclip',
+            iconColor: 'text-muted',
+            customContent: `
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="text-muted small">NCR ile ilişkili dosyalar</div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="ncr-files-upload-btn">
+                        <i class="fas fa-upload me-1"></i>Dosya Yükle
+                    </button>
+                </div>
+                <div id="ncr-files-list"></div>
+            `
+        });
+
         // Render and show the modal
         ncrDetailsModal.render();
         ncrDetailsModal.show();
+
+        const uploadBtn = document.getElementById('ncr-files-upload-btn');
+        if (uploadBtn) {
+            uploadBtn.onclick = (e) => {
+                e.preventDefault();
+                showNcrFileUploadModal(fullNCR.id, async () => {
+                    await refreshNcrFilesUI(fullNCR.id);
+                });
+            };
+        }
+        await refreshNcrFilesUI(fullNCR.id);
     } catch (error) {
         console.error('Error loading NCR details:', error);
         showNotification('NCR detayları yüklenirken hata oluştu', 'error');
