@@ -26,3 +26,28 @@ export async function fetchDailyEfficiencyReport(date = null) {
     }
 }
 
+/**
+ * Get machining job entries by job number
+ * @param {Object} params - Query parameters
+ * @param {string} params.job_no - Required. Job number
+ * @returns {Promise<Object>} Report data with job_no, summary, and entries
+ */
+export async function getMachiningJobEntries(params) {
+    if (!params.job_no) {
+        throw new Error('job_no parameter is required');
+    }
+
+    const queryParams = new URLSearchParams();
+    queryParams.append('job_no', params.job_no);
+
+    const url = `${backendBase}/machining/reports/job-entries/?${queryParams.toString()}`;
+    const resp = await authedFetch(url);
+    
+    if (!resp.ok) {
+        const errorData = await resp.json();
+        throw new Error(errorData.error || errorData.detail || 'Rapor yüklenirken hata oluştu');
+    }
+    
+    const data = await resp.json();
+    return data;
+}

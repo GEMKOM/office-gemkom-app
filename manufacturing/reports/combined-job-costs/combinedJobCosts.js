@@ -5,7 +5,7 @@ import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
 import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
 import { getCombinedJobCosts } from '../../../../apis/planning/reports.js';
-import { fetchJobCostDetailsReportByJobNo } from '../../../../apis/machining/costAnalysis.js';
+import { getMachiningJobEntries } from '../../../../apis/machining/reports.js';
 import { getWeldingJobCostDetail } from '../../../../apis/welding/reports.js';
 
 // State management
@@ -585,29 +585,26 @@ async function showMachiningDetails(jobNo) {
         // Ensure container exists
         ensureModalContainer('machining-details-modal-container');
         
-        // Fetch user details for the job
-        const data = await fetchJobCostDetailsReportByJobNo({ job_no: jobNo });
-        const users = data.results || [];
+        // Fetch machining entries for the job
+        const data = await getMachiningJobEntries({ job_no: jobNo });
+        const entries = data.entries || [];
+        const summary = data.summary || {};
+        
+        // Sort entries by start_time (ascending)
+        const sortedEntries = [...entries].sort((a, b) => {
+            const timeA = a.start_time || 0;
+            const timeB = b.start_time || 0;
+            return timeA - timeB;
+        });
         
         // Create display modal
         const modal = new DisplayModal('machining-details-modal-container', {
-            title: `${jobNo} - Talaşlı İmalat Kullanıcı Detayları`,
-            icon: 'fas fa-users',
+            title: `${jobNo} - Talaşlı İmalat Detayları`,
+            icon: 'fas fa-cog',
             size: 'xl',
             showEditButton: false
         });
         
-        // Calculate totals
-        const totalCost = users.reduce((sum, user) => sum + (user.total_cost || 0), 0);
-        const totalWeekdayHours = users.reduce((sum, user) => sum + (user.hours.weekday_work || 0), 0);
-        const totalAfterHours = users.reduce((sum, user) => sum + (user.hours.after_hours || 0), 0);
-        const totalSundayHours = users.reduce((sum, user) => sum + (user.hours.sunday || 0), 0);
-        const totalHours = totalWeekdayHours + totalAfterHours + totalSundayHours;
-        const costPerHour = totalHours > 0 ? totalCost / totalHours : 0;
-        const totalAfterHoursCost = users.reduce((sum, user) => sum + (user.costs.after_hours || 0), 0);
-        const totalSundayCost = users.reduce((sum, user) => sum + (user.costs.sunday || 0), 0);
-        const overtimeCost = totalAfterHoursCost + totalSundayCost;
-
         // Add summary section
         modal.addSection({
             title: 'Özet',
@@ -615,102 +612,74 @@ async function showMachiningDetails(jobNo) {
             iconColor: 'text-primary',
             fields: [
                 {
-                    id: 'total_users',
-                    label: 'Toplam Kullanıcı',
-                    value: users.length,
+                    id: 'total_entries',
+                    label: 'Toplam Kayıt',
+                    value: summary.total_entries || entries.length,
                     type: 'number',
-                    icon: 'fas fa-users',
-                    colSize: 3
-                },
-                {
-                    id: 'total_cost',
-                    label: 'Toplam Maliyet',
-                    value: totalCost,
-                    type: 'currency',
-                    icon: 'fas fa-euro-sign',
-                    format: (value) => `€${(Number(value) || 0).toFixed(2)}`,
-                    colSize: 3
-                },
-                {
-                    id: 'overtime_cost',
-                    label: 'Mesai Maliyeti',
-                    value: overtimeCost,
-                    type: 'currency',
-                    icon: 'fas fa-clock',
-                    format: (value) => `€${(Number(value) || 0).toFixed(2)}`,
-                    colSize: 3
-                },
-                {
-                    id: 'cost_per_hour',
-                    label: 'Saat Başı Maliyet',
-                    value: costPerHour,
-                    type: 'currency',
-                    icon: 'fas fa-calculator',
-                    format: (value) => `€${(Number(value) || 0).toFixed(2)}`,
-                    colSize: 3
-                },
-                {
-                    id: 'total_weekday_hours',
-                    label: 'Hafta İçi Saat',
-                    value: totalWeekdayHours,
-                    type: 'number',
-                    icon: 'fas fa-calendar-day',
-                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
-                    colSize: 3
-                },
-                {
-                    id: 'total_after_hours',
-                    label: 'Mesai Saat',
-                    value: totalAfterHours,
-                    type: 'number',
-                    icon: 'fas fa-clock',
-                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
-                    colSize: 3
-                },
-                {
-                    id: 'total_sunday_hours',
-                    label: 'Pazar Saat',
-                    value: totalSundayHours,
-                    type: 'number',
-                    icon: 'fas fa-calendar',
-                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    icon: 'fas fa-list',
                     colSize: 3
                 },
                 {
                     id: 'total_hours',
                     label: 'Toplam Saat',
-                    value: totalHours,
+                    value: summary.total_hours || 0,
                     type: 'number',
                     icon: 'fas fa-clock',
                     format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
                     colSize: 3
                 },
+                {
+                    id: 'weekday_work',
+                    label: 'Hafta İçi Saat',
+                    value: summary.breakdown_by_type?.weekday_work || 0,
+                    type: 'number',
+                    icon: 'fas fa-calendar-day',
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    colSize: 2
+                },
+                {
+                    id: 'after_hours',
+                    label: 'Mesai Saat',
+                    value: summary.breakdown_by_type?.after_hours || 0,
+                    type: 'number',
+                    icon: 'fas fa-clock',
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    colSize: 2
+                },
+                {
+                    id: 'sunday',
+                    label: 'Pazar Saat',
+                    value: summary.breakdown_by_type?.sunday || 0,
+                    type: 'number',
+                    icon: 'fas fa-calendar',
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    colSize: 2
+                }
             ]
         });
         
-        // Add users table using TableComponent
-        if (users.length > 0) {
-            // Process user data for table display
-            const userTableData = users.map(user => ({
-                user: user.user,
-                user_id: user.user_id,
-                issue_count: user.issue_count,
-                issue_keys: user.issue_keys,
-                weekday_work_hours: user.hours.weekday_work || 0,
-                after_hours_hours: user.hours.after_hours || 0,
-                sunday_hours: user.hours.sunday || 0,
-                total_hours: (user.hours.weekday_work || 0) + (user.hours.after_hours || 0) + (user.hours.sunday || 0),
-                weekday_work_cost: user.costs.weekday_work || 0,
-                after_hours_cost: user.costs.after_hours || 0,
-                sunday_cost: user.costs.sunday || 0,
-                total_cost: user.total_cost || 0,
-                currency: user.currency || 'EUR',
-                updated_at: user.updated_at,
-                raw_data: user
-            }));
+        // Add entries table using TableComponent
+        if (sortedEntries.length > 0) {
+            // Process entries data for table display
+            const entriesTableData = sortedEntries.map(entry => {
+                // Extract date from start_time timestamp
+                const date = entry.start_time ? new Date(entry.start_time).toISOString().split('T')[0] : '-';
+                return {
+                    id: entry.id,
+                    date: date,
+                    employee_id: entry.employee_id,
+                    employee_username: entry.employee_username,
+                    employee_full_name: entry.employee_full_name,
+                    operation_key: entry.operation_key || '-',
+                    operation_name: entry.operation_name || '-',
+                    hours: entry.hours || 0,
+                    work_type: entry.work_type,
+                    raw_data: entry
+                };
+            });
 
             const tableHtml = `
-                <div id="machining-user-details-table-container"></div>
+                <div id="machining-entries-table-container"></div>
             `;
             
             modal.addCustomSection({
@@ -723,115 +692,63 @@ async function showMachiningDetails(jobNo) {
 
             // Initialize table component after modal is shown
             setTimeout(() => {
-                const userDetailsTable = new TableComponent('machining-user-details-table-container', {
-                    title: 'Kullanıcı Detayları',
-                    icon: 'fas fa-users',
+                const entriesTable = new TableComponent('machining-entries-table-container', {
+                    title: 'Kayıtlar (Tarihe Göre Sıralı)',
+                    icon: 'fas fa-table',
                     iconColor: 'text-primary',
                     columns: [
                         {
-                            field: 'user',
-                            label: 'Kullanıcı',
+                            field: 'date',
+                            label: 'Tarih',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => `<span class="fw-bold">${value || '-'}</span>`
+                        },
+                        {
+                            field: 'employee_full_name',
+                            label: 'Çalışan',
                             sortable: true,
                             type: 'text',
                             formatter: (value, rowData) => `
-                                <span class="fw-bold text-primary">${value}</span>
+                                <div>
+                                    <span class="fw-bold text-primary">${value || rowData.employee_username || '-'}</span>
+                                    ${rowData.employee_username ? `<br><small class="text-muted">${rowData.employee_username}</small>` : ''}
+                                </div>
                             `
                         },
                         {
-                            field: 'weekday_work_hours',
-                            label: 'Hafta İçi Saat',
+                            field: 'operation_key',
+                            label: 'Operasyon Anahtarı',
                             sortable: true,
-                            type: 'number',
-                            formatter: (value) => `${(value || 0).toFixed(1)}`
+                            type: 'text',
+                            formatter: (value) => `<span class="text-info">${value || '-'}</span>`
                         },
                         {
-                            field: 'after_hours_hours',
-                            label: 'Mesai Saat',
+                            field: 'operation_name',
+                            label: 'Operasyon Adı',
                             sortable: true,
-                            type: 'number',
-                            formatter: (value) => `${(value || 0).toFixed(1)}`
+                            type: 'text',
+                            formatter: (value) => `<span>${value || '-'}</span>`
                         },
                         {
-                            field: 'sunday_hours',
-                            label: 'Pazar Saat',
-                            sortable: true,
-                            type: 'number',
-                            formatter: (value) => `${(value || 0).toFixed(1)}`
-                        },
-                        {
-                            field: 'total_hours',
-                            label: 'Toplam Saat',
+                            field: 'hours',
+                            label: 'Saat',
                             sortable: true,
                             type: 'number',
                             formatter: (value) => `<span class="fw-bold">${(value || 0).toFixed(1)}</span>`
                         },
                         {
-                            field: 'weekday_work_cost',
-                            label: 'Hafta İçi Maliyet',
+                            field: 'work_type',
+                            label: 'Tip',
                             sortable: true,
-                            type: 'number',
-                            formatter: (value) => `€${(value || 0).toFixed(2)}`
-                        },
-                        {
-                            field: 'after_hours_cost',
-                            label: 'Mesai Maliyet',
-                            sortable: true,
-                            type: 'number',
-                            formatter: (value) => `€${(value || 0).toFixed(2)}`
-                        },
-                        {
-                            field: 'sunday_cost',
-                            label: 'Pazar Maliyet',
-                            sortable: true,
-                            type: 'number',
-                            formatter: (value) => `€${(value || 0).toFixed(2)}`
-                        },
-                        {
-                            field: 'total_cost',
-                            label: 'Toplam Maliyet',
-                            sortable: true,
-                            type: 'number',
-                            formatter: (value) => `<span class="fw-bold">€${(value || 0).toFixed(2)}</span>`
-                        },
-                        {
-                            field: 'cost_per_hour',
-                            label: 'Saat Başı Maliyet',
-                            sortable: true,
-                            type: 'number',
-                            formatter: (value) => `<span class="fw-bold">€${(value || 0).toFixed(2)}</span>`
-                        },
-                        {
-                            field: 'issues',
-                            label: 'İş Anahtarları',
-                            sortable: false,
                             type: 'text',
-                            formatter: (value, rowData) => {
-                                const keys = rowData.raw_data?.issues || [];
-                                
-                                if (!keys || keys.length === 0) {
-                                    return '-';
-                                }
-                                
-                                return keys.map(key => {
-                                    let badgeClass = 'badge task-key-link me-1 mb-1';
-                                    
-                                    // Set background color based on status
-                                    switch(key.status) {
-                                        case 'completed':
-                                            badgeClass += ' bg-success';
-                                            break;
-                                        case 'in_progress':
-                                            badgeClass += ' bg-primary';
-                                            break;
-                                        case 'waiting':
-                                            badgeClass += ' bg-danger';
-                                            break;
-                                        default:
-                                            badgeClass += ' bg-secondary';
-                                    }
-                                    
-                                    return `<a href="/manufacturing/machining/tasks/list/?task=${key.key}" target="_blank" class="${badgeClass}">${key.key}</a>`;
-                                }).join('');
+                            formatter: (value) => {
+                                const typeLabels = {
+                                    'weekday_work': '<span class="badge bg-primary">Hafta İçi</span>',
+                                    'after_hours': '<span class="badge bg-warning">Mesai</span>',
+                                    'sunday': '<span class="badge bg-danger">Pazar</span>'
+                                };
+                                return typeLabels[value] || `<span class="badge bg-secondary">${value || '-'}</span>`;
                             }
                         }
                     ],
@@ -844,25 +761,19 @@ async function showMachiningDetails(jobNo) {
                     skeletonLoading: false
                 });
 
-                // Calculate cost per hour for each user
-                userTableData.forEach(user => {
-                    const totalHours = user.weekday_work_hours + user.after_hours_hours + user.sunday_hours;
-                    user.cost_per_hour = totalHours > 0 ? user.total_cost / totalHours : 0;
-                });
-
                 // Update table with data
-                userDetailsTable.updateData(userTableData, {
-                    totalItems: userTableData.length,
+                entriesTable.updateData(entriesTableData, {
+                    totalItems: entriesTableData.length,
                     currentPage: 1,
-                    pageSize: userTableData.length
+                    pageSize: entriesTableData.length
                 });
             }, 100);
         } else {
             modal.addCustomSection({
-                title: 'Kullanıcı Detayları',
+                title: 'Kayıtlar',
                 icon: 'fas fa-table',
-                iconColor: 'text-success',
-                customContent: '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Bu iş için kullanıcı detayı bulunamadı.</div>'
+                iconColor: 'text-primary',
+                customContent: '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Bu iş için kayıt bulunamadı.</div>'
             });
         }
         

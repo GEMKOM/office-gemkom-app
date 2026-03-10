@@ -2,10 +2,15 @@ import { initNavbar } from '../../components/navbar.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { TableComponent } from '../../components/table/table.js';
+import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { canViewCostTab } from '../../authService.js';
-import { getCostTable, getCostChildren } from '../../apis/projects/cost.js';
+import { getCostTable, getCostChildren, getProcurementLines } from '../../apis/projects/cost.js';
 import { listCustomers } from '../../apis/projects/customers.js';
+import { getCombinedJobCosts } from '../../apis/planning/reports.js';
+import { getMachiningJobEntries } from '../../apis/machining/reports.js';
+import { getWeldingJobCostDetail } from '../../apis/welding/reports.js';
+import { fetchAssignments } from '../../apis/subcontracting/assignments.js';
 
 const STATUS_OPTIONS = [
     { value: '', label: 'Tümü' },
@@ -232,33 +237,68 @@ document.addEventListener('DOMContentLoaded', async () => {
                 field: 'job_no',
                 label: 'İş No',
                 sortable: true,
-                width: '7rem',
+                width: '160px',
                 formatter: (v, row) => {
                     if (!v) return '-';
                     const level = row.hierarchy_level ?? 0;
                     const url = `/projects/project-tracking/?job_no=${encodeURIComponent(v)}`;
                     if (level > 0) {
-                        return `<a href="${url}" class="text-secondary text-decoration-none text-nowrap" style="font-weight:600;font-size:0.9rem;">${v}</a>`;
+                        // Child jobs - subtle badge styling
+                        return `<a href="${url}" class="text-decoration-none" style="font-weight: 600; color: #6c757d; font-family: 'Courier New', monospace; font-size: 0.9rem; background: rgba(108, 117, 125, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(108, 117, 125, 0.2); display: inline-block;">${v}</a>`;
+                    } else {
+                        // Root jobs - prominent badge styling
+                        return `<a href="${url}" class="text-decoration-none" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); display: inline-block;">${v}</a>`;
                     }
-                    return `<a href="${url}" class="fw-bold text-primary text-decoration-none text-nowrap">${v}</a>`;
                 }
             },
             { field: 'title', label: 'Başlık', sortable: false, formatter: (v, row) => (v || '-') },
-            { field: 'customer_name', label: 'Müşteri', sortable: false, formatter: v => (v || '-') },
+            { 
+                field: 'customer_name', 
+                label: 'Müşteri', 
+                sortable: false, 
+                width: '220px',
+                formatter: (v, row) => {
+                    const customerDisplayName = row.customer_short_name || row.customer_name || v;
+                    if (!customerDisplayName) return '-';
+                    return `<span class="status-badge status-grey">${customerDisplayName}</span>`;
+                }
+            },
             { field: 'status', label: 'Durum', sortable: true, formatter: v => statusBadge(v) },
             { 
                 field: 'labor_cost', 
-                label: 'İşçilik + Personel Gen. Gider', 
+                label: 'İşçilik + Vergi', 
                 sortable: true, 
                 formatter: (v, row) => {
                     const labor = typeof v === 'string' ? parseFloat(v) : (v || 0);
                     const overhead = typeof row.employee_overhead_cost === 'string' ? parseFloat(row.employee_overhead_cost) : (row.employee_overhead_cost || 0);
                     const total = labor + overhead;
-                    return formatMoney(total);
+                    const jobNo = (row.job_no || '').replace(/"/g, '&quot;');
+                    const iconButton = total > 0 ? ` <button class="btn btn-sm btn-link p-0 ms-1" onclick="window.showJobDetails &amp;&amp; window.showJobDetails(&quot;${jobNo}&quot;)" title="İşçilik Detaylarını Görüntüle" style="text-decoration: none; white-space: nowrap;"><i class="fas fa-info-circle text-primary"></i></button>` : '';
+                    return `<span style="white-space: nowrap;">${formatMoney(total)}${iconButton}</span>`;
                 }
             },
-            { field: 'material_cost', label: 'Malzeme', sortable: true, formatter: formatMoney },
-            { field: 'subcontractor_cost', label: 'Taşeron', sortable: true, formatter: formatMoney },
+            { 
+                field: 'material_cost', 
+                label: 'Malzeme', 
+                sortable: true, 
+                formatter: (v, row) => {
+                    const materialCost = typeof v === 'string' ? parseFloat(v) : (v || 0);
+                    const jobNo = (row.job_no || '').replace(/"/g, '&quot;');
+                    const iconButton = materialCost > 0 ? ` <button class="btn btn-sm btn-link p-0 ms-1" onclick="window.showMaterialDetails &amp;&amp; window.showMaterialDetails(&quot;${jobNo}&quot;)" title="Malzeme Detaylarını Görüntüle" style="text-decoration: none; white-space: nowrap;"><i class="fas fa-info-circle text-primary"></i></button>` : '';
+                    return `<span style="white-space: nowrap;">${formatMoney(v)}${iconButton}</span>`;
+                }
+            },
+            { 
+                field: 'subcontractor_cost', 
+                label: 'Taşeron', 
+                sortable: true, 
+                formatter: (v, row) => {
+                    const subcontractorCost = typeof v === 'string' ? parseFloat(v) : (v || 0);
+                    const jobNo = (row.job_no || '').replace(/"/g, '&quot;');
+                    const iconButton = subcontractorCost > 0 ? ` <button class="btn btn-sm btn-link p-0 ms-1" onclick="window.showSubcontractorDetails &amp;&amp; window.showSubcontractorDetails(&quot;${jobNo}&quot;)" title="Taşeron Detaylarını Görüntüle" style="text-decoration: none; white-space: nowrap;"><i class="fas fa-info-circle text-primary"></i></button>` : '';
+                    return `<span style="white-space: nowrap;">${formatMoney(v)}${iconButton}</span>`;
+                }
+            },
             { 
                 field: 'paint_cost', 
                 label: 'Boya + Boya Malzemesi', 
@@ -272,14 +312,36 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             { field: 'qc_cost', label: 'KK', sortable: true, formatter: formatMoney },
             { field: 'shipping_cost', label: 'Sevkiyat', sortable: true, formatter: formatMoney },
-            { field: 'general_expenses_cost', label: 'Genel Giderler', sortable: true, formatter: formatMoney },
-            { field: 'price_per_kg', label: 'Kg Fiyatı', sortable: true, formatter: v => (v != null && v !== '' ? `€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '<span class="text-muted">-</span>') },
+            { 
+                field: 'general_expenses_cost', 
+                label: 'Genel Giderler', 
+                sortable: true, 
+                formatter: (v, row) => {
+                    const cost = formatMoney(v);
+                    const rate = row.general_expenses_rate;
+                    if (rate != null && rate !== '' && rate !== undefined) {
+                        const rateNum = typeof rate === 'string' ? parseFloat(rate) : rate;
+                        if (!isNaN(rateNum)) {
+                            // Remove trailing zeros and decimal point if not needed
+                            const formattedRate = parseFloat(rateNum.toString());
+                            return `<span style="white-space: nowrap;">${cost} <small class="text-muted">(${formattedRate})</small></span>`;
+                        }
+                    }
+                    return cost;
+                }
+            },
             { field: 'total_weight_kg', label: 'Toplam Ağırlık (kg)', sortable: true, formatter: v => (v != null && v !== '' ? parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '<span class="text-muted">-</span>') },
+            { 
+                field: 'price_per_kg', 
+                label: 'Kg Fiyatı', 
+                sortable: true, 
+                formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-primary">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') 
+            },
             { field: 'actual_total_cost', label: 'Toplam Maliyet', sortable: true, formatter: v => `<span class="fw-bold">${formatMoney(v)}</span>` },
-            { field: 'selling_price', label: 'Satış Fiyatı', sortable: true, formatter: (v, row) => (v != null && v !== '' ? formatMoney(v) + (row.selling_price_currency ? ` <small class="text-muted">${row.selling_price_currency}</small>` : '') : '<span class="text-muted">-</span>') },
+            { field: 'selling_price', label: 'Satış Fiyatı', sortable: true, formatter: (v, row) => (v != null && v !== '' ? formatMoney(v) + (row.selling_price_currency && row.selling_price_currency !== 'EUR' ? ` <small class="text-muted">${row.selling_price_currency}</small>` : '') : '<span class="text-muted">-</span>') },
             { field: 'margin_eur', label: 'Marj (€)', sortable: true, formatter: v => (v != null && v !== '' ? formatMoney(v) : '<span class="text-muted">-</span>') },
             { field: 'margin_pct', label: 'Marj %', sortable: true, formatter: v => (v != null && v !== '' ? formatPct(v) : '<span class="text-muted">-</span>') },
-            { field: 'last_updated', label: 'Son Güncelleme', sortable: false, formatter: formatDate }
+            { field: 'last_updated', label: 'Tarih', sortable: false, formatter: formatDate }
         ],
         data: [],
         pagination: true,
@@ -350,3 +412,1038 @@ async function loadData() {
         costTable.setLoading(false);
     }
 }
+
+// Helper function to ensure modal container exists
+function ensureModalContainer(containerId) {
+    let container = document.getElementById(containerId);
+    if (!container) {
+        container = document.createElement('div');
+        container.id = containerId;
+        document.body.appendChild(container);
+    }
+    return container;
+}
+
+// Show error message
+function showError(message) {
+    console.error(message);
+    alert(message);
+}
+
+// Show job details modal
+async function showJobDetails(jobNo) {
+    if (!jobNo) {
+        showError('İş numarası bulunamadı.');
+        return;
+    }
+    
+    try {
+        // Ensure container exists
+        ensureModalContainer('job-details-modal-container');
+        
+        // Fetch job cost data
+        const data = await getCombinedJobCosts({ job_no: jobNo });
+        const results = data.results || [];
+        
+        if (results.length === 0) {
+            showError('Bu iş için maliyet verisi bulunamadı.');
+            return;
+        }
+        
+        const jobData = results[0];
+        const machining = jobData.machining || null;
+        const welding = jobData.welding || null;
+        const currency = jobData.currency || 'EUR';
+        
+        const modal = new DisplayModal('job-details-modal-container', {
+            title: `${jobNo} - İş Maliyeti Detayları`,
+            icon: 'fas fa-calculator',
+            size: 'xl',
+            showEditButton: false
+        });
+        
+        // Add summary section
+        const combinedTotalCost = jobData.combined_total_cost || 0;
+        const combinedTotalHours = jobData.combined_total_hours || 0;
+        const costPerHour = combinedTotalHours > 0 ? combinedTotalCost / combinedTotalHours : 0;
+        
+        modal.addCustomSection({
+            title: 'Özet',
+            icon: 'fas fa-chart-pie',
+            iconColor: 'text-primary',
+            customContent: `
+                <div class="row mb-3">
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-euro-sign text-primary mb-2"></i>
+                                <div class="fw-bold">€${combinedTotalCost.toFixed(2)}</div>
+                                <small class="text-muted">Toplam Maliyet</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-clock text-primary mb-2"></i>
+                                <div class="fw-bold">${combinedTotalHours.toFixed(1)}</div>
+                                <small class="text-muted">Toplam Saat</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-calculator text-primary mb-2"></i>
+                                <div class="fw-bold">€${costPerHour.toFixed(2)}</div>
+                                <small class="text-muted">Saat Başı Maliyet</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `
+        });
+        
+        // Add machining section (always show, even if no data)
+        const machiningTotalHours = machining ? (machining.hours.weekday_work || 0) + (machining.hours.after_hours || 0) + (machining.hours.sunday || 0) : 0;
+        const machiningOvertimeCost = machining ? (machining.costs.after_hours || 0) + (machining.costs.sunday || 0) : 0;
+        
+        modal.addCustomSection({
+            title: 'Talaşlı İmalat Departmanı',
+            icon: 'fas fa-cog',
+            iconColor: 'text-primary',
+            customContent: machining ? `
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-euro-sign text-primary mb-2"></i>
+                                <div class="fw-bold">€${(machining.total_cost || 0).toFixed(2)}</div>
+                                <small class="text-muted">Toplam Maliyet</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-clock text-primary mb-2"></i>
+                                <div class="fw-bold">${machiningTotalHours.toFixed(1)}</div>
+                                <small class="text-muted">Toplam Saat</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-calendar text-primary mb-2"></i>
+                                <div class="fw-bold">€${machiningOvertimeCost.toFixed(2)}</div>
+                                <small class="text-muted">Mesai Maliyeti</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-calculator text-primary mb-2"></i>
+                                <div class="fw-bold">€${(machiningTotalHours > 0 ? (machining.total_cost || 0) / machiningTotalHours : 0).toFixed(2)}</div>
+                                <small class="text-muted">Saat Başı Maliyet</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-center">
+                    <button class="btn btn-primary" onclick="showMachiningDetails('${jobNo}')">
+                        <i class="fas fa-table me-2"></i>Detayları Görüntüle
+                    </button>
+                </div>
+            ` : `
+                <div class="text-center py-3">
+                    <p class="text-muted mb-3">Bu iş için talaşlı imalat verisi bulunmamaktadır.</p>
+                </div>
+            `
+        });
+        
+        // Add welding section (always show, even if no data)
+        const weldingTotalHours = welding ? (welding.hours.regular || 0) + (welding.hours.after_hours || 0) + (welding.hours.holiday || 0) : 0;
+        const weldingOvertimeCost = welding ? (welding.costs.after_hours || 0) + (welding.costs.holiday || 0) : 0;
+        
+        modal.addCustomSection({
+            title: 'Kaynaklı İmalat Departmanı',
+            icon: 'fas fa-fire',
+            iconColor: 'text-danger',
+            customContent: welding ? `
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-euro-sign text-danger mb-2"></i>
+                                <div class="fw-bold">€${(welding.total_cost || 0).toFixed(2)}</div>
+                                <small class="text-muted">Toplam Maliyet</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-clock text-danger mb-2"></i>
+                                <div class="fw-bold">${weldingTotalHours.toFixed(1)}</div>
+                                <small class="text-muted">Toplam Saat</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-calendar text-danger mb-2"></i>
+                                <div class="fw-bold">€${weldingOvertimeCost.toFixed(2)}</div>
+                                <small class="text-muted">Mesai Maliyeti</small>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-calculator text-danger mb-2"></i>
+                                <div class="fw-bold">€${(weldingTotalHours > 0 ? (welding.total_cost || 0) / weldingTotalHours : 0).toFixed(2)}</div>
+                                <small class="text-muted">Saat Başı Maliyet</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="text-center">
+                    <button class="btn btn-danger" onclick="showWeldingDetails('${jobNo}')">
+                        <i class="fas fa-table me-2"></i>Detayları Görüntüle
+                    </button>
+                </div>
+            ` : `
+                <div class="text-center py-3">
+                    <p class="text-muted mb-3">Bu iş için kaynaklı imalat verisi bulunmamaktadır.</p>
+                </div>
+            `
+        });
+        
+        // Render and show modal
+        modal.render().show();
+        
+    } catch (error) {
+        console.error('Error loading job details:', error);
+        showError('İş detayları yüklenirken bir hata oluştu.');
+    }
+}
+
+// Show machining details modal
+async function showMachiningDetails(jobNo) {
+    try {
+        // Ensure container exists
+        ensureModalContainer('machining-details-modal-container');
+        
+        // Fetch machining entries for the job
+        const data = await getMachiningJobEntries({ job_no: jobNo });
+        const entries = data.entries || [];
+        const summary = data.summary || {};
+        
+        // Sort entries by start_time (ascending)
+        const sortedEntries = [...entries].sort((a, b) => {
+            const timeA = a.start_time || 0;
+            const timeB = b.start_time || 0;
+            return timeA - timeB;
+        });
+        
+        // Create display modal
+        const modal = new DisplayModal('machining-details-modal-container', {
+            title: `${jobNo} - Talaşlı İmalat Detayları`,
+            icon: 'fas fa-cog',
+            size: 'xl',
+            showEditButton: false
+        });
+        
+        // Add summary section
+        modal.addSection({
+            title: 'Özet',
+            icon: 'fas fa-chart-pie',
+            iconColor: 'text-primary',
+            fields: [
+                {
+                    id: 'total_entries',
+                    label: 'Toplam Kayıt',
+                    value: summary.total_entries || entries.length,
+                    type: 'number',
+                    icon: 'fas fa-list',
+                    colSize: 3
+                },
+                {
+                    id: 'total_hours',
+                    label: 'Toplam Saat',
+                    value: summary.total_hours || 0,
+                    type: 'number',
+                    icon: 'fas fa-clock',
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    colSize: 3
+                },
+                {
+                    id: 'weekday_work',
+                    label: 'Hafta İçi Saat',
+                    value: summary.breakdown_by_type?.weekday_work || 0,
+                    type: 'number',
+                    icon: 'fas fa-calendar-day',
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    colSize: 2
+                },
+                {
+                    id: 'after_hours',
+                    label: 'Mesai Saat',
+                    value: summary.breakdown_by_type?.after_hours || 0,
+                    type: 'number',
+                    icon: 'fas fa-clock',
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    colSize: 2
+                },
+                {
+                    id: 'sunday',
+                    label: 'Pazar Saat',
+                    value: summary.breakdown_by_type?.sunday || 0,
+                    type: 'number',
+                    icon: 'fas fa-calendar',
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    colSize: 2
+                }
+            ]
+        });
+        
+        // Add entries table using TableComponent
+        if (sortedEntries.length > 0) {
+            // Process entries data for table display
+            const entriesTableData = sortedEntries.map(entry => {
+                // Extract date from start_time timestamp
+                const date = entry.start_time ? new Date(entry.start_time).toISOString().split('T')[0] : '-';
+                return {
+                    id: entry.id,
+                    date: date,
+                    employee_id: entry.employee_id,
+                    employee_username: entry.employee_username,
+                    employee_full_name: entry.employee_full_name,
+                    operation_key: entry.operation_key || '-',
+                    operation_name: entry.operation_name || '-',
+                    hours: entry.hours || 0,
+                    work_type: entry.work_type,
+                    raw_data: entry
+                };
+            });
+
+            const tableHtml = `
+                <div id="machining-entries-table-container"></div>
+            `;
+            
+            modal.addCustomSection({
+                title: null,
+                customContent: tableHtml
+            });
+
+            // Render and show modal first
+            modal.render().show();
+
+            // Initialize table component after modal is shown
+            setTimeout(() => {
+                const entriesTable = new TableComponent('machining-entries-table-container', {
+                    title: 'Kayıtlar (Tarihe Göre Sıralı)',
+                    icon: 'fas fa-table',
+                    iconColor: 'text-primary',
+                    columns: [
+                        {
+                            field: 'date',
+                            label: 'Tarih',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => `<span class="fw-bold">${value || '-'}</span>`
+                        },
+                        {
+                            field: 'employee_full_name',
+                            label: 'Çalışan',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value, rowData) => `
+                                <div>
+                                    <span class="fw-bold text-primary">${value || rowData.employee_username || '-'}</span>
+                                    ${rowData.employee_username ? `<br><small class="text-muted">${rowData.employee_username}</small>` : ''}
+                                </div>
+                            `
+                        },
+                        {
+                            field: 'operation_key',
+                            label: 'Operasyon Anahtarı',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => `<span class="text-info">${value || '-'}</span>`
+                        },
+                        {
+                            field: 'operation_name',
+                            label: 'Operasyon Adı',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => `<span>${value || '-'}</span>`
+                        },
+                        {
+                            field: 'hours',
+                            label: 'Saat',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `<span class="fw-bold">${(value || 0).toFixed(1)}</span>`
+                        },
+                        {
+                            field: 'work_type',
+                            label: 'Tip',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => {
+                                const typeLabels = {
+                                    'weekday_work': '<span class="badge bg-primary">Hafta İçi</span>',
+                                    'after_hours': '<span class="badge bg-warning">Mesai</span>',
+                                    'sunday': '<span class="badge bg-danger">Pazar</span>'
+                                };
+                                return typeLabels[value] || `<span class="badge bg-secondary">${value || '-'}</span>`;
+                            }
+                        }
+                    ],
+                    onRowClick: null,
+                    onSort: null,
+                    onPageChange: null,
+                    showPagination: false,
+                    showSearch: false,
+                    showExport: false,
+                    skeletonLoading: false
+                });
+
+                // Update table with data
+                entriesTable.updateData(entriesTableData, {
+                    totalItems: entriesTableData.length,
+                    currentPage: 1,
+                    pageSize: entriesTableData.length
+                });
+            }, 100);
+        } else {
+            modal.addCustomSection({
+                title: 'Kayıtlar',
+                icon: 'fas fa-table',
+                iconColor: 'text-primary',
+                customContent: '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Bu iş için kayıt bulunamadı.</div>'
+            });
+            modal.render().show();
+        }
+        
+    } catch (error) {
+        console.error('Error loading machining details:', error);
+        showError('Talaşlı imalat detayları yüklenirken bir hata oluştu.');
+    }
+}
+
+// Show welding details modal
+async function showWeldingDetails(jobNo) {
+    try {
+        // Ensure container exists
+        ensureModalContainer('welding-details-modal-container');
+        
+        // Fetch welding entries for the job
+        const data = await getWeldingJobCostDetail({ job_no: jobNo });
+        const entries = data.entries || [];
+        const summary = data.summary || {};
+        
+        // Sort entries by date (ascending)
+        const sortedEntries = [...entries].sort((a, b) => {
+            const dateA = new Date(a.date || '');
+            const dateB = new Date(b.date || '');
+            return dateA - dateB;
+        });
+        
+        // Create display modal
+        const modal = new DisplayModal('welding-details-modal-container', {
+            title: `${jobNo} - Kaynaklı İmalat Detayları`,
+            icon: 'fas fa-fire',
+            size: 'xl',
+            showEditButton: false
+        });
+        
+        // Add summary section
+        modal.addSection({
+            title: 'Özet',
+            icon: 'fas fa-chart-pie',
+            iconColor: 'text-danger',
+            fields: [
+                {
+                    id: 'total_entries',
+                    label: 'Toplam Kayıt',
+                    value: summary.total_entries || entries.length,
+                    type: 'number',
+                    icon: 'fas fa-list',
+                    colSize: 3
+                },
+                {
+                    id: 'total_hours',
+                    label: 'Toplam Saat',
+                    value: summary.total_hours || 0,
+                    type: 'number',
+                    icon: 'fas fa-clock',
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    colSize: 3
+                },
+                {
+                    id: 'regular_hours',
+                    label: 'Normal Saat',
+                    value: summary.breakdown_by_type?.regular || 0,
+                    type: 'number',
+                    icon: 'fas fa-calendar-day',
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    colSize: 2
+                },
+                {
+                    id: 'after_hours',
+                    label: 'Mesai Saat',
+                    value: summary.breakdown_by_type?.after_hours || 0,
+                    type: 'number',
+                    icon: 'fas fa-clock',
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    colSize: 2
+                },
+                {
+                    id: 'holiday_hours',
+                    label: 'Tatil Saat',
+                    value: summary.breakdown_by_type?.holiday || 0,
+                    type: 'number',
+                    icon: 'fas fa-calendar',
+                    format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
+                    colSize: 2
+                }
+            ]
+        });
+        
+        // Add entries table using TableComponent
+        if (sortedEntries.length > 0) {
+            // Process entries data for table display
+            const entriesTableData = sortedEntries.map(entry => ({
+                id: entry.id,
+                date: entry.date,
+                employee_id: entry.employee_id,
+                employee_username: entry.employee_username,
+                employee_full_name: entry.employee_full_name,
+                hours: entry.hours || 0,
+                overtime_type: entry.overtime_type,
+                raw_data: entry
+            }));
+
+            const tableHtml = `
+                <div id="welding-entries-table-container"></div>
+            `;
+            
+            modal.addCustomSection({
+                title: null,
+                customContent: tableHtml
+            });
+
+            // Render and show modal first
+            modal.render().show();
+
+            // Initialize table component after modal is shown
+            setTimeout(() => {
+                const entriesTable = new TableComponent('welding-entries-table-container', {
+                    title: 'Kayıtlar (Tarihe Göre Sıralı)',
+                    icon: 'fas fa-table',
+                    iconColor: 'text-danger',
+                    columns: [
+                        {
+                            field: 'date',
+                            label: 'Tarih',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => `<span class="fw-bold">${value || '-'}</span>`
+                        },
+                        {
+                            field: 'employee_full_name',
+                            label: 'Çalışan',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value, rowData) => `
+                                <div>
+                                    <span class="fw-bold text-primary">${value || rowData.employee_username || '-'}</span>
+                                    ${rowData.employee_username ? `<br><small class="text-muted">${rowData.employee_username}</small>` : ''}
+                                </div>
+                            `
+                        },
+                        {
+                            field: 'hours',
+                            label: 'Saat',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => `<span class="fw-bold">${(value || 0).toFixed(1)}</span>`
+                        },
+                        {
+                            field: 'overtime_type',
+                            label: 'Tip',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => {
+                                const typeLabels = {
+                                    'regular': '<span class="badge bg-primary">Normal</span>',
+                                    'after_hours': '<span class="badge bg-warning">Mesai</span>',
+                                    'holiday': '<span class="badge bg-danger">Tatil</span>'
+                                };
+                                return typeLabels[value] || `<span class="badge bg-secondary">${value || '-'}</span>`;
+                            }
+                        }
+                    ],
+                    onRowClick: null,
+                    onSort: null,
+                    onPageChange: null,
+                    showPagination: false,
+                    showSearch: false,
+                    showExport: false,
+                    skeletonLoading: false
+                });
+
+                // Update table with data
+                entriesTable.updateData(entriesTableData, {
+                    totalItems: entriesTableData.length,
+                    currentPage: 1,
+                    pageSize: entriesTableData.length
+                });
+            }, 100);
+        } else {
+            modal.addCustomSection({
+                title: 'Kayıtlar',
+                icon: 'fas fa-table',
+                iconColor: 'text-danger',
+                customContent: '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Bu iş için kayıt bulunamadı.</div>'
+            });
+            modal.render().show();
+        }
+        
+    } catch (error) {
+        console.error('Error loading welding details:', error);
+        showError('Kaynaklı imalat detayları yüklenirken bir hata oluştu.');
+    }
+}
+
+// Show material details modal
+async function showMaterialDetails(jobNo) {
+    if (!jobNo) {
+        showError('İş numarası bulunamadı.');
+        return;
+    }
+    
+    try {
+        // Ensure container exists
+        ensureModalContainer('material-details-modal-container');
+        
+        // Fetch procurement lines for the job
+        const lines = await getProcurementLines(jobNo);
+        const procurementLines = Array.isArray(lines) ? lines : (lines.results || []);
+        
+        // Create display modal
+        const modal = new DisplayModal('material-details-modal-container', {
+            title: `${jobNo} - Malzeme Detayları`,
+            icon: 'fas fa-box',
+            size: 'xl',
+            showEditButton: false
+        });
+        
+        // Calculate totals
+        const totalAmount = procurementLines.reduce((sum, line) => {
+            const amount = typeof line.amount_eur === 'string' ? parseFloat(line.amount_eur) : (line.amount_eur || 0);
+            return sum + amount;
+        }, 0);
+        
+        // Add summary section
+        modal.addSection({
+            title: 'Özet',
+            icon: 'fas fa-chart-pie',
+            iconColor: 'text-success',
+            fields: [
+                {
+                    id: 'total_lines',
+                    label: 'Toplam Satır',
+                    value: procurementLines.length,
+                    type: 'number',
+                    icon: 'fas fa-list',
+                    colSize: 6
+                },
+                {
+                    id: 'total_amount',
+                    label: 'Toplam Tutar',
+                    value: totalAmount,
+                    type: 'currency',
+                    icon: 'fas fa-euro-sign',
+                    format: (value) => `€${(Number(value) || 0).toFixed(2)}`,
+                    colSize: 6
+                }
+            ]
+        });
+        
+        // Add procurement lines table using TableComponent
+        if (procurementLines.length > 0) {
+            // Process lines data for table display
+            const linesTableData = procurementLines.map((line, index) => ({
+                id: line.id || index,
+                item_code: line.item_code || '-',
+                item_name: line.item_name || '-',
+                item_unit: line.item_unit || '-',
+                item_description: line.item_description || '-',
+                quantity: line.quantity || 0,
+                unit_price: line.unit_price || 0,
+                amount_eur: line.amount_eur || 0,
+                raw_data: line
+            }));
+
+            const tableHtml = `
+                <div id="material-lines-table-container"></div>
+            `;
+            
+            modal.addCustomSection({
+                title: null,
+                customContent: tableHtml
+            });
+
+            // Render and show modal first
+            modal.render().show();
+
+            // Initialize table component after modal is shown
+            setTimeout(() => {
+                const linesTable = new TableComponent('material-lines-table-container', {
+                    title: 'Malzeme Satırları',
+                    icon: 'fas fa-table',
+                    iconColor: 'text-success',
+                    columns: [
+                        {
+                            field: 'item_code',
+                            label: 'Malzeme Kodu',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => `<span class="text-info fw-bold">${value || '-'}</span>`
+                        },
+                        {
+                            field: 'item_name',
+                            label: 'Malzeme Adı',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => `<span>${value || '-'}</span>`
+                        },
+                        {
+                            field: 'item_unit',
+                            label: 'Birim',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => `<span class="text-muted">${value || '-'}</span>`
+                        },
+                        {
+                            field: 'item_description',
+                            label: 'Açıklama',
+                            sortable: false,
+                            type: 'text',
+                            formatter: (value) => `<span>${value || '-'}</span>`
+                        },
+                        {
+                            field: 'quantity',
+                            label: 'Miktar',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => {
+                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
+                                return `<span class="fw-bold">${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+                            }
+                        },
+                        {
+                            field: 'unit_price',
+                            label: 'Birim Fiyat (€)',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => {
+                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
+                                return `€${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                            }
+                        },
+                        {
+                            field: 'amount_eur',
+                            label: 'Tutar (€)',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => {
+                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
+                                return `<span class="fw-bold text-success">€${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+                            }
+                        }
+                    ],
+                    onRowClick: null,
+                    onSort: null,
+                    onPageChange: null,
+                    showPagination: false,
+                    showSearch: false,
+                    showExport: false,
+                    skeletonLoading: false
+                });
+
+                // Update table with data
+                linesTable.updateData(linesTableData, {
+                    totalItems: linesTableData.length,
+                    currentPage: 1,
+                    pageSize: linesTableData.length
+                });
+            }, 100);
+        } else {
+            modal.addCustomSection({
+                title: 'Malzeme Satırları',
+                icon: 'fas fa-table',
+                iconColor: 'text-success',
+                customContent: '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Bu iş için malzeme satırı bulunamadı.</div>'
+            });
+            modal.render().show();
+        }
+        
+    } catch (error) {
+        console.error('Error loading material details:', error);
+        showError('Malzeme detayları yüklenirken bir hata oluştu.');
+    }
+}
+
+// Show subcontractor details modal
+async function showSubcontractorDetails(jobNo) {
+    if (!jobNo) {
+        showError('İş numarası bulunamadı.');
+        return;
+    }
+    
+    try {
+        // Ensure container exists
+        ensureModalContainer('subcontractor-details-modal-container');
+        
+        // Fetch subcontracting assignments for the job
+        const data = await fetchAssignments({ job_no: jobNo });
+        const assignments = Array.isArray(data) ? data : (data.results || []);
+        
+        // Create display modal
+        const modal = new DisplayModal('subcontractor-details-modal-container', {
+            title: `${jobNo} - Taşeron Detayları`,
+            icon: 'fas fa-handshake',
+            size: 'xl',
+            showEditButton: false
+        });
+        
+        // Calculate totals
+        const totalCost = assignments.reduce((sum, assignment) => {
+            const cost = typeof assignment.current_cost === 'string' ? parseFloat(assignment.current_cost) : (assignment.current_cost || 0);
+            return sum + cost;
+        }, 0);
+        
+        const totalUnbilledCost = assignments.reduce((sum, assignment) => {
+            const cost = typeof assignment.unbilled_cost === 'string' ? parseFloat(assignment.unbilled_cost) : (assignment.unbilled_cost || 0);
+            return sum + cost;
+        }, 0);
+        
+        const totalWeight = assignments.reduce((sum, assignment) => {
+            const weight = typeof assignment.allocated_weight_kg === 'string' ? parseFloat(assignment.allocated_weight_kg) : (assignment.allocated_weight_kg || 0);
+            return sum + weight;
+        }, 0);
+        
+        // Add summary section
+        modal.addSection({
+            title: 'Özet',
+            icon: 'fas fa-chart-pie',
+            iconColor: 'text-warning',
+            fields: [
+                {
+                    id: 'total_assignments',
+                    label: 'Toplam Atama',
+                    value: assignments.length,
+                    type: 'number',
+                    icon: 'fas fa-list',
+                    colSize: 4
+                },
+                {
+                    id: 'total_cost',
+                    label: 'Toplam Maliyet',
+                    value: totalCost,
+                    type: 'currency',
+                    icon: 'fas fa-euro-sign',
+                    format: (value) => `€${(Number(value) || 0).toFixed(2)}`,
+                    colSize: 4
+                },
+                {
+                    id: 'total_unbilled',
+                    label: 'Faturalanmamış Tutar',
+                    value: totalUnbilledCost,
+                    type: 'currency',
+                    icon: 'fas fa-file-invoice',
+                    format: (value) => `€${(Number(value) || 0).toFixed(2)}`,
+                    colSize: 4
+                },
+                {
+                    id: 'total_weight',
+                    label: 'Toplam Ağırlık (kg)',
+                    value: totalWeight,
+                    type: 'number',
+                    icon: 'fas fa-weight',
+                    format: (value) => `${(Number(value) || 0).toFixed(2)} kg`,
+                    colSize: 4
+                }
+            ]
+        });
+        
+        // Add assignments table using TableComponent
+        if (assignments.length > 0) {
+            // Process assignments data for table display
+            const assignmentsTableData = assignments.map((assignment, index) => ({
+                id: assignment.id || index,
+                subcontractor_name: assignment.subcontractor_name || '-',
+                price_tier_name: assignment.price_tier_name || '-',
+                price_per_kg: assignment.price_per_kg || 0,
+                cost_currency: assignment.cost_currency || 'EUR',
+                allocated_weight_kg: assignment.allocated_weight_kg || 0,
+                current_cost: assignment.current_cost || 0,
+                current_progress: assignment.current_progress || 0,
+                last_billed_progress: assignment.last_billed_progress || 0,
+                unbilled_progress: assignment.unbilled_progress || 0,
+                unbilled_cost: assignment.unbilled_cost || 0,
+                raw_data: assignment
+            }));
+
+            const tableHtml = `
+                <div id="subcontractor-assignments-table-container"></div>
+            `;
+            
+            modal.addCustomSection({
+                title: null,
+                customContent: tableHtml
+            });
+
+            // Render and show modal first
+            modal.render().show();
+
+            // Initialize table component after modal is shown
+            setTimeout(() => {
+                const assignmentsTable = new TableComponent('subcontractor-assignments-table-container', {
+                    title: 'Taşeron Atamaları',
+                    icon: 'fas fa-table',
+                    iconColor: 'text-warning',
+                    columns: [
+                        {
+                            field: 'subcontractor_name',
+                            label: 'Taşeron',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => `<span class="fw-bold text-primary">${value || '-'}</span>`
+                        },
+                        {
+                            field: 'price_tier_name',
+                            label: 'Fiyat Kademesi',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => `<span>${value || '-'}</span>`
+                        },
+                        {
+                            field: 'price_per_kg',
+                            label: 'Kg Fiyatı',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value, rowData) => {
+                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
+                                const currency = rowData.cost_currency || 'EUR';
+                                return `${currency === 'EUR' ? '€' : currency}${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                            }
+                        },
+                        {
+                            field: 'allocated_weight_kg',
+                            label: 'Ayrılan Ağırlık (kg)',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => {
+                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
+                                return `<span class="fw-bold">${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+                            }
+                        },
+                        {
+                            field: 'current_progress',
+                            label: 'Mevcut İlerleme (%)',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => {
+                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
+                                return `<span class="badge bg-info">${num.toFixed(1)}%</span>`;
+                            }
+                        },
+                        {
+                            field: 'last_billed_progress',
+                            label: 'Son Faturalanan (%)',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => {
+                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
+                                return `<span class="badge bg-success">${num.toFixed(1)}%</span>`;
+                            }
+                        },
+                        {
+                            field: 'unbilled_progress',
+                            label: 'Faturalanmamış (%)',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value) => {
+                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
+                                return `<span class="badge bg-warning">${num.toFixed(1)}%</span>`;
+                            }
+                        },
+                        {
+                            field: 'current_cost',
+                            label: 'Mevcut Maliyet',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value, rowData) => {
+                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
+                                const currency = rowData.cost_currency || 'EUR';
+                                return `<span class="fw-bold">${currency === 'EUR' ? '€' : currency}${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+                            }
+                        },
+                        {
+                            field: 'unbilled_cost',
+                            label: 'Faturalanmamış Tutar',
+                            sortable: true,
+                            type: 'number',
+                            formatter: (value, rowData) => {
+                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
+                                const currency = rowData.cost_currency || 'EUR';
+                                return `<span class="fw-bold text-warning">${currency === 'EUR' ? '€' : currency}${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+                            }
+                        }
+                    ],
+                    onRowClick: null,
+                    onSort: null,
+                    onPageChange: null,
+                    showPagination: false,
+                    showSearch: false,
+                    showExport: false,
+                    skeletonLoading: false
+                });
+
+                // Update table with data
+                assignmentsTable.updateData(assignmentsTableData, {
+                    totalItems: assignmentsTableData.length,
+                    currentPage: 1,
+                    pageSize: assignmentsTableData.length
+                });
+            }, 100);
+        } else {
+            modal.addCustomSection({
+                title: 'Taşeron Atamaları',
+                icon: 'fas fa-table',
+                iconColor: 'text-warning',
+                customContent: '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Bu iş için taşeron ataması bulunamadı.</div>'
+            });
+            modal.render().show();
+        }
+        
+    } catch (error) {
+        console.error('Error loading subcontractor details:', error);
+        showError('Taşeron detayları yüklenirken bir hata oluştu.');
+    }
+}
+
+// Make functions globally accessible for button onclick
+window.showJobDetails = showJobDetails;
+window.showMachiningDetails = showMachiningDetails;
+window.showWeldingDetails = showWeldingDetails;
+window.showMaterialDetails = showMaterialDetails;
+window.showSubcontractorDetails = showSubcontractorDetails;
