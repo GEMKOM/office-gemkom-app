@@ -24,8 +24,10 @@ import {
     DEFECT_TYPE_CHOICES,
     SEVERITY_CHOICES,
     DISPOSITION_CHOICES,
-    NCR_STATUS_CHOICES
+    NCR_STATUS_CHOICES,
+    NCR_FILE_TYPE_OPTIONS
 } from '../../../apis/qualityControl.js';
+import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 
 // State management
 const urlParams = new URLSearchParams(window.location.search);
@@ -52,14 +54,6 @@ let ncrSubmitModal = null;
 let ncrFileUploadModal = null;
 
 const ncrFileViewer = new FileViewer();
-
-const NCR_FILE_TYPE_OPTIONS = [
-    { value: 'photo', label: 'Fotoğraf' },
-    { value: 'drawing', label: 'Çizim' },
-    { value: 'report', label: 'Rapor' },
-    { value: 'specification', label: 'Şartname' },
-    { value: 'other', label: 'Diğer' }
-];
 
 function getFileExtension(fileName) {
     if (!fileName) return '';
@@ -842,8 +836,26 @@ async function showNCRDetails(ncr) {
     }
 }
 
-function showCreateNCRModal() {
+async function showCreateNCRModal() {
     ncrCreateModal.clearAll();
+
+    // Load job orders for dropdown
+    let jobOrderOptions = [{ value: '', label: 'İş emri seçin' }];
+    try {
+        const jobOrders = await getJobOrderDropdown();
+        if (Array.isArray(jobOrders)) {
+            jobOrderOptions = [
+                { value: '', label: 'İş emri seçin' },
+                ...jobOrders.map(jo => ({
+                    value: jo.job_no,
+                    label: `${jo.job_no}${jo.title ? ' - ' + jo.title : ''}`
+                }))
+            ];
+        }
+    } catch (error) {
+        console.error('Error loading job orders:', error);
+        showNotification('İş emirleri yüklenirken hata oluştu', 'error');
+    }
 
     ncrCreateModal
         .addSection({
@@ -853,9 +865,11 @@ function showCreateNCRModal() {
                 {
                     name: 'job_order',
                     label: 'İş Emri',
-                    type: 'text',
+                    type: 'dropdown',
                     required: true,
-                    placeholder: 'İş emri numarası'
+                    searchable: true,
+                    options: jobOrderOptions,
+                    placeholder: 'İş emri seçin'
                 },
                 {
                     name: 'title',

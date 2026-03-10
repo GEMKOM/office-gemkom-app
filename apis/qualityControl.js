@@ -428,6 +428,17 @@ export const NCR_STATUS_CHOICES = [
 ];
 
 /**
+ * Get NCR file type choices
+ */
+export const NCR_FILE_TYPE_OPTIONS = [
+    { value: 'photo', label: 'Fotoğraf' },
+    { value: 'drawing', label: 'Çizim' },
+    { value: 'report', label: 'Rapor' },
+    { value: 'specification', label: 'Şartname' },
+    { value: 'other', label: 'Diğer' }
+];
+
+/**
  * Get QC review status choices
  */
 export const QC_REVIEW_STATUS_CHOICES = [
