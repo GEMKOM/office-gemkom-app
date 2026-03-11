@@ -2863,7 +2863,27 @@ function updateStats() {
 function showCreateOfferModal() {
     createOfferModal.clearAll();
     createOfferModal.addSection({ title: 'Teklif Bilgileri', icon: 'fas fa-info-circle', iconColor: 'text-primary' });
-    createOfferModal.addField({ id: 'customer', name: 'customer', label: 'Müşteri', type: 'dropdown', required: true, icon: 'fas fa-building', colSize: 6, options: customerOptions });
+    // Customer: remote search (same behavior as edit modal and cost-table filter)
+    createOfferModal.addField({
+        id: 'customer',
+        name: 'customer',
+        label: 'Müşteri',
+        type: 'dropdown',
+        required: true,
+        icon: 'fas fa-building',
+        colSize: 6,
+        searchable: true,
+        options: [],
+        placeholder: 'Müşteri ara (en az 3 karakter)',
+        minSearchLength: 3,
+        remoteSearchPlaceholder: 'En az 3 karakter yazın',
+        remoteSearch: async (term) => {
+            if (!term || term.length < 3) return [];
+            const res = await listCustomers({ search: term.trim(), is_active: true, page_size: 50 });
+            const list = res.results || [];
+            return list.map(c => ({ value: String(c.id), text: c.name || c.code || `#${c.id}` }));
+        }
+    });
     createOfferModal.addField({ id: 'title', name: 'title', label: 'Teklif Başlığı', type: 'text', required: true, placeholder: 'Ör: Meltshop Equipment for ABC Steel', icon: 'fas fa-heading', colSize: 6 });
     createOfferModal.addField({ id: 'description', name: 'description', label: 'Açıklama', type: 'textarea', placeholder: 'Teklif kapsamı...', icon: 'fas fa-align-left', colSize: 12 });
     createOfferModal.addSection({ title: 'Ek Bilgiler', icon: 'fas fa-calendar', iconColor: 'text-success' });
