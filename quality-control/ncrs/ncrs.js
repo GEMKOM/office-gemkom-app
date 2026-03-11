@@ -435,7 +435,7 @@ function initializeTableComponent(canDecideNCRs) {
         }
     ];
 
-    // Add QC team or superuser actions
+    // Add QC team or superuser actions (approve/reject)
     if (canDecideNCRs) {
         actions.push(
             {
@@ -453,17 +453,27 @@ function initializeTableComponent(canDecideNCRs) {
                 class: 'btn-outline-danger',
                 visible: (row) => row.status === 'submitted',
                 onClick: (row) => showNCRDecisionModal(row, false)
-            },
-            {
-                key: 'close',
-                label: 'Kapat',
-                icon: 'fas fa-lock',
-                class: 'btn-outline-secondary',
-                visible: (row) => row.status === 'approved',
-                onClick: (row) => handleCloseNCR(row)
             }
         );
     }
+
+    // Close action: Available to QC team/superusers OR the assigned team
+    actions.push({
+        key: 'close',
+        label: 'Kapat',
+        icon: 'fas fa-lock',
+        class: 'btn-outline-secondary',
+        visible: (row) => {
+            if (row.status !== 'approved') return false;
+            // QC team or superuser can always close
+            if (canDecideNCRs) return true;
+            // Assigned team can close if NCR is assigned to them
+            const userTeam = currentUser && currentUser.team;
+            if (!userTeam || !row.assigned_team) return false;
+            return row.assigned_team === userTeam;
+        },
+        onClick: (row) => handleCloseNCR(row)
+    });
 
     ncrsTable = new TableComponent('ncrs-table-container', {
         title: 'Uygunsuzluk Raporları',

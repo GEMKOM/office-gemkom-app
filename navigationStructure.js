@@ -476,9 +476,13 @@ export const NAVIGATION_STRUCTURE = {
             },
             '/it/password-resets': {
                 label: 'Şifre Sıfırlama Talepleri',
-                icon: 'fas fa-desktop',
+                icon: 'fas fa-key',
                 children: {}
-
+            },
+            '/it/notifications': {
+                label: 'Bildirim Yönlendirmeleri',
+                icon: 'fas fa-bell',
+                children: {}
             }
         }
     },

@@ -65,6 +65,13 @@ async function handleITPage() {
                 icon: 'fas fa-key',
                 iconColor: 'warning',
                 link: '/it/password-resets'
+            },
+            {
+                title: 'Bildirim Yönlendirmeleri',
+                description: 'Bildirim türlerine göre kullanıcı atamalarını yönetin ve yapılandırın.',
+                icon: 'fas fa-bell',
+                iconColor: 'info',
+                link: '/it/notifications'
             }
         ];
 

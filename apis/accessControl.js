@@ -165,7 +165,8 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/subcontracting',
             '/manufacturing/subcontracting/subcontractors',
             '/manufacturing/subcontracting/statements',
-            '/manufacturing/material-tracking'
+            '/manufacturing/material-tracking',
+            '/quality-control/ncrs'
         ]),
         allowedSections: ['manufacturing', 'general', 'general_overtime']
     },
@@ -195,7 +196,8 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/cnc-cutting/reports',
             '/manufacturing/cnc-cutting/reports/finished-timers',
             '/manufacturing/cnc-cutting/capacity',
-            '/manufacturing/cnc-cutting/capacity/planning'
+            '/manufacturing/cnc-cutting/capacity/planning',
+            '/quality-control/ncrs'
         ]),
         allowedSections: ['manufacturing_machining', 'general', 'general_overtime']
     },
@@ -221,7 +223,8 @@ export const TEAM_ACCESS_CONFIG = {
             '/manufacturing/welding/time-entries',
             '/manufacturing/welding/reports',
             '/manufacturing/welding/reports/user-work-hours',
-            '/manufacturing/welding/reports/cost-analysis'
+            '/manufacturing/welding/reports/cost-analysis',
+            '/quality-control/ncrs'
         ]),
         allowedSections: ['manufacturing_welding', 'general', 'general_overtime']
     },
@@ -242,7 +245,8 @@ export const TEAM_ACCESS_CONFIG = {
             '/procurement/reports/items',
             '/procurement/reports/staff',
             '/procurement/reports/suppliers',
-            '/finance/purchase-orders'
+            '/finance/purchase-orders',
+            '/quality-control/ncrs'
         ]),
         allowedSections: ['procurement', 'finance_purchase_orders', 'general', 'general_overtime']
     },
@@ -263,7 +267,8 @@ export const TEAM_ACCESS_CONFIG = {
             '/procurement/reports/items',
             '/procurement/reports/staff',
             '/procurement/reports/suppliers',
-            '/finance/purchase-orders'
+            '/finance/purchase-orders',
+            '/quality-control/ncrs'
         ]),
         allowedSections: ['procurement', 'finance_purchase_orders', 'general', 'general_overtime']
     },
@@ -288,7 +293,8 @@ export const TEAM_ACCESS_CONFIG = {
             '/procurement/purchase-requests',
             '/procurement/purchase-requests/create',
             '/procurement/purchase-requests/pending',
-            '/procurement/purchase-requests/registry'
+            '/procurement/purchase-requests/registry',
+            '/quality-control/ncrs'
         ]),
         allowedSections: ['planning', 'manufacturing_planning', 'procurement', 'general', 'general_overtime']
     },
@@ -335,7 +341,8 @@ export const TEAM_ACCESS_CONFIG = {
         allowedRoutes: mergeWithBaseRoutes([
             '/logistics',
             '/logistics/projects',
-            '/logistics/cost-lines'
+            '/logistics/cost-lines',
+            '/quality-control/ncrs'
         ]),
         allowedSections: ['logistics', 'general', 'general_overtime']
     },
@@ -363,7 +370,8 @@ export const TEAM_ACCESS_CONFIG = {
         allowedRoutes: mergeWithBaseRoutes([
             '/design',
             '/design/projects',
-            '/design/revision-requests'
+            '/design/revision-requests',
+            '/quality-control/ncrs'
         ]),
         allowedSections: ['design', 'general', 'general_overtime']
     },
