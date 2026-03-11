@@ -863,6 +863,7 @@ async function showCreateNCRModal() {
             icon: 'fas fa-info-circle',
             fields: [
                 {
+                    id: 'job_order',
                     name: 'job_order',
                     label: 'İş Emri',
                     type: 'dropdown',
@@ -872,6 +873,7 @@ async function showCreateNCRModal() {
                     placeholder: 'İş emri seçin'
                 },
                 {
+                    id: 'title',
                     name: 'title',
                     label: 'Başlık',
                     type: 'text',
@@ -879,6 +881,7 @@ async function showCreateNCRModal() {
                     placeholder: 'NCR başlığı'
                 },
                 {
+                    id: 'description',
                     name: 'description',
                     label: 'Açıklama',
                     type: 'textarea',
@@ -892,24 +895,27 @@ async function showCreateNCRModal() {
             icon: 'fas fa-exclamation-triangle',
             fields: [
                 {
+                    id: 'defect_type',
                     name: 'defect_type',
                     label: 'Kusur Tipi',
-                    type: 'select',
+                    type: 'dropdown',
                     required: true,
                     options: DEFECT_TYPE_CHOICES.map(d => ({ value: d.value, label: d.label }))
                 },
                 {
+                    id: 'severity',
                     name: 'severity',
                     label: 'Önem Derecesi',
-                    type: 'select',
+                    type: 'dropdown',
                     required: true,
                     options: SEVERITY_CHOICES.map(s => ({ value: s.value, label: s.label }))
                 },
                 {
+                    id: 'affected_quantity',
                     name: 'affected_quantity',
                     label: 'Etkilenen Miktar',
                     type: 'number',
-                    required: false,
+                    required: true,
                     placeholder: '0'
                 }
             ]
@@ -919,9 +925,10 @@ async function showCreateNCRModal() {
             icon: 'fas fa-users',
             fields: [
                 {
+                    id: 'assigned_team',
                     name: 'assigned_team',
                     label: 'Atanan Takım',
-                    type: 'select',
+                    type: 'dropdown',
                     required: false,
                     options: [
                         { value: '', label: 'Seçiniz' },
@@ -931,10 +938,11 @@ async function showCreateNCRModal() {
                     ]
                 },
                 {
+                    id: 'disposition',
                     name: 'disposition',
                     label: 'Karar',
-                    type: 'select',
-                    required: false,
+                    type: 'dropdown',
+                    required: true,
                     options: [
                         { value: 'pending', label: 'Karar Bekliyor' },
                         ...DISPOSITION_CHOICES.filter(d => d.value !== 'pending').map(d => ({ value: d.value, label: d.label }))
