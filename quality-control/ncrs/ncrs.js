@@ -671,23 +671,48 @@ function showNcrFileUploadModal(ncrId, onSuccess) {
     ncrFileUploadModal.clearAll();
     ncrFileUploadModal.addSection({ title: 'Dosya Bilgileri', icon: 'fas fa-file', iconColor: 'text-primary' });
     ncrFileUploadModal.addField({ id: 'file_type', name: 'file_type', label: 'Dosya Türü', type: 'dropdown', required: true, options: NCR_FILE_TYPE_OPTIONS, icon: 'fas fa-tag', colSize: 6 });
-    ncrFileUploadModal.addField({ id: 'name', name: 'name', label: 'Dosya Adı', type: 'text', placeholder: 'Opsiyonel', icon: 'fas fa-heading', colSize: 6 });
-    ncrFileUploadModal.addField({ id: 'description', name: 'description', label: 'Açıklama', type: 'textarea', icon: 'fas fa-align-left', colSize: 12 });
+    ncrFileUploadModal.addField({ id: 'name', name: 'name', label: 'Dosya Adı', type: 'text', placeholder: 'Opsiyonel (tüm dosyalar için)', icon: 'fas fa-heading', colSize: 6 });
+    ncrFileUploadModal.addField({ id: 'description', name: 'description', label: 'Açıklama', type: 'textarea', placeholder: 'Opsiyonel (tüm dosyalar için)', icon: 'fas fa-align-left', colSize: 12 });
 
     ncrFileUploadModal.onSave = async (formData) => {
         const fileInput = document.getElementById('ncr-file-input-field');
-        if (!fileInput?.files?.[0]) {
-            showNotification('Lütfen dosya seçin', 'warning');
+        const files = fileInput?.files;
+        if (!files || files.length === 0) {
+            showNotification('Lütfen en az bir dosya seçin', 'warning');
             return;
         }
+        
+        ncrFileUploadModal.setLoading(true);
+        let successCount = 0;
+        let errorCount = 0;
+        
         try {
-            await uploadNCRFile(ncrId, fileInput.files[0], formData.file_type, formData.name, formData.description);
-            ncrFileUploadModal.hide();
-            showNotification('Dosya yüklendi', 'success');
-            if (onSuccess) await onSuccess();
-        } catch (e) {
-            console.error('Upload NCR file failed:', e);
-            showNotification('Dosya yüklenemedi', 'error');
+            for (let i = 0; i < files.length; i++) {
+                try {
+                    await uploadNCRFile(ncrId, files[i], formData.file_type, formData.name, formData.description);
+                    successCount++;
+                } catch (error) {
+                    console.error(`Error uploading file ${files[i].name}:`, error);
+                    errorCount++;
+                }
+            }
+            
+            ncrFileUploadModal.setLoading(false);
+            
+            if (successCount > 0 && errorCount === 0) {
+                ncrFileUploadModal.hide();
+                showNotification(`${successCount} dosya başarıyla yüklendi`, 'success');
+                if (onSuccess) await onSuccess();
+            } else if (successCount > 0 && errorCount > 0) {
+                ncrFileUploadModal.hide();
+                showNotification(`${successCount} dosya yüklendi, ${errorCount} dosya yüklenemedi`, 'warning');
+                if (onSuccess) await onSuccess();
+            } else {
+                showNotification('Dosyalar yüklenemedi', 'error');
+            }
+        } catch (error) {
+            ncrFileUploadModal.setLoading(false);
+            showNotification('Dosya yükleme sırasında hata oluştu', 'error');
         }
     };
 
@@ -696,8 +721,32 @@ function showNcrFileUploadModal(ncrId, onSuccess) {
     if (body) {
         const fileDiv = document.createElement('div');
         fileDiv.className = 'mb-3 px-3';
-        fileDiv.innerHTML = '<label class="form-label">Dosya</label><input type="file" class="form-control" id="ncr-file-input-field">';
+        fileDiv.innerHTML = `
+            <label class="form-label">Dosyalar (Birden fazla seçebilirsiniz)</label>
+            <input type="file" class="form-control" id="ncr-file-input-field" multiple>
+            <small class="form-text text-muted">Birden fazla dosya seçmek için Ctrl (veya Cmd) tuşuna basılı tutarak tıklayın</small>
+            <div id="ncr-selected-files-list" class="mt-2"></div>
+        `;
         body.insertBefore(fileDiv, body.firstChild);
+        
+        // Show selected files
+        const fileInput = fileDiv.querySelector('#ncr-file-input-field');
+        const filesList = fileDiv.querySelector('#ncr-selected-files-list');
+        fileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files.length === 0) {
+                filesList.innerHTML = '';
+                return;
+            }
+            const filesHtml = Array.from(files).map((file, index) => `
+                <div class="d-flex align-items-center gap-2 p-2 border rounded mb-1">
+                    <i class="fas fa-file text-primary"></i>
+                    <span class="flex-grow-1">${file.name}</span>
+                    <small class="text-muted">${(file.size / 1024).toFixed(1)} KB</small>
+                </div>
+            `).join('');
+            filesList.innerHTML = `<div class="mt-2"><strong>Seçilen dosyalar (${files.length}):</strong>${filesHtml}</div>`;
+        });
     }
     ncrFileUploadModal.show();
 }

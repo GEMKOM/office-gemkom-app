@@ -105,7 +105,7 @@ export class TableComponent {
         const tableClass = this.buildTableClass();
         
         this.container.innerHTML = `
-            <div class="dashboard-card">
+            <div class="dashboard-card ${this.options.stickyHeader ? 'has-sticky-header' : ''}">
                 <div class="card-header">
                     <h5 class="card-title">
                         <i class="${this.options.icon || 'fas fa-table'} me-2 ${this.options.iconColor || 'text-primary'}"></i>

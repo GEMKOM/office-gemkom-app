@@ -42,6 +42,17 @@ tr[draggable="true"]:hover {
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
 }
 
+/* Allow sticky headers to work - card with sticky header needs visible overflow */
+.dashboard-card.has-sticky-header {
+    overflow: visible;
+}
+
+/* Ensure card body doesn't clip sticky headers */
+.dashboard-card.has-sticky-header .card-body {
+    overflow: visible;
+    position: relative;
+}
+
 .dashboard-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
@@ -70,6 +81,7 @@ tr[draggable="true"]:hover {
 
 .dashboard-card .card-body {
     padding: 1.5rem;
+    overflow: visible;
 }
 
 .dashboard-card .card-footer {
@@ -97,19 +109,34 @@ tr[draggable="true"]:hover {
 /* Sticky Header Support */
 .table-sticky-header.table-responsive {
     position: relative;
+    overflow-x: auto;
+    max-height: calc(100vh - 350px);
+    overflow-y: auto;
+    display: block;
+}
+
+.table-sticky-header table {
+    position: relative;
+    margin-bottom: 0;
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
 }
 
 .table-sticky-header thead.sticky-thead {
+    position: -webkit-sticky;
     position: sticky;
     top: 0;
-    z-index: 10;
+    z-index: 100;
+    background: #f8f9fa;
 }
 
 .table-sticky-header thead.sticky-thead th {
+    position: -webkit-sticky;
     position: sticky;
     top: 0;
     background: #f8f9fa !important;
-    z-index: 11;
+    z-index: 101;
     box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
 }
 

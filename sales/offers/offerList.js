@@ -215,6 +215,7 @@ function initTable() {
                 field: 'status_display',
                 label: 'Durum',
                 sortable: true,
+                align: 'center',
                 formatter: (v, row) => {
                     // Prefer backend-provided status_display when available
                     const display = v || row.status_display;
@@ -1235,7 +1236,7 @@ function renderConsultationsTable() {
         columns: [
             { field: 'department', label: 'Departman', sortable: true, formatter: (v) => v || '-' },
             { field: 'title', label: 'Başlık', sortable: true, formatter: (v) => (v || '-').replace(/</g, '&lt;') },
-            { field: 'status_display', label: 'Durum', sortable: false, formatter: (v) => v || '-' },
+            { field: 'status_display', label: 'Durum', sortable: false, align: 'center', formatter: (v) => v || '-' },
             { field: 'assigned_to_name', label: 'Atanan', sortable: true, formatter: (v) => v || '-' },
             { field: 'deadline', label: 'Hedef Tarih', sortable: true, formatter: (v) => v || '-' },
             { field: 'notes', label: 'Not', sortable: false, formatter: (v) => (v || '-').replace(/</g, '&lt;') },
@@ -2408,27 +2409,84 @@ function countOfferItemsNested(items) {
 }
 
 function showFileUploadModal(onSuccess) {
-    const modal = new EditModal('file-upload-modal-container', { title: 'Dosya Yükle', icon: 'fas fa-upload', size: 'md', showEditButton: false });
+    const modal = new EditModal('file-upload-modal-container', { title: 'Dosya Yükle', icon: 'fas fa-upload', size: 'lg', showEditButton: false });
     modal.clearAll();
     modal.addSection({ title: 'Dosya Bilgileri', icon: 'fas fa-file', iconColor: 'text-primary' });
     modal.addField({ id: 'file_type', name: 'file_type', label: 'Dosya Türü', type: 'dropdown', required: true, options: FILE_TYPE_OPTIONS, icon: 'fas fa-tag', colSize: 6 });
-    modal.addField({ id: 'name', name: 'name', label: 'Dosya Adı', type: 'text', placeholder: 'Opsiyonel', icon: 'fas fa-heading', colSize: 6 });
-    modal.addField({ id: 'description', name: 'description', label: 'Açıklama', type: 'textarea', icon: 'fas fa-align-left', colSize: 12 });
+    modal.addField({ id: 'name', name: 'name', label: 'Dosya Adı', type: 'text', placeholder: 'Opsiyonel (tüm dosyalar için)', icon: 'fas fa-heading', colSize: 6 });
+    modal.addField({ id: 'description', name: 'description', label: 'Açıklama', type: 'textarea', placeholder: 'Opsiyonel (tüm dosyalar için)', icon: 'fas fa-align-left', colSize: 12 });
     modal.onSaveCallback(async (formData) => {
         const fileInput = document.getElementById('file-input-field');
-        if (!fileInput?.files[0]) { showNotification('Lütfen dosya seçin', 'warning'); return; }
-        await uploadOfferFile(offerId, fileInput.files[0], formData.file_type, formData.name, formData.description);
-        modal.hide();
-        showNotification('Dosya yüklendi', 'success');
-        await onSuccess();
+        const files = fileInput?.files;
+        if (!files || files.length === 0) {
+            showNotification('Lütfen en az bir dosya seçin', 'warning');
+            return;
+        }
+        
+        modal.setLoading(true);
+        let successCount = 0;
+        let errorCount = 0;
+        
+        try {
+            for (let i = 0; i < files.length; i++) {
+                try {
+                    await uploadOfferFile(offerId, files[i], formData.file_type, formData.name, formData.description);
+                    successCount++;
+                } catch (error) {
+                    console.error(`Error uploading file ${files[i].name}:`, error);
+                    errorCount++;
+                }
+            }
+            
+            modal.setLoading(false);
+            
+            if (successCount > 0 && errorCount === 0) {
+                modal.hide();
+                showNotification(`${successCount} dosya başarıyla yüklendi`, 'success');
+                await onSuccess();
+            } else if (successCount > 0 && errorCount > 0) {
+                modal.hide();
+                showNotification(`${successCount} dosya yüklendi, ${errorCount} dosya yüklenemedi`, 'warning');
+                await onSuccess();
+            } else {
+                showNotification('Dosyalar yüklenemedi', 'error');
+            }
+        } catch (error) {
+            modal.setLoading(false);
+            showNotification('Dosya yükleme sırasında hata oluştu', 'error');
+        }
     });
     modal.render();
     const body = modal.container?.querySelector('.modal-body');
     if (body) {
         const fileDiv = document.createElement('div');
         fileDiv.className = 'mb-3 px-3';
-        fileDiv.innerHTML = '<label class="form-label">Dosya</label><input type="file" class="form-control" id="file-input-field">';
+        fileDiv.innerHTML = `
+            <label class="form-label">Dosyalar (Birden fazla seçebilirsiniz)</label>
+            <input type="file" class="form-control" id="file-input-field" multiple>
+            <small class="form-text text-muted">Birden fazla dosya seçmek için Ctrl (veya Cmd) tuşuna basılı tutarak tıklayın</small>
+            <div id="selected-files-list" class="mt-2"></div>
+        `;
         body.insertBefore(fileDiv, body.firstChild);
+        
+        // Show selected files
+        const fileInput = fileDiv.querySelector('#file-input-field');
+        const filesList = fileDiv.querySelector('#selected-files-list');
+        fileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files.length === 0) {
+                filesList.innerHTML = '';
+                return;
+            }
+            const filesHtml = Array.from(files).map((file, index) => `
+                <div class="d-flex align-items-center gap-2 p-2 border rounded mb-1">
+                    <i class="fas fa-file text-primary"></i>
+                    <span class="flex-grow-1">${file.name}</span>
+                    <small class="text-muted">${(file.size / 1024).toFixed(1)} KB</small>
+                </div>
+            `).join('');
+            filesList.innerHTML = `<div class="mt-2"><strong>Seçilen dosyalar (${files.length}):</strong>${filesHtml}</div>`;
+        });
     }
     modal.show();
 }
@@ -2508,65 +2566,84 @@ async function showConsultationModal(onSuccess) {
         }
     }
     // Append selectable offer files section
-    const offerFiles = offer.files || [];
     const filesSection = document.createElement('div');
     filesSection.className = 'form-section compact mb-3';
     filesSection.dataset.sectionId = 'consultation-files';
-    if (offerFiles.length > 0) {
-        const title = document.createElement('h6');
-        title.className = 'section-subtitle compact text-info';
-        title.innerHTML = '<i class="fas fa-paperclip me-2"></i>Departmanla paylaşılacak dosyalar';
-        filesSection.appendChild(title);
-        const filesContainer = document.createElement('div');
-        filesContainer.className = 'consultation-files-selection';
-        filesContainer.innerHTML = '<p class="text-muted small mb-2">Departmanın görmesini istediğiniz dosyaları işaretleyin.</p>';
-        const listDiv = document.createElement('div');
-        listDiv.className = 'row g-2';
-        offerFiles.forEach(f => {
-            const fileName = f.name || f.filename || 'Dosya';
-            const ext = getFileExtension(fileName);
-            const col = document.createElement('div');
-            col.className = 'col-12';
-            col.innerHTML = `
-                <div class="file-attachment-item d-flex align-items-center gap-3 p-2 border rounded mb-2 consultation-file-row">
-                    <div class="form-check mb-0 flex-shrink-0">
-                        <input class="form-check-input consultation-file-cb" type="checkbox" value="${f.id}" id="consultation-file-${f.id}">
-                        <label class="form-check-label visually-hidden" for="consultation-file-${f.id}">${fileName}</label>
+    
+    // Show loading state
+    filesSection.innerHTML = '<p class="text-muted small mb-0"><i class="fas fa-spinner fa-spin me-2"></i>Dosyalar yükleniyor...</p>';
+    form.appendChild(filesSection);
+    
+    // Fetch files from API
+    try {
+        const offerFiles = await listOfferFiles(offerId);
+        filesSection.innerHTML = '';
+        
+        if (offerFiles.length > 0) {
+            const title = document.createElement('h6');
+            title.className = 'section-subtitle compact text-info';
+            title.innerHTML = '<i class="fas fa-paperclip me-2"></i>Departmanla paylaşılacak dosyalar';
+            filesSection.appendChild(title);
+            const filesContainer = document.createElement('div');
+            filesContainer.className = 'consultation-files-selection';
+            filesContainer.innerHTML = '<p class="text-muted small mb-2">Departmanın görmesini istediğiniz dosyaları işaretleyin.</p>';
+            const listDiv = document.createElement('div');
+            listDiv.className = 'row g-2';
+            offerFiles.forEach(f => {
+                const fileName = f.name || f.filename || 'Dosya';
+                const ext = getFileExtension(fileName);
+                const col = document.createElement('div');
+                col.className = 'col-12';
+                col.innerHTML = `
+                    <div class="file-attachment-item d-flex align-items-center gap-3 p-2 border rounded mb-2 consultation-file-row">
+                        <div class="form-check mb-0 flex-shrink-0">
+                            <input class="form-check-input consultation-file-cb" type="checkbox" value="${f.id}" id="consultation-file-${f.id}">
+                            <label class="form-check-label visually-hidden" for="consultation-file-${f.id}">${(fileName || '').replace(/</g, '&lt;')}</label>
+                        </div>
+                        <i class="fas fa-file text-primary flex-shrink-0"></i>
+                        <div class="flex-grow-1 min-width-0">
+                            <div class="fw-medium text-truncate">${(fileName || '').replace(/</g, '&lt;')}</div>
+                            ${f.file_type_display || f.file_type ? `<small class="text-muted">${(f.file_type_display || f.file_type || '').replace(/</g, '&lt;')}</small>` : ''}
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary preview-consultation-file flex-shrink-0" data-file-url="${f.file_url}" data-file-name="${fileName}" data-file-ext="${ext}">
+                            <i class="fas fa-eye me-1"></i>Önizle
+                        </button>
                     </div>
-                    <i class="fas fa-file text-primary flex-shrink-0"></i>
-                    <div class="flex-grow-1 min-width-0">
-                        <div class="fw-medium text-truncate">${fileName}</div>
-                        ${f.file_type_display || f.file_type ? `<small class="text-muted">${f.file_type_display || f.file_type}</small>` : ''}
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline-primary preview-consultation-file flex-shrink-0" data-file-url="${f.file_url}" data-file-name="${fileName}" data-file-ext="${ext}">
-                        <i class="fas fa-eye me-1"></i>Önizle
-                    </button>
-                </div>
-            `;
-            listDiv.appendChild(col);
-        });
-        filesContainer.appendChild(listDiv);
-        filesSection.appendChild(filesContainer);
-        form.appendChild(filesSection);
-        filesSection.querySelectorAll('.preview-consultation-file').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                const url = e.currentTarget.dataset.fileUrl;
-                const name = e.currentTarget.dataset.fileName;
-                const ext = e.currentTarget.dataset.fileExt || '';
-                consultationFileViewer.openFile(url, name, ext);
+                `;
+                listDiv.appendChild(col);
             });
-        });
-    } else {
+            filesContainer.appendChild(listDiv);
+            filesSection.appendChild(filesContainer);
+            filesSection.querySelectorAll('.preview-consultation-file').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const url = e.currentTarget.dataset.fileUrl;
+                    const name = e.currentTarget.dataset.fileName;
+                    const ext = e.currentTarget.dataset.fileExt || '';
+                    consultationFileViewer.openFile(url, name, ext);
+                });
+            });
+        } else {
+            const title = document.createElement('h6');
+            title.className = 'section-subtitle compact text-muted';
+            title.innerHTML = '<i class="fas fa-paperclip me-2"></i>Paylaşılacak dosya yok';
+            filesSection.appendChild(title);
+            const p = document.createElement('p');
+            p.className = 'text-muted small mb-0';
+            p.textContent = 'Teklifte henüz dosya yok. İstediğiniz dosyaları teklife ekledikten sonra görüş gönderebilirsiniz.';
+            filesSection.appendChild(p);
+        }
+    } catch (e) {
+        filesSection.innerHTML = '';
         const title = document.createElement('h6');
-        title.className = 'section-subtitle compact text-muted';
-        title.innerHTML = '<i class="fas fa-paperclip me-2"></i>Paylaşılacak dosya yok';
+        title.className = 'section-subtitle compact text-danger';
+        title.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Dosyalar yüklenemedi';
         filesSection.appendChild(title);
         const p = document.createElement('p');
         p.className = 'text-muted small mb-0';
-        p.textContent = 'Teklifte henüz dosya yok. İstediğiniz dosyaları teklife ekledikten sonra görüş gönderebilirsiniz.';
+        p.textContent = 'Dosyalar yüklenirken bir hata oluştu. Lütfen tekrar deneyin.';
         filesSection.appendChild(p);
-        form.appendChild(filesSection);
+        console.error('Error loading offer files:', e);
     }
     modal.show();
 }
@@ -2615,53 +2692,83 @@ async function showEditConsultationModal(taskId, onSuccess) {
     const form = container.querySelector('#edit-modal-form');
     if (!form) { modal.show(); return; }
 
-    const offerFiles = offer.files || [];
-    if (offerFiles.length > 0) {
-        const filesSection = document.createElement('div');
-        filesSection.className = 'form-section compact mb-3';
-        filesSection.dataset.sectionId = 'edit-consultation-files';
+    // Display offer files for selection - fetch from API
+    const filesSection = document.createElement('div');
+    filesSection.className = 'form-section compact mb-3';
+    filesSection.dataset.sectionId = 'edit-consultation-files';
+    
+    // Show loading state
+    filesSection.innerHTML = '<p class="text-muted small mb-0"><i class="fas fa-spinner fa-spin me-2"></i>Dosyalar yükleniyor...</p>';
+    form.appendChild(filesSection);
+    
+    // Fetch files from API and render
+    try {
+        const offerFiles = await listOfferFiles(offerId);
+        filesSection.innerHTML = '';
+        
+        if (offerFiles.length > 0) {
+            const title = document.createElement('h6');
+            title.className = 'section-subtitle compact text-info';
+            title.innerHTML = '<i class="fas fa-paperclip me-2"></i>Paylaşılacak dosyalar';
+            filesSection.appendChild(title);
+            const p = document.createElement('p');
+            p.className = 'text-muted small mb-2';
+            p.textContent = 'Departmanın görmesini istediğiniz dosyaları işaretleyin. Mevcut setin yerine seçtiğiniz set geçer.';
+            filesSection.appendChild(p);
+            const listDiv = document.createElement('div');
+            listDiv.className = 'row g-2';
+            offerFiles.forEach(f => {
+                const fileName = f.name || f.filename || 'Dosya';
+                const ext = getFileExtension(fileName);
+                const checkedAttr = sharedFileIds.has(f.id) ? ' checked' : '';
+                const col = document.createElement('div');
+                col.className = 'col-12';
+                col.innerHTML = `
+                    <div class="file-attachment-item d-flex align-items-center gap-3 p-2 border rounded mb-2">
+                        <div class="form-check mb-0 flex-shrink-0">
+                            <input class="form-check-input edit-consultation-file-cb" type="checkbox" value="${f.id}" id="edit-consultation-file-${f.id}"${checkedAttr}>
+                            <label class="form-check-label visually-hidden" for="edit-consultation-file-${f.id}">${(fileName || '').replace(/</g, '&lt;')}</label>
+                        </div>
+                        <i class="fas fa-file text-primary flex-shrink-0"></i>
+                        <div class="flex-grow-1 min-width-0">
+                            <div class="fw-medium text-truncate">${(fileName || '').replace(/</g, '&lt;')}</div>
+                            ${f.file_type_display || f.file_type ? `<small class="text-muted">${(f.file_type_display || f.file_type || '').replace(/</g, '&lt;')}</small>` : ''}
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary preview-edit-consultation-file flex-shrink-0" data-file-url="${f.file_url}" data-file-name="${fileName}" data-file-ext="${ext}">
+                            <i class="fas fa-eye me-1"></i>Önizle
+                        </button>
+                    </div>
+                `;
+                listDiv.appendChild(col);
+            });
+            filesSection.appendChild(listDiv);
+            filesSection.querySelectorAll('.preview-edit-consultation-file').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    consultationFileViewer.openFile(e.currentTarget.dataset.fileUrl, e.currentTarget.dataset.fileName, e.currentTarget.dataset.fileExt || '');
+                });
+            });
+        } else {
+            const title = document.createElement('h6');
+            title.className = 'section-subtitle compact text-muted';
+            title.innerHTML = '<i class="fas fa-paperclip me-2"></i>Paylaşılacak dosya yok';
+            filesSection.appendChild(title);
+            const p = document.createElement('p');
+            p.className = 'text-muted small mb-0';
+            p.textContent = 'Teklifte henüz dosya yok. İstediğiniz dosyaları teklife ekledikten sonra görüş gönderebilirsiniz.';
+            filesSection.appendChild(p);
+        }
+    } catch (e) {
+        filesSection.innerHTML = '';
         const title = document.createElement('h6');
-        title.className = 'section-subtitle compact text-info';
-        title.innerHTML = '<i class="fas fa-paperclip me-2"></i>Paylaşılacak dosyalar';
+        title.className = 'section-subtitle compact text-danger';
+        title.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Dosyalar yüklenemedi';
         filesSection.appendChild(title);
         const p = document.createElement('p');
-        p.className = 'text-muted small mb-2';
-        p.textContent = 'Departmanın görmesini istediğiniz dosyaları işaretleyin. Mevcut setin yerine seçtiğiniz set geçer.';
+        p.className = 'text-muted small mb-0';
+        p.textContent = 'Dosyalar yüklenirken bir hata oluştu. Lütfen tekrar deneyin.';
         filesSection.appendChild(p);
-        const listDiv = document.createElement('div');
-        listDiv.className = 'row g-2';
-        offerFiles.forEach(f => {
-            const fileName = f.name || f.filename || 'Dosya';
-            const ext = getFileExtension(fileName);
-            const checkedAttr = sharedFileIds.has(f.id) ? ' checked' : '';
-            const col = document.createElement('div');
-            col.className = 'col-12';
-            col.innerHTML = `
-                <div class="file-attachment-item d-flex align-items-center gap-3 p-2 border rounded mb-2">
-                    <div class="form-check mb-0 flex-shrink-0">
-                        <input class="form-check-input edit-consultation-file-cb" type="checkbox" value="${f.id}" id="edit-consultation-file-${f.id}"${checkedAttr}>
-                        <label class="form-check-label visually-hidden" for="edit-consultation-file-${f.id}">${(fileName || '').replace(/</g, '&lt;')}</label>
-                    </div>
-                    <i class="fas fa-file text-primary flex-shrink-0"></i>
-                    <div class="flex-grow-1 min-width-0">
-                        <div class="fw-medium text-truncate">${(fileName || '').replace(/</g, '&lt;')}</div>
-                        ${f.file_type_display || f.file_type ? `<small class="text-muted">${(f.file_type_display || f.file_type || '').replace(/</g, '&lt;')}</small>` : ''}
-                    </div>
-                    <button type="button" class="btn btn-sm btn-outline-primary preview-edit-consultation-file flex-shrink-0" data-file-url="${f.file_url}" data-file-name="${fileName}" data-file-ext="${ext}">
-                        <i class="fas fa-eye me-1"></i>Önizle
-                    </button>
-                </div>
-            `;
-            listDiv.appendChild(col);
-        });
-        filesSection.appendChild(listDiv);
-        form.appendChild(filesSection);
-        filesSection.querySelectorAll('.preview-edit-consultation-file').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                consultationFileViewer.openFile(e.currentTarget.dataset.fileUrl, e.currentTarget.dataset.fileName, e.currentTarget.dataset.fileExt || '');
-            });
-        });
+        console.error('Error loading offer files:', e);
     }
     modal.show();
 }
@@ -2799,9 +2906,14 @@ function formatFileSize(bytes) {
 }
 
 function getTaskStatusBadge(status) {
-    const map = { pending: 'secondary', in_progress: 'primary', completed: 'success', cancelled: 'danger' };
-    const c = map[status] || 'light';
-    return `<span class="badge bg-${c}">${status === 'pending' ? 'Bekliyor' : status === 'in_progress' ? 'Devam Ediyor' : status === 'completed' ? 'Tamamlandı' : status === 'cancelled' ? 'İptal' : status}</span>`;
+    const statusMap = {
+        'pending': { label: 'Bekliyor', class: 'status-yellow' },
+        'in_progress': { label: 'Devam Ediyor', class: 'status-blue' },
+        'completed': { label: 'Tamamlandı', class: 'status-green' },
+        'cancelled': { label: 'İptal', class: 'status-red' }
+    };
+    const statusInfo = statusMap[status] || { label: status, class: 'status-grey' };
+    return `<span class="status-badge ${statusInfo.class}">${statusInfo.label}</span>`;
 }
 
 function parseError(error, fallback) {

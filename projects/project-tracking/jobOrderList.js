@@ -1533,17 +1533,6 @@ window.editJobOrder = async function(jobNo) {
         });
 
         editJobOrderModal.addField({
-            id: 'estimated_cost',
-            name: 'estimated_cost',
-            label: 'Tahmini Maliyet',
-            type: 'number',
-            value: jobOrder.estimated_cost || '',
-            icon: 'fas fa-calculator',
-            colSize: 12,
-            helpText: 'Tahmini maliyet'
-        });
-
-        editJobOrderModal.addField({
             id: 'general_expenses_rate',
             name: 'general_expenses_rate',
             label: 'Genel Gider Oranı',
