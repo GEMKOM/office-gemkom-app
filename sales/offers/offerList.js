@@ -168,15 +168,23 @@ function initFilters() {
         colSize: 2
     });
 
-    if (customerOptions.length > 0) {
-        offersFilters.addDropdownFilter({
-            id: 'customer-filter',
-            label: 'Müşteri',
-            options: [{ value: '', label: 'Tümü' }, ...customerOptions],
-            placeholder: 'Tümü',
-            colSize: 3
-        });
-    }
+    // Customer: remote search via /projects/customers/?search=...&is_active=true (same behavior as cost-table)
+    offersFilters.addDropdownFilter({
+        id: 'customer-filter',
+        label: 'Müşteri',
+        options: [],
+        placeholder: 'Müşteri ara (en az 3 karakter)',
+        colSize: 3,
+        searchable: true,
+        minSearchLength: 3,
+        remoteSearchPlaceholder: 'En az 3 karakter yazın',
+        remoteSearch: async (term) => {
+            if (!term || term.length < 3) return [];
+            const res = await listCustomers({ search: term.trim(), is_active: true, page_size: 50 });
+            const list = res.results || [];
+            return list.map(c => ({ value: String(c.id), text: c.name || c.code || `#${c.id}` }));
+        }
+    });
 }
 
 function initTable() {
@@ -887,7 +895,7 @@ function buildGenelTab(statusLabel, statusColor) {
                     </div>
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
-                            <i class="fas fa-calendar-check me-1"></i>Teklif Geçerlilik Tarihi
+                            <i class="fas fa-calendar-check me-1"></i>Teklif Sunumu için Son Tarih
                         </div>
                         <div class="field-value flex-grow-1">${offer.offer_expiry_date ? formatDate(offer.offer_expiry_date) : '-'}</div>
                     </div>
@@ -1635,12 +1643,39 @@ function showEditModal(onSuccess) {
     const modal = new EditModal('edit-offer-modal-container', { title: 'Teklifi Düzenle', icon: 'fas fa-edit', size: 'lg', showEditButton: false });
     modal.clearAll();
     modal.addSection({ title: 'Teklif Bilgileri', icon: 'fas fa-info-circle', iconColor: 'text-primary' });
+    
+    // Customer: remote search (same behavior as cost-table filter)
+    // Preselect current customer (ensure it shows even before searching)
+    const currentCustomerId = offer?.customer || offer?.customer_id || offer?.customerId || '';
+    const currentCustomerLabel = offer?.customer_name || offer?.customerName || '';
+    modal.addField({
+        id: 'customer',
+        name: 'customer',
+        label: 'Müşteri',
+        type: 'dropdown',
+        required: true,
+        icon: 'fas fa-building',
+        colSize: 6,
+        searchable: true,
+        options: (currentCustomerId && currentCustomerLabel) ? [{ value: String(currentCustomerId), label: currentCustomerLabel }] : [],
+        value: currentCustomerId ? String(currentCustomerId) : '',
+        placeholder: 'Müşteri ara (en az 3 karakter)',
+        minSearchLength: 3,
+        remoteSearchPlaceholder: 'En az 3 karakter yazın',
+        remoteSearch: async (term) => {
+            if (!term || term.length < 3) return [];
+            const res = await listCustomers({ search: term.trim(), is_active: true, page_size: 50 });
+            const list = res.results || [];
+            return list.map(c => ({ value: String(c.id), text: c.name || c.code || `#${c.id}` }));
+        }
+    });
+
     modal.addField({ id: 'title', name: 'title', label: 'Başlık', type: 'text', value: offer.title || '', required: true, icon: 'fas fa-heading', colSize: 12 });
     modal.addField({ id: 'description', name: 'description', label: 'Açıklama', type: 'textarea', value: offer.description || '', icon: 'fas fa-align-left', colSize: 12 });
     modal.addField({ id: 'customer_inquiry_ref', name: 'customer_inquiry_ref', label: 'Müşteri Referansı', type: 'text', value: offer.customer_inquiry_ref || '', icon: 'fas fa-hashtag', colSize: 6 });
     modal.addField({ id: 'incoterms', name: 'incoterms', label: 'Incoterms', type: 'dropdown', value: offer.incoterms || '', options: INCOTERMS_OPTIONS, icon: 'fas fa-shipping-fast', colSize: 6 });
     modal.addField({ id: 'delivery_date_requested', name: 'delivery_date_requested', label: 'İstenen Termin Tarihi', type: 'date', value: offer.delivery_date_requested || '', icon: 'fas fa-calendar-alt', colSize: 6 });
-    modal.addField({ id: 'offer_expiry_date', name: 'offer_expiry_date', label: 'Teklif Geçerlilik Tarihi', type: 'date', value: offer.offer_expiry_date || '', icon: 'fas fa-calendar-check', colSize: 6 });
+    modal.addField({ id: 'offer_expiry_date', name: 'offer_expiry_date', label: 'Teklif Sunumu için Son Tarih', type: 'date', value: offer.offer_expiry_date || '', icon: 'fas fa-calendar-check', colSize: 6 });
     modal.onSaveCallback(async (formData) => {
         try {
             await patchOffer(offerId, formData);
@@ -2835,7 +2870,7 @@ function showCreateOfferModal() {
     createOfferModal.addField({ id: 'customer_inquiry_ref', name: 'customer_inquiry_ref', label: 'Müşteri Referansı', type: 'text', placeholder: 'Ör: ABC-RFQ-2026-003', icon: 'fas fa-hashtag', colSize: 6 });
     createOfferModal.addField({ id: 'incoterms', name: 'incoterms', label: 'Incoterms', type: 'dropdown', options: INCOTERMS_OPTIONS, icon: 'fas fa-shipping-fast', colSize: 6 });
     createOfferModal.addField({ id: 'delivery_date_requested', name: 'delivery_date_requested', label: 'İstenen Termin Tarihi', type: 'date', icon: 'fas fa-calendar-alt', colSize: 6 });
-    createOfferModal.addField({ id: 'offer_expiry_date', name: 'offer_expiry_date', label: 'Teklif Geçerlilik Tarihi', type: 'date', icon: 'fas fa-calendar-check', colSize: 6 });
+    createOfferModal.addField({ id: 'offer_expiry_date', name: 'offer_expiry_date', label: 'Teklif Sunumu için Son Tarih', type: 'date', icon: 'fas fa-calendar-check', colSize: 6 });
     createOfferModal.render();
     createOfferModal.show();
 }

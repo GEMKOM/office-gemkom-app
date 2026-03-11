@@ -123,7 +123,7 @@ class WagesManager {
                     loading: true
                 },
                 {
-                    title: 'Ortalama Saatlik Ücret',
+                    title: 'Ortalama Aylık Ücret',
                     value: '0 ₺',
                     icon: 'fas fa-clock',
                     color: 'success',
@@ -572,7 +572,7 @@ class WagesManager {
                 loading: false
             },
             {
-                title: 'Ortalama Saatlik Ücret',
+                title: 'Ortalama Aylık Ücret',
                 value: formatCurrency(this.statistics.averageHourlyWage, 'TRY'),
                 icon: 'fas fa-clock',
                 color: 'success',
@@ -678,12 +678,17 @@ class WagesManager {
                 console.log('Wage history response:', wageHistoryResponse);
                 
                 if (wageHistoryResponse && wageHistoryResponse.results && wageHistoryResponse.results.length > 0) {
-                    const wageHistory = wageHistoryResponse.results;
+                    // Sort wage history by created_at descending to get the latest first
+                    const wageHistory = [...wageHistoryResponse.results].sort((a, b) => {
+                        const dateA = new Date(a.created_at || a.effective_from || 0);
+                        const dateB = new Date(b.created_at || b.effective_from || 0);
+                        return dateB - dateA; // Descending order (newest first)
+                    });
                     
                     // Add wage history fields to modal
                     this.addWageHistoryFields(wageHistory);
                     
-                    // Pre-fill form with most recent values (first in the list)
+                    // Pre-fill form with most recent values (first in the sorted list)
                     const mostRecentWage = wageHistory[0];
                     if (mostRecentWage) {
                         effectiveFrom = mostRecentWage.effective_from || effectiveFrom;

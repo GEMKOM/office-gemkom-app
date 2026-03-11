@@ -391,28 +391,39 @@ export class EditModal {
         
         // Initialize dropdown after rendering
         setTimeout(() => {
-            const dropdown = new ModernDropdown(dropdownContainer, {
+            const dropdownOptions = {
                 placeholder: field.placeholder || 'Seçiniz...',
                 searchable: field.searchable || false,
                 multiple: field.multiple || false
-            });
-            
-            const items = field.options.map((option, index) => {
-                // Handle different option formats
-                let value = option.value !== undefined ? option.value : option.id;
-                
-                // If value is still undefined, use index as fallback
-                if (value === undefined) {
-                    value = index;
+            };
+            if (field.remoteSearch && typeof field.remoteSearch === 'function') {
+                dropdownOptions.remoteSearch = field.remoteSearch;
+                dropdownOptions.minSearchLength = field.minSearchLength != null ? field.minSearchLength : 3;
+                if (field.remoteSearchPlaceholder) {
+                    dropdownOptions.remoteSearchPlaceholder = field.remoteSearchPlaceholder;
                 }
-                
-                const text = option.label || option.text || option.name;
-                return {
-                    value: value,
-                    text: text,
-                    disabled: option.disabled || false
-                };
-            });
+            }
+
+            const dropdown = new ModernDropdown(dropdownContainer, dropdownOptions);
+            
+            const items = dropdownOptions.remoteSearch
+                ? []
+                : field.options.map((option, index) => {
+                    // Handle different option formats
+                    let value = option.value !== undefined ? option.value : option.id;
+                    
+                    // If value is still undefined, use index as fallback
+                    if (value === undefined) {
+                        value = index;
+                    }
+                    
+                    const text = option.label || option.text || option.name;
+                    return {
+                        value: value,
+                        text: text,
+                        disabled: option.disabled || false
+                    };
+                });
             
             dropdown.setItems(items);
             dropdown.setValue(field.value);

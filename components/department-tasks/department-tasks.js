@@ -91,7 +91,7 @@ export async function initDepartmentTasksPage(config) {
     let subtasksCache = new Map();
     let taskHierarchyMap = new Map(); // Track hierarchy levels for each task
     let expandButtonHandler = null;
-    let currentSortField = 'job_order__job_no'; // Default sort field
+    let currentSortField = ''; // Default sort field
     let currentSortDirection = 'asc'; // Default sort direction
 
     // Component instances
@@ -1395,7 +1395,7 @@ async function loadTasks() {
 
         // Build query options
         // Build ordering string (field name with optional '-' prefix for descending)
-        const orderingField = currentSortField || 'job_order__job_no';
+        const orderingField = currentSortField;
         const orderingDirection = currentSortDirection === 'desc' ? '-' : '';
         const ordering = `${orderingDirection}${orderingField}`;
         
