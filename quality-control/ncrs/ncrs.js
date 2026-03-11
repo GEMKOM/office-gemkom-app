@@ -423,7 +423,14 @@ function initializeTableComponent(canDecideNCRs) {
             label: 'Gönder',
             icon: 'fas fa-paper-plane',
             class: 'btn-outline-success',
-            visible: (row) => row.status === 'draft' || row.status === 'rejected',
+            // Only users from the assigned team can submit
+            visible: (row) => {
+                const userTeam = currentUser && currentUser.team;
+                if (!userTeam) return false;
+                if (!row.assigned_team) return false;
+                if (!(row.status === 'draft' || row.status === 'rejected')) return false;
+                return row.assigned_team === userTeam;
+            },
             onClick: (row) => handleSubmitNCR(row)
         }
     ];

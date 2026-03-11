@@ -1876,16 +1876,14 @@ window.viewJobOrder = async function(jobNo) {
             customContent: '<div id="topics-container" style="padding: 20px;"></div>'
         });
         
-        // Add Teknik Çizimler tab (only for root job orders)
-        if (!jobOrder.parent) {
-            viewJobOrderModal.addTab({
-                id: 'teknik-cizimler',
-                label: 'Teknik Çizimler',
-                icon: 'fas fa-drafting-compass',
-                iconColor: 'text-primary',
-                customContent: '<div id="drawing-releases-container" style="padding: 20px;"></div>'
-            });
-        }
+        // Add Teknik Çizimler tab (for all job orders including child job orders)
+        viewJobOrderModal.addTab({
+            id: 'teknik-cizimler',
+            label: 'Teknik Çizimler',
+            icon: 'fas fa-drafting-compass',
+            iconColor: 'text-primary',
+            customContent: '<div id="drawing-releases-container" style="padding: 20px;"></div>'
+        });
         
         // Add Taşeronluk tab (only for planning and management)
         if (canViewSubcontracting()) {
