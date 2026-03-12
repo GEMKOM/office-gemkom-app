@@ -501,6 +501,11 @@ export const NAVIGATION_STRUCTURE = {
         label: 'Satış',
         icon: 'fas fa-handshake',
         children: {
+            '/sales/cost-table': {
+                label: 'Maliyet Tablosu',
+                icon: 'fas fa-calculator',
+                children: {}
+            },
             '/sales/customers': {
                 label: 'Müşteriler',
                 icon: 'fas fa-users',

@@ -14,6 +14,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         subtitle: 'Müşteri yönetimi, teklif oluşturma ve satış süreçlerinizi yönetin',
         cards: [
             {
+                title: 'Maliyet Tablosu',
+                description: 'İş emirlerinin maliyet özetlerini görüntüleyin.',
+                icon: 'fas fa-calculator',
+                iconColor: 'warning',
+                link: '/sales/cost-table'
+            },
+            {
                 title: 'Müşteriler',
                 description: 'Müşteri bilgileri, iletişim detayları ve yönetim işlemleri.',
                 icon: 'fas fa-users',
