@@ -1336,7 +1336,10 @@ async function showSubcontractorDetails(jobNo) {
         
         // Fetch subcontracting assignments for the job
         const data = await fetchAssignments({ job_no: jobNo });
-        const assignments = Array.isArray(data) ? data : (data.results || []);
+        const allAssignments = Array.isArray(data) ? data : (data.results || []);
+        
+        // Filter out "Boya" assignments
+        const assignments = allAssignments.filter(assignment => assignment.price_tier_name !== 'Boya');
         
         // Create display modal
         const modal = new DisplayModal('subcontractor-details-modal-container', {
@@ -1346,14 +1349,19 @@ async function showSubcontractorDetails(jobNo) {
             showEditButton: false
         });
         
-        // Calculate totals
+        // Calculate totals (excluding "Boya" assignments)
         const totalCost = assignments.reduce((sum, assignment) => {
-            const cost = typeof assignment.current_cost === 'string' ? parseFloat(assignment.current_cost) : (assignment.current_cost || 0);
+            const cost = typeof assignment.current_cost_eur === 'string' ? parseFloat(assignment.current_cost_eur) : (assignment.current_cost_eur || 0);
+            return sum + cost;
+        }, 0);
+        
+        const totalProjectedCost = assignments.reduce((sum, assignment) => {
+            const cost = typeof assignment.projected_cost === 'string' ? parseFloat(assignment.projected_cost) : (assignment.projected_cost || 0);
             return sum + cost;
         }, 0);
         
         const totalUnbilledCost = assignments.reduce((sum, assignment) => {
-            const cost = typeof assignment.unbilled_cost === 'string' ? parseFloat(assignment.unbilled_cost) : (assignment.unbilled_cost || 0);
+            const cost = typeof assignment.unbilled_cost_eur === 'string' ? parseFloat(assignment.unbilled_cost_eur) : (assignment.unbilled_cost_eur || 0);
             return sum + cost;
         }, 0);
         
@@ -1374,25 +1382,34 @@ async function showSubcontractorDetails(jobNo) {
                     value: assignments.length,
                     type: 'number',
                     icon: 'fas fa-list',
-                    colSize: 4
+                    colSize: 2
                 },
                 {
                     id: 'total_cost',
-                    label: 'Toplam Maliyet',
+                    label: 'Mevcut Maliyet',
                     value: totalCost,
-                    type: 'currency',
+                    type: 'text',
                     icon: 'fas fa-euro-sign',
-                    format: (value) => `€${(Number(value) || 0).toFixed(2)}`,
-                    colSize: 4
+                    format: (value) => formatMoney(value),
+                    colSize: 2
+                },
+                {
+                    id: 'total_projected_cost',
+                    label: 'Tahmini Maliyet',
+                    value: totalProjectedCost,
+                    type: 'text',
+                    icon: 'fas fa-calculator',
+                    format: (value) => formatMoney(value),
+                    colSize: 2
                 },
                 {
                     id: 'total_unbilled',
                     label: 'Faturalanmamış Tutar',
                     value: totalUnbilledCost,
-                    type: 'currency',
+                    type: 'text',
                     icon: 'fas fa-file-invoice',
-                    format: (value) => `€${(Number(value) || 0).toFixed(2)}`,
-                    colSize: 4
+                    format: (value) => formatMoney(value),
+                    colSize: 2
                 },
                 {
                     id: 'total_weight',
@@ -1401,7 +1418,7 @@ async function showSubcontractorDetails(jobNo) {
                     type: 'number',
                     icon: 'fas fa-weight',
                     format: (value) => `${(Number(value) || 0).toFixed(2)} kg`,
-                    colSize: 4
+                    colSize: 2
                 }
             ]
         });
@@ -1416,11 +1433,12 @@ async function showSubcontractorDetails(jobNo) {
                 price_per_kg: assignment.price_per_kg || 0,
                 cost_currency: assignment.cost_currency || 'EUR',
                 allocated_weight_kg: assignment.allocated_weight_kg || 0,
-                current_cost: assignment.current_cost || 0,
+                current_cost_eur: assignment.current_cost_eur || 0,
+                projected_cost: assignment.projected_cost || 0,
                 current_progress: assignment.current_progress || 0,
                 last_billed_progress: assignment.last_billed_progress || 0,
                 unbilled_progress: assignment.unbilled_progress || 0,
-                unbilled_cost: assignment.unbilled_cost || 0,
+                unbilled_cost_eur: assignment.unbilled_cost_eur || 0,
                 raw_data: assignment
             }));
 
@@ -1440,94 +1458,86 @@ async function showSubcontractorDetails(jobNo) {
             setTimeout(() => {
                 const assignmentsTable = new TableComponent('subcontractor-assignments-table-container', {
                     title: 'Taşeron Atamaları',
-                    icon: 'fas fa-table',
-                    iconColor: 'text-warning',
                     columns: [
                         {
                             field: 'subcontractor_name',
                             label: 'Taşeron',
                             sortable: true,
                             type: 'text',
-                            formatter: (value) => `<span class="fw-bold text-primary">${value || '-'}</span>`
+                            formatter: (value) => value || '-'
                         },
                         {
                             field: 'price_tier_name',
                             label: 'Fiyat Kademesi',
                             sortable: true,
                             type: 'text',
-                            formatter: (value) => `<span>${value || '-'}</span>`
+                            formatter: (value) => value || '-'
                         },
                         {
                             field: 'price_per_kg',
                             label: 'Kg Fiyatı',
                             sortable: true,
                             type: 'number',
+                            width: '120px',
                             formatter: (value, rowData) => {
                                 const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
                                 const currency = rowData.cost_currency || 'EUR';
-                                return `${currency === 'EUR' ? '€' : currency}${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+                                if (currency === 'EUR') {
+                                    return formatMoney(value);
+                                }
+                                return `${currency}${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
                             }
                         },
                         {
                             field: 'allocated_weight_kg',
-                            label: 'Ayrılan Ağırlık (kg)',
+                            label: 'Ağırlık (kg)',
                             sortable: true,
                             type: 'number',
+                            width: '120px',
                             formatter: (value) => {
                                 const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
-                                return `<span class="fw-bold">${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+                                return num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                            }
+                        },
+                        {
+                            field: 'current_cost_eur',
+                            label: 'Mevcut Maliyet',
+                            sortable: true,
+                            type: 'text',
+                            width: '120px',
+                            formatter: (value, rowData) => {
+                                return formatMoney(value);
+                            }
+                        },
+                        {
+                            field: 'projected_cost',
+                            label: 'Tahmini Maliyet',
+                            sortable: true,
+                            type: 'text',
+                            width: '120px',
+                            formatter: (value, rowData) => {
+                                return formatMoney(value);
                             }
                         },
                         {
                             field: 'current_progress',
-                            label: 'Mevcut İlerleme (%)',
+                            label: 'İlerleme (%)',
                             sortable: true,
                             type: 'number',
+                            width: '100px',
                             formatter: (value) => {
                                 const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
-                                return `<span class="badge bg-info">${num.toFixed(1)}%</span>`;
+                                return num.toFixed(1) + '%';
                             }
                         },
                         {
-                            field: 'last_billed_progress',
-                            label: 'Son Faturalanan (%)',
+                            field: 'unbilled_cost_eur',
+                            label: 'Faturalanmamış',
                             sortable: true,
-                            type: 'number',
-                            formatter: (value) => {
-                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
-                                return `<span class="badge bg-success">${num.toFixed(1)}%</span>`;
-                            }
-                        },
-                        {
-                            field: 'unbilled_progress',
-                            label: 'Faturalanmamış (%)',
-                            sortable: true,
-                            type: 'number',
-                            formatter: (value) => {
-                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
-                                return `<span class="badge bg-warning">${num.toFixed(1)}%</span>`;
-                            }
-                        },
-                        {
-                            field: 'current_cost',
-                            label: 'Mevcut Maliyet',
-                            sortable: true,
-                            type: 'number',
+                            type: 'text',
+                            width: '120px',
                             formatter: (value, rowData) => {
-                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
-                                const currency = rowData.cost_currency || 'EUR';
-                                return `<span class="fw-bold">${currency === 'EUR' ? '€' : currency}${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
-                            }
-                        },
-                        {
-                            field: 'unbilled_cost',
-                            label: 'Faturalanmamış Tutar',
-                            sortable: true,
-                            type: 'number',
-                            formatter: (value, rowData) => {
-                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
-                                const currency = rowData.cost_currency || 'EUR';
-                                return `<span class="fw-bold text-warning">${currency === 'EUR' ? '€' : currency}${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+                                return formatMoney(value);
                             }
                         }
                     ],
