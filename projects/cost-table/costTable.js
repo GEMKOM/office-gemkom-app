@@ -639,15 +639,8 @@ async function showMachiningDetails(jobNo) {
         
         // Fetch machining entries for the job
         const data = await getMachiningJobEntries({ job_no: jobNo });
-        const entries = data.entries || [];
+        const operationGroups = data.entries || [];
         const summary = data.summary || {};
-        
-        // Sort entries by start_time (ascending)
-        const sortedEntries = [...entries].sort((a, b) => {
-            const timeA = a.start_time || 0;
-            const timeB = b.start_time || 0;
-            return timeA - timeB;
-        });
         
         // Create display modal
         const modal = new DisplayModal('machining-details-modal-container', {
@@ -658,6 +651,9 @@ async function showMachiningDetails(jobNo) {
         });
         
         // Add summary section
+        const totalCost = summary.total_cost || '0';
+        const costCurrency = summary.cost_currency || 'EUR';
+        
         modal.addSection({
             title: 'Özet',
             icon: 'fas fa-chart-pie',
@@ -666,10 +662,10 @@ async function showMachiningDetails(jobNo) {
                 {
                     id: 'total_entries',
                     label: 'Toplam Kayıt',
-                    value: summary.total_entries || entries.length,
+                    value: summary.total_entries || 0,
                     type: 'number',
                     icon: 'fas fa-list',
-                    colSize: 3
+                    colSize: 2
                 },
                 {
                     id: 'total_hours',
@@ -678,7 +674,16 @@ async function showMachiningDetails(jobNo) {
                     type: 'number',
                     icon: 'fas fa-clock',
                     format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
-                    colSize: 3
+                    colSize: 2
+                },
+                {
+                    id: 'total_cost',
+                    label: 'Toplam Maliyet',
+                    value: totalCost,
+                    type: 'text',
+                    icon: 'fas fa-euro-sign',
+                    format: (value) => formatMoney(value),
+                    colSize: 2
                 },
                 {
                     id: 'weekday_work',
@@ -710,24 +715,48 @@ async function showMachiningDetails(jobNo) {
             ]
         });
         
-        // Add entries table using TableComponent
-        if (sortedEntries.length > 0) {
-            // Process entries data for table display
-            const entriesTableData = sortedEntries.map(entry => {
-                // Extract date from start_time timestamp
-                const date = entry.start_time ? new Date(entry.start_time).toISOString().split('T')[0] : '-';
-                return {
-                    id: entry.id,
-                    date: date,
-                    employee_id: entry.employee_id,
-                    employee_username: entry.employee_username,
-                    employee_full_name: entry.employee_full_name,
-                    operation_key: entry.operation_key || '-',
-                    operation_name: entry.operation_name || '-',
-                    hours: entry.hours || 0,
-                    work_type: entry.work_type,
-                    raw_data: entry
-                };
+        // Add entries table using TableComponent with grouping
+        if (operationGroups.length > 0) {
+            // Create a map of operation_key -> operation info for group headers
+            const operationInfoMap = new Map();
+            operationGroups.forEach(operation => {
+                operationInfoMap.set(operation.operation_key || '-', {
+                    operation_name: operation.operation_name || '-',
+                    total_hours: operation.total_hours || 0,
+                    total_entries: operation.total_entries || 0,
+                    total_cost: operation.total_cost || '0',
+                    cost_currency: operation.cost_currency || 'EUR'
+                });
+            });
+            
+            // Process data: only create rows for entries (not operations)
+            const tableData = [];
+            
+            operationGroups.forEach(operation => {
+                // Add entry rows (children) - sort by start_time
+                const sortedEntries = [...(operation.entries || [])].sort((a, b) => {
+                    const timeA = a.start_time || 0;
+                    const timeB = b.start_time || 0;
+                    return timeA - timeB;
+                });
+                
+                sortedEntries.forEach(entry => {
+                    const date = entry.start_time ? new Date(entry.start_time).toISOString().split('T')[0] : '-';
+                    tableData.push({
+                        id: entry.id,
+                        operation_key: operation.operation_key || '-',
+                        date: date,
+                        employee_id: entry.employee_id,
+                        employee_username: entry.employee_username,
+                        employee_full_name: entry.employee_full_name,
+                        operation_name: entry.operation_name || '-',
+                        hours: entry.hours || 0,
+                        cost: entry.cost || '0',
+                        cost_currency: entry.cost_currency || 'EUR',
+                        work_type: entry.work_type,
+                        raw_data: entry
+                    });
+                });
             });
 
             const tableHtml = `
@@ -745,62 +774,82 @@ async function showMachiningDetails(jobNo) {
             // Initialize table component after modal is shown
             setTimeout(() => {
                 const entriesTable = new TableComponent('machining-entries-table-container', {
-                    title: 'Kayıtlar (Tarihe Göre Sıralı)',
-                    icon: 'fas fa-table',
-                    iconColor: 'text-primary',
+                    title: 'Kayıtlar',
+                    groupBy: 'operation_key',
+                    groupCollapsible: true,
+                    defaultGroupExpanded: true,
+                    groupHeaderFormatter: (groupValue, groupRows) => {
+                        const operationInfo = operationInfoMap.get(groupValue);
+                        if (operationInfo) {
+                            const costDisplay = formatMoney(operationInfo.total_cost);
+                            return `
+                                <div class="d-flex align-items-center gap-2">
+                                    <strong>${operationInfo.operation_name || '-'}</strong>
+                                    <span class="text-muted">${groupValue}</span>
+                                    <span class="text-muted">•</span>
+                                    <span>${operationInfo.total_hours.toFixed(1)} saat</span>
+                                    <span class="text-muted">•</span>
+                                    <span>${costDisplay}</span>
+                                    <span class="text-muted">•</span>
+                                    <span class="text-muted">${groupRows.length} kayıt</span>
+                                </div>
+                            `;
+                        }
+                        return `<strong>${groupValue || '-'}</strong>`;
+                    },
                     columns: [
                         {
                             field: 'date',
                             label: 'Tarih',
                             sortable: true,
                             type: 'text',
-                            formatter: (value) => `<span class="fw-bold">${value || '-'}</span>`
+                            width: '120px',
+                            formatter: (value) => value || '-'
                         },
                         {
                             field: 'employee_full_name',
                             label: 'Çalışan',
                             sortable: true,
                             type: 'text',
-                            formatter: (value, rowData) => `
-                                <div>
-                                    <span class="fw-bold text-primary">${value || rowData.employee_username || '-'}</span>
-                                    ${rowData.employee_username ? `<br><small class="text-muted">${rowData.employee_username}</small>` : ''}
-                                </div>
-                            `
-                        },
-                        {
-                            field: 'operation_key',
-                            label: 'Operasyon Anahtarı',
-                            sortable: true,
-                            type: 'text',
-                            formatter: (value) => `<span class="text-info">${value || '-'}</span>`
-                        },
-                        {
-                            field: 'operation_name',
-                            label: 'Operasyon Adı',
-                            sortable: true,
-                            type: 'text',
-                            formatter: (value) => `<span>${value || '-'}</span>`
+                            formatter: (value, rowData) => {
+                                const displayName = value || rowData.employee_username || '-';
+                                return displayName;
+                            }
                         },
                         {
                             field: 'hours',
                             label: 'Saat',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `<span class="fw-bold">${(value || 0).toFixed(1)}</span>`
+                            width: '100px',
+                            formatter: (value) => {
+                                const hours = (value || 0).toFixed(1);
+                                return hours;
+                            }
+                        },
+                        {
+                            field: 'cost',
+                            label: 'Maliyet',
+                            sortable: true,
+                            type: 'text',
+                            width: '120px',
+                            formatter: (value, rowData) => {
+                                return formatMoney(value);
+                            }
                         },
                         {
                             field: 'work_type',
                             label: 'Tip',
                             sortable: true,
                             type: 'text',
+                            width: '120px',
                             formatter: (value) => {
                                 const typeLabels = {
-                                    'weekday_work': '<span class="badge bg-primary">Hafta İçi</span>',
-                                    'after_hours': '<span class="badge bg-warning">Mesai</span>',
-                                    'sunday': '<span class="badge bg-danger">Pazar</span>'
+                                    'weekday_work': 'Hafta İçi',
+                                    'after_hours': 'Mesai',
+                                    'sunday': 'Pazar'
                                 };
-                                return typeLabels[value] || `<span class="badge bg-secondary">${value || '-'}</span>`;
+                                return typeLabels[value] || value || '-';
                             }
                         }
                     ],
@@ -814,10 +863,10 @@ async function showMachiningDetails(jobNo) {
                 });
 
                 // Update table with data
-                entriesTable.updateData(entriesTableData, {
-                    totalItems: entriesTableData.length,
+                entriesTable.updateData(tableData, {
+                    totalItems: tableData.length,
                     currentPage: 1,
-                    pageSize: entriesTableData.length
+                    pageSize: tableData.length
                 });
             }, 100);
         } else {
