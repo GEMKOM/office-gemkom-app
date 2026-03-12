@@ -154,7 +154,7 @@ async function loadConfigs() {
                     id: config.notification_type,
                     notification_type: config.notification_type,
                     label: config.notification_type_display || config.notification_type,
-                    title_template: config.title_template || '',
+                    always_notified: config.always_notified || null,
                     routing: routingText,
                     default_send_email: config.default_send_email !== undefined ? config.default_send_email : true,
                     default_send_in_app: config.default_send_in_app !== undefined ? config.default_send_in_app : true,
@@ -191,13 +191,15 @@ function initializeTable() {
                 }
             },
             {
-                field: 'title_template',
-                label: 'Başlık Şablonu',
+                field: 'always_notified',
+                label: 'Otomatik Bildirilenler',
                 sortable: false,
                 width: '300px',
                 formatter: (value) => {
-                    const truncated = truncateText(value, 40);
-                    return `<span class="text-muted">${escapeHtml(truncated)}</span>`;
+                    if (!value) {
+                        return '<span class="text-muted">-</span>';
+                    }
+                    return `<span class="text-body"><i class="fas fa-info-circle me-1 text-muted"></i>${escapeHtml(value)}</span>`;
                 }
             },
             {
