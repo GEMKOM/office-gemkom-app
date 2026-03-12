@@ -729,10 +729,24 @@ async function showMachiningDetails(jobNo) {
                 });
             });
             
-            // Process data: only create rows for entries (not operations)
+            // Process data: add operation summary rows and entry rows
             const tableData = [];
             
             operationGroups.forEach(operation => {
+                // Add operation summary row first
+                tableData.push({
+                    id: `operation-summary-${operation.operation_key}`,
+                    operation_key: operation.operation_key || '-',
+                    date: '',
+                    employee_full_name: '',
+                    hours: operation.total_hours || 0,
+                    cost: operation.total_cost || '0',
+                    cost_currency: operation.cost_currency || 'EUR',
+                    work_type: '',
+                    is_operation_summary: true,
+                    operation_name: operation.operation_name || '-'
+                });
+                
                 // Add entry rows (children) - sort by start_time
                 const sortedEntries = [...(operation.entries || [])].sort((a, b) => {
                     const timeA = a.start_time || 0;
@@ -754,6 +768,7 @@ async function showMachiningDetails(jobNo) {
                         cost: entry.cost || '0',
                         cost_currency: entry.cost_currency || 'EUR',
                         work_type: entry.work_type,
+                        is_operation_summary: false,
                         raw_data: entry
                     });
                 });
@@ -781,21 +796,27 @@ async function showMachiningDetails(jobNo) {
                     groupHeaderFormatter: (groupValue, groupRows) => {
                         const operationInfo = operationInfoMap.get(groupValue);
                         if (operationInfo) {
-                            const costDisplay = formatMoney(operationInfo.total_cost);
+                            // Escape HTML for security
+                            const escapeHtml = (text) => {
+                                const div = document.createElement('div');
+                                div.textContent = text;
+                                return div.innerHTML;
+                            };
+                            const operationName = escapeHtml(operationInfo.operation_name || '-');
+                            const operationKey = escapeHtml(groupValue);
                             return `
                                 <div class="d-flex align-items-center gap-2">
-                                    <strong>${operationInfo.operation_name || '-'}</strong>
-                                    <span class="text-muted">${groupValue}</span>
-                                    <span class="text-muted">•</span>
-                                    <span>${operationInfo.total_hours.toFixed(1)} saat</span>
-                                    <span class="text-muted">•</span>
-                                    <span>${costDisplay}</span>
-                                    <span class="text-muted">•</span>
-                                    <span class="text-muted">${groupRows.length} kayıt</span>
+                                    <span class="status-badge status-blue">${operationName}</span>
+                                    <span class="text-muted">${operationKey}</span>
                                 </div>
                             `;
                         }
-                        return `<strong>${groupValue || '-'}</strong>`;
+                        const escapeHtml = (text) => {
+                            const div = document.createElement('div');
+                            div.textContent = text;
+                            return div.innerHTML;
+                        };
+                        return `<span class="status-badge status-grey">${escapeHtml(groupValue || '-')}</span>`;
                     },
                     columns: [
                         {
@@ -804,7 +825,12 @@ async function showMachiningDetails(jobNo) {
                             sortable: true,
                             type: 'text',
                             width: '120px',
-                            formatter: (value) => value || '-'
+                            formatter: (value, rowData) => {
+                                if (rowData.is_operation_summary) {
+                                    return '<span class="text-muted fw-bold">Toplam</span>';
+                                }
+                                return value || '-';
+                            }
                         },
                         {
                             field: 'employee_full_name',
@@ -812,6 +838,9 @@ async function showMachiningDetails(jobNo) {
                             sortable: true,
                             type: 'text',
                             formatter: (value, rowData) => {
+                                if (rowData.is_operation_summary) {
+                                    return '<span class="text-muted">-</span>';
+                                }
                                 const displayName = value || rowData.employee_username || '-';
                                 return displayName;
                             }
@@ -822,8 +851,11 @@ async function showMachiningDetails(jobNo) {
                             sortable: true,
                             type: 'number',
                             width: '100px',
-                            formatter: (value) => {
+                            formatter: (value, rowData) => {
                                 const hours = (value || 0).toFixed(1);
+                                if (rowData.is_operation_summary) {
+                                    return `<span class="fw-bold">${hours}</span>`;
+                                }
                                 return hours;
                             }
                         },
@@ -834,6 +866,9 @@ async function showMachiningDetails(jobNo) {
                             type: 'text',
                             width: '120px',
                             formatter: (value, rowData) => {
+                                if (rowData.is_operation_summary) {
+                                    return `<span class="fw-bold">${formatMoney(value)}</span>`;
+                                }
                                 return formatMoney(value);
                             }
                         },
@@ -843,7 +878,10 @@ async function showMachiningDetails(jobNo) {
                             sortable: true,
                             type: 'text',
                             width: '120px',
-                            formatter: (value) => {
+                            formatter: (value, rowData) => {
+                                if (rowData.is_operation_summary) {
+                                    return '<span class="text-muted">-</span>';
+                                }
                                 const typeLabels = {
                                     'weekday_work': 'Hafta İçi',
                                     'after_hours': 'Mesai',
@@ -853,6 +891,15 @@ async function showMachiningDetails(jobNo) {
                             }
                         }
                     ],
+                    rowAttributes: (row) => {
+                        if (row.is_operation_summary) {
+                            return {
+                                class: 'operation-summary-row',
+                                style: 'background-color: #f8f9fa;'
+                            };
+                        }
+                        return null;
+                    },
                     onRowClick: null,
                     onSort: null,
                     onPageChange: null,
@@ -912,6 +959,9 @@ async function showWeldingDetails(jobNo) {
         });
         
         // Add summary section
+        const totalCost = summary.total_cost || '0';
+        const costCurrency = summary.cost_currency || 'EUR';
+        
         modal.addSection({
             title: 'Özet',
             icon: 'fas fa-chart-pie',
@@ -923,7 +973,7 @@ async function showWeldingDetails(jobNo) {
                     value: summary.total_entries || entries.length,
                     type: 'number',
                     icon: 'fas fa-list',
-                    colSize: 3
+                    colSize: 2
                 },
                 {
                     id: 'total_hours',
@@ -932,7 +982,16 @@ async function showWeldingDetails(jobNo) {
                     type: 'number',
                     icon: 'fas fa-clock',
                     format: (value) => `${(Number(value) || 0).toFixed(1)} saat`,
-                    colSize: 3
+                    colSize: 2
+                },
+                {
+                    id: 'total_cost',
+                    label: 'Toplam Maliyet',
+                    value: totalCost,
+                    type: 'text',
+                    icon: 'fas fa-euro-sign',
+                    format: (value) => formatMoney(value),
+                    colSize: 2
                 },
                 {
                     id: 'regular_hours',
@@ -974,6 +1033,8 @@ async function showWeldingDetails(jobNo) {
                 employee_username: entry.employee_username,
                 employee_full_name: entry.employee_full_name,
                 hours: entry.hours || 0,
+                cost: entry.cost || '0',
+                cost_currency: entry.cost_currency || 'EUR',
                 overtime_type: entry.overtime_type,
                 raw_data: entry
             }));
@@ -993,48 +1054,60 @@ async function showWeldingDetails(jobNo) {
             // Initialize table component after modal is shown
             setTimeout(() => {
                 const entriesTable = new TableComponent('welding-entries-table-container', {
-                    title: 'Kayıtlar (Tarihe Göre Sıralı)',
-                    icon: 'fas fa-table',
-                    iconColor: 'text-danger',
+                    title: 'Kayıtlar',
                     columns: [
                         {
                             field: 'date',
                             label: 'Tarih',
                             sortable: true,
                             type: 'text',
-                            formatter: (value) => `<span class="fw-bold">${value || '-'}</span>`
+                            width: '120px',
+                            formatter: (value) => value || '-'
                         },
                         {
                             field: 'employee_full_name',
                             label: 'Çalışan',
                             sortable: true,
                             type: 'text',
-                            formatter: (value, rowData) => `
-                                <div>
-                                    <span class="fw-bold text-primary">${value || rowData.employee_username || '-'}</span>
-                                    ${rowData.employee_username ? `<br><small class="text-muted">${rowData.employee_username}</small>` : ''}
-                                </div>
-                            `
+                            formatter: (value, rowData) => {
+                                const displayName = value || rowData.employee_username || '-';
+                                return displayName;
+                            }
                         },
                         {
                             field: 'hours',
                             label: 'Saat',
                             sortable: true,
                             type: 'number',
-                            formatter: (value) => `<span class="fw-bold">${(value || 0).toFixed(1)}</span>`
+                            width: '100px',
+                            formatter: (value) => {
+                                const hours = (value || 0).toFixed(1);
+                                return hours;
+                            }
+                        },
+                        {
+                            field: 'cost',
+                            label: 'Maliyet',
+                            sortable: true,
+                            type: 'text',
+                            width: '120px',
+                            formatter: (value, rowData) => {
+                                return formatMoney(value);
+                            }
                         },
                         {
                             field: 'overtime_type',
                             label: 'Tip',
                             sortable: true,
                             type: 'text',
+                            width: '120px',
                             formatter: (value) => {
                                 const typeLabels = {
-                                    'regular': '<span class="badge bg-primary">Normal</span>',
-                                    'after_hours': '<span class="badge bg-warning">Mesai</span>',
-                                    'holiday': '<span class="badge bg-danger">Tatil</span>'
+                                    'regular': 'Normal',
+                                    'after_hours': 'Mesai',
+                                    'holiday': 'Tatil'
                                 };
-                                return typeLabels[value] || `<span class="badge bg-secondary">${value || '-'}</span>`;
+                                return typeLabels[value] || value || '-';
                             }
                         }
                     ],
