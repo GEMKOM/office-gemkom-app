@@ -3,13 +3,13 @@ import { backendBase } from '../../base.js';
 
 /**
  * Notifications API Service
- * Handles all notification-related API requests for the notification bell
+ * Handles all notification-related API requests
  */
 
 const NOTIFICATIONS_BASE = `${backendBase}/notifications`;
 
 /**
- * Get paginated list of notifications
+ * Get paginated list of notifications (for notification bell)
  * @param {Object} filters - Filter parameters
  * @param {boolean} filters.is_read - Filter by read status
  * @param {string} filters.ordering - Ordering field (e.g., '-created_at')
@@ -189,6 +189,86 @@ export async function resetNotificationPreferences() {
         return await response.json();
     } catch (error) {
         console.error('Error resetting notification preferences:', error);
+        throw error;
+    }
+}
+
+/**
+ * Notification Config API (Admin only)
+ */
+
+/**
+ * Get all notification configs
+ * @returns {Promise<Object>} Object with team_choices and configs array
+ */
+export async function getNotificationConfigs() {
+    try {
+        const url = `${NOTIFICATIONS_BASE}/config/`;
+        const response = await authedFetch(url);
+        
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Bildirim yapılandırmaları yüklenirken hata oluştu' }));
+            throw new Error(error.detail || `Failed to fetch notification configs: ${response.status}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching notification configs:', error);
+        throw error;
+    }
+}
+
+/**
+ * Update a notification config
+ * @param {string} notificationType - Notification type (e.g., 'job_on_hold')
+ * @param {Object} data - Update data (title_template, body_template, link_template, user_ids, teams, enabled)
+ * @returns {Promise<Object>} Updated config object
+ */
+export async function updateNotificationConfig(notificationType, data) {
+    try {
+        const url = `${NOTIFICATIONS_BASE}/config/${notificationType}/`;
+        const response = await authedFetch(url, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(data)
+        });
+        
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Bildirim yapılandırması güncellenirken hata oluştu' }));
+            throw new Error(error.detail || `Failed to update notification config: ${response.status}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error updating notification config:', error);
+        throw error;
+    }
+}
+
+/**
+ * Reset all notification configs to defaults
+ * @returns {Promise<Object>} Response object with status and message
+ */
+export async function resetNotificationConfigs() {
+    try {
+        const url = `${NOTIFICATIONS_BASE}/config/reset/`;
+        const response = await authedFetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+        
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({ detail: 'Bildirim yapılandırmaları sıfırlanırken hata oluştu' }));
+            throw new Error(error.detail || `Failed to reset notification configs: ${response.status}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error('Error resetting notification configs:', error);
         throw error;
     }
 }

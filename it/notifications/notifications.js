@@ -7,24 +7,42 @@ import { showNotification } from '../../../components/notification/notification.
 import { initRouteProtection } from '../../../apis/routeProtection.js';
 import { getUser } from '../../../authService.js';
 import { 
-    listNotificationRoutes, 
-    updateNotificationRoute,
-    NOTIFICATION_TYPES 
-} from '../../../apis/notifications.js';
+    getNotificationConfigs, 
+    updateNotificationConfig,
+    resetNotificationConfigs
+} from '../../../apis/notification/notifications.js';
 import { fetchAllUsers } from '../../../apis/users.js';
 
 // State management
-let notificationRoutes = [];
+let notificationConfigs = [];
+let teamChoices = [];
 let allUsers = [];
 let currentUser = null;
-let routesTable = null;
-let editRouteModal = null;
-let teamChoices = [];
+let configsTable = null;
+let editConfigModal = null;
 
 function escapeHtml(text) {
     const div = document.createElement('div');
     div.textContent = text ?? '';
     return div.innerHTML;
+}
+
+function formatDate(dateString) {
+    if (!dateString) return '-';
+    const date = new Date(dateString);
+    return date.toLocaleDateString('tr-TR', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
+}
+
+function truncateText(text, maxLength = 50) {
+    if (!text) return '-';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -50,23 +68,38 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Initialize header
     new HeaderComponent({
-        title: 'Bildirim Yönlendirmeleri',
-        subtitle: 'Bildirim türlerine göre kullanıcı atamalarını yönetin',
+        title: 'Bildirim Yapılandırmaları',
+        subtitle: 'Bildirim şablonlarını ve yönlendirmelerini yönetin',
         icon: 'fas fa-bell',
         showBackButton: 'block',
         showCreateButton: 'none',
         showRefreshButton: 'block',
         backUrl: '/it/',
         onRefreshClick: async () => {
-            await loadRoutes();
+            await loadConfigs();
         }
     });
 
-    // Initialize modals
-    editRouteModal = new EditModal('edit-route-modal-container', {
-        title: 'Bildirim Yönlendirmesi Düzenle',
+    // Add reset button to header after it renders
+    setTimeout(() => {
+        const headerPlaceholder = document.getElementById('header-placeholder');
+        if (headerPlaceholder) {
+            const dashboardControls = headerPlaceholder.querySelector('.dashboard-controls');
+            if (dashboardControls) {
+                const resetBtn = document.createElement('button');
+                resetBtn.className = 'btn btn-sm btn-outline-danger ms-2';
+                resetBtn.innerHTML = '<i class="fas fa-undo me-1"></i>Tümünü Sıfırla';
+                resetBtn.onclick = handleResetAll;
+                dashboardControls.appendChild(resetBtn);
+            }
+        }
+    }, 100);
+
+    // Initialize modal
+    editConfigModal = new EditModal('edit-route-modal-container', {
+        title: 'Bildirim Yapılandırması Düzenle',
         icon: 'fas fa-edit',
-        size: 'lg',
+        size: 'xl',
         showEditButton: false
     });
 
@@ -76,8 +109,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Initialize table
     initializeTable();
 
-    // Load routes
-    await loadRoutes();
+    // Load configs
+    await loadConfigs();
 });
 
 async function loadUsers() {
@@ -89,132 +122,107 @@ async function loadUsers() {
     }
 }
 
-async function loadRoutes() {
+async function loadConfigs() {
     try {
-        if (routesTable) routesTable.setLoading(true);
+        if (configsTable) configsTable.setLoading(true);
         
-        const res = await listNotificationRoutes();
-        const routes = Array.isArray(res) ? res : (res.routes || []);
-        teamChoices = Array.isArray(res?.team_choices) ? res.team_choices : [];
-        notificationRoutes = routes;
+        const response = await getNotificationConfigs();
+        teamChoices = response.team_choices || [];
+        notificationConfigs = response.configs || [];
 
         // Update table data
-        if (routesTable) {
-            const tableData = routes.map(route => {
-                const routeTeams = route.team_values || route.teams || route.team_recipients || [];
+        if (configsTable) {
+            const tableData = notificationConfigs.map(config => {
+                // Build routing display (users + teams)
+                const userCount = config.users ? config.users.length : 0;
+                const teams = config.teams || [];
+                const teamLabels = teams.map(t => {
+                    const teamChoice = teamChoices.find(tc => tc.value === t);
+                    return teamChoice ? teamChoice.label : t;
+                }).filter(Boolean);
+                
+                let routingDisplay = [];
+                if (userCount > 0) {
+                    routingDisplay.push(`${userCount} kullanıcı`);
+                }
+                if (teamLabels.length > 0) {
+                    routingDisplay.push(teamLabels.join(', '));
+                }
+                const routingText = routingDisplay.length > 0 ? routingDisplay.join(' + ') : '-';
+
                 return {
-                    id: route.notification_type,
-                    notification_type: route.notification_type,
-                    label: route.notification_type_display || route.notification_type,
-                    link: route.link || null,
-                    always_notified: route.always_notified || null,
-                    enabled: route.enabled || false,
-                    user_count: route.users ? route.users.length : 0,
-                    users: route.users || [],
-                    teams: Array.isArray(routeTeams) ? routeTeams : (routeTeams ? [routeTeams] : []),
-                    raw_data: route
+                    id: config.notification_type,
+                    notification_type: config.notification_type,
+                    label: config.notification_type_display || config.notification_type,
+                    title_template: config.title_template || '',
+                    routing: routingText,
+                    updated_at: config.updated_at,
+                    is_default: config.is_default || false,
+                    is_routable: config.is_routable || false,
+                    raw_data: config
                 };
             });
-            routesTable.updateData(tableData, tableData.length, 1);
+            configsTable.updateData(tableData, tableData.length, 1);
         }
     } catch (error) {
-        console.error('Error loading notification routes:', error);
-        showNotification('Bildirim yönlendirmeleri yüklenirken hata oluştu', 'error');
-        if (routesTable) routesTable.updateData([], 0, 1);
+        console.error('Error loading notification configs:', error);
+        showNotification('Bildirim yapılandırmaları yüklenirken hata oluştu', 'error');
+        if (configsTable) configsTable.updateData([], 0, 1);
     } finally {
-        if (routesTable) routesTable.setLoading(false);
+        if (configsTable) configsTable.setLoading(false);
     }
 }
 
 function initializeTable() {
-    routesTable = new TableComponent('notifications-table-container', {
-        title: 'Bildirim Yönlendirmeleri',
+    configsTable = new TableComponent('notifications-table-container', {
+        title: 'Bildirim Yapılandırmaları',
         columns: [
             {
                 field: 'label',
                 label: 'Bildirim Türü',
                 sortable: true,
-                formatter: (value) => `<strong>${value || '-'}</strong>`
-            },
-            {
-                field: 'link',
-                label: 'Link',
-                sortable: false,
-                width: '220px',
-                formatter: (value) => {
-                    if (!value) return '<span class="text-muted">-</span>';
-                    const safe = escapeHtml(value);
-                    return `<a href="${safe}" class="text-decoration-none" target="_blank" rel="noopener noreferrer">
-                        <i class="fas fa-external-link-alt me-1"></i>${safe}
-                    </a>`;
+                formatter: (value, row) => {
+                    const defaultBadge = row.is_default 
+                        ? '<span class="badge bg-secondary ms-2">Varsayılan</span>' 
+                        : '';
+                    return `<strong>${escapeHtml(value || '-')}</strong>${defaultBadge}`;
                 }
             },
             {
-                field: 'always_notified',
-                label: 'Otomatik Bildirilenler',
+                field: 'title_template',
+                label: 'Başlık Şablonu',
+                sortable: false,
+                width: '300px',
+                formatter: (value) => {
+                    const truncated = truncateText(value, 40);
+                    return `<span class="text-muted">${escapeHtml(truncated)}</span>`;
+                }
+            },
+            {
+                field: 'routing',
+                label: 'Yönlendirme',
                 sortable: false,
                 width: '250px',
                 formatter: (value, row) => {
+                    if (!row.is_routable) {
+                        return '<span class="text-muted">Yönlendirilemez</span>';
+                    }
+                    if (value === '-') {
+                        return '<span class="text-muted">-</span>';
+                    }
+                    return `<span class="status-badge status-grey">${escapeHtml(value)}</span>`;
+                }
+            },
+            {
+                field: 'updated_at',
+                label: 'Son Güncelleme',
+                sortable: true,
+                width: '180px',
+                formatter: (value) => {
                     if (!value) {
                         return '<span class="text-muted">-</span>';
                     }
-                    return `<span class="text-body"><i class="fas fa-info-circle me-1 text-muted"></i>${escapeHtml(value)}</span>`;
-                }
-            },
-            {
-                field: 'teams',
-                label: 'Takımlar',
-                sortable: false,
-                width: '180px',
-                formatter: (value) => {
-                    const teams = Array.isArray(value) ? value : [];
-                    if (teams.length === 0) return '<span class="text-muted">-</span>';
-                    const labelByValue = new Map((teamChoices || []).map(t => [t.value, t.label]));
-                    const display = teams.map(v => labelByValue.get(v) || v).filter(Boolean);
-                    return `<span class="status-badge status-grey">${escapeHtml(display.join(', '))}</span>`;
-                }
-            },
-            {
-                field: 'enabled',
-                label: 'Durum',
-                sortable: true,
-                width: '120px',
-                formatter: (value) => {
-                    if (value) {
-                        return '<span class="status-badge status-green">Aktif</span>';
-                    } else {
-                        return '<span class="status-badge status-grey">Pasif</span>';
-                    }
-                }
-            },
-            {
-                field: 'user_count',
-                label: 'Ek Kullanıcı Sayısı',
-                sortable: true,
-                width: '150px',
-                formatter: (value, row) => {
-                    const count = value || 0;
-                    if (count === 0) {
-                        return '<span class="text-muted">-</span>';
-                    }
-                    return `<span class="fw-bold text-primary">${count}</span>`;
-                }
-            },
-            {
-                field: 'users',
-                label: 'Ek Atanan Kullanıcılar',
-                sortable: false,
-                formatter: (value, row) => {
-                    if (!value || value.length === 0) {
-                        return '<span class="text-muted">-</span>';
-                    }
-                    const userNames = value.map(user => {
-                        const firstName = user.first_name || '';
-                        const lastName = user.last_name || '';
-                        const fullName = `${firstName} ${lastName}`.trim();
-                        return fullName || user.username || `#${user.id}`;
-                    });
-                    return `<span class="status-badge status-grey">${userNames.join(', ')}</span>`;
+                    return `<span class="text-muted">${formatDate(value)}</span>`;
                 }
             }
         ],
@@ -224,143 +232,323 @@ function initializeTable() {
                 label: 'Düzenle',
                 icon: 'fas fa-edit',
                 class: 'btn-outline-primary',
-                onClick: (row) => showEditRouteModal(row)
+                onClick: (row) => showEditConfigModal(row)
             }
         ],
         pagination: false,
         refreshable: true,
         onRefresh: async () => {
-            await loadRoutes();
+            await loadConfigs();
         },
-        emptyMessage: 'Bildirim yönlendirmesi bulunamadı.',
+        emptyMessage: 'Bildirim yapılandırması bulunamadı.',
         loading: true
     });
 }
 
-function showEditRouteModal(routeRow) {
-    const route = routeRow.raw_data;
+function showEditConfigModal(configRow) {
+    const config = configRow.raw_data;
 
-    editRouteModal.clearAll();
-    editRouteModal.addSection({
-        title: 'Bildirim Yönlendirmesi',
-        icon: 'fas fa-bell',
+    editConfigModal.clearAll();
+
+    // Notification type section
+    editConfigModal.addSection({
+        title: 'Bildirim Türü',
+        icon: 'fas fa-tag',
         iconColor: 'text-primary'
     });
 
     // Notification type label (read-only)
-    editRouteModal.addField({
+    editConfigModal.addField({
         id: 'notification_type_label',
         name: 'notification_type_label',
         label: 'Bildirim Türü',
         type: 'text',
-        value: route.notification_type_display || route.notification_type,
+        value: config.notification_type_display || config.notification_type,
         readonly: true,
         icon: 'fas fa-tag',
         colSize: 12
     });
 
-    // Always notified info (read-only)
-    if (route.always_notified) {
-        editRouteModal.addField({
+    // Always notified info (read-only, if exists)
+    if (config.always_notified) {
+        editConfigModal.addField({
             id: 'always_notified',
             name: 'always_notified',
-            label: 'Otomatik Bildirilenler',
+            label: 'Her Zaman Bildirilenler',
             type: 'text',
-            value: route.always_notified,
+            value: config.always_notified,
             readonly: true,
             icon: 'fas fa-info-circle',
+            colSize: 12,
+            help: 'Bu bildirim türünde her zaman şu kişiler bildirilir'
+        });
+    }
+
+    // Templates section
+    editConfigModal.addSection({
+        title: 'Şablonlar',
+        icon: 'fas fa-code',
+        iconColor: 'text-info'
+    });
+
+    // Store available vars for variable insertion
+    window.currentAvailableVars = config.available_vars || [];
+
+    // Title template
+    editConfigModal.addField({
+        id: 'title_template',
+        name: 'title_template',
+        label: 'Başlık Şablonu',
+        type: 'text',
+        value: config.title_template || '',
+        placeholder: 'Örn: [İş Emri Beklemede] {job_no}',
+        icon: 'fas fa-heading',
+        colSize: 12,
+        help: config.available_vars && config.available_vars.length > 0 
+            ? 'Kullanılabilir değişkenler: ' + config.available_vars.map(v => `{${v}}`).join(', ')
+            : ''
+    });
+
+    // Body template
+    editConfigModal.addField({
+        id: 'body_template',
+        name: 'body_template',
+        label: 'İçerik Şablonu',
+        type: 'textarea',
+        value: config.body_template || '',
+        placeholder: 'Örn: {job_no} numaralı iş emri bekletilmiştir.',
+        rows: 5,
+        icon: 'fas fa-align-left',
+        colSize: 12,
+        help: config.available_vars && config.available_vars.length > 0 
+            ? 'Kullanılabilir değişkenler: ' + config.available_vars.map(v => `{${v}}`).join(', ')
+            : ''
+    });
+
+    // Link template
+    editConfigModal.addField({
+        id: 'link_template',
+        name: 'link_template',
+        label: 'Link Şablonu',
+        type: 'text',
+        value: config.link_template || '',
+        placeholder: 'Örn: https://ofis.gemcore.com.tr/projects/project-tracking/?job_no={job_no}',
+        icon: 'fas fa-link',
+        colSize: 12,
+        help: config.available_vars && config.available_vars.length > 0 
+            ? 'Kullanılabilir değişkenler: ' + config.available_vars.map(v => `{${v}}`).join(', ')
+            : ''
+    });
+
+    // Routing section (only if routable)
+    if (config.is_routable) {
+        editConfigModal.addSection({
+            title: 'Yönlendirme',
+            icon: 'fas fa-route',
+            iconColor: 'text-success'
+        });
+
+        // Enabled toggle
+        editConfigModal.addField({
+            id: 'enabled',
+            name: 'enabled',
+            label: 'Aktif',
+            type: 'checkbox',
+            value: config.enabled || false,
+            icon: 'fas fa-toggle-on',
+            colSize: 12
+        });
+
+        // User selection (multi-select dropdown)
+        const userOptions = allUsers.map(user => {
+            const firstName = user.first_name || '';
+            const lastName = user.last_name || '';
+            const fullName = `${firstName} ${lastName}`.trim();
+            const displayName = fullName || user.username || `#${user.id}`;
+            return {
+                value: String(user.id),
+                label: displayName
+            };
+        });
+
+        const currentUserIds = (config.users || []).map(u => String(u.id));
+
+        editConfigModal.addField({
+            id: 'user_ids',
+            name: 'user_ids',
+            label: 'Atanan Kullanıcılar',
+            type: 'dropdown',
+            value: currentUserIds,
+            multiple: true,
+            options: userOptions,
+            placeholder: 'Kullanıcı seçin',
+            searchable: true,
+            icon: 'fas fa-users',
+            colSize: 12
+        });
+
+        // Team selection (multi-select dropdown)
+        const teamOptions = (teamChoices || []).map(t => ({
+            value: String(t.value),
+            label: t.label || t.value
+        }));
+        const currentTeamValues = (config.teams || []).map(v => String(v));
+
+        editConfigModal.addField({
+            id: 'teams',
+            name: 'teams',
+            label: 'Takımlar',
+            type: 'dropdown',
+            value: currentTeamValues,
+            multiple: true,
+            options: teamOptions,
+            placeholder: 'Takım seçin',
+            searchable: true,
+            icon: 'fas fa-sitemap',
             colSize: 12
         });
     }
 
-    // Enabled toggle
-    editRouteModal.addField({
-        id: 'enabled',
-        name: 'enabled',
-        label: 'Aktif',
-        type: 'checkbox',
-        value: route.enabled || false,
-        icon: 'fas fa-toggle-on',
-        colSize: 12
-    });
-
-    // User selection (multi-select dropdown)
-    const userOptions = allUsers.map(user => {
-        const firstName = user.first_name || '';
-        const lastName = user.last_name || '';
-        const fullName = `${firstName} ${lastName}`.trim();
-        const displayName = fullName || user.username || `#${user.id}`;
-        return {
-            value: String(user.id),
-            label: displayName
-        };
-    });
-
-    const currentUserIds = (route.users || []).map(u => String(u.id));
-
-    editRouteModal.addField({
-        id: 'user_ids',
-        name: 'user_ids',
-        label: 'Atanan Kullanıcılar',
-        type: 'dropdown',
-        value: currentUserIds,
-        multiple: true,
-        options: userOptions,
-        placeholder: 'Kullanıcı seçin',
-        searchable: true,
-        icon: 'fas fa-users',
-        colSize: 12
-    });
-
-    // Team selection (multi-select dropdown)
-    const teamOptions = (teamChoices || []).map(t => ({
-        value: String(t.value),
-        label: t.label || t.value
-    }));
-    const currentTeamsRaw = route.team_values || route.teams || route.team_recipients || [];
-    const currentTeamValues = (Array.isArray(currentTeamsRaw) ? currentTeamsRaw : (currentTeamsRaw ? [currentTeamsRaw] : []))
-        .map(v => String(v));
-
-    editRouteModal.addField({
-        id: 'team_values',
-        name: 'team_values',
-        label: 'Takımlar',
-        type: 'dropdown',
-        value: currentTeamValues,
-        multiple: true,
-        options: teamOptions,
-        placeholder: 'Takım seçin',
-        searchable: true,
-        icon: 'fas fa-sitemap',
-        colSize: 12
-    });
-
-    editRouteModal.onSaveCallback(async (formData) => {
+    editConfigModal.onSaveCallback(async (formData) => {
         try {
-            // Convert user_ids array to integers
-            const userIds = Array.isArray(formData.user_ids) 
-                ? formData.user_ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id))
-                : [];
-            const teamValues = Array.isArray(formData.team_values)
-                ? formData.team_values.map(v => String(v)).filter(Boolean)
-                : [];
+            const updateData = {};
 
-            const updateData = {
-                enabled: formData.enabled || false,
-                user_ids: userIds,
-                team_values: teamValues
-            };
+            // Template fields (always included)
+            if (formData.title_template !== undefined) {
+                updateData.title_template = formData.title_template || '';
+            }
+            if (formData.body_template !== undefined) {
+                updateData.body_template = formData.body_template || '';
+            }
+            if (formData.link_template !== undefined) {
+                updateData.link_template = formData.link_template || '';
+            }
 
-            await updateNotificationRoute(route.notification_type, updateData);
-            editRouteModal.hide();
-            showNotification('Bildirim yönlendirmesi güncellendi', 'success');
-            await loadRoutes();
+            // Routing fields (only for routable types)
+            if (config.is_routable) {
+                if (formData.enabled !== undefined) {
+                    updateData.enabled = formData.enabled || false;
+                }
+                
+                // Convert user_ids array to integers
+                const userIds = Array.isArray(formData.user_ids) 
+                    ? formData.user_ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id))
+                    : [];
+                updateData.user_ids = userIds;
+
+                // Teams
+                const teams = Array.isArray(formData.teams)
+                    ? formData.teams.map(v => String(v)).filter(Boolean)
+                    : [];
+                updateData.teams = teams;
+            }
+
+            await updateNotificationConfig(config.notification_type, updateData);
+            editConfigModal.hide();
+            showNotification('Bildirim yapılandırması güncellendi', 'success');
+            await loadConfigs();
         } catch (error) {
-            console.error('Error updating notification route:', error);
+            console.error('Error updating notification config:', error);
             showNotification(error.message || 'Güncelleme hatası', 'error');
         }
     });
 
-    editRouteModal.render();
-    editRouteModal.show();
+    editConfigModal.render();
+    editConfigModal.show();
+
+    // Add variable chips after modal is shown
+    if (config.available_vars && config.available_vars.length > 0) {
+        setTimeout(() => {
+            addVariableChips(config.available_vars);
+        }, 200);
+    }
+}
+
+function addVariableChips(availableVars) {
+    const modal = document.querySelector('.edit-modal-container');
+    if (!modal) return;
+
+    // Find template fields
+    const titleField = document.getElementById('title_template');
+    const bodyField = document.getElementById('body_template');
+    const linkField = document.getElementById('link_template');
+
+    const fields = [
+        { field: titleField, label: 'Başlık Şablonu' },
+        { field: bodyField, label: 'İçerik Şablonu' },
+        { field: linkField, label: 'Link Şablonu' }
+    ].filter(f => f.field);
+
+    fields.forEach(({ field, label }) => {
+        const fieldGroup = field.closest('.field-group');
+        if (!fieldGroup) return;
+
+        // Create chips container
+        const chipsContainer = document.createElement('div');
+        chipsContainer.className = 'mb-2 mt-1';
+        chipsContainer.style.fontSize = '0.85rem';
+
+        const chipsLabel = document.createElement('small');
+        chipsLabel.className = 'text-muted d-block mb-1';
+        chipsLabel.textContent = `${label} için değişkenler:`;
+
+        const chipsDiv = document.createElement('div');
+        chipsDiv.className = 'd-flex flex-wrap gap-1';
+
+        availableVars.forEach(varName => {
+            const chip = document.createElement('span');
+            chip.className = 'badge bg-light text-dark';
+            chip.style.cursor = 'pointer';
+            chip.textContent = `{${varName}}`;
+            chip.onclick = () => insertVariable(field.id, varName);
+            chip.onmouseover = () => chip.style.backgroundColor = '#e9ecef';
+            chip.onmouseout = () => chip.style.backgroundColor = '#f8f9fa';
+            chipsDiv.appendChild(chip);
+        });
+
+        chipsContainer.appendChild(chipsLabel);
+        chipsContainer.appendChild(chipsDiv);
+
+        // Insert after the field input
+        fieldGroup.appendChild(chipsContainer);
+    });
+}
+
+function insertVariable(fieldId, varName) {
+    const field = document.getElementById(fieldId);
+    if (!field) return;
+
+    const variable = `{${varName}}`;
+    const start = field.selectionStart || 0;
+    const end = field.selectionEnd || 0;
+    const text = field.value || '';
+    
+    const newText = text.substring(0, start) + variable + text.substring(end);
+    field.value = newText;
+    
+    // Set cursor position after inserted variable
+    const newPos = start + variable.length;
+    field.setSelectionRange(newPos, newPos);
+    field.focus();
+}
+
+async function handleResetAll() {
+    const confirmed = confirm(
+        'Tüm özel bildirim yapılandırmaları silinecek ve varsayılan değerlere dönecektir. ' +
+        'Bu işlem geri alınamaz. Devam etmek istediğinizden emin misiniz?'
+    );
+    
+    if (!confirmed) return;
+
+    try {
+        const response = await resetNotificationConfigs();
+        showNotification(
+            response.message || 'Tüm yapılandırmalar varsayılan değerlere sıfırlandı',
+            'success'
+        );
+        await loadConfigs();
+    } catch (error) {
+        console.error('Error resetting notification configs:', error);
+        showNotification(error.message || 'Yapılandırmalar sıfırlanırken hata oluştu', 'error');
+    }
 }
