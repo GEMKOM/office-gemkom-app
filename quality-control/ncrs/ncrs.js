@@ -33,9 +33,16 @@ import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 const urlParams = new URLSearchParams(window.location.search);
 let currentPage = parseInt(urlParams.get('page')) || 1;
 let currentPageSize = parseInt(urlParams.get('page_size')) || 20;
+// Initialize filters from URL or use defaults
 let currentFilters = {};
-let currentSearch = '';
-let currentOrdering = '-created_at';
+if (urlParams.get('status__in')) {
+    currentFilters.status__in = urlParams.get('status__in');
+} else {
+    // Default status filter: draft and submitted
+    currentFilters.status__in = 'draft,submitted';
+}
+let currentSearch = urlParams.get('search') || '';
+let currentOrdering = urlParams.get('ordering') || '-created_at';
 let ncrs = [];
 let totalNCRs = 0;
 let isLoading = false;
@@ -82,8 +89,8 @@ const STATUS_BADGE_MAP = {
 };
 
 const SEVERITY_BADGE_MAP = {
-    'minor': { class: 'status-yellow', label: 'Minör' },
-    'major': { class: 'status-orange', label: 'Majör' },
+    'minor': { class: 'status-blue', label: 'Minör' },
+    'major': { class: 'status-yellow', label: 'Majör' },
     'critical': { class: 'status-red', label: 'Kritik' }
 };
 
@@ -98,29 +105,35 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initializeComponents();
     await loadNCRs();
     
-    // Check if there's an NCR ID in the URL to auto-open the modal
-    const ncrIdParam = urlParams.get('ncr');
-    if (ncrIdParam) {
-        const ncrId = parseInt(ncrIdParam);
-        if (!isNaN(ncrId)) {
-            // Wait a bit for the table to load, then open the modal
-            setTimeout(async () => {
-                try {
-                    const ncr = await getNCR(ncrId);
+    // Check if there's an NCR number in the URL to auto-open the modal
+    const ncrNumberParam = urlParams.get('ncr');
+    if (ncrNumberParam) {
+        // Wait a bit for the table to load, then search for and open the NCR
+        setTimeout(async () => {
+            try {
+                // Search for NCR by number
+                const response = await listNCRs({}, ncrNumberParam, '-created_at', 1, 1);
+                if (response.results && response.results.length > 0) {
+                    // Find exact match by ncr_number
+                    const ncr = response.results.find(n => n.ncr_number === ncrNumberParam);
                     if (ncr) {
                         await showNCRDetails(ncr);
-                        // Remove the ncr parameter from URL after opening
-                        const newParams = new URLSearchParams(window.location.search);
-                        newParams.delete('ncr');
-                        const newUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
-                        window.history.replaceState({}, '', newUrl);
+                    } else {
+                        throw new Error('NCR not found');
                     }
-                } catch (error) {
-                    console.error('Error loading NCR from URL parameter:', error);
-                    showNotification('NCR yüklenirken hata oluştu', 'error');
+                } else {
+                    throw new Error('NCR not found');
                 }
-            }, 500);
-        }
+            } catch (error) {
+                console.error('Error loading NCR from URL parameter:', error);
+                showNotification('NCR yüklenirken hata oluştu', 'error');
+                // Remove invalid NCR number from URL
+                const newParams = new URLSearchParams(window.location.search);
+                newParams.delete('ncr');
+                const newUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
+                window.history.replaceState({}, '', newUrl);
+            }
+        }, 500);
     }
 });
 
@@ -170,6 +183,9 @@ async function initializeComponents() {
 }
 
 function initializeFiltersComponent() {
+    // Default status filter values
+    const defaultStatusFilter = ['draft', 'submitted'];
+    
     ncrsFilters = new FiltersComponent('filters-placeholder', {
         title: 'NCR Filtreleri',
         onApply: async (values) => {
@@ -177,7 +193,16 @@ function initializeFiltersComponent() {
             currentSearch = '';
             
             if (values['status-filter']) {
-                currentFilters.status = values['status-filter'];
+                const statusValues = Array.isArray(values['status-filter']) ? values['status-filter'] : [values['status-filter']];
+                // Filter out empty strings
+                const validStatusValues = statusValues.filter(v => v && v !== '');
+                if (validStatusValues.length > 0) {
+                    // Use status__in with comma-separated values
+                    currentFilters.status__in = validStatusValues.join(',');
+                }
+            } else {
+                // Apply default filter if no status is selected
+                currentFilters.status__in = defaultStatusFilter.join(',');
             }
             if (values['severity-filter']) {
                 currentFilters.severity = values['severity-filter'];
@@ -200,23 +225,27 @@ function initializeFiltersComponent() {
             await loadNCRs();
         },
         onClear: async () => {
-            currentFilters = {};
+            currentFilters = { status__in: defaultStatusFilter.join(',') };
             currentSearch = '';
             currentPage = 1;
-            updateUrlParams({ page: 1 });
+            updateUrlParams({ page: 1, status__in: defaultStatusFilter.join(',') });
             await loadNCRs();
         }
     });
 
-    // Status filter
+    // Status filter - multiselect
+    // Get initial value from URL or use default
+    const initialStatusValue = urlParams.get('status__in') 
+        ? urlParams.get('status__in').split(',').filter(v => v)
+        : defaultStatusFilter;
+    
     ncrsFilters.addDropdownFilter({
         id: 'status-filter',
         label: 'Durum',
-        options: [
-            { value: '', label: 'Tümü' },
-            ...NCR_STATUS_CHOICES.map(s => ({ value: s.value, label: s.label }))
-        ],
+        multiple: true,
+        options: NCR_STATUS_CHOICES.map(s => ({ value: s.value, label: s.label })),
         placeholder: 'Durum seçin',
+        value: initialStatusValue,
         colSize: 2
     });
 
@@ -345,9 +374,11 @@ function initializeTableComponent(canDecideNCRs) {
             label: 'Durum',
             sortable: true,
             width: '130px',
-            formatter: (value) => {
+            formatter: (value, row) => {
+                // Use status_display from API if available, otherwise fallback to mapping
+                const displayLabel = row.status_display || STATUS_BADGE_MAP[value]?.label || value;
                 const status = STATUS_BADGE_MAP[value] || { class: 'status-grey', label: value };
-                return `<span class="status-badge ${status.class}">${status.label}</span>`;
+                return `<span class="status-badge ${status.class}">${displayLabel}</span>`;
             }
         },
         {
@@ -545,8 +576,15 @@ async function loadNCRs() {
 
     try {
         ncrsTable?.setLoading(true);
+        
+        // Apply default status filter if no status filter is set
+        const filters = { ...currentFilters };
+        if (!filters.status && !filters.status__in) {
+            filters.status__in = 'draft,submitted';
+        }
+        
         const response = await listNCRs(
-            currentFilters,
+            filters,
             currentSearch,
             currentOrdering,
             currentPage,
@@ -753,7 +791,13 @@ function showNcrFileUploadModal(ncrId, onSuccess) {
 
 async function showNCRDetails(ncr) {
     try {
+        // Get full NCR to ensure we have ncr_number
         const fullNCR = await getNCR(ncr.id);
+        
+        // Update URL with NCR number (key)
+        if (fullNCR.ncr_number) {
+            updateUrlParams({ ncr: fullNCR.ncr_number });
+        }
 
         // Clear and prepare the modal
         ncrDetailsModal.clearData();

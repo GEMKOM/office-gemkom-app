@@ -54,6 +54,43 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
     await initializeComponents();
     await loadReviews();
+    
+    // Check for review ID in URL and open details
+    const reviewIdParam = urlParams.get('review');
+    if (reviewIdParam) {
+        setTimeout(async () => {
+            try {
+                const reviewId = parseInt(reviewIdParam);
+                if (isNaN(reviewId)) {
+                    throw new Error('Invalid review ID');
+                }
+                // Find the review in the loaded reviews
+                let review = reviews.find(r => r.id === reviewId);
+                if (!review) {
+                    // If not found, try to fetch it directly
+                    review = await getQCReview(reviewId);
+                }
+                if (review) {
+                    await showReviewDetails(review);
+                } else {
+                    showNotification('Belirtilen inceleme bulunamadı', 'error');
+                    // Remove invalid review ID from URL
+                    const newParams = new URLSearchParams(window.location.search);
+                    newParams.delete('review');
+                    const newUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
+                    window.history.replaceState({}, '', newUrl);
+                }
+            } catch (error) {
+                console.error('Error loading review from URL parameter:', error);
+                showNotification('İnceleme yüklenirken hata oluştu', 'error');
+                // Remove invalid review ID from URL
+                const newParams = new URLSearchParams(window.location.search);
+                newParams.delete('review');
+                const newUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
+                window.history.replaceState({}, '', newUrl);
+            }
+        }, 500);
+    }
 });
 
 async function initializeComponents() {
@@ -189,8 +226,11 @@ async function initializeTableComponent() {
             width: '100px',
             formatter: (value) => {
                 if (!value) return '-';
-                // Badge-style styling for ID
-                return `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); white-space: nowrap; display: inline-block;">#${value}</span>`;
+                // Badge-style styling for ID with link
+                const reviewUrl = `/quality-control/qc-reviews/?review=${value}`;
+                return `<a href="${reviewUrl}" target="_blank" class="text-decoration-none">
+                    <span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); white-space: nowrap; display: inline-block;">#${value}</span>
+                </a>`;
             }
         },
         {
@@ -407,6 +447,9 @@ async function showReviewDetails(review) {
         const fullReview = await getQCReview(review.id);
         currentReview = fullReview;
 
+        // Update URL with review ID
+        updateUrlParams({ review: fullReview.id });
+
         // Clear previous content
         reviewDetailsModal.sections = [];
         
@@ -539,6 +582,11 @@ async function showReviewDetails(review) {
     } catch (error) {
         console.error('Error loading review details:', error);
         showNotification('İnceleme detayları yüklenirken hata oluştu', 'error');
+        // Remove invalid review ID from URL
+        const newParams = new URLSearchParams(window.location.search);
+        newParams.delete('review');
+        const newUrl = window.location.pathname + (newParams.toString() ? '?' + newParams.toString() : '');
+        window.history.replaceState({}, '', newUrl);
     }
 }
 

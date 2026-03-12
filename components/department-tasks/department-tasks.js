@@ -37,7 +37,7 @@ import {
 } from '../../apis/subcontracting/assignments.js';
 import { fetchSubcontractors } from '../../apis/subcontracting/subcontractors.js';
 import { fetchPriceTiers, getPriceTierRemainingWeight, updatePriceTier } from '../../apis/subcontracting/priceTiers.js';
-import { submitQCReview, bulkSubmitQCReviews, listQCReviews, listNCRs } from '../../apis/qualityControl.js';
+import { submitQCReview, bulkSubmitQCReviews, listQCReviews, listNCRs, getNCR } from '../../apis/qualityControl.js';
 
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
@@ -3493,6 +3493,25 @@ async function renderQCReviewsTab(task) {
             `;
         }
         
+        // Fetch NCR details for rejected reviews that have an NCR
+        const ncrMap = new Map();
+        const rejectedReviewsWithNCR = reviews.filter(r => r.status === 'rejected' && r.ncr);
+        if (rejectedReviewsWithNCR.length > 0) {
+            try {
+                const ncrPromises = rejectedReviewsWithNCR.map(review => 
+                    getNCR(review.ncr).then(ncr => ({ reviewId: review.id, ncr })).catch(() => null)
+                );
+                const ncrResults = await Promise.all(ncrPromises);
+                ncrResults.forEach(result => {
+                    if (result && result.ncr) {
+                        ncrMap.set(result.reviewId, result.ncr);
+                    }
+                });
+            } catch (error) {
+                console.error('Error fetching NCR details:', error);
+            }
+        }
+        
         // Status badge mapping
         const statusBadgeMap = {
             'pending': '<span class="badge bg-warning">Beklemede</span>',
@@ -3509,9 +3528,40 @@ async function renderQCReviewsTab(task) {
                 : '-';
             const statusBadge = statusBadgeMap[review.status] || `<span class="badge bg-secondary">${review.status || '-'}</span>`;
             
+            // NCR link for rejected reviews
+            let ncrCell = '-';
+            if (review.status === 'rejected' && review.ncr) {
+                const ncr = ncrMap.get(review.id);
+                if (ncr && ncr.ncr_number) {
+                    const ncrUrl = `/quality-control/ncrs/?ncr=${encodeURIComponent(ncr.ncr_number)}`;
+                    ncrCell = `<a href="${ncrUrl}" target="_blank" class="text-decoration-none">
+                        <span class="badge bg-primary">
+                            <i class="fas fa-exclamation-triangle me-1"></i>${ncr.ncr_number}
+                        </span>
+                    </a>`;
+                } else {
+                    // Fallback: use NCR ID if number not available
+                    const ncrUrl = `/quality-control/ncrs/?ncr=${review.ncr}`;
+                    ncrCell = `<a href="${ncrUrl}" target="_blank" class="text-decoration-none">
+                        <span class="badge bg-primary">
+                            <i class="fas fa-exclamation-triangle me-1"></i>NCR #${review.ncr}
+                        </span>
+                    </a>`;
+                }
+            }
+            
+            // ID with link to QC reviews page
+            let idCell = '-';
+            if (review.id) {
+                const reviewUrl = `/quality-control/qc-reviews/?review=${review.id}`;
+                idCell = `<a href="${reviewUrl}" target="_blank" class="text-decoration-none">
+                    <span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); white-space: nowrap; display: inline-block;">#${review.id}</span>
+                </a>`;
+            }
+            
             return `
                 <tr>
-                    <td>${review.id || '-'}</td>
+                    <td>${idCell}</td>
                     <td>${review.part_data?.location || '-'}</td>
                     <td>${review.part_data?.quantity_inspected || '-'}</td>
                     <td>${review.part_data?.drawing_no || '-'}</td>
@@ -3522,6 +3572,7 @@ async function renderQCReviewsTab(task) {
                     <td>${review.reviewed_by_name || '-'}</td>
                     <td>${reviewedAt}</td>
                     <td>${review.comment || '-'}</td>
+                    <td>${ncrCell}</td>
                 </tr>
             `;
         }).join('');
@@ -3543,6 +3594,7 @@ async function renderQCReviewsTab(task) {
                             <th>İnceleyen</th>
                             <th>İnceleme Tarihi</th>
                             <th>Yorum</th>
+                            <th>NCR</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -3701,9 +3753,28 @@ async function renderNCRsTab(task) {
             const statusBadge = statusBadgeMap[ncr.status] || `<span class="badge bg-secondary">${ncr.status_display || ncr.status || '-'}</span>`;
             const severityBadge = severityBadgeMap[ncr.severity] || `<span class="badge bg-secondary">${ncr.severity_display || ncr.severity || '-'}</span>`;
             
+            // NCR number with link
+            let ncrNumberCell = '-';
+            if (ncr.ncr_number) {
+                const ncrUrl = `/quality-control/ncrs/?ncr=${encodeURIComponent(ncr.ncr_number)}`;
+                ncrNumberCell = `<a href="${ncrUrl}" target="_blank" class="text-decoration-none">
+                    <span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); white-space: nowrap; display: inline-block;">
+                        ${ncr.ncr_number}
+                    </span>
+                </a>`;
+            } else if (ncr.id) {
+                // Fallback: use ID if number not available
+                const ncrUrl = `/quality-control/ncrs/?ncr=${ncr.id}`;
+                ncrNumberCell = `<a href="${ncrUrl}" target="_blank" class="text-decoration-none">
+                    <span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); white-space: nowrap; display: inline-block;">
+                        NCR #${ncr.id}
+                    </span>
+                </a>`;
+            }
+            
             return `
                 <tr>
-                    <td>${ncr.ncr_number || ncr.id || '-'}</td>
+                    <td>${ncrNumberCell}</td>
                     <td>${ncr.title || '-'}</td>
                     <td>${statusBadge}</td>
                     <td>${severityBadge}</td>
