@@ -25,7 +25,7 @@ export const NOTIFICATION_TYPES = [
 
 /**
  * Get all notification routes
- * @returns {Promise<Array>} Array of notification route objects
+ * @returns {Promise<Object|Array>} New shape: { team_choices: [...], routes: [...] }. (Backward compat: may return array.)
  */
 export async function listNotificationRoutes() {
     const url = `${NOTIFICATIONS_BASE}/routes/`;

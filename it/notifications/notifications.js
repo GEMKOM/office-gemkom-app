@@ -19,6 +19,7 @@ let allUsers = [];
 let currentUser = null;
 let routesTable = null;
 let editRouteModal = null;
+let teamChoices = [];
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -92,12 +93,15 @@ async function loadRoutes() {
     try {
         if (routesTable) routesTable.setLoading(true);
         
-        const routes = await listNotificationRoutes();
+        const res = await listNotificationRoutes();
+        const routes = Array.isArray(res) ? res : (res.routes || []);
+        teamChoices = Array.isArray(res?.team_choices) ? res.team_choices : [];
         notificationRoutes = routes;
 
         // Update table data
         if (routesTable) {
             const tableData = routes.map(route => {
+                const routeTeams = route.team_values || route.teams || route.team_recipients || [];
                 return {
                     id: route.notification_type,
                     notification_type: route.notification_type,
@@ -107,6 +111,7 @@ async function loadRoutes() {
                     enabled: route.enabled || false,
                     user_count: route.users ? route.users.length : 0,
                     users: route.users || [],
+                    teams: Array.isArray(routeTeams) ? routeTeams : (routeTeams ? [routeTeams] : []),
                     raw_data: route
                 };
             });
@@ -154,6 +159,19 @@ function initializeTable() {
                         return '<span class="text-muted">-</span>';
                     }
                     return `<span class="text-body"><i class="fas fa-info-circle me-1 text-muted"></i>${escapeHtml(value)}</span>`;
+                }
+            },
+            {
+                field: 'teams',
+                label: 'Takımlar',
+                sortable: false,
+                width: '180px',
+                formatter: (value) => {
+                    const teams = Array.isArray(value) ? value : [];
+                    if (teams.length === 0) return '<span class="text-muted">-</span>';
+                    const labelByValue = new Map((teamChoices || []).map(t => [t.value, t.label]));
+                    const display = teams.map(v => labelByValue.get(v) || v).filter(Boolean);
+                    return `<span class="status-badge status-grey">${escapeHtml(display.join(', '))}</span>`;
                 }
             },
             {
@@ -294,16 +312,43 @@ function showEditRouteModal(routeRow) {
         colSize: 12
     });
 
+    // Team selection (multi-select dropdown)
+    const teamOptions = (teamChoices || []).map(t => ({
+        value: String(t.value),
+        label: t.label || t.value
+    }));
+    const currentTeamsRaw = route.team_values || route.teams || route.team_recipients || [];
+    const currentTeamValues = (Array.isArray(currentTeamsRaw) ? currentTeamsRaw : (currentTeamsRaw ? [currentTeamsRaw] : []))
+        .map(v => String(v));
+
+    editRouteModal.addField({
+        id: 'team_values',
+        name: 'team_values',
+        label: 'Takımlar',
+        type: 'dropdown',
+        value: currentTeamValues,
+        multiple: true,
+        options: teamOptions,
+        placeholder: 'Takım seçin',
+        searchable: true,
+        icon: 'fas fa-sitemap',
+        colSize: 12
+    });
+
     editRouteModal.onSaveCallback(async (formData) => {
         try {
             // Convert user_ids array to integers
             const userIds = Array.isArray(formData.user_ids) 
                 ? formData.user_ids.map(id => parseInt(id, 10)).filter(id => !isNaN(id))
                 : [];
+            const teamValues = Array.isArray(formData.team_values)
+                ? formData.team_values.map(v => String(v)).filter(Boolean)
+                : [];
 
             const updateData = {
                 enabled: formData.enabled || false,
-                user_ids: userIds
+                user_ids: userIds,
+                team_values: teamValues
             };
 
             await updateNotificationRoute(route.notification_type, updateData);
