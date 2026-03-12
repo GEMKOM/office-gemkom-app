@@ -20,6 +20,12 @@ let currentUser = null;
 let routesTable = null;
 let editRouteModal = null;
 
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text ?? '';
+    return div.innerHTML;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
         return;
@@ -96,6 +102,7 @@ async function loadRoutes() {
                     id: route.notification_type,
                     notification_type: route.notification_type,
                     label: route.notification_type_display || route.notification_type,
+                    link: route.link || null,
                     always_notified: route.always_notified || null,
                     enabled: route.enabled || false,
                     user_count: route.users ? route.users.length : 0,
@@ -125,6 +132,19 @@ function initializeTable() {
                 formatter: (value) => `<strong>${value || '-'}</strong>`
             },
             {
+                field: 'link',
+                label: 'Link',
+                sortable: false,
+                width: '220px',
+                formatter: (value) => {
+                    if (!value) return '<span class="text-muted">-</span>';
+                    const safe = escapeHtml(value);
+                    return `<a href="${safe}" class="text-decoration-none" target="_blank" rel="noopener noreferrer">
+                        <i class="fas fa-external-link-alt me-1"></i>${safe}
+                    </a>`;
+                }
+            },
+            {
                 field: 'always_notified',
                 label: 'Otomatik Bildirilenler',
                 sortable: false,
@@ -133,7 +153,7 @@ function initializeTable() {
                     if (!value) {
                         return '<span class="text-muted">-</span>';
                     }
-                    return `<span class="text-info"><i class="fas fa-info-circle me-1"></i>${value}</span>`;
+                    return `<span class="text-body"><i class="fas fa-info-circle me-1 text-muted"></i>${escapeHtml(value)}</span>`;
                 }
             },
             {

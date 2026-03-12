@@ -3,6 +3,7 @@ import { backendBase } from '../base.js';
 import { authedFetch } from '../authService.js';
 import { filterNavigationByAccess, hasRouteAccess } from '../apis/accessControl.js';
 import { NAVIGATION_STRUCTURE } from '../navigationStructure.js';
+import { NotificationBell } from './notificationBell/notificationBell.js';
 
 
 // Helper function to find navigation item by path
@@ -249,6 +250,23 @@ export function initNavbar() {
                     </ul>
                     
                     <ul class="navbar-nav ms-auto align-items-center">
+                        <li class="nav-item">
+                            <div class="notification-bell-container" id="notification-bell-container">
+                                <button class="notification-bell-button" type="button" aria-label="Bildirimler">
+                                    <i class="fas fa-bell"></i>
+                                    <span class="notification-badge"></span>
+                                </button>
+                                <div class="notification-dropdown">
+                                    <div class="notification-dropdown-header">
+                                        <h6>Bildirimler</h6>
+                                        <div class="notification-dropdown-actions">
+                                            <button class="mark-all-read-btn" type="button" style="display: none;">Tümünü Okundu İşaretle</button>
+                                        </div>
+                                    </div>
+                                    <div class="notification-list"></div>
+                                </div>
+                            </div>
+                        </li>
                         <li class="nav-item dropdown">
                             <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button" 
                                data-bs-toggle="dropdown" aria-expanded="false" id="userDropdown">
@@ -277,6 +295,12 @@ export function initNavbar() {
       `;
       
              navbarContainer.innerHTML = navHTML;
+      
+      // Initialize notification bell
+      const notificationBellContainer = navbarContainer.querySelector('#notification-bell-container');
+      if (notificationBellContainer) {
+          window.notificationBell = new NotificationBell(notificationBellContainer);
+      }
       
       // Initialize Bootstrap dropdowns after navbar is created
         const dropdownElementList = navbarContainer.querySelectorAll('.dropdown-toggle');
