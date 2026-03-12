@@ -154,6 +154,8 @@ async function loadConfigs() {
                     id: config.notification_type,
                     notification_type: config.notification_type,
                     label: config.notification_type_display || config.notification_type,
+                    category: config.category || 'other',
+                    category_display: config.category_display || 'Diğer',
                     always_notified: config.always_notified || null,
                     routing: routingText,
                     default_send_email: config.default_send_email !== undefined ? config.default_send_email : true,
@@ -178,6 +180,20 @@ async function loadConfigs() {
 function initializeTable() {
     configsTable = new TableComponent('notifications-table-container', {
         title: 'Bildirim Yapılandırmaları',
+        groupBy: 'category',
+        groupCollapsible: true,
+        defaultGroupExpanded: true,
+        groupHeaderFormatter: (groupValue, groupRows) => {
+            // Find category_display from first row
+            const categoryDisplay = groupRows[0]?.category_display || groupValue || 'Diğer';
+            const count = groupRows.length;
+            return `
+                <div class="d-flex align-items-center">
+                    <strong>${escapeHtml(categoryDisplay)}</strong>
+                    <span class="badge bg-secondary ms-2">${count} ${count === 1 ? 'bildirim' : 'bildirim'}</span>
+                </div>
+            `;
+        },
         columns: [
             {
                 field: 'label',
