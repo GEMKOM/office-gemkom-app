@@ -156,6 +156,8 @@ async function loadConfigs() {
                     label: config.notification_type_display || config.notification_type,
                     title_template: config.title_template || '',
                     routing: routingText,
+                    default_send_email: config.default_send_email !== undefined ? config.default_send_email : true,
+                    default_send_in_app: config.default_send_in_app !== undefined ? config.default_send_in_app : true,
                     updated_at: config.updated_at,
                     is_default: config.is_default || false,
                     is_routable: config.is_routable || false,
@@ -211,6 +213,32 @@ function initializeTable() {
                         return '<span class="text-muted">-</span>';
                     }
                     return `<span class="status-badge status-grey">${escapeHtml(value)}</span>`;
+                }
+            },
+            {
+                field: 'default_send_email',
+                label: 'E-posta',
+                sortable: true,
+                width: '100px',
+                formatter: (value) => {
+                    if (value) {
+                        return '<span class="status-badge status-green"><i class="fas fa-check me-1"></i>Aktif</span>';
+                    } else {
+                        return '<span class="status-badge status-grey"><i class="fas fa-times me-1"></i>Pasif</span>';
+                    }
+                }
+            },
+            {
+                field: 'default_send_in_app',
+                label: 'Uygulama İçi',
+                sortable: true,
+                width: '120px',
+                formatter: (value) => {
+                    if (value) {
+                        return '<span class="status-badge status-green"><i class="fas fa-check me-1"></i>Aktif</span>';
+                    } else {
+                        return '<span class="status-badge status-grey"><i class="fas fa-times me-1"></i>Pasif</span>';
+                    }
                 }
             },
             {
@@ -340,6 +368,37 @@ function showEditConfigModal(configRow) {
             : ''
     });
 
+    // Default delivery methods section
+    editConfigModal.addSection({
+        title: 'Varsayılan Teslimat Yöntemleri',
+        icon: 'fas fa-paper-plane',
+        iconColor: 'text-warning'
+    });
+
+    // Default send email
+    editConfigModal.addField({
+        id: 'default_send_email',
+        name: 'default_send_email',
+        label: 'E-posta ile Gönder',
+        type: 'checkbox',
+        value: config.default_send_email !== undefined ? config.default_send_email : true,
+        icon: 'fas fa-envelope',
+        colSize: 12,
+        help: 'Varsayılan olarak bu bildirim türü e-posta ile gönderilir'
+    });
+
+    // Default send in app
+    editConfigModal.addField({
+        id: 'default_send_in_app',
+        name: 'default_send_in_app',
+        label: 'Uygulama İçi Bildirim',
+        type: 'checkbox',
+        value: config.default_send_in_app !== undefined ? config.default_send_in_app : true,
+        icon: 'fas fa-bell',
+        colSize: 12,
+        help: 'Varsayılan olarak bu bildirim türü uygulama içi bildirim olarak gönderilir'
+    });
+
     // Routing section (only if routable)
     if (config.is_routable) {
         editConfigModal.addSection({
@@ -422,6 +481,14 @@ function showEditConfigModal(configRow) {
             }
             if (formData.link_template !== undefined) {
                 updateData.link_template = formData.link_template || '';
+            }
+
+            // Default delivery methods (always included)
+            if (formData.default_send_email !== undefined) {
+                updateData.default_send_email = formData.default_send_email || false;
+            }
+            if (formData.default_send_in_app !== undefined) {
+                updateData.default_send_in_app = formData.default_send_in_app || false;
             }
 
             // Routing fields (only for routable types)
