@@ -269,8 +269,8 @@ export class TableComponent {
             
             // Render group rows if expanded
             if (isExpanded) {
-                groupRows.forEach(({ row }) => {
-                    html += this.renderRow(row, rowIndex);
+                groupRows.forEach(({ row, originalIndex }) => {
+                    html += this.renderRow(row, originalIndex);
                     rowIndex++;
                 });
             }
