@@ -108,6 +108,12 @@ export const TEAM_ACCESS_CONFIG = {
             '/finance/reports',
             '/finance/reports/executive-overview',
             '/finance/reports/projects',
+            // Sales module
+            '/sales',
+            '/sales/cost-table',
+            '/sales/customers',
+            '/sales/offers',
+            '/sales/catalog',
             '/projects/cost-table',
             '/logistics',
             '/logistics/projects',
@@ -117,7 +123,7 @@ export const TEAM_ACCESS_CONFIG = {
             '/quality-control/ncrs',
             '/quality-control/cost-lines'
         ]),
-        allowedSections: ['planning', 'general', 'manufacturing', 'procurement', 'finance']
+        allowedSections: ['planning', 'general', 'manufacturing', 'procurement', 'finance', 'sales']
     },
     
     // Manufacturing team - access to manufacturing and related areas
