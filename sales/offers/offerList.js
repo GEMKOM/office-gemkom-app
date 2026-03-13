@@ -1813,10 +1813,12 @@ function showEditModal(onSuccess) {
     modal.clearAll();
     modal.addSection({ title: 'Teklif Bilgileri', icon: 'fas fa-info-circle', iconColor: 'text-primary' });
     
-    // Customer: remote search (same behavior as cost-table filter)
+    // Customer: remote search (same behavior as project-tracking: show code - name)
     // Preselect current customer (ensure it shows even before searching)
     const currentCustomerId = offer?.customer || offer?.customer_id || offer?.customerId || '';
-    const currentCustomerLabel = offer?.customer_name || offer?.customerName || '';
+    const currentCustomerLabel = offer?.customer_code
+        ? `${offer.customer_code} - ${offer?.customer_name || offer?.customerName || ''}`
+        : (offer?.customer_name || offer?.customerName || '');
     modal.addField({
         id: 'customer',
         name: 'customer',
@@ -1835,7 +1837,7 @@ function showEditModal(onSuccess) {
             if (!term || term.length < 3) return [];
             const res = await listCustomers({ search: term.trim(), is_active: true, page_size: 50 });
             const list = res.results || [];
-            return list.map(c => ({ value: String(c.id), text: c.name || c.code || `#${c.id}` }));
+            return list.map(c => ({ value: String(c.id), text: [c.code, c.name].filter(Boolean).join(' - ') || `#${c.id}` }));
         }
     });
 
@@ -3316,7 +3318,7 @@ function updateStats() {
 function showCreateOfferModal() {
     createOfferModal.clearAll();
     createOfferModal.addSection({ title: 'Teklif Bilgileri', icon: 'fas fa-info-circle', iconColor: 'text-primary' });
-    // Customer: remote search (same behavior as edit modal and cost-table filter)
+    // Customer: remote search (same behavior as project-tracking: show code - name)
     createOfferModal.addField({
         id: 'customer',
         name: 'customer',
@@ -3334,7 +3336,7 @@ function showCreateOfferModal() {
             if (!term || term.length < 3) return [];
             const res = await listCustomers({ search: term.trim(), is_active: true, page_size: 50 });
             const list = res.results || [];
-            return list.map(c => ({ value: String(c.id), text: c.name || c.code || `#${c.id}` }));
+            return list.map(c => ({ value: String(c.id), text: [c.code, c.name].filter(Boolean).join(' - ') || `#${c.id}` }));
         }
     });
     createOfferModal.addField({ id: 'title', name: 'title', label: 'Teklif Başlığı', type: 'text', required: true, placeholder: 'Ör: Meltshop Equipment for ABC Steel', icon: 'fas fa-heading', colSize: 6 });

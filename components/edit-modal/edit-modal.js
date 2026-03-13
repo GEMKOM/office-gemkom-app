@@ -406,24 +406,14 @@ export class EditModal {
 
             const dropdown = new ModernDropdown(dropdownContainer, dropdownOptions);
             
-            const items = dropdownOptions.remoteSearch
-                ? []
-                : field.options.map((option, index) => {
-                    // Handle different option formats
-                    let value = option.value !== undefined ? option.value : option.id;
-                    
-                    // If value is still undefined, use index as fallback
-                    if (value === undefined) {
-                        value = index;
-                    }
-                    
-                    const text = option.label || option.text || option.name;
-                    return {
-                        value: value,
-                        text: text,
-                        disabled: option.disabled || false
-                    };
-                });
+            // When remoteSearch is set, still use field.options as initial items so the current value can be displayed (e.g. edit modal customer)
+            const mapOptionToItem = (option, index) => {
+                let value = option.value !== undefined ? option.value : option.id;
+                if (value === undefined) value = index;
+                const text = option.label || option.text || option.name;
+                return { value, text, disabled: option.disabled || false };
+            };
+            const items = (field.options || []).map(mapOptionToItem);
             
             dropdown.setItems(items);
             dropdown.setValue(field.value);

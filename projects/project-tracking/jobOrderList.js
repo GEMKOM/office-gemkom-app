@@ -1465,10 +1465,29 @@ window.editJobOrder = async function(jobNo) {
             icon: 'fas fa-users',
             colSize: 6,
             helpText: 'Müşteri seçin',
-            options: customers.map(c => ({
-                value: c.id.toString(),
-                label: `${c.code} - ${c.name}`
-            })),
+            searchable: true,
+            placeholder: 'Müşteri ara (en az 3 karakter)',
+            minSearchLength: 3,
+            remoteSearchPlaceholder: 'En az 3 karakter yazın',
+            // Preload current customer so it is visible even before searching
+            options: (jobOrder.customer
+                ? [{
+                    value: jobOrder.customer.toString(),
+                    label: [
+                        jobOrder.customer_code,
+                        jobOrder.customer_short_name || jobOrder.customer_name || ''
+                    ].filter(Boolean).join(' - ') || `#${jobOrder.customer}`
+                }]
+                : []),
+            remoteSearch: async (term) => {
+                if (!term || term.length < 3) return [];
+                const res = await listCustomers({ search: term.trim(), is_active: true, page_size: 50 });
+                const list = res.results || [];
+                return list.map(c => ({
+                    value: String(c.id),
+                    text: [c.code, c.name].filter(Boolean).join(' - ') || `#${c.id}`
+                }));
+            },
             disabled: !!jobOrder.parent // Cannot change customer for child jobs
         });
 
