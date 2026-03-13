@@ -2809,20 +2809,193 @@ function showSubmitApprovalConfirm(onSuccess) {
 }
 
 function showDecisionModal(onSuccess) {
-    const modal = new EditModal('decision-modal-container', { title: 'Onay Kararı', icon: 'fas fa-check', size: 'md', showEditButton: false });
+    const modal = new EditModal('decision-modal-container', { title: 'Onay Kararı', icon: 'fas fa-check', size: 'xl', showEditButton: false, saveButtonText: '' });
     modal.clearAll();
-    modal.addSection({ title: 'Karar', icon: 'fas fa-balance-scale', iconColor: 'text-primary' });
-    modal.addField({ id: 'approve', name: 'approve', label: 'Onayla', type: 'checkbox', value: true, icon: 'fas fa-check', colSize: 12 });
-    modal.addField({ id: 'comment', name: 'comment', label: 'Yorum', type: 'textarea', icon: 'fas fa-comment', colSize: 12 });
-    modal.addSection({ title: 'Karşı Teklif (Ret)', icon: 'fas fa-exchange-alt', iconColor: 'text-warning' });
+    modal.render();
+
+    // Inject read-only items table (same layout as pricing tab) as the only content
+    const formEl = document.querySelector('#decision-modal-container #edit-modal-form');
+    if (formEl) {
+        const sectionDiv = document.createElement('div');
+        sectionDiv.className = 'form-section compact mb-3';
+        sectionDiv.innerHTML = `
+            <h6 class="section-subtitle compact text-primary">
+                <i class="fas fa-tag me-2"></i>Kalemler (Fiyatlandırma Özeti)
+            </h6>
+            <div class="row g-2">
+                <div class="col-md-12">
+                    <div class="table-responsive mb-3">
+                        <div id="decision-items-loading" class="text-center text-muted py-3">
+                            <i class="fas fa-spinner fa-spin me-2"></i>Kalemler yükleniyor...
+                        </div>
+                        <div id="decision-items-content" style="display:none;"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+        formEl.appendChild(sectionDiv);
+    }
+
+    // Replace default save button with Approve / Reject buttons
+    const footer = modal.container?.querySelector('.modal-footer');
+    if (footer) {
+        const saveBtn = footer.querySelector('#save-edit-btn');
+        if (saveBtn) {
+            saveBtn.style.display = 'none';
+        }
+
+        const approveBtn = document.createElement('button');
+        approveBtn.type = 'button';
+        approveBtn.className = 'btn btn-sm btn-success me-2';
+        approveBtn.innerHTML = '<i class="fas fa-check me-1"></i>Onayla';
+        approveBtn.addEventListener('click', () => {
+            modal.hide();
+            setTimeout(() => showApproveDecisionModal(onSuccess), 150);
+        });
+
+        const rejectBtn = document.createElement('button');
+        rejectBtn.type = 'button';
+        rejectBtn.className = 'btn btn-sm btn-danger';
+        rejectBtn.innerHTML = '<i class="fas fa-times me-1"></i>Reddet';
+        rejectBtn.addEventListener('click', () => {
+            modal.hide();
+            setTimeout(() => showRejectDecisionModal(onSuccess), 150);
+        });
+
+        footer.appendChild(approveBtn);
+        footer.appendChild(rejectBtn);
+    }
+
+    // After render, load items from /sales/offers/{offerId}/items/ and show read-only table
+    setTimeout(async () => {
+        try {
+            const loadingEl = document.querySelector('#decision-modal-container #decision-items-loading');
+            const contentEl = document.querySelector('#decision-modal-container #decision-items-content');
+            if (!contentEl) return;
+
+            const itemsData = await getOfferItems(offerId);
+            const items = flattenItemsForPricing(Array.isArray(itemsData) ? itemsData : (itemsData.results || []));
+
+            if (!items.length) {
+                if (loadingEl) loadingEl.innerHTML = `
+                    <div class="text-center text-muted py-3">
+                        <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                        Henüz kalem eklenmemiş. Önce kalemler sekmesinden kalem ekleyin.
+                    </div>
+                `;
+                return;
+            }
+
+            let totalPrice = 0;
+            let totalWeight = 0;
+            const rowsHtml = items.map((item) => {
+                const unitPrice = item.unit_price ? parseFloat(item.unit_price) : 0;
+                const weightKg = item.weight_kg ? parseFloat(item.weight_kg) : 0;
+                const quantity = item.quantity || 1;
+                const subtotal = item.subtotal ? parseFloat(item.subtotal) : unitPrice * quantity;
+                const title = item.resolved_title || item.title_override || item.title || '-';
+                if (!isNaN(subtotal)) totalPrice += subtotal;
+                // Toplam ağırlık = parça ağırlığı * adet
+                if (!isNaN(weightKg)) totalWeight += weightKg * quantity;
+                // Birim fiyat / kg (€/kg), parça başına ağırlığı kullan
+                const kgPrice = weightKg > 0 ? unitPrice / weightKg : null;
+                return `
+                    <tr>
+                        <td>${escapeHtml(title)}</td>
+                        <td class="text-center">${quantity}</td>
+                        <td class="text-end">${unitPrice ? unitPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}</td>
+                        <td class="text-end">${weightKg ? weightKg.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}</td>
+                        <td class="text-end">${kgPrice != null ? kgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}</td>
+                        <td class="text-end">${subtotal ? subtotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}</td>
+                    </tr>
+                `;
+            }).join('');
+
+            const totalKgPrice = totalWeight > 0 ? totalPrice / totalWeight : null;
+
+            contentEl.innerHTML = `
+                <table class="table table-bordered mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width: 40%;">Kalem</th>
+                            <th style="width: 10%;" class="text-center">Adet</th>
+                            <th style="width: 15%;" class="text-end">Birim Fiyat (€)</th>
+                            <th style="width: 15%;" class="text-end">Ağırlık (kg)</th>
+                            <th style="width: 15%;" class="text-end">Kg Fiyatı (€/kg)</th>
+                            <th style="width: 15%;" class="text-end">Ara Toplam (€)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rowsHtml}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <th colspan="5" class="text-end">Toplam:</th>
+                            <th class="text-end">${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} €</th>
+                        </tr>
+                        <tr>
+                            <th colspan="5" class="text-end">Toplam Ağırlık:</th>
+                            <th class="text-end">${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kg</th>
+                        </tr>
+                        <tr>
+                            <th colspan="5" class="text-end">Ortalama Kg Fiyatı:</th>
+                            <th class="text-end">${totalKgPrice != null ? totalKgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-' } €/kg</th>
+                        </tr>
+                    </tfoot>
+                </table>
+            `;
+
+            if (loadingEl) loadingEl.style.display = 'none';
+            contentEl.style.display = '';
+        } catch (e) {
+            const loadingEl = document.querySelector('#decision-modal-container #decision-items-loading');
+            if (loadingEl) {
+                loadingEl.innerHTML = '<div class="text-danger py-3">Kalemler yüklenemedi.</div>';
+            }
+            console.error('Error loading decision items:', e);
+        }
+    }, 50);
+
+    modal.show();
+}
+
+function showApproveDecisionModal(onSuccess) {
+    const modal = new EditModal('decision-modal-container', { title: 'Onayla', icon: 'fas fa-check', size: 'md', showEditButton: false });
+    modal.clearAll();
+    modal.addSection({ title: 'Onay Kararı', icon: 'fas fa-check', iconColor: 'text-success' });
+    modal.addField({ id: 'comment', name: 'comment', label: 'Yorum (İsteğe Bağlı)', type: 'textarea', icon: 'fas fa-comment', colSize: 12, required: false });
+    modal.onSaveCallback(async (formData) => {
+        const payload = { approve: true, comment: formData.comment || '' };
+        await recordDecision(offerId, payload);
+        modal.hide();
+        showNotification('Onay kararı kaydedildi', 'success');
+        await onSuccess();
+    });
+    modal.render();
+    modal.show();
+}
+
+function showRejectDecisionModal(onSuccess) {
+    const modal = new EditModal('decision-modal-container', { title: 'Reddet', icon: 'fas fa-times', size: 'md', showEditButton: false });
+    modal.clearAll();
+    modal.addSection({ title: 'Red Kararı', icon: 'fas fa-times-circle', iconColor: 'text-danger' });
+    modal.addField({ id: 'comment', name: 'comment', label: 'Yorum (Zorunlu)', type: 'textarea', icon: 'fas fa-comment', colSize: 12, required: true });
+    modal.addSection({ title: 'Karşı Teklif (İsteğe Bağlı)', icon: 'fas fa-exchange-alt', iconColor: 'text-warning' });
     modal.addField({ id: 'counter_amount', name: 'counter_amount', label: 'Karşı Tutar', type: 'number', icon: 'fas fa-money-bill', colSize: 6 });
     modal.addField({ id: 'counter_currency', name: 'counter_currency', label: 'Para Birimi', type: 'dropdown', options: [{ value: '', label: 'Seçilmedi' }, ...CURRENCY_OPTIONS], icon: 'fas fa-coins', colSize: 6 });
     modal.onSaveCallback(async (formData) => {
-        const payload = { approve: !!formData.approve, comment: formData.comment || '' };
-        if (!formData.approve && formData.counter_amount) { payload.counter_amount = formData.counter_amount; payload.counter_currency = formData.counter_currency || 'EUR'; }
+        if (!formData.comment) {
+            showNotification('Red için yorum zorunludur', 'warning');
+            return;
+        }
+        const payload = { approve: false, comment: formData.comment || '' };
+        if (formData.counter_amount) {
+            payload.counter_amount = formData.counter_amount;
+            payload.counter_currency = formData.counter_currency || 'EUR';
+        }
         await recordDecision(offerId, payload);
         modal.hide();
-        showNotification('Karar kaydedildi', 'success');
+        showNotification('Red kararı kaydedildi', 'success');
         await onSuccess();
     });
     modal.render();
