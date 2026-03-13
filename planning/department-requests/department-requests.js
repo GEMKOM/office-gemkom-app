@@ -2178,14 +2178,16 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
         setupItemsSection().then(() => {
             // Pre-fill items if department request is provided
             if (departmentRequest) {
-                // Store department request ID for later use (always set, even if no files)
+                // Store department request ID for later use (always set/update so second transfer uses correct id)
                 const modalContainer = createPlanningRequestModal.container;
-                if (!modalContainer.querySelector('[data-department-request-id]')) {
-                    const hiddenInput = document.createElement('div');
-                    hiddenInput.setAttribute('data-department-request-id', departmentRequest.id);
-                    hiddenInput.style.display = 'none';
-                    modalContainer.appendChild(hiddenInput);
+                let deptIdEl = modalContainer.querySelector('[data-department-request-id]');
+                if (!deptIdEl) {
+                    deptIdEl = document.createElement('div');
+                    deptIdEl.setAttribute('data-department-request-id', '');
+                    deptIdEl.style.display = 'none';
+                    modalContainer.appendChild(deptIdEl);
                 }
+                deptIdEl.setAttribute('data-department-request-id', String(departmentRequest.id));
                 
                 // Pre-fill items after a short delay to ensure dropdowns are initialized
                 setTimeout(() => {
@@ -3817,11 +3819,19 @@ async function transferDepartmentRequest(requestId) {
             return;
         }
 
-        // Close details modal if it's open
+        // Close details modal if it's open and clear modal state so second transfer works
         const departmentRequestDetailsModal = getDepartmentRequestDetailsModal();
         if (departmentRequestDetailsModal) {
             departmentRequestDetailsModal.hide();
         }
+        currentRequest = null;
+        setGlobalVariables({
+            currentRequest: null,
+            requests,
+            loadRequests,
+            loadCompletedRequests,
+            showNotification
+        });
 
         // Open create planning request modal with department request data
         showCreatePlanningRequestModal(departmentRequest);

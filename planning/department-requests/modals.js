@@ -339,7 +339,7 @@ async function showDepartmentRequestDetailsModal(request = null) {
         const modalFooter = departmentRequestDetailsModal.container.querySelector('.modal-footer');
         if (modalFooter) {
             if (requestToShow.status === 'approved') {
-                // Show transfer button for approved requests
+                // Show transfer button for approved requests (always enabled so second transfer works)
                 modalFooter.innerHTML = `
                     <div class="d-flex justify-content-end gap-2">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
@@ -350,6 +350,8 @@ async function showDepartmentRequestDetailsModal(request = null) {
                         </button>
                     </div>
                 `;
+                const transferBtn = modalFooter.querySelector('#transfer-department-request-btn');
+                if (transferBtn) transferBtn.disabled = false;
             } else {
                 // Show only close button for other statuses
                 modalFooter.innerHTML = `
@@ -541,11 +543,16 @@ function getStatusBadge(status, statusLabel) {
     return `<span class="badge ${statusClass}">${displayText}</span>`;
 }
 
+// Priority options for planning: normal, urgent, critical (PRIORITY_CHOICES)
 function getPriorityBadge(priority) {
     let badgeClass = 'status-grey';
     let label = 'Normal';
 
     switch (priority) {
+        case 'critical':
+            badgeClass = 'status-red';
+            label = 'Kritik';
+            break;
         case 'urgent':
             badgeClass = 'status-red';
             label = 'Acil';
@@ -569,6 +576,7 @@ function getPriorityBadge(priority) {
 
 function getPriorityLabel(priority) {
     switch (priority) {
+        case 'critical': return 'Kritik';
         case 'urgent': return 'Acil';
         case 'high': return 'Yüksek';
         case 'normal': return 'Normal';
