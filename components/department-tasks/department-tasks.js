@@ -496,9 +496,6 @@ function initializeTableComponent() {
                         }
                     }
                     
-                    // Early return if no value (after checking procurement)
-                    if (!value) return '-';
-                    
                     // Special case: if type is machining_part, show key link to machining tasks
                     if (row.type === 'machining_part') {
                         // Try to get key from various possible locations
@@ -525,9 +522,16 @@ function initializeTableComponent() {
                         }
                     }
                     
-                    // Default: show job order link to project tracking
-                    const jobOrderLink = `<a href="/projects/project-tracking/?job_no=${encodeURIComponent(value)}" class="text-decoration-none"><strong>${value}</strong></a>`;
-                    return `<div style="padding-left: ${indent}px;">${prefix}${jobOrderLink}</div>`;
+                    // Default: show job order link to project tracking if it has a job order
+                    // If there's no job order (null/undefined), show non-clickable id instead
+                    if (row.job_order) {
+                        const jobOrderLink = `<a href="/projects/project-tracking/?job_no=${encodeURIComponent(row.job_order)}" class="text-decoration-none"><strong>${row.job_order}</strong></a>`;
+                        return `<div style="padding-left: ${indent}px;">${prefix}${jobOrderLink}</div>`;
+                    }
+                    
+                    // No job order: display plain, non-clickable id
+                    const idText = row.id != null ? String(row.id) : '-';
+                    return `<div style="padding-left: ${indent}px;">${prefix}<strong>${idText}</strong></div>`;
                 }
             },
             {

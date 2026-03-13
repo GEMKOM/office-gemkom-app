@@ -45,6 +45,7 @@ import {
 import { listOfferTemplates, getOfferTemplate, getOfferTemplateNodes, getOfferTemplateNodeChildren } from '../../apis/sales/offerTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
 import { authFetchUsers } from '../../apis/users.js';
+import { getUser } from '../../authService.js';
 import { FileViewer } from '../../components/file-viewer/file-viewer.js';
 
 const CLOSED_STATUSES = ['cancelled']; // Only cancelled status prevents editing
@@ -100,10 +101,18 @@ let templates = [];
 const refreshList = async () => { await loadOffers(); };
 let selectedTemplate = null;
 let users = [];
+let currentUser = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) return;
     await initNavbar();
+
+    try {
+        currentUser = await getUser();
+    } catch (e) {
+        console.error('Failed to load current user for offers page:', e);
+        currentUser = null;
+    }
 
     new HeaderComponent({
         title: 'Satış Teklifleri',
@@ -132,7 +141,44 @@ document.addEventListener('DOMContentLoaded', async () => {
     initTable();
     initModals();
     await loadOffers();
+
+    // If URL contains an offer id, open its detail modal (optionally with a specific tab)
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const initialTabId = params.get('tab') || 'approval';
+        const offerNoFromUrl = params.get('offer_no');
+
+        if (offerNoFromUrl) {
+            // Resolve offer id from offer_no by searching
+            setTimeout(async () => {
+                const resolvedId = await resolveOfferIdFromOfferNo(offerNoFromUrl);
+                if (resolvedId) {
+                    window.viewOffer(resolvedId, { initialTabId });
+                } else {
+                    showNotification('Teklif bulunamadı', 'warning');
+                }
+            }, 100);
+        }
+    } catch (e) {
+        console.error('Failed to parse URL params for offer detail:', e);
+    }
 });
+
+async function resolveOfferIdFromOfferNo(offerNo) {
+    if (!offerNo) return null;
+    try {
+        const res = await listOffers({ search: offerNo, page: 1, page_size: 25 });
+        const results = Array.isArray(res) ? res : (res.results || []);
+        const normalized = String(offerNo).trim().toLowerCase();
+        const exact = results.find(o => String(o.offer_no || '').trim().toLowerCase() === normalized);
+        if (exact && exact.id) return exact.id;
+        if (results.length === 1 && results[0]?.id) return results[0].id;
+        return null;
+    } catch (e) {
+        console.error('Failed to resolve offer id from offer_no:', e);
+        return null;
+    }
+}
 
 async function loadCustomerOptions() {
     try {
@@ -506,7 +552,8 @@ function initModals() {
             if (e.target.closest('#submit-approval-from-pricing-btn')) { showSubmitApprovalConfirm(refreshOffer); return; }
             if (e.target.closest('#submit-approval-btn')) { showSubmitApprovalConfirm(refreshOffer); return; }
             if (e.target.closest('#decide-btn')) { showDecisionModal(refreshOffer); return; }
-            if (e.target.closest('#refresh-approval-btn')) { loadApprovalStatus(); return; }
+            if (e.target.closest('#decide-approve-btn')) { showApproveDecisionModal(refreshOffer); return; }
+            if (e.target.closest('#decide-reject-btn')) { showRejectDecisionModal(refreshOffer); return; }
         });
     }
 }
@@ -515,7 +562,7 @@ function initModals() {
 
 const TAB_LOADING_HTML = '<div class="offer-tab-content"><div class="text-muted py-4 text-center"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div></div>';
 
-window.viewOffer = async function (id) {
+window.viewOffer = async function (id, options = {}) {
     try {
         offer = await getOffer(id);
         offerId = offer.id;
@@ -579,6 +626,28 @@ window.viewOffer = async function (id) {
         attachOfferModalListeners();
         setupApprovalTabHandler();
         viewOfferModal.show();
+
+        // If an initial tab is requested (e.g. from URL param), activate it
+        const initialTabId = options.initialTabId;
+        if (initialTabId && initialTabId !== 'genel') {
+            const tabBtn = viewOfferModal.container?.querySelector(`[data-bs-target="#tab-${initialTabId}-pane"]`);
+            if (tabBtn) {
+                tabBtn.click();
+            }
+        }
+
+        // Update URL so this modal has a shareable link
+        try {
+            const url = new URL(window.location.href);
+            if (offer?.offer_no) {
+                url.searchParams.set('offer_no', String(offer.offer_no));
+            }
+            const activeTab = initialTabId || 'genel';
+            url.searchParams.set('tab', activeTab);
+            window.history.replaceState({}, '', url);
+        } catch (e) {
+            console.error('Failed to update URL for offer detail:', e);
+        }
     } catch (error) {
         console.error('Error loading offer:', error);
         showNotification('Teklif yüklenirken hata oluştu', 'error');
@@ -632,18 +701,26 @@ async function loadTabDataIfNeeded(tabId) {
 
     if (tabId === 'pricing' && !offerTabLoaded.pricing) {
         try {
-            const [priceHistoryData, itemsData] = await Promise.all([
-                getPriceHistory(offerId),
-                getOfferItems(offerId)
-            ]);
-            offer.price_revisions = Array.isArray(priceHistoryData) ? priceHistoryData : (priceHistoryData.results || []);
+            // Load items first (required for table)
+            const itemsData = await getOfferItems(offerId);
             offer.items = Array.isArray(itemsData) ? itemsData : (itemsData.results || []);
-            offerTabLoaded.pricing = true;
-            pane.innerHTML = `<div class="offer-tab-content">${buildPricingTab()}</div>`;
-            attachPricingTabListeners();
         } catch (e) {
             pane.innerHTML = `<div class="offer-tab-content"><div class="text-danger text-center py-4">Fiyatlandırma verileri yüklenemedi.</div></div>`;
+            return;
         }
+
+        // Price history is optional for the table; if it fails we still show items
+        try {
+            const priceHistoryData = await getPriceHistory(offerId);
+            offer.price_revisions = Array.isArray(priceHistoryData) ? priceHistoryData : (priceHistoryData.results || []);
+        } catch (e) {
+            console.error('Price history could not be loaded for pricing tab:', e);
+            offer.price_revisions = [];
+        }
+
+        offerTabLoaded.pricing = true;
+        pane.innerHTML = `<div class="offer-tab-content">${buildPricingTab()}</div>`;
+        attachPricingTabListeners();
         return;
     }
 
@@ -665,6 +742,18 @@ function setupApprovalTabHandler() {
             const tabId = match ? match[1] : 'genel';
             updateOfferModalFooter(tabId);
             loadTabDataIfNeeded(tabId);
+
+            // Keep URL in sync with active tab for sharable links
+            try {
+                const url = new URL(window.location.href);
+                if (offer?.offer_no) {
+                    url.searchParams.set('offer_no', String(offer.offer_no));
+                }
+                url.searchParams.set('tab', tabId);
+                window.history.replaceState({}, '', url);
+            } catch (err) {
+                console.error('Failed to sync URL with active offer tab:', err);
+            }
         });
     });
 }
@@ -809,6 +898,7 @@ function renderApprovalWorkflow(approval) {
 function buildGenelTab(statusLabel, statusColor) {
     const totalPrice = offer.total_price ? parseFloat(offer.total_price) : 0;
     const totalWeight = offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0;
+    const totalKgPrice = totalWeight > 0 ? totalPrice / totalWeight : null;
     const priceText = totalPrice > 0 
         ? `€ ${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`
         : '-';
@@ -1305,6 +1395,7 @@ function buildPricingTab() {
     const revisions = offer.price_revisions || [];
     const totalPrice = offer.total_price ? parseFloat(offer.total_price) : 0;
     const totalWeight = offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0;
+    const totalKgPrice = totalWeight > 0 ? totalPrice / totalWeight : null;
     
     let html = `
         <div class="mb-4">
@@ -1323,8 +1414,9 @@ function buildPricingTab() {
                             <tr>
                                 <th style="width: 40%;">Kalem</th>
                                 <th style="width: 10%;" class="text-center">Adet</th>
-                                <th style="width: 20%;">Birim Fiyat (€)</th>
-                                <th style="width: 15%;">Ağırlık (kg)</th>
+                                <th style="width: 18%;">Birim Fiyat (€)</th>
+                                <th style="width: 14%;">Ağırlık (kg)</th>
+                                <th style="width: 13%;" class="text-end">Kg Fiyatı (€/kg)</th>
                                 <th style="width: 15%;" class="text-end">Ara Toplam (€)</th>
                             </tr>
                         </thead>
@@ -1335,6 +1427,7 @@ function buildPricingTab() {
                                 const subtotal = item.subtotal ? parseFloat(item.subtotal) : '';
                                 const quantity = item.quantity || 1;
                                 const title = item.resolved_title || item.title_override || item.title || '-';
+                                const kgPrice = unitPrice && weightKg ? (parseFloat(unitPrice) / parseFloat(weightKg)) : null;
                                 return `
                                     <tr class="pricing-item-row" data-item-id="${item.id}">
                                         <td>${escapeHtml(title)}</td>
@@ -1358,6 +1451,11 @@ function buildPricingTab() {
                                                    min="0">
                                         </td>
                                         <td class="text-end">
+                                                <span class="pricing-kg-price" data-item-id="${item.id}">
+                                                    ${kgPrice != null ? kgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}
+                                                </span>
+                                            </td>
+                                            <td class="text-end">
                                             <span class="pricing-subtotal" data-item-id="${item.id}">
                                                 ${subtotal ? subtotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}
                                             </span>
@@ -1368,15 +1466,21 @@ function buildPricingTab() {
                         </tbody>
                         <tfoot class="table-light">
                             <tr>
-                                <th colspan="4" class="text-end">Toplam:</th>
+                                <th colspan="5" class="text-end">Toplam:</th>
                                 <th class="text-end">
                                     <span id="pricing-total-price">${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span> €
                                 </th>
                             </tr>
                             <tr>
-                                <th colspan="4" class="text-end">Toplam Ağırlık:</th>
+                                <th colspan="5" class="text-end">Toplam Ağırlık:</th>
                                 <th class="text-end">
                                     <span id="pricing-total-weight">${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span> kg
+                                </th>
+                            </tr>
+                            <tr>
+                                <th colspan="5" class="text-end">Ortalama Kg Fiyatı:</th>
+                                <th class="text-end">
+                                    <span id="pricing-total-kg-price">${totalKgPrice != null ? totalKgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}</span> €/kg
                                 </th>
                             </tr>
                         </tfoot>
@@ -1439,7 +1543,7 @@ function attachPricingTabListeners() {
     const tbody = document.getElementById('pricing-items-tbody');
     if (!tbody) return;
 
-    // Only update subtotal display on input (no auto-save)
+    // Update subtotal and kg price display on input (no auto-save)
     tbody.addEventListener('input', (e) => {
         const input = e.target;
         if (!input.classList.contains('pricing-unit-price') && !input.classList.contains('pricing-weight-kg')) return;
@@ -1448,9 +1552,12 @@ function attachPricingTabListeners() {
         const quantity = parseInt(row.querySelector('td:nth-child(2)').textContent.trim(), 10) || 1;
         
         const unitPriceInput = row.querySelector('.pricing-unit-price');
+        const weightInput = row.querySelector('.pricing-weight-kg');
         const subtotalEl = row.querySelector('.pricing-subtotal');
+        const kgPriceEl = row.querySelector('.pricing-kg-price');
         
         const unitPrice = unitPriceInput.value ? parseFloat(unitPriceInput.value) : null;
+        const weightKg = weightInput.value ? parseFloat(weightInput.value) : null;
         
         // Update subtotal display immediately (for UI feedback only)
         if (unitPrice !== null && !isNaN(unitPrice)) {
@@ -1460,6 +1567,16 @@ function attachPricingTabListeners() {
             }
         } else if (subtotalEl) {
             subtotalEl.textContent = '-';
+        }
+
+        // Update kg price display immediately (unit price / kg)
+        if (kgPriceEl) {
+            if (unitPrice !== null && !isNaN(unitPrice) && weightKg !== null && !isNaN(weightKg) && weightKg > 0) {
+                const kgPrice = unitPrice / weightKg;
+                kgPriceEl.textContent = kgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+            } else {
+                kgPriceEl.textContent = '-';
+            }
         }
     });
 }
@@ -1510,14 +1627,21 @@ async function saveAllPrices() {
         // Update totals display in pricing tab
         const totalPriceEl = document.getElementById('pricing-total-price');
         const totalWeightEl = document.getElementById('pricing-total-weight');
+        const totalKgPriceEl = document.getElementById('pricing-total-kg-price');
         if (totalPriceEl) {
             totalPriceEl.textContent = (offer.total_price ? parseFloat(offer.total_price) : 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
         }
         if (totalWeightEl) {
             totalWeightEl.textContent = (offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
         }
+        if (totalKgPriceEl) {
+            const tPrice = offer.total_price ? parseFloat(offer.total_price) : 0;
+            const tWeight = offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0;
+            const tKg = tWeight > 0 ? tPrice / tWeight : null;
+            totalKgPriceEl.textContent = tKg != null ? tKg.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-';
+        }
         
-        // Update all subtotals and input values to match server response
+        // Update all subtotals, kg prices and input values to match server response
         const allItems = flattenItemsForPricing(offer.items);
         allItems.forEach(item => {
             const subtotalEl = document.querySelector(`.pricing-subtotal[data-item-id="${item.id}"]`);
@@ -1526,11 +1650,21 @@ async function saveAllPrices() {
             }
             const unitPriceInput = document.querySelector(`.pricing-unit-price[data-item-id="${item.id}"]`);
             const weightInput = document.querySelector(`.pricing-weight-kg[data-item-id="${item.id}"]`);
+            const kgPriceEl = document.querySelector(`.pricing-kg-price[data-item-id="${item.id}"]`);
             if (unitPriceInput) {
                 unitPriceInput.value = item.unit_price ? parseFloat(item.unit_price).toFixed(2) : '';
             }
             if (weightInput) {
                 weightInput.value = item.weight_kg ? parseFloat(item.weight_kg).toFixed(2) : '';
+            }
+            if (kgPriceEl) {
+                const u = item.unit_price ? parseFloat(item.unit_price) : null;
+                const w = item.weight_kg ? parseFloat(item.weight_kg) : null;
+                if (u != null && !isNaN(u) && w != null && !isNaN(w) && w > 0) {
+                    kgPriceEl.textContent = (u / w).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+                } else {
+                    kgPriceEl.textContent = '-';
+                }
             }
         });
         
@@ -1587,9 +1721,29 @@ function getOfferModalFooterHtml(tabId) {
         if (editable) parts.push(`<button type="button" class="${actionClass}" id="save-prices-btn"><i class="fas fa-save me-1"></i>Fiyatları Kaydet</button>`);
         if (canSubmitApproval) parts.push(`<button type="button" class="${actionClass}" id="submit-approval-from-pricing-btn"><i class="fas fa-gavel me-1"></i>Onaya Gönder</button>`);
     } else if (tabId === 'approval') {
-        if (canSubmitApproval) parts.push(`<button type="button" class="${actionClass}" id="submit-approval-btn"><i class="fas fa-gavel me-1"></i>Onaya Gönder</button>`);
-        if (canDecide) parts.push(`<button type="button" class="${actionClass}" id="decide-btn"><i class="fas fa-check me-1"></i>Karar Ver</button>`);
-        if (hasRound) parts.push(`<button type="button" class="${actionClass}" id="refresh-approval-btn"><i class="fas fa-sync-alt me-1"></i>Onay Durumunu Yenile</button>`);
+        // Determine if current user is an approver in any active stage
+        let isApprover = false;
+        if (offer.approval && Array.isArray(offer.approval.stage_instances) && currentUser && currentUser.id) {
+            const uid = currentUser.id;
+            for (const stage of offer.approval.stage_instances) {
+                if (Array.isArray(stage.approvers)) {
+                    if (stage.approvers.some(a => a.id === uid)) {
+                        isApprover = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (canSubmitApproval) {
+            parts.push(`<button type="button" class="${actionClass}" id="submit-approval-btn"><i class="fas fa-gavel me-1"></i>Onaya Gönder</button>`);
+        }
+
+        // Only approvers can see decision buttons on approval tab
+        if (canDecide && isApprover) {
+            parts.push(`<button type="button" class="${actionClass}" id="decide-approve-btn"><i class="fas fa-check me-1"></i>Onayla</button>`);
+            parts.push(`<button type="button" class="${actionClass}" id="decide-reject-btn"><i class="fas fa-times me-1"></i>Reddet</button>`);
+        }
     }
 
     return `<div class="d-flex gap-2 flex-wrap align-items-center justify-content-end ms-auto">${parts.join('')}${closeBtn}</div>`;
@@ -1602,6 +1756,20 @@ function updateOfferModalFooter(tabId) {
 function attachOfferModalListeners() {
     const container = viewOfferModal.container;
     if (!container) return;
+    const modalEl = viewOfferModal.modal;
+    if (modalEl) {
+        modalEl.addEventListener('hidden.bs.modal', () => {
+            // When detail modal closes, remove offer-specific params from URL
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('offer');
+                url.searchParams.delete('tab');
+                window.history.replaceState({}, '', url);
+            } catch (e) {
+                console.error('Failed to clear offer params from URL:', e);
+            }
+        }, { once: true });
+    }
 
     const refreshOffer = () => viewOffer(offerId);
     updateOfferModalFooter('genel');
