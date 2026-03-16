@@ -193,6 +193,36 @@ function initializeTableComponent() {
                 }
             },
             {
+                field: 'job_last_billed_progress',
+                label: 'Önceki İlerleme (%)',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => {
+                    if (value === null || value === undefined) return '-';
+                    return `${formatNumber(value)}%`;
+                }
+            },
+            {
+                field: 'job_current_progress',
+                label: 'Mevcut İlerleme (%)',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => {
+                    if (value === null || value === undefined) return '-';
+                    return `${formatNumber(value)}%`;
+                }
+            },
+            {
+                field: 'job_unbilled_progress',
+                label: 'Faturalanmamış İlerleme (%)',
+                sortable: true,
+                type: 'number',
+                formatter: (value) => {
+                    if (value === null || value === undefined) return '-';
+                    return `${formatNumber(value)}%`;
+                }
+            },
+            {
                 field: 'job_total_billed_cost',
                 label: 'Faturalanan Tutar',
                 sortable: true,
@@ -403,6 +433,9 @@ function buildTableRows(subcontractors) {
                 job_next_bill_cost: null,
                 job_unbilled_remaining_cost: null,
                 job_total_cost: null,
+                job_last_billed_progress: null,
+                job_current_progress: null,
+                job_unbilled_progress: null,
                 is_active: sub.is_active
             });
             return;
@@ -432,6 +465,9 @@ function buildTableRows(subcontractors) {
                 job_next_bill_cost: job.next_bill_cost,
                 job_unbilled_remaining_cost: job.unbilled_remaining_cost,
                 job_total_cost: job.total_cost,
+                job_last_billed_progress: job.last_billed_progress,
+                job_current_progress: job.current_progress,
+                job_unbilled_progress: job.unbilled_progress,
                 is_active: sub.is_active
             });
         });

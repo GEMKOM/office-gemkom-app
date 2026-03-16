@@ -484,6 +484,11 @@ export const NAVIGATION_STRUCTURE = {
                 icon: 'fas fa-key',
                 children: {}
             },
+            '/it/permissions': {
+                label: 'Yetki Yönetimi',
+                icon: 'fas fa-user-shield',
+                children: {}
+            },
             '/it/notifications': {
                 label: 'Bildirim Yönlendirmeleri',
                 icon: 'fas fa-bell',

@@ -5,6 +5,9 @@ const API_URL = backendBase;
 let accessToken = localStorage.getItem('accessToken');
 let refreshToken = localStorage.getItem('refreshToken');
 
+// Cached permissions dictionary for the current user
+let cachedPermissions = null;
+
 // Centralized routing to prevent infinite redirects
 export const ROUTES = {
     LOGIN: '/login/',
@@ -54,10 +57,78 @@ export async function getUser() {
     }
 }
 
+// --- Permissions helpers ----------------------------------------------------
+
+/**
+ * Fetch current user's permissions from backend and cache them.
+ * Called on login and can be used to refresh permissions after admin changes.
+ */
+export async function fetchAndStorePermissions() {
+    try {
+        const response = await authedFetch(`${backendBase}/users/me/permissions/`);
+        if (!response.ok) {
+            console.error('Failed to fetch permissions, status:', response.status);
+            return null;
+        }
+        const perms = await response.json();
+        cachedPermissions = perms;
+        localStorage.setItem('permissions', JSON.stringify(perms));
+        return perms;
+    } catch (error) {
+        console.error('Failed to fetch permissions from API:', error);
+        return null;
+    }
+}
+
+/**
+ * Get permissions from memory/localStorage without doing a network call.
+ */
+export function getPermissions() {
+    if (cachedPermissions) {
+        return cachedPermissions;
+    }
+    try {
+        const stored = localStorage.getItem('permissions');
+        if (!stored) return {};
+        const perms = JSON.parse(stored);
+        cachedPermissions = perms;
+        return perms;
+    } catch (error) {
+        console.warn('Failed to parse cached permissions, clearing them');
+        localStorage.removeItem('permissions');
+        cachedPermissions = null;
+        return {};
+    }
+}
+
+/**
+ * Simple helper to check if current user has a given permission codename.
+ */
+export function hasPerm(codename) {
+    if (!codename) return true;
+    const perms = getPermissions();
+    return perms[codename] === true;
+}
+
+/**
+ * Ensure permissions are present in localStorage; if missing, fetch them.
+ * Useful for direct URL access / F5 on protected pages.
+ */
+export async function ensurePermissions() {
+    if (!isLoggedIn()) {
+        return;
+    }
+    if (!localStorage.getItem('permissions')) {
+        await fetchAndStorePermissions();
+    }
+}
+
 // Helper function to clear cached user data (useful for logout)
 export function clearCachedUser() {
     localStorage.removeItem('user');
     localStorage.removeItem('userTeam');
+    localStorage.removeItem('permissions');
+    cachedPermissions = null;
     localStorage.removeItem('purchaseRequestDraft');
     console.log('Cached user data cleared');
 }
@@ -107,8 +178,17 @@ export async function login(username, password) {
 
     const data = await response.json();
     setTokens(data.access, data.refresh);
-    const user_data = await getUser();
-    localStorage.setItem('user', JSON.stringify(user_data));
+
+    // Fetch user and permissions in parallel after we have tokens
+    const [userData] = await Promise.all([
+        getUser(),
+        fetchAndStorePermissions()
+    ]);
+
+    // Ensure user is stored (getUser already stores it, but keep explicit)
+    if (userData) {
+        localStorage.setItem('user', JSON.stringify(userData));
+    }
     
     // Mark this as a fresh login
     isFreshLogin = true;

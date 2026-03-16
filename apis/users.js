@@ -136,3 +136,127 @@ export async function resetPassword(newPassword) {
     });
     return resp;
 }
+
+// ---------------------------------------------------------------------------
+// Permissions & groups (new permission system)
+// ---------------------------------------------------------------------------
+
+/**
+ * Fetch current user's flat permissions dictionary.
+ * GET /users/me/permissions/
+ */
+export async function fetchCurrentUserPermissions() {
+    const resp = await authedFetch(`${backendBase}/users/me/permissions/`);
+    if (!resp.ok) {
+        throw new Error('Kullanıcı yetkileri alınamadı');
+    }
+    return await resp.json();
+}
+
+/**
+ * Permissions matrix for admin page.
+ * GET /users/permissions/matrix/
+ */
+export async function fetchPermissionsMatrix(params = {}) {
+    const search = params.search || '';
+    const group = params.group || '';
+    const active = params.active;
+
+    const query = new URLSearchParams();
+    if (search) query.set('search', search);
+    if (group) query.set('group', group);
+    if (active !== undefined && active !== null && active !== '') {
+        query.set('active', String(active));
+    }
+
+    const resp = await authedFetch(`${backendBase}/users/permissions/matrix/${query.toString() ? `?${query.toString()}` : ''}`);
+    if (!resp.ok) {
+        throw new Error('Yetki matrisi alınamadı');
+    }
+    return await resp.json();
+}
+
+/**
+ * Fetch all groups.
+ * GET /users/groups/
+ */
+export async function fetchUserGroups() {
+    const resp = await authedFetch(`${backendBase}/users/groups/`);
+    if (!resp.ok) {
+        throw new Error('Kullanıcı grupları alınamadı');
+    }
+    return await resp.json();
+}
+
+/**
+ * Fetch full permission state for a single user.
+ * GET /users/{id}/permissions/
+ */
+export async function fetchUserPermissionsDetail(userId) {
+    const resp = await authedFetch(`${backendBase}/users/${userId}/permissions/`);
+    if (!resp.ok) {
+        throw new Error('Kullanıcı yetki detayları alınamadı');
+    }
+    return await resp.json();
+}
+
+/**
+ * Add user to group.
+ * POST /users/{id}/groups/{group_name}/
+ */
+export async function addUserToGroup(userId, groupName) {
+    const resp = await authedFetch(`${backendBase}/users/${userId}/groups/${groupName}/`, {
+        method: 'POST'
+    });
+    if (!resp.ok) {
+        throw new Error('Kullanıcı gruba eklenemedi');
+    }
+    return await resp.json();
+}
+
+/**
+ * Remove user from group.
+ * DELETE /users/{id}/groups/{group_name}/
+ */
+export async function removeUserFromGroup(userId, groupName) {
+    const resp = await authedFetch(`${backendBase}/users/${userId}/groups/${groupName}/`, {
+        method: 'DELETE'
+    });
+    if (!resp.ok) {
+        throw new Error('Kullanıcı gruptan çıkarılamadı');
+    }
+    return await resp.json();
+}
+
+/**
+ * Create or update a per-user permission override.
+ * POST /users/{id}/permission-overrides/
+ */
+export async function saveUserPermissionOverride(userId, { codename, granted, reason }) {
+    const resp = await authedFetch(`${backendBase}/users/${userId}/permission-overrides/`, {
+        method: 'POST',
+        body: JSON.stringify({
+            codename,
+            granted,
+            reason: reason || ''
+        })
+    });
+    if (!resp.ok) {
+        throw new Error('Yetki geçersiz kılma kaydedilemedi');
+    }
+    return await resp.json();
+}
+
+/**
+ * Delete a per-user permission override.
+ * DELETE /users/{id}/permission-overrides/{codename}/
+ */
+export async function deleteUserPermissionOverride(userId, codename) {
+    const resp = await authedFetch(`${backendBase}/users/${userId}/permission-overrides/${codename}/`, {
+        method: 'DELETE'
+    });
+    if (!resp.ok) {
+        throw new Error('Yetki geçersiz kılma silinemedi');
+    }
+    return await resp.json();
+}

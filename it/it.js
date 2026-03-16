@@ -72,6 +72,13 @@ async function handleITPage() {
                 icon: 'fas fa-bell',
                 iconColor: 'info',
                 link: '/it/notifications'
+            },
+            {
+                title: 'Yetki Yönetimi',
+                description: 'Kullanıcı gruplarını ve detaylı yetki matrisini yönetin.',
+                icon: 'fas fa-user-shield',
+                iconColor: 'danger',
+                link: '/it/permissions'
             }
         ];
 
