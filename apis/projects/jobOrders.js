@@ -571,6 +571,18 @@ export async function getJobOrderChildren(jobNo) {
 }
 
 /**
+ * File type options for job order files
+ */
+export const JOB_ORDER_FILE_TYPE_OPTIONS = [
+    { value: 'drawing', label: 'Çizim' },
+    { value: 'specification', label: 'Şartname' },
+    { value: 'report', label: 'Rapor' },
+    { value: 'photo', label: 'Fotoğraf' },
+    { value: 'correspondence', label: 'Yazışma' },
+    { value: 'other', label: 'Diğer' }
+];
+
+/**
  * Get files/attachments for a job order
  * @param {string} jobNo - Job order number
  * @returns {Promise<Array>} Array of file/attachment objects
@@ -587,6 +599,42 @@ export async function getJobOrderFiles(jobNo) {
         return data;
     } catch (error) {
         console.error(`Error fetching files for job order ${jobNo}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Upload files to a job order
+ * @param {string} jobNo - Job order number
+ * @param {File|File[]} files - Single file or array of files to upload
+ * @param {string} fileType - File type (drawing, specification, report, photo, correspondence, other)
+ * @returns {Promise<Object>} Response from the server
+ */
+export async function uploadJobOrderFile(jobNo, files, fileType) {
+    try {
+        const formData = new FormData();
+        
+        // Handle both single file and array of files
+        const filesArray = Array.isArray(files) ? files : [files];
+        filesArray.forEach(file => {
+            formData.append('files', file);
+        });
+        
+        formData.append('file_type', fileType);
+        
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${jobNo}/upload_file/`, {
+            method: 'POST',
+            body: formData
+        });
+        
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+        
+        return await response.json();
+    } catch (error) {
+        console.error(`Error uploading files for job order ${jobNo}:`, error);
         throw error;
     }
 }

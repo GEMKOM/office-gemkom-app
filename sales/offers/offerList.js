@@ -47,6 +47,7 @@ import { listCustomers } from '../../apis/projects/customers.js';
 import { authFetchUsers } from '../../apis/users.js';
 import { getUser } from '../../authService.js';
 import { FileViewer } from '../../components/file-viewer/file-viewer.js';
+import { FileAttachments } from '../../components/file-attachments/file-attachments.js';
 
 const CLOSED_STATUSES = ['cancelled']; // Only cancelled status prevents editing
 const EDITABLE_STATUSES = ['draft', 'consultation', 'pricing'];
@@ -98,6 +99,7 @@ let offerId = null;
 /** Per-tab loaded state: only one request per tab while modal is open */
 let offerTabLoaded = { items: false, files: false, consultations: false, pricing: false, approval: false };
 let templates = [];
+let offerFilesComponent = null;
 const refreshList = async () => { await loadOffers(); };
 let selectedTemplate = null;
 let users = [];
@@ -439,17 +441,8 @@ function initTable() {
                 visible: (row) => row.status === 'won',
                 onClick: (row) => {
                     offerId = row.id;
-                    showActionConfirm({
-                        message: 'Teklifi iş emrine dönüştürmek istediğinize emin misiniz?',
-                        onConfirm: async () => {
-                            try {
-                                const result = await convertToJobOrder(offerId);
-                                showNotification(`İş emrine dönüştürüldü: ${result.job_no}`, 'success');
-                                await loadOffers();
-                            } catch (e) {
-                                showNotification(parseError(e, 'Dönüşüm hatası'), 'error');
-                            }
-                        }
+                    showConvertModal(async () => {
+                        await loadOffers();
                     });
                 }
             },
@@ -546,6 +539,16 @@ function initModals() {
             const refreshOffer = () => viewOffer(offerId);
             if (e.target.closest('#edit-offer-btn')) { showEditModal(refreshOffer); return; }
             if (e.target.closest('#add-items-btn')) { showAddItemsModal(refreshOffer); return; }
+            if (e.target.closest('#download-all-files-btn')) {
+                const files = offer.files || [];
+                if (files.length > 0) {
+                    const offerTitle = offer.title || offer.id || 'offer';
+                    await downloadAllFilesAsZip(files, `offer-${offerTitle}-files.zip`);
+                } else {
+                    showNotification('İndirilecek dosya yok', 'warning');
+                }
+                return;
+            }
             if (e.target.closest('#upload-file-btn')) { showFileUploadModal(refreshOffer); return; }
             if (e.target.closest('#send-consultations-btn')) { showConsultationModal(refreshOffer); return; }
             if (e.target.closest('#save-prices-btn')) { await saveAllPrices(); await refreshOffer(); return; }
@@ -625,6 +628,10 @@ window.viewOffer = async function (id, options = {}) {
         viewOfferModal.render();
         attachOfferModalListeners();
         setupApprovalTabHandler();
+
+        // Reset files component so it binds to the current modal instance
+        offerFilesComponent = null;
+
         viewOfferModal.show();
 
         // If an initial tab is requested (e.g. from URL param), activate it
@@ -680,6 +687,7 @@ async function loadTabDataIfNeeded(tabId) {
             offer.files = Array.isArray(data) ? data : (data.results || []);
             offerTabLoaded.files = true;
             pane.innerHTML = `<div class="offer-tab-content">${buildFilesTab()}</div>`;
+            renderOfferFilesTab();
         } catch (e) {
             pane.innerHTML = `<div class="offer-tab-content"><div class="text-danger text-center py-4">Dosyalar yüklenemedi.</div></div>`;
         }
@@ -1264,18 +1272,125 @@ function renderOfferItemsTable() {
 }
 
 function buildFilesTab() {
-    const files = offer.files || [];
-    let html = '';
-    if (files.length === 0) return html + '<div class="text-center text-muted py-4"><i class="fas fa-folder-open fa-2x mb-2 d-block"></i>Henüz dosya yüklenmemiş.</div>';
-    html += files.map(f => `
-        <div class="file-card d-flex align-items-center gap-3 p-2 border rounded mb-2">
-            <i class="fas fa-file text-primary"></i>
-            <div class="flex-grow-1"><strong>${f.name || f.filename}</strong><br><small class="text-muted">${f.file_type_display || f.file_type} · ${formatFileSize(f.file_size)} · ${formatDate(f.uploaded_at)}</small></div>
-            <a href="${f.file_url}" target="_blank" class="btn btn-sm btn-outline-secondary"><i class="fas fa-download"></i></a>
-            ${!CLOSED_STATUSES.includes(offer.status) ? `<button class="btn btn-sm btn-outline-danger delete-file-btn" data-file-id="${f.id}"><i class="fas fa-trash"></i></button>` : ''}
-        </div>
-    `).join('');
-    return html;
+    return '<div id="offer-files-container"></div>';
+}
+
+async function renderOfferFilesTab() {
+    const container = document.getElementById('offer-files-container');
+    if (!container) return;
+
+    const files = offer?.files || [];
+
+    if (!files.length) {
+        container.innerHTML = '<div class="text-center text-muted py-4"><i class="fas fa-folder-open fa-2x mb-2 d-block"></i>Henüz dosya yüklenmemiş.</div>';
+        return;
+    }
+
+    // Initialize FileAttachments component once per offer modal show
+    if (!offerFilesComponent) {
+        offerFilesComponent = new FileAttachments('offer-files-container', {
+            title: 'Dosyalar',
+            titleIcon: 'fas fa-paperclip',
+            titleIconColor: 'text-primary',
+            layout: 'list',
+            showDeleteButton: !CLOSED_STATUSES.includes(offer?.status || ''),
+            onFileClick: async (file) => {
+                const fileName = file.file_name || 'Dosya';
+                const fileExtension = file.file_extension || (fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '');
+                const fileUrl = file.file_url;
+
+                if (!fileUrl) {
+                    showNotification('Dosya URL bulunamadı', 'warning');
+                    return;
+                }
+
+                let viewer = window.fileViewer;
+                if (!viewer) {
+                    try {
+                        const { FileViewer } = await import('../../components/file-viewer/file-viewer.js');
+                        viewer = new FileViewer();
+                        viewer.setDownloadCallback(async () => {
+                            await viewer.downloadFile(fileUrl, fileName);
+                        });
+                    } catch (error) {
+                        console.error('Error loading FileViewer:', error);
+                        showNotification('Dosya görüntüleyici yüklenemedi', 'error');
+                        return;
+                    }
+                }
+
+                if (viewer) {
+                    viewer.openFile(fileUrl, fileName, fileExtension);
+                }
+            },
+            onDownloadClick: async (fileUrl, fileName) => {
+                if (!fileUrl) {
+                    showNotification('Dosya URL bulunamadı', 'warning');
+                    return;
+                }
+                try {
+                    const response = await fetch(fileUrl);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = fileName || 'Dosya';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(downloadUrl);
+                } catch (error) {
+                    console.error('Error downloading file:', error);
+                    const fallbackLink = document.createElement('a');
+                    fallbackLink.href = fileUrl;
+                    fallbackLink.download = fileName || 'Dosya';
+                    fallbackLink.target = '_blank';
+                    document.body.appendChild(fallbackLink);
+                    fallbackLink.click();
+                    document.body.removeChild(fallbackLink);
+                }
+            },
+            onDeleteClick: (file) => {
+                const fileId = file.id;
+                if (!fileId || !offerId) {
+                    showNotification('Dosya ID bulunamadı', 'warning');
+                    return;
+                }
+                showActionConfirm({
+                    title: 'Dosya Sil',
+                    message: 'Bu dosyayı silmek istiyor musunuz?',
+                    onConfirm: async () => {
+                        try {
+                            await deleteOfferFile(offerId, fileId);
+                            showNotification('Dosya silindi', 'success');
+                            // Refresh files list
+                            const data = await listOfferFiles(offerId);
+                            offer.files = Array.isArray(data) ? data : (data.results || []);
+                            await renderOfferFilesTab();
+                        } catch (error) {
+                            console.error('Error deleting offer file:', error);
+                            showNotification('Dosya silinirken hata oluştu', 'error');
+                        }
+                    }
+                });
+            }
+        });
+    }
+
+    // Map offer files to FileAttachments format
+    const mappedFiles = files.map(f => ({
+        id: f.id,
+        file_url: f.file_url || f.url || f.file || '',
+        file_name: f.name || f.filename || 'Dosya',
+        file_extension: (f.name || f.filename || '').includes('.') ? (f.name || f.filename).split('.').pop().toLowerCase() : '',
+        uploaded_at: f.uploaded_at,
+        uploaded_by_username: f.uploaded_by || ''
+    }));
+
+    offerFilesComponent.setFiles(mappedFiles);
 }
 
 function buildConsultationsTab() {
@@ -1714,7 +1829,10 @@ function getOfferModalFooterHtml(tabId) {
     } else if (tabId === 'kalemler') {
         if (editable) parts.push(`<button type="button" class="${actionClass}" id="add-items-btn"><i class="fas fa-plus me-1"></i>Kalem Ekle</button>`);
     } else if (tabId === 'dosyalar') {
-        if (!closed) parts.push(`<button type="button" class="${actionClass}" id="upload-file-btn"><i class="fas fa-upload me-1"></i>Dosya Yükle</button>`);
+        if (!closed) {
+            parts.push(`<button type="button" class="btn btn-sm btn-success" id="download-all-files-btn"><i class="fas fa-download me-1"></i>Tümünü İndir (ZIP)</button>`);
+            parts.push(`<button type="button" class="${actionClass}" id="upload-file-btn"><i class="fas fa-upload me-1"></i>Dosya Yükle</button>`);
+        }
     } else if (tabId === 'consultations') {
         if (canSendConsultations) parts.push(`<button type="button" class="${actionClass}" id="send-consultations-btn"><i class="fas fa-paper-plane me-1"></i>Departman Görüşü Gönder</button>`);
     } else if (tabId === 'pricing') {
@@ -2662,6 +2780,67 @@ function showFileUploadModal(onSuccess) {
 }
 
 const consultationFileViewer = new FileViewer();
+const convertFileViewer = new FileViewer();
+
+// Utility function to download all files as zip
+async function downloadAllFilesAsZip(files, zipFileName = 'files.zip') {
+    if (!window.JSZip) {
+        showNotification('JSZip kütüphanesi yüklenemedi', 'error');
+        return;
+    }
+    
+    if (!files || files.length === 0) {
+        showNotification('İndirilecek dosya yok', 'warning');
+        return;
+    }
+    
+    try {
+        showNotification('Dosyalar indiriliyor...', 'info');
+        const zip = new JSZip();
+        
+        // Fetch and add each file to the zip
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const fileUrl = file.file_url || file.url || file.file || '';
+            const fileName = file.file_name || file.name || file.filename || `file_${i + 1}`;
+            
+            if (!fileUrl) {
+                console.warn(`Skipping file ${fileName}: no URL`);
+                continue;
+            }
+            
+            try {
+                const response = await fetch(fileUrl);
+                if (!response.ok) {
+                    console.warn(`Failed to fetch ${fileName}: ${response.status}`);
+                    continue;
+                }
+                const blob = await response.blob();
+                zip.file(fileName, blob);
+            } catch (error) {
+                console.error(`Error fetching file ${fileName}:`, error);
+            }
+        }
+        
+        // Generate zip file
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        
+        // Download the zip
+        const url = window.URL.createObjectURL(zipBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = zipFileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        showNotification(`${files.length} dosya zip olarak indirildi`, 'success');
+    } catch (error) {
+        console.error('Error creating zip file:', error);
+        showNotification('Zip dosyası oluşturulurken hata oluştu', 'error');
+    }
+}
 
 function getFileExtension(fileName) {
     if (!fileName) return '';
@@ -3199,19 +3378,127 @@ function showActionConfirm(options) {
     });
 }
 
-function handleConvert(onSuccess) {
-    showActionConfirm({
-        message: 'Teklifi iş emrine dönüştürmek istediğinize emin misiniz?',
-        onConfirm: async () => {
-            try {
-                const result = await convertToJobOrder(offerId);
-                showNotification(`İş emrine dönüştürüldü: ${result.job_no}`, 'success');
-                await onSuccess();
-            } catch (e) {
-                showNotification(parseError(e, 'Dönüşüm hatası'), 'error');
-            }
+async function showConvertModal(onSuccess) {
+    const modal = new EditModal('convert-modal-container', { title: 'İş Emrine Dönüştür', icon: 'fas fa-exchange-alt', size: 'lg', showEditButton: false });
+    modal.clearAll();
+    modal.addSection({ title: 'Dönüşüm Bilgileri', icon: 'fas fa-info-circle', iconColor: 'text-primary' });
+    const infoField = document.createElement('div');
+    infoField.className = 'mb-3';
+    infoField.innerHTML = '<p class="text-muted mb-0">Teklifi iş emrine dönüştürmek istediğinize emin misiniz? İş emrine aktarılacak dosyaları seçebilirsiniz.</p>';
+    const form = modal.container.querySelector('#edit-modal-form');
+    if (form) {
+        const firstSection = form.querySelector('.form-section');
+        if (firstSection) {
+            firstSection.appendChild(infoField);
+        }
+    }
+    modal.onSaveCallback(async (formData) => {
+        const container = document.getElementById('convert-modal-container');
+        const checked = container.querySelectorAll('.convert-file-cb:checked');
+        const file_ids = Array.from(checked).map(el => parseInt(el.value, 10)).filter(id => !isNaN(id));
+        try {
+            const result = await convertToJobOrder(offerId, file_ids.length > 0 ? file_ids : null);
+            modal.hide();
+            showNotification(`İş emrine dönüştürüldü: ${result.job_no}`, 'success');
+            await onSuccess();
+        } catch (e) {
+            const msg = e.message || parseError(e, 'Dönüşüm hatası');
+            showNotification(msg, 'error');
         }
     });
+    modal.render();
+    const container = document.getElementById('convert-modal-container');
+    const formEl = container.querySelector('#edit-modal-form');
+    if (!formEl) {
+        modal.show();
+        return;
+    }
+    
+    // Append selectable offer files section
+    const filesSection = document.createElement('div');
+    filesSection.className = 'form-section compact mb-3';
+    filesSection.dataset.sectionId = 'convert-files';
+    
+    // Show loading state
+    filesSection.innerHTML = '<p class="text-muted small mb-0"><i class="fas fa-spinner fa-spin me-2"></i>Dosyalar yükleniyor...</p>';
+    formEl.appendChild(filesSection);
+    
+    // Fetch files from API
+    try {
+        const offerFiles = await listOfferFiles(offerId);
+        filesSection.innerHTML = '';
+        
+        if (offerFiles.length > 0) {
+            const title = document.createElement('h6');
+            title.className = 'section-subtitle compact text-info';
+            title.innerHTML = '<i class="fas fa-paperclip me-2"></i>İş emrine aktarılacak dosyalar';
+            filesSection.appendChild(title);
+            const filesContainer = document.createElement('div');
+            filesContainer.className = 'convert-files-selection';
+            filesContainer.innerHTML = '<p class="text-muted small mb-2">İş emrine aktarılmasını istediğiniz dosyaları işaretleyin.</p>';
+            const listDiv = document.createElement('div');
+            listDiv.className = 'row g-2';
+            offerFiles.forEach(f => {
+                const fileName = f.name || f.filename || 'Dosya';
+                const ext = getFileExtension(fileName);
+                const col = document.createElement('div');
+                col.className = 'col-12';
+                col.innerHTML = `
+                    <div class="file-attachment-item d-flex align-items-center gap-3 p-2 border rounded mb-2 convert-file-row">
+                        <div class="form-check mb-0 flex-shrink-0">
+                            <input class="form-check-input convert-file-cb" type="checkbox" value="${f.id}" id="convert-file-${f.id}">
+                            <label class="form-check-label visually-hidden" for="convert-file-${f.id}">${(fileName || '').replace(/</g, '&lt;')}</label>
+                        </div>
+                        <i class="fas fa-file text-primary flex-shrink-0"></i>
+                        <div class="flex-grow-1 min-width-0">
+                            <div class="fw-medium text-truncate">${(fileName || '').replace(/</g, '&lt;')}</div>
+                            ${f.file_type_display || f.file_type ? `<small class="text-muted">${(f.file_type_display || f.file_type || '').replace(/</g, '&lt;')}</small>` : ''}
+                        </div>
+                        <button type="button" class="btn btn-sm btn-outline-primary preview-convert-file flex-shrink-0" data-file-url="${f.file_url}" data-file-name="${fileName}" data-file-ext="${ext}">
+                            <i class="fas fa-eye me-1"></i>Önizle
+                        </button>
+                    </div>
+                `;
+                listDiv.appendChild(col);
+            });
+            filesContainer.appendChild(listDiv);
+            filesSection.appendChild(filesContainer);
+            filesSection.querySelectorAll('.preview-convert-file').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const url = e.currentTarget.dataset.fileUrl;
+                    const name = e.currentTarget.dataset.fileName;
+                    const ext = e.currentTarget.dataset.fileExt || '';
+                    convertFileViewer.openFile(url, name, ext);
+                });
+            });
+        } else {
+            const title = document.createElement('h6');
+            title.className = 'section-subtitle compact text-muted';
+            title.innerHTML = '<i class="fas fa-paperclip me-2"></i>Aktarılacak dosya yok';
+            filesSection.appendChild(title);
+            const p = document.createElement('p');
+            p.className = 'text-muted small mb-0';
+            p.textContent = 'Teklifte henüz dosya yok. İstediğiniz dosyaları teklife ekledikten sonra dönüştürebilirsiniz.';
+            filesSection.appendChild(p);
+        }
+    } catch (e) {
+        filesSection.innerHTML = '';
+        const title = document.createElement('h6');
+        title.className = 'section-subtitle compact text-danger';
+        title.innerHTML = '<i class="fas fa-exclamation-triangle me-2"></i>Dosyalar yüklenemedi';
+        filesSection.appendChild(title);
+        const p = document.createElement('p');
+        p.className = 'text-muted small mb-0';
+        p.textContent = 'Dosyalar yüklenirken bir hata oluştu. Lütfen tekrar deneyin.';
+        filesSection.appendChild(p);
+        console.error('Error loading offer files:', e);
+    }
+    modal.show();
+}
+
+function handleConvert(onSuccess) {
+    showConvertModal(onSuccess);
 }
 
 function handleStatusAction(action, successMessage, onSuccess) {

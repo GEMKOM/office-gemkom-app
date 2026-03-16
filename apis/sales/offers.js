@@ -301,10 +301,17 @@ export async function markWon(offerId) {
     return response.json();
 }
 
-export async function convertToJobOrder(offerId) {
-    const response = await authedFetch(`${BASE}/${offerId}/convert/`, {
+export async function convertToJobOrder(offerId, fileIds = null) {
+    const options = {
         method: 'POST'
-    });
+    };
+    if (fileIds && Array.isArray(fileIds) && fileIds.length > 0) {
+        options.headers = {
+            'Content-Type': 'application/json'
+        };
+        options.body = JSON.stringify({ file_ids: fileIds });
+    }
+    const response = await authedFetch(`${BASE}/${offerId}/convert/`, options);
     if (!response.ok) {
         const err = await response.json().catch(() => ({}));
         throw new Error(err.detail || JSON.stringify(err));

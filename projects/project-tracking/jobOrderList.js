@@ -16,6 +16,8 @@ import {
     getJobOrderDepartmentTasks,
     getJobOrderChildren,
     getJobOrderFiles,
+    uploadJobOrderFile,
+    JOB_ORDER_FILE_TYPE_OPTIONS,
     STATUS_OPTIONS
 } from '../../apis/projects/jobOrders.js';
 import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks } from '../../apis/projects/departmentTasks.js';
@@ -131,6 +133,7 @@ let viewJobOrderModal = null;
 let confirmationModal = null;
 let requestRevisionModal = null;
 let holdJobOrderModal = null;
+let jobOrderFileUploadModal = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -1023,6 +1026,14 @@ function initializeModalComponents() {
         size: 'md',
         showEditButton: false,
         saveButtonText: 'Beklet'
+    });
+
+    // Job Order File Upload Modal
+    jobOrderFileUploadModal = new EditModal('job-order-file-upload-modal-container', {
+        title: 'Dosya Yükle',
+        icon: 'fas fa-upload',
+        size: 'lg',
+        showEditButton: false
     });
 
     requestRevisionModal.onSaveCallback(async (formData) => {
@@ -2440,7 +2451,7 @@ function renderChildrenTable(children, getStatusBadgeClass) {
 async function loadFilesTab(jobNo) {
     // Check cache first
     if (jobOrderTabCache.files !== null) {
-        renderFilesTab(jobOrderTabCache.files);
+        renderFilesTab(jobOrderTabCache.files, jobNo);
         return;
     }
     
@@ -2457,7 +2468,7 @@ async function loadFilesTab(jobNo) {
         jobOrderTabCache.files = files;
         
         // Render the files
-        renderFilesTab(files);
+        renderFilesTab(files, jobNo);
     } catch (error) {
         console.error('Error loading files:', error);
         container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Dosyalar yüklenirken hata oluştu.</div>';
@@ -2465,88 +2476,383 @@ async function loadFilesTab(jobNo) {
 }
 
 // Render Files Tab
-async function renderFilesTab(files) {
+async function renderFilesTab(files, jobNo) {
     const container = viewJobOrderModal.content.querySelector('#files-container');
     if (!container) return;
     
-    if (files.length === 0) {
-        container.innerHTML = '<p class="text-muted text-center py-3">Henüz dosya eklenmemiş.</p>';
+    // Get the current job number from cache if not provided
+    if (!jobNo) {
+        jobNo = jobOrderTabCache.jobNo;
+    }
+    
+    // Extract job_order_files and offer_files from response
+    let jobOrderFiles = [];
+    let offerFiles = [];
+    
+    if (files && typeof files === 'object') {
+        if (Array.isArray(files.job_order_files)) {
+            jobOrderFiles = files.job_order_files;
+        }
+        if (Array.isArray(files.offer_files)) {
+            offerFiles = files.offer_files;
+        }
+        // Fallback: if it's already an array, treat as job_order_files
+        if (Array.isArray(files) && jobOrderFiles.length === 0 && offerFiles.length === 0) {
+            jobOrderFiles = files;
+        }
+    } else if (Array.isArray(files)) {
+        jobOrderFiles = files;
+    }
+    
+    const totalFiles = jobOrderFiles.length + offerFiles.length;
+    
+    if (totalFiles === 0) {
+        container.innerHTML = `
+            <div class="text-center py-4">
+                <i class="fas fa-folder-open fa-2x mb-2 d-block text-muted"></i>
+                <p class="text-muted mb-3">Henüz dosya eklenmemiş.</p>
+                ${jobNo ? `
+                    <button type="button" class="btn btn-sm btn-primary" id="job-order-upload-file-btn">
+                        <i class="fas fa-upload me-1"></i>Dosya Yükle
+                    </button>
+                ` : ''}
+            </div>
+        `;
+        
+        if (jobNo) {
+            const uploadBtn = container.querySelector('#job-order-upload-file-btn');
+            if (uploadBtn) {
+                uploadBtn.addEventListener('click', () => {
+                    showJobOrderFileUploadModal(jobNo, async () => {
+                        // Clear cache and reload files
+                        jobOrderTabCache.files = null;
+                        await loadFilesTab(jobNo);
+                    });
+                });
+            }
+        }
         return;
     }
     
     const { FileAttachments } = await import('../../components/file-attachments/file-attachments.js');
     
-    const fileAttachments = new FileAttachments('files-container', {
-        title: 'Dosyalar',
-        titleIcon: 'fas fa-paperclip',
-        titleIconColor: 'text-primary',
-        layout: 'grid',
-        onFileClick: async (file) => {
-            const fileName = file.file_name || 'Dosya';
-            const fileExtension = file.file_extension || (fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '');
-            const fileUrl = file.file_url;
-            
-            if (!fileUrl) {
-                console.error('File URL is missing');
-                return;
-            }
-            
-            let viewer = window.fileViewer;
-            if (!viewer) {
-                try {
-                    const { FileViewer } = await import('../../components/file-viewer/file-viewer.js');
-                    viewer = new FileViewer();
-                    viewer.setDownloadCallback(async () => {
-                        await viewer.downloadFile(fileUrl, fileName);
-                    });
-                } catch (error) {
-                    console.error('Error loading FileViewer:', error);
-                    showNotification('Dosya görüntüleyici yüklenemedi', 'error');
+    // Create header with upload and download all buttons
+    const headerHtml = `
+        <div class="d-flex align-items-center justify-content-between mb-3">
+            <h6 class="mb-0 d-flex align-items-center">
+                <i class="fas fa-paperclip me-2 text-primary"></i>
+                Dosyalar
+            </h6>
+            ${jobNo ? `
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-success" id="job-order-download-all-btn">
+                        <i class="fas fa-download me-1"></i>Tümünü İndir (ZIP)
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="job-order-upload-file-btn">
+                        <i class="fas fa-upload me-1"></i>Dosya Yükle
+                    </button>
+                </div>
+            ` : ''}
+        </div>
+    `;
+    
+    container.innerHTML = headerHtml;
+    
+    // Helper function to map files to FileAttachments format
+    const mapFiles = (fileArray, sourceLabel = '') => {
+        return fileArray.map(file => ({
+            file_url: file.file_url || file.url || file.file || '',
+            file_name: file.name || file.file_name || 'Dosya',
+            uploaded_at: file.uploaded_at,
+            uploaded_by_username: file.uploaded_by || 'Bilinmeyen',
+            source_label: sourceLabel
+        }));
+    };
+    
+    // Helper function to create FileAttachments component
+    const createFileAttachments = (containerId, files, title = '') => {
+        const fileAttachments = new FileAttachments(containerId, {
+            title: title,
+            titleIcon: '',
+            titleIconColor: '',
+            layout: 'list',
+            onFileClick: async (file) => {
+                const fileName = file.file_name || 'Dosya';
+                const fileExtension = file.file_extension || (fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '');
+                const fileUrl = file.file_url;
+                
+                if (!fileUrl) {
+                    console.error('File URL is missing');
                     return;
                 }
+                
+                let viewer = window.fileViewer;
+                if (!viewer) {
+                    try {
+                        const { FileViewer } = await import('../../components/file-viewer/file-viewer.js');
+                        viewer = new FileViewer();
+                        viewer.setDownloadCallback(async () => {
+                            await viewer.downloadFile(fileUrl, fileName);
+                        });
+                    } catch (error) {
+                        console.error('Error loading FileViewer:', error);
+                        showNotification('Dosya görüntüleyici yüklenemedi', 'error');
+                        return;
+                    }
+                }
+                
+                if (viewer) {
+                    viewer.openFile(fileUrl, fileName, fileExtension);
+                }
+            },
+            onDownloadClick: async (fileUrl, fileName) => {
+                try {
+                    const response = await fetch(fileUrl);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = fileName;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                } catch (error) {
+                    console.error('Error downloading file:', error);
+                    const link = document.createElement('a');
+                    link.href = fileUrl;
+                    link.download = fileName;
+                    link.target = '_blank';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                }
+            }
+        });
+        
+        fileAttachments.setFiles(files);
+        return fileAttachments;
+    };
+    
+    // Render job order files
+    if (jobOrderFiles.length > 0) {
+        const jobOrderFilesSection = document.createElement('div');
+        jobOrderFilesSection.className = 'mb-4';
+        jobOrderFilesSection.innerHTML = `
+            <h6 class="mb-3 d-flex align-items-center text-primary">
+                <i class="fas fa-file me-2"></i>
+                İş Emri Dosyaları
+            </h6>
+            <div id="job-order-files-list"></div>
+        `;
+        container.appendChild(jobOrderFilesSection);
+        const mappedJobOrderFiles = mapFiles(jobOrderFiles);
+        createFileAttachments('job-order-files-list', mappedJobOrderFiles);
+    }
+    
+    // Render offer files
+    if (offerFiles.length > 0) {
+        const offerFilesSection = document.createElement('div');
+        offerFilesSection.className = 'mb-4';
+        offerFilesSection.innerHTML = `
+            <h6 class="mb-3 d-flex align-items-center text-info">
+                <i class="fas fa-file-contract me-2"></i>
+                Teklif Dosyaları
+            </h6>
+            <div id="offer-files-list"></div>
+        `;
+        container.appendChild(offerFilesSection);
+        const mappedOfferFiles = mapFiles(offerFiles);
+        createFileAttachments('offer-files-list', mappedOfferFiles);
+    }
+    
+    // Setup upload and download all button listeners
+    if (jobNo) {
+        const uploadBtn = container.querySelector('#job-order-upload-file-btn');
+        if (uploadBtn) {
+            uploadBtn.addEventListener('click', () => {
+                showJobOrderFileUploadModal(jobNo, async () => {
+                    // Clear cache and reload files
+                    jobOrderTabCache.files = null;
+                    await loadFilesTab(jobNo);
+                });
+            });
+        }
+        
+        const downloadAllBtn = container.querySelector('#job-order-download-all-btn');
+        if (downloadAllBtn) {
+            downloadAllBtn.addEventListener('click', async () => {
+                try {
+                    const allFiles = [...jobOrderFiles, ...offerFiles];
+                    if (allFiles.length > 0) {
+                        await downloadAllFilesAsZip(allFiles, `job-order-${jobNo}-files.zip`);
+                    } else {
+                        showNotification('İndirilecek dosya yok', 'warning');
+                    }
+                } catch (error) {
+                    console.error('Error downloading files:', error);
+                    showNotification('Dosyalar indirilirken hata oluştu', 'error');
+                }
+            });
+        }
+    }
+}
+
+// Utility function to download all files as zip
+async function downloadAllFilesAsZip(files, zipFileName = 'files.zip') {
+    if (!window.JSZip) {
+        showNotification('JSZip kütüphanesi yüklenemedi', 'error');
+        return;
+    }
+    
+    if (!files || files.length === 0) {
+        showNotification('İndirilecek dosya yok', 'warning');
+        return;
+    }
+    
+    try {
+        showNotification('Dosyalar indiriliyor...', 'info');
+        const zip = new JSZip();
+        
+        // Fetch and add each file to the zip
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const fileUrl = file.file_url || file.url || file.file || '';
+            const fileName = file.file_name || file.name || file.filename || `file_${i + 1}`;
+            
+            if (!fileUrl) {
+                console.warn(`Skipping file ${fileName}: no URL`);
+                continue;
             }
             
-            if (viewer) {
-                viewer.openFile(fileUrl, fileName, fileExtension);
-            }
-        },
-        onDownloadClick: async (fileUrl, fileName) => {
             try {
                 const response = await fetch(fileUrl);
                 if (!response.ok) {
-                    throw new Error(`HTTP error! status: ${response.status}`);
+                    console.warn(`Failed to fetch ${fileName}: ${response.status}`);
+                    continue;
                 }
                 const blob = await response.blob();
-                const url = window.URL.createObjectURL(blob);
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = fileName;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                window.URL.revokeObjectURL(url);
+                zip.file(fileName, blob);
             } catch (error) {
-                console.error('Error downloading file:', error);
-                const link = document.createElement('a');
-                link.href = fileUrl;
-                link.download = fileName;
-                link.target = '_blank';
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
+                console.error(`Error fetching file ${fileName}:`, error);
             }
         }
-    });
-    
-    // Map files to FileAttachments format
-    const mappedFiles = files.map(file => ({
-        file_url: file.file_url || file.url || file.file || '',
-        file_name: file.name || file.file_name || 'Dosya',
-        uploaded_at: file.uploaded_at,
-        uploaded_by_username: file.uploaded_by || 'Bilinmeyen'
-    }));
-    
-    fileAttachments.setFiles(mappedFiles);
+        
+        // Generate zip file
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        
+        // Download the zip
+        const url = window.URL.createObjectURL(zipBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = zipFileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        showNotification(`${files.length} dosya zip olarak indirildi`, 'success');
+    } catch (error) {
+        console.error('Error creating zip file:', error);
+        showNotification('Zip dosyası oluşturulurken hata oluştu', 'error');
+    }
+}
+
+// Show Job Order File Upload Modal
+function showJobOrderFileUploadModal(jobNo, onSuccess) {
+    if (!jobOrderFileUploadModal) return;
+    jobOrderFileUploadModal.clearAll();
+    jobOrderFileUploadModal.addSection({ title: 'Dosya Bilgileri', icon: 'fas fa-file', iconColor: 'text-primary' });
+    jobOrderFileUploadModal.addField({ id: 'file_type', name: 'file_type', label: 'Dosya Türü', type: 'dropdown', required: true, options: JOB_ORDER_FILE_TYPE_OPTIONS, icon: 'fas fa-tag', colSize: 6 });
+
+    jobOrderFileUploadModal.onSaveCallback = async (formData) => {
+        const fileInput = document.getElementById('job-order-file-input-field');
+        const files = fileInput?.files;
+        if (!files || files.length === 0) {
+            showNotification('Lütfen en az bir dosya seçin', 'warning');
+            return;
+        }
+        
+        jobOrderFileUploadModal.setLoading(true);
+        let successCount = 0;
+        let errorCount = 0;
+        
+        try {
+            // Upload all files at once (API accepts multiple files)
+            try {
+                await uploadJobOrderFile(jobNo, Array.from(files), formData.file_type);
+                successCount = files.length;
+            } catch (error) {
+                console.error('Error uploading files:', error);
+                errorCount = files.length;
+                throw error;
+            }
+            
+            jobOrderFileUploadModal.setLoading(false);
+            
+            if (successCount > 0 && errorCount === 0) {
+                jobOrderFileUploadModal.hide();
+                showNotification(`${successCount} dosya başarıyla yüklendi`, 'success');
+                if (onSuccess) await onSuccess();
+            } else if (successCount > 0 && errorCount > 0) {
+                jobOrderFileUploadModal.hide();
+                showNotification(`${successCount} dosya yüklendi, ${errorCount} dosya yüklenemedi`, 'warning');
+                if (onSuccess) await onSuccess();
+            } else {
+                showNotification('Dosyalar yüklenemedi', 'error');
+            }
+        } catch (error) {
+            jobOrderFileUploadModal.setLoading(false);
+            const errorMsg = error.message || 'Dosya yükleme sırasında hata oluştu';
+            showNotification(errorMsg, 'error');
+        }
+    };
+
+    jobOrderFileUploadModal.render();
+    const body = jobOrderFileUploadModal.container?.querySelector('.modal-body');
+    if (body) {
+        // Remove any existing file input containers to prevent duplicates
+        const existingFileInputs = body.querySelectorAll('#job-order-file-input-field');
+        existingFileInputs.forEach(input => {
+            const container = input.closest('.mb-3.px-3');
+            if (container) {
+                container.remove();
+            }
+        });
+        
+        const fileDiv = document.createElement('div');
+        fileDiv.className = 'mb-3 px-3';
+        fileDiv.innerHTML = `
+            <label class="form-label">Dosyalar (Birden fazla seçebilirsiniz)</label>
+            <input type="file" class="form-control" id="job-order-file-input-field" multiple>
+            <small class="form-text text-muted">Birden fazla dosya seçmek için Ctrl (veya Cmd) tuşuna basılı tutarak tıklayın</small>
+            <div id="job-order-selected-files-list" class="mt-2"></div>
+        `;
+        body.insertBefore(fileDiv, body.firstChild);
+        
+        // Show selected files
+        const fileInput = fileDiv.querySelector('#job-order-file-input-field');
+        const filesList = fileDiv.querySelector('#job-order-selected-files-list');
+        fileInput.addEventListener('change', (e) => {
+            const files = e.target.files;
+            if (files.length === 0) {
+                filesList.innerHTML = '';
+                return;
+            }
+            const filesHtml = Array.from(files).map((file, index) => `
+                <div class="d-flex align-items-center gap-2 p-2 border rounded mb-1">
+                    <i class="fas fa-file text-primary"></i>
+                    <span class="flex-grow-1">${file.name}</span>
+                    <small class="text-muted">${(file.size / 1024).toFixed(1)} KB</small>
+                </div>
+            `).join('');
+            filesList.innerHTML = `<div class="mt-2"><strong>Seçilen dosyalar (${files.length}):</strong>${filesHtml}</div>`;
+        });
+    }
+    jobOrderFileUploadModal.show();
 }
 
 // Load Topics Tab

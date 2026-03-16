@@ -15,12 +15,15 @@ export class FileAttachments {
             maxThumbnailSize: 80,
             onFileClick: null, // Callback for file click
             onDownloadClick: null, // Callback for download click
+            showDeleteButton: false, // Whether to show delete action
+            onDeleteClick: null, // Callback for delete click
             ...options
         };
         
         this.files = [];
         this.onFileClick = this.options.onFileClick;
         this.onDownloadClick = this.options.onDownloadClick;
+        this.onDeleteClick = this.options.onDeleteClick;
     }
     
     /**
@@ -211,6 +214,14 @@ export class FileAttachments {
      * Create actions HTML
      */
     createActionsHtml(file, fileName, fileExtension) {
+        const deleteButtonHtml = this.options.showDeleteButton ? `
+                <button class="btn btn-sm btn-outline-danger delete-btn" 
+                        data-file-name="${fileName}" 
+                        style="font-size: 12px;">
+                    <i class="fas fa-trash me-1"></i>Sil
+                </button>
+        ` : '';
+
         return `
             <div class="file-actions mt-2">
                 <button class="btn btn-sm btn-outline-primary me-2 preview-btn" 
@@ -226,6 +237,7 @@ export class FileAttachments {
                         style="font-size: 12px;">
                     <i class="fas fa-download me-1"></i>İndir
                 </button>
+                ${deleteButtonHtml}
             </div>
         `;
     }
@@ -278,6 +290,21 @@ export class FileAttachments {
                 }
             });
         });
+
+        // Delete button clicks
+        if (this.options.showDeleteButton && this.onDeleteClick) {
+            this.container.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const itemEl = e.currentTarget.closest('.file-attachment-item');
+                    const fileIndex = itemEl ? parseInt(itemEl.dataset.fileIndex, 10) : -1;
+                    const file = this.files[fileIndex];
+                    if (file && fileIndex >= 0) {
+                        this.onDeleteClick(file, fileIndex);
+                    }
+                });
+            });
+        }
     }
     
     /**

@@ -10,6 +10,7 @@ import { initRouteProtection } from '../../../apis/routeProtection.js';
 import { getUser } from '../../../authService.js';
 import { fetchAllUsers, authFetchUsers } from '../../../apis/users.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
+import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import {
     listNCRs,
     getNCR,
@@ -61,6 +62,7 @@ let ncrSubmitModal = null;
 let ncrFileUploadModal = null;
 
 const ncrFileViewer = new FileViewer();
+let ncrFilesComponent = null;
 
 function getFileExtension(fileName) {
     if (!fileName) return '';
@@ -605,13 +607,74 @@ async function loadNCRs() {
     }
 }
 
-async function refreshNcrFilesUI(ncrId) {
-    const listEl = document.getElementById('ncr-files-list');
-    if (!listEl) return;
+// Utility function to download all files as zip
+async function downloadAllFilesAsZip(files, zipFileName = 'files.zip') {
+    if (!window.JSZip) {
+        showNotification('JSZip kütüphanesi yüklenemedi', 'error');
+        return;
+    }
+    
+    if (!files || files.length === 0) {
+        showNotification('İndirilecek dosya yok', 'warning');
+        return;
+    }
+    
+    try {
+        showNotification('Dosyalar indiriliyor...', 'info');
+        const zip = new JSZip();
+        
+        // Fetch and add each file to the zip
+        for (let i = 0; i < files.length; i++) {
+            const file = files[i];
+            const fileUrl = file.file_url || file.url || file.file || '';
+            const fileName = file.file_name || file.name || file.filename || `file_${i + 1}`;
+            
+            if (!fileUrl) {
+                console.warn(`Skipping file ${fileName}: no URL`);
+                continue;
+            }
+            
+            try {
+                const response = await fetch(fileUrl);
+                if (!response.ok) {
+                    console.warn(`Failed to fetch ${fileName}: ${response.status}`);
+                    continue;
+                }
+                const blob = await response.blob();
+                zip.file(fileName, blob);
+            } catch (error) {
+                console.error(`Error fetching file ${fileName}:`, error);
+            }
+        }
+        
+        // Generate zip file
+        const zipBlob = await zip.generateAsync({ type: 'blob' });
+        
+        // Download the zip
+        const url = window.URL.createObjectURL(zipBlob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = zipFileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        showNotification(`${files.length} dosya zip olarak indirildi`, 'success');
+    } catch (error) {
+        console.error('Error creating zip file:', error);
+        showNotification('Zip dosyası oluşturulurken hata oluştu', 'error');
+    }
+}
 
-    listEl.innerHTML = `
+async function refreshNcrFilesUI(ncrId) {
+    const container = document.getElementById('ncr-files-list');
+    if (!container) return;
+
+    // Show loading state
+    container.innerHTML = `
         <div class="text-center text-muted py-3">
-            <i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...
+            <i class="fas fa-spinner fa-spin me-2"></i>Dosyalar yükleniyor...
         </div>
     `;
 
@@ -622,86 +685,100 @@ async function refreshNcrFilesUI(ncrId) {
         files = rawList.map(normalizeNcrFile);
     } catch (e) {
         console.error('Failed to load NCR files:', e);
-        listEl.innerHTML = `<div class="text-danger small py-2">Dosyalar yüklenemedi.</div>`;
+        container.innerHTML = `<div class="text-danger small py-2">Dosyalar yüklenemedi.</div>`;
         return;
     }
 
     if (!files.length) {
-        listEl.innerHTML = `<div class="text-muted small py-2">Henüz dosya yok.</div>`;
+        container.innerHTML = `<div class="text-muted small py-2">Henüz dosya yok.</div>`;
         return;
     }
 
-    listEl.innerHTML = files.map((f) => {
-        const name = f.filename || 'Dosya';
-        const ext = getFileExtension(name);
-        const typeLabel = f.file_type_display || f.file_type || '-';
-        const desc = f.description || '';
-        const url = f.file_url || '';
-        const uploadedBy = f.uploaded_by_username || f.uploaded_by_name || '';
-        const date = f.uploaded_at ? new Date(f.uploaded_at) : null;
-        const dateStr = date && !isNaN(date.getTime())
-            ? date.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' })
-            : '';
-
-        return `
-            <div class="d-flex align-items-start justify-content-between gap-3 p-2 border rounded mb-2" style="background:#fff;">
-                <div class="d-flex align-items-start gap-2 flex-grow-1 min-width-0">
-                    <i class="fas fa-paperclip text-muted mt-1"></i>
-                    <div class="min-width-0">
-                        <div class="fw-medium text-truncate">${name}</div>
-                        <div class="text-muted small">
-                            ${typeLabel}${uploadedBy || dateStr ? ` • ${[uploadedBy, dateStr].filter(Boolean).join(' • ')}` : ''}
-                        </div>
-                        ${desc ? `<div class="text-muted small mt-1">${desc}</div>` : ''}
-                    </div>
-                </div>
-                <div class="d-flex gap-2 flex-shrink-0">
-                    <button type="button" class="btn btn-sm btn-outline-primary ncr-file-preview-btn" data-url="${url}" data-name="${encodeURIComponent(name)}" data-ext="${ext}">
-                        <i class="fas fa-eye me-1"></i>Önizle
-                    </button>
-                    <a class="btn btn-sm btn-outline-secondary" href="${url}" download>
-                        <i class="fas fa-download me-1"></i>İndir
-                    </a>
-                    <button type="button" class="btn btn-sm btn-outline-danger ncr-file-delete-btn" data-file-id="${f.id}">
-                        <i class="fas fa-trash me-1"></i>Sil
-                    </button>
-                </div>
-            </div>
-        `;
-    }).join('');
-
-    listEl.querySelectorAll('.ncr-file-preview-btn').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            const url = btn.dataset.url || '';
-            const name = decodeURIComponent(btn.dataset.name || 'Dosya');
-            const ext = btn.dataset.ext || getFileExtension(name);
-            if (!url) {
-                showNotification('Dosya URL bulunamadı', 'warning');
-                return;
-            }
-            ncrFileViewer.openFile(url, name, ext);
-        });
-    });
-
-    listEl.querySelectorAll('.ncr-file-delete-btn').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-            e.preventDefault();
-            const fileId = parseInt(btn.dataset.fileId, 10);
-            if (isNaN(fileId)) return;
-            confirmationModal.show({
-                title: 'Dosya Sil',
-                message: 'Bu dosyayı silmek istiyor musunuz?',
-                confirmText: 'Sil',
-                confirmButtonClass: 'btn-danger',
-                onConfirm: async () => {
-                    await deleteNCRFile(ncrId, fileId);
-                    showNotification('Dosya silindi', 'success');
-                    await refreshNcrFilesUI(ncrId);
+    // Initialize FileAttachments component once
+    if (!ncrFilesComponent) {
+        ncrFilesComponent = new FileAttachments('ncr-files-list', {
+            title: 'Dosyalar',
+            titleIcon: 'fas fa-paperclip',
+            titleIconColor: 'text-muted',
+            layout: 'list',
+            showDeleteButton: true,
+            onFileClick: (file) => {
+                const name = file.file_name || 'Dosya';
+                const ext = getFileExtension(name);
+                const url = file.file_url;
+                if (!url) {
+                    showNotification('Dosya URL bulunamadı', 'warning');
+                    return;
                 }
-            });
+                ncrFileViewer.openFile(url, name, ext);
+            },
+            onDownloadClick: async (fileUrl, fileName) => {
+                if (!fileUrl) {
+                    showNotification('Dosya URL bulunamadı', 'warning');
+                    return;
+                }
+                try {
+                    const response = await fetch(fileUrl);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    const blob = await response.blob();
+                    const downloadUrl = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = downloadUrl;
+                    link.download = fileName || 'Dosya';
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(downloadUrl);
+                } catch (error) {
+                    console.error('Error downloading file:', error);
+                    // Fallback: open in new tab
+                    const fallbackLink = document.createElement('a');
+                    fallbackLink.href = fileUrl;
+                    fallbackLink.download = fileName || 'Dosya';
+                    fallbackLink.target = '_blank';
+                    document.body.appendChild(fallbackLink);
+                    fallbackLink.click();
+                    document.body.removeChild(fallbackLink);
+                }
+            },
+            onDeleteClick: (file) => {
+                const fileId = file.id;
+                if (!fileId) {
+                    showNotification('Dosya ID bulunamadı', 'warning');
+                    return;
+                }
+                confirmationModal.show({
+                    title: 'Dosya Sil',
+                    message: 'Bu dosyayı silmek istiyor musunuz?',
+                    confirmText: 'Sil',
+                    confirmButtonClass: 'btn-danger',
+                    onConfirm: async () => {
+                        try {
+                            await deleteNCRFile(ncrId, fileId);
+                            showNotification('Dosya silindi', 'success');
+                            await refreshNcrFilesUI(ncrId);
+                        } catch (error) {
+                            console.error('Error deleting NCR file:', error);
+                            showNotification('Dosya silinirken hata oluştu', 'error');
+                        }
+                    }
+                });
+            }
         });
-    });
+    }
+
+    // Map NCR files to FileAttachments format
+    const mappedFiles = files.map(f => ({
+        id: f.id,
+        file_url: f.file_url || f.url || f.file || '',
+        file_name: f.filename || f.name || 'Dosya',
+        uploaded_at: f.uploaded_at,
+        uploaded_by_username: f.uploaded_by_username || f.uploaded_by_name || ''
+    }));
+
+    ncrFilesComponent.setFiles(mappedFiles);
 }
 
 function showNcrFileUploadModal(ncrId, onSuccess) {
@@ -918,9 +995,14 @@ async function showNCRDetails(ncr) {
             customContent: `
                 <div class="d-flex align-items-center justify-content-between mb-2">
                     <div class="text-muted small">NCR ile ilişkili dosyalar</div>
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="ncr-files-upload-btn">
-                        <i class="fas fa-upload me-1"></i>Dosya Yükle
-                    </button>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-outline-success" id="ncr-files-download-all-btn">
+                            <i class="fas fa-download me-1"></i>Tümünü İndir (ZIP)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" id="ncr-files-upload-btn">
+                            <i class="fas fa-upload me-1"></i>Dosya Yükle
+                        </button>
+                    </div>
                 </div>
                 <div id="ncr-files-list"></div>
             `
@@ -929,6 +1011,9 @@ async function showNCRDetails(ncr) {
         // Render and show the modal
         ncrDetailsModal.render();
         ncrDetailsModal.show();
+
+        // Reset files component so it binds to the current modal instance
+        ncrFilesComponent = null;
 
         const uploadBtn = document.getElementById('ncr-files-upload-btn');
         if (uploadBtn) {
@@ -939,6 +1024,28 @@ async function showNCRDetails(ncr) {
                 });
             };
         }
+        
+        const downloadAllBtn = document.getElementById('ncr-files-download-all-btn');
+        if (downloadAllBtn) {
+            downloadAllBtn.onclick = async (e) => {
+                e.preventDefault();
+                try {
+                    const data = await listNCRFiles(fullNCR.id);
+                    const rawList = Array.isArray(data) ? data : (data.results || data.files || []);
+                    const files = rawList.map(normalizeNcrFile);
+                    if (files.length > 0) {
+                        const ncrNumber = fullNCR.ncr_number || fullNCR.id;
+                        await downloadAllFilesAsZip(files, `ncr-${ncrNumber}-files.zip`);
+                    } else {
+                        showNotification('İndirilecek dosya yok', 'warning');
+                    }
+                } catch (error) {
+                    console.error('Error loading files for download:', error);
+                    showNotification('Dosyalar yüklenirken hata oluştu', 'error');
+                }
+            };
+        }
+        
         await refreshNcrFilesUI(fullNCR.id);
     } catch (error) {
         console.error('Error loading NCR details:', error);
