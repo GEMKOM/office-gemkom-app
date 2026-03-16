@@ -3842,6 +3842,23 @@ async function renderConsultationTab(task) {
         </div>
     `;
 
+    // Initial consultation notes (task.notes), shown read-only in details
+    if (task.notes) {
+        const safeNotes = task.notes
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+
+        html += `
+            <div class="card mb-3">
+                <div class="card-header bg-light"><i class="fas fa-sticky-note me-2"></i>Danışma Notu</div>
+                <div class="card-body">
+                    <pre class="mb-0" style="white-space: pre-wrap; font-family: inherit;">${safeNotes}</pre>
+                </div>
+            </div>
+        `;
+    }
+
     // Shared files from the offer
     if (sharedFiles.length > 0) {
         html += `
