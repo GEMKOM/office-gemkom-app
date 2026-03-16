@@ -6,11 +6,12 @@ import { authedFetch } from "../../authService.js";
  * Handles all subcontractor-related API requests using authedFetch
  * 
  * Based on Django REST Framework ViewSet endpoints:
- * - GET /subcontracting/subcontractors/            (list)
- * - POST /subcontracting/subcontractors/           (create)
- * - GET /subcontracting/subcontractors/{id}/       (detail)
- * - PATCH /subcontracting/subcontractors/{id}/     (update)
- * - DELETE /subcontracting/subcontractors/{id}/     (delete)
+ * - GET /subcontracting/subcontractors/                (list)
+ * - POST /subcontracting/subcontractors/               (create)
+ * - GET /subcontracting/subcontractors/{id}/           (detail)
+ * - PATCH /subcontracting/subcontractors/{id}/         (update)
+ * - DELETE /subcontracting/subcontractors/{id}/        (delete)
+ * - GET /subcontracting/subcontractors/overview/       (overview analytics)
  */
 
 /**
@@ -143,3 +144,42 @@ export async function deleteSubcontractor(subcontractorId) {
     
     return await resp.json();
 }
+
+/**
+ * Fetch subcontractor overview analytics
+ * Aggregated financial and assignment data per subcontractor.
+ * 
+ * Endpoint:
+ * - GET /subcontracting/subcontractors/overview/
+ * 
+ * @param {Object} filters - Optional filter parameters
+ * @param {boolean} filters.is_active - Filter by active status
+ * @param {string} filters.search - Search in name, short_name, contact_person
+ * @param {string} filters.ordering - Ordering field (e.g., 'name', '-total_earned_all')
+ * @returns {Promise<Array>} List of subcontractor overview objects
+ */
+export async function fetchSubcontractorsOverview(filters = {}) {
+    const params = new URLSearchParams();
+
+    Object.keys(filters).forEach(key => {
+        if (filters[key] !== null && filters[key] !== undefined && filters[key] !== '') {
+            params.append(key, filters[key]);
+        }
+    });
+
+    const url = `${backendBase}/subcontracting/subcontractors/overview/?${params.toString()}`;
+    const resp = await authedFetch(url);
+
+    if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(
+            errorData.detail ||
+            errorData.message ||
+            'Taşeron genel bakış verileri yüklenirken hata oluştu'
+        );
+    }
+
+    const data = await resp.json();
+    return data;
+}
+

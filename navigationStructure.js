@@ -332,6 +332,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Taşeron',
                 icon: 'fas fa-handshake',
                 children: {
+                    '/manufacturing/subcontracting/overview': {
+                        label: 'Genel Bakış',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    },
                     '/manufacturing/subcontracting/subcontractors': {
                         label: 'Taşeronlar',
                         icon: 'fas fa-building',
