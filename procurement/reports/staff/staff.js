@@ -37,7 +37,7 @@ const filtersComponent = new FiltersComponent('filters-placeholder', {
 async function loadUsers() {
     try {
         const usersResponse = await authFetchUsers(1, 1000, { 
-            team: 'procurement,external_workshop',
+            group: 'procurement_team,external_workshop_team',
             ordering: 'full_name'
         });
         

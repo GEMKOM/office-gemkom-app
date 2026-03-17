@@ -19,7 +19,7 @@ import { authedFetch } from "../authService.js";
  * Fetch all overtime requests with optional filtering
  * @param {Object} filters - Filter parameters
  * @param {string} filters.status - Filter by status (submitted, approved, cancelled)
- * @param {string} filters.team - Filter by team
+ * @param {string} filters.group - Filter by user group (e.g. machining_team)
  * @param {string} filters.search - Search in reason, job_no, description
  * @param {string} filters.start_date - Filter by start date (YYYY-MM-DD)
  * @param {string} filters.end_date - Filter by end date (YYYY-MM-DD)

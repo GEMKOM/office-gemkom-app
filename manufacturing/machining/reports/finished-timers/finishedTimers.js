@@ -529,7 +529,7 @@ function initializeFiltersComponent() {
 
 async function loadUsers() {
     try {
-        users = await fetchUsers('machining');
+        users = await fetchUsers('machining_team');
         
         // Update user filter options if filters component is initialized
         if (timerFilters) {

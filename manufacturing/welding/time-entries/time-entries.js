@@ -71,7 +71,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadUsers() {
     try {
         const response = await authFetchUsers(1, 10000, { 
-            team: 'welding',
+            group: 'welding_team',
             ordering: 'full_name'
         });
         users = response.results || [];

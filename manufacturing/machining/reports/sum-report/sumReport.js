@@ -295,7 +295,7 @@ async function processReportData(data) {
     let processedData = [];
     
     if (groupBy === 'user') {
-        const users = await fetchUsers('machining');
+        const users = await fetchUsers('machining_team');
         // Match by username (group_val is username string when grouping by user)
         processedData = users.map(user => {
             const found = data.find(row => row.group_val === user.username || row.group_val === user.id || row.group_val === String(user.id));

@@ -10,11 +10,10 @@ export async function fetchAllUsers() {
     return data.results;
 }
 
-export async function fetchUsers(team = null) {
-    // Adjust endpoint if needed
+export async function fetchUsers(group = null) {
     let url = `${backendBase}/users/`;
-    if (team) {
-        url += `?team=${team}`;
+    if (group) {
+        url += `?group=${group}`;
     }
     const resp = await fetch(url);
     if (!resp.ok) return [];
@@ -28,39 +27,13 @@ export async function authFetchUsers(page = 1, pageSize = 20, filters = {}) {
     params.append('page', page.toString());
     params.append('page_size', pageSize.toString());
     
-    // Add filters if provided
-    if (filters.username) {
-        params.append('username', filters.username);
-    }
-    if (filters.team) {
-        params.append('team', filters.team);
-    }
-    if (filters.work_location) {
-        params.append('work_location', filters.work_location);
-    }
-    if (filters.group) {
-        params.append('group', filters.group);
-    }
-    if (filters.office_access) {
-        params.append('office_access', filters.office_access);
-    }
-    if (filters.workshop_access) {
-        params.append('workshop_access', filters.workshop_access);
-    }
-    if (filters.portal) {
-        params.append('portal', filters.portal);
-    }
-    if (filters.occupation) {
-        params.append('occupation', filters.occupation);
-    }
-    if (filters.is_active) {
-        params.append('is_active', filters.is_active);
-    }
-    
-    // Add ordering if provided
-    if (filters.ordering) {
-        params.append('ordering', filters.ordering);
-    }
+    if (filters.username)       params.append('username', filters.username);
+    if (filters.group)          params.append('group', filters.group);
+    if (filters.office_access)  params.append('office_access', filters.office_access);
+    if (filters.workshop_access) params.append('workshop_access', filters.workshop_access);
+    if (filters.occupation)     params.append('occupation', filters.occupation);
+    if (filters.is_active)      params.append('is_active', filters.is_active);
+    if (filters.ordering)       params.append('ordering', filters.ordering);
     
     const url = `${backendBase}/users/?${params.toString()}`;
     const resp = await authedFetch(url);
@@ -76,10 +49,20 @@ export async function authFetchUsers(page = 1, pageSize = 20, filters = {}) {
 }
 
 export async function fetchTeams() {
-    const resp = await authedFetch(`${backendBase}/users/teams/`);
+    // NOTE: "teams" dropdown has been migrated to user groups.
+    // GET /users/groups/
+    // Response items now include: { name, display_name, portal, member_count, permissions: [] }
+    const resp = await authedFetch(`${backendBase}/users/groups/`);
     if (!resp.ok) return [];
     const data = await resp.json();
-    return extractResultsFromResponse(data);
+    // backend returns array (not paginated) for groups in this project
+    const groups = Array.isArray(data) ? data : (data.results || data.data || []);
+    // Normalize to legacy dropdown consumers that expect {value,label,...}
+    return groups.map(g => ({
+        ...g,
+        value: g.value ?? g.name,
+        label: g.label ?? g.display_name ?? g.name
+    }));
 }
 
 export async function fetchOccupations() {

@@ -20,7 +20,7 @@ import {
     formatCurrency,
     getCurrencyInfo
 } from '../../apis/hr.js';
-import { authFetchUsers, fetchTeams } from '../../apis/users.js';
+import { fetchTeams } from '../../apis/users.js';
 import { showNotification } from '../../components/notification/notification.js';
 
 class WagesManager {
@@ -29,7 +29,6 @@ class WagesManager {
         this.currentPage = 1;
         this.pageSize = 20;
         this.totalItems = 0;
-        this.users = [];
         this.teams = [];
         this.wageRates = [];
         this.statistics = {};
@@ -44,22 +43,11 @@ class WagesManager {
             return;
         }
 
-        await this.loadUsers();
         await this.loadTeams();
         await this.initializeComponents();
         await this.loadWageRates();
         await this.calculateStatistics();
         
-    }
-
-    async loadUsers() {
-        try {
-            const response = await authFetchUsers(1, 1000); // Get all users
-            this.users = response.results || [];
-        } catch (error) {
-            console.error('Error loading users:', error);
-            this.users = [];
-        }
     }
 
     async loadTeams() {
@@ -178,8 +166,8 @@ class WagesManager {
             options: [
                 { value: '', label: 'Tüm Takımlar' },
                 ...this.teams.map(team => ({
-                    value: team.value || team.id,
-                    label: team.label || team.name
+                    value: team.value || team.code || team.id || team.name,
+                    label: team.label || team.display_name || team.name
                 }))
             ],
             placeholder: 'Tüm Takımlar',
@@ -605,7 +593,8 @@ class WagesManager {
             this.currentFilters.search = filterValues['search-filter'];
         }
         if (filterValues['team-filter']) {
-            this.currentFilters.team = filterValues['team-filter'];
+            // Backend expects group name (from /users/groups/), not team
+            this.currentFilters.group = filterValues['team-filter'];
         }
         if (filterValues['work-location-filter']) {
             this.currentFilters.work_location = filterValues['work-location-filter'];

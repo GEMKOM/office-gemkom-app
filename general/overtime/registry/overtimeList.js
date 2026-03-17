@@ -369,8 +369,8 @@ function updateTeamFilterOptions() {
     const teamOptions = [
         { value: '', label: 'Tümü' },
         ...allTeams.map(team => ({
-            value: team.value || team.code,
-            label: team.label || team.name
+            value: team.value || team.code || team.id || team.name,
+            label: team.label || team.display_name || team.name
         }))
     ];
     
@@ -687,7 +687,8 @@ async function loadOvertimeRequests() {
             delete apiFilters['status-filter'];
         }
         if (apiFilters['team-filter']) {
-            apiFilters.team = apiFilters['team-filter'];
+            // Backend expects group name (from /users/groups/), not team
+            apiFilters.group = apiFilters['team-filter'];
             delete apiFilters['team-filter'];
         }
         if (apiFilters['start-date-filter']) {
@@ -814,9 +815,10 @@ async function loadUsersForModal() {
     }
     
     // Fetch users for all allowed teams
-    const userPromises = allowedTeams.map(team => 
-        authFetchUsers(1, 1000, { team: team })
-    );
+    const userPromises = allowedTeams.map(team => {
+        const groupName = team ? (team.endsWith('_team') ? team : `${team}_team`) : team;
+        return authFetchUsers(1, 1000, { group: groupName });
+    });
     
     const userResponses = await Promise.all(userPromises);
     

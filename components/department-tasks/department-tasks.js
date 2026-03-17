@@ -171,9 +171,10 @@ async function initializeComponents() {
             console.warn('Could not fetch department choices, using defaults:', error);
         }
 
-        // Load users for assignment filter (team from config)
+        // Load users for assignment filter (group name from config, e.g. machining_team)
         try {
-            const usersResponse = await authFetchUsers(1, 10000, { team: userTeam });
+            const groupName = userTeam ? (userTeam.endsWith('_team') ? userTeam : `${userTeam}_team`) : null;
+            const usersResponse = await authFetchUsers(1, 10000, groupName ? { group: groupName } : {});
             users = usersResponse.results || [];
         } catch (error) {
             console.warn('Could not fetch users:', error);

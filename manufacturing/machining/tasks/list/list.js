@@ -116,7 +116,7 @@ async function loadMachines() {
 async function loadUsers() {
     try {
         const usersResponse = await authFetchUsers(1, 1000, { 
-            team: 'manufacturing',
+            group: 'manufacturing_team',
             ordering: 'full_name'
         });
         users = usersResponse.results || [];
