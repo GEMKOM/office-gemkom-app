@@ -369,8 +369,8 @@ export class TableComponent {
             `);
         }
         
-        const rowClick = this.options.onRowClick ? 
-            `onclick="this.dispatchEvent(new CustomEvent('rowClick', {detail: {index: ${rowIndex}}}))"` : '';
+        const rowClick = this.options.onRowClick ?
+            `onclick="this.dispatchEvent(new CustomEvent('rowClick', {bubbles: true, composed: true, detail: {index: ${rowIndex}}}))"` : '';
         
         // Get custom row attributes if provided
         let customAttributes = '';

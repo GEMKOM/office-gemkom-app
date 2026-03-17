@@ -260,3 +260,44 @@ export async function deleteUserPermissionOverride(userId, codename) {
     }
     return await resp.json();
 }
+
+/**
+ * Group permissions
+ * GET /users/groups/<group_name>/permissions/
+ */
+export async function fetchGroupPermissions(groupName) {
+    const resp = await authedFetch(`${backendBase}/users/groups/${encodeURIComponent(groupName)}/permissions/`);
+    if (!resp.ok) {
+        throw new Error('Grup yetkileri alınamadı');
+    }
+    return await resp.json();
+}
+
+/**
+ * Add a permission to a group
+ * POST /users/groups/<group_name>/permissions/  body: { codename }
+ */
+export async function addPermissionToGroup(groupName, codename) {
+    const resp = await authedFetch(`${backendBase}/users/groups/${encodeURIComponent(groupName)}/permissions/`, {
+        method: 'POST',
+        body: JSON.stringify({ codename })
+    });
+    if (!resp.ok) {
+        throw new Error('Gruba yetki eklenemedi');
+    }
+    return await resp.json();
+}
+
+/**
+ * Remove a permission from a group
+ * DELETE /users/groups/<group_name>/permissions/<codename>/
+ */
+export async function removePermissionFromGroup(groupName, codename) {
+    const resp = await authedFetch(`${backendBase}/users/groups/${encodeURIComponent(groupName)}/permissions/${encodeURIComponent(codename)}/`, {
+        method: 'DELETE'
+    });
+    if (!resp.ok) {
+        throw new Error('Gruptan yetki kaldırılamadı');
+    }
+    return await resp.json();
+}
