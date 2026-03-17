@@ -15,6 +15,8 @@ import {
     saveUserPermissionOverride,
     deleteUserPermissionOverride,
     fetchGroupPermissions,
+    fetchGroupsWithPermissions,
+    fetchPermissionsUsersList,
     addPermissionToGroup,
     removePermissionFromGroup
 } from '../../../apis/users.js';
@@ -33,6 +35,11 @@ let currentGroupName = null;
 let currentGroupPermsOriginal = new Set();
 let currentGroupPermsDraft = new Set();
 let currentGroupDirty = false;
+let usersTabLoaded = false;
+let groupsTabLoaded = false;
+let permsTabLoaded = false;
+let permissionsCatalog = null; // [{codename,name,section}]
+let sectionCollapseState = new Map(); // section -> boolean (expanded)
 
 function boolIcon(val) {
     if (val) {
@@ -69,7 +76,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         showCreateButton: 'none',
         showRefreshButton: 'block',
         onRefreshClick: async () => {
-            await loadMatrix();
+            await refreshActiveTab();
         }
     });
 
@@ -85,14 +92,140 @@ document.addEventListener('DOMContentLoaded', async () => {
     initMatrixTable();
     initGroupMatrixTable();
     initPermissionsListTable();
-    await loadMatrix();
-    await loadGroupPermissionsMatrix();
-    await loadPermissionsList();
+
+    attachTabLazyLoadHandlers();
+
+    // Default tab is "Kullanıcılar" -> load immediately
+    await ensureUsersTabLoaded();
 });
+
+function getActiveTabId() {
+    const active = document.querySelector('#permissions-tabs .nav-link.active');
+    return active ? active.getAttribute('data-bs-target') : null; // e.g. "#tab-users"
+}
+
+async function refreshActiveTab() {
+    const active = getActiveTabId();
+    if (active === '#tab-groups') {
+        await ensureGroupsTabLoaded(true);
+        return;
+    }
+    if (active === '#tab-perms') {
+        await ensurePermsTabLoaded(true);
+        return;
+    }
+    await ensureUsersTabLoaded(true);
+}
+
+function attachTabLazyLoadHandlers() {
+    const usersBtn = document.getElementById('tab-users-tab');
+    const groupsBtn = document.getElementById('tab-groups-tab');
+    const permsBtn = document.getElementById('tab-perms-tab');
+
+    // Bootstrap tab event fires when a tab becomes active
+    if (usersBtn) {
+        usersBtn.addEventListener('shown.bs.tab', async () => {
+            await ensureUsersTabLoaded();
+        });
+    }
+    if (groupsBtn) {
+        groupsBtn.addEventListener('shown.bs.tab', async () => {
+            await ensureGroupsTabLoaded();
+        });
+    }
+    if (permsBtn) {
+        permsBtn.addEventListener('shown.bs.tab', async () => {
+            await ensurePermsTabLoaded();
+        });
+    }
+}
+
+async function ensureUsersTabLoaded(force = false) {
+    if (!force && usersTabLoaded) return;
+    await loadMatrix();
+    usersTabLoaded = true;
+}
+
+async function ensureGroupsTabLoaded(force = false) {
+    if (!force && groupsTabLoaded) return;
+
+    // Group matrix needs codenames from permissionsMatrix
+    if (!permissionsMatrix) {
+        await ensureUsersTabLoaded();
+    }
+    await loadGroupPermissionsMatrix();
+    groupsTabLoaded = true;
+}
+
+async function ensurePermsTabLoaded(force = false) {
+    if (!force && permsTabLoaded) return;
+
+    // Yetkiler tab prefers /users/permissions/, but may fall back to matrix-derived list.
+    if (!permissionsMatrix) {
+        await ensureUsersTabLoaded();
+    }
+    await loadPermissionsList();
+    permsTabLoaded = true;
+}
+
+async function ensurePermissionsCatalogLoaded() {
+    if (Array.isArray(permissionsCatalog) && permissionsCatalog.length) return;
+    try {
+        // Reuse /users/permissions/ which already includes {codename, name, portal}
+        const perms = await fetchPermissionsUsersList();
+        permissionsCatalog = (perms || [])
+            .filter(p => p && p.codename)
+            .map(p => ({
+                codename: p.codename,
+                name: p.name || p.codename,
+                section: p.section || p.portal || 'other'
+            }));
+    } catch (e) {
+        console.warn('Failed to load permissions catalog; falling back to matrix codenames', e);
+        const codenames = permissionsMatrix?.codenames || [];
+        permissionsCatalog = codenames.map(code => ({
+            codename: code,
+            name: code,
+            section: 'other'
+        }));
+    }
+}
+
+function sectionLabel(section) {
+    if (section === 'office') return 'Ofis';
+    if (section === 'workshop') return 'Atölye';
+    if (section === 'manufacturing') return 'Üretim';
+    return section || '-';
+}
+
+function sectionBadgeClass(section) {
+    if (section === 'office') return 'bg-primary';
+    if (section === 'workshop') return 'bg-dark';
+    if (section === 'manufacturing') return 'bg-success';
+    return 'bg-secondary';
+}
+
+function safeId(s) {
+    return (s || '')
+        .toString()
+        .toLowerCase()
+        .replace(/[^a-z0-9\-_]/g, '_');
+}
+
+function captureSectionCollapseState(panelEl) {
+    if (!panelEl) return;
+    panelEl.querySelectorAll('.accordion-collapse').forEach(el => {
+        const section = el.querySelector('.group-panel-checkbox')?.getAttribute('data-section');
+        if (!section) return;
+        const expanded = el.classList.contains('show');
+        sectionCollapseState.set(section, expanded);
+    });
+}
 
 async function loadGroups() {
     try {
-        groupsCache = await fetchUserGroups();
+        // Prefer bulk group payload (includes member_count/portal/permissions)
+        groupsCache = await fetchGroupsWithPermissions();
     } catch (e) {
         console.error('Error loading groups', e);
         groupsCache = [];
@@ -141,24 +274,44 @@ async function loadGroupPermissionsMatrix() {
 
         const codenames = permissionsMatrix.codenames || [];
 
-        // Fetch group permissions from backend
+        // Preferred: single backend call returning groups with permissions.
+        // Fallback: per-group permissions calls (older backend).
         groupPermsCache = new Map();
-        await Promise.all((groupsCache || []).map(async (g) => {
-            try {
-                const resp = await fetchGroupPermissions(g.name);
-                // Expecting either {codenames: [...]} or plain array; normalize to array
-                const codes = Array.isArray(resp) ? resp : (resp.codenames || resp.permissions || []);
-                groupPermsCache.set(g.name, new Set(codes));
-            } catch (e) {
-                console.error('Failed to fetch permissions for group', g.name, e);
-                groupPermsCache.set(g.name, new Set());
-            }
-        }));
+        let groupsWithPerms = [];
+        try {
+            groupsWithPerms = await fetchGroupsWithPermissions();
+        } catch (e) {
+            console.warn('Bulk group permissions fetch failed; falling back to per-group requests', e);
+            groupsWithPerms = [];
+        }
 
-        const rows = (groupsCache || []).map(g => {
+        const hasInlinePerms = (groupsWithPerms || []).some(g => Array.isArray(g?.permissions));
+        if (hasInlinePerms) {
+            // keep groupsCache in sync so filters + panels show updated info like member_count/portal
+            groupsCache = groupsWithPerms;
+            for (const g of groupsWithPerms) {
+                const codes = Array.isArray(g.permissions) ? g.permissions : [];
+                groupPermsCache.set(g.name, new Set(codes));
+            }
+        } else {
+            await Promise.all((groupsCache || []).map(async (g) => {
+                try {
+                    const resp = await fetchGroupPermissions(g.name);
+                    // Expecting either {codenames: [...]} or plain array; normalize to array
+                    const codes = Array.isArray(resp) ? resp : (resp.codenames || resp.permissions || []);
+                    groupPermsCache.set(g.name, new Set(codes));
+                } catch (e) {
+                    console.error('Failed to fetch permissions for group', g.name, e);
+                    groupPermsCache.set(g.name, new Set());
+                }
+            }));
+        }
+
+        let rows = (groupsCache || []).map(g => {
             const set = groupPermsCache.get(g.name) || new Set();
             const base = {
                 id: g.name,
+                portal: g.portal || '-',
                 group_name: g.name,
                 group_display_name: g.display_name || g.name,
                 member_count: g.member_count ?? '-'
@@ -167,6 +320,16 @@ async function loadGroupPermissionsMatrix() {
                 base[code] = set.has(code);
             });
             return base;
+        });
+
+        // Group visually by portal by sorting rows (office/workshop/other).
+        rows = rows.sort((a, b) => {
+            const ap = (a.portal || '').toString();
+            const bp = (b.portal || '').toString();
+            if (ap !== bp) return ap.localeCompare(bp, 'tr');
+            const an = (a.group_display_name || a.group_name || '').toString();
+            const bn = (b.group_display_name || b.group_name || '').toString();
+            return an.localeCompare(bn, 'tr');
         });
 
         groupMatrixTable.updateData(rows, rows.length, 1);
@@ -186,22 +349,56 @@ async function loadGroupPermissionsMatrix() {
 
 async function loadPermissionsList() {
     try {
-        if (!permissionsListTable || !permissionsMatrix) return;
+        if (!permissionsListTable) return;
         permissionsListTable.setLoading(true);
 
-        const codenames = permissionsMatrix.codenames || [];
-        const rows = codenames.map(code => {
-            const usersWith = (permissionsMatrix.users || []).filter(u => {
-                const perm = u.permissions ? u.permissions[code] : null;
-                return perm && perm.value === true;
+        // Preferred: backend-provided permission -> users (+ overrides) list
+        let perms = [];
+        try {
+            perms = await fetchPermissionsUsersList();
+        } catch (e) {
+            console.warn('Failed to load /users/permissions/; falling back to matrix-derived list', e);
+            perms = [];
+        }
+
+        let rows = [];
+        if (Array.isArray(perms) && perms.length) {
+            rows = perms.map(p => {
+                const users = Array.isArray(p.users) ? p.users : [];
+                const overrides = Array.isArray(p.overrides) ? p.overrides : [];
+
+                const usersPart = users.length
+                    ? users.map(u => u.username).join(', ')
+                    : '-';
+                const overridesPart = overrides.length
+                    ? overrides.map(o => `${o.username}(${o.granted ? '+' : '-'})`).join(', ')
+                    : '-';
+
+                const overridesDisplay = overrides.length ? ` | Override: ${overridesPart}` : '';
+
+                return {
+                    id: p.codename,
+                    codename: p.codename,
+                    user_count: users.length,
+                    users_display: `${usersPart}${overridesDisplay}`
+                };
             });
-            return {
-                id: code,
-                codename: code,
-                user_count: usersWith.length,
-                users_display: usersWith.map(u => u.username).join(', ') || '-'
-            };
-        });
+        } else if (permissionsMatrix) {
+            // Fallback: derive from matrix (no overrides info)
+            const codenames = permissionsMatrix.codenames || [];
+            rows = codenames.map(code => {
+                const usersWith = (permissionsMatrix.users || []).filter(u => {
+                    const perm = u.permissions ? u.permissions[code] : null;
+                    return perm && perm.value === true;
+                });
+                return {
+                    id: code,
+                    codename: code,
+                    user_count: usersWith.length,
+                    users_display: usersWith.map(u => u.username).join(', ') || '-'
+                };
+            });
+        }
 
         permissionsListTable.updateData(rows, rows.length, 1);
     } catch (e) {
@@ -287,6 +484,19 @@ function initMatrixTable() {
 function initGroupMatrixTable() {
     const staticColumns = [
         {
+            field: 'portal',
+            label: 'Portal',
+            width: '120px',
+            sortable: true,
+            formatter: (val) => {
+                const v = (val || '').toString();
+                if (!v || v === '-') return '-';
+                const cls = sectionBadgeClass(v);
+                const label = sectionLabel(v);
+                return `<span class="badge ${cls}">${label}</span>`;
+            }
+        },
+        {
             field: 'group_name',
             label: 'Grup',
             width: '180px',
@@ -349,12 +559,17 @@ async function loadGroupDetail(groupName) {
     if (!panel) return;
 
     const groupInfo = (groupsCache || []).find(g => g.name === groupName) || { name: groupName, display_name: groupName };
+    const portalBadgeHtml = groupInfo.portal === 'office'
+        ? '<span class="badge bg-primary ms-2">Ofis</span>'
+        : (groupInfo.portal === 'workshop'
+            ? '<span class="badge bg-dark ms-2">Atölye</span>'
+            : (groupInfo.portal ? `<span class="badge bg-secondary ms-2">${groupInfo.portal}</span>` : ''));
 
     panel.innerHTML = `
         <div class="card shadow-sm">
             <div class="card-body">
                 <h5 class="card-title mb-1">
-                    <i class="fas fa-users-cog me-2"></i>${groupInfo.display_name || groupInfo.name}
+                    <i class="fas fa-users-cog me-2"></i>${groupInfo.display_name || groupInfo.name}${portalBadgeHtml}
                 </h5>
                 <p class="text-muted mb-3"><code>${groupInfo.name}</code></p>
                 <div class="text-muted">Yükleniyor...</div>
@@ -363,8 +578,14 @@ async function loadGroupDetail(groupName) {
     `;
 
     try {
-        const resp = await fetchGroupPermissions(groupName);
-        const codes = Array.isArray(resp) ? resp : (resp.codenames || resp.permissions || []);
+        // Prefer cache filled by bulk groups-with-permissions fetch.
+        let codes = [];
+        if (groupPermsCache?.has(groupName)) {
+            codes = Array.from(groupPermsCache.get(groupName) || []);
+        } else {
+            const resp = await fetchGroupPermissions(groupName);
+            codes = Array.isArray(resp) ? resp : (resp.codenames || resp.permissions || []);
+        }
         const set = new Set(codes);
         groupPermsCache.set(groupName, set);
 
@@ -373,32 +594,101 @@ async function loadGroupDetail(groupName) {
         currentGroupPermsDraft = new Set(codes);
         currentGroupDirty = false;
 
-        const codenames = permissionsMatrix?.codenames || [];
+        await ensurePermissionsCatalogLoaded();
+        const catalog = Array.isArray(permissionsCatalog) ? permissionsCatalog : [];
+        const bySection = new Map(); // section -> [{codename,name}]
+        for (const p of catalog) {
+            const section = p.section || 'other';
+            if (!bySection.has(section)) bySection.set(section, []);
+            bySection.get(section).push({ codename: p.codename, name: p.name || p.codename, section });
+        }
+        // Sort portals + items for stable UI
+        const sections = Array.from(bySection.keys()).sort((a, b) => a.localeCompare(b, 'tr'));
+        for (const section of sections) {
+            bySection.get(section).sort((a, b) => (a.name || '').localeCompare((b.name || ''), 'tr'));
+        }
+
         const members = (permissionsMatrix?.users || [])
             .filter(u => (u.groups || []).includes(groupName))
             .map(u => u.full_name || u.username);
 
-        const permsList = codenames.map(code => {
-            const checked = currentGroupPermsDraft.has(code) ? 'checked' : '';
+        const sectionAccordions = sections.map((section) => {
+            const items = bySection.get(section) || [];
+            const total = items.length;
+            const selectedCount = items.reduce((acc, it) => acc + (currentGroupPermsDraft.has(it.codename) ? 1 : 0), 0);
+            const allSelected = total > 0 && selectedCount === total;
+
+            const sectionId = safeId(section);
+            const collapseId = `section-collapse-${safeId(groupName)}-${sectionId}`;
+            const headerId = `section-header-${safeId(groupName)}-${sectionId}`;
+
+            const expanded = sectionCollapseState.has(section) ? sectionCollapseState.get(section) : false;
+
+            const children = items.map(it => {
+                const checked = currentGroupPermsDraft.has(it.codename) ? 'checked' : '';
+                return `
+                    <div class="d-flex align-items-start justify-content-between py-1 border-bottom">
+                        <div class="me-2">
+                            <div class="text-body">${it.name || '-'}</div>
+                            <div class="text-muted small"><code>${it.codename}</code></div>
+                        </div>
+                        <div class="form-check m-0 pt-1">
+                            <input class="form-check-input group-panel-checkbox"
+                                   type="checkbox"
+                                   ${checked}
+                                   data-group-name="${groupName}"
+                                   data-codename="${it.codename}"
+                                   data-section="${section}">
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
             return `
-                <div class="d-flex align-items-center justify-content-between py-1 border-bottom">
-                    <div class="me-2"><code>${code}</code></div>
-                    <div class="form-check m-0">
-                        <input class="form-check-input group-panel-checkbox"
-                               type="checkbox"
-                               ${checked}
-                               data-group-name="${groupName}"
-                               data-codename="${code}">
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="${headerId}">
+                        <div class="d-flex align-items-stretch">
+                            <button class="accordion-button ${expanded ? '' : 'collapsed'} flex-grow-1" type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#${collapseId}"
+                                    aria-expanded="${expanded ? 'true' : 'false'}"
+                                    aria-controls="${collapseId}">
+                                <div class="d-flex align-items-center gap-2 w-100">
+                                    <span class="badge ${sectionBadgeClass(section)}">${sectionLabel(section)}</span>
+                                    <span class="text-muted small">${selectedCount}/${total}</span>
+                                </div>
+                            </button>
+                            <div class="px-3 d-flex align-items-center border-start">
+                                <div class="form-check m-0">
+                                    <input class="form-check-input section-parent-checkbox"
+                                           type="checkbox"
+                                           ${allSelected ? 'checked' : ''}
+                                           data-section="${section}">
+                                </div>
+                            </div>
+                        </div>
+                    </h2>
+                    <div id="${collapseId}" class="accordion-collapse collapse ${expanded ? 'show' : ''}"
+                         aria-labelledby="${headerId}">
+                        <div class="accordion-body py-2">
+                            ${children || `<div class="text-muted">-</div>`}
+                        </div>
                     </div>
                 </div>
             `;
         }).join('');
 
+        const permsList = `
+            <div class="accordion" id="group-portal-accordion">
+                ${sectionAccordions || `<div class="text-muted">-</div>`}
+            </div>
+        `;
+
         panel.innerHTML = `
             <div class="card shadow-sm h-100">
                 <div class="card-body d-flex flex-column">
                     <h5 class="card-title mb-1">
-                        <i class="fas fa-users-cog me-2"></i>${groupInfo.display_name || groupInfo.name}
+                        <i class="fas fa-users-cog me-2"></i>${groupInfo.display_name || groupInfo.name}${portalBadgeHtml}
                     </h5>
                     <p class="text-muted mb-2"><code>${groupInfo.name}</code></p>
                     <div class="d-flex flex-wrap gap-2 mb-3">
@@ -536,6 +826,59 @@ function attachGroupPanelHandlers() {
 
             const isDirty = !setsEqual(currentGroupPermsDraft, currentGroupPermsOriginal);
             setDirty(isDirty);
+
+            // Update the portal header counters/indeterminate state by re-rendering panel (no network)
+            // Preserve collapse state.
+            capturePortalCollapseState(panel);
+            await loadGroupDetail(currentGroupName);
+        });
+    });
+
+    // Parent portal checkbox: select/deselect all children in that portal.
+    panel.querySelectorAll('.section-parent-checkbox').forEach(pcb => {
+        // set indeterminate if partially selected
+        const section = pcb.getAttribute('data-section');
+        if (section) {
+            const children = panel.querySelectorAll(`.group-panel-checkbox[data-section="${section}"]`);
+            let total = 0;
+            let selected = 0;
+            children.forEach(ch => {
+                total += 1;
+                if (ch.checked) selected += 1;
+            });
+            pcb.indeterminate = selected > 0 && selected < total;
+        }
+
+        pcb.addEventListener('change', async () => {
+            const section = pcb.getAttribute('data-section');
+            if (!section) return;
+            const wantChecked = pcb.checked === true;
+
+            // Preserve collapse state while we update/re-render
+            captureSectionCollapseState(panel);
+
+            panel.querySelectorAll(`.group-panel-checkbox[data-section="${section}"]`).forEach(ch => {
+                const codename = ch.getAttribute('data-codename');
+                if (!codename) return;
+                if (wantChecked) currentGroupPermsDraft.add(codename);
+                else currentGroupPermsDraft.delete(codename);
+            });
+
+            const isDirty = !setsEqual(currentGroupPermsDraft, currentGroupPermsOriginal);
+            setDirty(isDirty);
+            await loadGroupDetail(currentGroupName);
+        });
+    });
+
+    // Track expand/collapse state so re-renders don't lose it.
+    panel.querySelectorAll('.accordion-collapse').forEach(el => {
+        el.addEventListener('shown.bs.collapse', () => {
+            const section = el.querySelector('.group-panel-checkbox')?.getAttribute('data-section');
+            if (section) sectionCollapseState.set(section, true);
+        });
+        el.addEventListener('hidden.bs.collapse', () => {
+            const section = el.querySelector('.group-panel-checkbox')?.getAttribute('data-section');
+            if (section) sectionCollapseState.set(section, false);
         });
     });
 }

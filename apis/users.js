@@ -274,6 +274,48 @@ export async function fetchGroupPermissions(groupName) {
 }
 
 /**
+ * Fetch groups including permissions in a single request (preferred).
+ * GET /users/groups/
+ *
+ * Expected item shape:
+ *  {
+ *    name, display_name, portal, member_count,
+ *    permissions: ["access_planning", ...]
+ *  }
+ */
+export async function fetchGroupsWithPermissions() {
+    const resp = await authedFetch(`${backendBase}/users/groups/`);
+    if (!resp.ok) {
+        throw new Error('Kullanıcı grupları alınamadı');
+    }
+    const data = await resp.json();
+    // backend returns array (not paginated) for groups in this project
+    return Array.isArray(data) ? data : (data.results || data.data || []);
+}
+
+/**
+ * Permissions -> users listing for admin page.
+ * GET /users/permissions/
+ *
+ * Expected shape:
+ * [
+ *   {
+ *     codename, name,
+ *     users: [{id, username, full_name, source, source_detail}],
+ *     overrides: [{id, username, full_name, granted}]
+ *   }
+ * ]
+ */
+export async function fetchPermissionsUsersList() {
+    const resp = await authedFetch(`${backendBase}/users/permissions/`);
+    if (!resp.ok) {
+        throw new Error('Yetki listesi alınamadı');
+    }
+    const data = await resp.json();
+    return Array.isArray(data) ? data : (data.results || data.data || []);
+}
+
+/**
  * Add a permission to a group
  * POST /users/groups/<group_name>/permissions/  body: { codename }
  */
