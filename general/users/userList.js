@@ -1,6 +1,6 @@
 import { initNavbar } from '../../components/navbar.js';
 import { ModernDropdown } from '../../components/dropdown/dropdown.js';
-import { authFetchUsers, deleteUser as deleteUserAPI, createUser as createUserAPI, updateUser as updateUserAPI, fetchTeams, fetchOccupations } from '../../apis/users.js';
+import { authFetchUsers, deleteUser as deleteUserAPI, createUser as createUserAPI, updateUser as updateUserAPI, fetchOccupations, fetchUserGroups } from '../../apis/users.js';
 import { fetchUsersSummary } from '../../apis/summaries.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
@@ -22,8 +22,8 @@ let totalUsers = 0;
 let isLoading = false;
 let usersStats = null; // Statistics Cards component instance
 let userFilters = null; // Filters component instance
-let teams = []; // Store teams data for filters
 let occupations = []; // Store occupations data for filters
+let groups = []; // Store groups data for filters
 let usersTable = null; // Table component instance
 
 // Modal component instances
@@ -75,11 +75,10 @@ async function initializeUsers() {
         initializeTableComponent();
         initializeModalComponents();
         
-        await loadTeams();
+        await loadGroups();
         await loadOccupations();
-        
-        // Update filter options with the loaded teams and occupations data
-        updateTeamFilterOptions();
+        updateOccupationFilterOptions();
+        updateGroupFilterOptions();
         
         await loadUsers();
         updateUserCounts();
@@ -124,22 +123,31 @@ function initializeTableComponent() {
                 formatter: (value) => value || '-'
             },
             {
-                field: 'team_label',
-                label: 'Takım',
-                sortable: true,
-                formatter: (value) => value || '-'
-            },
-            {
                 field: 'occupation_label',
                 label: 'Görev',
                 sortable: true,
                 formatter: (value) => value || '-'
             },
             {
-                field: 'work_location_label',
-                label: 'Çalışma Yeri',
+                field: 'portal',
+                label: 'Portal',
                 sortable: true,
-                formatter: (value) => value || '-'
+                formatter: (value) => {
+                    const v = (value || '').toString();
+                    if (!v) return '-';
+                    if (v === 'office') return '<span class="status-badge status-blue">OFİS</span>';
+                    if (v === 'workshop') return '<span class="status-badge status-grey">ATÖLYE</span>';
+                    return `<span class="status-badge status-grey">${v}</span>`;
+                }
+            },
+            {
+                field: 'groups',
+                label: 'Gruplar',
+                sortable: false,
+                formatter: (value) => {
+                    const arr = Array.isArray(value) ? value : [];
+                    return arr.length ? arr.join(', ') : '-';
+                }
             },
             {
                 field: 'is_active',
@@ -215,15 +223,6 @@ function initializeTableComponent() {
     });
 }
 
-async function loadTeams() {
-    try {
-        const teamsData = await fetchTeams();
-        teams = teamsData; // Store teams globally
-    } catch (error) {
-        console.error('Error loading teams:', error);
-    }
-}
-
 async function loadOccupations() {
     try {
         const occupationsData = await fetchOccupations();
@@ -257,6 +256,16 @@ async function loadOccupations() {
     }
 }
 
+async function loadGroups() {
+    try {
+        const data = await fetchUserGroups();
+        groups = Array.isArray(data) ? data : [];
+    } catch (error) {
+        console.error('Error loading groups:', error);
+        groups = [];
+    }
+}
+
 function initializeFiltersComponent() {
     // Initialize filters component
     userFilters = new FiltersComponent('filters-placeholder', {
@@ -284,20 +293,22 @@ function initializeFiltersComponent() {
         colSize: 3
     });
 
-    // Add dropdown filters with initial empty options
     userFilters.addDropdownFilter({
-        id: 'team-filter',
-        label: 'Takım',
+        id: 'group-filter',
+        label: 'Grup',
+        placeholder: 'Tüm Gruplar',
         options: [
-            { value: '', label: 'Tüm Takımlar' }
+            { value: '', label: 'Tüm Gruplar' }
         ],
-        placeholder: 'Tüm Takımlar',
+        multiple: true,
         colSize: 3
     });
 
+    // "Çalışma Yeri" is now derived from access flags instead of a user field.
+    // Ofis -> office_access=true, Atölye -> workshop_access=true
     userFilters.addDropdownFilter({
-        id: 'work-location-filter',
-        label: 'Çalışma Yeri',
+        id: 'access-filter',
+        label: 'Erişim',
         options: [
             { value: '', label: 'Tümü' },
             { value: 'office', label: 'Ofis' },
@@ -403,12 +414,16 @@ async function loadUsers() {
         if (filterValues['username-filter']) {
             params.append('username', filterValues['username-filter']);
         }
-        if (filterValues['team-filter']) {
-            params.append('team', filterValues['team-filter']);
-        }
-        if (filterValues['work-location-filter']) {
-            params.append('work_location', filterValues['work-location-filter']);
-        }
+        // group can be single or multiple. backend supports comma-separated list
+        const groupVal = filterValues['group-filter'] || [];
+        const group = Array.isArray(groupVal) ? groupVal.filter(Boolean).join(',') : (groupVal || '');
+        if (group) params.append('group', group);
+
+        // access filter -> office_access/workshop_access
+        const access = filterValues['access-filter'] || '';
+        if (access === 'office') params.append('office_access', 'true');
+        if (access === 'workshop') params.append('workshop_access', 'true');
+
         if (filterValues['occupation-filter']) {
             params.append('occupation', filterValues['occupation-filter']);
         }
@@ -423,8 +438,9 @@ async function loadUsers() {
         // Call API with parameters
         const usersResponse = await authFetchUsers(currentPage, pageSize, {
             username: filterValues['username-filter'] || '',
-            team: filterValues['team-filter'] || '',
-            work_location: filterValues['work-location-filter'] || '',
+            group,
+            office_access: access === 'office' ? 'true' : '',
+            workshop_access: access === 'workshop' ? 'true' : '',
             occupation: filterValues['occupation-filter'] || '',
             is_active: filterValues['is-active-filter'] || '',
             ordering: orderingParam
@@ -443,8 +459,8 @@ async function loadUsers() {
         
         updateUserCounts();
         
-        // Update team filter options
-        updateTeamFilterOptions();
+        updateOccupationFilterOptions();
+        updateGroupFilterOptions();
         
     } catch (error) {
         console.error('Error loading users:', error);
@@ -470,13 +486,25 @@ function updateUserCounts() {
     try {
         // Load summary data
         fetchUsersSummary().then(summary => {
-            const officeCount = summary.find(s => s.work_location === 'office')?.count || 0;
-            const workshopCount = summary.find(s => s.work_location === 'workshop')?.count || 0;
-            const totalCount = officeCount + workshopCount;
+            // New shape: { total, office, workshop }
+            // Legacy shape: [{ portal/work_location, count }, ...]
+            let officeCount = 0;
+            let workshopCount = 0;
+            let totalCount = 0;
+
+            if (summary && typeof summary === 'object' && !Array.isArray(summary)) {
+                officeCount = Number(summary.office || 0);
+                workshopCount = Number(summary.workshop || 0);
+                totalCount = Number(summary.total || (officeCount + workshopCount));
+            } else if (Array.isArray(summary)) {
+                officeCount = summary.find(s => (s.portal || s.work_location) === 'office')?.count || 0;
+                workshopCount = summary.find(s => (s.portal || s.work_location) === 'workshop')?.count || 0;
+                totalCount = officeCount + workshopCount;
+            }
             
-            // Count active teams
-            const teams = new Set(users.map(user => user.team_label).filter(Boolean));
-            const activeTeamsCount = teams.size;
+            // Card kept for layout; count distinct occupations instead of teams (team field removed)
+            const occs = new Set(users.map(user => user.occupation_label).filter(Boolean));
+            const activeTeamsCount = occs.size;
             
             // Update statistics cards using the component
             if (usersStats) {
@@ -493,21 +521,10 @@ function updateUserCounts() {
     }
 }
 
-function updateTeamFilterOptions() {
+function updateOccupationFilterOptions() {
     if (!userFilters) return;
     
-    // Use the stored teams data from API instead of extracting from user data
-    const teamOptions = [
-        { value: '', label: 'Tüm Takımlar' },
-        ...teams.map(team => ({ 
-            value: team.value || team.id, 
-            label: team.label || team.name 
-        }))
-    ];
-    
-    userFilters.updateFilterOptions('team-filter', teamOptions);
-    
-    // Also update occupation filter options using stored occupations data
+    // Update occupation filter options using stored occupations data
     const occupationOptions = [
         { value: '', label: 'Tüm Görevler' },
         ...occupations.map(occupation => ({ 
@@ -517,6 +534,20 @@ function updateTeamFilterOptions() {
     ];
     
     userFilters.updateFilterOptions('occupation-filter', occupationOptions);
+}
+
+function updateGroupFilterOptions() {
+    if (!userFilters) return;
+
+    const groupOptions = [
+        { value: '', label: 'Tüm Gruplar' },
+        ...(groups || []).map(g => ({
+            value: g.name,
+            label: g.display_name || g.name
+        }))
+    ];
+
+    userFilters.updateFilterOptions('group-filter', groupOptions);
 }
 
 // Sorting is now handled by TableComponent
@@ -560,11 +591,6 @@ function setupEventListeners() {
      }
      
      // Ensure teams are loaded
-     if (!teams || teams.length === 0) {
-         showNotification('Takım verileri yükleniyor, lütfen bekleyin...', 'warning');
-         return;
-     }
-     
      // Find the user data - convert userId to string for comparison
      const user = users.find(u => String(u.id) === String(userId));
      if (!user) {
@@ -638,41 +664,6 @@ function setupEventListeners() {
          title: 'İş Bilgileri',
          icon: 'fas fa-briefcase',
          iconColor: 'text-success'
-     });
-
-     
-     // Add team dropdown
-     editUserModal.addField({
-         id: 'team',
-         name: 'team',
-         label: 'Takım',
-         type: 'dropdown',
-         value: user.team || '',
-         required: true,
-         icon: 'fas fa-users',
-         colSize: 6,
-         helpText: 'Çalışanın bağlı olduğu takım',
-         options: teams.map(team => ({
-             value: team.value || team.id,
-             label: team.label || team.name
-         }))
-     });
-
-     // Add work location dropdown
-     editUserModal.addField({
-         id: 'work_location',
-         name: 'work_location',
-         label: 'Çalışma Yeri',
-         type: 'dropdown',
-         value: user.work_location || '',
-         required: true,
-         icon: 'fas fa-map-marker-alt',
-         colSize: 6,
-         helpText: 'Çalışanın çalışma yeri',
-         options: [
-             { value: 'office', label: 'Ofis' },
-             { value: 'workshop', label: 'Atölye' }
-         ]
      });
 
      // Add is_active checkbox
@@ -767,12 +758,6 @@ function showDeleteUserModal(userId, username) {
 }
 
 function showCreateUserModal() {
-    // Ensure teams are loaded
-    if (!teams || teams.length === 0) {
-        showNotification('Takım verileri yükleniyor, lütfen bekleyin...', 'warning');
-        return;
-    }
-
     // Clear and configure the create modal
     createUserModal.clearAll();
     
@@ -836,41 +821,6 @@ function showCreateUserModal() {
         title: 'İş Bilgileri',
         icon: 'fas fa-briefcase',
         iconColor: 'text-success'
-    });
-
-    
-    // Add team dropdown
-    createUserModal.addField({
-        id: 'team',
-        name: 'team',
-        label: 'Takım',
-        type: 'dropdown',
-        placeholder: 'Takım seçin...',
-        required: true,
-        icon: 'fas fa-users',
-        colSize: 6,
-        helpText: 'Çalışanın bağlı olduğu takım',
-        options: teams.map(team => ({
-            value: team.value || team.id,
-            label: team.label || team.name
-        }))
-    });
-
-    // Add work location dropdown
-    createUserModal.addField({
-        id: 'work_location',
-        name: 'work_location',
-        label: 'Çalışma Yeri',
-        type: 'dropdown',
-        placeholder: 'Çalışma yeri seçin...',
-        required: true,
-        icon: 'fas fa-map-marker-alt',
-        colSize: 6,
-        helpText: 'Çalışanın çalışma yeri',
-        options: [
-            { value: 'office', label: 'Ofis' },
-            { value: 'workshop', label: 'Atölye' }
-        ]
     });
 
     // Add is_active checkbox
@@ -957,10 +907,15 @@ async function exportUsers(format) {
         const filterValues = userFilters ? userFilters.getFilterValues() : {};
         
         // Fetch all users for export (use a large page size)
+        const groupVal = filterValues['group-filter'] || [];
+        const group = Array.isArray(groupVal) ? groupVal.filter(Boolean).join(',') : (groupVal || '');
+        const access = filterValues['access-filter'] || '';
+
         const usersResponse = await authFetchUsers(1, 10000, {
             username: filterValues['username-filter'] || '',
-            team: filterValues['team-filter'] || '',
-            work_location: filterValues['work-location-filter'] || '',
+            group,
+            office_access: access === 'office' ? 'true' : '',
+            workshop_access: access === 'workshop' ? 'true' : '',
             occupation: filterValues['occupation-filter'] || '',
             is_active: filterValues['is-active-filter'] || '',
             ordering: currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`

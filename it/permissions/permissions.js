@@ -4,7 +4,6 @@ import { HeaderComponent } from '../../../components/header/header.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
-import { FiltersComponent } from '../../../components/filters/filters.js';
 import { initRouteProtection } from '../../../apis/routeProtection.js';
 import {
     fetchUserGroups,
@@ -26,7 +25,6 @@ let permissionsMatrix = null;
 let matrixTable = null;
 let groupMatrixTable = null;
 let permissionsListTable = null;
-let filtersComponent = null;
 let overrideModal = null;
 let currentUserDetail = null;
 let groupsCache = [];
@@ -88,7 +86,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     await loadGroups();
-    initFilters();
     initMatrixTable();
     initGroupMatrixTable();
     initPermissionsListTable();
@@ -494,9 +491,13 @@ function initGroupMatrixTable() {
             formatter: (val) => {
                 const v = (val || '').toString();
                 if (!v || v === '-') return '-';
-                const cls = sectionBadgeClass(v);
                 const label = sectionLabel(v);
-                return `<span class="badge ${cls}">${label}</span>`;
+                const cls = v === 'office'
+                    ? 'status-badge status-blue'
+                    : (v === 'workshop'
+                        ? 'status-badge status-grey'
+                        : 'status-badge status-grey');
+                return `<span class="${cls}">${label.toUpperCase()}</span>`;
             }
         },
         {
@@ -928,37 +929,7 @@ function initPermissionsListTable() {
     });
 }
 
-function initFilters() {
-    filtersComponent = new FiltersComponent('permissions-filters', {
-        title: 'Filtreler',
-        onApply: (values) => {
-            const search = values['user-search'] || '';
-            const group = values['group-filter'] || '';
-            loadMatrix({ search, group });
-        },
-        onClear: () => {
-            loadMatrix({});
-        }
-    });
-
-    filtersComponent
-        .addTextFilter({
-            id: 'user-search',
-            label: 'Kullanıcı',
-            placeholder: 'Kullanıcı adı / isim',
-            colSize: 3
-        })
-        .addDropdownFilter({
-            id: 'group-filter',
-            label: 'Grup',
-            placeholder: 'Tüm Gruplar',
-            options: groupsCache.map(g => ({
-                value: g.name,
-                label: g.display_name || g.name
-            })),
-            colSize: 3
-        });
-}
+// No filters on this page.
 
 function attachMatrixPermissionCellHandler() {
     const container = document.getElementById('permissions-matrix-container');

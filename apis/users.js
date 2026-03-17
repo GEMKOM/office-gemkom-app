@@ -38,6 +38,18 @@ export async function authFetchUsers(page = 1, pageSize = 20, filters = {}) {
     if (filters.work_location) {
         params.append('work_location', filters.work_location);
     }
+    if (filters.group) {
+        params.append('group', filters.group);
+    }
+    if (filters.office_access) {
+        params.append('office_access', filters.office_access);
+    }
+    if (filters.workshop_access) {
+        params.append('workshop_access', filters.workshop_access);
+    }
+    if (filters.portal) {
+        params.append('portal', filters.portal);
+    }
     if (filters.occupation) {
         params.append('occupation', filters.occupation);
     }
@@ -160,13 +172,21 @@ export async function fetchCurrentUserPermissions() {
 export async function fetchPermissionsMatrix(params = {}) {
     const search = params.search || '';
     const group = params.group || '';
-    const active = params.active;
+    const isActive = params.is_active ?? params.active;
+    const officeAccess = params.office_access;
+    const workshopAccess = params.workshop_access;
 
     const query = new URLSearchParams();
     if (search) query.set('search', search);
     if (group) query.set('group', group);
-    if (active !== undefined && active !== null && active !== '') {
-        query.set('active', String(active));
+    if (officeAccess !== undefined && officeAccess !== null && officeAccess !== '') {
+        query.set('office_access', String(officeAccess));
+    }
+    if (workshopAccess !== undefined && workshopAccess !== null && workshopAccess !== '') {
+        query.set('workshop_access', String(workshopAccess));
+    }
+    if (isActive !== undefined && isActive !== null && isActive !== '') {
+        query.set('is_active', String(isActive));
     }
 
     const resp = await authedFetch(`${backendBase}/users/permissions/matrix/${query.toString() ? `?${query.toString()}` : ''}`);
