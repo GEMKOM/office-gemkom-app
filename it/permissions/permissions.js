@@ -309,12 +309,15 @@ async function loadGroupPermissionsMatrix() {
 
         let rows = (groupsCache || []).map(g => {
             const set = groupPermsCache.get(g.name) || new Set();
+            const permsArr = Array.from(set);
+            const permissionsDisplay = permsArr.length ? permsArr.join(', ') : '-';
             const base = {
                 id: g.name,
                 portal: g.portal || '-',
                 group_name: g.name,
                 group_display_name: g.display_name || g.name,
-                member_count: g.member_count ?? '-'
+                member_count: g.member_count ?? '-',
+                permissions_display: permissionsDisplay
             };
             codenames.forEach(code => {
                 base[code] = set.has(code);
@@ -513,6 +516,11 @@ function initGroupMatrixTable() {
             label: 'Kullanıcı Sayısı',
             width: '120px',
             sortable: true
+        },
+        {
+            field: 'permissions_display',
+            label: 'Yetkiler',
+            sortable: false
         }
     ];
 
