@@ -11,15 +11,37 @@ import {
     updateNotificationConfig,
     resetNotificationConfigs
 } from '../../../apis/notification/notifications.js';
-import { fetchAllUsers } from '../../../apis/users.js';
+import { fetchAllUsers, fetchGroupsWithPermissions } from '../../../apis/users.js';
 
 // State management
 let notificationConfigs = [];
-let teamChoices = [];
+let groupChoices = [];
 let allUsers = [];
 let currentUser = null;
 let configsTable = null;
 let editConfigModal = null;
+
+function normalizeGroupChoice(item) {
+    if (!item) return null;
+    if (typeof item === 'string') {
+        return { value: item, label: item };
+    }
+    const value = item.value ?? item.name ?? item.id;
+    const label = item.label ?? item.display ?? value;
+    if (!value) return null;
+    return { value: String(value), label: String(label ?? value) };
+}
+
+function normalizeConfigGroup(item) {
+    if (!item) return null;
+    if (typeof item === 'string') {
+        return { name: item, display: item };
+    }
+    const name = item.name ?? item.value ?? item.id;
+    const display = item.display ?? item.label ?? name;
+    if (!name) return null;
+    return { name: String(name), display: String(display ?? name) };
+}
 
 function escapeHtml(text) {
     const div = document.createElement('div');
@@ -127,26 +149,28 @@ async function loadConfigs() {
         if (configsTable) configsTable.setLoading(true);
         
         const response = await getNotificationConfigs();
-        teamChoices = response.team_choices || [];
+        const rawGroupChoices = response.groups || response.group_choices || response.team_choices || [];
+        groupChoices = (rawGroupChoices || []).map(normalizeGroupChoice).filter(Boolean);
         notificationConfigs = response.configs || [];
 
         // Update table data
         if (configsTable) {
             const tableData = notificationConfigs.map(config => {
-                // Build routing display (users + teams)
+                // Build routing display (users + groups)
                 const userCount = config.users ? config.users.length : 0;
-                const teams = config.teams || [];
-                const teamLabels = teams.map(t => {
-                    const teamChoice = teamChoices.find(tc => tc.value === t);
-                    return teamChoice ? teamChoice.label : t;
-                }).filter(Boolean);
+                const rawGroups = config.groups || config.teams || [];
+                const groupLabels = rawGroups
+                    .map(normalizeConfigGroup)
+                    .filter(Boolean)
+                    .map(g => g.display || g.name)
+                    .filter(Boolean);
                 
                 let routingDisplay = [];
                 if (userCount > 0) {
                     routingDisplay.push(`${userCount} kullanıcı`);
                 }
-                if (teamLabels.length > 0) {
-                    routingDisplay.push(teamLabels.join(', '));
+                if (groupLabels.length > 0) {
+                    routingDisplay.push(groupLabels.join(', '));
                 }
                 const routingText = routingDisplay.length > 0 ? routingDisplay.join(' + ') : '-';
 
@@ -278,7 +302,7 @@ function initializeTable() {
                 label: 'Düzenle',
                 icon: 'fas fa-edit',
                 class: 'btn-outline-primary',
-                onClick: (row) => showEditConfigModal(row)
+                onClick: async (row) => await showEditConfigModal(row)
             }
         ],
         pagination: false,
@@ -291,7 +315,7 @@ function initializeTable() {
     });
 }
 
-function showEditConfigModal(configRow) {
+async function showEditConfigModal(configRow) {
     const config = configRow.raw_data;
 
     editConfigModal.clearAll();
@@ -464,22 +488,41 @@ function showEditConfigModal(configRow) {
             colSize: 12
         });
 
-        // Team selection (multi-select dropdown)
-        const teamOptions = (teamChoices || []).map(t => ({
-            value: String(t.value),
-            label: t.label || t.value
-        }));
-        const currentTeamValues = (config.teams || []).map(v => String(v));
+        // Group selection (multi-select dropdown) - fetch live groups for correct display + selection
+        let liveGroupOptions = [];
+        try {
+            const groupsResp = await fetchGroupsWithPermissions();
+            liveGroupOptions = (groupsResp || [])
+                .map(g => normalizeGroupChoice({
+                    value: g.name,
+                    label: g.display_name || g.display || g.name
+                }))
+                .filter(Boolean)
+                .map(g => ({ value: String(g.value), label: g.label || g.value }));
+        } catch (error) {
+            console.warn('Error fetching live groups list, falling back to cached choices:', error);
+        }
+
+        const groupOptions = liveGroupOptions.length > 0
+            ? liveGroupOptions
+            : (groupChoices || []).map(g => ({
+                value: String(g.value),
+                label: g.label || g.value
+            }));
+        const currentGroupValues = (config.groups || config.teams || [])
+            .map(normalizeConfigGroup)
+            .filter(Boolean)
+            .map(g => String(g.name));
 
         editConfigModal.addField({
-            id: 'teams',
-            name: 'teams',
-            label: 'Takımlar',
+            id: 'groups',
+            name: 'groups',
+            label: 'Gruplar',
             type: 'dropdown',
-            value: currentTeamValues,
+            value: currentGroupValues,
             multiple: true,
-            options: teamOptions,
-            placeholder: 'Takım seçin',
+            options: groupOptions,
+            placeholder: 'Grup seçin',
             searchable: true,
             icon: 'fas fa-sitemap',
             colSize: 12
@@ -521,11 +564,12 @@ function showEditConfigModal(configRow) {
                     : [];
                 updateData.user_ids = userIds;
 
-                // Teams
-                const teams = Array.isArray(formData.teams)
-                    ? formData.teams.map(v => String(v)).filter(Boolean)
+                // Groups (fallback: backend might still accept `teams`)
+                const groups = Array.isArray(formData.groups)
+                    ? formData.groups.map(v => String(v)).filter(Boolean)
                     : [];
-                updateData.teams = teams;
+                updateData.groups = groups;
+                updateData.teams = groups;
             }
 
             await updateNotificationConfig(config.notification_type, updateData);
