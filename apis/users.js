@@ -346,3 +346,20 @@ export async function removePermissionFromGroup(groupName, codename) {
     }
     return await resp.json();
 }
+
+/**
+ * Replace a group's permission list in bulk.
+ * PUT /users/groups/<group_name>/permissions/  body: ["access_x", ...]
+ */
+export async function saveGroupPermissionsBulk(groupName, codenames) {
+    const resp = await authedFetch(`${backendBase}/users/groups/${encodeURIComponent(groupName)}/permissions/`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(Array.isArray(codenames) ? codenames : [])
+    });
+    if (!resp.ok) {
+        throw new Error('Grup yetkileri kaydedilemedi');
+    }
+    // Backend may return updated permissions or a status payload; just pass through.
+    return await resp.json().catch(() => ({}));
+}

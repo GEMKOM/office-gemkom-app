@@ -1,441 +1,70 @@
-import { getUserTeam, isAdmin } from '../authService.js';
+import { hasPerm, isAdmin, getPermissions, getGrantedPageRoutes } from '../authService.js';
 
 /**
- * Team-based access control configuration
- * Defines which routes/sections each team can access
+ * Permission-based access control
+ *
+ * Convention:
+ * - Route `/manufacturing/cnc-cutting/dashboard` -> permission `access_manufacturing_cnc_cutting_dashboard`
+ * - Dashes in path segments are converted to underscores.
  */
-// Base routes that all logged-in users should have access to
-const BASE_GENERAL_ROUTES = [
-    '/',
-    '/general',
-    '/general/users',
-    '/general/machines',
-    '/general/overtime',
-    '/general/overtime/pending',
-    '/general/overtime/registry',
-    '/general/overtime/users',
-    '/general/department-requests',
-    '/general/department-requests/list',
-    '/general/department-requests/pending',
-    '/projects',
-    '/projects/project-tracking'
-];
 
-// Helper function to merge base routes with team-specific routes
-const mergeWithBaseRoutes = (teamRoutes) => {
-    return [...BASE_GENERAL_ROUTES, ...teamRoutes.filter(route => !BASE_GENERAL_ROUTES.includes(route))];
-};
+const ALWAYS_ALLOWED_ROUTES = new Set(['/', '/login', '/login/']);
 
-export const TEAM_ACCESS_CONFIG = {
-    // Admin users have access to everything
-    admin: {
-        allowedRoutes: ['*'], // Wildcard means all routes
-        allowedSections: ['*']
-    },
-    
-    // Management team - has access to most sections
-    management: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/management',
-            '/management/dashboard',
-            '/management/reports',
-            '/management/analytics',
-            '/planning',
-            '/planning/department-requests',
-            '/planning/task-templates',
-            '/planning/projects',
-            '/planning/procurement-lines',
-            '/planning/inventory',
-            '/planning/inventory/cards',
-            '/manufacturing',
-            '/manufacturing/machining',
-            '/manufacturing/machining/dashboard',
-            '/manufacturing/machining/capacity',
-            '/manufacturing/machining/capacity/planning',
-            '/manufacturing/machining/capacity/history',
-            '/manufacturing/machining/tasks',
-            '/manufacturing/machining/tasks/list',
-            '/manufacturing/machining/tasks/create',
-            '/manufacturing/machining/reports',
-            '/manufacturing/machining/reports/sum-report',
-            '/manufacturing/machining/reports/finished-timers',
-            '/manufacturing/machining/reports/cost-analysis',
-            '/manufacturing/machining/reports/history',
-            '/manufacturing/machining/reports/production-plan',
-            '/manufacturing/machining/reports/daily-report',
-            '/manufacturing/maintenance',
-            '/manufacturing/maintenance/fault-requests',
-            '/manufacturing/maintenance/fault-requests/list',
-            '/manufacturing/maintenance/fault-requests/statistics',
-            '/manufacturing/maintenance/reports',
-            '/manufacturing/maintenance/reports/faults',
-            '/manufacturing/maintenance/reports/user-resolution',
-            '/manufacturing/cnc-cutting',
-            '/manufacturing/cnc-cutting/dashboard',
-            '/manufacturing/cnc-cutting/cuts',
-            '/manufacturing/cnc-cutting/remnants',
-            '/manufacturing/cnc-cutting/reports',
-            '/manufacturing/cnc-cutting/reports/finished-timers',
-            '/manufacturing/cnc-cutting/capacity',
-            '/manufacturing/cnc-cutting/capacity/planning',
-            '/manufacturing/welding',
-            '/manufacturing/welding/time-entries',
-            '/manufacturing/welding/reports',
-            '/manufacturing/welding/reports/user-work-hours',
-            '/manufacturing/welding/reports/cost-analysis',
-            '/manufacturing/reports',
-            '/manufacturing/reports/combined-job-costs',
-            '/manufacturing/projects',
-            '/manufacturing/subcontracting',
-            '/manufacturing/subcontracting/subcontractors',
-            '/manufacturing/subcontracting/statements',
-            '/manufacturing/material-tracking',
-            '/procurement',
-            '/procurement/projects',
-            '/procurement/purchase-requests',
-            '/procurement/purchase-requests/create',
-            '/procurement/purchase-requests/pending',
-            '/procurement/purchase-requests/registry',
-            '/procurement/suppliers',
-            '/procurement/suppliers/list',
-            '/procurement/suppliers/payment-terms',
-            '/procurement/reports',
-            '/procurement/reports/items',
-            '/procurement/reports/staff',
-            '/procurement/reports/suppliers',
-            '/finance',
-            '/finance/purchase-orders',
-            '/finance/reports',
-            '/finance/reports/executive-overview',
-            '/finance/reports/projects',
-            // Sales module
-            '/sales',
-            '/sales/cost-table',
-            '/sales/customers',
-            '/sales/offers',
-            '/sales/catalog',
-            '/projects/cost-table',
-            '/logistics',
-            '/logistics/projects',
-            '/logistics/cost-lines',
-            '/quality-control',
-            '/quality-control/qc-reviews',
-            '/quality-control/ncrs',
-            '/quality-control/cost-lines'
-        ]),
-        allowedSections: ['planning', 'general', 'manufacturing', 'procurement', 'finance', 'sales']
-    },
-    
-    // Manufacturing team - access to manufacturing and related areas
-    manufacturing: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/manufacturing',
-            '/manufacturing/machining',
-            '/manufacturing/machining/dashboard',
-            '/manufacturing/machining/capacity',
-            '/manufacturing/machining/capacity/planning',
-            '/manufacturing/machining/capacity/history',
-            '/manufacturing/machining/tasks',
-            '/manufacturing/machining/tasks/list',
-            '/manufacturing/machining/tasks/create',
-            '/manufacturing/machining/reports',
-            '/manufacturing/machining/reports/sum-report',
-            '/manufacturing/machining/reports/finished-timers',
-            '/manufacturing/machining/reports/cost-analysis',
-            '/manufacturing/machining/reports/history',
-            '/manufacturing/machining/reports/production-plan',
-            '/manufacturing/machining/reports/daily-report',
-            '/manufacturing/maintenance',
-            '/manufacturing/maintenance/fault-requests',
-            '/manufacturing/maintenance/fault-requests/list',
-            '/manufacturing/maintenance/fault-requests/statistics',
-            '/manufacturing/maintenance/reports',
-            '/manufacturing/maintenance/reports/faults',
-            '/manufacturing/maintenance/reports/user-resolution',
-            '/manufacturing/cnc-cutting',
-            '/manufacturing/cnc-cutting/dashboard',
-            '/manufacturing/cnc-cutting/cuts',
-            '/manufacturing/cnc-cutting/remnants',
-            '/manufacturing/cnc-cutting/reports',
-            '/manufacturing/cnc-cutting/reports/finished-timers',
-            '/manufacturing/cnc-cutting/capacity',
-            '/manufacturing/cnc-cutting/capacity/planning',
-            '/manufacturing/welding',
-            '/manufacturing/welding/time-entries',
-            '/manufacturing/welding/reports',
-            '/manufacturing/welding/reports/user-work-hours',
-            '/manufacturing/welding/reports/cost-analysis',
-            '/manufacturing/reports',
-            '/manufacturing/reports/combined-job-costs',
-            '/manufacturing/projects',
-            '/manufacturing/subcontracting',
-            '/manufacturing/subcontracting/subcontractors',
-            '/manufacturing/subcontracting/statements',
-            '/manufacturing/material-tracking',
-            '/quality-control/ncrs'
-        ]),
-        allowedSections: ['manufacturing', 'general', 'general_overtime']
-    },
-    
-    // Machining team - specific to machining operations
-    machining: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/manufacturing/machining',
-            '/manufacturing/machining/dashboard',
-            '/manufacturing/machining/capacity',
-            '/manufacturing/machining/capacity/planning',
-            '/manufacturing/machining/capacity/history',
-            '/manufacturing/machining/tasks',
-            '/manufacturing/machining/tasks/list',
-            '/manufacturing/machining/tasks/create',
-            '/manufacturing/machining/reports',
-            '/manufacturing/machining/reports/sum-report',
-            '/manufacturing/machining/reports/finished-timers',
-            '/manufacturing/machining/reports/cost-analysis',
-            '/manufacturing/machining/reports/history',
-            '/manufacturing/machining/reports/production-plan',
-            '/manufacturing/machining/reports/daily-report',
-            '/manufacturing/cnc-cutting',
-            '/manufacturing/cnc-cutting/dashboard',
-            '/manufacturing/cnc-cutting/cuts',
-            '/manufacturing/cnc-cutting/remnants',
-            '/manufacturing/cnc-cutting/reports',
-            '/manufacturing/cnc-cutting/reports/finished-timers',
-            '/manufacturing/cnc-cutting/capacity',
-            '/manufacturing/cnc-cutting/capacity/planning',
-            '/quality-control/ncrs'
-        ]),
-        allowedSections: ['manufacturing_machining', 'general', 'general_overtime']
-    },
-    
-    // Maintenance team - access to maintenance and fault management
-    maintenance: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/manufacturing/maintenance',
-            '/manufacturing/maintenance/fault-requests',
-            '/manufacturing/maintenance/fault-requests/list',
-            '/manufacturing/maintenance/fault-requests/statistics',
-            '/manufacturing/maintenance/reports',
-            '/manufacturing/maintenance/reports/faults',
-            '/manufacturing/maintenance/reports/user-resolution'
-        ]),
-        allowedSections: ['manufacturing_maintenance', 'general', 'general_overtime']
-    },
-    
-    // Welding team - access to welding operations
-    welding: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/manufacturing/welding',
-            '/manufacturing/welding/time-entries',
-            '/manufacturing/welding/reports',
-            '/manufacturing/welding/reports/user-work-hours',
-            '/manufacturing/welding/reports/cost-analysis',
-            '/quality-control/ncrs'
-        ]),
-        allowedSections: ['manufacturing_welding', 'general', 'general_overtime']
-    },
-    
-    // Procurement team - access to procurement and related areas
-    procurement: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/procurement',
-            '/procurement/projects',
-            '/procurement/purchase-requests',
-            '/procurement/purchase-requests/create',
-            '/procurement/purchase-requests/pending',
-            '/procurement/purchase-requests/registry',
-            '/procurement/suppliers',
-            '/procurement/suppliers/list',
-            '/procurement/suppliers/payment-terms',
-            '/procurement/reports',
-            '/procurement/reports/items',
-            '/procurement/reports/staff',
-            '/procurement/reports/suppliers',
-            '/finance/purchase-orders',
-            '/quality-control/ncrs'
-        ]),
-        allowedSections: ['procurement', 'finance_purchase_orders', 'general', 'general_overtime']
-    },
+function normalizePath(path) {
+    if (!path) return '/';
+    const noQuery = String(path).split('?')[0].split('#')[0];
+    if (noQuery.length > 1 && noQuery.endsWith('/')) return noQuery.slice(0, -1);
+    return noQuery || '/';
+}
 
-    // External workshops team - access to procurement and related areas
-    external_workshops: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/procurement',
-            '/procurement/projects',
-            '/procurement/purchase-requests',
-            '/procurement/purchase-requests/create',
-            '/procurement/purchase-requests/pending',
-            '/procurement/purchase-requests/registry',
-            '/procurement/suppliers',
-            '/procurement/suppliers/list',
-            '/procurement/suppliers/payment-terms',
-            '/procurement/reports',
-            '/procurement/reports/items',
-            '/procurement/reports/staff',
-            '/procurement/reports/suppliers',
-            '/finance/purchase-orders',
-            '/quality-control/ncrs'
-        ]),
-        allowedSections: ['procurement', 'finance_purchase_orders', 'general', 'general_overtime']
-    },
-    
-    // Planning team - access to planning and related areas (cost-table access checked in-app for planning+manager only)
-    planning: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/planning',
-            '/planning/department-requests',
-            '/planning/task-templates',
-            '/planning/projects',
-            '/planning/procurement-lines',
-            '/planning/inventory',
-            '/planning/inventory/cards',
-            '/projects/cost-table',
-            '/manufacturing',
-            '/manufacturing/machining',
-            '/manufacturing/machining/capacity',
-            '/manufacturing/machining/capacity/planning',
-            '/manufacturing/machining/capacity/history',
-            '/procurement',
-            '/procurement/purchase-requests',
-            '/procurement/purchase-requests/create',
-            '/procurement/purchase-requests/pending',
-            '/procurement/purchase-requests/registry',
-            '/quality-control/ncrs'
-        ]),
-        allowedSections: ['planning', 'manufacturing_planning', 'procurement', 'general', 'general_overtime']
-    },
-    
-    // Finance team - access to financial areas
-    finance: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/finance',
-            '/finance/purchase-orders',
-            '/finance/reports',
-            '/finance/reports/executive-overview',
-            '/finance/reports/projects',
-            '/procurement/reports',
-            '/procurement/reports/items',
-            '/procurement/reports/staff',
-            '/procurement/reports/suppliers'
-        ]),
-        allowedSections: ['finance', 'procurement_reports', 'general', 'general_overtime']
-    },
-    
-    // Sales team - access to sales and customer management
-    sales: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/sales',
-            '/sales/customers',
-            '/sales/offers',
-            '/sales/catalog'
-        ]),
-        allowedSections: ['sales', 'general', 'general_overtime']
-    },
-    
-    // IT team - access to IT systems and inventory
-    it: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/it',
-            '/it/inventory',
-            '/it/password-resets'
-        ]),
-        allowedSections: ['it', 'general', 'general_overtime']
-    },
+function routeIsAllowedByGrantedPages(route) {
+    const normalized = normalizePath(route);
+    if (ALWAYS_ALLOWED_ROUTES.has(normalized)) return true;
 
-    // Logistics team - access to logistics and related areas
-    logistics: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/logistics',
-            '/logistics/projects',
-            '/logistics/cost-lines',
-            '/quality-control/ncrs'
-        ]),
-        allowedSections: ['logistics', 'general', 'general_overtime']
-    },
-    
-    // Human Resources team - access to HR and related areas
-    human_resources: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/human_resources',
-            '/human_resources/wages'
-        ]),
-        allowedSections: ['human_resources', 'general', 'general_overtime']
-    },
-    
-    // Handle misspelled team name (human_resouces instead of human_resources)
-    human_resouces: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/human_resources',
-            '/human_resources/wages'
-        ]),
-        allowedSections: ['human_resources', 'general', 'general_overtime']
-    },
-    
-    // Design team - access to design and related areas
-    design: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/design',
-            '/design/projects',
-            '/design/revision-requests',
-            '/quality-control/ncrs'
-        ]),
-        allowedSections: ['design', 'general', 'general_overtime']
-    },
-    
-    // Quality Control team - access to quality control and related areas
-    qualitycontrol: {
-        allowedRoutes: mergeWithBaseRoutes([
-            '/quality-control',
-            '/quality-control/qc-reviews',
-            '/quality-control/ncrs',
-            '/quality-control/cost-lines'
-        ]),
-        allowedSections: ['quality_control', 'general', 'general_overtime']
-    },
-    
-    // Default/other teams - minimal access
-    other: {
-        allowedRoutes: mergeWithBaseRoutes([]),
-        allowedSections: ['general', 'general_overtime']
+    const allowed = getGrantedPageRoutes();
+    for (const base of allowed) {
+        if (!base) continue;
+        if (normalized === base) return true;
     }
-};
+    return false;
+}
+
+function sectionToPermissionCandidates(section) {
+    if (!section) return [];
+    const normalized = String(section).trim().replace(/-/g, '_');
+    const base = `access_${normalized}`;
+
+    // Sections may map to exact permission or any deeper permission under that prefix.
+    // Example: section "procurement_reports" should allow "access_procurement_reports_*".
+    return [base];
+}
 
 /**
- * Check if a user has access to a specific route
- * @param {string} route - The route to check
- * @param {string} userTeam - The user's team
- * @returns {boolean} - Whether the user has access
+ * Check if current user has access to a route using permissions.
  */
-export function hasRouteAccess(route, userTeam = null) {
+export function hasRouteAccess(route) {
     try {
-        // Get user team if not provided
-        if (!userTeam) {
-            const user = JSON.parse(localStorage.getItem('user') || '{}');
-            userTeam = user.team || 'other';
+        const normalized = normalizePath(route);
+
+        // Always allow public routes
+        if (ALWAYS_ALLOWED_ROUTES.has(normalized)) {
+            return true;
         }
-        
+
         // Admin users have access to everything
-        if (isAdmin() || userTeam === null) {
-            return true;
-        }
-        
-        // Get team configuration
-        const teamConfig = TEAM_ACCESS_CONFIG[userTeam] || TEAM_ACCESS_CONFIG.other;
-        
-        // Check if route is explicitly allowed
-        if (teamConfig.allowedRoutes.includes('*')) {
-            return true; // Wildcard access
-        }
-        
-        // Check exact route match
-        if (teamConfig.allowedRoutes.includes(route)) {
-            return true;
-        }
-        
-        // Check if route starts with any allowed route (for sub-routes)
-        return teamConfig.allowedRoutes.some(allowedRoute => 
-            route.startsWith(allowedRoute + '/') || route.startsWith(allowedRoute + '?')
-        );
+        if (isAdmin()) return true;
+        // New permission payload includes "name": "Page: /some/route/"
+        // Use that mapping (and allow subroutes under granted base routes).
+        if (routeIsAllowedByGrantedPages(normalized)) return true;
+
+        // Backward compatibility: fall back to codename-based checks
+        // for environments that still return boolean permissions.
+        const segments = normalized
+            .split('/')
+            .filter(Boolean)
+            .map(s => s.replace(/-/g, '_'));
+        if (!segments.length) return false;
+        return hasPerm(`access_${segments.join('_')}`);
         
     } catch (error) {
         console.error('Error checking route access:', error);
@@ -444,33 +73,33 @@ export function hasRouteAccess(route, userTeam = null) {
 }
 
 /**
- * Check if a user has access to a specific section
- * @param {string} section - The section to check
- * @param {string} userTeam - The user's team
- * @returns {boolean} - Whether the user has access
+ * Check if current user has access to a navigation section using permissions.
  */
-export function hasSectionAccess(section, userTeam = null) {
+export function hasSectionAccess(section) {
     try {
-        // Get user team if not provided
-        if (!userTeam) {
-            const user = JSON.parse(localStorage.getItem('user') || '{}');
-            userTeam = user.team || 'other';
+        if (isAdmin()) return true;
+
+        // New behavior: infer section visibility from granted "Page:" routes.
+        // Example: section "quality-control" should show if user has any granted page under "/quality-control".
+        const s = String(section || '').trim();
+        if (!s) return false;
+
+        const routePrefix = '/' + s.replace(/_/g, '-');
+        const normalizedPrefix = normalizePath(routePrefix);
+
+        const allowed = getGrantedPageRoutes();
+        for (const r of allowed) {
+            if (!r) continue;
+            if (r === normalizedPrefix) return true;
+            if (r.startsWith(normalizedPrefix + '/')) return true;
         }
-        
-        // Admin users have access to everything
-        if (isAdmin() || userTeam === null) {
-            return true;
-        }
-        
-        // Get team configuration
-        const teamConfig = TEAM_ACCESS_CONFIG[userTeam] || TEAM_ACCESS_CONFIG.other;
-        
-        // Check if section is explicitly allowed
-        if (teamConfig.allowedSections.includes('*')) {
-            return true; // Wildcard access
-        }
-        
-        return teamConfig.allowedSections.includes(section);
+
+        // Backward compatibility: old codename-based section checks
+        const [base] = sectionToPermissionCandidates(section);
+        if (!base) return false;
+        if (hasPerm(base)) return true;
+        const perms = getPermissions();
+        return Object.keys(perms || {}).some(code => code === base || code.startsWith(base + '_'));
         
     } catch (error) {
         console.error('Error checking section access:', error);
@@ -479,21 +108,14 @@ export function hasSectionAccess(section, userTeam = null) {
 }
 
 /**
- * Filter navigation items based on user team access
+ * Filter navigation items based on permission access
  * @param {Object} navigationStructure - The navigation structure to filter
- * @param {string} userTeam - The user's team
  * @returns {Object} - Filtered navigation structure
  */
-export function filterNavigationByAccess(navigationStructure, userTeam = null) {
+export function filterNavigationByAccess(navigationStructure) {
     try {
-        // Get user team if not provided
-        if (!userTeam) {
-            const user = JSON.parse(localStorage.getItem('user') || '{}');
-            userTeam = user.team || 'other';
-        }
-        
         // Admin users see everything
-        if (isAdmin() || userTeam === null) {
+        if (isAdmin()) {
             return navigationStructure;
         }
         
@@ -501,12 +123,12 @@ export function filterNavigationByAccess(navigationStructure, userTeam = null) {
         
         for (const [path, item] of Object.entries(navigationStructure)) {
             // Check if user has access to this route
-            if (hasRouteAccess(path, userTeam)) {
+            if (hasRouteAccess(path)) {
                 // Recursively filter children
-                const filteredChildren = filterNavigationByAccess(item.children, userTeam);
+                const filteredChildren = filterNavigationByAccess(item.children);
                 
                 // Only include this item if it has children or if user has access to the route itself
-                if (Object.keys(filteredChildren).length > 0 || hasRouteAccess(path, userTeam)) {
+                if (Object.keys(filteredChildren).length > 0 || hasRouteAccess(path)) {
                     filteredStructure[path] = {
                         ...item,
                         children: filteredChildren
@@ -524,23 +146,16 @@ export function filterNavigationByAccess(navigationStructure, userTeam = null) {
 }
 
 /**
- * Get user's accessible routes for debugging/logging
- * @param {string} userTeam - The user's team
- * @returns {Array} - Array of accessible routes
+ * Get user's accessible permission codenames for debugging/logging
+ * @returns {Array<string>} - Array of permission codenames that are true
  */
-export function getAccessibleRoutes(userTeam = null) {
+export function getAccessibleRoutes() {
     try {
-        if (!userTeam) {
-            const user = JSON.parse(localStorage.getItem('user') || '{}');
-            userTeam = user.team || 'other';
-        }
-        
-        if (isAdmin() || userTeam === null) {
-            return ['*']; // All routes
-        }
-        
-        const teamConfig = TEAM_ACCESS_CONFIG[userTeam] || TEAM_ACCESS_CONFIG.other;
-        return teamConfig.allowedRoutes;
+        if (isAdmin()) return ['*'];
+        const perms = getPermissions();
+        return Object.entries(perms || {})
+            .filter(([, v]) => v === true)
+            .map(([k]) => k);
         
     } catch (error) {
         console.error('Error getting accessible routes:', error);

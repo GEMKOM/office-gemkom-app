@@ -226,9 +226,8 @@ export function initNavbar() {
       
       const currentPath = window.location.pathname;
       
-      // Filter navigation based on user team access
-      const userTeam = user.team || 'other';
-      const filteredNavigation = filterNavigationByAccess(NAVIGATION_STRUCTURE, userTeam);
+      // Filter navigation based on permission access
+      const filteredNavigation = filterNavigationByAccess(NAVIGATION_STRUCTURE);
       const navigationItems = renderNavigationWithMore(filteredNavigation, currentPath);
       
       const navHTML = `
