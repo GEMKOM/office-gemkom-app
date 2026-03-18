@@ -107,6 +107,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/manufacturing/maintenance',
                 features: [
                     {
+                        label: 'Dashboard',
+                        icon: 'fas fa-chart-line',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/maintenance/dashboard'
+                    },
+                    {
                         label: 'Arıza Talepleri',
                         icon: 'fas fa-exclamation-triangle',
                         iconColor: 'rgba(139, 0, 0, 1)',

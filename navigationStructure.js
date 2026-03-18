@@ -208,6 +208,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Bakım',
                 icon: 'fas fa-wrench',
                 children: {
+                    '/manufacturing/maintenance/dashboard': {
+                        label: 'Dashboard',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    },
                     '/manufacturing/maintenance/fault-requests': {
                         label: 'Arıza Talepleri',
                         icon: 'fas fa-exclamation-triangle',
