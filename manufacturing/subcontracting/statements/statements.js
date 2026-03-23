@@ -49,6 +49,14 @@ let totalStatements = 0;
 let isLoading = false;
 let subcontractors = [];
 
+function formatAdjustmentTypeLabel(type) {
+    const typeMap = {
+        addition: 'Ek Ödeme',
+        deduction: 'Kesinti'
+    };
+    return typeMap[type] || type || '-';
+}
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
@@ -499,10 +507,13 @@ function showGenerateStatementModal() {
 
 async function viewStatementDetail(statementId) {
     try {
-        const [statement, adjustments] = await Promise.all([
+        const [statement, adjustmentsResponse] = await Promise.all([
             fetchStatement(statementId),
             fetchStatementAdjustments(statementId)
         ]);
+        const adjustments = Array.isArray(adjustmentsResponse)
+            ? adjustmentsResponse
+            : (adjustmentsResponse?.results || []);
         
         if (!statement) {
             showNotification('Hakediş bulunamadı', 'error');
@@ -647,7 +658,7 @@ async function viewStatementDetail(statementId) {
                                 ${adjustments && adjustments.length > 0 ? 
                                     adjustments.map(adj => `
                                         <tr>
-                                            <td>${adj.adjustment_type || '-'}</td>
+                                            <td>${formatAdjustmentTypeLabel(adj.adjustment_type)}</td>
                                             <td>${formatCurrency(adj.amount, statement.currency)}</td>
                                             <td>${adj.reason || '-'}</td>
                                             <td>${adj.job_order || '-'}</td>
@@ -899,8 +910,8 @@ function showAddAdjustmentModal(statementId) {
         required: true,
         options: [
             { value: '', label: 'Tür seçin...' },
-            { value: 'Ek Ödeme', label: 'Ek Ödeme' },
-            { value: 'Kesinti', label: 'Kesinti' }
+            { value: 'addition', label: 'Ek Ödeme' },
+            { value: 'deduction', label: 'Kesinti' }
         ],
         icon: 'fas fa-tag',
         colSize: 6

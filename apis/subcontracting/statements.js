@@ -225,7 +225,7 @@ export async function fetchStatementAdjustments(statementId) {
  * Create an adjustment for a statement
  * @param {number} statementId - Statement ID
  * @param {Object} adjustmentData - Adjustment data
- * @param {string} adjustmentData.adjustment_type - Type: 'Ek Ödeme' or 'Kesinti'
+ * @param {string} adjustmentData.adjustment_type - Type: 'addition' or 'deduction'
  * @param {number} adjustmentData.amount - Amount (positive number, backend handles sign)
  * @param {string} adjustmentData.reason - Reason for adjustment
  * @param {string} adjustmentData.job_order - Job order number (optional)
