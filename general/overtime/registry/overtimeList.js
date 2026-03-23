@@ -805,7 +805,9 @@ async function loadUsersForModal() {
     }
     
     // Get allowed teams for current user
-    const allowedTeams = getAllowedTeams(currentUser.team);
+    // Prefer group (e.g. "machining_team") over team (e.g. "machining") if available
+    const baseTeam = (currentUser.group || currentUser.team || '').replace(/_team$/, '');
+    const allowedTeams = getAllowedTeams(baseTeam);
     
     if (allowedTeams.length === 0) {
         // If no specific teams, fetch all users
