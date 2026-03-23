@@ -39,8 +39,8 @@ let currentFilters = {};
 if (urlParams.get('status__in')) {
     currentFilters.status__in = urlParams.get('status__in');
 } else {
-    // Default status filter: draft and submitted
-    currentFilters.status__in = 'draft,submitted';
+    // Default status filter: draft, submitted and rejected
+    currentFilters.status__in = 'draft,submitted,rejected';
 }
 let currentSearch = urlParams.get('search') || '';
 let currentOrdering = urlParams.get('ordering') || '-created_at';
@@ -49,6 +49,24 @@ let totalNCRs = 0;
 let isLoading = false;
 let allUsers = [];
 let currentUser = null;
+
+function isUserInGroup(user, groupName) {
+    if (!user || !groupName) return false;
+    const groups = Array.isArray(user.groups) ? user.groups : [];
+    return groups.some(group => {
+        if (typeof group === 'string') return group === groupName;
+        if (group && typeof group === 'object') {
+            return group.name === groupName || group.slug === groupName;
+        }
+        return false;
+    });
+}
+
+function canCurrentUserDecideNCRs() {
+    const isQCTeam = isUserInGroup(currentUser, 'qualitycontrol_team');
+    const isSuperuser = currentUser && (currentUser.is_superuser || currentUser.is_admin);
+    return isQCTeam || isSuperuser;
+}
 
 // Component instances
 let ncrsFilters = null;
@@ -150,9 +168,7 @@ async function loadUsers() {
 
 async function initializeComponents() {
     try {
-        const isQCTeam = currentUser && currentUser.team === 'qualitycontrol';
-        const isSuperuser = currentUser && (currentUser.is_superuser || currentUser.is_admin);
-        const canDecideNCRs = isQCTeam || isSuperuser;
+        const canDecideNCRs = canCurrentUserDecideNCRs();
 
         // Initialize header
         new HeaderComponent({
@@ -186,7 +202,8 @@ async function initializeComponents() {
 
 function initializeFiltersComponent() {
     // Default status filter values
-    const defaultStatusFilter = ['draft', 'submitted'];
+    const defaultStatusFilter = ['draft', 'submitted', 'rejected'];
+    const allStatusFilter = NCR_STATUS_CHOICES.map(status => status.value).filter(Boolean);
     
     ncrsFilters = new FiltersComponent('filters-placeholder', {
         title: 'NCR Filtreleri',
@@ -203,8 +220,8 @@ function initializeFiltersComponent() {
                     currentFilters.status__in = validStatusValues.join(',');
                 }
             } else {
-                // Apply default filter if no status is selected
-                currentFilters.status__in = defaultStatusFilter.join(',');
+                // If no status is selected, include all statuses
+                currentFilters.status__in = allStatusFilter.join(',');
             }
             if (values['severity-filter']) {
                 currentFilters.severity = values['severity-filter'];
@@ -446,7 +463,7 @@ function initializeTableComponent(canDecideNCRs) {
             icon: 'fas fa-edit',
             class: 'btn-outline-primary',
             visible: (row) => {
-                const isQCTeam = currentUser && currentUser.team === 'qualitycontrol';
+                const isQCTeam = isUserInGroup(currentUser, 'qualitycontrol_team');
                 return isQCTeam && (row.status === 'draft' || row.status === 'rejected');
             },
             onClick: (row) => showEditNCRModal(row)
@@ -539,7 +556,9 @@ function initializeTableComponent(canDecideNCRs) {
 
 function initializeModalComponents() {
     confirmationModal = new ConfirmationModal('confirmation-modal-container');
-    ncrDetailsModal = new DisplayModal('ncr-details-modal-container');
+    ncrDetailsModal = new DisplayModal('ncr-details-modal-container', {
+        fullscreen: true
+    });
     ncrEditModal = new EditModal('ncr-edit-modal-container', {
         title: 'NCR Düzenle',
         icon: 'fas fa-edit',
@@ -582,7 +601,7 @@ async function loadNCRs() {
         // Apply default status filter if no status filter is set
         const filters = { ...currentFilters };
         if (!filters.status && !filters.status__in) {
-            filters.status__in = 'draft,submitted';
+            filters.status__in = 'draft,submitted,rejected';
         }
         
         const response = await listNCRs(
@@ -880,26 +899,38 @@ async function showNCRDetails(ncr) {
         ncrDetailsModal.clearData();
         ncrDetailsModal.setTitle(fullNCR.ncr_number || `NCR #${fullNCR.id}`);
 
-        // Title section - most important, shown prominently
+        // Top section: merged Başlık + Açıklama + Genel Bilgiler
         ncrDetailsModal.addSection({
-            title: 'Başlık',
-            icon: 'fas fa-heading',
+            title: 'Genel Bilgiler',
+            icon: 'fas fa-info-circle',
             fields: [
-                { 
-                    label: 'Başlık', 
+                {
+                    label: 'Başlık',
                     value: fullNCR.title || '-',
                     colSize: 12
-                }
-            ]
-        });
-
-        // Description section - important, shown early
-        ncrDetailsModal.addSection({
-            title: 'Açıklama',
-            icon: 'fas fa-align-left',
-            fields: [
-                { 
-                    label: 'Açıklama', 
+                },
+                {
+                    label: 'NCR Numarası',
+                    value: fullNCR.ncr_number || '-',
+                    colSize: 6
+                },
+                {
+                    label: 'İş Emri',
+                    value: fullNCR.job_order || '-',
+                    colSize: 6
+                },
+                {
+                    label: 'Durum',
+                    value: STATUS_BADGE_MAP[fullNCR.status]?.label || fullNCR.status_display || '-',
+                    colSize: 6
+                },
+                {
+                    label: 'Tespit Eden',
+                    value: fullNCR.detected_by_name || '-',
+                    colSize: 6
+                },
+                {
+                    label: 'Açıklama',
                     value: fullNCR.description || '-',
                     colSize: 12
                 }
@@ -959,34 +990,6 @@ async function showNCRDetails(ncr) {
             });
         }
 
-        // Genel Bilgiler section - additional information
-        ncrDetailsModal.addSection({
-            title: 'Genel Bilgiler',
-            icon: 'fas fa-info-circle',
-            fields: [
-                { 
-                    label: 'NCR Numarası', 
-                    value: fullNCR.ncr_number || '-',
-                    colSize: 6
-                },
-                { 
-                    label: 'İş Emri', 
-                    value: fullNCR.job_order || '-',
-                    colSize: 6
-                },
-                { 
-                    label: 'Durum', 
-                    value: STATUS_BADGE_MAP[fullNCR.status]?.label || fullNCR.status_display || '-',
-                    colSize: 6
-                },
-                { 
-                    label: 'Tespit Eden', 
-                    value: fullNCR.detected_by_name || '-',
-                    colSize: 6
-                }
-            ]
-        });
-
         // Files section (upload + list)
         ncrDetailsModal.addCustomSection({
             title: 'Dosyalar',
@@ -1008,9 +1011,36 @@ async function showNCRDetails(ncr) {
             `
         });
 
+        const canDecideNCRs = canCurrentUserDecideNCRs();
+        const canShowDecisionButtons = canDecideNCRs && fullNCR.status === 'submitted';
+        ncrDetailsModal.setFooterContent(`
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                <i class="fas fa-times me-1"></i>Kapat
+            </button>
+            ${canShowDecisionButtons ? `
+                <button type="button" class="btn btn-sm btn-outline-danger" id="ncr-details-reject-btn">
+                    <i class="fas fa-times me-1"></i>Reddet
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-success" id="ncr-details-approve-btn">
+                    <i class="fas fa-check me-1"></i>Onayla
+                </button>
+            ` : ''}
+        `);
+
         // Render and show the modal
         ncrDetailsModal.render();
         ncrDetailsModal.show();
+
+        if (canShowDecisionButtons) {
+            const approveBtn = document.getElementById('ncr-details-approve-btn');
+            if (approveBtn) {
+                approveBtn.onclick = () => showNCRDecisionModal(fullNCR, true);
+            }
+            const rejectBtn = document.getElementById('ncr-details-reject-btn');
+            if (rejectBtn) {
+                rejectBtn.onclick = () => showNCRDecisionModal(fullNCR, false);
+            }
+        }
 
         // Reset files component so it binds to the current modal instance
         ncrFilesComponent = null;
