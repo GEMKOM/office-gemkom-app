@@ -1,9 +1,9 @@
 import { hasRouteAccess } from './accessControl.js';
-import { isLoggedIn, navigateTo, ROUTES, isAdmin } from '../authService.js';
+import { isLoggedIn, navigateTo, ROUTES, isAdmin, hasPerm } from '../authService.js';
 
 /**
  * Route protection middleware
- * Protects pages from unauthorized access based on user team
+ * Protects pages from unauthorized access based on permissions
  */
 
 /**
@@ -24,7 +24,7 @@ export function checkRouteAccess(route = null) {
         return false;
     }
     
-    // Check team-based access
+    // Check permission-based access
     return hasRouteAccess(currentRoute);
 }
 
@@ -49,12 +49,12 @@ export function protectRoute(route = null, redirectRoute = null) {
         return false;
     }
     
-    // Check team-based access
+    // Check permission-based access
     if (!hasRouteAccess(currentRoute)) {
         // Show access denied message
         showAccessDeniedMessage(currentRoute);
         
-        // Redirect to appropriate page based on user team
+        // Redirect to an appropriate page based on permissions
         const redirect = redirectRoute || getDefaultRedirectForUser();
         navigateTo(redirect);
         return false;
@@ -111,35 +111,32 @@ function getRouteDisplayName(route) {
  */
 function getDefaultRedirectForUser() {
     try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        const userTeam = user.team || 'other';
-        
-        // Admin users go to home
-        if (isAdmin() || userTeam === null) {
-            return ROUTES.HOME;
+        if (isAdmin()) return ROUTES.HOME;
+
+        // Pick the first route the user can actually access.
+        const candidates = [
+            '/management/dashboard',
+            '/manufacturing/machining/dashboard',
+            '/manufacturing/cnc-cutting/dashboard',
+            '/manufacturing/maintenance/fault-requests',
+            '/manufacturing/welding',
+            '/procurement/purchase-requests',
+            '/planning/projects',
+            '/finance/purchase-orders',
+            '/it/inventory',
+            '/quality-control',
+            '/general',
+            '/projects',
+            ROUTES.HOME
+        ];
+
+        for (const path of candidates) {
+            if (hasRouteAccess(path)) return path;
         }
-        
-        // Team-specific redirects
-        switch (userTeam) {
-            case 'machining':
-                return '/manufacturing/machining/dashboard';
-            case 'maintenance':
-                return '/manufacturing/maintenance/fault-requests';
-            case 'welding':
-                return '/manufacturing/welding';
-            case 'manufacturing':
-                return '/manufacturing/machining/dashboard';
-            case 'procurement':
-                return '/procurement/purchase-requests';
-            case 'planning':
-                return '/manufacturing/machining/capacity/planning';
-            case 'finance':
-                return '/finance/purchase-orders';
-            case 'qualitycontrol':
-                return '/quality-control';
-            default:
-                return ROUTES.HOME;
-        }
+
+        // If permissions are missing for some reason, fall back to home.
+        if (hasPerm('access_general')) return '/general';
+        return ROUTES.HOME;
     } catch (error) {
         console.error('Error getting default redirect:', error);
         return ROUTES.HOME;
@@ -193,31 +190,15 @@ export function withRouteProtection(pageInitFunction, expectedRoute = null) {
  */
 export function canAccessFeature(feature) {
     try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        const userTeam = user.team || 'other';
-        
-        // Admin users can access everything
-        if (isAdmin() || userTeam === null) {
-            return true;
-        }
-        
-        // Feature-based access control
-        const featureAccess = {
-            'create_user': ['management', 'admin'],
-            'edit_user': ['management', 'admin'],
-            'delete_user': ['management', 'admin'],
-            'view_finance': ['management', 'finance', 'admin'],
-            'edit_finance': ['management', 'finance', 'admin'],
-            'view_procurement': ['management', 'procurement', 'planning', 'admin'],
-            'edit_procurement': ['management', 'procurement', 'planning', 'admin'],
-            'view_manufacturing': ['management', 'manufacturing', 'machining', 'maintenance', 'welding', 'admin'],
-            'edit_manufacturing': ['management', 'manufacturing', 'machining', 'maintenance', 'welding', 'admin'],
-            'view_overtime': ['management', 'manufacturing', 'machining', 'maintenance', 'welding', 'procurement', 'planning', 'finance', 'admin'],
-            'edit_overtime': ['management', 'manufacturing', 'machining', 'maintenance', 'welding', 'procurement', 'planning', 'finance', 'admin']
-        };
-        
-        const allowedTeams = featureAccess[feature] || [];
-        return allowedTeams.includes(userTeam);
+        if (isAdmin()) return true;
+
+        // New behavior: treat feature as a permission codename, or as a suffix for access_*
+        // Examples:
+        // - canAccessFeature('access_it_permissions')
+        // - canAccessFeature('it_permissions') -> checks access_it_permissions
+        if (!feature) return false;
+        if (feature.startsWith('access_')) return hasPerm(feature);
+        return hasPerm(`access_${feature}`);
         
     } catch (error) {
         console.error('Error checking feature access:', error);

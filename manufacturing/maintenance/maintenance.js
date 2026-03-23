@@ -15,6 +15,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         subtitle: 'Ekipman bakım planları, arıza takibi ve önleyici bakım yönetimi',
         cards: [
             {
+                title: 'Dashboard',
+                description: 'Aktif arıza zamanlayıcıları ve temel istatistikleri takip edin.',
+                icon: 'fas fa-chart-line',
+                iconColor: 'primary',
+                link: '/manufacturing/maintenance/dashboard'
+            },
+            {
                 title: 'Arıza Talepleri',
                 description: 'Yeni arıza talepleri oluşturun ve mevcut arıza durumlarını takip edin.',
                 icon: 'fas fa-exclamation-triangle',

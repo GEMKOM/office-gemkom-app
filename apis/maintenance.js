@@ -91,3 +91,19 @@ export async function fetchMachineFaults(filters = {}) {
         throw error;
     }
 }
+
+export async function fetchFaultTimers(is_active = true) {
+    const url = `${backendBase}/machines/faults/timers/?is_active=${is_active}`;
+    const response = await authedFetch(url, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    });
+
+    if (!response.ok) {
+        throw new Error('Failed to fetch fault timers');
+    }
+
+    return response.json();
+}

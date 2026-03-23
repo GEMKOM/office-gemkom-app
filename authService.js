@@ -7,6 +7,20 @@ let refreshToken = localStorage.getItem('refreshToken');
 
 // Cached permissions dictionary for the current user
 let cachedPermissions = null;
+let cachedGrantedPageRoutes = null; // Set<string> of normalized routes
+
+function hasPermissionInPayload(perms, codename) {
+    if (!codename) return true;
+    if (!perms) return false;
+    if (Array.isArray(perms)) return perms.includes(codename);
+    if (typeof perms === 'object') {
+        const v = perms[codename];
+        if (v === true) return true;
+        if (v && typeof v === 'object' && v.granted === true) return true;
+        return false;
+    }
+    return false;
+}
 
 // Centralized routing to prevent infinite redirects
 export const ROUTES = {
@@ -72,6 +86,7 @@ export async function fetchAndStorePermissions() {
         }
         const perms = await response.json();
         cachedPermissions = perms;
+        cachedGrantedPageRoutes = null; // recompute lazily
         localStorage.setItem('permissions', JSON.stringify(perms));
         return perms;
     } catch (error) {
@@ -92,13 +107,57 @@ export function getPermissions() {
         if (!stored) return {};
         const perms = JSON.parse(stored);
         cachedPermissions = perms;
+        cachedGrantedPageRoutes = null; // recompute lazily
         return perms;
     } catch (error) {
         console.warn('Failed to parse cached permissions, clearing them');
         localStorage.removeItem('permissions');
         cachedPermissions = null;
+        cachedGrantedPageRoutes = null;
         return {};
     }
+}
+
+function normalizeRouteForPermission(route) {
+    if (!route) return null;
+    const noQuery = String(route).split('?')[0].split('#')[0].trim();
+    if (!noQuery.startsWith('/')) return null;
+    if (noQuery.length > 1 && noQuery.endsWith('/')) return noQuery.slice(0, -1);
+    return noQuery || '/';
+}
+
+function extractPageRouteFromName(name) {
+    if (!name || typeof name !== 'string') return null;
+    const idx = name.indexOf('Page:');
+    if (idx === -1) return null;
+    const after = name.slice(idx + 'Page:'.length).trim();
+    if (!after) return null;
+    // "Page: /planning/" -> "/planning/"
+    // Also tolerate extra text after the path.
+    const firstToken = after.split(/\s+/)[0].trim();
+    return normalizeRouteForPermission(firstToken);
+}
+
+/**
+ * Return a Set of normalized routes granted by "Page:" permissions.
+ * Example permission entry:
+ *  { granted: true, name: "Page: /planning/" }
+ */
+export function getGrantedPageRoutes() {
+    if (cachedGrantedPageRoutes instanceof Set) return cachedGrantedPageRoutes;
+    const perms = getPermissions();
+    const routes = new Set();
+
+    for (const v of Object.values(perms || {})) {
+        if (v === true) continue; // legacy boolean-only permissions don't encode routes
+        if (!v || typeof v !== 'object') continue;
+        if (v.granted !== true) continue;
+        const route = extractPageRouteFromName(v.name);
+        if (route) routes.add(route);
+    }
+
+    cachedGrantedPageRoutes = routes;
+    return routes;
 }
 
 /**
@@ -107,7 +166,10 @@ export function getPermissions() {
 export function hasPerm(codename) {
     if (!codename) return true;
     const perms = getPermissions();
-    return perms[codename] === true;
+    const v = perms[codename];
+    if (v === true) return true;
+    if (v && typeof v === 'object') return v.granted === true;
+    return false;
 }
 
 /**
@@ -129,6 +191,7 @@ export function clearCachedUser() {
     localStorage.removeItem('userTeam');
     localStorage.removeItem('permissions');
     cachedPermissions = null;
+    cachedGrantedPageRoutes = null;
     localStorage.removeItem('purchaseRequestDraft');
     console.log('Cached user data cleared');
 }
@@ -180,10 +243,17 @@ export async function login(username, password) {
     setTokens(data.access, data.refresh);
 
     // Fetch user and permissions in parallel after we have tokens
-    const [userData] = await Promise.all([
+    const [userData, perms] = await Promise.all([
         getUser(),
         fetchAndStorePermissions()
     ]);
+
+    // Block non-office users from logging in
+    if (!hasPermissionInPayload(perms, 'office_access')) {
+        // Clear tokens and cached data to ensure user is fully logged out
+        logout();
+        throw new Error('FORBIDDEN');
+    }
 
     // Ensure user is stored (getUser already stores it, but keep explicit)
     if (userData) {

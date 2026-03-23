@@ -16,8 +16,7 @@ import {
     fetchGroupPermissions,
     fetchGroupsWithPermissions,
     fetchPermissionsUsersList,
-    addPermissionToGroup,
-    removePermissionFromGroup
+    saveGroupPermissionsBulk
 } from '../../../apis/users.js';
 
 // State
@@ -563,6 +562,7 @@ function initGroupMatrixTable() {
 }
 
 async function loadGroupDetail(groupName) {
+    const prevGroupName = currentGroupName;
     currentGroupName = groupName;
     const panel = document.getElementById('group-permissions-panel');
     if (!panel) return;
@@ -587,6 +587,11 @@ async function loadGroupDetail(groupName) {
     `;
 
     try {
+        const isSameGroup =
+            prevGroupName === groupName &&
+            currentGroupPermsDraft instanceof Set &&
+            currentGroupPermsOriginal instanceof Set;
+
         // Prefer cache filled by bulk groups-with-permissions fetch.
         let codes = [];
         if (groupPermsCache?.has(groupName)) {
@@ -595,13 +600,19 @@ async function loadGroupDetail(groupName) {
             const resp = await fetchGroupPermissions(groupName);
             codes = Array.isArray(resp) ? resp : (resp.codenames || resp.permissions || []);
         }
-        const set = new Set(codes);
-        groupPermsCache.set(groupName, set);
+        const fetchedSet = new Set(codes);
 
-        // Initialize draft state
-        currentGroupPermsOriginal = new Set(codes);
-        currentGroupPermsDraft = new Set(codes);
-        currentGroupDirty = false;
+        // Keep cache in sync only when not actively editing this same group.
+        if (!isSameGroup || !currentGroupDirty) {
+            groupPermsCache.set(groupName, fetchedSet);
+        }
+
+        // Initialize draft state only when switching groups (or first load).
+        if (!isSameGroup) {
+            currentGroupPermsOriginal = new Set(codes);
+            currentGroupPermsDraft = new Set(codes);
+            currentGroupDirty = false;
+        }
 
         await ensurePermissionsCatalogLoaded();
         const catalog = Array.isArray(permissionsCatalog) ? permissionsCatalog : [];
@@ -672,7 +683,8 @@ async function loadGroupDetail(groupName) {
                                     <input class="form-check-input section-parent-checkbox"
                                            type="checkbox"
                                            ${allSelected ? 'checked' : ''}
-                                           data-section="${section}">
+                                           data-section="${section}"
+                                           onclick="event.stopPropagation();">
                                 </div>
                             </div>
                         </div>
@@ -702,17 +714,17 @@ async function loadGroupDetail(groupName) {
                     <p class="text-muted mb-2"><code>${groupInfo.name}</code></p>
                     <div class="d-flex flex-wrap gap-2 mb-3">
                         <span class="badge bg-secondary">Üye: ${groupInfo.member_count ?? members.length ?? '-'}</span>
-                        <span class="badge bg-secondary">Yetki: ${set.size}</span>
+                        <span class="badge bg-secondary">Yetki: ${currentGroupPermsDraft.size}</span>
                     </div>
 
                     <div class="d-flex gap-2 mb-3">
-                        <button type="button" class="btn btn-sm btn-success" id="group-save-btn" disabled>
+                        <button type="button" class="btn btn-sm btn-success" id="group-save-btn" ${currentGroupDirty ? '' : 'disabled'}>
                             <i class="fas fa-save me-1"></i>Kaydet
                         </button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="group-discard-btn" disabled>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="group-discard-btn" ${currentGroupDirty ? '' : 'disabled'}>
                             <i class="fas fa-undo me-1"></i>Vazgeç
                         </button>
-                        <div class="ms-auto text-muted small" id="group-dirty-indicator"></div>
+                        <div class="ms-auto text-muted small" id="group-dirty-indicator">${currentGroupDirty ? 'Kaydedilmemiş değişiklikler' : ''}</div>
                     </div>
 
                     <h6>Üyeler</h6>
@@ -761,6 +773,9 @@ function attachGroupPanelHandlers() {
         if (dirtyIndicator) dirtyIndicator.textContent = isDirty ? 'Kaydedilmemiş değişiklikler' : '';
     }
 
+    // Sync initial UI state on each re-render
+    setDirty(currentGroupDirty === true);
+
     if (discardBtn) {
         discardBtn.addEventListener('click', () => {
             currentGroupPermsDraft = new Set(currentGroupPermsOriginal);
@@ -775,17 +790,7 @@ function attachGroupPanelHandlers() {
             const groupName = currentGroupName;
             if (!groupName) return;
 
-            // Diff original vs draft
-            const toAdd = [];
-            const toRemove = [];
-            for (const code of currentGroupPermsDraft) {
-                if (!currentGroupPermsOriginal.has(code)) toAdd.push(code);
-            }
-            for (const code of currentGroupPermsOriginal) {
-                if (!currentGroupPermsDraft.has(code)) toRemove.push(code);
-            }
-
-            if (toAdd.length === 0 && toRemove.length === 0) {
+            if (setsEqual(currentGroupPermsDraft, currentGroupPermsOriginal)) {
                 setDirty(false);
                 return;
             }
@@ -795,13 +800,9 @@ function attachGroupPanelHandlers() {
             if (dirtyIndicator) dirtyIndicator.textContent = 'Kaydediliyor...';
 
             try {
-                // Apply changes
-                for (const code of toAdd) {
-                    await addPermissionToGroup(groupName, code);
-                }
-                for (const code of toRemove) {
-                    await removePermissionFromGroup(groupName, code);
-                }
+                // Bulk replace (send only leaf/child codenames)
+                const payload = Array.from(currentGroupPermsDraft);
+                await saveGroupPermissionsBulk(groupName, payload);
 
                 // Update caches
                 currentGroupPermsOriginal = new Set(currentGroupPermsDraft);
@@ -838,7 +839,7 @@ function attachGroupPanelHandlers() {
 
             // Update the portal header counters/indeterminate state by re-rendering panel (no network)
             // Preserve collapse state.
-            capturePortalCollapseState(panel);
+            captureSectionCollapseState(panel);
             await loadGroupDetail(currentGroupName);
         });
     });

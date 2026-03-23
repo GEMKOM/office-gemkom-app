@@ -199,7 +199,7 @@ export async function resetNotificationPreferences() {
 
 /**
  * Get all notification configs
- * @returns {Promise<Object>} Object with team_choices and configs array
+ * @returns {Promise<Object>} Object with group_choices (or team_choices) and configs array
  */
 export async function getNotificationConfigs() {
     try {
