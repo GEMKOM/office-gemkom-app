@@ -122,18 +122,17 @@ export function filterNavigationByAccess(navigationStructure) {
         const filteredStructure = {};
         
         for (const [path, item] of Object.entries(navigationStructure)) {
-            // Check if user has access to this route
-            if (hasRouteAccess(path)) {
-                // Recursively filter children
-                const filteredChildren = filterNavigationByAccess(item.children);
-                
-                // Only include this item if it has children or if user has access to the route itself
-                if (Object.keys(filteredChildren).length > 0 || hasRouteAccess(path)) {
-                    filteredStructure[path] = {
-                        ...item,
-                        children: filteredChildren
-                    };
-                }
+            // Recursively filter children first so parent sections can stay visible
+            // when a user has access only to specific child routes.
+            const filteredChildren = filterNavigationByAccess(item.children || {});
+            const hasDirectAccess = hasRouteAccess(path);
+            const hasVisibleChildren = Object.keys(filteredChildren).length > 0;
+
+            if (hasDirectAccess || hasVisibleChildren) {
+                filteredStructure[path] = {
+                    ...item,
+                    children: filteredChildren
+                };
             }
         }
         
