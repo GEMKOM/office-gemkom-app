@@ -790,6 +790,14 @@ async function showDeleteSubcontractorModal(subcontractorId, subcontractorName) 
     try {
         deleteSubcontractorModal.clearData();
         deleteSubcontractorModal.setTitle('Taşeron Silme Onayı');
+        deleteSubcontractorModal.setFooterContent(`
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                <i class="fas fa-times me-1"></i>Kapat
+            </button>
+            <button type="button" class="btn btn-sm btn-danger" id="confirm-delete-subcontractor-btn">
+                <i class="fas fa-trash me-1"></i>Sil
+            </button>
+        `);
         
         deleteSubcontractorModal.addSection({
             title: 'Onay',
@@ -815,7 +823,7 @@ async function showDeleteSubcontractorModal(subcontractorId, subcontractorName) 
         window.pendingDeleteSubcontractorId = subcontractorId;
         
         // Add delete button handler
-        const deleteBtn = deleteSubcontractorModal.container.querySelector('.btn-danger');
+        const deleteBtn = deleteSubcontractorModal.container.querySelector('#confirm-delete-subcontractor-btn');
         if (deleteBtn) {
             deleteBtn.onclick = async () => {
                 try {
