@@ -49,7 +49,7 @@ import { showNotification } from '../../components/notification/notification.js'
 import { backendBase } from '../../base.js';
 import { isAdmin, canViewCostTab } from '../../authService.js';
 import { listDrawingReleases, getCurrentRelease, requestRevision } from '../../apis/projects/design.js';
-import { fetchAllUsers } from '../../apis/users.js';
+import { fetchAllUsers, fetchTeams } from '../../apis/users.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
 import { 
     fetchPriceTiers, 
@@ -3839,15 +3839,21 @@ function getAvatarColor(name) {
 // Initialize @mention functionality for any textarea
 function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
     let allUsers = [];
+    let allGroups = [];
     let mentionStartPos = -1;
     let selectedSuggestionIndex = -1;
     
-    // Load users for @mentions
+    // Load users and groups for @mentions
     (async () => {
         try {
-            allUsers = await fetchAllUsers();
+            const [users, groups] = await Promise.all([
+                fetchAllUsers(),
+                fetchTeams()
+            ]);
+            allUsers = users || [];
+            allGroups = groups || [];
         } catch (error) {
-            console.error('Error loading users for mentions:', error);
+            console.error('Error loading mention data:', error);
         }
     })();
     
@@ -3858,22 +3864,38 @@ function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
         const textBeforeCursor = text.substring(0, cursorPos);
         
         // Check if we're typing after @
-        const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+        const mentionMatch = textBeforeCursor.match(/@([\w-]*)$/);
         
         if (mentionMatch) {
             const query = mentionMatch[1].toLowerCase();
             mentionStartPos = cursorPos - query.length - 1; // -1 for @
             
-            // Filter users based on query
+            // Filter users and groups based on query
             const filteredUsers = allUsers.filter(user => {
                 const username = (user.username || '').toLowerCase();
                 const fullName = (user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || '').toLowerCase();
                 return username.includes(query) || fullName.includes(query);
-            }).slice(0, 10); // Limit to 10 suggestions
+            }).map(user => ({
+                type: 'user',
+                token: user.username || '',
+                fullName: user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || ''
+            })).filter(item => item.token);
+
+            const filteredGroups = allGroups.filter(group => {
+                const groupName = (group.name || group.value || '').toLowerCase();
+                const displayName = (group.display_name || group.label || groupName || '').toLowerCase();
+                return groupName.includes(query) || displayName.includes(query);
+            }).map(group => ({
+                type: 'group',
+                token: group.name || group.value || '',
+                fullName: group.display_name || group.label || group.name || group.value || ''
+            })).filter(item => item.token);
+
+            const filteredMentions = [...filteredUsers, ...filteredGroups].slice(0, 10); // Limit to 10 suggestions
             
-            if (filteredUsers.length > 0) {
+            if (filteredMentions.length > 0) {
                 selectedSuggestionIndex = -1;
-                renderMentionSuggestions(filteredUsers, query, mentionSuggestionsContainer, textarea);
+                renderMentionSuggestions(filteredMentions, mentionSuggestionsContainer, textarea);
             } else {
                 hideMentionSuggestions(mentionSuggestionsContainer);
             }
@@ -3901,8 +3923,8 @@ function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
             if (selectedSuggestionIndex >= 0 && selectedSuggestionIndex < suggestionItems.length) {
                 e.preventDefault();
                 const selectedItem = suggestionItems[selectedSuggestionIndex];
-                const username = selectedItem.dataset.username;
-                insertMention(username, textarea, mentionStartPos);
+                const mentionToken = selectedItem.dataset.token;
+                insertMention(mentionToken, textarea, mentionStartPos);
                 hideMentionSuggestions(mentionSuggestionsContainer);
             }
         } else if (e.key === 'Escape') {
@@ -3918,24 +3940,27 @@ function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
     };
     document.addEventListener('click', clickHandler);
     
-    function renderMentionSuggestions(users, query, container, textarea) {
-        container.innerHTML = users.map((user, index) => {
-            const username = user.username || '';
-            const fullName = user.full_name || `${user.first_name || ''} ${user.last_name || ''}`.trim() || username;
+    function renderMentionSuggestions(mentions, container, textarea) {
+        container.innerHTML = mentions.map((mention, index) => {
+            const token = mention.token || '';
+            const fullName = mention.fullName || token;
             const initials = getUserInitials(fullName);
             const avatarColor = getAvatarColor(fullName);
+            const mentionTypeBadge = mention.type === 'group'
+                ? '<span class="badge bg-warning text-dark ms-2" style="font-size: 10px;">Grup</span>'
+                : '';
             
             return `
                 <div class="mention-suggestion-item ${index === 0 ? 'selected' : ''}" 
-                     data-username="${username}" 
+                     data-token="${token}" 
                      data-full-name="${fullName}"
                      style="cursor: pointer; padding: 8px 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e1e5e9;">
                     <div class="mention-avatar" style="width: 24px; height: 24px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600; flex-shrink: 0;">
                         ${initials}
                     </div>
                     <div class="flex-grow-1">
-                        <div style="font-weight: 500; color: #172b4d; font-size: 14px;">${fullName}</div>
-                        <div style="font-size: 12px; color: #6c757d;">@${username}</div>
+                        <div style="font-weight: 500; color: #172b4d; font-size: 14px;">${fullName}${mentionTypeBadge}</div>
+                        <div style="font-size: 12px; color: #6c757d;">@${token}</div>
                     </div>
                 </div>
             `;
@@ -3946,8 +3971,8 @@ function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
         // Add click handlers
         container.querySelectorAll('.mention-suggestion-item').forEach((item, index) => {
             item.addEventListener('click', () => {
-                const username = item.dataset.username;
-                insertMention(username, textarea, mentionStartPos);
+                const mentionToken = item.dataset.token;
+                insertMention(mentionToken, textarea, mentionStartPos);
                 hideMentionSuggestions(container);
             });
             
@@ -3970,14 +3995,14 @@ function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
         });
     }
     
-    function insertMention(username, textarea, startPos) {
+    function insertMention(mentionToken, textarea, startPos) {
         const text = textarea.value;
         const beforeMention = text.substring(0, startPos);
         const afterMention = text.substring(textarea.selectionStart);
-        const newText = beforeMention + `@${username} ` + afterMention;
+        const newText = beforeMention + `@${mentionToken} ` + afterMention;
         
         textarea.value = newText;
-        const newCursorPos = startPos + username.length + 2; // +2 for @ and space
+        const newCursorPos = startPos + mentionToken.length + 2; // +2 for @ and space
         textarea.setSelectionRange(newCursorPos, newCursorPos);
         textarea.focus();
     }
