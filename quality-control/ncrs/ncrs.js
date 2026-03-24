@@ -62,6 +62,45 @@ function isUserInGroup(user, groupName) {
     });
 }
 
+function doesGroupMatchAssignedTeam(group, assignedTeamName, assignedTeamId) {
+    if (!group) return false;
+
+    if (typeof group === 'string') {
+        return Boolean(assignedTeamName) && group === assignedTeamName;
+    }
+
+    if (typeof group === 'object') {
+        const groupName = group.name;
+        const groupSlug = group.slug;
+        const groupId = group.id;
+
+        if (assignedTeamName && (groupName === assignedTeamName || groupSlug === assignedTeamName)) {
+            return true;
+        }
+
+        if (assignedTeamId !== null && assignedTeamId !== undefined && groupId !== undefined && groupId !== null) {
+            return String(groupId) === String(assignedTeamId);
+        }
+    }
+
+    return false;
+}
+
+function isUserInAssignedTeam(user, row) {
+    if (!user || !row) return false;
+
+    const isSuperuser = user.is_superuser || user.is_admin;
+    if (isSuperuser) return true;
+
+    const groups = Array.isArray(user.groups) ? user.groups : [];
+    if (!groups.length) return false;
+
+    const assignedTeamName = row.assigned_team_name || '';
+    const assignedTeamId = row.assigned_team;
+
+    return groups.some(group => doesGroupMatchAssignedTeam(group, assignedTeamName, assignedTeamId));
+}
+
 function canCurrentUserDecideNCRs() {
     const isQCTeam = isUserInGroup(currentUser, 'qualitycontrol_team');
     const isSuperuser = currentUser && (currentUser.is_superuser || currentUser.is_admin);
@@ -473,13 +512,11 @@ function initializeTableComponent(canDecideNCRs) {
             label: 'Gönder',
             icon: 'fas fa-paper-plane',
             class: 'btn-outline-success',
-            // Only users from the assigned team can submit
+            // Only users from the assigned group/team can submit
             visible: (row) => {
-                const userTeam = currentUser && currentUser.team;
-                if (!userTeam) return false;
-                if (!row.assigned_team) return false;
+                if (!row.assigned_team && !row.assigned_team_name) return false;
                 if (!(row.status === 'draft' || row.status === 'rejected')) return false;
-                return row.assigned_team === userTeam;
+                return isUserInAssignedTeam(currentUser, row);
             },
             onClick: (row) => handleSubmitNCR(row)
         }
@@ -517,10 +554,9 @@ function initializeTableComponent(canDecideNCRs) {
             if (row.status !== 'approved') return false;
             // QC team or superuser can always close
             if (canDecideNCRs) return true;
-            // Assigned team can close if NCR is assigned to them
-            const userTeam = currentUser && currentUser.team;
-            if (!userTeam || !row.assigned_team) return false;
-            return row.assigned_team === userTeam;
+            // Assigned group/team can close if NCR is assigned to one of user's groups
+            if (!row.assigned_team && !row.assigned_team_name) return false;
+            return isUserInAssignedTeam(currentUser, row);
         },
         onClick: (row) => handleCloseNCR(row)
     });

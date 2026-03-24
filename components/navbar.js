@@ -1,4 +1,4 @@
-import { logout, isAdmin, isLoggedIn, getUser, navigateTo, ROUTES } from '../authService.js';
+import { logout, isAdmin, isLoggedIn, getUser, navigateTo, ROUTES, fetchAndStorePermissions } from '../authService.js';
 import { backendBase } from '../base.js';
 import { authedFetch } from '../authService.js';
 import { filterNavigationByAccess, hasRouteAccess } from '../apis/accessControl.js';
@@ -206,6 +206,12 @@ export function initNavbar() {
     }
 
     async function renderNavbar() {
+      // Refresh permission cache so newly granted routes are reflected
+      // without requiring users to log out and back in.
+      if (isLoggedIn()) {
+        await fetchAndStorePermissions();
+      }
+
       let user = null;
       try {
         const cached = localStorage.getItem('user');

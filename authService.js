@@ -224,6 +224,11 @@ function clearTokens() {
 }
 
 export async function login(username, password) {
+    // Always force a fresh permission fetch for each new login.
+    localStorage.removeItem('permissions');
+    cachedPermissions = null;
+    cachedGrantedPageRoutes = null;
+
     const response = await fetch(`${API_URL}/token/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' ,
@@ -243,13 +248,16 @@ export async function login(username, password) {
     setTokens(data.access, data.refresh);
 
     // Fetch user and permissions in parallel after we have tokens
-    const [userData, perms] = await Promise.all([
+    const [userData, initialPerms] = await Promise.all([
         getUser(),
         fetchAndStorePermissions()
     ]);
+    const perms = initialPerms || await fetchAndStorePermissions();
 
     // Block non-office users from logging in
-    if (!hasPermissionInPayload(perms, 'office_access')) {
+    // If permissions endpoint is temporarily unavailable, do not force logout loop.
+    // Enforce office_access only when permission payload is available.
+    if (perms && !hasPermissionInPayload(perms, 'office_access')) {
         // Clear tokens and cached data to ensure user is fully logged out
         logout();
         throw new Error('FORBIDDEN');
@@ -269,6 +277,9 @@ export async function login(username, password) {
 export function logout() {
     clearTokens();
     clearCachedUser();
+    // Ensure in-memory permission caches are also dropped immediately.
+    cachedPermissions = null;
+    cachedGrantedPageRoutes = null;
     navigateTo(ROUTES.LOGIN);
 }
 
