@@ -44,6 +44,7 @@ import {
 } from '../../apis/sales/offers.js';
 import { listOfferTemplates, getOfferTemplate, getOfferTemplateNodes, getOfferTemplateNodeChildren } from '../../apis/sales/offerTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
+import { createComment, getTopicComments } from '../../apis/projects/topics.js';
 import { authFetchUsers } from '../../apis/users.js';
 import { getUser } from '../../authService.js';
 import { FileViewer } from '../../components/file-viewer/file-viewer.js';
@@ -1410,6 +1411,7 @@ function getConsultationsTableRows() {
             const descText = (t.notes ?? t.description ?? '').toString();
             rows.push({
                 task_id: t.id,
+                discussion_topic_id: t.discussion_topic?.id || null,
                 department: deptLabel,
                 title: t.title || 'Görev',
                 status: t.status,
@@ -1476,6 +1478,15 @@ function renderConsultationsTable() {
         emptyIcon: 'fas fa-comments',
         actions: [
             {
+                key: 'view_consultation_comments',
+                label: 'Yorumlar',
+                title: 'Yorumları görüntüle ve ekle',
+                icon: 'fas fa-comments',
+                class: 'btn-outline-secondary',
+                visible: true,
+                onClick: (row) => showConsultationCommentsModal(row.task_id)
+            },
+            {
                 key: 'edit_consultation',
                 label: 'Düzenle',
                 title: 'Danışma görevini düzenle',
@@ -1486,6 +1497,110 @@ function renderConsultationsTable() {
             }
         ]
     });
+}
+
+async function showConsultationCommentsModal(taskId) {
+    let task;
+    try {
+        task = await getOfferConsultationTask(offerId, taskId);
+    } catch (e) {
+        showNotification(e.message || 'Danışma görevi yüklenemedi', 'error');
+        return;
+    }
+
+    const topicId = task?.discussion_topic?.id;
+    if (!topicId) {
+        showNotification('Bu görev için tartışma konusu bulunamadı', 'warning');
+        return;
+    }
+
+    let commentsModalContainer = document.getElementById('consultation-comments-modal-container');
+    if (!commentsModalContainer) {
+        commentsModalContainer = document.createElement('div');
+        commentsModalContainer.id = 'consultation-comments-modal-container';
+        document.body.appendChild(commentsModalContainer);
+    }
+
+    const commentsModal = new DisplayModal('consultation-comments-modal-container', {
+        title: `${task.title || 'Danışma Görevi'} - Yorumlar`,
+        icon: 'fas fa-comments',
+        size: 'lg',
+        showEditButton: false
+    });
+
+    const renderCommentsContent = async () => {
+        let comments = [];
+        try {
+            comments = await getTopicComments(topicId);
+        } catch (err) {
+            console.error('Error loading consultation comments:', err);
+        }
+
+        const commentsHtml = comments.length === 0
+            ? '<p class="text-muted text-center py-4 mb-0">Henüz yorum yok.</p>'
+            : comments.map((comment) => {
+                const author = escapeHtml(comment.created_by_name || comment.created_by_username || 'Kullanıcı');
+                const date = comment.created_at ? new Date(comment.created_at) : null;
+                const dateText = date && !Number.isNaN(date.getTime()) ? date.toLocaleString('tr-TR') : '-';
+                const content = escapeHtml(comment.content || '').replace(/\n/g, '<br>');
+                return `
+                    <div class="comment-item mb-3 pb-3 border-bottom">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="fw-semibold">${author}</span>
+                            <small class="text-muted">${dateText}</small>
+                        </div>
+                        <div style="line-height: 1.5;">${content}</div>
+                    </div>
+                `;
+            }).join('');
+
+        return `
+            <div class="mb-3">
+                <h6 class="mb-3"><i class="fas fa-comments me-2"></i>Yorumlar (${comments.length})</h6>
+                <div id="consultation-comments-list" class="mb-4">${commentsHtml}</div>
+                <div class="border-top pt-3">
+                    <label class="form-label"><i class="fas fa-pen me-1"></i>Yeni Yorum</label>
+                    <textarea id="consultation-new-comment-text" class="form-control mb-2" rows="3" placeholder="Yorum yazın..."></textarea>
+                    <button class="btn btn-sm btn-primary" id="consultation-add-comment-btn">
+                        <i class="fas fa-paper-plane me-1"></i>Yorum Ekle
+                    </button>
+                </div>
+            </div>
+        `;
+    };
+
+    commentsModal.addCustomSection({
+        id: 'consultation-comments-section',
+        customContent: '<div class="text-center py-4"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>'
+    });
+
+    commentsModal.render();
+    commentsModal.show();
+
+    const sectionContainer = commentsModal.container?.querySelector('[data-section-id="consultation-comments-section"] .custom-content');
+    if (!sectionContainer) return;
+
+    const refreshComments = async () => {
+        sectionContainer.innerHTML = await renderCommentsContent();
+        sectionContainer.querySelector('#consultation-add-comment-btn')?.addEventListener('click', async () => {
+            const textarea = sectionContainer.querySelector('#consultation-new-comment-text');
+            const content = textarea?.value?.trim();
+            if (!content) {
+                showNotification('Lütfen yorum metni girin', 'warning');
+                return;
+            }
+            try {
+                await createComment({ topic: topicId, content });
+                showNotification('Yorum eklendi', 'success');
+                await refreshComments();
+            } catch (err) {
+                console.error('Error creating consultation comment:', err);
+                showNotification('Yorum eklenirken hata oluştu', 'error');
+            }
+        });
+    };
+
+    await refreshComments();
 }
 
 // Flatten items tree for pricing display (show all items)

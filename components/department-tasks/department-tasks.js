@@ -38,6 +38,7 @@ import {
 import { fetchSubcontractors } from '../../apis/subcontracting/subcontractors.js';
 import { fetchPriceTiers, getPriceTierRemainingWeight, updatePriceTier } from '../../apis/subcontracting/priceTiers.js';
 import { submitQCReview, bulkSubmitQCReviews, listQCReviews, listNCRs, getNCR } from '../../apis/qualityControl.js';
+import { createComment } from '../../apis/projects/topics.js';
 
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
@@ -3825,6 +3826,20 @@ async function renderConsultationTab(task) {
     const summary = task.offer_summary || {};
     const sharedFiles = task.shared_files || [];
     const completionFiles = task.completion_files || [];
+    const discussionTopic = task.discussion_topic || null;
+    const discussionComments = Array.isArray(discussionTopic?.comments) ? discussionTopic.comments : [];
+
+    const escapeHtml = (value) => String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    const formatCommentDate = (value) => {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '-';
+        return date.toLocaleString('tr-TR');
+    };
 
     let html = `<h5 class="mb-4"><i class="fas fa-handshake me-2"></i>Teklif Danışma</h5>`;
 
@@ -3930,6 +3945,41 @@ async function renderConsultationTab(task) {
         `;
     }
 
+    // Discussion topic comments linked to this consultation
+    html += `
+        <div class="card mt-3">
+            <div class="card-header bg-light">
+                <i class="fas fa-comments me-2"></i>Tartışma Yorumları (${discussionComments.length})
+            </div>
+            <div class="card-body">
+                ${discussionTopic?.id ? `
+                    <div class="mb-3" id="consultation-comments-list">
+                        ${discussionComments.length === 0
+                            ? '<p class="text-muted mb-0">Henüz yorum yok.</p>'
+                            : discussionComments.map(comment => `
+                                <div class="border-bottom pb-2 mb-2">
+                                    <div class="d-flex align-items-center gap-2 mb-1">
+                                        <strong>${escapeHtml(comment.created_by_name || comment.created_by_username || 'Kullanıcı')}</strong>
+                                        <small class="text-muted">${formatCommentDate(comment.created_at)}</small>
+                                    </div>
+                                    <div style="white-space: pre-wrap;">${escapeHtml(comment.content)}</div>
+                                </div>
+                            `).join('')}
+                    </div>
+                    <div class="mt-3">
+                        <label class="form-label"><i class="fas fa-pen me-1"></i>Yeni Yorum</label>
+                        <textarea class="form-control mb-2" id="consultation-comment-input" rows="3" placeholder="Yorum yazın..."></textarea>
+                        <button class="btn btn-primary btn-sm" id="consultation-comment-add-btn" data-topic-id="${discussionTopic.id}">
+                            <i class="fas fa-paper-plane me-1"></i>Yorum Ekle
+                        </button>
+                    </div>
+                ` : `
+                    <p class="text-muted mb-0">Bu görev için tartışma konusu bulunamadı.</p>
+                `}
+            </div>
+        </div>
+    `;
+
     return html;
 }
 
@@ -4011,10 +4061,47 @@ function setupConsultationTabListeners(task) {
             const { completeTask } = await import('../../apis/sales/departmentTasks.js');
             await completeTask(task.id, notes);
             showNotification('Görev tamamlandı', 'success');
-            taskDetailsModal.hide();
+            contentContainer.dataset.loaded = 'false';
+            const updatedTask = await getDepartmentTaskById(task.id);
+            contentContainer.innerHTML = await renderConsultationTab(updatedTask);
+            contentContainer.dataset.loaded = 'true';
+            setupConsultationTabListeners(updatedTask);
             await loadTasks();
         } catch (e) {
             showNotification(e.message || 'Tamamlama hatası', 'error');
+        }
+    });
+
+    contentContainer.querySelector('#consultation-comment-add-btn')?.addEventListener('click', async () => {
+        const commentInput = contentContainer.querySelector('#consultation-comment-input');
+        const commentText = commentInput?.value?.trim();
+        const topicIdRaw = contentContainer.querySelector('#consultation-comment-add-btn')?.dataset?.topicId;
+        const topicId = topicIdRaw ? parseInt(topicIdRaw, 10) : null;
+
+        if (!topicId) {
+            showNotification('Tartışma konusu bulunamadı', 'error');
+            return;
+        }
+        if (!commentText) {
+            showNotification('Lütfen yorum metni girin', 'warning');
+            return;
+        }
+
+        try {
+            await createComment({
+                topic: topicId,
+                content: commentText
+            });
+            showNotification('Yorum eklendi', 'success');
+
+            contentContainer.dataset.loaded = 'false';
+            const updatedTask = await getDepartmentTaskById(task.id);
+            contentContainer.innerHTML = await renderConsultationTab(updatedTask);
+            contentContainer.dataset.loaded = 'true';
+            setupConsultationTabListeners(updatedTask);
+        } catch (e) {
+            console.error('Error adding consultation comment:', e);
+            showNotification('Yorum ekleme hatası', 'error');
         }
     });
 }
