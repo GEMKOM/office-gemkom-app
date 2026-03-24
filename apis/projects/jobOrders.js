@@ -668,11 +668,13 @@ export async function recalculateJobOrderProgress(jobNo) {
 
 /**
  * Get job orders for dropdown (simplified list with job_no and title)
+ * @param {boolean} includeAll - Include completed/cancelled job orders
  * @returns {Promise<Array>} Array of job orders with job_no and title
  */
-export async function getJobOrderDropdown() {
+export async function getJobOrderDropdown(includeAll = false) {
     try {
-        const response = await authedFetch(`${backendBase}/projects/job-orders/dropdown/`);
+        const query = includeAll ? '?all=true' : '';
+        const response = await authedFetch(`${backendBase}/projects/job-orders/dropdown/${query}`);
         
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);

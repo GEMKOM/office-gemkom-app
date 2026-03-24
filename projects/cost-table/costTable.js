@@ -10,7 +10,7 @@ import { listCustomers } from '../../apis/projects/customers.js';
 import { getCombinedJobCosts } from '../../apis/planning/reports.js';
 import { getMachiningJobEntries } from '../../apis/machining/reports.js';
 import { getWeldingJobCostDetail } from '../../apis/welding/reports.js';
-import { fetchAssignments } from '../../apis/subcontracting/assignments.js';
+import { fetchSubcontractorCostBreakdown } from '../../apis/subcontracting/subcontractors.js';
 
 const STATUS_OPTIONS = [
     { value: '', label: 'Tümü' },
@@ -1334,12 +1334,10 @@ async function showSubcontractorDetails(jobNo) {
         // Ensure container exists
         ensureModalContainer('subcontractor-details-modal-container');
         
-        // Fetch subcontracting assignments for the job
-        const data = await fetchAssignments({ job_no: jobNo });
-        const allAssignments = Array.isArray(data) ? data : (data.results || []);
-        
-        // Filter out "Boya" assignments
-        const assignments = allAssignments.filter(assignment => assignment.price_tier_name !== 'Boya');
+        // Fetch subcontractor cost breakdown for the job
+        const data = await fetchSubcontractorCostBreakdown(jobNo);
+        const lines = Array.isArray(data?.lines) ? data.lines : [];
+        const adjustments = Array.isArray(data?.adjustments) ? data.adjustments : [];
         
         // Create display modal
         const modal = new DisplayModal('subcontractor-details-modal-container', {
@@ -1349,26 +1347,7 @@ async function showSubcontractorDetails(jobNo) {
             showEditButton: false
         });
         
-        // Calculate totals (excluding "Boya" assignments)
-        const totalCost = assignments.reduce((sum, assignment) => {
-            const cost = typeof assignment.current_cost_eur === 'string' ? parseFloat(assignment.current_cost_eur) : (assignment.current_cost_eur || 0);
-            return sum + cost;
-        }, 0);
-        
-        const totalProjectedCost = assignments.reduce((sum, assignment) => {
-            const cost = typeof assignment.projected_cost === 'string' ? parseFloat(assignment.projected_cost) : (assignment.projected_cost || 0);
-            return sum + cost;
-        }, 0);
-        
-        const totalUnbilledCost = assignments.reduce((sum, assignment) => {
-            const cost = typeof assignment.unbilled_cost_eur === 'string' ? parseFloat(assignment.unbilled_cost_eur) : (assignment.unbilled_cost_eur || 0);
-            return sum + cost;
-        }, 0);
-        
-        const totalWeight = assignments.reduce((sum, assignment) => {
-            const weight = typeof assignment.allocated_weight_kg === 'string' ? parseFloat(assignment.allocated_weight_kg) : (assignment.allocated_weight_kg || 0);
-            return sum + weight;
-        }, 0);
+        const totalEur = typeof data?.total_eur === 'string' ? parseFloat(data.total_eur) : (data?.total_eur || 0);
         
         // Add summary section
         modal.addSection({
@@ -1377,73 +1356,49 @@ async function showSubcontractorDetails(jobNo) {
             iconColor: 'text-warning',
             fields: [
                 {
-                    id: 'total_assignments',
-                    label: 'Toplam Atama',
-                    value: assignments.length,
+                    id: 'total_work_lines',
+                    label: 'İş Satırı',
+                    value: lines.length,
                     type: 'number',
                     icon: 'fas fa-list',
-                    colSize: 2
+                    colSize: 4
                 },
                 {
-                    id: 'total_cost',
-                    label: 'Mevcut Maliyet',
-                    value: totalCost,
+                    id: 'total_adjustments',
+                    label: 'Düzeltme Satırı',
+                    value: adjustments.length,
+                    type: 'number',
+                    icon: 'fas fa-edit',
+                    colSize: 4
+                },
+                {
+                    id: 'total_eur',
+                    label: 'Toplam (EUR)',
+                    value: totalEur,
                     type: 'text',
                     icon: 'fas fa-euro-sign',
                     format: (value) => formatMoney(value),
-                    colSize: 2
-                },
-                {
-                    id: 'total_projected_cost',
-                    label: 'Tahmini Maliyet',
-                    value: totalProjectedCost,
-                    type: 'text',
-                    icon: 'fas fa-calculator',
-                    format: (value) => formatMoney(value),
-                    colSize: 2
-                },
-                {
-                    id: 'total_unbilled',
-                    label: 'Faturalanmamış Tutar',
-                    value: totalUnbilledCost,
-                    type: 'text',
-                    icon: 'fas fa-file-invoice',
-                    format: (value) => formatMoney(value),
-                    colSize: 2
-                },
-                {
-                    id: 'total_weight',
-                    label: 'Toplam Ağırlık (kg)',
-                    value: totalWeight,
-                    type: 'number',
-                    icon: 'fas fa-weight',
-                    format: (value) => `${(Number(value) || 0).toFixed(2)} kg`,
-                    colSize: 2
+                    colSize: 4
                 }
             ]
         });
         
-        // Add assignments table using TableComponent
-        if (assignments.length > 0) {
-            // Process assignments data for table display
-            const assignmentsTableData = assignments.map((assignment, index) => ({
-                id: assignment.id || index,
-                subcontractor_name: assignment.subcontractor_name || '-',
-                price_tier_name: assignment.price_tier_name || '-',
-                price_per_kg: assignment.price_per_kg || 0,
-                cost_currency: assignment.cost_currency || 'EUR',
-                allocated_weight_kg: assignment.allocated_weight_kg || 0,
-                current_cost_eur: assignment.current_cost_eur || 0,
-                projected_cost: assignment.projected_cost || 0,
-                current_progress: assignment.current_progress || 0,
-                last_billed_progress: assignment.last_billed_progress || 0,
-                unbilled_progress: assignment.unbilled_progress || 0,
-                unbilled_cost_eur: assignment.unbilled_cost_eur || 0,
-                raw_data: assignment
+        // Add work lines table
+        if (lines.length > 0) {
+            const linesTableData = lines.map((line, index) => ({
+                id: `line-${index}`,
+                statement_period: line.statement_year && line.statement_month
+                    ? `${line.statement_month}.${line.statement_year}`
+                    : '-',
+                subcontractor_name: line.subcontractor_name || '-',
+                delta_progress: line.delta_progress || 0,
+                cost_amount: line.cost_amount || 0,
+                cost_currency: line.cost_currency || 'TRY',
+                cost_amount_eur: line.cost_amount_eur || 0
             }));
 
             const tableHtml = `
-                <div id="subcontractor-assignments-table-container"></div>
+                <div id="subcontractor-lines-table-container"></div>
             `;
             
             modal.addCustomSection({
@@ -1454,11 +1409,18 @@ async function showSubcontractorDetails(jobNo) {
             // Render and show modal first
             modal.render().show();
 
-            // Initialize table component after modal is shown
+            // Initialize work lines table after modal is shown
             setTimeout(() => {
-                const assignmentsTable = new TableComponent('subcontractor-assignments-table-container', {
-                    title: 'Taşeron Atamaları',
+                const linesTable = new TableComponent('subcontractor-lines-table-container', {
+                    title: 'İş Satırları',
                     columns: [
+                        {
+                            field: 'statement_period',
+                            label: 'Dönem',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => value || '-'
+                        },
                         {
                             field: 'subcontractor_name',
                             label: 'Taşeron',
@@ -1467,78 +1429,30 @@ async function showSubcontractorDetails(jobNo) {
                             formatter: (value) => value || '-'
                         },
                         {
-                            field: 'price_tier_name',
-                            label: 'Fiyat Kademesi',
-                            sortable: true,
-                            type: 'text',
-                            formatter: (value) => value || '-'
-                        },
-                        {
-                            field: 'price_per_kg',
-                            label: 'Kg Fiyatı',
+                            field: 'delta_progress',
+                            label: 'Delta İlerleme (%)',
                             sortable: true,
                             type: 'number',
-                            width: '120px',
-                            formatter: (value, rowData) => {
-                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
-                                const currency = rowData.cost_currency || 'EUR';
-                                if (currency === 'EUR') {
-                                    return formatMoney(value);
-                                }
-                                return `${currency}${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-                            }
+                            formatter: (value) => formatPct(value)
                         },
                         {
-                            field: 'allocated_weight_kg',
-                            label: 'Ağırlık (kg)',
-                            sortable: true,
-                            type: 'number',
-                            width: '120px',
-                            formatter: (value) => {
-                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
-                                return num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                            }
-                        },
-                        {
-                            field: 'current_cost_eur',
-                            label: 'Mevcut Maliyet',
+                            field: 'cost_amount',
+                            label: 'Tutar',
                             sortable: true,
                             type: 'text',
-                            width: '120px',
                             formatter: (value, rowData) => {
-                                return formatMoney(value);
-                            }
-                        },
-                        {
-                            field: 'projected_cost',
-                            label: 'Tahmini Maliyet',
-                            sortable: true,
-                            type: 'text',
-                            width: '120px',
-                            formatter: (value, rowData) => {
-                                return formatMoney(value);
-                            }
-                        },
-                        {
-                            field: 'current_progress',
-                            label: 'İlerleme (%)',
-                            sortable: true,
-                            type: 'number',
-                            width: '100px',
-                            formatter: (value) => {
                                 const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
-                                return num.toFixed(1) + '%';
+                                const currency = rowData.cost_currency || 'TRY';
+                                return `${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
                             }
                         },
                         {
-                            field: 'unbilled_cost_eur',
-                            label: 'Faturalanmamış',
+                            field: 'cost_amount_eur',
+                            label: 'EUR Tutarı',
+                            sortable: true,
                             sortable: true,
                             type: 'text',
-                            width: '120px',
-                            formatter: (value, rowData) => {
-                                return formatMoney(value);
-                            }
+                            formatter: (value) => formatMoney(value)
                         }
                     ],
                     onRowClick: null,
@@ -1551,18 +1465,101 @@ async function showSubcontractorDetails(jobNo) {
                 });
 
                 // Update table with data
-                assignmentsTable.updateData(assignmentsTableData, {
-                    totalItems: assignmentsTableData.length,
+                linesTable.updateData(linesTableData, {
+                    totalItems: linesTableData.length,
                     currentPage: 1,
-                    pageSize: assignmentsTableData.length
+                    pageSize: linesTableData.length
                 });
             }, 100);
         } else {
             modal.addCustomSection({
-                title: 'Taşeron Atamaları',
+                title: 'İş Satırları',
                 icon: 'fas fa-table',
                 iconColor: 'text-warning',
-                customContent: '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Bu iş için taşeron ataması bulunamadı.</div>'
+                customContent: '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Bu iş için taşeron iş satırı bulunamadı.</div>'
+            });
+            modal.render().show();
+        }
+
+        if (adjustments.length > 0) {
+            const adjustmentsTableData = adjustments.map((adj, index) => ({
+                id: `adj-${index}`,
+                adjustment_type: adj.adjustment_type || '-',
+                reason: adj.reason || '-',
+                amount: adj.amount || 0,
+                cost_currency: adj.cost_currency || 'TRY',
+                cost_amount_eur: adj.cost_amount_eur || 0
+            }));
+
+            const adjustmentsTableHtml = `
+                <div id="subcontractor-adjustments-table-container"></div>
+            `;
+
+            modal.addCustomSection({
+                title: null,
+                customContent: adjustmentsTableHtml
+            });
+
+            modal.render();
+
+            setTimeout(() => {
+                const adjustmentsTable = new TableComponent('subcontractor-adjustments-table-container', {
+                    title: 'Düzeltmeler',
+                    columns: [
+                        {
+                            field: 'adjustment_type',
+                            label: 'Tür',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => value || '-'
+                        },
+                        {
+                            field: 'reason',
+                            label: 'Açıklama',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => value || '-'
+                        },
+                        {
+                            field: 'amount',
+                            label: 'Tutar',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value, rowData) => {
+                                const num = typeof value === 'string' ? parseFloat(value) : (value || 0);
+                                const currency = rowData.cost_currency || 'TRY';
+                                return `${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${currency}`;
+                            }
+                        },
+                        {
+                            field: 'cost_amount_eur',
+                            label: 'EUR Tutarı',
+                            sortable: true,
+                            type: 'text',
+                            formatter: (value) => formatMoney(value)
+                        }
+                    ],
+                    onRowClick: null,
+                    onSort: null,
+                    onPageChange: null,
+                    showPagination: false,
+                    showSearch: false,
+                    showExport: false,
+                    skeletonLoading: false
+                });
+
+                adjustmentsTable.updateData(adjustmentsTableData, {
+                    totalItems: adjustmentsTableData.length,
+                    currentPage: 1,
+                    pageSize: adjustmentsTableData.length
+                });
+            }, 100);
+        } else {
+            modal.addCustomSection({
+                title: 'Düzeltmeler',
+                icon: 'fas fa-table',
+                iconColor: 'text-warning',
+                customContent: '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Bu iş için taşeron düzeltmesi bulunamadı.</div>'
             });
             modal.render().show();
         }

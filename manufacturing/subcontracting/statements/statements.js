@@ -8,13 +8,15 @@ import {
     refreshStatement,
     submitStatement,
     decideStatement,
-    markStatementAsPaid,
     fetchStatementAdjustments,
     createStatementAdjustment,
     deleteStatementAdjustment,
     getStatementStatusInfo
 } from '../../../../apis/subcontracting/statements.js';
-import { fetchSubcontractors } from '../../../../apis/subcontracting/subcontractors.js';
+import {
+    fetchSubcontractors,
+    markSubcontractingStatementAsPaid
+} from '../../../../apis/subcontracting/subcontractors.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { TableComponent } from '../../../../components/table/table.js';
@@ -877,7 +879,7 @@ function setupStatementDetailActions(statement, adjustments) {
                     message: 'Hakedişi ödendi olarak işaretlemek istediğinizden emin misiniz?',
                     onConfirm: async () => {
                         try {
-                            await markStatementAsPaid(stId);
+                            await markSubcontractingStatementAsPaid(stId);
                             showNotification('Hakediş ödendi olarak işaretlendi', 'success');
                             viewStatementDetail(stId);
                             await loadStatements();

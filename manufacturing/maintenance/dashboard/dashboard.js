@@ -3,15 +3,17 @@ import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../../components/table/table.js';
-import { fetchFaultTimers } from '../../../apis/maintenance.js';
+import { fetchFaultTimers, fetchMachineFaults } from '../../../apis/maintenance.js';
 import { formatDurationFromMs, formatDateTime } from '../../../apis/formatters.js';
 
 let headerComponent;
 let statisticsCards;
 let faultTimersTable;
+let resolvedFaultsTable;
 
 let state = {
     timers: [],
+    resolvedFaultsToday: [],
     refreshInterval: null,
     timerUpdateInterval: null
 };
@@ -49,6 +51,7 @@ function getStartMs(timer) {
 
 function getUsername(timer) {
     return (
+        timer.resolved_by_username ||
         timer.username ||
         timer.user ||
         timer.user_name ||
@@ -82,13 +85,31 @@ function getFaultLabel(timer) {
     return '-';
 }
 
+function getResolvedAt(timer) {
+    return (
+        timer.resolved_at ||
+        timer.resolved_date ||
+        timer.completed_at ||
+        timer.updated_at ||
+        null
+    );
+}
+
+function getTodayDateForApi() {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
 async function initDashboard() {
     if (!guardRoute()) return;
 
     await initNavbar();
     initHeader();
     initStatistics();
-    initTable();
+    initTables();
 
     await loadData();
     startAutoRefresh();
@@ -119,7 +140,7 @@ function initStatistics() {
     });
 }
 
-function initTable() {
+function initTables() {
     faultTimersTable = new TableComponent('fault-timers-table', {
         title: 'Aktif Arıza Zamanlayıcıları',
         icon: 'fas fa-stopwatch',
@@ -184,6 +205,50 @@ function initTable() {
             faultTimersTable.setLoading(false);
         }
     });
+
+    resolvedFaultsTable = new TableComponent('resolved-faults-table', {
+        title: 'Bugün Çözülen Arızalar',
+        icon: 'fas fa-check-circle',
+        columns: [
+            {
+                field: 'user',
+                label: 'Kullanıcı',
+                sortable: false,
+                formatter: (value) => `<span style="font-weight: 600; color: #0d6efd;">${value || 'Bilinmiyor'}</span>`
+            },
+            {
+                field: 'machine',
+                label: 'Ekipman',
+                sortable: false,
+                formatter: (value) => `<span style="font-weight: 500;">${value || 'Bilinmiyor'}</span>`
+            },
+            {
+                field: 'fault',
+                label: 'Arıza',
+                sortable: false,
+                formatter: (value) => `<span title="${String(value || '').replace(/"/g, '&quot;')}">${value || '-'}</span>`
+            },
+            {
+                field: 'resolved_at',
+                label: 'Çözüm',
+                sortable: false,
+                formatter: (value) => `<span style="color:#198754;font-weight:600;">${formatDateTime(value) || '-'}</span>`
+            }
+        ],
+        data: [],
+        pagination: false,
+        emptyMessage: 'Bugün çözülen arıza yok',
+        emptyIcon: 'fas fa-check-circle',
+        tableClass: 'table table-hover',
+        refreshable: true,
+        skeleton: true,
+        skeletonRows: 6,
+        onRefresh: async () => {
+            resolvedFaultsTable.setLoading(true);
+            await loadData();
+            resolvedFaultsTable.setLoading(false);
+        }
+    });
 }
 
 function updateStatistics() {
@@ -221,17 +286,41 @@ function updateTable() {
     faultTimersTable.updateData(tableData);
 }
 
+function updateResolvedFaultsTable() {
+    if (!resolvedFaultsTable) return;
+
+    const tableData = state.resolvedFaultsToday.map((fault) => {
+        return {
+            user: getUsername(fault),
+            machine: getMachineName(fault),
+            fault: getFaultLabel(fault),
+            resolved_at: getResolvedAt(fault)
+        };
+    });
+
+    resolvedFaultsTable.updateData(tableData);
+}
+
 async function loadData() {
     try {
-        const response = await fetchFaultTimers(true);
-        state.timers = normalizeTimersResponse(response);
+        const [timersResponse, resolvedFaultsResponse] = await Promise.all([
+            fetchFaultTimers(true),
+            fetchMachineFaults({
+                resolved_date: getTodayDateForApi(),
+                page_size: 100
+            })
+        ]);
+        state.timers = normalizeTimersResponse(timersResponse);
+        state.resolvedFaultsToday = normalizeTimersResponse(resolvedFaultsResponse);
     } catch (error) {
         console.error('Error loading fault timers:', error);
         state.timers = [];
+        state.resolvedFaultsToday = [];
     }
 
     updateStatistics();
     updateTable();
+    updateResolvedFaultsTable();
 }
 
 function startAutoRefresh() {

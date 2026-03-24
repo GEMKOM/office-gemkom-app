@@ -183,3 +183,68 @@ export async function fetchSubcontractorsOverview(filters = {}) {
     return data;
 }
 
+/**
+ * Mark a subcontracting statement as paid.
+ * Works only when statement status is "approved";
+ * backend sets status to "paid" and stamps paid_at.
+ *
+ * Endpoint:
+ * - POST /subcontracting/statements/{id}/mark-paid/
+ *
+ * @param {number} statementId - Statement ID
+ * @returns {Promise<Object>} Updated statement payload
+ */
+export async function markSubcontractingStatementAsPaid(statementId) {
+    const url = `${backendBase}/subcontracting/statements/${statementId}/mark-paid/`;
+    const resp = await authedFetch(url, {
+        method: 'POST'
+    });
+
+    if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(
+            errorData.detail ||
+            errorData.message ||
+            'Hakediş ödendi olarak işaretlenirken hata oluştu'
+        );
+    }
+
+    const data = await resp.json();
+    return data;
+}
+
+/**
+ * Fetch subcontractor cost breakdown for a job order.
+ *
+ * Endpoint:
+ * - GET /projects/job-orders/{job_no}/subcontractor_cost_breakdown/
+ *
+ * Response shape:
+ * {
+ *   job_no: string,
+ *   total_eur: string,
+ *   lines: Array,
+ *   adjustments: Array
+ * }
+ *
+ * @param {string} jobNo - Job order number (e.g. "094-175")
+ * @returns {Promise<Object>} Subcontractor cost breakdown payload
+ */
+export async function fetchSubcontractorCostBreakdown(jobNo) {
+    const encodedJobNo = encodeURIComponent(jobNo);
+    const url = `${backendBase}/projects/job-orders/${encodedJobNo}/subcontractor_cost_breakdown/`;
+    const resp = await authedFetch(url);
+
+    if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(
+            errorData.detail ||
+            errorData.message ||
+            'Taşeron maliyet kırılımı yüklenirken hata oluştu'
+        );
+    }
+
+    const data = await resp.json();
+    return data;
+}
+

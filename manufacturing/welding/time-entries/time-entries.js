@@ -13,7 +13,6 @@ import {
 } from '../../../../apis/welding/crud.js';
 import { authFetchUsers } from '../../../../apis/users.js';
 import { showNotification } from '../../../../components/notification/notification.js';
-import { ModernDropdown } from '../../../../components/dropdown/dropdown.js';
 import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
 
 // State management
@@ -30,8 +29,6 @@ let editTimeEntryModal = null;
 let deleteTimeEntryModal = null;
 let actionConfirmModal = null;
 
-// Job order dropdown state
-let jobOrderDropdowns = new Map(); // Store dropdown references by row index
 let jobOrderDropdownOptions = []; // Array of { job_no, title }
 
 // Initialize the page
@@ -84,7 +81,7 @@ async function loadUsers() {
 // Load job order dropdown options
 async function loadJobOrderDropdownOptions() {
     try {
-        jobOrderDropdownOptions = await getJobOrderDropdown();
+        jobOrderDropdownOptions = await getJobOrderDropdown(true);
     } catch (error) {
         console.error('Error loading job order dropdown options:', error);
         jobOrderDropdownOptions = [];
@@ -465,55 +462,7 @@ function setupBulkCreateForm(bulkCreateModal) {
     let hasUnsavedChanges = false;
     let initialRows = JSON.stringify(rows);
     let parsedExcelRows = []; // Store parsed Excel rows
-    
-    // Initialize job order dropdown for a specific row
-    function initializeJobOrderDropdown(rowIndex, initialValue = '') {
-        const container = document.getElementById(`job-no-dropdown-${rowIndex}`);
-        if (!container) return;
-
-        // Load options if not already loaded
-        if (jobOrderDropdownOptions.length === 0) {
-            loadJobOrderDropdownOptions().then(() => {
-                setupJobOrderDropdown(container, rowIndex, initialValue);
-            }).catch(() => {
-                // Initialize with empty options if loading fails
-                setupJobOrderDropdown(container, rowIndex, initialValue);
-            });
-        } else {
-            setupJobOrderDropdown(container, rowIndex, initialValue);
-        }
-    }
-
-    // Setup the job order dropdown component
-    function setupJobOrderDropdown(container, rowIndex, initialValue = '') {
-        // Clear container
-        container.innerHTML = '';
-
-        // Create dropdown
-        const dropdown = new ModernDropdown(container, {
-            placeholder: 'İş emri seçin',
-            searchable: true,
-            multiple: false,
-            maxHeight: 200,
-            width: '100%'
-        });
-
-        // Convert job orders to dropdown items format
-        const dropdownItems = jobOrderDropdownOptions.map(jobOrder => ({
-            value: jobOrder.job_no,
-            text: `${jobOrder.job_no} - ${jobOrder.title}`
-        }));
-
-        dropdown.setItems(dropdownItems);
-
-        // Set initial value if provided
-        if (initialValue) {
-            dropdown.setValue(initialValue);
-        }
-
-        // Store dropdown reference in Map
-        jobOrderDropdowns.set(rowIndex, dropdown);
-    }
+    let failedExcelRows = []; // Store Excel rows that failed validation
     
     function checkForUnsavedChanges() {
         const currentRows = JSON.stringify(rows);
@@ -601,8 +550,13 @@ function setupBulkCreateForm(bulkCreateModal) {
                     }
                     html += `</select></td>`;
                 } else if (col.key === 'job_no') {
-                    // Use text input for job_no (temporarily replaced dropdown)
-                    html += `<td><input type="text" class="form-control form-control-sm bulk-input" data-row="${i}" data-key="${col.key}" value="${row[col.key] || ''}" ${col.required ? 'required' : ''}></td>`;
+                    html += `<td><select class="form-control form-control-sm bulk-input" data-row="${i}" data-key="${col.key}" ${col.required ? 'required' : ''}>`;
+                    html += `<option value="">İş no seçin...</option>`;
+                    jobOrderDropdownOptions.forEach(jobOrder => {
+                        const selected = row[col.key] == jobOrder.job_no ? 'selected' : '';
+                        html += `<option value="${jobOrder.job_no}" ${selected}>${jobOrder.job_no} - ${jobOrder.title}</option>`;
+                    });
+                    html += `</select></td>`;
                 } else {
                     const inputType = col.type === 'number' ? 'number' : (col.type === 'date' ? 'date' : 'text');
                     let inputAttrs = '';
@@ -687,6 +641,28 @@ function setupBulkCreateForm(bulkCreateModal) {
                             </button>
                         </div>
                     </div>
+                    <div id="excel-failed-section" class="mt-3" style="display: none;">
+                        <hr>
+                        <h6 class="mb-2 text-danger">
+                            <i class="fas fa-triangle-exclamation me-2"></i>Başarısız Satırlar
+                            <span class="badge bg-danger ms-2" id="failed-count">0 satır</span>
+                        </h6>
+                        <div class="table-responsive" style="max-height: 300px; overflow-y: auto;">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light sticky-top">
+                                    <tr>
+                                        <th>Satır</th>
+                                        <th>Çalışan</th>
+                                        <th>İş No</th>
+                                        <th>Tarih</th>
+                                        <th>Saat</th>
+                                        <th>Sebep</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="excel-failed-tbody"></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>`;
@@ -704,13 +680,6 @@ function setupBulkCreateForm(bulkCreateModal) {
             if (customContentDiv) {
                 customContentDiv.innerHTML = customContent;
                 setupBulkCreateEventListeners();
-                
-                // Job order dropdown initialization temporarily disabled - using text field instead
-                // setTimeout(() => {
-                //     rows.forEach((row, i) => {
-                //         initializeJobOrderDropdown(i, row.job_no);
-                //     });
-                // }, 100);
             }
         }
     }
@@ -744,16 +713,8 @@ function setupBulkCreateForm(bulkCreateModal) {
                     return;
                 }
                 const rowIdx = parseInt(btn.getAttribute('data-row'));
-                // Get job_no from input field before duplicating (temporarily using text field)
-                const jobNoInput = document.querySelector(`input[data-row="${rowIdx}"][data-key="job_no"]`);
-                const jobNo = jobNoInput?.value || rows[rowIdx].job_no || '';
-                
                 const newRow = { ...rows[rowIdx] };
-                newRow.job_no = jobNo; // Preserve job_no value
                 rows.splice(rowIdx + 1, 0, newRow);
-                
-                // Dropdown references cleared (temporarily using text field)
-                // jobOrderDropdowns.clear();
                 checkForUnsavedChanges();
                 reRenderTable();
             });
@@ -765,21 +726,7 @@ function setupBulkCreateForm(bulkCreateModal) {
                 e.stopPropagation();
                 const rowIdx = parseInt(btn.getAttribute('data-row'));
                 if (rows.length > 1) {
-                    // Dropdown cleanup temporarily disabled (using text field)
-                    // jobOrderDropdowns.delete(rowIdx);
                     rows.splice(rowIdx, 1);
-                    
-                    // Re-index dropdown references for remaining rows (temporarily disabled)
-                    // const newDropdowns = new Map();
-                    // jobOrderDropdowns.forEach((dropdown, oldIndex) => {
-                    //     if (oldIndex < rowIdx) {
-                    //         newDropdowns.set(oldIndex, dropdown);
-                    //     } else if (oldIndex > rowIdx) {
-                    //         newDropdowns.set(oldIndex - 1, dropdown);
-                    //     }
-                    // });
-                    // jobOrderDropdowns = newDropdowns;
-                    
                     checkForUnsavedChanges();
                     reRenderTable();
                 }
@@ -854,6 +801,9 @@ function setupBulkCreateForm(bulkCreateModal) {
                 excelPasteInput.value = '';
                 excelPreviewSection.style.display = 'none';
                 parsedExcelRows = [];
+                failedExcelRows = [];
+                const failedSection = document.getElementById('excel-failed-section');
+                if (failedSection) failedSection.style.display = 'none';
             });
         }
         
@@ -871,6 +821,9 @@ function setupBulkCreateForm(bulkCreateModal) {
                 e.stopPropagation();
                 excelPreviewSection.style.display = 'none';
                 parsedExcelRows = [];
+                failedExcelRows = [];
+                const failedSection = document.getElementById('excel-failed-section');
+                if (failedSection) failedSection.style.display = 'none';
             });
         }
         
@@ -891,15 +844,20 @@ function setupBulkCreateForm(bulkCreateModal) {
         const previewSection = document.getElementById('excel-preview-section');
         const previewTbody = document.getElementById('excel-preview-tbody');
         const previewCount = document.getElementById('preview-count');
+        const failedSection = document.getElementById('excel-failed-section');
+        const failedTbody = document.getElementById('excel-failed-tbody');
+        const failedCount = document.getElementById('failed-count');
         
         if (!pasteInput || !previewSection || !previewTbody) return;
         
         const rawText = pasteInput.value.trim();
+        failedExcelRows = [];
         
         if (!rawText) {
             showModalNotification('Lütfen Excel verilerini yapıştırın', 'warning');
             previewSection.style.display = 'none';
             parsedExcelRows = [];
+            if (failedSection) failedSection.style.display = 'none';
             return;
         }
         
@@ -911,6 +869,7 @@ function setupBulkCreateForm(bulkCreateModal) {
                 showModalNotification('Geçerli veri bulunamadı', 'warning');
                 previewSection.style.display = 'none';
                 parsedExcelRows = [];
+                if (failedSection) failedSection.style.display = 'none';
                 return;
             }
             
@@ -929,6 +888,12 @@ function setupBulkCreateForm(bulkCreateModal) {
             }
             
             // Parse data rows
+            const validJobNos = new Set(
+                jobOrderDropdownOptions
+                    .map(job => (job.job_no || '').toString().trim().toLowerCase())
+                    .filter(Boolean)
+            );
+
             for (let i = startIndex; i < lines.length; i++) {
                 const line = lines[i];
                 let cells = line.split('\t').map(cell => cell.trim());
@@ -941,6 +906,14 @@ function setupBulkCreateForm(bulkCreateModal) {
                     if (cellsComma.length >= 4) {
                         cells = cellsComma;
                     } else {
+                        failedExcelRows.push({
+                            rowNumber: i + 1,
+                            employee: cells[0] || '',
+                            job_no: cells[1] || '',
+                            date: cells[2] || '',
+                            hours: cells[3] || '',
+                            reason: 'Sütun sayısı yetersiz'
+                        });
                         continue; // Skip invalid rows
                     }
                 }
@@ -1008,16 +981,35 @@ function setupBulkCreateForm(bulkCreateModal) {
                 
                 // Description
                 const descriptionValue = cells[5] || '';
+                const jobNoRaw = (cells[1] || '').trim();
+                const normalizedJobNo = jobNoRaw.toLowerCase();
+                const hasValidJobNo = validJobNos.has(normalizedJobNo);
                 
                 // Only add if we have minimum required fields
-                if (employeeId && cells[1] && dateValue && hoursValue) {
+                if (employeeId && jobNoRaw && hasValidJobNo && dateValue && hoursValue) {
                     parsedExcelRows.push({
                         employee: employeeId,
-                        job_no: cells[1],
+                        job_no: jobNoRaw,
                         date: dateValue,
                         hours: hoursValue,
                         overtime_type: overtimeTypeValue,
                         description: descriptionValue
+                    });
+                } else {
+                    const reasons = [];
+                    if (!employeeId) reasons.push('Çalışan bulunamadı');
+                    if (!jobNoRaw) reasons.push('İş no boş');
+                    if (jobNoRaw && !hasValidJobNo) reasons.push('İş no listede yok');
+                    if (!dateValue) reasons.push('Tarih geçersiz');
+                    if (!hoursValue) reasons.push('Saat geçersiz');
+
+                    failedExcelRows.push({
+                        rowNumber: i + 1,
+                        employee: employeeText,
+                        job_no: jobNoRaw,
+                        date: dateText,
+                        hours: hoursText,
+                        reason: reasons.join(', ')
                     });
                 }
             }
@@ -1025,6 +1017,9 @@ function setupBulkCreateForm(bulkCreateModal) {
             if (parsedExcelRows.length === 0) {
                 showModalNotification('Yapıştırılan veriler ayrıştırılamadı. Lütfen formatı kontrol edin.', 'warning');
                 previewSection.style.display = 'none';
+                if (failedSection && failedExcelRows.length > 0) {
+                    failedSection.style.display = 'block';
+                }
                 return;
             }
             
@@ -1054,15 +1049,39 @@ function setupBulkCreateForm(bulkCreateModal) {
             if (previewCount) {
                 previewCount.textContent = `${parsedExcelRows.length} satır`;
             }
+
+            if (failedSection && failedTbody && failedCount) {
+                failedTbody.innerHTML = '';
+                failedExcelRows.forEach(failedRow => {
+                    const tr = document.createElement('tr');
+                    tr.innerHTML = `
+                        <td>${failedRow.rowNumber}</td>
+                        <td>${failedRow.employee || '-'}</td>
+                        <td>${failedRow.job_no || '-'}</td>
+                        <td>${failedRow.date || '-'}</td>
+                        <td>${failedRow.hours || '-'}</td>
+                        <td class="text-danger">${failedRow.reason || '-'}</td>
+                    `;
+                    failedTbody.appendChild(tr);
+                });
+                failedCount.textContent = `${failedExcelRows.length} satır`;
+                failedSection.style.display = failedExcelRows.length > 0 ? 'block' : 'none';
+            }
             
             previewSection.style.display = 'block';
-            showModalNotification(`${parsedExcelRows.length} satır başarıyla ayrıştırıldı`, 'success');
+            if (failedExcelRows.length > 0) {
+                showModalNotification(`${parsedExcelRows.length} satır eklenecek, ${failedExcelRows.length} satır başarısız`, 'warning');
+            } else {
+                showModalNotification(`${parsedExcelRows.length} satır başarıyla ayrıştırıldı`, 'success');
+            }
             
         } catch (error) {
             console.error('Error parsing Excel data:', error);
             showModalNotification('Veri ayrıştırılırken hata oluştu: ' + error.message, 'error');
             previewSection.style.display = 'none';
             parsedExcelRows = [];
+            failedExcelRows = [];
+            if (failedSection) failedSection.style.display = 'none';
         }
     }
     
@@ -1073,7 +1092,6 @@ function setupBulkCreateForm(bulkCreateModal) {
             return;
         }
         
-        const rowCount = parsedExcelRows.length;
         const rowsToAdd = rows.length + parsedExcelRows.length > 300 
             ? parsedExcelRows.slice(0, 300 - rows.length)
             : parsedExcelRows;
@@ -1087,10 +1105,6 @@ function setupBulkCreateForm(bulkCreateModal) {
             }
             showModalNotification(`Sadece ${available} satır eklenebilir (Maksimum 300 satır limiti). İlk ${available} satır eklenecek.`, 'warning');
         }
-        
-        // Store job_no values from parsed rows before adding
-        const jobNoValues = rowsToAdd.map(row => row.job_no || '');
-        const startIndex = rows.length; // Store starting index before adding rows
         
         // Add parsed rows to the main rows array
         rows.push(...rowsToAdd);
@@ -1106,22 +1120,10 @@ function setupBulkCreateForm(bulkCreateModal) {
         if (excelPasteSection) excelPasteSection.style.display = 'none';
         
         parsedExcelRows = [];
+        failedExcelRows = [];
         
         // Re-render table
         reRenderTable();
-        
-        // Set job_no values in input fields after rendering (temporarily using text field)
-        setTimeout(() => {
-            rowsToAdd.forEach((row, i) => {
-                const rowIndex = startIndex + i;
-                if (row.job_no) {
-                    const jobNoInput = document.querySelector(`input[data-row="${rowIndex}"][data-key="job_no"]`);
-                    if (jobNoInput) {
-                        jobNoInput.value = row.job_no;
-                    }
-                }
-            });
-        }, 200);
         
         showModalNotification(`${rowsToAdd.length} satır tabloya eklendi`, 'success');
     }
@@ -1143,8 +1145,6 @@ function setupBulkCreateForm(bulkCreateModal) {
     // Set up cancel callback
     bulkCreateModal.onCancelCallback(() => {
         rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
-        // Clear dropdown references (temporarily disabled - using text field)
-        // jobOrderDropdowns.clear();
         updateInitialState();
     });
     
@@ -1168,12 +1168,6 @@ function setupBulkCreateForm(bulkCreateModal) {
         
         setupBulkCreateEventListeners();
         
-        // Job order dropdown initialization temporarily disabled - using text field instead
-        // setTimeout(() => {
-        //     rows.forEach((row, i) => {
-        //         initializeJobOrderDropdown(i, row.job_no);
-        //     });
-        // }, 100);
     }, 100);
 }
 
@@ -1189,12 +1183,7 @@ async function handleBulkCreateSave(rows, columns, showModalNotification) {
     
     rows.forEach((row, index) => {
         requiredFields.forEach(field => {
-            let value = row[field];
-            // Get job_no from input field (temporarily using text field instead of dropdown)
-            if (field === 'job_no') {
-                const jobNoInput = document.querySelector(`input[data-row="${index}"][data-key="job_no"]`);
-                value = jobNoInput?.value || row[field];
-            }
+            const value = row[field];
             if (!value || value.toString().trim() === '') {
                 missingFields.push(`Satır ${index + 1}: ${columns.find(col => col.key === field)?.label}`);
             }
@@ -1222,14 +1211,10 @@ async function handleBulkCreateSave(rows, columns, showModalNotification) {
     }
     
     const payload = {
-        entries: rows.map((row, index) => {
-            // Get job_no from input field (temporarily using text field instead of dropdown)
-            const jobNoInput = document.querySelector(`input[data-row="${index}"][data-key="job_no"]`);
-            const jobNo = jobNoInput?.value || row.job_no || '';
-            
+        entries: rows.map((row) => {
             return {
                 employee: parseInt(row.employee),
-                job_no: jobNo,
+                job_no: row.job_no,
                 date: row.date,
                 hours: parseFloat(row.hours),
                 overtime_type: row.overtime_type || 'regular',
