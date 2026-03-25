@@ -158,7 +158,7 @@ async function loadConfigs() {
             const tableData = notificationConfigs.map(config => {
                 // Build routing display (users + groups)
                 const userCount = config.users ? config.users.length : 0;
-                const rawGroups = config.groups || config.teams || [];
+                const rawGroups = config.groups || [];
                 const groupLabels = rawGroups
                     .map(normalizeConfigGroup)
                     .filter(Boolean)
@@ -509,7 +509,7 @@ async function showEditConfigModal(configRow) {
                 value: String(g.value),
                 label: g.label || g.value
             }));
-        const currentGroupValues = (config.groups || config.teams || [])
+        const currentGroupValues = (config.groups || [])
             .map(normalizeConfigGroup)
             .filter(Boolean)
             .map(g => String(g.name));
@@ -569,7 +569,6 @@ async function showEditConfigModal(configRow) {
                     ? formData.groups.map(v => String(v)).filter(Boolean)
                     : [];
                 updateData.groups = groups;
-                updateData.teams = groups;
             }
 
             await updateNotificationConfig(config.notification_type, updateData);
