@@ -44,6 +44,7 @@ import {
 } from '../../apis/sales/offers.js';
 import { listOfferTemplates, getOfferTemplate, getOfferTemplateNodes, getOfferTemplateNodeChildren } from '../../apis/sales/offerTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
+import { getPaymentTerms } from '../../apis/procurement.js';
 import { createComment, getTopicComments } from '../../apis/projects/topics.js';
 import { authFetchUsers } from '../../apis/users.js';
 import { getUser } from '../../authService.js';
@@ -95,6 +96,7 @@ let approvalConfirmModal = null;
 let submitCustomerConfirmModal = null;
 let actionConfirmModal = null;
 let customerOptions = [];
+let paymentTermsOptions = [];
 let offer = null;
 let offerId = null;
 /** Per-tab loaded state: only one request per tab while modal is open */
@@ -140,6 +142,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     await loadCustomerOptions();
+    await loadPaymentTermsOptions();
     initFilters();
     initTable();
     initModals();
@@ -190,6 +193,40 @@ async function loadCustomerOptions() {
     } catch (e) {
         console.error('Error loading customers:', e);
     }
+}
+
+async function loadPaymentTermsOptions() {
+    try {
+        const res = await getPaymentTerms({ status: 'active', page_size: 1000 });
+        const list = Array.isArray(res) ? res : (res.results || []);
+        paymentTermsOptions = [
+            { value: '', label: 'Seçiniz' },
+            ...list.map((pt) => ({ value: String(pt.id), label: pt.name || `#${pt.id}` }))
+        ];
+    } catch (e) {
+        console.error('Error loading payment terms:', e);
+        paymentTermsOptions = [{ value: '', label: 'Seçiniz' }];
+    }
+}
+
+function getPaymentTermsLabel(paymentTermsValue) {
+    if (paymentTermsValue == null || paymentTermsValue === '') return '-';
+    const normalizedValue = typeof paymentTermsValue === 'object'
+        ? (paymentTermsValue.id ?? paymentTermsValue.value ?? '')
+        : paymentTermsValue;
+    const valueStr = String(normalizedValue);
+    const found = paymentTermsOptions.find((o) => String(o.value) === valueStr);
+    if (found?.label) return found.label;
+    if (typeof paymentTermsValue === 'object' && paymentTermsValue.name) return paymentTermsValue.name;
+    return offer?.payment_terms_name || '-';
+}
+
+function normalizeOfferFormData(formData) {
+    const payload = { ...formData };
+    if (payload.payment_terms === '') {
+        payload.payment_terms = null;
+    }
+    return payload;
 }
 
 function initFilters() {
@@ -486,7 +523,7 @@ function initModals() {
 
     createOfferModal.onSaveCallback(async (formData) => {
         try {
-            const res = await createOffer(formData);
+            const res = await createOffer(normalizeOfferFormData(formData));
             if (res && res.id) {
                 showNotification('Teklif başarıyla oluşturuldu', 'success');
                 createOfferModal.hide();
@@ -979,6 +1016,12 @@ function buildGenelTab(statusLabel, statusColor) {
                     Teklif Detayları
                 </h6>
                 <div class="field-list">
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-file-signature me-1"></i>Sipariş No
+                        </div>
+                        <div class="field-value flex-grow-1">${offer.order_no || '-'}</div>
+                    </div>
                     ${offer.incoterms ? `
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
@@ -987,6 +1030,18 @@ function buildGenelTab(statusLabel, statusColor) {
                         <div class="field-value flex-grow-1">${offer.incoterms}</div>
                     </div>
                     ` : ''}
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-map-marker-alt me-1"></i>Teslim Yeri
+                        </div>
+                        <div class="field-value flex-grow-1">${offer.delivery_place || '-'}</div>
+                    </div>
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-credit-card me-1"></i>Ödeme Şekli
+                        </div>
+                        <div class="field-value flex-grow-1">${getPaymentTermsLabel(offer.payment_terms)}</div>
+                    </div>
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-calendar-alt me-1"></i>İstenen Termin Tarihi
@@ -1646,7 +1701,8 @@ function buildPricingTab() {
                                 <th style="width: 10%;" class="text-center">Adet</th>
                                 <th style="width: 18%;">Birim Fiyat (€)</th>
                                 <th style="width: 14%;">Ağırlık (kg)</th>
-                                <th style="width: 13%;" class="text-end">Kg Fiyatı (€/kg)</th>
+                                <th style="width: 16%;">Termin Süresi</th>
+                                <th style="width: 12%;" class="text-end">Kg Fiyatı (€/kg)</th>
                                 <th style="width: 15%;" class="text-end">Ara Toplam (€)</th>
                             </tr>
                         </thead>
@@ -1680,6 +1736,13 @@ function buildPricingTab() {
                                                    step="0.01" 
                                                    min="0">
                                         </td>
+                                        <td>
+                                            <input type="text"
+                                                   class="form-control form-control-sm pricing-delivery-period"
+                                                   data-item-id="${item.id}"
+                                                   value="${escapeHtml(String(item.delivery_period || ''))}"
+                                                   placeholder="Örn. 4 ay, 6 hafta">
+                                        </td>
                                         <td class="text-end">
                                                 <span class="pricing-kg-price" data-item-id="${item.id}">
                                                     ${kgPrice != null ? kgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}
@@ -1696,19 +1759,19 @@ function buildPricingTab() {
                         </tbody>
                         <tfoot class="table-light">
                             <tr>
-                                <th colspan="5" class="text-end">Toplam:</th>
+                                <th colspan="6" class="text-end">Toplam:</th>
                                 <th class="text-end">
                                     <span id="pricing-total-price">${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span> €
                                 </th>
                             </tr>
                             <tr>
-                                <th colspan="5" class="text-end">Toplam Ağırlık:</th>
+                                <th colspan="6" class="text-end">Toplam Ağırlık:</th>
                                 <th class="text-end">
                                     <span id="pricing-total-weight">${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span> kg
                                 </th>
                             </tr>
                             <tr>
-                                <th colspan="5" class="text-end">Ortalama Kg Fiyatı:</th>
+                                <th colspan="6" class="text-end">Ortalama Kg Fiyatı:</th>
                                 <th class="text-end">
                                     <span id="pricing-total-kg-price">${totalKgPrice != null ? totalKgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}</span> €/kg
                                 </th>
@@ -1822,9 +1885,11 @@ async function saveAllPrices() {
         const itemId = parseInt(row.dataset.itemId, 10);
         const unitPriceInput = row.querySelector('.pricing-unit-price');
         const weightInput = row.querySelector('.pricing-weight-kg');
+        const deliveryPeriodInput = row.querySelector('.pricing-delivery-period');
         
         const unitPrice = unitPriceInput.value ? parseFloat(unitPriceInput.value) : null;
         const weightKg = weightInput.value ? parseFloat(weightInput.value) : null;
+        const deliveryPeriod = deliveryPeriodInput ? String(deliveryPeriodInput.value || '').trim() : '';
         
         // Prepare data for API (only send fields that have values)
         const data = {};
@@ -1833,6 +1898,10 @@ async function saveAllPrices() {
         }
         if (weightKg !== null && !isNaN(weightKg) && weightKg >= 0) {
             data.weight_kg = weightKg.toFixed(2);
+        }
+        // CharField (blank=True, null=False) => send '' instead of null when empty
+        if (deliveryPeriodInput) {
+            data.delivery_period = deliveryPeriod;
         }
         
         // Only save if there's data to send
@@ -1881,11 +1950,15 @@ async function saveAllPrices() {
             const unitPriceInput = document.querySelector(`.pricing-unit-price[data-item-id="${item.id}"]`);
             const weightInput = document.querySelector(`.pricing-weight-kg[data-item-id="${item.id}"]`);
             const kgPriceEl = document.querySelector(`.pricing-kg-price[data-item-id="${item.id}"]`);
+            const deliveryPeriodInput = document.querySelector(`.pricing-delivery-period[data-item-id="${item.id}"]`);
             if (unitPriceInput) {
                 unitPriceInput.value = item.unit_price ? parseFloat(item.unit_price).toFixed(2) : '';
             }
             if (weightInput) {
                 weightInput.value = item.weight_kg ? parseFloat(item.weight_kg).toFixed(2) : '';
+            }
+            if (deliveryPeriodInput) {
+                deliveryPeriodInput.value = item.delivery_period ? String(item.delivery_period) : '';
             }
             if (kgPriceEl) {
                 const u = item.unit_price ? parseFloat(item.unit_price) : null;
@@ -2077,12 +2150,24 @@ function showEditModal(onSuccess) {
     modal.addField({ id: 'title', name: 'title', label: 'Başlık', type: 'text', value: offer.title || '', required: true, icon: 'fas fa-heading', colSize: 12 });
     modal.addField({ id: 'description', name: 'description', label: 'Açıklama', type: 'textarea', value: offer.description || '', icon: 'fas fa-align-left', colSize: 12 });
     modal.addField({ id: 'customer_inquiry_ref', name: 'customer_inquiry_ref', label: 'Müşteri Referansı', type: 'text', value: offer.customer_inquiry_ref || '', icon: 'fas fa-hashtag', colSize: 6 });
+    modal.addField({ id: 'order_no', name: 'order_no', label: 'Sipariş No', type: 'text', value: offer.order_no || '', icon: 'fas fa-file-signature', colSize: 6 });
     modal.addField({ id: 'incoterms', name: 'incoterms', label: 'Incoterms', type: 'dropdown', value: offer.incoterms || '', options: INCOTERMS_OPTIONS, icon: 'fas fa-shipping-fast', colSize: 6 });
+    modal.addField({ id: 'delivery_place', name: 'delivery_place', label: 'Teslim Yeri', type: 'text', value: offer.delivery_place || '', icon: 'fas fa-map-marker-alt', colSize: 6 });
+    modal.addField({
+        id: 'payment_terms',
+        name: 'payment_terms',
+        label: 'Ödeme Şekli',
+        type: 'dropdown',
+        value: offer.payment_terms != null ? String(offer.payment_terms) : '',
+        options: paymentTermsOptions,
+        icon: 'fas fa-credit-card',
+        colSize: 6
+    });
     modal.addField({ id: 'delivery_date_requested', name: 'delivery_date_requested', label: 'İstenen Termin Tarihi', type: 'date', value: offer.delivery_date_requested || '', icon: 'fas fa-calendar-alt', colSize: 6 });
     modal.addField({ id: 'offer_expiry_date', name: 'offer_expiry_date', label: 'Teklif Sunumu için Son Tarih', type: 'date', value: offer.offer_expiry_date || '', icon: 'fas fa-calendar-check', colSize: 6 });
     modal.onSaveCallback(async (formData) => {
         try {
-            await patchOffer(offerId, formData);
+            await patchOffer(offerId, normalizeOfferFormData(formData));
             modal.hide();
             showNotification('Teklif güncellendi', 'success');
             await onSuccess();
@@ -3369,6 +3454,7 @@ function showDecisionModal(onSuccess) {
                         <td class="text-center">${quantity}</td>
                         <td class="text-end">${unitPrice ? unitPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}</td>
                         <td class="text-end">${weightKg ? weightKg.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}</td>
+                        <td>${escapeHtml(item.delivery_period || '-')}</td>
                         <td class="text-end">${kgPrice != null ? kgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}</td>
                         <td class="text-end">${subtotal ? subtotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}</td>
                     </tr>
@@ -3385,7 +3471,8 @@ function showDecisionModal(onSuccess) {
                             <th style="width: 10%;" class="text-center">Adet</th>
                             <th style="width: 15%;" class="text-end">Birim Fiyat (€)</th>
                             <th style="width: 15%;" class="text-end">Ağırlık (kg)</th>
-                            <th style="width: 15%;" class="text-end">Kg Fiyatı (€/kg)</th>
+                            <th style="width: 16%;">Termin Süresi</th>
+                            <th style="width: 12%;" class="text-end">Kg Fiyatı (€/kg)</th>
                             <th style="width: 15%;" class="text-end">Ara Toplam (€)</th>
                         </tr>
                     </thead>
@@ -3394,15 +3481,15 @@ function showDecisionModal(onSuccess) {
                     </tbody>
                     <tfoot class="table-light">
                         <tr>
-                            <th colspan="5" class="text-end">Toplam:</th>
+                            <th colspan="6" class="text-end">Toplam:</th>
                             <th class="text-end">${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} €</th>
                         </tr>
                         <tr>
-                            <th colspan="5" class="text-end">Toplam Ağırlık:</th>
+                            <th colspan="6" class="text-end">Toplam Ağırlık:</th>
                             <th class="text-end">${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kg</th>
                         </tr>
                         <tr>
-                            <th colspan="5" class="text-end">Ortalama Kg Fiyatı:</th>
+                            <th colspan="6" class="text-end">Ortalama Kg Fiyatı:</th>
                             <th class="text-end">${totalKgPrice != null ? totalKgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-' } €/kg</th>
                         </tr>
                     </tfoot>
@@ -3745,7 +3832,18 @@ function showCreateOfferModal() {
     createOfferModal.addField({ id: 'description', name: 'description', label: 'Açıklama', type: 'textarea', placeholder: 'Teklif kapsamı...', icon: 'fas fa-align-left', colSize: 12 });
     createOfferModal.addSection({ title: 'Ek Bilgiler', icon: 'fas fa-calendar', iconColor: 'text-success' });
     createOfferModal.addField({ id: 'customer_inquiry_ref', name: 'customer_inquiry_ref', label: 'Müşteri Referansı', type: 'text', placeholder: 'Ör: ABC-RFQ-2026-003', icon: 'fas fa-hashtag', colSize: 6 });
+    createOfferModal.addField({ id: 'order_no', name: 'order_no', label: 'Sipariş No', type: 'text', placeholder: 'Sipariş numarası', icon: 'fas fa-file-signature', colSize: 6 });
     createOfferModal.addField({ id: 'incoterms', name: 'incoterms', label: 'Incoterms', type: 'dropdown', options: INCOTERMS_OPTIONS, icon: 'fas fa-shipping-fast', colSize: 6 });
+    createOfferModal.addField({ id: 'delivery_place', name: 'delivery_place', label: 'Teslim Yeri', type: 'text', placeholder: 'Teslim yeri bilgisi', icon: 'fas fa-map-marker-alt', colSize: 6 });
+    createOfferModal.addField({
+        id: 'payment_terms',
+        name: 'payment_terms',
+        label: 'Ödeme Şekli',
+        type: 'dropdown',
+        options: paymentTermsOptions,
+        icon: 'fas fa-credit-card',
+        colSize: 6
+    });
     createOfferModal.addField({ id: 'delivery_date_requested', name: 'delivery_date_requested', label: 'İstenen Termin Tarihi', type: 'date', icon: 'fas fa-calendar-alt', colSize: 6 });
     createOfferModal.addField({ id: 'offer_expiry_date', name: 'offer_expiry_date', label: 'Teklif Sunumu için Son Tarih', type: 'date', icon: 'fas fa-calendar-check', colSize: 6 });
     createOfferModal.render();
