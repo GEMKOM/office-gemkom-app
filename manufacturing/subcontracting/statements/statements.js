@@ -25,6 +25,7 @@ import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
 import { ConfirmationModal } from '../../../../components/confirmation-modal/confirmation-modal.js';
 import { initRouteProtection } from '../../../../apis/routeProtection.js';
 import { showNotification } from '../../../../components/notification/notification.js';
+import { fetchPaintInputs, createPaintInput, patchPaintInput } from '../../../../apis/subcontracting/paintInputs.js';
 
 // Header component instance
 let headerComponent;
@@ -41,6 +42,7 @@ let statementDetailModal = null;
 let adjustmentModal = null;
 let decideModal = null;
 let actionConfirmModal = null;
+let paintInputModal = null;
 
 // State management
 let currentPage = 1;
@@ -50,6 +52,8 @@ let statements = [];
 let totalStatements = 0;
 let isLoading = false;
 let subcontractors = [];
+let currentPaintInput = null;
+let paintInputClickHandlerAttached = false;
 
 function formatAdjustmentTypeLabel(type) {
     const typeMap = {
@@ -84,6 +88,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Initialize modal components
     initializeModalComponents();
+    setupPaintInputButtonHandler();
     
     await initializeStatements();
 });
@@ -267,15 +272,28 @@ function initializeTableComponent() {
             const count = groupRows.length;
             const periodText = `${monthName} ${year}`;
             return `
-                <div style="
-                    color: #0d6efd;
-                    font-weight: 500;
-                    font-size: 0.95rem;
-                    font-family: 'Courier New', monospace;
-                    letter-spacing: 0.5px;
-                    display: inline-block;
-                ">${periodText}</div>
-                <span class="badge bg-secondary ms-2">${count} ${count === 1 ? 'hakediş' : 'hakediş'}</span>
+                <div class="d-flex align-items-center justify-content-between">
+                    <div class="d-flex align-items-center">
+                        <div style="
+                            color: #0d6efd;
+                            font-weight: 500;
+                            font-size: 0.95rem;
+                            font-family: 'Courier New', monospace;
+                            letter-spacing: 0.5px;
+                            display: inline-block;
+                        ">${periodText}</div>
+                        <span class="badge bg-secondary ms-2">${count} ${count === 1 ? 'hakediş' : 'hakediş'}</span>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button"
+                                class="btn btn-sm btn-outline-primary paint-input-btn"
+                                data-year="${year}"
+                                data-month="${month}"
+                                title="Aylık boya girişi">
+                            <i class="fas fa-fill-drip me-1"></i>Boya Girişi
+                        </button>
+                    </div>
+                </div>
             `;
         }
     });
@@ -383,6 +401,13 @@ function initializeModalComponents() {
         saveButtonText: 'Karar Ver',
         size: 'md'
     });
+
+    paintInputModal = new EditModal('paint-input-modal-container', {
+        title: 'Aylık Boya Girişi',
+        icon: 'fas fa-fill-drip',
+        saveButtonText: 'Kaydet',
+        size: 'md'
+    });
 }
 
 async function loadStatements() {
@@ -448,6 +473,148 @@ async function loadStatements() {
             statementsTable.setLoading(false);
         }
     }
+}
+
+function setupPaintInputButtonHandler() {
+    // IMPORTANT: TableComponent re-renders by cloning/replacing its container,
+    // which removes any listeners attached to that container. Use document-level
+    // delegation so the handler survives re-renders.
+    if (paintInputClickHandlerAttached) return;
+    paintInputClickHandlerAttached = true;
+
+    document.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.paint-input-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const year = parseInt(btn.dataset.year);
+        const month = parseInt(btn.dataset.month);
+        if (!year || !month) return;
+
+        await showPaintInputModal(year, month);
+    });
+}
+
+async function showPaintInputModal(year, month) {
+    if (!paintInputModal) return;
+
+    paintInputModal.clearAll();
+    currentPaintInput = null;
+
+    const monthNames = ['Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+        'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'];
+    const periodText = `${monthNames[month - 1] || month} ${year}`;
+
+    paintInputModal.setTitle(`Aylık Boya Girişi - ${periodText}`);
+
+    paintInputModal.addSection({
+        title: 'Dönem',
+        icon: 'fas fa-calendar',
+        iconColor: 'text-primary'
+    });
+
+    paintInputModal.addField({
+        id: 'paint-year',
+        name: 'year',
+        label: 'Yıl',
+        type: 'number',
+        value: year,
+        required: true,
+        readonly: true,
+        icon: 'fas fa-calendar',
+        colSize: 6
+    });
+
+    paintInputModal.addField({
+        id: 'paint-month',
+        name: 'month',
+        label: 'Ay',
+        type: 'number',
+        value: month,
+        required: true,
+        readonly: true,
+        icon: 'fas fa-calendar-alt',
+        colSize: 6
+    });
+
+    paintInputModal.addSection({
+        title: 'Boya Bilgileri',
+        icon: 'fas fa-fill-drip',
+        iconColor: 'text-primary'
+    });
+
+    paintInputModal.addField({
+        id: 'paint-total-kg',
+        name: 'total_kg',
+        label: 'Toplam (kg)',
+        type: 'number',
+        value: '',
+        required: true,
+        step: '0.001',
+        min: '0',
+        icon: 'fas fa-weight-hanging',
+        colSize: 6
+    });
+
+    paintInputModal.addField({
+        id: 'paint-total-cost',
+        name: 'total_cost',
+        label: 'Toplam Maliyet',
+        type: 'number',
+        value: '',
+        required: true,
+        step: '0.01',
+        min: '0',
+        icon: 'fas fa-money-bill-wave',
+        colSize: 6
+    });
+
+    paintInputModal.render();
+    paintInputModal.show();
+
+    try {
+        paintInputModal.setLoading(true);
+        const resp = await fetchPaintInputs({ year, month });
+        const list = Array.isArray(resp) ? resp : (resp?.results || []);
+        currentPaintInput = list.length > 0 ? list[0] : null;
+
+        if (currentPaintInput) {
+            paintInputModal.setFieldValue('paint-total-kg', currentPaintInput.total_kg ?? '');
+            paintInputModal.setFieldValue('paint-total-cost', currentPaintInput.total_cost ?? '');
+        }
+    } catch (error) {
+        // If backend returns 404 for empty, it'll show error; we prefer silent empty state.
+        // Keep modal usable even if GET fails.
+        console.warn('Paint input GET failed:', error);
+    } finally {
+        paintInputModal.setLoading(false);
+    }
+
+    paintInputModal.onSaveCallback(async (formData) => {
+        try {
+            const payload = {
+                year: parseInt(formData.year),
+                month: parseInt(formData.month),
+                total_kg: parseFloat(formData.total_kg),
+                total_cost: parseFloat(formData.total_cost)
+            };
+
+            if (currentPaintInput?.id) {
+                await patchPaintInput(currentPaintInput.id, payload);
+                showNotification('Boya girişi güncellendi', 'success');
+            } else {
+                const created = await createPaintInput(payload);
+                currentPaintInput = created;
+                showNotification('Boya girişi kaydedildi', 'success');
+            }
+
+            paintInputModal.hide();
+        } catch (error) {
+            console.error('Error saving paint input:', error);
+            showNotification(error.message || 'Boya girişi kaydedilirken hata oluştu', 'error');
+        }
+    });
 }
 
 function showGenerateStatementModal() {
