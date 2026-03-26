@@ -52,6 +52,12 @@ function formatWeight(weight) {
     return parseFloat(weight).toFixed(3) + ' kg';
 }
 
+function parseWeightToNumber(weight) {
+    if (weight === null || weight === undefined || weight === '') return 0;
+    const n = typeof weight === 'number' ? weight : parseFloat(weight);
+    return Number.isFinite(n) ? n : 0;
+}
+
 /**
  * Initialize filters component
  */
@@ -160,6 +166,33 @@ function initTable() {
         striped: true,
         bordered: true,
         responsive: true,
+        footer: ({ displayedData, columns, hasActions }) => {
+            const totalWeight = displayedData.reduce((sum, row) => sum + parseWeightToNumber(row.weight_kg), 0);
+            const weightColIndex = columns.findIndex(c => c.field === 'weight_kg');
+            const totalColumns = columns.length + (hasActions ? 1 : 0);
+            
+            // If weight column is missing for some reason, render a single-cell footer
+            if (weightColIndex < 0) {
+                return `
+                    <tr>
+                        <td colspan="${totalColumns}" class="text-end fw-semibold">
+                            Toplam Ağırlık: ${formatWeight(totalWeight)}
+                        </td>
+                    </tr>
+                `;
+            }
+            
+            const labelColspan = Math.max(1, weightColIndex);
+            const afterWeightCount = totalColumns - (labelColspan + 1);
+            
+            return `
+                <tr>
+                    <td colspan="${labelColspan}" class="text-end fw-semibold">Toplam</td>
+                    <td class="fw-semibold">${formatWeight(totalWeight)}</td>
+                    ${afterWeightCount > 0 ? `<td colspan="${afterWeightCount}"></td>` : ''}
+                </tr>
+            `;
+        },
         
         // Pagination configuration
         pagination: true,

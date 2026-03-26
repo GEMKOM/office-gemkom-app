@@ -615,6 +615,12 @@ export function initNavbar() {
                     navigateTo(path);
                     return;
                 }
+
+                if (path.startsWith('/accounting/')) {
+                    // Allow navigation to accounting pages
+                    navigateTo(path);
+                    return;
+                }
                 
                 if (path.startsWith('/it/')) {
                     // Allow navigation to IT pages
@@ -729,6 +735,12 @@ export function initNavbar() {
                 
                 if (path.startsWith('/finance/')) {
                     // Allow navigation to finance pages
+                    navigateTo(path);
+                    return;
+                }
+
+                if (path.startsWith('/accounting/')) {
+                    // Allow navigation to accounting pages
                     navigateTo(path);
                     return;
                 }

@@ -215,6 +215,21 @@ async function handleLandingPage() {
                     ]
                 },
                 {
+                    title: 'Muhasebe',
+                    description: 'Muhasebe işlemleri, dışa aktarımlar ve finansal entegrasyonlar.',
+                    icon: 'fas fa-file-invoice',
+                    iconColor: 'primary',
+                    link: '/accounting',
+                    features: [
+                        {
+                            label: 'Hakedişler',
+                            icon: 'fas fa-file-invoice-dollar',
+                            iconColor: 'rgba(139, 0, 0, 0.95)',
+                            link: '/accounting/subcontracting-statements'
+                        }
+                    ]
+                },
+                {
                     title: 'Bilgi İşlem',
                     description: 'IT cihazlarını yönetin, envanter takibi yapın ve donanım durumunu izleyin.',
                     icon: 'fas fa-laptop-code',

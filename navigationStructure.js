@@ -475,6 +475,17 @@ export const NAVIGATION_STRUCTURE = {
             }
         }
     },
+    '/accounting': {
+        label: 'Muhasebe',
+        icon: 'fas fa-file-invoice',
+        children: {
+            '/accounting/subcontracting-statements': {
+                label: 'Hakedişler',
+                icon: 'fas fa-file-invoice-dollar',
+                children: {}
+            }
+        }
+    },
     '/it': {
         label: 'Bilgi İşlem',
         icon: 'fas fa-laptop-code',

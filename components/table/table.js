@@ -70,6 +70,9 @@ export class TableComponent {
             // Row background color
             rowBackgroundColor: null, // Function that returns background color for each row (receives row, index)
             
+            // Footer
+            footer: null, // Function that returns <tr>...</tr> HTML for <tfoot>. Receives ({ displayedData, columns, hasActions })
+            
             // Drag and drop configuration
             draggable: false,
             onReorder: null, // Callback function when rows are reordered
@@ -133,6 +136,7 @@ export class TableComponent {
                             <tbody id="${this.containerId}-tbody">
                                 ${this.renderBody()}
                             </tbody>
+                            ${this.renderFooter()}
                         </table>
                     ${this.options.responsive ? '</div>' : ''}
                 </div>
@@ -215,19 +219,42 @@ export class TableComponent {
             return this.renderGroupedBody();
         }
         
+        const { displayedData, startIndex } = this.getDisplayedData();
+        return displayedData.map((row, index) => this.renderRow(row, startIndex + index)).join('');
+    }
+
+    getDisplayedData() {
         // For server-side pagination, use all data as-is
         // For client-side pagination, slice the data
-        let pageData = this.options.data;
+        let displayedData = this.options.data;
         let startIndex = 0;
         
         if (this.options.pagination && !this.options.serverSidePagination && this.options.totalItems > this.options.data.length) {
-            // Client-side pagination: slice the data
             startIndex = (this.options.currentPage - 1) * this.options.itemsPerPage;
             const endIndex = startIndex + this.options.itemsPerPage;
-            pageData = this.options.data.slice(startIndex, endIndex);
+            displayedData = this.options.data.slice(startIndex, endIndex);
         }
         
-        return pageData.map((row, index) => this.renderRow(row, startIndex + index)).join('');
+        return { displayedData, startIndex };
+    }
+
+    renderFooter() {
+        if (!this.options.footer || typeof this.options.footer !== 'function') return '';
+        if (this.options.loading) return '';
+        if (this.options.data.length === 0) return '';
+        if (this.options.groupBy) return ''; // Footer for grouped tables is not supported yet
+        
+        const { displayedData } = this.getDisplayedData();
+        const hasActions = this.options.actions.length > 0;
+        const footerRowHtml = this.options.footer({
+            displayedData,
+            columns: this.options.columns,
+            hasActions
+        });
+        
+        if (!footerRowHtml || typeof footerRowHtml !== 'string') return '';
+        
+        return `<tfoot>${footerRowHtml}</tfoot>`;
     }
     
     renderGroupedBody() {
