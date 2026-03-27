@@ -50,6 +50,7 @@ export const FILE_TYPE_OPTIONS = [
     { value: 'drawing', label: 'Çizim' },
     { value: 'specification', label: 'Şartname' },
     { value: 'quotation', label: 'Teklif' },
+    { value: 'receipt', label: 'Proforma' },
     { value: 'correspondence', label: 'Yazışma' },
     { value: 'photo', label: 'Fotoğraf' },
     { value: 'other', label: 'Diğer' }

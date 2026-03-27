@@ -3884,8 +3884,9 @@ async function renderConsultationTab(task) {
                     ${sharedFiles.map(f => `
                         <div class="d-flex align-items-center gap-2 mb-2">
                             <i class="fas fa-file text-primary"></i>
-                            <a href="${f.file_url}" target="_blank">${f.name || f.filename}</a>
-                            <span class="badge bg-light text-dark">${f.file_type || ''}</span>
+                            <a href="${f.file_url}" target="_blank">${f.filename || f.name || 'Dosya'}</a>
+                            <span class="badge bg-light text-dark">${f.file_type_display || f.file_type || '-'}</span>
+                            <small class="text-muted">İsim: ${f.name || '-'}</small>
                             ${f.file_size ? `<small class="text-muted">${(f.file_size / 1024).toFixed(0)} KB</small>` : ''}
                         </div>
                     `).join('')}
@@ -3902,8 +3903,9 @@ async function renderConsultationTab(task) {
                 ${completionFiles.length > 0 ? completionFiles.map(f => `
                     <div class="d-flex align-items-center gap-2 mb-2">
                         <i class="fas fa-file-alt text-success"></i>
-                        <a href="${f.file_url}" target="_blank">${f.name || f.filename}</a>
-                        <span class="badge bg-light text-dark">${f.file_type_display || f.file_type || ''}</span>
+                        <a href="${f.file_url}" target="_blank">${f.filename || f.name || 'Dosya'}</a>
+                        <span class="badge bg-light text-dark">${f.file_type_display || f.file_type || '-'}</span>
+                        <small class="text-muted">İsim: ${f.name || '-'}</small>
                         ${f.file_size ? `<small class="text-muted">${(f.file_size / 1024).toFixed(0)} KB</small>` : ''}
                         <button class="btn btn-sm btn-outline-danger consultation-delete-file-btn" data-task-id="${task.id}" data-file-id="${f.id}"><i class="fas fa-trash"></i></button>
                     </div>

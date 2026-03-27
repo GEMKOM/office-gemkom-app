@@ -201,9 +201,14 @@ export class FileAttachments {
      */
     createFileInfoHtml(file, fileName, formattedDate, formattedTime) {
         const uploader = file.uploaded_by_username || 'Bilinmeyen';
+        const fileType = file.file_type_display || file.file_type || '-';
+        const displayName = file.display_name || file.name || '-';
         
         return `
             <div class="file-name fw-medium mb-1" style="color: #172b4d; font-size: 14px;">${fileName}</div>
+            <div class="file-meta text-muted" style="font-size: 12px;">
+                Tür: ${fileType} • İsim: ${displayName}
+            </div>
             <div class="file-meta text-muted" style="font-size: 12px;">
                 ${uploader} • ${formattedDate}, ${formattedTime}
             </div>

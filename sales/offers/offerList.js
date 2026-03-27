@@ -1465,10 +1465,13 @@ async function renderOfferFilesTab() {
     const mappedFiles = files.map(f => ({
         id: f.id,
         file_url: f.file_url || f.url || f.file || '',
-        file_name: f.name || f.filename || 'Dosya',
-        file_extension: (f.name || f.filename || '').includes('.') ? (f.name || f.filename).split('.').pop().toLowerCase() : '',
+        file_name: f.filename || f.name || 'Dosya',
+        file_extension: (f.filename || f.name || '').includes('.') ? (f.filename || f.name).split('.').pop().toLowerCase() : '',
+        file_type: f.file_type || '',
+        file_type_display: f.file_type_display || '',
+        display_name: f.name || '',
         uploaded_at: f.uploaded_at,
-        uploaded_by_username: f.uploaded_by || ''
+        uploaded_by_username: f.uploaded_by_name || f.uploaded_by || ''
     }));
 
     offerFilesComponent.setFiles(mappedFiles);
@@ -3253,7 +3256,9 @@ async function showConsultationModal(onSuccess) {
             const listDiv = document.createElement('div');
             listDiv.className = 'row g-2';
             offerFiles.forEach(f => {
-                const fileName = f.name || f.filename || 'Dosya';
+                const fileName = f.filename || f.name || 'Dosya';
+                const fileType = (f.file_type_display || f.file_type || '-').replace(/</g, '&lt;');
+                const displayName = (f.name || '-').replace(/</g, '&lt;');
                 const ext = getFileExtension(fileName);
                 const col = document.createElement('div');
                 col.className = 'col-12';
@@ -3266,7 +3271,8 @@ async function showConsultationModal(onSuccess) {
                         <i class="fas fa-file text-primary flex-shrink-0"></i>
                         <div class="flex-grow-1 min-width-0">
                             <div class="fw-medium text-truncate">${(fileName || '').replace(/</g, '&lt;')}</div>
-                            ${f.file_type_display || f.file_type ? `<small class="text-muted">${(f.file_type_display || f.file_type || '').replace(/</g, '&lt;')}</small>` : ''}
+                            <small class="text-muted d-block">Tür: ${fileType}</small>
+                            <small class="text-muted d-block">İsim: ${displayName}</small>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-primary preview-consultation-file flex-shrink-0" data-file-url="${f.file_url}" data-file-name="${fileName}" data-file-ext="${ext}">
                             <i class="fas fa-eye me-1"></i>Önizle
@@ -3381,7 +3387,9 @@ async function showEditConsultationModal(taskId, onSuccess) {
             const listDiv = document.createElement('div');
             listDiv.className = 'row g-2';
             offerFiles.forEach(f => {
-                const fileName = f.name || f.filename || 'Dosya';
+                const fileName = f.filename || f.name || 'Dosya';
+                const fileType = (f.file_type_display || f.file_type || '-').replace(/</g, '&lt;');
+                const displayName = (f.name || '-').replace(/</g, '&lt;');
                 const ext = getFileExtension(fileName);
                 const checkedAttr = sharedFileIds.has(f.id) ? ' checked' : '';
                 const col = document.createElement('div');
@@ -3395,7 +3403,8 @@ async function showEditConsultationModal(taskId, onSuccess) {
                         <i class="fas fa-file text-primary flex-shrink-0"></i>
                         <div class="flex-grow-1 min-width-0">
                             <div class="fw-medium text-truncate">${(fileName || '').replace(/</g, '&lt;')}</div>
-                            ${f.file_type_display || f.file_type ? `<small class="text-muted">${(f.file_type_display || f.file_type || '').replace(/</g, '&lt;')}</small>` : ''}
+                            <small class="text-muted d-block">Tür: ${fileType}</small>
+                            <small class="text-muted d-block">İsim: ${displayName}</small>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-primary preview-edit-consultation-file flex-shrink-0" data-file-url="${f.file_url}" data-file-name="${fileName}" data-file-ext="${ext}">
                             <i class="fas fa-eye me-1"></i>Önizle
@@ -3755,7 +3764,9 @@ async function showConvertModal(onSuccess) {
             const listDiv = document.createElement('div');
             listDiv.className = 'row g-2';
             offerFiles.forEach(f => {
-                const fileName = f.name || f.filename || 'Dosya';
+                const fileName = f.filename || f.name || 'Dosya';
+                const fileType = (f.file_type_display || f.file_type || '-').replace(/</g, '&lt;');
+                const displayName = (f.name || '-').replace(/</g, '&lt;');
                 const ext = getFileExtension(fileName);
                 const col = document.createElement('div');
                 col.className = 'col-12';
@@ -3768,7 +3779,8 @@ async function showConvertModal(onSuccess) {
                         <i class="fas fa-file text-primary flex-shrink-0"></i>
                         <div class="flex-grow-1 min-width-0">
                             <div class="fw-medium text-truncate">${(fileName || '').replace(/</g, '&lt;')}</div>
-                            ${f.file_type_display || f.file_type ? `<small class="text-muted">${(f.file_type_display || f.file_type || '').replace(/</g, '&lt;')}</small>` : ''}
+                            <small class="text-muted d-block">Tür: ${fileType}</small>
+                            <small class="text-muted d-block">İsim: ${displayName}</small>
                         </div>
                         <button type="button" class="btn btn-sm btn-outline-primary preview-convert-file flex-shrink-0" data-file-url="${f.file_url}" data-file-name="${fileName}" data-file-ext="${ext}">
                             <i class="fas fa-eye me-1"></i>Önizle
