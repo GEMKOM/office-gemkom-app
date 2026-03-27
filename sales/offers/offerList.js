@@ -808,132 +808,157 @@ async function loadApprovalStatus() {
     const container = document.getElementById('approval-workflow-content');
     if (!container) return;
     try {
-        const workflow = await getApprovalStatus(offerId);
-        if (!workflow || !workflow.stage_instances) {
+        const workflowData = await getApprovalStatus(offerId);
+        const approvals = Array.isArray(workflowData) ? workflowData : (workflowData ? [workflowData] : []);
+        if (!approvals.length) {
             container.innerHTML = '<div class="text-muted">Aktif onay süreci bulunamadı.</div>';
             return;
         }
-        container.innerHTML = renderApprovalWorkflow(workflow);
+        container.innerHTML = renderApprovalWorkflow(approvals);
     } catch (e) {
         container.innerHTML = '<div class="text-danger">Onay durumu yüklenemedi.</div>';
     }
 }
 
-function renderApprovalWorkflow(approval) {
-    if (!approval || !approval.stage_instances || !approval.stage_instances.length) {
+function renderApprovalWorkflow(approvals) {
+    const list = Array.isArray(approvals) ? approvals : (approvals ? [approvals] : []);
+    const getLatestDecisionTime = (approval) => {
+        const allDecisions = (approval?.stage_instances || []).flatMap(stage => Array.isArray(stage.decisions) ? stage.decisions : []);
+        let latest = 0;
+        allDecisions.forEach((decision) => {
+            const t = decision?.decided_at ? Date.parse(decision.decided_at) : NaN;
+            if (Number.isFinite(t) && t > latest) latest = t;
+        });
+        return latest;
+    };
+    const normalized = list
+        .filter(a => a && Array.isArray(a.stage_instances) && a.stage_instances.length > 0)
+        .sort((a, b) => getLatestDecisionTime(b) - getLatestDecisionTime(a));
+    if (!normalized.length) {
         return '<p class="text-muted">Onay bilgisi bulunamadı.</p>';
     }
-    const { stage_instances, current_stage_order, is_complete, is_rejected } = approval;
 
-    let html = '<div class="approval-workflow">';
+    let html = '<div class="approval-workflow"><h6 class="mb-3 d-flex align-items-center"><i class="fas fa-clipboard-check me-2 text-success"></i>Onay Süreci</h6>';
 
-    // Section title (matches procurement detail modal)
-    html += `<h6 class="mb-3 d-flex align-items-center">
-        <i class="fas fa-clipboard-check me-2 text-success"></i>Onay Süreci
-    </h6>`;
-
-    stage_instances.forEach((stage) => {
-        const isCurrentStage = stage.order === current_stage_order && !is_complete && !is_rejected;
-        const isCompleted = stage.is_complete;
-        const isRejected = stage.is_rejected;
-        const isPending = !isCompleted && !isRejected && !isCurrentStage && stage.order > current_stage_order;
-
-        let stageClass = 'border-secondary';
-        let stageBadge = '';
-        let stageIcon = 'fas fa-circle';
-
-        if (isRejected) {
-            stageClass = 'border-danger';
-            stageBadge = '<span class="badge bg-danger">Reddedildi</span>';
-            stageIcon = 'fas fa-times-circle text-danger';
-        } else if (isCompleted) {
-            stageClass = 'border-success';
-            stageBadge = '<span class="badge bg-success">Tamamlandı</span>';
-            stageIcon = 'fas fa-check-circle text-success';
-        } else if (isCurrentStage) {
-            stageClass = 'border-warning';
-            stageBadge = '<span class="badge bg-warning text-dark">Mevcut Aşama</span>';
-            stageIcon = 'fas fa-hourglass-half text-warning';
-        } else if (isPending) {
-            stageClass = 'border-secondary';
-            stageBadge = '<span class="badge bg-secondary">Beklemede</span>';
-            stageIcon = 'fas fa-circle text-secondary';
-        }
+    normalized.forEach((approval, index) => {
+        const { stage_instances, current_stage_order, is_complete, is_rejected } = approval;
+        const approvalLabel = `Süreç ${normalized.length - index}`;
+        const approvalBadge = is_rejected
+            ? '<span class="badge bg-danger">Reddedildi</span>'
+            : is_complete
+                ? '<span class="badge bg-success">Tamamlandı</span>'
+                : '<span class="badge bg-warning text-dark">Devam Ediyor</span>';
 
         html += `
-            <div class="card mb-3 ${stageClass}" style="border-width: 2px;">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <h6 class="mb-0">
-                            <i class="${stageIcon} me-2"></i>
-                            ${stage.order}. ${stage.name}
-                        </h6>
-                        ${stageBadge}
-                    </div>
-                    <div class="row mb-2">
-                        <div class="col-md-6">
-                            <small class="text-muted">Gerekli Onay Sayısı:</small>
-                            <strong class="ms-2">${stage.required_approvals ?? 0}</strong>
-                        </div>
-                        <div class="col-md-6">
-                            <small class="text-muted">Onaylanan:</small>
-                            <strong class="ms-2 ${(stage.approved_count ?? 0) >= (stage.required_approvals ?? 0) ? 'text-success' : 'text-warning'}">${stage.approved_count ?? 0}</strong>
-                        </div>
-                    </div>
-                    <div class="mb-2">
-                        <small class="text-muted d-block mb-1">Onaylayıcılar:</small>
-                        <div class="d-flex flex-wrap gap-1">
+            <div class="d-flex justify-content-between align-items-center mb-2 mt-3">
+                <h6 class="mb-0">${approvalLabel}</h6>
+                ${approvalBadge}
+            </div>
         `;
 
-        if (stage.approvers && stage.approvers.length > 0) {
-            stage.approvers.forEach((approver) => {
-                const decision = stage.decisions?.find(d => d.approver === approver.id);
-                let approverBadge = 'bg-light text-dark';
-                let approverIcon = 'fas fa-user';
-                if (decision) {
-                    if (decision.decision === 'approve') {
-                        approverBadge = 'bg-success text-white';
-                        approverIcon = 'fas fa-check';
-                    } else if (decision.decision === 'reject') {
-                        approverBadge = 'bg-danger text-white';
-                        approverIcon = 'fas fa-times';
+        stage_instances.forEach((stage) => {
+            const isCurrentStage = stage.order === current_stage_order && !is_complete && !is_rejected;
+            const isCompleted = stage.is_complete;
+            const isRejected = stage.is_rejected;
+            const isPending = !isCompleted && !isRejected && !isCurrentStage && stage.order > current_stage_order;
+
+            let stageClass = 'border-secondary';
+            let stageBadge = '';
+            let stageIcon = 'fas fa-circle';
+
+            if (isRejected) {
+                stageClass = 'border-danger';
+                stageBadge = '<span class="badge bg-danger">Reddedildi</span>';
+                stageIcon = 'fas fa-times-circle text-danger';
+            } else if (isCompleted) {
+                stageClass = 'border-success';
+                stageBadge = '<span class="badge bg-success">Tamamlandı</span>';
+                stageIcon = 'fas fa-check-circle text-success';
+            } else if (isCurrentStage) {
+                stageClass = 'border-warning';
+                stageBadge = '<span class="badge bg-warning text-dark">Mevcut Aşama</span>';
+                stageIcon = 'fas fa-hourglass-half text-warning';
+            } else if (isPending) {
+                stageClass = 'border-secondary';
+                stageBadge = '<span class="badge bg-secondary">Beklemede</span>';
+                stageIcon = 'fas fa-circle text-secondary';
+            }
+
+            html += `
+                <div class="card mb-3 ${stageClass}" style="border-width: 2px;">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <h6 class="mb-0">
+                                <i class="${stageIcon} me-2"></i>
+                                ${stage.order}. ${stage.name}
+                            </h6>
+                            ${stageBadge}
+                        </div>
+                        <div class="row mb-2">
+                            <div class="col-md-6">
+                                <small class="text-muted">Gerekli Onay Sayısı:</small>
+                                <strong class="ms-2">${stage.required_approvals ?? 0}</strong>
+                            </div>
+                            <div class="col-md-6">
+                                <small class="text-muted">Onaylanan:</small>
+                                <strong class="ms-2 ${(stage.approved_count ?? 0) >= (stage.required_approvals ?? 0) ? 'text-success' : 'text-warning'}">${stage.approved_count ?? 0}</strong>
+                            </div>
+                        </div>
+                        <div class="mb-2">
+                            <small class="text-muted d-block mb-1">Onaylayıcılar:</small>
+                            <div class="d-flex flex-wrap gap-1">
+            `;
+
+            if (stage.approvers && stage.approvers.length > 0) {
+                stage.approvers.forEach((approver) => {
+                    const decision = stage.decisions?.find(d => d.approver === approver.id);
+                    let approverBadge = 'bg-light text-dark';
+                    let approverIcon = 'fas fa-user';
+                    if (decision) {
+                        if (decision.decision === 'approve') {
+                            approverBadge = 'bg-success text-white';
+                            approverIcon = 'fas fa-check';
+                        } else if (decision.decision === 'reject') {
+                            approverBadge = 'bg-danger text-white';
+                            approverIcon = 'fas fa-times';
+                        }
                     }
-                }
-                const name = approver.full_name || [approver.first_name, approver.last_name].filter(Boolean).join(' ') || approver.username;
-                html += `<span class="badge ${approverBadge}" style="font-size: 0.85rem;"><i class="${approverIcon} me-1"></i>${name}</span>`;
-            });
-        } else {
-            html += '<span class="text-muted">Onaylayıcı atanmamış</span>';
-        }
+                    const name = approver.full_name || [approver.first_name, approver.last_name].filter(Boolean).join(' ') || approver.username;
+                    html += `<span class="badge ${approverBadge}" style="font-size: 0.85rem;"><i class="${approverIcon} me-1"></i>${name}</span>`;
+                });
+            } else {
+                html += '<span class="text-muted">Onaylayıcı atanmamış</span>';
+            }
 
-        html += `</div></div>`;
+            html += `</div></div>`;
 
-        if (stage.decisions && stage.decisions.length > 0) {
-            html += `<div class="mt-3"><small class="text-muted d-block mb-2"><strong>Kararlar:</strong></small>`;
-            stage.decisions.forEach((decision) => {
-                const decisionIcon = decision.decision === 'approve' ? 'fas fa-check-circle text-success' : 'fas fa-times-circle text-danger';
-                const decisionText = decision.decision === 'approve' ? 'Onayladı' : 'Reddetti';
-                const detail = decision.approver_detail || {};
-                const approverName = detail.full_name || [detail.first_name, detail.last_name].filter(Boolean).join(' ') || detail.username || 'Bilinmeyen';
-                const decisionDate = decision.decided_at ? formatDateTime(decision.decided_at) : '-';
-                html += `
-                    <div class="card mb-2" style="background-color: #f8f9fa;">
-                        <div class="card-body p-2">
-                            <div class="d-flex align-items-center flex-wrap mb-1">
-                                <i class="${decisionIcon} me-2"></i>
-                                <strong>${approverName}</strong>
-                                <span class="ms-2 text-muted" style="font-size: 0.85rem;">${decisionText}</span>
-                                <small class="ms-auto text-muted">${decisionDate}</small>
-                            </div>`;
-                if (decision.comment) {
-                    html += `<div class="mt-1"><small class="text-muted">Yorum:</small><p class="mb-0" style="font-size: 0.9rem;">${decision.comment}</p></div>`;
-                }
-                html += `</div></div>`;
-            });
-            html += `</div>`;
-        }
+            if (stage.decisions && stage.decisions.length > 0) {
+                html += `<div class="mt-3"><small class="text-muted d-block mb-2"><strong>Kararlar:</strong></small>`;
+                stage.decisions.forEach((decision) => {
+                    const decisionIcon = decision.decision === 'approve' ? 'fas fa-check-circle text-success' : 'fas fa-times-circle text-danger';
+                    const decisionText = decision.decision === 'approve' ? 'Onayladı' : 'Reddetti';
+                    const detail = decision.approver_detail || {};
+                    const approverName = detail.full_name || [detail.first_name, detail.last_name].filter(Boolean).join(' ') || detail.username || 'Bilinmeyen';
+                    const decisionDate = decision.decided_at ? formatDateTime(decision.decided_at) : '-';
+                    html += `
+                        <div class="card mb-2" style="background-color: #f8f9fa;">
+                            <div class="card-body p-2">
+                                <div class="d-flex align-items-center flex-wrap mb-1">
+                                    <i class="${decisionIcon} me-2"></i>
+                                    <strong>${approverName}</strong>
+                                    <span class="ms-2 text-muted" style="font-size: 0.85rem;">${decisionText}</span>
+                                    <small class="ms-auto text-muted">${decisionDate}</small>
+                                </div>`;
+                    if (decision.comment) {
+                        html += `<div class="mt-1"><small class="text-muted">Yorum:</small><p class="mb-0" style="font-size: 0.9rem;">${decision.comment}</p></div>`;
+                    }
+                    html += `</div></div>`;
+                });
+                html += `</div>`;
+            }
 
-        html += `</div></div>`;
+            html += `</div></div>`;
+        });
     });
 
     html += '</div>';
@@ -1673,20 +1698,96 @@ function flattenItemsForPricing(items) {
     return flattened;
 }
 
+function parsePricingNumber(value) {
+    if (value === null || value === undefined || value === '') return null;
+    const parsed = parseFloat(value);
+    return Number.isFinite(parsed) ? parsed : null;
+}
+
+function updatePricingTotalsDisplay(itemsTotal, totalWeight, shippingPrice) {
+    const totalPriceEl = document.getElementById('pricing-total-price');
+    const totalWeightEl = document.getElementById('pricing-total-weight');
+    const totalKgPriceEl = document.getElementById('pricing-total-kg-price');
+    const shippingPriceEl = document.getElementById('pricing-shipping-price-display');
+    const totalKgPrice = totalWeight > 0 ? itemsTotal / totalWeight : null;
+
+    if (totalPriceEl) {
+        totalPriceEl.textContent = itemsTotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+    }
+    if (totalWeightEl) {
+        totalWeightEl.textContent = totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+    }
+    if (totalKgPriceEl) {
+        totalKgPriceEl.textContent = totalKgPrice != null ? totalKgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-';
+    }
+    if (shippingPriceEl) {
+        shippingPriceEl.textContent = shippingPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+    }
+}
+
+function recalculatePricingTotalsFromInputs() {
+    const rows = document.querySelectorAll('#pricing-items-tbody .pricing-item-row');
+    const shippingPriceInput = document.getElementById('pricing-shipping-price');
+    const shippingPrice = parsePricingNumber(shippingPriceInput ? shippingPriceInput.value : null) || 0;
+
+    let itemsTotal = 0;
+    let totalWeight = 0;
+
+    rows.forEach((row) => {
+        const quantity = parseInt(row.querySelector('td:nth-child(2)').textContent.trim(), 10) || 1;
+        const unitPriceInput = row.querySelector('.pricing-unit-price');
+        const weightInput = row.querySelector('.pricing-weight-kg');
+
+        const unitPrice = parsePricingNumber(unitPriceInput ? unitPriceInput.value : null);
+        const weightKg = parsePricingNumber(weightInput ? weightInput.value : null);
+
+        if (unitPrice !== null && unitPrice >= 0) {
+            itemsTotal += unitPrice * quantity;
+        }
+        if (weightKg !== null && weightKg >= 0) {
+            totalWeight += weightKg * quantity;
+        }
+    });
+
+    updatePricingTotalsDisplay(itemsTotal, totalWeight, shippingPrice);
+}
+
 function buildPricingTab() {
     const allItems = offer.items || [];
     // Flatten items to show all priceable items
     const items = flattenItemsForPricing(allItems);
     const revisions = offer.price_revisions || [];
-    const totalPrice = offer.total_price ? parseFloat(offer.total_price) : 0;
-    const totalWeight = offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0;
-    const totalKgPrice = totalWeight > 0 ? totalPrice / totalWeight : null;
+    const shippingPrice = offer.shipping_price ? parseFloat(offer.shipping_price) : 0;
+    const itemsTotal = items.reduce((sum, item) => {
+        const quantity = item.quantity || 1;
+        const unitPrice = item.unit_price ? parseFloat(item.unit_price) : null;
+        return unitPrice !== null && !isNaN(unitPrice) ? (sum + (unitPrice * quantity)) : sum;
+    }, 0);
+    const totalWeight = items.reduce((sum, item) => {
+        const quantity = item.quantity || 1;
+        const weightKg = item.weight_kg ? parseFloat(item.weight_kg) : null;
+        return weightKg !== null && !isNaN(weightKg) ? (sum + (weightKg * quantity)) : sum;
+    }, 0);
+    const totalPrice = itemsTotal;
+    const totalKgPrice = totalWeight > 0 ? itemsTotal / totalWeight : null;
     
     let html = `
         <div class="mb-4">
             <h6 class="mb-3 d-flex align-items-center">
                 <i class="fas fa-tag me-2 text-primary"></i>Kalem Fiyatlandırması
             </h6>
+            <div class="row g-2 mb-3">
+                <div class="col-12 col-md-4">
+                    <label for="pricing-shipping-price" class="form-label fw-semibold mb-1">Nakliye Fiyatı (€)</label>
+                    <input type="number"
+                           id="pricing-shipping-price"
+                           class="form-control form-control-sm"
+                           value="${shippingPrice ? shippingPrice.toFixed(2) : ''}"
+                           placeholder="0.00"
+                           step="0.01"
+                           min="0">
+                </div>
+            </div>
             ${items.length === 0 ? `
                 <div class="text-center text-muted py-4">
                     <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
@@ -1710,8 +1811,8 @@ function buildPricingTab() {
                             ${items.map(item => {
                                 const unitPrice = item.unit_price ? parseFloat(item.unit_price) : '';
                                 const weightKg = item.weight_kg ? parseFloat(item.weight_kg) : '';
-                                const subtotal = item.subtotal ? parseFloat(item.subtotal) : '';
                                 const quantity = item.quantity || 1;
+                                const subtotal = unitPrice !== '' ? (parseFloat(unitPrice) * quantity) : '';
                                 const title = item.resolved_title || item.title_override || item.title || '-';
                                 const kgPrice = unitPrice && weightKg ? (parseFloat(unitPrice) / parseFloat(weightKg)) : null;
                                 return `
@@ -1762,6 +1863,12 @@ function buildPricingTab() {
                                 <th colspan="6" class="text-end">Toplam:</th>
                                 <th class="text-end">
                                     <span id="pricing-total-price">${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span> €
+                                </th>
+                            </tr>
+                            <tr>
+                                <th colspan="6" class="text-end">Nakliye Fiyatı:</th>
+                                <th class="text-end">
+                                    <span id="pricing-shipping-price-display">${shippingPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span> €
                                 </th>
                             </tr>
                             <tr>
@@ -1834,51 +1941,62 @@ function buildPricingTab() {
 
 function attachPricingTabListeners() {
     const tbody = document.getElementById('pricing-items-tbody');
-    if (!tbody) return;
+    const shippingPriceInput = document.getElementById('pricing-shipping-price');
 
-    // Update subtotal and kg price display on input (no auto-save)
-    tbody.addEventListener('input', (e) => {
-        const input = e.target;
-        if (!input.classList.contains('pricing-unit-price') && !input.classList.contains('pricing-weight-kg')) return;
-        
-        const row = input.closest('tr');
-        const quantity = parseInt(row.querySelector('td:nth-child(2)').textContent.trim(), 10) || 1;
-        
-        const unitPriceInput = row.querySelector('.pricing-unit-price');
-        const weightInput = row.querySelector('.pricing-weight-kg');
-        const subtotalEl = row.querySelector('.pricing-subtotal');
-        const kgPriceEl = row.querySelector('.pricing-kg-price');
-        
-        const unitPrice = unitPriceInput.value ? parseFloat(unitPriceInput.value) : null;
-        const weightKg = weightInput.value ? parseFloat(weightInput.value) : null;
-        
-        // Update subtotal display immediately (for UI feedback only)
-        if (unitPrice !== null && !isNaN(unitPrice)) {
-            const subtotal = unitPrice * quantity;
-            if (subtotalEl) {
-                subtotalEl.textContent = subtotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
-            }
-        } else if (subtotalEl) {
-            subtotalEl.textContent = '-';
-        }
+    if (tbody) {
+        // Update subtotal, kg price and totals immediately on input (no auto-save)
+        tbody.addEventListener('input', (e) => {
+            const input = e.target;
+            if (!input.classList.contains('pricing-unit-price') && !input.classList.contains('pricing-weight-kg')) return;
 
-        // Update kg price display immediately (unit price / kg)
-        if (kgPriceEl) {
-            if (unitPrice !== null && !isNaN(unitPrice) && weightKg !== null && !isNaN(weightKg) && weightKg > 0) {
-                const kgPrice = unitPrice / weightKg;
-                kgPriceEl.textContent = kgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
-            } else {
-                kgPriceEl.textContent = '-';
+            const row = input.closest('tr');
+            const quantity = parseInt(row.querySelector('td:nth-child(2)').textContent.trim(), 10) || 1;
+
+            const unitPriceInput = row.querySelector('.pricing-unit-price');
+            const weightInput = row.querySelector('.pricing-weight-kg');
+            const subtotalEl = row.querySelector('.pricing-subtotal');
+            const kgPriceEl = row.querySelector('.pricing-kg-price');
+
+            const unitPrice = parsePricingNumber(unitPriceInput ? unitPriceInput.value : null);
+            const weightKg = parsePricingNumber(weightInput ? weightInput.value : null);
+
+            if (unitPrice !== null && unitPrice >= 0) {
+                const subtotal = unitPrice * quantity;
+                if (subtotalEl) {
+                    subtotalEl.textContent = subtotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+                }
+            } else if (subtotalEl) {
+                subtotalEl.textContent = '-';
             }
-        }
-    });
+
+            if (kgPriceEl) {
+                if (unitPrice !== null && weightKg !== null && weightKg > 0) {
+                    const kgPrice = unitPrice / weightKg;
+                    kgPriceEl.textContent = kgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
+                } else {
+                    kgPriceEl.textContent = '-';
+                }
+            }
+
+            recalculatePricingTotalsFromInputs();
+        });
+    }
+
+    if (shippingPriceInput) {
+        shippingPriceInput.addEventListener('input', () => {
+            recalculatePricingTotalsFromInputs();
+        });
+    }
+
+    recalculatePricingTotalsFromInputs();
 }
 
 async function saveAllPrices() {
     const tbody = document.getElementById('pricing-items-tbody');
-    if (!tbody) return;
+    const shippingPriceInput = document.getElementById('pricing-shipping-price');
+    if (!tbody && !shippingPriceInput) return;
 
-    const rows = tbody.querySelectorAll('.pricing-item-row');
+    const rows = tbody ? tbody.querySelectorAll('.pricing-item-row') : [];
     const savePromises = [];
 
     for (const row of rows) {
@@ -1910,6 +2028,11 @@ async function saveAllPrices() {
         }
     }
 
+    const shippingPrice = parsePricingNumber(shippingPriceInput ? shippingPriceInput.value : null);
+    if (shippingPrice !== null && shippingPrice >= 0) {
+        savePromises.push(patchOffer(offerId, { shipping_price: shippingPrice.toFixed(2) }));
+    }
+
     if (savePromises.length === 0) {
         showNotification('Kaydedilecek fiyat bulunamadı', 'info');
         return;
@@ -1921,25 +2044,9 @@ async function saveAllPrices() {
         const updatedOffer = await getOffer(offerId);
         offer.total_price = updatedOffer.total_price;
         offer.total_weight_kg = updatedOffer.total_weight_kg;
+        offer.shipping_price = updatedOffer.shipping_price;
         offer.items = updatedOffer.items || [];
-        
-        // Update totals display in pricing tab
-        const totalPriceEl = document.getElementById('pricing-total-price');
-        const totalWeightEl = document.getElementById('pricing-total-weight');
-        const totalKgPriceEl = document.getElementById('pricing-total-kg-price');
-        if (totalPriceEl) {
-            totalPriceEl.textContent = (offer.total_price ? parseFloat(offer.total_price) : 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
-        }
-        if (totalWeightEl) {
-            totalWeightEl.textContent = (offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
-        }
-        if (totalKgPriceEl) {
-            const tPrice = offer.total_price ? parseFloat(offer.total_price) : 0;
-            const tWeight = offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0;
-            const tKg = tWeight > 0 ? tPrice / tWeight : null;
-            totalKgPriceEl.textContent = tKg != null ? tKg.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-';
-        }
-        
+
         // Update all subtotals, kg prices and input values to match server response
         const allItems = flattenItemsForPricing(offer.items);
         allItems.forEach(item => {
@@ -1970,6 +2077,13 @@ async function saveAllPrices() {
                 }
             }
         });
+
+        if (shippingPriceInput) {
+            const shipping = offer.shipping_price ? parseFloat(offer.shipping_price) : 0;
+            shippingPriceInput.value = shipping > 0 ? shipping.toFixed(2) : '';
+        }
+
+        recalculatePricingTotalsFromInputs();
         
         showNotification('Fiyatlar kaydedildi', 'success');
     } catch (e) {

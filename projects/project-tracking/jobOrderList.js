@@ -2897,7 +2897,12 @@ async function loadDrawingReleasesTab(jobNo) {
     
     // Check cache
     if (jobOrderTabCache.drawingReleases && jobOrderTabCache.drawingReleasesJobNo === jobNo) {
-        renderDrawingReleasesUI(container, jobOrderTabCache.drawingReleases, jobNo);
+        renderDrawingReleasesUI(
+            container,
+            jobOrderTabCache.drawingReleases,
+            jobNo,
+            jobOrderTabCache.currentRelease
+        );
         return;
     }
     
