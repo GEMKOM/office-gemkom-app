@@ -375,6 +375,7 @@ async function initializeTableComponent() {
         data: reviews,
         actions: actions,
         pagination: true,
+        serverSidePagination: true,
         itemsPerPage: currentPageSize,
         currentPage: currentPage,
         totalItems: totalReviews,
@@ -388,6 +389,12 @@ async function initializeTableComponent() {
         onPageChange: async (page) => {
             currentPage = page;
             updateUrlParams({ page });
+            await loadReviews();
+        },
+        onPageSizeChange: async (newPageSize) => {
+            currentPageSize = newPageSize;
+            currentPage = 1;
+            updateUrlParams({ page: 1, page_size: newPageSize });
             await loadReviews();
         },
         refreshable: true,

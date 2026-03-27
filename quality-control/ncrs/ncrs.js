@@ -567,6 +567,7 @@ function initializeTableComponent(canDecideNCRs) {
         data: ncrs,
         actions: actions,
         pagination: true,
+        serverSidePagination: true,
         itemsPerPage: currentPageSize,
         currentPage: currentPage,
         totalItems: totalNCRs,
@@ -580,6 +581,12 @@ function initializeTableComponent(canDecideNCRs) {
         onPageChange: async (page) => {
             currentPage = page;
             updateUrlParams({ page });
+            await loadNCRs();
+        },
+        onPageSizeChange: async (newPageSize) => {
+            currentPageSize = newPageSize;
+            currentPage = 1;
+            updateUrlParams({ page: 1, page_size: newPageSize });
             await loadNCRs();
         },
         refreshable: true,
