@@ -314,6 +314,7 @@ async function loadCustomers() {
 function initializeTableComponent() {
     jobOrdersTable = new TableComponent('job-orders-table-container', {
         title: 'İş Emri Listesi',
+        stickyHeader: true,
         rowAttributes: (row, rowIndex) => {
             const attributes = {};
             
@@ -678,8 +679,33 @@ function initializeTableComponent() {
                 sortable: false,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
-                    if (!value || value === 0) return '-';
-                    return `<span class="status-badge status-grey">${value}</span>`;
+                    const count = parseInt(value) || 0;
+                    if (count <= 0) return '-';
+                    const badgeClass = count > 5 ? 'status-red' : (count >= 3 ? 'status-yellow' : 'status-grey');
+
+                    return `
+                        <a href="#" class="joborder-ncr-count-link text-decoration-none" data-job-no="${row.job_no}"
+                           title="Kalite Kontrol sekmesine git">
+                            <span class="status-badge ${badgeClass}">${count}</span>
+                        </a>
+                    `;
+                }
+            },
+            {
+                field: 'revision_count',
+                label: 'Revizyon Sayısı',
+                sortable: false,
+                formatter: (value, row) => {
+                    if (row._isDepartmentTasksRow) return '';
+                    const count = parseInt(value) || 0;
+                    if (count <= 0) return '-';
+                    const badgeClass = count > 5 ? 'status-red' : (count >= 3 ? 'status-yellow' : 'status-grey');
+                    return `
+                        <a href="#" class="joborder-revision-count-link text-decoration-none" data-job-no="${row.job_no}"
+                           title="Teknik Çizimler sekmesine git">
+                            <span class="status-badge ${badgeClass}">${count}</span>
+                        </a>
+                    `;
                 }
             },
             {
@@ -1281,6 +1307,8 @@ function updateTableDataOnly() {
 // Setup event listeners for expand/collapse buttons using event delegation
 // Use a persistent container that doesn't get recreated
 let expandButtonHandler = null;
+let ncrCountClickHandler = null;
+let revisionCountClickHandler = null;
 
 function setupExpandButtonListeners() {
     if (!jobOrdersTable || !jobOrdersTable.container) {
@@ -1346,6 +1374,72 @@ function setupExpandButtonListeners() {
     
     // Attach the event listener to the container (which persists across renders)
     jobOrdersTable.container.addEventListener('click', expandButtonHandler);
+
+    // NCR count badge click -> open details modal on Kalite Kontrol tab
+    if (ncrCountClickHandler) {
+        jobOrdersTable.container.removeEventListener('click', ncrCountClickHandler);
+    }
+    ncrCountClickHandler = async (e) => {
+        const link = e.target.closest?.('.joborder-ncr-count-link');
+        if (!link) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const jobNo = link.getAttribute('data-job-no');
+        if (!jobNo) return;
+
+        await viewJobOrder(jobNo);
+
+        // Switch to Kalite Kontrol tab and trigger its request
+        setTimeout(async () => {
+            const modal = viewJobOrderModal?.modal;
+            if (!modal) return;
+
+            const tabBtn = modal.querySelector('[data-bs-target="#tab-kalite-kontrol-pane"]');
+            if (tabBtn) tabBtn.click();
+
+            // Ensure data is fetched for this tab (even if already active)
+            try {
+                await loadNCRsTab(jobNo);
+            } catch (err) {
+                console.error('Error loading NCRs tab:', err);
+            }
+        }, 0);
+    };
+    jobOrdersTable.container.addEventListener('click', ncrCountClickHandler);
+
+    // Revision count badge click -> open details modal on Teknik Çizimler tab
+    if (revisionCountClickHandler) {
+        jobOrdersTable.container.removeEventListener('click', revisionCountClickHandler);
+    }
+    revisionCountClickHandler = async (e) => {
+        const link = e.target.closest?.('.joborder-revision-count-link');
+        if (!link) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const jobNo = link.getAttribute('data-job-no');
+        if (!jobNo) return;
+
+        await viewJobOrder(jobNo);
+
+        // Switch to Teknik Çizimler tab and trigger its request
+        setTimeout(async () => {
+            const modal = viewJobOrderModal?.modal;
+            if (!modal) return;
+
+            const tabBtn = modal.querySelector('[data-bs-target="#tab-teknik-cizimler-pane"]');
+            if (tabBtn) tabBtn.click();
+
+            // Ensure data is fetched for this tab (even if already active)
+            try {
+                await loadDrawingReleasesTab(jobNo);
+            } catch (err) {
+                console.error('Error loading drawing releases tab:', err);
+            }
+        }, 0);
+    };
+    jobOrdersTable.container.addEventListener('click', revisionCountClickHandler);
 }
 
 // Fetch children for a specific job order
