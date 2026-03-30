@@ -26,6 +26,7 @@ import { ConfirmationModal } from '../../../../components/confirmation-modal/con
 import { initRouteProtection } from '../../../../apis/routeProtection.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 import { fetchPaintInputs, createPaintInput, patchPaintInput } from '../../../../apis/subcontracting/paintInputs.js';
+import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
 
 // Header component instance
 let headerComponent;
@@ -856,6 +857,11 @@ async function viewStatementDetail(statementId) {
         });
         
         // Totals Section
+        const subtotal = (parseFloat(statement.work_total) || 0) + (parseFloat(statement.adjustments_total) || 0);
+        const vatRate = 0.20;
+        const vatAmount = subtotal * vatRate;
+        const totalWithVat = subtotal + vatAmount;
+
         statementDetailModal.addCustomSection({
             id: 'totals',
             customContent: `
@@ -873,8 +879,18 @@ async function viewStatementDetail(statementId) {
                                         <td class="text-end">${formatCurrency(statement.adjustments_total || 0, statement.currency)}</td>
                                     </tr>
                                     <tr class="border-top">
-                                        <td><strong>Genel Toplam:</strong></td>
-                                        <td class="text-end"><strong>${formatCurrency(statement.grand_total || 0, statement.currency)}</strong></td>
+                                        <td><strong>Ara Toplam:</strong></td>
+                                        <td class="text-end">${formatCurrency(subtotal, statement.currency)}</td>
+                                    </tr>
+                                    <tr>
+                                        <td>
+                                            <strong>KDV (%20):</strong>
+                                        </td>
+                                        <td class="text-end">${formatCurrency(vatAmount, statement.currency)}</td>
+                                    </tr>
+                                    <tr class="border-top">
+                                        <td><strong>Genel Toplam (KDV Dahil):</strong></td>
+                                        <td class="text-end"><strong>${formatCurrency(totalWithVat, statement.currency)}</strong></td>
                                     </tr>
                                 </table>
                             </div>
@@ -1061,7 +1077,7 @@ function setupStatementDetailActions(statement, adjustments) {
     }
 }
 
-function showAddAdjustmentModal(statementId) {
+async function showAddAdjustmentModal(statementId) {
     adjustmentModal.clearAll();
     
     adjustmentModal.addSection({
@@ -1109,15 +1125,51 @@ function showAddAdjustmentModal(statementId) {
         icon: 'fas fa-comment',
         colSize: 12
     });
-    
+
+    let jobOrderOptions = [];
+    try {
+        const dropdownItems = await getJobOrderDropdown(true);
+        const list = Array.isArray(dropdownItems) ? dropdownItems : (dropdownItems?.results || []);
+        jobOrderOptions = list.map((it) => {
+            const jobNo = it.job_no || it.jobNo || it.value || it.id;
+            const title = it.title || it.name || it.label || '';
+            const label = title ? `${jobNo} - ${title}` : `${jobNo}`;
+            return { value: jobNo, label };
+        }).filter(o => o.value);
+    } catch (error) {
+        console.warn('Failed to load job order dropdown:', error);
+        jobOrderOptions = [];
+    }
+
     adjustmentModal.addField({
         id: 'adjustment-job-order',
         name: 'job_order',
-        label: 'İş Emri (Opsiyonel)',
-        type: 'text',
+        label: 'İş Emri',
+        type: 'dropdown',
         value: '',
+        required: true,
+        options: [
+            { value: '', label: 'İş emri seçin...' },
+            ...jobOrderOptions
+        ],
+        searchable: true,
+        placeholder: 'İş emri seçin...',
         icon: 'fas fa-file-invoice',
         colSize: 12
+    });
+
+    adjustmentModal.addField({
+        id: 'adjustment-weight-kg',
+        name: 'weight_kg',
+        label: 'Ağırlık (kg) (Opsiyonel)',
+        type: 'number',
+        value: '',
+        required: false,
+        step: '0.01',
+        min: '0',
+        icon: 'fas fa-weight-hanging',
+        colSize: 12,
+        helpText: '<span class="text-danger"><i class="fas fa-exclamation-triangle me-1"></i>Uyarı: Bu değer toplam imalat tonajına dahil edilir.</span>'
     });
     
     adjustmentModal.render();
@@ -1127,11 +1179,18 @@ function showAddAdjustmentModal(statementId) {
     
     adjustmentModal.onSaveCallback(async (formData) => {
         try {
+            const weightKgRaw = formData.weight_kg;
+            const weightKgParsed = (weightKgRaw === null || weightKgRaw === undefined || `${weightKgRaw}`.trim() === '')
+                ? 0
+                : parseFloat(weightKgRaw);
+            const weight_kg = Number.isFinite(weightKgParsed) ? weightKgParsed : 0;
+
             await createStatementAdjustment(statementId, {
                 adjustment_type: formData.adjustment_type,
                 amount: parseFloat(formData.amount),
                 reason: formData.reason,
-                job_order: formData.job_order || null
+                job_order: formData.job_order,
+                weight_kg
             });
             showNotification('Düzeltme eklendi', 'success');
             adjustmentModal.hide();
@@ -1188,7 +1247,7 @@ function showDecideModal(statementId, approve) {
 }
 
 function formatCurrency(amount, currency) {
-    if (!amount) return '-';
+    if (amount === null || amount === undefined || Number.isNaN(amount)) return '-';
     return new Intl.NumberFormat('tr-TR', {
         style: 'decimal',
         minimumFractionDigits: 2,
