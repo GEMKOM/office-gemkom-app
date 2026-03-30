@@ -48,14 +48,63 @@ let paintInputModal = null;
 
 // State management
 let currentPage = 1;
-let currentSortField = '-year';
-let currentSortDirection = 'desc';
+let currentOrdering = '-year,-month';
 let statements = [];
 let totalStatements = 0;
 let isLoading = false;
 let subcontractors = [];
 let currentPaintInput = null;
 let paintInputClickHandlerAttached = false;
+let statementDeepLinkInitialized = false;
+let currentOpenedStatementId = null;
+
+function getStatementIdFromUrl() {
+    try {
+        const url = new URL(window.location.href);
+        const raw = url.searchParams.get('statement');
+        const id = raw ? parseInt(raw, 10) : null;
+        return Number.isFinite(id) ? id : null;
+    } catch {
+        return null;
+    }
+}
+
+function setStatementIdInUrl(statementId) {
+    const url = new URL(window.location.href);
+    if (statementId) {
+        url.searchParams.set('statement', String(statementId));
+    } else {
+        url.searchParams.delete('statement');
+    }
+    window.history.pushState({ statementId: statementId || null }, '', url.toString());
+}
+
+function replaceStatementIdInUrl(statementId) {
+    const url = new URL(window.location.href);
+    if (statementId) {
+        url.searchParams.set('statement', String(statementId));
+    } else {
+        url.searchParams.delete('statement');
+    }
+    window.history.replaceState({ statementId: statementId || null }, '', url.toString());
+}
+
+function initStatementDeepLinking() {
+    if (statementDeepLinkInitialized) return;
+    statementDeepLinkInitialized = true;
+
+    window.addEventListener('popstate', () => {
+        const statementId = getStatementIdFromUrl();
+        if (statementId) {
+            viewStatementDetail(statementId, { pushUrl: false });
+        } else {
+            // If URL no longer points to a statement, close modal if open.
+            if (statementDetailModal) {
+                statementDetailModal.hide();
+            }
+        }
+    });
+}
 
 function formatAdjustmentTypeLabel(type) {
     const typeMap = {
@@ -77,6 +126,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     await initNavbar();
+    initStatementDeepLinking();
     actionConfirmModal = new ConfirmationModal('action-confirm-modal-container', {
         title: 'Onay',
         icon: 'fas fa-exclamation-triangle',
@@ -93,6 +143,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupPaintInputButtonHandler();
     
     await initializeStatements();
+
+    // Auto-open detail modal if URL contains a statement id
+    const deepLinkedId = getStatementIdFromUrl();
+    if (deepLinkedId) {
+        await viewStatementDetail(deepLinkedId, { pushUrl: false });
+    }
 });
 
 // Initialize header component
@@ -229,8 +285,17 @@ function initializeTableComponent() {
         },
         onSort: async (field, direction) => {
             currentPage = 1;
-            currentSortField = field;
-            currentSortDirection = direction;
+            if (!field) {
+                currentOrdering = '-year,-month';
+            } else {
+                const cleanField = String(field).replace(/^-+/, '');
+                // Keep year+month ordering coupled so newest period stays on top.
+                if (cleanField === 'year' || cleanField === 'month') {
+                    currentOrdering = direction === 'asc' ? 'year,month' : '-year,-month';
+                } else {
+                    currentOrdering = direction === 'asc' ? cleanField : `-${cleanField}`;
+                }
+            }
             await loadStatements();
         },
         onPageSizeChange: async (newPageSize) => {
@@ -263,7 +328,8 @@ function initializeTableComponent() {
         // Grouping configuration
         groupBy: 'period',
         groupCollapsible: true,
-        defaultGroupExpanded: true,
+        defaultGroupExpanded: false,
+        groupSortDirection: 'desc',
         groupHeaderFormatter: (groupValue, groupRows) => {
             // groupValue is the period string (e.g., "2026-02")
             // Parse it to display nicely
@@ -441,8 +507,7 @@ async function loadStatements() {
             filters.status = filterValues['status-filter'];
         }
         
-        const orderingParam = currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`;
-        filters.ordering = orderingParam;
+        filters.ordering = currentOrdering;
         
         const response = await fetchStatements(filters);
         
@@ -676,8 +741,9 @@ function showGenerateStatementModal() {
     });
 }
 
-async function viewStatementDetail(statementId) {
+async function viewStatementDetail(statementId, options = {}) {
     try {
+        const { pushUrl = true } = options || {};
         const [statement, adjustmentsResponse] = await Promise.all([
             fetchStatement(statementId),
             fetchStatementAdjustments(statementId)
@@ -914,6 +980,21 @@ async function viewStatementDetail(statementId) {
         
         statementDetailModal.render();
         statementDetailModal.show();
+
+        // Sync URL for shareable links
+        currentOpenedStatementId = statementId;
+        if (pushUrl) {
+            setStatementIdInUrl(statementId);
+        } else {
+            // Ensure initial deep link has correct state for back/forward.
+            replaceStatementIdInUrl(statementId);
+        }
+
+        // When modal closes, clear URL param (replace to avoid extra history entry).
+        statementDetailModal.onCloseCallback(() => {
+            currentOpenedStatementId = null;
+            replaceStatementIdInUrl(null);
+        });
         
         // Set up event listeners
         setTimeout(() => {

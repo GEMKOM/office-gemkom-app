@@ -82,6 +82,7 @@ export class TableComponent {
             groupHeaderFormatter: null, // Function to format group header (receives groupValue, groupRows)
             groupCollapsible: false, // Allow collapsing/expanding groups
             defaultGroupExpanded: true, // Default state for groups (expanded/collapsed)
+            groupSortDirection: 'asc', // 'asc' | 'desc' - sorting for group header keys
             
             ...options
         };
@@ -270,6 +271,9 @@ export class TableComponent {
         
         // Sort groups (optional - could be made configurable)
         const sortedGroupKeys = Object.keys(groups).sort();
+        if (String(this.options.groupSortDirection).toLowerCase() === 'desc') {
+            sortedGroupKeys.reverse();
+        }
         
         // Calculate total items for pagination (all rows, not just groups)
         if (this.options.pagination && !this.options.serverSidePagination) {
