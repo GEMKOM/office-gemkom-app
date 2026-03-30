@@ -1,5 +1,6 @@
 import { guardRoute } from '../../../../authService.js';
 import { initNavbar } from '../../../../components/navbar.js';
+import { getUser } from '../../../../authService.js';
 import { 
     fetchStatements,
     fetchStatement,
@@ -204,7 +205,7 @@ function initializeTableComponent() {
             },
             {
                 field: 'grand_total',
-                label: 'Genel Toplam',
+                label: 'Genel Toplam (KDV Hariç)',
                 sortable: true,
                 formatter: (value, row) => {
                     if (!value) return '-';
@@ -684,6 +685,13 @@ async function viewStatementDetail(statementId) {
         const adjustments = Array.isArray(adjustmentsResponse)
             ? adjustmentsResponse
             : (adjustmentsResponse?.results || []);
+        // Some detail endpoints may not include adjustments_total; compute it from the list to keep UI consistent.
+        const computedAdjustmentsTotal = adjustments.reduce((sum, adj) => {
+            const raw = parseFloat(adj?.amount);
+            const amount = Number.isFinite(raw) ? raw : 0;
+            const sign = (adj?.adjustment_type === 'deduction') ? -1 : 1;
+            return sum + (sign * amount);
+        }, 0);
         
         if (!statement) {
             showNotification('Hakediş bulunamadı', 'error');
@@ -817,10 +825,11 @@ async function viewStatementDetail(statementId) {
                         <table class="table table-sm table-bordered">
                             <thead class="table-light">
                                 <tr>
-                                    <th>Tür</th>
-                                    <th>Tutar</th>
-                                    <th>Neden</th>
                                     <th>İş Emri</th>
+                                    <th>Tür</th>
+                                    <th>Neden</th>
+                                    <th>Ağırlık</th>
+                                    <th class="text-end">Tutar</th>
                                     ${statement.status === 'draft' || statement.status === 'rejected' ? '<th>İşlem</th>' : ''}
                                 </tr>
                             </thead>
@@ -828,10 +837,13 @@ async function viewStatementDetail(statementId) {
                                 ${adjustments && adjustments.length > 0 ? 
                                     adjustments.map(adj => `
                                         <tr>
+                                            <td>
+                                                <strong>${adj.job_order || '-'}</strong>
+                                            </td>
                                             <td>${formatAdjustmentTypeLabel(adj.adjustment_type)}</td>
-                                            <td>${formatCurrency(adj.amount, statement.currency)}</td>
                                             <td>${adj.reason || '-'}</td>
-                                            <td>${adj.job_order || '-'}</td>
+                                            <td>${(adj.weight_kg ?? 0)} kg</td>
+                                            <td class="text-end"><strong>${formatCurrency(adj.amount, statement.currency)}</strong></td>
                                             ${statement.status === 'draft' || statement.status === 'rejected' ? `
                                                 <td>
                                                     <button class="btn btn-sm btn-outline-danger delete-adj-btn" data-adj-id="${adj.id}">
@@ -841,13 +853,13 @@ async function viewStatementDetail(statementId) {
                                             ` : ''}
                                         </tr>
                                     `).join('') : 
-                                    `<tr><td colspan="${statement.status === 'draft' || statement.status === 'rejected' ? '5' : '4'}" class="text-center text-muted">Düzeltme bulunmamaktadır</td></tr>`
+                                    `<tr><td colspan="${statement.status === 'draft' || statement.status === 'rejected' ? '6' : '5'}" class="text-center text-muted">Düzeltme bulunmamaktadır</td></tr>`
                                 }
                             </tbody>
                             <tfoot class="table-light">
                                 <tr>
-                                    <td colspan="${statement.status === 'draft' || statement.status === 'rejected' ? '4' : '3'}" class="text-end"><strong>Düzeltmeler Toplamı:</strong></td>
-                                    <td><strong>${formatCurrency(statement.adjustments_total || 0, statement.currency)}</strong></td>
+                                    <td colspan="${statement.status === 'draft' || statement.status === 'rejected' ? '5' : '4'}" class="text-end"><strong>Düzeltmeler Toplamı:</strong></td>
+                                    <td><strong>${formatCurrency(computedAdjustmentsTotal, statement.currency)}</strong></td>
                                 </tr>
                             </tfoot>
                         </table>
@@ -857,7 +869,7 @@ async function viewStatementDetail(statementId) {
         });
         
         // Totals Section
-        const subtotal = (parseFloat(statement.work_total) || 0) + (parseFloat(statement.adjustments_total) || 0);
+        const subtotal = (parseFloat(statement.work_total) || 0) + computedAdjustmentsTotal;
         const vatRate = 0.20;
         const vatAmount = subtotal * vatRate;
         const totalWithVat = subtotal + vatAmount;
@@ -876,7 +888,7 @@ async function viewStatementDetail(statementId) {
                                     </tr>
                                     <tr>
                                         <td><strong>Düzeltmeler:</strong></td>
-                                        <td class="text-end">${formatCurrency(statement.adjustments_total || 0, statement.currency)}</td>
+                                        <td class="text-end">${formatCurrency(computedAdjustmentsTotal, statement.currency)}</td>
                                     </tr>
                                     <tr class="border-top">
                                         <td><strong>Ara Toplam:</strong></td>
@@ -913,7 +925,7 @@ async function viewStatementDetail(statementId) {
     }
 }
 
-function setupStatementDetailActions(statement, adjustments) {
+async function setupStatementDetailActions(statement, adjustments) {
     // Add adjustment button
     const addAdjBtn = document.getElementById('add-adjustment-btn');
     if (addAdjBtn) {
@@ -947,6 +959,23 @@ function setupStatementDetailActions(statement, adjustments) {
     const modalFooter = statementDetailModal.container.querySelector('.modal-footer');
     if (modalFooter) {
         let footerButtons = '';
+
+        let canCurrentUserDecide = true;
+        if (statement.status === 'submitted') {
+            try {
+                const user = await getUser();
+                const userId = user?.id;
+                const wf = statement?.approval_workflow;
+                const currentOrder = wf?.current_stage_order;
+                const stages = Array.isArray(wf?.stage_instances) ? wf.stage_instances : [];
+                const currentStage = stages.find(s => s?.order === currentOrder) || null;
+                const approverIds = Array.isArray(currentStage?.approver_user_ids) ? currentStage.approver_user_ids : [];
+                canCurrentUserDecide = !!(userId && approverIds.includes(userId));
+            } catch (e) {
+                // If user/wf cannot be resolved, default to safe behavior: hide approve/reject.
+                canCurrentUserDecide = false;
+            }
+        }
         
         if (statement.status === 'draft') {
             footerButtons = `
@@ -956,22 +985,19 @@ function setupStatementDetailActions(statement, adjustments) {
                 <button type="button" class="btn btn-sm btn-success" id="submit-statement-btn">
                     <i class="fas fa-paper-plane me-1"></i>Onaya Gönder
                 </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Kapat
-                </button>
             `;
         } else if (statement.status === 'submitted') {
-            footerButtons = `
-                <button type="button" class="btn btn-sm btn-success" id="approve-statement-btn">
-                    <i class="fas fa-check me-1"></i>Onayla
-                </button>
-                <button type="button" class="btn btn-sm btn-danger" id="reject-statement-btn">
-                    <i class="fas fa-times me-1"></i>Reddet
-                </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Kapat
-                </button>
-            `;
+            footerButtons = canCurrentUserDecide ? `
+                    <button type="button" class="btn btn-success" id="approve-statement-btn">
+                        <i class="fas fa-check me-1"></i>Onayla
+                    </button>
+                    <button type="button" class="btn btn-sm btn-danger" id="reject-statement-btn">
+                        <i class="fas fa-times me-1"></i>Reddet
+                    </button>
+                `
+                : `
+                    <div class="text-muted small">Bu hakedişi onaylamak/reddetmek için yetkiniz yok.</div>
+                `;
         } else if (statement.status === 'rejected') {
             footerButtons = `
                 <button type="button" class="btn btn-sm btn-primary" id="refresh-statement-btn">
@@ -980,26 +1006,16 @@ function setupStatementDetailActions(statement, adjustments) {
                 <button type="button" class="btn btn-sm btn-success" id="submit-statement-btn">
                     <i class="fas fa-paper-plane me-1"></i>Onaya Gönder
                 </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Kapat
-                </button>
             `;
         } else if (statement.status === 'approved') {
             footerButtons = `
                 <button type="button" class="btn btn-sm btn-info" id="mark-paid-btn">
                     <i class="fas fa-money-check-alt me-1"></i>Ödendi olarak işaretle
                 </button>
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Kapat
-                </button>
             `;
         } else {
             // Default: just close button
-            footerButtons = `
-                <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                    <i class="fas fa-times me-1"></i>Kapat
-                </button>
-            `;
+            footerButtons = ``;
         }
         
         modalFooter.innerHTML = footerButtons;
