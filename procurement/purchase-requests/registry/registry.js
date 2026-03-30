@@ -65,20 +65,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     // Fetch currency rates
     currencyRates = await fetchCurrencyRates();
     
-    // Initialize comparison table component
-    comparisonTable = new ComparisonTable('comparison-table-container', {
-        currencyRates: currencyRates,
-        currencySymbols: currencySymbols,
-        showRecommendations: false, // Hide recommendations column for registry page
-        showSummary: false, // Hide summary section (Özet Bilgiler)
-        showSummaryRow: true, // Show summary row (totals row in table)
-        showEuroTotal: false, // Show Euro Total column for registry page
-        autoSave: null, // No auto-save needed for registry page
-        onRecommendationChange: null, // No recommendation changes needed for registry page
-        onSupplierRecommendAll: null, // No bulk recommendations needed for registry page
-        onShowFiles: (itemIndex, files, item) => showFilesModal(files, item),
-        onShowSpecifications: (itemIndex, specifications, itemDescription, item) => showSpecificationsModal(specifications, itemDescription, item)
-    });
+    // Comparison table is rendered inside the details modal (see `modal-comparison-table-container`)
+    // so we don't initialize it on page load.
     
     // Initialize DisplayModal component
     displayModal = new DisplayModal('display-modal-container', {
@@ -300,7 +288,7 @@ async function initializeFiltersComponent() {
     let users = [];
     try {
         const { authFetchUsers } = await import('../../../apis/users.js');
-        const usersResponse = await authFetchUsers(1, 1000);
+        const usersResponse = await authFetchUsers(1, 1000, { group: 'procurement_team' });
         users = usersResponse.results || [];
         console.log(users);
     } catch (error) {
