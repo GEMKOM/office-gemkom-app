@@ -62,13 +62,20 @@ function getUsername(timer) {
 }
 
 function getMachineName(timer) {
-    return (
+    const fromFk =
         timer.machine_name ||
-        timer.machine ||
+        (timer.machine && typeof timer.machine === 'object' ? timer.machine.name : null) ||
+        (typeof timer.machine === 'string' ? timer.machine : null) ||
         timer.asset_name ||
         timer.equipment_name ||
-        'Bilinmiyor'
-    );
+        '';
+
+    if (fromFk && String(fromFk).trim() !== '') return String(fromFk).trim();
+
+    const fallback = timer.fault_machine_name;
+    if (fallback && String(fallback).trim() !== '') return String(fallback).trim();
+
+    return 'Bilinmiyor';
 }
 
 function getFaultLabel(timer) {
@@ -81,6 +88,10 @@ function getFaultLabel(timer) {
         timer.fault_reason_name;
 
     if (desc && String(desc).trim() !== '') return String(desc);
+
+    const issueName = timer.issue_name;
+    if (issueName && String(issueName).trim() !== '') return String(issueName).trim();
+
     if (id !== null && id !== undefined && String(id).trim() !== '') return `#${id}`;
     return '-';
 }

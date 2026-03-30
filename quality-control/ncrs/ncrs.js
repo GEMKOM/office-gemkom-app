@@ -452,11 +452,11 @@ function initializeTableComponent(canDecideNCRs) {
             }
         },
         {
-            field: 'assigned_team',
+            field: 'assigned_team_name',
             label: 'Atanan Takım',
             sortable: false,
             width: '150px',
-            formatter: (value) => {
+            formatter: (value, row) => {
                 const teamMap = {
                     'manufacturing': 'İmalat',
                     'welding': 'Kaynak',
@@ -464,7 +464,7 @@ function initializeTableComponent(canDecideNCRs) {
                     'design': 'Dizayn',
                     'planning': 'Planlama'
                 };
-                const displayValue = teamMap[value] || value;
+                const displayValue = value || teamMap[row.assigned_team] || row.assigned_team;
                 if (!displayValue || displayValue === '-') return '-';
                 return `<span class="status-badge status-grey">${displayValue}</span>`;
             }
@@ -1002,7 +1002,7 @@ async function showNCRDetails(ncr) {
                 },
                 { 
                     label: 'Atanan Takım', 
-                    value: fullNCR.assigned_team || '-',
+                    value: fullNCR.assigned_team_name || '-',
                     colSize: 6
                 }
             ]
