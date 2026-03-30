@@ -123,6 +123,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Malzeme Maliyeti Satırları',
                 icon: 'fas fa-shopping-cart',
                 children: {}
+            },
+            '/planning/items': {
+                label: 'Planlama Kalemleri',
+                icon: 'fas fa-list',
+                children: {}
             }
         }
     },

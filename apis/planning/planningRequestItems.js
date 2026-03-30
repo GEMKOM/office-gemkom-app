@@ -21,11 +21,23 @@ export async function getNumberOfAvailablePlanningRequestItems() {
 /**
  * Get all planning request items with optional filtering
  * @param {Object} filters - Filter parameters
- * @param {number} filters.planning_request - Filter by planning request ID
- * @param {number} filters.item - Filter by item ID
- * @param {string} filters.job_no - Filter by job number
- * @param {string} filters.priority - Filter by priority (normal, urgent, critical)
- * @param {string} filters.ordering - Ordering field (e.g., 'order', '-order')
+ * @param {string} [filters.search] - Matches item code OR item name (partial)
+ * @param {string} [filters.item_code] - Partial match on item code
+ * @param {string} [filters.item_name] - Partial match on item name
+ * @param {number|string} [filters.planning_request] - Filter by planning request ID
+ * @param {string} [filters.planning_request_number] - Partial match on request number
+ * @param {string} [filters.planning_request_status] - Exact match on parent request status
+ * @param {string} [filters.job_no] - Exact or partial match
+ * @param {number|string} [filters.item] - Exact item ID
+ * @param {string} [filters.priority] - normal / urgent / critical
+ * @param {string} [filters.item_type] - Exact item type
+ * @param {string} [filters.item_type_exclude] - Exclude specific item type
+ * @param {boolean|string} [filters.is_delivered] - Delivery status
+ * @param {boolean|string} [filters.is_available] - Has remaining qty for purchase
+ * @param {boolean|string} [filters.needs_purchase] - quantity_to_purchase > 0
+ * @param {boolean|string} [filters.available_for_procurement] - Ready for procurement (status + qty checks)
+ * @param {string} [filters.fields] - Set to 'simple' to return lightweight serializer
+ * @param {string} [filters.ordering] - ordering=-id, ordering=order, ordering=job_no
  * @param {number} filters.page - Page number for pagination
  * @param {number} filters.page_size - Page size for pagination
  * @returns {Promise<Object>} Response with planning request items
@@ -53,6 +65,16 @@ export async function getPlanningRequestItems(filters = {}) {
         console.error('Error fetching planning request items:', error);
         throw error;
     }
+}
+
+/**
+ * Alias for the planning items endpoint.
+ * This endpoint is served at GET /planning/items/ in the backend.
+ * @param {Object} filters - Same filter shape as getPlanningRequestItems()
+ * @returns {Promise<Object>}
+ */
+export async function getPlanningItems(filters = {}) {
+    return getPlanningRequestItems(filters);
 }
 
 /**

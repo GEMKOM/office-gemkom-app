@@ -54,6 +54,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-shopping-cart',
                 iconColor: 'primary',
                 link: '/planning/procurement-lines'
+            },
+            {
+                title: 'Planlama Kalemleri',
+                description: 'Planlama taleplerindeki ürün/kalem listesini filtreleyin ve takip edin.',
+                icon: 'fas fa-list',
+                iconColor: 'primary',
+                link: '/planning/items'
             }
         ]
     });
