@@ -566,7 +566,13 @@ export const NAVIGATION_STRUCTURE = {
             '/management/reports': {
                 label: 'Raporlar',
                 icon: 'fas fa-chart-bar',
-                children: {}
+                children: {
+                    '/management/reports/overview': {
+                        label: 'Genel Bakış',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    }
+                }
             },
             '/management/analytics': {
                 label: 'Analitik',

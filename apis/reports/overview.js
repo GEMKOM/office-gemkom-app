@@ -3,7 +3,7 @@ import { backendBase } from '../../base.js';
 
 const REPORTS_BASE_URL = `${backendBase}/reports`;
 
-function buildOverviewQuery({ preset = null, date_from = null, date_to = null } = {}) {
+function buildOverviewQuery({ preset = null, date_from = null, date_to = null, compare = null } = {}) {
     // Rules:
     // - preset takes priority over date_from/date_to
     // - If nothing is provided, defaults to current_month
@@ -13,6 +13,7 @@ function buildOverviewQuery({ preset = null, date_from = null, date_to = null } 
 
     if (preset) {
         qs.set('preset', preset);
+        if (compare === true) qs.set('compare', 'true');
         return qs;
     }
 
@@ -33,10 +34,12 @@ function buildOverviewQuery({ preset = null, date_from = null, date_to = null } 
         }
         qs.set('date_from', from);
         qs.set('date_to', to);
+        if (compare === true) qs.set('compare', 'true');
         return qs;
     }
 
     qs.set('preset', 'current_month');
+    if (compare === true) qs.set('compare', 'true');
     return qs;
 }
 

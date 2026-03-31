@@ -1,0 +1,221 @@
+/* ============================================================================
+   REPORTS OVERVIEW
+   ============================================================================ */
+
+/* ---------- Outer wrapper: override dashboard-card hover bounce ---------- */
+.overview-tabs.dashboard-card {
+    transform: none !important;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1) !important;
+}
+
+/* ---------- Tabs ---------- */
+.overview-tabs > .card-body {
+    padding: 1.25rem 1.5rem;
+}
+
+.overview-tabs .nav-tabs {
+    border-bottom: 2px solid #dee2e6;
+    margin-bottom: 0;
+}
+
+.overview-tabs .nav-tabs .nav-link {
+    color: #6c757d !important;
+    font-weight: 600;
+    font-size: 0.88rem;
+    border: none !important;
+    border-bottom: 3px solid transparent !important;
+    padding: 0.6rem 1.15rem !important;
+    margin-bottom: -2px;
+    background: transparent !important;
+    transition: color 0.2s, border-color 0.2s;
+    animation: none !important;
+}
+
+.overview-tabs .nav-tabs .nav-link:hover {
+    color: #343a40 !important;
+    border-bottom-color: rgba(139, 0, 0, 0.25) !important;
+    background: transparent !important;
+    transform: none !important;
+}
+
+.overview-tabs .nav-tabs .nav-link.active {
+    color: #8b0000 !important;
+    border-bottom-color: #8b0000 !important;
+    background: transparent !important;
+}
+
+/* ---------- Inner section cards ---------- */
+.ov-card {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    overflow: hidden;
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+}
+
+.ov-card-header {
+    background: #f1f3f5;
+    border-bottom: 1px solid #e9ecef;
+    padding: 0.7rem 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ov-card-header h6 {
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #343a40;
+}
+
+.ov-card-body {
+    padding: 1rem;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ---------- Chart wrappers: explicit height prevents infinite growth ---------- */
+.chart-wrap {
+    position: relative;
+    width: 100%;
+}
+
+.chart-wrap--sm  { height: 200px; }
+.chart-wrap--md  { height: 260px; }
+.chart-wrap--lg  { height: 300px; }
+
+.chart-wrap canvas {
+    display: block;
+}
+
+/* ---------- Key-value data grid ---------- */
+.ov-kv {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.5rem 1rem;
+    font-size: 0.88rem;
+}
+
+.ov-kv dt {
+    font-weight: 400;
+    color: #6c757d;
+}
+
+.ov-kv dd {
+    margin: 0;
+    font-weight: 700;
+    color: #212529;
+    text-align: right;
+}
+
+/* ---------- Stat mini cards (numbers with label) ---------- */
+.ov-stat-grid {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.ov-stat-grid--3 { grid-template-columns: repeat(3, 1fr); }
+.ov-stat-grid--4 { grid-template-columns: repeat(4, 1fr); }
+
+.ov-stat {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+}
+
+.ov-stat-label {
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    font-weight: 600;
+    color: #6c757d;
+    margin-bottom: 0.25rem;
+}
+
+.ov-stat-value {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #212529;
+    line-height: 1.2;
+}
+
+.ov-stat-sub {
+    font-size: 0.72rem;
+    color: #adb5bd;
+    margin-top: 0.15rem;
+}
+
+/* ---------- Trend badges ---------- */
+.trend-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+}
+
+.trend-up-good {
+    background: rgba(25, 135, 84, 0.1);
+    color: #198754;
+    border: 1px solid rgba(25, 135, 84, 0.2);
+}
+
+.trend-down-bad {
+    background: rgba(220, 53, 69, 0.1);
+    color: #dc3545;
+    border: 1px solid rgba(220, 53, 69, 0.2);
+}
+
+.trend-flat {
+    background: rgba(108, 117, 125, 0.1);
+    color: #6c757d;
+    border: 1px solid rgba(108, 117, 125, 0.2);
+}
+
+/* ---------- Snapshot hint ---------- */
+.ov-hint {
+    font-size: 0.72rem;
+    color: #adb5bd;
+    font-style: italic;
+    margin-top: auto;
+    padding-top: 0.5rem;
+}
+
+/* ---------- Team badges row ---------- */
+.ov-team-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.65rem;
+}
+
+.ov-team-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    background: #fff;
+    border: 1px solid #dee2e6;
+    border-radius: 6px;
+    padding: 0.3rem 0.65rem;
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #495057;
+}
+
+/* ---------- Responsive ---------- */
+@media (max-width: 768px) {
+    .ov-stat-grid--3,
+    .ov-stat-grid--4 { grid-template-columns: repeat(2, 1fr); }
+
+    .chart-wrap--sm  { height: 180px; }
+    .chart-wrap--md  { height: 220px; }
+    .chart-wrap--lg  { height: 250px; }
+}

@@ -1,113 +1,170 @@
-.overview-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    flex-wrap: wrap;
+/* ============================================================================
+   MANAGEMENT DASHBOARD
+   ============================================================================ */
+
+/* ---------- Section groups ---------- */
+.snapshot-section {
+    margin-bottom: 1.5rem;
 }
 
-.overview-toolbar__left,
-.overview-toolbar__right {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-    flex-wrap: wrap;
-}
-
-.overview-preset-group .btn {
-    border-radius: 8px;
-}
-
-.overview-panel {
-    background: rgba(255, 255, 255, 0.95);
-    border-radius: 14px;
-    box-shadow: var(--shadow-medium);
-    border: 1px solid rgba(255, 255, 255, 0.4);
-    overflow: hidden;
-}
-
-.overview-panel__header {
-    padding: 0.9rem 1.1rem;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
-    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.75));
-}
-
-.overview-panel__title {
-    margin: 0;
+.snapshot-section-title {
     font-size: 1rem;
     font-weight: 700;
     color: #343a40;
+    margin-bottom: 0.75rem;
     display: flex;
     align-items: center;
     gap: 0.5rem;
 }
 
-.overview-panel__body {
-    padding: 1rem 1.1rem;
-}
-
-.kv-grid {
-    display: grid;
-    grid-template-columns: 1fr auto;
-    gap: 0.45rem 0.75rem;
-}
-
-.kv-grid .k {
-    color: #6c757d;
-    font-size: 0.9rem;
-}
-
-.kv-grid .v {
-    font-weight: 700;
-    color: #212529;
+.snapshot-section-title i {
     font-size: 0.95rem;
-    text-align: right;
 }
 
-.overview-subtitle {
-    color: #6c757d;
-    font-size: 0.85rem;
-    margin-top: 0.75rem;
+/* ---------- Metric tiles ---------- */
+.metric-tiles {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.75rem;
 }
 
-.overview-list {
-    margin: 0.5rem 0 0 0;
-    padding-left: 1.1rem;
-    color: #495057;
-    font-size: 0.9rem;
+.metric-tile {
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
+    border-radius: 12px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    padding: 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 
-.badge-scope {
-    font-size: 0.75rem;
+.metric-tile::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: 12px 12px 0 0;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.metric-tile:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+    border-color: rgba(0, 0, 0, 0.1);
+}
+
+.metric-tile:hover::before {
+    opacity: 1;
+}
+
+.metric-tile--blue::before { background: linear-gradient(90deg, #0d6efd, #0b5ed7); }
+.metric-tile--red::before { background: linear-gradient(90deg, #dc3545, #bb2d3b); }
+.metric-tile--amber::before { background: linear-gradient(90deg, #ffc107, #e0a800); }
+.metric-tile--green::before { background: linear-gradient(90deg, #198754, #157347); }
+
+.metric-tile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.metric-tile-label {
+    font-size: 0.8rem;
     font-weight: 600;
-    padding: 0.25rem 0.5rem;
+    color: #6c757d;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.metric-tile-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    color: white;
+    flex-shrink: 0;
+}
+
+.metric-tile-icon--blue { background: linear-gradient(135deg, #0d6efd, #0b5ed7); }
+.metric-tile-icon--red { background: linear-gradient(135deg, #dc3545, #bb2d3b); }
+.metric-tile-icon--amber { background: linear-gradient(135deg, #ffc107, #e0a800); color: #343a40; }
+.metric-tile-icon--green { background: linear-gradient(135deg, #198754, #157347); }
+.metric-tile-icon--dark { background: linear-gradient(135deg, #343a40, #212529); }
+
+.metric-tile-value {
+    font-size: 2rem;
+    font-weight: 800;
+    color: #212529;
+    line-height: 1.1;
+}
+
+.metric-tile-footer {
+    font-size: 0.75rem;
+    color: #adb5bd;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.metric-tile-footer i {
+    font-size: 0.7rem;
+}
+
+/* ---------- Alert badges inside tiles ---------- */
+.metric-tile-alert {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.15rem 0.55rem;
     border-radius: 999px;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    background: rgba(13, 110, 253, 0.08);
-    color: #0d6efd;
+    font-size: 0.7rem;
+    font-weight: 700;
+    position: absolute;
+    top: 0.75rem;
+    right: 0.75rem;
 }
 
-.overview-state .alert {
-    border-radius: 14px;
-    box-shadow: var(--shadow-light);
+.metric-tile-alert--red {
+    background: rgba(220, 53, 69, 0.12);
+    color: #dc3545;
+    border: 1px solid rgba(220, 53, 69, 0.25);
 }
 
-@media (max-width: 768px) {
-    .overview-toolbar {
-        flex-direction: column;
-        align-items: stretch;
-    }
+.metric-tile-alert--amber {
+    background: rgba(255, 193, 7, 0.15);
+    color: #b17c00;
+    border: 1px solid rgba(255, 193, 7, 0.3);
+}
 
-    .overview-toolbar__left,
-    .overview-toolbar__right {
-        justify-content: space-between;
-    }
+/* ---------- Last updated ---------- */
+.snapshot-updated {
+    text-align: right;
+    font-size: 0.75rem;
+    color: #adb5bd;
+    margin-top: 0.5rem;
+}
 
-    .overview-custom-range {
-        width: 100%;
+/* ---------- Responsive ---------- */
+@media (max-width: 992px) {
+    .metric-tiles {
+        grid-template-columns: repeat(2, 1fr);
     }
 }
 
+@media (max-width: 576px) {
+    .metric-tiles {
+        grid-template-columns: 1fr;
+    }
+}
