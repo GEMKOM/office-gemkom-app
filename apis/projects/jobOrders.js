@@ -172,6 +172,42 @@ export async function updateJobOrder(jobNo, jobOrderData) {
 }
 
 /**
+ * Revise target completion date with a reason (PATCH)
+ * Backend endpoint: /projects/job-orders/{job_no}/
+ * Payload:
+ *  - target_completion_date: YYYY-MM-DD
+ *  - target_date_change_reason: string
+ *
+ * @param {string} jobNo - Job order number
+ * @param {Object} payload
+ * @param {string} payload.target_completion_date
+ * @param {string} payload.target_date_change_reason
+ * @returns {Promise<Object>} Updated job order detail object
+ */
+export async function reviseTargetCompletionDate(jobNo, payload) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${jobNo}/`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error(`Error revising target completion date for job order ${jobNo}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Start job order (draft → active)
  * @param {string} jobNo - Job order number
  * @returns {Promise<Object>} Response with status, message, and job_order

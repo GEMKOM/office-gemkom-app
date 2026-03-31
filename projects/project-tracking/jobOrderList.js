@@ -5,6 +5,7 @@ import {
     getJobOrderByJobNo, 
     createJobOrder as createJobOrderAPI, 
     updateJobOrder as updateJobOrderAPI,
+    reviseTargetCompletionDate,
     startJobOrder as startJobOrderAPI,
     holdJobOrder as holdJobOrderAPI,
     resumeJobOrder as resumeJobOrderAPI,
@@ -132,6 +133,7 @@ let createDepartmentTaskModal = null;
 let viewJobOrderModal = null;
 let confirmationModal = null;
 let requestRevisionModal = null;
+let targetDateRevisionModal = null;
 let holdJobOrderModal = null;
 let jobOrderFileUploadModal = null;
 
@@ -586,6 +588,25 @@ function initializeTableComponent() {
                         month: 'short',
                         day: 'numeric'
                     });
+
+                    const previous = row.previous_target_date_revision;
+                    let previousHtml = '';
+                    if (previous) {
+                        const prevDateStr = typeof previous === 'string'
+                            ? previous
+                            : (previous.previous_date || previous.date || previous.target_completion_date);
+                        if (prevDateStr) {
+                            const prevDate = new Date(prevDateStr);
+                            const prevFormatted = prevDate.toLocaleDateString('tr-TR', {
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
+                            });
+                            previousHtml = `<div class="text-muted" style="font-size: 0.75rem; line-height: 1.1; margin-top: 2px; text-align:center; width:100%;">
+                                <span style="text-decoration: line-through;">${prevFormatted}</span>
+                            </div>`;
+                        }
+                    }
                     
                     // Color code based on urgency
                     // Use darker colors for better contrast, especially on yellow backgrounds
@@ -598,12 +619,42 @@ function initializeTableComponent() {
                         // Use dark brown/black for yellow background rows for better visibility
                         dateClass = '';
                         fontWeight = '700';
-                        return `<span style="color: #92400e; font-size: 0.875rem; font-weight: ${fontWeight};">${formattedDate}</span>`;
+                        const reviseBtnHtml = (!HIDE_ACTION_BUTTONS && canEditJobOrders())
+                            ? `<button type="button"
+                                      class="btn btn-xs btn-link p-0 ms-2 target-date-revise-row-btn"
+                                      title="Hedef tarihi revize et"
+                                      data-job-no="${row.job_no}"
+                                      data-current-date="${value}">
+                                    <i class="fas fa-pen-to-square"></i>
+                               </button>`
+                            : '';
+                        return `<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center;">
+                            <div style="display:flex; align-items:center; justify-content:center; gap:6px; width:100%;">
+                                <span style="color: #92400e; font-size: 0.875rem; font-weight: ${fontWeight};">${formattedDate}</span>
+                                ${reviseBtnHtml}
+                            </div>
+                            ${previousHtml}
+                        </div>`;
                     } else {
                         dateClass = 'text-dark';
                     }
                     
-                    return `<span class="${dateClass}" style="font-size: 0.875rem; font-weight: ${fontWeight};">${formattedDate}</span>`;
+                    const reviseBtnHtml = (!HIDE_ACTION_BUTTONS && canEditJobOrders())
+                        ? `<button type="button"
+                                  class="btn btn-xs btn-link p-0 ms-2 target-date-revise-row-btn"
+                                  title="Hedef tarihi revize et"
+                                  data-job-no="${row.job_no}"
+                                  data-current-date="${value}">
+                                <i class="fas fa-pen-to-square"></i>
+                           </button>`
+                        : '';
+                    return `<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center;">
+                        <div style="display:flex; align-items:center; justify-content:center; gap:6px; width:100%;">
+                            <span class="${dateClass}" style="font-size: 0.875rem; font-weight: ${fontWeight};">${formattedDate}</span>
+                            ${reviseBtnHtml}
+                        </div>
+                        ${previousHtml}
+                    </div>`;
                 }
             },
             {
@@ -819,6 +870,15 @@ function initializeTableComponent() {
                             editJobOrder(row.job_no);
                         },
                         visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                    },
+                    {
+                        key: 'revise-target-date',
+                        label: 'Hedef Tarihi Revize Et',
+                        icon: 'fas fa-calendar-check',
+                        onClick: (row) => {
+                            showTargetDateRevisionModal(row.job_no, row.target_completion_date);
+                        },
+                        visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && !row._isDepartmentTasksRow
                     },
                     {
                         key: 'create-child',
@@ -1045,6 +1105,15 @@ function initializeModalComponents() {
         showEditButton: false
     });
 
+    // Target Completion Date Revision Modal
+    targetDateRevisionModal = new EditModal('target-date-revision-modal-container', {
+        title: 'Hedef Tarih Revize Et',
+        icon: 'fas fa-calendar-check',
+        size: 'md',
+        showEditButton: false,
+        saveButtonText: 'Kaydet'
+    });
+
     // Hold Job Order Modal
     holdJobOrderModal = new EditModal('hold-job-order-modal-container', {
         title: 'İş Emrini Beklet',
@@ -1109,6 +1178,54 @@ function initializeModalComponents() {
         }
     });
 
+    targetDateRevisionModal.onSaveCallback(async (formData) => {
+        const jobNo = window.targetDateRevisionJobNo;
+        if (!jobNo) return;
+
+        try {
+            const targetDate = (formData.target_completion_date || '').trim();
+            const reason = (formData.target_date_change_reason || '').trim();
+
+            if (!targetDate) {
+                showNotification('Yeni hedef tarih gereklidir', 'error');
+                return;
+            }
+            if (!reason) {
+                showNotification('Değişiklik nedeni gereklidir', 'error');
+                return;
+            }
+
+            await reviseTargetCompletionDate(jobNo, {
+                target_completion_date: targetDate,
+                target_date_change_reason: reason
+            });
+
+            showNotification('Hedef tarih revizesi kaydedildi', 'success');
+            targetDateRevisionModal.hide();
+            window.targetDateRevisionJobNo = null;
+
+            await loadJobOrders();
+            if (viewJobOrderModal?.modal) {
+                await viewJobOrder(jobNo);
+            }
+        } catch (error) {
+            console.error('Error revising target completion date:', error);
+            let errorMessage = 'Hedef tarih revizesi kaydedilirken hata oluştu';
+            try {
+                if (error.message) {
+                    const errorData = JSON.parse(error.message);
+                    if (typeof errorData === 'object') {
+                        const errors = Object.values(errorData).flat();
+                        errorMessage = errors.join(', ') || errorMessage;
+                    } else {
+                        errorMessage = error.message;
+                    }
+                }
+            } catch (e) {}
+            showNotification(errorMessage, 'error');
+        }
+    });
+
     // Set up close callback to clean up URL and clear cache
     viewJobOrderModal.onCloseCallback(() => {
         // Clear tab cache when modal closes
@@ -1139,6 +1256,51 @@ function initializeModalComponents() {
 
     // Set up modal callbacks
     setupModalCallbacks();
+}
+
+function showTargetDateRevisionModal(jobNo, currentTargetDate) {
+    if (!targetDateRevisionModal) return;
+
+    window.targetDateRevisionJobNo = jobNo;
+
+    // Rebuild fields each time to avoid stale state / duplicated content
+    // EditModal keeps sections in-memory; it must be reset before adding fields again.
+    if (Array.isArray(targetDateRevisionModal.sections)) targetDateRevisionModal.sections = [];
+    if (targetDateRevisionModal.fields?.clear) targetDateRevisionModal.fields.clear();
+    if (targetDateRevisionModal.dropdowns?.clear) targetDateRevisionModal.dropdowns.clear();
+
+    if (typeof targetDateRevisionModal.addSection === 'function') {
+        targetDateRevisionModal.addSection({
+            title: 'Hedef Tarih Revizesi',
+            icon: 'fas fa-calendar-check',
+            iconColor: 'text-primary'
+        });
+    }
+
+    targetDateRevisionModal.addField({
+        id: 'target_completion_date',
+        name: 'target_completion_date',
+        label: 'Yeni Hedef Tamamlanma Tarihi',
+        type: 'date',
+        value: currentTargetDate ? String(currentTargetDate).split('T')[0] : '',
+        icon: 'fas fa-calendar-check',
+        colSize: 12
+    });
+
+    targetDateRevisionModal.addField({
+        id: 'target_date_change_reason',
+        name: 'target_date_change_reason',
+        label: 'Değişiklik Nedeni',
+        type: 'textarea',
+        value: '',
+        icon: 'fas fa-comment-dots',
+        colSize: 12,
+        required: true,
+        placeholder: 'Örn: Tedarik gecikmesi'
+    });
+
+    targetDateRevisionModal.render();
+    targetDateRevisionModal.show();
 }
 
 // Set up modal callbacks
@@ -1370,6 +1532,7 @@ function updateTableDataOnly() {
 let expandButtonHandler = null;
 let ncrCountClickHandler = null;
 let revisionCountClickHandler = null;
+let targetDateReviseRowClickHandler = null;
 
 function setupExpandButtonListeners() {
     if (!jobOrdersTable || !jobOrdersTable.container) {
@@ -1501,6 +1664,24 @@ function setupExpandButtonListeners() {
         }, 0);
     };
     jobOrdersTable.container.addEventListener('click', revisionCountClickHandler);
+
+    // Target completion date revise button (inline in table cell)
+    if (targetDateReviseRowClickHandler) {
+        jobOrdersTable.container.removeEventListener('click', targetDateReviseRowClickHandler);
+    }
+    targetDateReviseRowClickHandler = (e) => {
+        const btn = e.target.closest?.('.target-date-revise-row-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+
+        const jobNo = btn.getAttribute('data-job-no');
+        const currentDate = btn.getAttribute('data-current-date');
+        if (!jobNo) return;
+
+        showTargetDateRevisionModal(jobNo, currentDate);
+    };
+    jobOrdersTable.container.addEventListener('click', targetDateReviseRowClickHandler);
 }
 
 // Fetch children for a specific job order
@@ -1699,17 +1880,6 @@ window.editJobOrder = async function(jobNo) {
             iconColor: 'text-info'
         });
 
-        editJobOrderModal.addField({
-            id: 'target_completion_date',
-            name: 'target_completion_date',
-            label: 'Hedef Tamamlanma Tarihi',
-            type: 'date',
-            value: jobOrder.target_completion_date ? jobOrder.target_completion_date.split('T')[0] : '',
-            icon: 'fas fa-calendar-check',
-            colSize: 6,
-            helpText: 'Hedef tamamlanma tarihi'
-        });
-
         // Add Cost Information section
         editJobOrderModal.addSection({
             title: 'Maliyet Bilgileri',
@@ -1822,6 +1992,50 @@ window.viewJobOrder = async function(jobNo) {
             const currencySymbol = currency === 'USD' ? '$' : currency === 'EUR' ? '€' : currency === 'GBP' ? '£' : '₺';
             return `${currencySymbol} ${numValue.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
         };
+
+        const buildTargetDateRevisionsHtml = (revisions = []) => {
+            const items = Array.isArray(revisions) ? revisions : [];
+            if (items.length === 0) {
+                return `
+                    <div style="padding: 20px;">
+                        <div class="text-muted">Hedef tarih revizyonu bulunamadı.</div>
+                    </div>
+                `;
+            }
+
+            const rows = items.map(r => `
+                <tr>
+                    <td>${r.id ?? '-'}</td>
+                    <td>${formatDate(r.previous_date)}</td>
+                    <td class="fw-semibold">${formatDate(r.new_date)}</td>
+                    <td>${r.reason || '-'}</td>
+                    <td>${r.changed_by_name || (r.changed_by ? `#${r.changed_by}` : '-')}</td>
+                    <td>${formatDateTime(r.changed_at)}</td>
+                </tr>
+            `).join('');
+
+            return `
+                <div style="padding: 20px;">
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover align-middle">
+                            <thead>
+                                <tr>
+                                    <th style="width: 60px;">#</th>
+                                    <th>Önceki</th>
+                                    <th>Yeni</th>
+                                    <th>Neden</th>
+                                    <th>Değiştiren</th>
+                                    <th>Tarih</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${rows}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `;
+        };
         
         // Build Temel Bilgiler tab content
         const temelBilgilerHtml = `
@@ -1919,7 +2133,16 @@ window.viewJobOrder = async function(jobNo) {
                             <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                                 <i class="fas fa-calendar-check me-1"></i>Hedef Tamamlanma
                             </div>
-                            <div class="field-value fw-bold flex-grow-1">${formatDate(jobOrder.target_completion_date)}</div>
+                            <div class="field-value fw-bold flex-grow-1 d-flex align-items-center justify-content-between gap-2">
+                                <span>${formatDate(jobOrder.target_completion_date)}</span>
+                                ${canEditJobOrders() ? `
+                                    <button type="button" class="btn btn-sm btn-outline-primary target-date-revise-btn"
+                                            data-job-no="${jobOrder.job_no}"
+                                            data-current-date="${jobOrder.target_completion_date || ''}">
+                                        Revize Et
+                                    </button>
+                                ` : ''}
+                            </div>
                         </div>
                         <div class="field-row d-flex align-items-center py-2 border-bottom">
                             <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
@@ -2011,6 +2234,14 @@ window.viewJobOrder = async function(jobNo) {
             customContent: temelBilgilerHtml,
             active: true
         });
+
+        viewJobOrderModal.addTab({
+            id: 'hedef-tarih-revizyonlari',
+            label: 'Hedef Tarih Revizyonları',
+            icon: 'fas fa-history',
+            iconColor: 'text-primary',
+            customContent: buildTargetDateRevisionsHtml(jobOrder.target_date_revisions)
+        });
         
         // Add Departman Görevleri tab
         viewJobOrderModal.addTab({
@@ -2090,6 +2321,20 @@ window.viewJobOrder = async function(jobNo) {
         
         // Render the modal
         viewJobOrderModal.render();
+
+        // Wire up target-date revise button (in Temel Bilgiler tab)
+        setTimeout(() => {
+            try {
+                const btn = viewJobOrderModal?.content?.querySelector?.('.target-date-revise-btn');
+                if (!btn) return;
+                btn.addEventListener('click', (e) => {
+                    const el = e.currentTarget;
+                    const jn = el.getAttribute('data-job-no');
+                    const currentDate = el.getAttribute('data-current-date');
+                    showTargetDateRevisionModal(jn, currentDate);
+                });
+            } catch (e) {}
+        }, 50);
         
         // Set up tab click handlers for lazy loading
         setTimeout(() => {
