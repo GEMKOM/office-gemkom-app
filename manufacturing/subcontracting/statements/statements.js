@@ -243,7 +243,7 @@ function initializeTableComponent() {
                 field: 'status',
                 label: 'Durum',
                 sortable: true,
-                formatter: (value) => {
+                formatter: (value, row) => {
                     const statusInfo = getStatementStatusInfo(value);
                     // Map status classes to badge classes
                     let badgeClass = statusInfo.class;
@@ -252,7 +252,22 @@ function initializeTableComponent() {
                     } else if (badgeClass === 'status-unknown') {
                         badgeClass = 'status-grey';
                     }
-                    return `<span class="status-badge ${badgeClass}">${statusInfo.label}</span>`;
+                    const approvers = Array.isArray(row?.current_approvers) ? row.current_approvers : [];
+                    const approverText = approvers
+                        .map(a => (a?.full_name || a?.username || '').trim())
+                        .filter(Boolean)
+                        .join(', ');
+
+                    return `
+                        <div class="text-center" style="line-height: 1.15;">
+                            <span class="status-badge ${badgeClass} d-inline-block">${statusInfo.label}</span>
+                            ${approverText ? `
+                                <div class="small text-muted mt-1" style="white-space: nowrap;">
+                                    <i class="fas fa-user-check me-1"></i>${approverText}
+                                </div>
+                            ` : ``}
+                        </div>
+                    `;
                 }
             },
             {
@@ -269,17 +284,22 @@ function initializeTableComponent() {
                 }
             },
             {
-                field: 'adjustments_total',
+                // Backend field name is `adjustment_total` (singular). Keep formatter tolerant to older payloads.
+                field: 'adjustment_total',
                 label: 'Düzeltme',
                 sortable: true,
                 formatter: (value, row) => {
-                    if (!value) return '0 ' + (row.currency || 'TRY');
-                    const sign = value >= 0 ? '+' : '';
+                    const resolved =
+                        (value ?? row?.adjustment_total ?? row?.adjustments_total ?? 0);
+                    if (resolved === null || resolved === undefined || Number.isNaN(resolved)) {
+                        return '0 ' + (row.currency || 'TRY');
+                    }
+                    const sign = resolved >= 0 ? '+' : '';
                     return sign + new Intl.NumberFormat('tr-TR', {
                         style: 'decimal',
                         minimumFractionDigits: 2,
                         maximumFractionDigits: 2
-                    }).format(value) + ' ' + (row.currency || 'TRY');
+                    }).format(resolved) + ' ' + (row.currency || 'TRY');
                 }
             },
             {
@@ -997,6 +1017,7 @@ async function viewStatementDetail(statementId, options = {}) {
                                     <th>Tür</th>
                                     <th>Neden</th>
                                     <th>Ağırlık</th>
+                                    <th class="text-end">Fiyat/kg</th>
                                     <th class="text-end">Tutar</th>
                                     ${statement.status === 'draft' || statement.status === 'rejected' ? '<th>İşlem</th>' : ''}
                                 </tr>
@@ -1011,6 +1032,15 @@ async function viewStatementDetail(statementId, options = {}) {
                                             <td>${formatAdjustmentTypeLabel(adj.adjustment_type)}</td>
                                             <td>${adj.reason || '-'}</td>
                                             <td>${(adj.weight_kg ?? 0)} kg</td>
+                                            <td class="text-end">${
+                                                (() => {
+                                                    const w = parseFloat(adj?.weight_kg);
+                                                    const a = parseFloat(adj?.amount);
+                                                    if (!Number.isFinite(w) || w <= 0) return '-';
+                                                    if (!Number.isFinite(a)) return '-';
+                                                    return formatCurrency(a / w, statement.currency);
+                                                })()
+                                            }</td>
                                             <td class="text-end"><strong>${formatCurrency(adj.amount, statement.currency)}</strong></td>
                                             ${statement.status === 'draft' || statement.status === 'rejected' ? `
                                                 <td>
@@ -1021,12 +1051,12 @@ async function viewStatementDetail(statementId, options = {}) {
                                             ` : ''}
                                         </tr>
                                     `).join('') : 
-                                    `<tr><td colspan="${statement.status === 'draft' || statement.status === 'rejected' ? '6' : '5'}" class="text-center text-muted">Düzeltme bulunmamaktadır</td></tr>`
+                                    `<tr><td colspan="${statement.status === 'draft' || statement.status === 'rejected' ? '7' : '6'}" class="text-center text-muted">Düzeltme bulunmamaktadır</td></tr>`
                                 }
                             </tbody>
                             <tfoot class="table-light">
                                 <tr>
-                                    <td colspan="${statement.status === 'draft' || statement.status === 'rejected' ? '5' : '4'}" class="text-end"><strong>Düzeltmeler Toplamı:</strong></td>
+                                    <td colspan="${statement.status === 'draft' || statement.status === 'rejected' ? '6' : '5'}" class="text-end"><strong>Düzeltmeler Toplamı:</strong></td>
                                     <td><strong>${formatCurrency(computedAdjustmentsTotal, statement.currency)}</strong></td>
                                 </tr>
                             </tfoot>

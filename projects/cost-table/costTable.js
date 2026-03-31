@@ -36,6 +36,19 @@ function formatMoney(value) {
     return `€${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+function toNumber(value) {
+    if (value == null || value === '') return 0;
+    const num = typeof value === 'string' ? parseFloat(value) : Number(value);
+    return Number.isFinite(num) ? num : 0;
+}
+
+function formatNumber(value, fractionDigits = 2) {
+    if (value == null || value === '') return '<span class="text-muted">-</span>';
+    const num = typeof value === 'string' ? parseFloat(value) : value;
+    if (!Number.isFinite(num)) return '<span class="text-muted">-</span>';
+    return num.toLocaleString('tr-TR', { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits });
+}
+
 function formatPct(value) {
     if (value == null || value === '') return '<span class="text-muted">-</span>';
     const num = typeof value === 'string' ? parseFloat(value) : value;
@@ -338,6 +351,101 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'last_updated', label: 'Tarih', sortable: false, formatter: formatDate }
         ],
         data: [],
+        footer: ({ displayedData, columns, hasActions }) => {
+            // Summary is for currently displayed rows (page + expanded children).
+            const rowCount = Array.isArray(displayedData) ? displayedData.length : 0;
+
+            const sums = {
+                laborWithTax: 0,
+                material: 0,
+                subcontractor: 0,
+                paintWithMaterial: 0,
+                qc: 0,
+                shipping: 0,
+                generalExpenses: 0,
+                weightKg: 0,
+                actualTotalCost: 0,
+                sellingPrice: 0,
+                marginEur: 0
+            };
+
+            let generalRateSum = 0;
+            let generalRateCount = 0;
+
+            (displayedData || []).forEach((row) => {
+                sums.laborWithTax += toNumber(row.labor_cost) + toNumber(row.employee_overhead_cost);
+                sums.material += toNumber(row.material_cost);
+                sums.subcontractor += toNumber(row.subcontractor_cost);
+                sums.paintWithMaterial += toNumber(row.paint_cost) + toNumber(row.paint_material_cost);
+                sums.qc += toNumber(row.qc_cost);
+                sums.shipping += toNumber(row.shipping_cost);
+                sums.generalExpenses += toNumber(row.general_expenses_cost);
+                sums.weightKg += toNumber(row.total_weight_kg);
+                sums.actualTotalCost += toNumber(row.actual_total_cost);
+                sums.sellingPrice += toNumber(row.selling_price);
+                sums.marginEur += toNumber(row.margin_eur);
+
+                const rate = row.general_expenses_rate;
+                if (rate != null && rate !== '') {
+                    const r = toNumber(rate);
+                    if (Number.isFinite(r) && r !== 0) {
+                        generalRateSum += r;
+                        generalRateCount += 1;
+                    }
+                }
+            });
+
+            const pricePerKgOverall = sums.weightKg > 0 ? (sums.actualTotalCost / sums.weightKg) : null;
+            const marginPctOverall = sums.sellingPrice > 0 ? ((sums.marginEur / sums.sellingPrice) * 100) : null;
+            const generalRateAvg = generalRateCount > 0 ? (generalRateSum / generalRateCount) : null;
+
+            const valueByField = new Map();
+            valueByField.set('_expand', '');
+            valueByField.set('job_no', `<span class="fw-bold">Toplam / Ortalama</span><div class="text-muted small">${rowCount} satır</div>`);
+            valueByField.set('title', '<span class="text-muted">-</span>');
+            valueByField.set('customer_name', '<span class="text-muted">-</span>');
+            valueByField.set('status', '<span class="text-muted">-</span>');
+
+            valueByField.set('labor_cost', `<span class="fw-bold">${formatMoney(sums.laborWithTax)}</span>`);
+            valueByField.set('material_cost', `<span class="fw-bold">${formatMoney(sums.material)}</span>`);
+            valueByField.set('subcontractor_cost', `<span class="fw-bold">${formatMoney(sums.subcontractor)}</span>`);
+            valueByField.set('paint_cost', `<span class="fw-bold">${formatMoney(sums.paintWithMaterial)}</span>`);
+            valueByField.set('qc_cost', `<span class="fw-bold">${formatMoney(sums.qc)}</span>`);
+            valueByField.set('shipping_cost', `<span class="fw-bold">${formatMoney(sums.shipping)}</span>`);
+            valueByField.set(
+                'general_expenses_cost',
+                `<span class="fw-bold" style="white-space: nowrap;">${formatMoney(sums.generalExpenses)}${generalRateAvg != null ? ` <small class="text-muted">(${formatNumber(generalRateAvg, 2)})</small>` : ''}</span>`
+            );
+            valueByField.set('total_weight_kg', `<span class="fw-bold">${formatNumber(sums.weightKg, 2)}</span>`);
+            valueByField.set(
+                'price_per_kg',
+                pricePerKgOverall != null
+                    ? `<span class="fw-bold text-primary">€${formatNumber(pricePerKgOverall, 2)}</span>`
+                    : '<span class="text-muted">-</span>'
+            );
+            valueByField.set('actual_total_cost', `<span class="fw-bold">${formatMoney(sums.actualTotalCost)}</span>`);
+            valueByField.set('selling_price', `<span class="fw-bold">${formatMoney(sums.sellingPrice)}</span>`);
+            valueByField.set('margin_eur', `<span class="fw-bold">${formatMoney(sums.marginEur)}</span>`);
+            valueByField.set(
+                'margin_pct',
+                marginPctOverall != null
+                    ? `<span class="fw-bold">${formatPct(marginPctOverall)}</span>`
+                    : '<span class="text-muted">-</span>'
+            );
+            valueByField.set('last_updated', '<span class="text-muted">-</span>');
+
+            const tds = (columns || []).map((col, idx) => {
+                const content = valueByField.has(col.field) ? valueByField.get(col.field) : '<span class="text-muted">-</span>';
+                const widthStyle = col.width ? ` style="width: ${col.width}; min-width: ${col.width};"` : '';
+                return `<td class="cost-table-summary-cell"${widthStyle}>${content}</td>`;
+            });
+
+            if (hasActions) {
+                tds.push('<td class="cost-table-summary-cell"></td>');
+            }
+
+            return `<tr class="cost-table-summary-row">${tds.join('')}</tr>`;
+        },
         pagination: true,
         serverSidePagination: true,
         totalItems: 0,

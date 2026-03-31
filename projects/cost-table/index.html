@@ -22,6 +22,19 @@
         .table tbody tr .expand-toggle-btn:hover { transform: scale(1.1); box-shadow: 0 2px 4px rgba(13, 110, 253, 0.3); }
         .table tbody tr .expand-toggle-btn.expanded { background: #0d6efd !important; color: #ffffff !important; }
         .table tbody tr .expand-toggle-btn.collapsed { background: #ffffff !important; color: #0d6efd !important; }
+
+        /* Sticky totals/averages footer (pixel-aligned via colgroup) */
+        .table tfoot td.cost-table-summary-cell {
+            position: sticky;
+            bottom: 0;
+            background: #ffffff;
+            z-index: 2;
+            border-top: 2px solid #dee2e6;
+            vertical-align: middle;
+        }
+        .table tfoot tr.cost-table-summary-row td.cost-table-summary-cell {
+            box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.04);
+        }
     </style>
 </head>
 <body>

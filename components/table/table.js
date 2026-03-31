@@ -140,6 +140,7 @@ export class TableComponent {
                 <div class="card-body">
                     ${this.options.responsive ? `<div class="table-responsive ${this.options.stickyHeader ? 'table-sticky-header' : ''}">` : ''}
                         <table class="${tableClass} ${this.options.stickyHeader ? 'table-sticky-header' : ''}" id="${this.containerId}-table">
+                            ${this.renderColGroup()}
                             <thead class="${this.options.stickyHeader ? 'sticky-thead' : ''}">
                                 ${this.renderHeader()}
                             </thead>
@@ -170,6 +171,29 @@ export class TableComponent {
             restore();
             requestAnimationFrame(restore);
         });
+    }
+
+    renderColGroup() {
+        const cols = [];
+        (this.options.columns || []).forEach((col) => {
+            const width = col?.width;
+            if (width) {
+                cols.push(`<col style="width: ${width}; min-width: ${width};">`);
+            } else {
+                cols.push('<col>');
+            }
+        });
+
+        if (this.options.actions.length > 0) {
+            const w = this.options.actionColumnWidth;
+            if (w && w !== 'auto') {
+                cols.push(`<col style="width: ${w}; min-width: ${w};">`);
+            } else {
+                cols.push('<col>');
+            }
+        }
+
+        return `<colgroup>${cols.join('')}</colgroup>`;
     }
     
     buildTableClass() {
