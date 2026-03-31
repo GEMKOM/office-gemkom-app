@@ -1276,18 +1276,63 @@ function mergeExpandedChildren(rootOrders, level = 0) {
     return merged;
 }
 
-// Preserve page scroll position during full table re-renders (expand/collapse)
-function preservePageScroll(run) {
-    const x = window.scrollX || 0;
-    const y = window.scrollY || 0;
+// Capture and restore scroll for both window and scrollable containers (e.g. table-responsive)
+function getScrollParents(element) {
+    const parents = [];
+    let el = element?.parentElement;
+    while (el) {
+        const style = window.getComputedStyle(el);
+        const overflowY = style.overflowY;
+        const overflowX = style.overflowX;
+        const canScrollY = (overflowY === 'auto' || overflowY === 'scroll') && el.scrollHeight > el.clientHeight;
+        const canScrollX = (overflowX === 'auto' || overflowX === 'scroll') && el.scrollWidth > el.clientWidth;
+        if (canScrollY || canScrollX) parents.push(el);
+        el = el.parentElement;
+    }
+    return parents;
+}
+
+function captureScrollSnapshot(anchorEl) {
+    const snapshot = {
+        windowX: window.scrollX || 0,
+        windowY: window.scrollY || 0,
+        parents: []
+    };
+    const scrollParents = getScrollParents(anchorEl);
+    snapshot.parents = scrollParents.map(p => ({
+        el: p,
+        scrollTop: p.scrollTop,
+        scrollLeft: p.scrollLeft
+    }));
+    return snapshot;
+}
+
+function restoreScrollSnapshot(snapshot) {
+    if (!snapshot) return;
+    const restore = () => {
+        // Restore scrollable parents first (inner -> outer)
+        snapshot.parents?.forEach(({ el, scrollTop, scrollLeft }) => {
+            if (!el) return;
+            el.scrollTop = scrollTop;
+            el.scrollLeft = scrollLeft;
+        });
+        window.scrollTo(snapshot.windowX || 0, snapshot.windowY || 0);
+    };
+    // Multiple passes to survive DOM replacement + late layout
+    requestAnimationFrame(() => {
+        restore();
+        requestAnimationFrame(restore);
+    });
+    setTimeout(restore, 0);
+    setTimeout(restore, 50);
+}
+
+function preserveScrollDuringUpdate(anchorEl, run) {
+    const snapshot = captureScrollSnapshot(anchorEl);
     try {
         run();
     } finally {
-        // TableComponent.updateData() re-renders synchronously, but layout/paint can shift after.
-        // Restore scroll on next frame to avoid being pulled back to the top.
-        requestAnimationFrame(() => {
-            window.scrollTo(x, y);
-        });
+        restoreScrollSnapshot(snapshot);
     }
 }
 
@@ -1309,10 +1354,9 @@ function updateTableDataOnly() {
         dataToDisplay = mergeExpandedChildren(rootOrders);
     }
     
-    // Update table data without loading state (preserve scroll position)
-    preservePageScroll(() => {
-        jobOrdersTable.updateData(dataToDisplay, totalJobOrders, currentPage);
-    });
+    // Update table data without loading state
+    // Scroll preservation is handled by the expand/collapse handler (it has the click anchor element).
+    jobOrdersTable.updateData(dataToDisplay, totalJobOrders, currentPage);
     
     // Setup both expand button listeners and toggle button after table is updated
     setTimeout(() => {
@@ -1361,7 +1405,7 @@ function setupExpandButtonListeners() {
             // Collapse: remove from expanded set
             expandedRows.delete(jobNo);
             // Update table without loading state
-            updateTableDataOnly();
+            preserveScrollDuringUpdate(expandButton, () => updateTableDataOnly());
         } else {
             // Expand: always fetch children to get latest updates
             try {
@@ -1375,7 +1419,7 @@ function setupExpandButtonListeners() {
                 
                 expandedRows.add(jobNo);
                 // Update table without loading state
-                updateTableDataOnly();
+                preserveScrollDuringUpdate(expandButton, () => updateTableDataOnly());
             } catch (error) {
                 console.error(`Error fetching children for ${jobNo}:`, error);
                 showNotification('Alt işler yüklenirken hata oluştu', 'error');

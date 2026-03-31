@@ -106,6 +106,15 @@ export class TableComponent {
     }
     
     render() {
+        // Preserve scroll positions across full re-renders.
+        // This component updates DOM via innerHTML + container cloning (removeEventListeners),
+        // which can reset scroll positions (especially for .table-responsive wrappers).
+        const windowScrollX = window.scrollX || 0;
+        const windowScrollY = window.scrollY || 0;
+        const prevResponsive = this.container?.querySelector?.('.table-responsive');
+        const prevResponsiveScrollTop = prevResponsive ? prevResponsive.scrollTop : 0;
+        const prevResponsiveScrollLeft = prevResponsive ? prevResponsive.scrollLeft : 0;
+
         const tableClass = this.buildTableClass();
         
         this.container.innerHTML = `
@@ -147,6 +156,20 @@ export class TableComponent {
         
         // Re-setup event listeners after rendering
         this.setupEventListeners();
+
+        // Restore scroll after DOM replacement and paint
+        const restore = () => {
+            const nextResponsive = this.container?.querySelector?.('.table-responsive');
+            if (nextResponsive) {
+                nextResponsive.scrollTop = prevResponsiveScrollTop;
+                nextResponsive.scrollLeft = prevResponsiveScrollLeft;
+            }
+            window.scrollTo(windowScrollX, windowScrollY);
+        };
+        requestAnimationFrame(() => {
+            restore();
+            requestAnimationFrame(restore);
+        });
     }
     
     buildTableClass() {
