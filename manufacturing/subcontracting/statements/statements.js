@@ -12,7 +12,8 @@ import {
     fetchStatementAdjustments,
     createStatementAdjustment,
     deleteStatementAdjustment,
-    getStatementStatusInfo
+    getStatementStatusInfo,
+    patchStatement
 } from '../../../../apis/subcontracting/statements.js';
 import {
     fetchSubcontractors,
@@ -217,6 +218,28 @@ function initializeTableComponent() {
                 formatter: (value) => `<strong>${value || '-'}</strong>`
             },
             {
+                field: 'employee_count',
+                label: 'Çalışan Sayısı',
+                sortable: true,
+                editable: true,
+                type: 'number',
+                width: '140px',
+                formatter: (value) => {
+                    if (value === null || value === undefined || value === '') return '-';
+                    const n = parseInt(value, 10);
+                    return Number.isFinite(n) ? n.toLocaleString('tr-TR') : '-';
+                },
+                validate: (newValue) => {
+                    const raw = `${newValue ?? ''}`.trim();
+                    if (raw === '') return 'Çalışan sayısı boş olamaz';
+                    const n = Number(raw);
+                    if (!Number.isFinite(n)) return 'Çalışan sayısı sayı olmalıdır';
+                    if (!Number.isInteger(n)) return 'Çalışan sayısı tam sayı olmalıdır';
+                    if (n < 0) return 'Çalışan sayısı 0 veya daha büyük olmalıdır';
+                    return true;
+                }
+            },
+            {
                 field: 'status',
                 label: 'Durum',
                 sortable: true,
@@ -275,6 +298,22 @@ function initializeTableComponent() {
         ],
         data: [],
         sortable: true,
+        editable: true,
+        editableColumns: ['employee_count'],
+        onEdit: async (row, field, newValue) => {
+            // Only allow editing in draft/rejected
+            if (!['draft', 'rejected'].includes(row?.status)) {
+                throw new Error('Bu hakedişte çalışan sayısı düzenlenemez');
+            }
+            const n = parseInt(`${newValue}`.trim(), 10);
+            if (!Number.isFinite(n) || n < 0) {
+                throw new Error('Geçersiz çalışan sayısı');
+            }
+            const updated = await patchStatement(row.id, { employee_count: n });
+            // Keep table row in sync with backend response when available
+            row.employee_count = updated?.employee_count ?? n;
+            return updated;
+        },
         pagination: true,
         serverSidePagination: true,
         itemsPerPage: 20,
@@ -521,6 +560,30 @@ async function loadStatements() {
                 ? `${statement.year}-${String(statement.month).padStart(2, '0')}`
                 : 'unknown'
         }));
+
+        // Expand the latest period group by default (keep others collapsed).
+        // This is based on the actual loaded data so it always opens the newest month/year.
+        if (statementsTable?.options?.groupBy === 'period') {
+            const periodKeys = Array.from(
+                new Set(
+                    statements
+                        .map(s => s.period)
+                        .filter(p => p && p !== 'unknown')
+                )
+            ).sort(); // YYYY-MM sorts naturally
+
+            const latestPeriodKey = periodKeys.length > 0 ? periodKeys[periodKeys.length - 1] : null;
+
+            // Pre-seed groupExpandedState BEFORE rendering so TableComponent won't override it.
+            statementsTable.groupExpandedState = {};
+            periodKeys.forEach(k => {
+                statementsTable.groupExpandedState[k] = (k === latestPeriodKey);
+            });
+            if (latestPeriodKey === null) {
+                // fallback: leave defaults if no valid period
+                statementsTable.groupExpandedState = {};
+            }
+        }
         
         if (statementsTable) {
             statementsTable.updateData(statements, totalStatements, currentPage);
@@ -817,6 +880,45 @@ async function viewStatementDetail(statementId, options = {}) {
                 return `<span class="status-badge ${badgeClass}">${statusInfo.label}</span>`;
             }
         });
+
+        const canEditEmployeeCount = ['draft', 'rejected'].includes(statement.status);
+        const employeeCountValue =
+            statement.employee_count === null || statement.employee_count === undefined
+                ? ''
+                : String(statement.employee_count);
+
+        statementDetailModal.addCustomSection({
+            id: 'employee-count',
+            customContent: `
+                <div class="mb-3">
+                    <div class="row g-2 align-items-end">
+                        <div class="col-md-4">
+                            <label class="form-label">
+                                <i class="fas fa-users me-1"></i>Çalışan Sayısı
+                            </label>
+                            <input
+                                type="number"
+                                class="form-control"
+                                id="detail-employee-count-input"
+                                min="0"
+                                step="1"
+                                value="${employeeCountValue}"
+                                ${canEditEmployeeCount ? '' : 'readonly'}
+                            />
+                        </div>
+                        <div class="col-md-4">
+                            ${canEditEmployeeCount ? `
+                                <button type="button" class="btn btn-primary" id="save-employee-count-btn">
+                                    <i class="fas fa-save me-1"></i>Kaydet
+                                </button>
+                            ` : `
+                                <div class="text-muted small">Bu alan sadece Taslak / Reddedildi durumunda düzenlenebilir.</div>
+                            `}
+                        </div>
+                    </div>
+                </div>
+            `
+        });
         
         // Line Items Section
         statementDetailModal.addCustomSection({
@@ -1007,6 +1109,34 @@ async function viewStatementDetail(statementId, options = {}) {
 }
 
 async function setupStatementDetailActions(statement, adjustments) {
+    // Employee count save
+    const saveEmployeeBtn = document.getElementById('save-employee-count-btn');
+    if (saveEmployeeBtn) {
+        saveEmployeeBtn.addEventListener('click', async () => {
+            try {
+                const input = document.getElementById('detail-employee-count-input');
+                const raw = `${input?.value ?? ''}`.trim();
+                if (raw === '') {
+                    showNotification('Çalışan sayısı boş olamaz', 'error');
+                    return;
+                }
+                const n = Number(raw);
+                if (!Number.isFinite(n) || !Number.isInteger(n) || n < 0) {
+                    showNotification('Çalışan sayısı 0 veya daha büyük tam sayı olmalıdır', 'error');
+                    return;
+                }
+                await patchStatement(statement.id, { employee_count: n });
+                showNotification('Çalışan sayısı güncellendi', 'success');
+                // Refresh detail + list to reflect new value
+                await viewStatementDetail(statement.id);
+                await loadStatements();
+            } catch (error) {
+                console.error('Error updating employee count:', error);
+                showNotification(error.message || 'Çalışan sayısı güncellenirken hata oluştu', 'error');
+            }
+        });
+    }
+
     // Add adjustment button
     const addAdjBtn = document.getElementById('add-adjustment-btn');
     if (addAdjBtn) {

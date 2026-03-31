@@ -1276,6 +1276,21 @@ function mergeExpandedChildren(rootOrders, level = 0) {
     return merged;
 }
 
+// Preserve page scroll position during full table re-renders (expand/collapse)
+function preservePageScroll(run) {
+    const x = window.scrollX || 0;
+    const y = window.scrollY || 0;
+    try {
+        run();
+    } finally {
+        // TableComponent.updateData() re-renders synchronously, but layout/paint can shift after.
+        // Restore scroll on next frame to avoid being pulled back to the top.
+        requestAnimationFrame(() => {
+            window.scrollTo(x, y);
+        });
+    }
+}
+
 // Update table data without showing loading state (for expand/collapse operations)
 function updateTableDataOnly() {
     if (!jobOrdersTable) return;
@@ -1294,8 +1309,10 @@ function updateTableDataOnly() {
         dataToDisplay = mergeExpandedChildren(rootOrders);
     }
     
-    // Update table data without loading state
-    jobOrdersTable.updateData(dataToDisplay, totalJobOrders, currentPage);
+    // Update table data without loading state (preserve scroll position)
+    preservePageScroll(() => {
+        jobOrdersTable.updateData(dataToDisplay, totalJobOrders, currentPage);
+    });
     
     // Setup both expand button listeners and toggle button after table is updated
     setTimeout(() => {

@@ -1,0 +1,113 @@
+.overview-toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.overview-toolbar__left,
+.overview-toolbar__right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.overview-preset-group .btn {
+    border-radius: 8px;
+}
+
+.overview-panel {
+    background: rgba(255, 255, 255, 0.95);
+    border-radius: 14px;
+    box-shadow: var(--shadow-medium);
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    overflow: hidden;
+}
+
+.overview-panel__header {
+    padding: 0.9rem 1.1rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.75));
+}
+
+.overview-panel__title {
+    margin: 0;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #343a40;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.overview-panel__body {
+    padding: 1rem 1.1rem;
+}
+
+.kv-grid {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 0.45rem 0.75rem;
+}
+
+.kv-grid .k {
+    color: #6c757d;
+    font-size: 0.9rem;
+}
+
+.kv-grid .v {
+    font-weight: 700;
+    color: #212529;
+    font-size: 0.95rem;
+    text-align: right;
+}
+
+.overview-subtitle {
+    color: #6c757d;
+    font-size: 0.85rem;
+    margin-top: 0.75rem;
+}
+
+.overview-list {
+    margin: 0.5rem 0 0 0;
+    padding-left: 1.1rem;
+    color: #495057;
+    font-size: 0.9rem;
+}
+
+.badge-scope {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 999px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    background: rgba(13, 110, 253, 0.08);
+    color: #0d6efd;
+}
+
+.overview-state .alert {
+    border-radius: 14px;
+    box-shadow: var(--shadow-light);
+}
+
+@media (max-width: 768px) {
+    .overview-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .overview-toolbar__left,
+    .overview-toolbar__right {
+        justify-content: space-between;
+    }
+
+    .overview-custom-range {
+        width: 100%;
+    }
+}
+

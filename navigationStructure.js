@@ -93,6 +93,11 @@ export const NAVIGATION_STRUCTURE = {
         label: 'Planlama',
         icon: 'fas fa-calendar-alt',
         children: {
+            '/planning/projects': {
+                label: 'Projeler',
+                icon: 'fas fa-project-diagram',
+                children: {}
+            },
             '/planning/department-requests': {
                 label: 'Departman Talepleri',
                 icon: 'fas fa-boxes',
@@ -101,6 +106,11 @@ export const NAVIGATION_STRUCTURE = {
             '/planning/task-templates': {
                 label: 'Görev Şablonları',
                 icon: 'fas fa-tasks',
+                children: {}
+            },
+            '/planning/items': {
+                label: 'Planlama Kalemleri',
+                icon: 'fas fa-list',
                 children: {}
             },
             '/planning/inventory': {
@@ -114,19 +124,9 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
-            '/planning/projects': {
-                label: 'Projeler',
-                icon: 'fas fa-project-diagram',
-                children: {}
-            },
             '/planning/procurement-lines': {
                 label: 'Malzeme Maliyeti Satırları',
                 icon: 'fas fa-shopping-cart',
-                children: {}
-            },
-            '/planning/items': {
-                label: 'Planlama Kalemleri',
-                icon: 'fas fa-list',
                 children: {}
             }
         }

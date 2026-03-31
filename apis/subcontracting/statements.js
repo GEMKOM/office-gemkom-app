@@ -69,6 +69,32 @@ export async function fetchStatement(statementId) {
 }
 
 /**
+ * Patch a statement (partial update)
+ * @param {number} statementId - Statement ID
+ * @param {Object} patchData - Partial fields to update
+ * @returns {Promise<Object>} Updated statement
+ */
+export async function patchStatement(statementId, patchData) {
+    const url = `${backendBase}/subcontracting/statements/${statementId}/`;
+    const resp = await authedFetch(url, {
+        method: 'PATCH',
+        body: JSON.stringify(patchData)
+    });
+
+    if (!resp.ok) {
+        const errorData = await resp.json();
+        const errorMessage =
+            errorData.detail ||
+            errorData.message ||
+            Object.values(errorData).flat().join(', ') ||
+            'Hakediş güncellenirken hata oluştu';
+        throw new Error(errorMessage);
+    }
+
+    return await resp.json();
+}
+
+/**
  * Generate a new statement
  * @param {Object} generateData - Generation parameters
  * @param {number} generateData.subcontractor - Subcontractor ID
