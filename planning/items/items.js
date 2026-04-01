@@ -72,6 +72,67 @@ function renderEuro(value) {
     return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'EUR' }).format(num);
 }
 
+function renderTotalEuroFromRow(row) {
+    const qtyRaw = row?.quantity;
+    const unitRaw = row?.latest_unit_price_eur;
+    if (qtyRaw === null || qtyRaw === undefined || qtyRaw === '') return '-';
+    if (unitRaw === null || unitRaw === undefined || unitRaw === '') return '-';
+
+    const qty = typeof qtyRaw === 'number' ? qtyRaw : Number(qtyRaw);
+    const unit = typeof unitRaw === 'number' ? unitRaw : Number(unitRaw);
+    if (!Number.isFinite(qty) || !Number.isFinite(unit)) return '-';
+
+    return renderEuro(qty * unit);
+}
+
+function sumTotalEuro(rows) {
+    if (!Array.isArray(rows) || rows.length === 0) return 0;
+    return rows.reduce((acc, row) => {
+        const qtyRaw = row?.quantity;
+        const unitRaw = row?.latest_unit_price_eur;
+        const qty = typeof qtyRaw === 'number' ? qtyRaw : Number(qtyRaw);
+        const unit = typeof unitRaw === 'number' ? unitRaw : Number(unitRaw);
+        if (!Number.isFinite(qty) || !Number.isFinite(unit)) return acc;
+        return acc + qty * unit;
+    }, 0);
+}
+
+function renderLatestUnitPriceSource(value) {
+    if (!value) {
+        return `<span class="status-badge status-grey" style="min-width: auto;" title="Fiyat bulunamadı.">YOK</span>`;
+    }
+
+    const map = {
+        po_line: {
+            label: 'PO',
+            className: 'status-green',
+            title: 'Bu kalem için satınalma siparişi (PO) oluşturuldu. Fiyat, onaylı sipariş satırından gelir.'
+        },
+        recommended_offer: {
+            label: 'ÖNERİLEN TEKLİF',
+            className: 'status-blue',
+            title: 'Henüz PO yok. Tedarikçi teklifi “önerilen” olarak işaretlenmiş; fiyat bu tekliften gelir.'
+        },
+        any_offer: {
+            label: 'TEKLİF VAR',
+            className: 'status-yellow',
+            title: 'Henüz PO yok ve önerilen teklif yok. En az bir tedarikçi teklifi var; fiyat bu tekliflerden gelir.'
+        },
+        historical_po: {
+            label: 'GEÇMİŞ PO',
+            className: 'status-grey',
+            title: 'Bu kalem/talep için PO/teklif yok. Fiyat, sistemde aynı katalog kaleminin en son PO satırından alınır.'
+        }
+    };
+
+    const def = map[value];
+    if (!def) {
+        return `<span class="status-badge status-grey" style="min-width: auto;" title="Bilinmeyen fiyat kaynağı.">${String(value)}</span>`;
+    }
+
+    return `<span class="status-badge ${def.className}" style="min-width: auto;" title="${def.title}">${def.label}</span>`;
+}
+
 function initFilters() {
     filtersComponent = new FiltersComponent('items-filters-placeholder', {
         title: 'Filtreler',
@@ -142,6 +203,17 @@ function initFilters() {
             colSize: 2
         })
         .addDropdownFilter({
+            id: 'has_price',
+            label: 'Fiyat Var mı?',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'true', label: 'Var' },
+                { value: 'false', label: 'Yok' }
+            ],
+            placeholder: 'Tümü',
+            colSize: 2
+        })
+        .addDropdownFilter({
             id: 'ordering',
             label: 'Sıralama',
             options: [
@@ -169,6 +241,18 @@ function initTable() {
             { field: 'quantity_to_purchase', label: 'Satın Alınacak', sortable: false, formatter: (v) => (v ?? '-') },
             { field: 'item_unit', label: 'Birim', sortable: false, formatter: (v) => v || '-' },
             { field: 'latest_unit_price_eur', label: 'Son Birim Fiyat (€)', sortable: false, formatter: (v) => renderEuro(v) },
+            {
+                field: '__total_price_eur',
+                label: 'Toplam (€)',
+                sortable: false,
+                formatter: (_v, row) => renderTotalEuroFromRow(row)
+            },
+            {
+                field: 'latest_unit_price_source',
+                label: 'Fiyat Kaynağı',
+                sortable: false,
+                formatter: (v) => renderLatestUnitPriceSource(v)
+            },
             { field: 'is_delivered', label: 'Teslim', sortable: false, formatter: (v) => renderBoolIcon(v) },
             { field: 'purchase_request_number', label: 'Satın Alma PR No', sortable: false, formatter: (v) => renderPurchaseRequestNumberBadge(v) }
         ],
@@ -176,6 +260,23 @@ function initTable() {
         itemsPerPage: currentPageSize,
         serverSidePagination: true,
         refreshable: true,
+        footer: ({ displayedData, columns }) => {
+            const total = sumTotalEuro(displayedData);
+            const totalColIndex = columns.findIndex((c) => c.field === '__total_price_eur');
+            if (totalColIndex < 0) return '';
+
+            const cells = columns.map((_, idx) => {
+                if (idx === totalColIndex) {
+                    return `<td style="font-weight: 700;">${renderEuro(total)}</td>`;
+                }
+                if (idx === totalColIndex - 1) {
+                    return `<td style="font-weight: 700; text-align: right;">TOPLAM:</td>`;
+                }
+                return '<td></td>';
+            });
+
+            return `<tr>${cells.join('')}</tr>`;
+        },
         onRefresh: () => loadItems(),
         onSort: (field, direction) => {
             // Backend supports: -id, order, job_no
@@ -218,6 +319,7 @@ async function loadItems() {
             is_delivered: values.is_delivered || undefined,
             from_inventory: values.from_inventory || undefined,
             is_available: values.is_available || undefined,
+            has_price: values.has_price || undefined,
             ordering: orderingFromFilter || currentOrdering,
             page: currentPage,
             page_size: currentPageSize

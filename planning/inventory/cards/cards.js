@@ -27,6 +27,50 @@ let planningRequestsModal = null;
 let purchaseRequestsTable = null;
 let planningRequestsTable = null;
 
+function renderStatusBadge(label, className = 'status-grey', title = '') {
+    if (!label) return '-';
+    const safeTitle = title ? ` title="${title}"` : '';
+    return `<span class="status-badge ${className}" style="min-width: auto;"${safeTitle}>${label}</span>`;
+}
+
+function renderEuro(value) {
+    if (value === null || value === undefined || value === '') return '-';
+    const num = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(num)) return '-';
+    return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'EUR' }).format(num);
+}
+
+function renderLatestUnitPriceSource(value) {
+    if (!value) return renderStatusBadge('YOK', 'status-grey', 'Fiyat bulunamadı.');
+
+    const map = {
+        po_line: {
+            label: 'PO',
+            className: 'status-green',
+            title: 'Bu ürün için satınalma siparişi (PO) oluşturuldu. Fiyat, onaylı sipariş satırından gelir.'
+        },
+        recommended_offer: {
+            label: 'ÖNERİLEN TEKLİF',
+            className: 'status-blue',
+            title: 'Henüz PO yok. Tedarikçi teklifi “önerilen” olarak işaretlenmiş; fiyat bu tekliften gelir.'
+        },
+        any_offer: {
+            label: 'TEKLİF VAR',
+            className: 'status-yellow',
+            title: 'Henüz PO yok ve önerilen teklif yok. En az bir tedarikçi teklifi var; fiyat bu tekliflerden gelir.'
+        },
+        historical_po: {
+            label: 'GEÇMİŞ PO',
+            className: 'status-grey',
+            title: 'Bu ürün için PO/teklif yok. Fiyat, sistemde aynı katalog kaleminin en son PO satırından alınır.'
+        }
+    };
+
+    const def = map[value];
+    if (!def) return renderStatusBadge(String(value), 'status-grey', 'Bilinmeyen fiyat kaynağı.');
+    return renderStatusBadge(def.label, def.className, def.title);
+}
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) {
@@ -251,7 +295,7 @@ function initializeTable() {
                 formatter: (value, row) => {
                     const unitLabel = row.unit_label || row.unit || value || '-';
                     if (unitLabel === '-') return unitLabel;
-                    return `<span class="badge bg-secondary">${unitLabel}</span>`;
+                    return renderStatusBadge(unitLabel, 'status-grey');
                 }
             },
             {
@@ -261,7 +305,7 @@ function initializeTable() {
                 formatter: (value, row) => {
                     const typeLabel = row.item_type_label || row.item_type || value || '-';
                     if (typeLabel === '-') return typeLabel;
-                    return `<span class="badge bg-info">${typeLabel}</span>`;
+                    return renderStatusBadge(typeLabel, 'status-blue');
                 }
             },
             {
@@ -277,6 +321,19 @@ function initializeTable() {
                         </div>
                     `;
                 }
+            }
+            ,
+            {
+                field: 'latest_unit_price_eur',
+                label: 'Son Birim Fiyat (€)',
+                sortable: true,
+                formatter: (value) => renderEuro(value)
+            },
+            {
+                field: 'latest_unit_price_source',
+                label: 'Fiyat Kaynağı',
+                sortable: false,
+                formatter: (value) => renderLatestUnitPriceSource(value)
             }
         ],
         data: [],
@@ -595,7 +652,7 @@ async function showPurchaseRequests(item) {
                         sortable: true,
                         formatter: (value, row) => {
                             const status = value || row.status || '-';
-                            return `<span class="badge bg-info">${status}</span>`;
+                            return status === '-' ? '-' : renderStatusBadge(status, 'status-blue');
                         }
                     },
                     {
@@ -723,7 +780,7 @@ async function showPlanningRequests(item) {
                         sortable: true,
                         formatter: (value, row) => {
                             const status = value || row.status || '-';
-                            return `<span class="badge bg-success">${status}</span>`;
+                            return status === '-' ? '-' : renderStatusBadge(status, 'status-green');
                         }
                     },
                     {
