@@ -60,6 +60,18 @@ function renderJobNoBadge(value) {
     return `<span class="status-badge status-grey" style="min-width: auto;">${value}</span>`;
 }
 
+function renderPurchaseRequestNumberBadge(value) {
+    if (!value) return '-';
+    return `<span class="status-badge status-green" style="min-width: auto;">${value}</span>`;
+}
+
+function renderEuro(value) {
+    if (value === null || value === undefined || value === '') return '-';
+    const num = typeof value === 'number' ? value : Number(value);
+    if (!Number.isFinite(num)) return '-';
+    return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'EUR' }).format(num);
+}
+
 function initFilters() {
     filtersComponent = new FiltersComponent('items-filters-placeholder', {
         title: 'Filtreler',
@@ -156,8 +168,9 @@ function initTable() {
             { field: 'quantity_from_inventory', label: 'Stoktan', sortable: false, formatter: (v) => (v ?? '-') },
             { field: 'quantity_to_purchase', label: 'Satın Alınacak', sortable: false, formatter: (v) => (v ?? '-') },
             { field: 'item_unit', label: 'Birim', sortable: false, formatter: (v) => v || '-' },
+            { field: 'latest_unit_price_eur', label: 'Son Birim Fiyat (€)', sortable: false, formatter: (v) => renderEuro(v) },
             { field: 'is_delivered', label: 'Teslim', sortable: false, formatter: (v) => renderBoolIcon(v) },
-            { field: 'is_converted', label: 'PR Aktarıldı', sortable: false, formatter: (v) => renderBoolIcon(v) }
+            { field: 'purchase_request_number', label: 'Satın Alma PR No', sortable: false, formatter: (v) => renderPurchaseRequestNumberBadge(v) }
         ],
         pagination: true,
         itemsPerPage: currentPageSize,
