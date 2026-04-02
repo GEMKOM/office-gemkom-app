@@ -40,6 +40,16 @@ import { fetchPriceTiers, getPriceTierRemainingWeight, updatePriceTier } from '.
 import { submitQCReview, bulkSubmitQCReviews, listQCReviews, listNCRs, getNCR } from '../../apis/qualityControl.js';
 import { createComment } from '../../apis/projects/topics.js';
 
+function escapeHtml(value) {
+    const str = value === null || value === undefined ? '' : String(value);
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 /**
  * Initialize the department tasks page. Call from design/projects, planning/projects, or procurement/projects.
  * @param {Object} config - Page configuration
@@ -2874,16 +2884,15 @@ function getAvailableActions(task) {
         });
     }
     
-    // Set paint price action
     if (task.task_type === 'painting') {
+        // Assign subcontractor action (painting) - fixed subcontractor=9, manual price_per_kg
         actions.push({
-            key: 'set-paint-price',
-            label: 'Boya Fiyatı Belirle',
-            icon: 'fas fa-paint-brush',
-            handler: 'set-paint-price'
+            key: 'assign-paint-subcontractor',
+            label: 'Taşeron Ata',
+            icon: 'fas fa-handshake',
+            handler: 'assign-paint-subcontractor'
         });
         
-        // Subcontractor tab - show right after "Boya Fiyatı Belirle" tab
         actions.push({
             key: 'subcontractor',
             label: 'Taşeron Ataması',
@@ -2958,8 +2967,8 @@ async function loadActionContent(task, action) {
             case 'assign-subcontractor':
                 content = await renderAssignSubcontractorActionForm(task);
                 break;
-            case 'set-paint-price':
-                content = await renderSetPaintPriceActionForm(task);
+            case 'assign-paint-subcontractor':
+                content = await renderAssignPaintSubcontractorActionForm(task);
                 break;
             case 'qc-reviews':
                 content = await renderQCReviewsTab(task);
@@ -3432,52 +3441,68 @@ async function renderAssignSubcontractorActionForm(task) {
     }
 }
 
-// Render form for set paint price action
-async function renderSetPaintPriceActionForm(task) {
+// Render form for assign paint subcontractor action (fixed subcontractor=9, manual price_per_kg)
+async function renderAssignPaintSubcontractorActionForm(task) {
     if (task.task_type !== 'painting') {
         return '<p class="text-warning">Bu işlem sadece Boya görevleri için kullanılabilir</p>';
     }
-    
-    if (!task.job_order) {
-        return '<p class="text-danger">İş emri bulunamadı</p>';
-    }
-    
+
     try {
-        // Fetch price tiers for this job order
-        const tiersResponse = await fetchPriceTiers({ job_order: task.job_order });
-        const tiers = tiersResponse.results || tiersResponse || [];
-        
-        // Find the painting tier
-        const paintingTier = tiers.find(t => {
-            const tierName = (t.name || '').toLowerCase();
-            return tierName.includes('boya') || tierName.includes('painting');
-        });
-        
-        if (!paintingTier) {
-            return '<p class="text-danger">Boya fiyat kademesi bulunamadı</p>';
-        }
-        
+        const subcontractorsResponse = await fetchSubcontractors({ is_active: true });
+        const subcontractors = subcontractorsResponse.results || subcontractorsResponse || [];
+        const paintSub = subcontractors.find(s => s?.id === 9) || null;
+
+        const subcontractorLabel = paintSub
+            ? (paintSub.name || paintSub.short_name || `#${paintSub.id}`)
+            : '#9';
+
         return `
-            <h5 class="mb-4"><i class="fas fa-paint-brush me-2"></i>Boya Fiyatı Belirle</h5>
-            <form id="set-paint-price-action-form">
+            <h5 class="mb-4"><i class="fas fa-handshake me-2"></i>Taşeron Ata ve Alt Görev Oluştur</h5>
+            <form id="assign-paint-subcontractor-action-form">
+                <div class="mb-4">
+                    <h6 class="text-primary"><i class="fas fa-info-circle me-2"></i>Atama Bilgileri</h6>
+                </div>
                 <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-building me-1"></i>Taşeron <span class="text-muted">(Sabit)</span>
+                        </label>
+                        <input type="text" class="form-control" value="${escapeHtml(subcontractorLabel)}" readonly>
+                        <small class="form-text text-muted">Boya görevleri için taşeron otomatik seçilir (ID: 9).</small>
+                    </div>
                     <div class="col-md-12">
                         <label class="form-label">
                             <i class="fas fa-money-bill-wave me-1"></i>Fiyat/kg <span class="text-danger">*</span>
                         </label>
-                        <input type="number" class="form-control" id="paint-price" name="price_per_kg" value="${paintingTier.price_per_kg || ''}" step="0.01" min="0" required>
-                        <small class="form-text text-muted">Mevcut fiyat: ${paintingTier.price_per_kg || '0'} ${paintingTier.currency || 'TRY'}/kg</small>
+                        <input type="number" class="form-control" id="paint-assignment-price-per-kg" name="price_per_kg" step="0.01" min="0" required>
                     </div>
                     <div class="col-md-12">
-                        <button type="submit" class="btn btn-info">
-                            <i class="fas fa-save me-1"></i>Fiyatı Güncelle
-                        </button>
+                        <label class="form-label">
+                            <i class="fas fa-weight me-1"></i>Ayrılan Ağırlık (kg) <span class="text-danger">*</span>
+                        </label>
+                        <input type="number" class="form-control" id="paint-assignment-weight" name="allocated_weight_kg" step="0.01" min="0" required>
                     </div>
+                </div>
+                <div class="mb-4 mt-4">
+                    <h6 class="text-info"><i class="fas fa-tasks me-2"></i>Alt Görev Bilgileri (Opsiyonel)</h6>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-heading me-1"></i>Alt Görev Başlığı
+                        </label>
+                        <input type="text" class="form-control" id="paint-assignment-title" name="title" placeholder="Örn: Boya Grubu 1">
+                    </div>
+                </div>
+                <div class="col-md-12 mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Taşeron Ata ve Alt Görev Oluştur
+                    </button>
                 </div>
             </form>
         `;
     } catch (error) {
-        console.error('Error loading paint price form data:', error);
+        console.error('Error loading paint subcontractor form data:', error);
         return '<p class="text-danger">Form yüklenirken hata oluştu</p>';
     }
 }
@@ -4164,8 +4189,8 @@ function attachActionFormListeners(task, action) {
                     case 'assign-subcontractor':
                         await handleAssignSubcontractorActionSubmit(task);
                         break;
-                    case 'set-paint-price':
-                        await handleSetPaintPriceActionSubmit(task);
+                    case 'assign-paint-subcontractor':
+                        await handleAssignPaintSubcontractorActionSubmit(task);
                         break;
                     case 'bulk-subtask':
                         await handleBulkSubtaskActionSubmit(task);
@@ -4468,39 +4493,43 @@ async function handleAssignSubcontractorActionSubmit(task) {
     }
 }
 
-// Handle set paint price action form submission
-async function handleSetPaintPriceActionSubmit(task) {
-    const priceInput = taskDetailsModal.container.querySelector('#paint-price');
-    
-    if (!priceInput || !priceInput.value) {
-        showNotification('Lütfen fiyat girin', 'error');
+// Handle assign paint subcontractor action form submission (fixed subcontractor=9, manual price_per_kg)
+async function handleAssignPaintSubcontractorActionSubmit(task) {
+    if (task.task_type !== 'painting') {
+        showNotification('Bu işlem sadece Boya görevleri için kullanılabilir', 'error');
         return;
     }
-    
+
+    const priceInput = taskDetailsModal.container.querySelector('#paint-assignment-price-per-kg');
+    const weightInput = taskDetailsModal.container.querySelector('#paint-assignment-weight');
+    const titleInput = taskDetailsModal.container.querySelector('#paint-assignment-title');
+
+    if (!priceInput || !priceInput.value) {
+        showNotification('Lütfen fiyat/kg girin', 'error');
+        return;
+    }
+    if (!weightInput || !weightInput.value) {
+        showNotification('Lütfen ayrılan ağırlığı girin', 'error');
+        return;
+    }
+
+    const assignmentData = {
+        kaynak_task_id: task.id,
+        subcontractor: 9,
+        price_per_kg: (parseFloat(priceInput.value)).toFixed(2),
+        allocated_weight_kg: (parseFloat(weightInput.value)).toFixed(2)
+    };
+    if (titleInput && titleInput.value.trim()) {
+        assignmentData.title = titleInput.value.trim();
+    }
+
     try {
-        // Fetch price tiers to find the painting tier
-        const tiersResponse = await fetchPriceTiers({ job_order: task.job_order });
-        const tiers = tiersResponse.results || tiersResponse || [];
-        
-        const paintingTier = tiers.find(t => {
-            const tierName = (t.name || '').toLowerCase();
-            return tierName.includes('boya') || tierName.includes('painting');
-        });
-        
-        if (!paintingTier) {
-            showNotification('Boya fiyat kademesi bulunamadı', 'error');
-            return;
-        }
-        
-        await updatePriceTier(paintingTier.id, {
-            price_per_kg: parseFloat(priceInput.value)
-        });
-        
-        showNotification('Boya fiyatı güncellendi', 'success');
+        await createAssignmentWithSubtask(assignmentData);
+        showNotification('Taşeron ataması ve alt görev oluşturuldu', 'success');
         taskDetailsModal.hide();
     } catch (error) {
-        console.error('Error updating paint price:', error);
-        showNotification(error.message || 'Boya fiyatı güncellenirken hata oluştu', 'error');
+        console.error('Error creating paint assignment with subtask:', error);
+        showNotification(error.message || 'Taşeron ataması oluşturulurken hata oluştu', 'error');
     }
 }
 
@@ -6823,84 +6852,8 @@ async function showCreateAssignmentWithSubtaskModal(taskId, taskRow = null) {
 }
 
 // Show Set Paint Price Modal
-async function showSetPaintPriceModal(taskId, taskRow = null) {
-    try {
-        // Get task to ensure we have the latest data
-        const task = taskRow || await getDepartmentTaskById(taskId);
-        
-        // Verify this is a painting task
-        if (task.task_type !== 'painting') {
-            showNotification('Bu işlem sadece Boya görevleri için kullanılabilir', 'error');
-            return;
-        }
-        
-        if (!task.job_order) {
-            showNotification('İş emri bulunamadı', 'error');
-            return;
-        }
-        
-        // Fetch price tiers for this job order
-        const tiersResponse = await fetchPriceTiers({ job_order: task.job_order });
-        const tiers = tiersResponse.results || tiersResponse || [];
-        
-        // Find the painting tier (usually named "Boya" or contains "painting")
-        const paintingTier = tiers.find(t => {
-            const tierName = (t.name || '').toLowerCase();
-            return tierName.includes('boya') || tierName.includes('painting');
-        });
-        
-        if (!paintingTier) {
-            showNotification('Boya fiyat kademesi bulunamadı', 'error');
-            return;
-        }
-        
-        const modal = new EditModal('assignment-modal-container', {
-            title: 'Boya Fiyatı Belirle',
-            icon: 'fas fa-paint-brush',
-            size: 'md',
-            showEditButton: false
-        });
-        
-        modal.clearAll();
-        modal.addSection({
-            title: 'Fiyat Bilgisi',
-            icon: 'fas fa-money-bill-wave',
-            iconColor: 'text-primary'
-        });
-        
-        modal.addField({
-            id: 'paint-price',
-            name: 'price_per_kg',
-            label: 'Fiyat/kg',
-            type: 'number',
-            value: paintingTier.price_per_kg || '',
-            required: true,
-            step: '0.01',
-            min: '0',
-            icon: 'fas fa-money-bill-wave',
-            colSize: 12,
-            helpText: `Mevcut fiyat: ${paintingTier.price_per_kg || '0'} ${paintingTier.currency || 'TRY'}/kg`
-        });
-        
-        modal.render();
-        modal.show();
-        
-        modal.onSaveCallback(async (formData) => {
-            try {
-                await updatePriceTier(paintingTier.id, {
-                    price_per_kg: formData.price_per_kg
-                });
-                showNotification('Boya fiyatı güncellendi', 'success');
-                modal.hide();
-            } catch (error) {
-                console.error('Error updating paint price:', error);
-                showNotification(error.message || 'Boya fiyatı güncellenirken hata oluştu', 'error');
-            }
-        });
-    } catch (error) {
-        console.error('Error showing set paint price modal:', error);
-        showNotification('Fiyat formu yüklenirken hata oluştu', 'error');
-    }
+async function showSetPaintPriceModal() {
+    showNotification('Boya fiyatı belirleme kaldırıldı', 'info');
 }
 
     // Setup QC Excel import listeners
