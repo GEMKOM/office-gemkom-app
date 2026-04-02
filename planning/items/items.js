@@ -320,6 +320,7 @@ async function loadItems() {
             from_inventory: values.from_inventory || undefined,
             is_available: values.is_available || undefined,
             has_price: values.has_price || undefined,
+            include_price: true,
             ordering: orderingFromFilter || currentOrdering,
             page: currentPage,
             page_size: currentPageSize

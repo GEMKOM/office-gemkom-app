@@ -835,9 +835,10 @@ async function viewStatementDetail(statementId, options = {}) {
             ? adjustmentsResponse
             : (adjustmentsResponse?.results || []);
         // Some detail endpoints may not include adjustments_total; compute it from the list to keep UI consistent.
+        // Backend may send deductions as negative amounts; normalize using abs() then apply sign by type.
         const computedAdjustmentsTotal = adjustments.reduce((sum, adj) => {
             const raw = parseFloat(adj?.amount);
-            const amount = Number.isFinite(raw) ? raw : 0;
+            const amount = Number.isFinite(raw) ? Math.abs(raw) : 0;
             const sign = (adj?.adjustment_type === 'deduction') ? -1 : 1;
             return sum + (sign * amount);
         }, 0);

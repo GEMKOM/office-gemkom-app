@@ -3,421 +3,230 @@ import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { TableComponent } from '../../../components/table/table.js';
-import { getPlanningRequestItems } from '../../../apis/planning/planningRequestItems.js';
 import { initRouteProtection } from '../../../apis/routeProtection.js';
+import { getPlanningItems } from '../../../apis/planning/planningRequestItems.js';
+import { extractResultsFromResponse } from '../../../apis/paginationHelper.js';
+import { showNotification } from '../../../components/notification/notification.js';
 
-/**
- * Malzeme Takibi Page
- * Displays delivered planning request items (excluding expenditure items)
- */
-
-let filtersComponent;
-let tableComponent;
-let currentFilters = {};
+// State
 let currentPage = 1;
 let currentPageSize = 20;
+let currentOrdering = '-id';
+let isLoading = false;
 
-/**
- * Format date string to Turkish format
- */
-function formatDate(dateString) {
-    if (!dateString) return '-';
-    try {
-        const date = new Date(dateString);
-        return date.toLocaleDateString('tr-TR', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        });
-    } catch (error) {
-        return '-';
-    }
+/** @type {import('../../../components/table/table.js').TableComponent | null} */
+let table = null;
+let filtersComponent = null;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    if (!guardRoute()) return;
+    if (!initRouteProtection()) return;
+
+    await initNavbar();
+
+    new HeaderComponent({
+        title: 'Planlama Kalemleri',
+        subtitle: 'Planlama taleplerindeki ürün/kalem listesini filtreleyin ve takip edin',
+        icon: 'list',
+        showBackButton: 'block',
+        showCreateButton: 'none',
+        showRefreshButton: 'block',
+        onRefreshClick: () => {
+            currentPage = 1;
+            loadItems();
+        },
+        backUrl: '/planning/'
+    });
+
+    initFilters();
+    initTable();
+
+    await loadItems();
+});
+
+function renderBoolIcon(value) {
+    if (value === true) return '<i class="fas fa-check text-success" title="Evet"></i>';
+    if (value === false) return '<i class="fas fa-times text-danger" title="Hayır"></i>';
+    return '-';
 }
 
-/**
- * Format date for export
- */
-function formatDateForExport(dateString) {
-    if (!dateString) return '-';
-    try {
-        const date = new Date(dateString);
-        const day = String(date.getDate()).padStart(2, '0');
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const year = date.getFullYear();
-        const hours = String(date.getHours()).padStart(2, '0');
-        const minutes = String(date.getMinutes()).padStart(2, '0');
-        return `${day}.${month}.${year} ${hours}:${minutes}`;
-    } catch (error) {
-        return '-';
-    }
+function renderRequestNumberBadge(value) {
+    if (!value) return '-';
+    return `<span class="status-badge status-blue" style="min-width: auto;">${value}</span>`;
 }
 
-/**
- * Format quantity with 2 decimal places
- */
-function formatQuantity(quantity) {
-    if (!quantity) return '-';
-    return parseFloat(quantity).toFixed(2);
+function renderJobNoBadge(value) {
+    if (!value) return '-';
+    return `<span class="status-badge status-grey" style="min-width: auto;">${value}</span>`;
 }
 
-/**
- * Initialize filters component
- */
+function renderPurchaseRequestNumberBadge(value) {
+    if (!value) return '-';
+    return `<span class="status-badge status-green" style="min-width: auto;">${value}</span>`;
+}
+
 function initFilters() {
-    filtersComponent = new FiltersComponent('filters-placeholder', {
+    filtersComponent = new FiltersComponent('items-filters-placeholder', {
         title: 'Filtreler',
-        showClearButton: true,
-        showApplyButton: true,
-        applyButtonText: 'Filtrele',
-        clearButtonText: 'Temizle',
-        onApply: handleFilter,
-        onClear: handleClear
-    });
-
-    // Add text filters
-    filtersComponent.addTextFilter({
-        id: 'job_no',
-        label: 'İş No',
-        placeholder: 'İş numarası...',
-        colSize: 3
-    });
-
-    filtersComponent.addTextFilter({
-        id: 'item_code',
-        label: 'Malzeme Kodu',
-        placeholder: 'Malzeme kodu...',
-        colSize: 3
-    });
-
-    filtersComponent.addTextFilter({
-        id: 'item_name',
-        label: 'Malzeme Adı',
-        placeholder: 'Malzeme adı...',
-        colSize: 3
-    });
-
-    filtersComponent.addTextFilter({
-        id: 'planning_request_number',
-        label: 'Planlama Talebi No',
-        placeholder: 'Planlama talebi numarası...',
-        colSize: 3
-    });
-}
-
-/**
- * Initialize table component
- */
-function initTable() {
-    const columns = [
-        {
-            field: 'job_no',
-            label: 'İş No',
-            sortable: true
+        onApply: () => {
+            currentPage = 1;
+            loadItems();
         },
-        {
-            field: 'item_code',
-            label: 'Malzeme Kodu',
-            sortable: true
-        },
-        {
-            field: 'item_name',
-            label: 'Malzeme Adı',
-            sortable: true
-        },
-        {
-            field: 'item_unit',
-            label: 'Birim',
-            sortable: true,
-            width: '100px'
-        },
-        {
-            field: 'quantity',
-            label: 'Miktar',
-            sortable: true,
-            formatter: (value) => formatQuantity(value),
-            width: '100px'
-        },
-        {
-            field: 'planning_request_number',
-            label: 'Planlama Talebi No',
-            sortable: true
-        },
-        {
-            field: 'delivered_at',
-            label: 'Teslim Tarihi',
-            sortable: true,
-            formatter: (value) => formatDate(value)
-        },
-        {
-            field: 'delivered_by_username',
-            label: 'Teslim Eden',
-            sortable: true
+        onClear: () => {
+            currentPage = 1;
+            currentOrdering = '-id';
+            loadItems();
+            showNotification('Filtreler temizlendi', 'info');
         }
-    ];
+    });
 
-    tableComponent = new TableComponent('table-container', {
-        title: 'Malzeme Takibi',
-        columns: columns,
-        data: [],
-        emptyMessage: 'Veri yükleniyor...',
-        emptyIcon: 'fas fa-box',
-        striped: true,
-        bordered: true,
-        responsive: true,
-        
-        // Pagination configuration
+    filtersComponent
+        .addTextFilter({ id: 'search', label: 'Arama', placeholder: 'Ürün kodu veya adı...', colSize: 3 })
+        .addTextFilter({ id: 'planning_request', label: 'Planlama Talep ID', placeholder: 'örn. 5', type: 'number', colSize: 2 })
+        .addTextFilter({ id: 'planning_request_number', label: 'Talep No', placeholder: 'Talep numarası...', colSize: 2 })
+        .addDropdownFilter({
+            id: 'planning_request_status',
+            label: 'Talep Durumu',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'draft', label: 'Taslak' },
+                { value: 'ready', label: 'Satın Almaya Hazır' },
+                { value: 'converted', label: 'Onaya Gönderildi' },
+                { value: 'completed', label: 'Tamamlandı' },
+                { value: 'cancelled', label: 'İptal' }
+            ],
+            placeholder: 'Tümü',
+            colSize: 2
+        })
+        .addTextFilter({ id: 'job_no', label: 'İş No', placeholder: 'İş no...', colSize: 2 })
+        .addTextFilter({ id: 'item_code', label: 'Ürün Kodu', placeholder: 'Ürün kodu...', colSize: 2 })
+        .addTextFilter({ id: 'item_name', label: 'Ürün Adı', placeholder: 'Ürün adı...', colSize: 2 })
+        .addDropdownFilter({
+            id: 'is_delivered',
+            label: 'Teslim',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'true', label: 'Teslim Edildi' },
+                { value: 'false', label: 'Teslim Edilmedi' }
+            ],
+            placeholder: 'Tümü',
+            colSize: 2
+        })
+        .addDropdownFilter({
+            id: 'from_inventory',
+            label: 'Stoktan Karşılandı',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'true', label: 'Evet (stok ayrıldı)' },
+                { value: 'false', label: 'Hayır (stok ayrılmadı)' }
+            ],
+            placeholder: 'Tümü',
+            colSize: 2
+        })
+        .addDropdownFilter({
+            id: 'is_available',
+            label: 'Kalan (Satın Alma)',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'true', label: 'Var' },
+                { value: 'false', label: 'Yok' }
+            ],
+            placeholder: 'Tümü',
+            colSize: 2
+        })
+        .addDropdownFilter({
+            id: 'ordering',
+            label: 'Sıralama',
+            options: [
+                { value: '-id', label: 'Yeni → Eski' },
+                { value: 'order', label: 'Sıra (Artan)' },
+                { value: 'job_no', label: 'İş No (A→Z)' }
+            ],
+            placeholder: 'Yeni → Eski',
+            colSize: 2
+        });
+}
+
+function initTable() {
+    table = new TableComponent('planning-items-table-container', {
+        title: 'Kalemler',
+        icon: 'fas fa-list',
+        columns: [
+            { field: 'id', label: 'ID', sortable: true, formatter: (v) => v ?? '-' },
+            { field: 'item_code', label: 'Ürün Kodu', sortable: false, formatter: (v) => v || '-' },
+            { field: 'item_name', label: 'Ürün Adı', sortable: false, formatter: (v) => v || '-' },
+            { field: 'planning_request_number', label: 'Talep No', sortable: false, formatter: (v) => renderRequestNumberBadge(v) },
+            { field: 'job_no', label: 'İş No', sortable: true, formatter: (v) => renderJobNoBadge(v) },
+            { field: 'quantity', label: 'Miktar', sortable: false, formatter: (v) => (v ?? '-') },
+            { field: 'quantity_from_inventory', label: 'Stoktan', sortable: false, formatter: (v) => (v ?? '-') },
+            { field: 'quantity_to_purchase', label: 'Satın Alınacak', sortable: false, formatter: (v) => (v ?? '-') },
+            { field: 'item_unit', label: 'Birim', sortable: false, formatter: (v) => v || '-' },
+            { field: 'is_delivered', label: 'Teslim', sortable: false, formatter: (v) => renderBoolIcon(v) },
+            { field: 'purchase_request_number', label: 'Satın Alma PR No', sortable: false, formatter: (v) => renderPurchaseRequestNumberBadge(v) }
+        ],
         pagination: true,
+        itemsPerPage: currentPageSize,
         serverSidePagination: true,
-        itemsPerPage: 20,
-        currentPage: 1,
-        totalItems: 0,
-        onPageChange: handlePageChange,
-        onPageSizeChange: handlePageSizeChange,
-        
-        // Loading state
-        loading: false,
-        skeleton: true,
-        skeletonRows: 5,
-        
-        // Refresh functionality
         refreshable: true,
-        onRefresh: handleRefresh,
-        
-        // Export functionality
-        exportable: true,
-        onExport: handleExport
+        onRefresh: () => loadItems(),
+        onSort: (field, direction) => {
+            // Backend supports: -id, order, job_no
+            if (field === 'id') currentOrdering = '-id';
+            if (field === 'job_no') currentOrdering = 'job_no';
+            currentPage = 1;
+            loadItems();
+        },
+        onPageChange: (page) => {
+            currentPage = page;
+            loadItems();
+        },
+        onPageSizeChange: (pageSize) => {
+            currentPageSize = pageSize;
+            currentPage = 1;
+            loadItems();
+        },
+        emptyMessage: 'Kalem bulunamadı.',
+        emptyIcon: 'fas fa-inbox'
     });
 }
 
-/**
- * Load material tracking data with pagination
- */
-async function loadData(page = 1, pageSize = 20) {
+async function loadItems() {
+    if (isLoading || !table || !filtersComponent) return;
     try {
-        // Show loading state
-        tableComponent.setLoading(true);
+        isLoading = true;
+        table.setLoading(true);
 
-        // Build filter parameters
+        const values = filtersComponent.getFilterValues();
+        const orderingFromFilter = values.ordering ?? '';
+
         const filters = {
-            fields: 'simple',
-            is_delivered: true,
-            item_type_exclude: 'expenditure',
-            ordering: 'job_no',
-            page: page,
-            page_size: pageSize,
-            ...currentFilters
+            search: values.search || undefined,
+            item_code: values.item_code || undefined,
+            item_name: values.item_name || undefined,
+            planning_request: values.planning_request || undefined,
+            planning_request_number: values.planning_request_number || undefined,
+            planning_request_status: values.planning_request_status || undefined,
+            job_no: values.job_no || undefined,
+            is_delivered: values.is_delivered || undefined,
+            from_inventory: values.from_inventory || undefined,
+            is_available: values.is_available || undefined,
+            include_price: false,
+            ordering: orderingFromFilter || currentOrdering,
+            page: currentPage,
+            page_size: currentPageSize
         };
 
-        // Remove empty filters
-        Object.keys(filters).forEach(key => {
-            if (filters[key] === '' || filters[key] === null || filters[key] === undefined) {
-                delete filters[key];
-            }
-        });
+        const response = await getPlanningItems(filters);
+        const results = extractResultsFromResponse(response);
+        const total = typeof response?.count === 'number' ? response.count : results.length;
 
-        // Fetch data
-        const response = await getPlanningRequestItems(filters);
-
-        // Update table with results and pagination
-        tableComponent.updateData(response.results || [], response.count || 0, page);
-        
-        // Update empty message based on context
-        if ((response.results || []).length === 0) {
-            const hasFilters = Object.values(currentFilters).some(value => {
-                if (value === null || value === undefined) return false;
-                if (typeof value === 'string') return value.trim() !== '';
-                return true;
-            });
-            tableComponent.options.emptyMessage = hasFilters 
-                ? 'Filtre kriterlerine uygun sonuç bulunamadı.'
-                : 'Kayıt bulunamadı.';
-        }
-
-        // Update current state
-        currentPage = page;
-        currentPageSize = pageSize;
-        
-        // Hide loading state
-        tableComponent.setLoading(false);
-
+        table.updateData(results, total, currentPage);
     } catch (error) {
-        console.error('Error loading material tracking data:', error);
-        tableComponent.setLoading(false);
-        tableComponent.options.emptyMessage = 'Veri yüklenirken bir hata oluştu. Lütfen tekrar deneyin.';
-        tableComponent.updateData([], 0, 1);
+        console.error('Error loading planning items:', error);
+        table.updateData([], 0, 1);
+        showNotification(error?.message || 'Kalemler yüklenirken hata oluştu', 'danger');
+    } finally {
+        isLoading = false;
+        table.setLoading(false);
     }
 }
-
-/**
- * Handle filter action
- */
-async function handleFilter(filters) {
-    // Update current filters
-    currentFilters = { ...filters };
-    
-    // Reset to page 1 when filtering
-    await loadData(1, currentPageSize);
-}
-
-/**
- * Handle clear action
- */
-async function handleClear() {
-    // Clear filters
-    currentFilters = {};
-    
-    // Reset to page 1 and reload data
-    await loadData(1, currentPageSize);
-}
-
-/**
- * Handle page change
- */
-async function handlePageChange(page) {
-    await loadData(page, currentPageSize);
-}
-
-/**
- * Handle page size change
- */
-async function handlePageSizeChange(pageSize) {
-    await loadData(1, pageSize);
-}
-
-/**
- * Handle refresh action
- */
-async function handleRefresh() {
-    await loadData(currentPage, currentPageSize);
-}
-
-/**
- * Handle export action
- */
-function handleExport(format = 'csv') {
-    try {
-        // Get current data
-        const data = tableComponent.options.data;
-        
-        if (data.length === 0) {
-            alert('İndirilecek veri bulunamadı.');
-            return;
-        }
-
-        // Prepare export data with formatted values
-        const exportData = data.map(row => ({
-            'İş No': row.job_no || '-',
-            'Malzeme Kodu': row.item_code || '-',
-            'Malzeme Adı': row.item_name || '-',
-            'Birim': row.item_unit || '-',
-            'Miktar': row.quantity ? formatQuantity(row.quantity) : '-',
-            'Planlama Talebi No': row.planning_request_number || '-',
-            'Teslim Tarihi': row.delivered_at ? formatDateForExport(row.delivered_at) : '-',
-            'Teslim Eden': row.delivered_by_username || '-'
-        }));
-
-        if (format === 'csv') {
-            exportToCSV(exportData, 'malzeme_takibi');
-        } else if (format === 'excel') {
-            exportToExcel(exportData, 'malzeme_takibi');
-        }
-
-    } catch (error) {
-        console.error('Error exporting data:', error);
-        alert('Veri dışa aktarılırken bir hata oluştu.');
-    }
-}
-
-/**
- * Export data to CSV
- */
-function exportToCSV(data, filename) {
-    if (data.length === 0) return;
-
-    // Get headers
-    const headers = Object.keys(data[0]);
-    
-    // Date columns that need special Excel formatting
-    const dateColumns = ['Teslim Tarihi'];
-    
-    // Create CSV content with semicolon delimiter for Turkish Excel
-    let csvContent = '\uFEFF'; // UTF-8 BOM for Excel
-    csvContent += headers.join(';') + '\n';
-    
-    data.forEach(row => {
-        const values = headers.map(header => {
-            const value = row[header];
-            const stringValue = String(value).replace(/"/g, '""');
-            
-            // For date columns, use Excel formula format to force text
-            if (dateColumns.includes(header) && value !== '-') {
-                return `"=""${stringValue}"""`;
-            }
-            
-            return `"${stringValue}"`;
-        });
-        csvContent += values.join(';') + '\n';
-    });
-
-    // Download
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = `${filename}_${new Date().toISOString().split('T')[0]}.csv`;
-    link.click();
-}
-
-/**
- * Export data to Excel (simplified CSV format)
- */
-function exportToExcel(data, filename) {
-    // For now, use CSV format with .xls extension
-    exportToCSV(data, filename);
-}
-
-/**
- * Initialize the page
- */
-async function init() {
-    try {
-        // Check authentication
-        if (!guardRoute()) {
-            return;
-        }
-
-        // Initialize route protection
-        if (!initRouteProtection()) {
-            return;
-        }
-
-        // Initialize navbar
-        await initNavbar();
-
-        // Initialize header
-        const header = new HeaderComponent({
-            containerId: 'header-placeholder',
-            title: 'Malzeme Takibi',
-            subtitle: 'Teslim edilmiş planlama talebi kalemlerini görüntüleyin',
-            icon: 'box',
-            showBackButton: 'block',
-            backUrl: '../index.html'
-        });
-
-        // Initialize filters
-        initFilters();
-
-        // Initialize table
-        initTable();
-
-        // Load initial data
-        await loadData(1, 20);
-
-    } catch (error) {
-        console.error('Error initializing material tracking page:', error);
-    }
-}
-
-// Initialize on page load
-document.addEventListener('DOMContentLoaded', init);
