@@ -216,8 +216,8 @@ export class TableComponent {
             // Determine sort icon based on current sort state
             let sortIcon = '';
             if (sortable) {
-                const currentField = this.options.currentSortField;
-                const currentDirection = this.options.currentSortDirection;
+                const currentField = this.currentSortField;
+                const currentDirection = this.currentSortDirection;
                 
                 if (currentField === column.field) {
                     if (currentDirection === 'asc') {

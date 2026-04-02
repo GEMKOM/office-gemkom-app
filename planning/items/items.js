@@ -218,8 +218,14 @@ function initFilters() {
             label: 'Sıralama',
             options: [
                 { value: '-id', label: 'Yeni → Eski' },
+                { value: 'id', label: 'Eski → Yeni' },
                 { value: 'order', label: 'Sıra (Artan)' },
-                { value: 'job_no', label: 'İş No (A→Z)' }
+                { value: 'job_no', label: 'İş No (A→Z)' },
+                { value: '-job_no', label: 'İş No (Z→A)' },
+                { value: 'item_code', label: 'Ürün Kodu (A→Z)' },
+                { value: '-item_code', label: 'Ürün Kodu (Z→A)' },
+                { value: 'item_name', label: 'Ürün Adı (A→Z)' },
+                { value: '-item_name', label: 'Ürün Adı (Z→A)' }
             ],
             placeholder: 'Yeni → Eski',
             colSize: 2
@@ -232,8 +238,8 @@ function initTable() {
         icon: 'fas fa-list',
         columns: [
             { field: 'id', label: 'ID', sortable: true, formatter: (v) => v ?? '-' },
-            { field: 'item_code', label: 'Ürün Kodu', sortable: false, formatter: (v) => v || '-' },
-            { field: 'item_name', label: 'Ürün Adı', sortable: false, formatter: (v) => v || '-' },
+            { field: 'item_code', label: 'Ürün Kodu', sortable: true, formatter: (v) => v || '-' },
+            { field: 'item_name', label: 'Ürün Adı', sortable: true, formatter: (v) => v || '-' },
             { field: 'planning_request_number', label: 'Talep No', sortable: false, formatter: (v) => renderRequestNumberBadge(v) },
             { field: 'job_no', label: 'İş No', sortable: true, formatter: (v) => renderJobNoBadge(v) },
             { field: 'quantity', label: 'Miktar', sortable: false, formatter: (v) => (v ?? '-') },
@@ -279,9 +285,15 @@ function initTable() {
         },
         onRefresh: () => loadItems(),
         onSort: (field, direction) => {
-            // Backend supports: -id, order, job_no
-            if (field === 'id') currentOrdering = '-id';
-            if (field === 'job_no') currentOrdering = 'job_no';
+            // Backend ordering keys (supports -prefix for desc)
+            const orderable = new Set(['id', 'job_no', 'item_code', 'item_name']);
+            if (!orderable.has(field)) return;
+
+            currentOrdering = `${direction === 'desc' ? '-' : ''}${field}`;
+            // Keep dropdown in sync so table header clicks always take effect
+            if (filtersComponent) {
+                filtersComponent.setFilterValues({ ordering: currentOrdering });
+            }
             currentPage = 1;
             loadItems();
         },
