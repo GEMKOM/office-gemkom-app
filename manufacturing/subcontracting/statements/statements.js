@@ -842,6 +842,13 @@ async function viewStatementDetail(statementId, options = {}) {
             const sign = (adj?.adjustment_type === 'deduction') ? -1 : 1;
             return sum + (sign * amount);
         }, 0);
+
+        const paintInput = statement?.paint_input || null;
+        const paintKgRaw = parseFloat(paintInput?.total_kg);
+        const paintCostRaw = parseFloat(paintInput?.total_cost);
+        const paintTotalKg = Number.isFinite(paintKgRaw) ? paintKgRaw : 0;
+        const paintTotalCost = Number.isFinite(paintCostRaw) ? paintCostRaw : 0;
+        const hasPaintInput = !!(paintInput && (paintTotalKg !== 0 || paintTotalCost !== 0));
         
         if (!statement) {
             showNotification('Hakediş bulunamadı', 'error');
@@ -941,6 +948,50 @@ async function viewStatementDetail(statementId, options = {}) {
             `
         });
         
+        const paintRowHtml = hasPaintInput ? `
+            <tr>
+                <td><strong>Boya</strong></td>
+                <td>-</td>
+                <td>-</td>
+                <td>-</td>
+                <td>-</td>
+                <td>-</td>
+                <td>${new Intl.NumberFormat('tr-TR', {
+                    style: 'decimal',
+                    minimumFractionDigits: 3,
+                    maximumFractionDigits: 3
+                }).format(paintTotalKg)} kg</td>
+                <td>${(() => {
+                    if (!paintTotalKg || paintTotalKg <= 0) return '-';
+                    return formatCurrency(paintTotalCost / paintTotalKg, statement.currency);
+                })()}</td>
+                <td><strong>${formatCurrency(paintTotalCost, statement.currency)}</strong></td>
+            </tr>
+        ` : ``;
+
+        const lineItems = Array.isArray(statement?.line_items) ? statement.line_items : [];
+        const lineItemRowsHtml = (lineItems.length > 0
+            ? lineItems.map(item => `
+                                        <tr>
+                                            <td>
+                                                <strong>${item.job_no || '-'}</strong>
+                                                ${item.job_title ? `<br><small class="text-muted">${item.job_title}</small>` : ''}
+                                            </td>
+                                            <td>${item.price_tier_name || '-'}</td>
+                                            <td>${item.allocated_weight_kg || 0} kg</td>
+                                            <td>${item.previous_progress || 0}%</td>
+                                            <td>${item.current_progress || 0}%</td>
+                                            <td>${item.delta_progress || 0}%</td>
+                                            <td>${item.effective_weight_kg || 0} kg</td>
+                                            <td>${formatCurrency(item.price_per_kg, statement.currency)}</td>
+                                            <td><strong>${formatCurrency(item.cost_amount, statement.currency)}</strong></td>
+                                        </tr>
+                                    `).join('')
+            : (hasPaintInput
+                ? ''
+                : '<tr><td colspan="9" class="text-center text-muted">Kalem bulunmamaktadır</td></tr>')
+        ) + paintRowHtml;
+
         // Line Items Section
         statementDetailModal.addCustomSection({
             id: 'line-items',
@@ -965,25 +1016,7 @@ async function viewStatementDetail(statementId, options = {}) {
                                 </tr>
                             </thead>
                             <tbody>
-                                ${statement.line_items && statement.line_items.length > 0 ? 
-                                    statement.line_items.map(item => `
-                                        <tr>
-                                            <td>
-                                                <strong>${item.job_no || '-'}</strong>
-                                                ${item.job_title ? `<br><small class="text-muted">${item.job_title}</small>` : ''}
-                                            </td>
-                                            <td>${item.price_tier_name || '-'}</td>
-                                            <td>${item.allocated_weight_kg || 0} kg</td>
-                                            <td>${item.previous_progress || 0}%</td>
-                                            <td>${item.current_progress || 0}%</td>
-                                            <td>${item.delta_progress || 0}%</td>
-                                            <td>${item.effective_weight_kg || 0} kg</td>
-                                            <td>${formatCurrency(item.price_per_kg, statement.currency)}</td>
-                                            <td><strong>${formatCurrency(item.cost_amount, statement.currency)}</strong></td>
-                                        </tr>
-                                    `).join('') : 
-                                    '<tr><td colspan="9" class="text-center text-muted">Kalem bulunmamaktadır</td></tr>'
-                                }
+                                ${lineItemRowsHtml}
                             </tbody>
                             <tfoot class="table-light">
                                 <tr>
@@ -1068,7 +1101,8 @@ async function viewStatementDetail(statementId, options = {}) {
         });
         
         // Totals Section
-        const subtotal = (parseFloat(statement.work_total) || 0) + computedAdjustmentsTotal;
+        const workTotal = (parseFloat(statement.work_total) || 0);
+        const subtotal = workTotal + computedAdjustmentsTotal + (hasPaintInput ? paintTotalCost : 0);
         const vatRate = 0.20;
         const vatAmount = subtotal * vatRate;
         const totalWithVat = subtotal + vatAmount;
@@ -1083,12 +1117,18 @@ async function viewStatementDetail(statementId, options = {}) {
                                 <table class="table table-sm table-borderless">
                                     <tr>
                                         <td><strong>İş Toplamı:</strong></td>
-                                        <td class="text-end">${formatCurrency(statement.work_total || 0, statement.currency)}</td>
+                                        <td class="text-end">${formatCurrency(workTotal, statement.currency)}</td>
                                     </tr>
                                     <tr>
                                         <td><strong>Düzeltmeler:</strong></td>
                                         <td class="text-end">${formatCurrency(computedAdjustmentsTotal, statement.currency)}</td>
                                     </tr>
+                                    ${hasPaintInput ? `
+                                        <tr>
+                                            <td><strong>Boya Maliyeti:</strong></td>
+                                            <td class="text-end">${formatCurrency(paintTotalCost, statement.currency)}</td>
+                                        </tr>
+                                    ` : ``}
                                     <tr class="border-top">
                                         <td><strong>Ara Toplam:</strong></td>
                                         <td class="text-end">${formatCurrency(subtotal, statement.currency)}</td>

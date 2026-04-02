@@ -2135,7 +2135,7 @@ window.viewJobOrder = async function(jobNo) {
                             </div>
                             <div class="field-value fw-bold flex-grow-1 d-flex align-items-center justify-content-between gap-2">
                                 <span>${formatDate(jobOrder.target_completion_date)}</span>
-                                ${canEditJobOrders() ? `
+                                ${!HIDE_ACTION_BUTTONS ? `
                                     <button type="button" class="btn btn-sm btn-outline-primary target-date-revise-btn"
                                             data-job-no="${jobOrder.job_no}"
                                             data-current-date="${jobOrder.target_completion_date || ''}">
