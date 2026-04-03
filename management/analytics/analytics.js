@@ -504,6 +504,12 @@ function applyCostBreakdownVisibility() {
     const detailIndices = [];
     cols.forEach((col, i) => { if (DETAIL_FIELDS.has(col.field)) detailIndices.push(i); });
     const display = costBreakdownVisible ? '' : 'none';
+
+    // Also hide/show <col> elements so the table layout doesn't reserve width
+    // for hidden detail columns (otherwise you can get a large empty area on the right).
+    const colEls = table.querySelectorAll('colgroup col');
+    detailIndices.forEach(i => { if (colEls[i]) colEls[i].style.display = display; });
+
     table.querySelectorAll('tr').forEach(tr => {
         const cells = tr.querySelectorAll('th, td');
         detailIndices.forEach(i => { if (cells[i]) cells[i].style.display = display; });

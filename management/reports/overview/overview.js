@@ -373,9 +373,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         return `
         <div class="row g-3">
             <div class="col-lg-7">
-                ${chartCard('handshake', 'text-info', 'Taşeron Top 10', 'chart-subcontractor', 'md',
-                    '<div class="ov-hint">Her taşeronun kendi para birimi vardır — toplama yapılmaz.</div>'
-                )}
+                ${chartCard('handshake', 'text-info', 'Taşeron Top 10', 'chart-subcontractor', 'md')}
             </div>
             <div class="col-lg-5">
                 ${card('file-invoice-dollar', 'text-warning', 'Taşeron Hakediş', `
