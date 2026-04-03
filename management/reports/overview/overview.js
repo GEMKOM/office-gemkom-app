@@ -15,11 +15,11 @@ const paneRendered = { jobs: false, prod: false, sales: false, sub: false, proc:
 
 const TAB_ENDPOINTS = {
     jobs: ['job-orders'],
-    prod: ['operations', 'job-orders'],
+    prod: ['operations'],
     sales: ['sales'],
     sub: ['subcontracting'],
     proc: ['procurement'],
-    qlt: ['operations', 'job-orders']
+    qlt: ['operations']
 };
 
 const TARGET_TO_TAB = {
@@ -42,8 +42,14 @@ const PANE_IDS = {
 
 let tabLoadSeq = 0;
 
+/** Active overview tab key; preserved when filters change or the page is refreshed from the header. */
+let activeOverviewTabKey = 'jobs';
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) return;
+    if (typeof Chart !== 'undefined' && typeof ChartDataLabels !== 'undefined') {
+        Chart.register(ChartDataLabels);
+    }
     await initNavbar();
 
     new HeaderComponent({
@@ -204,6 +210,36 @@ document.addEventListener('DOMContentLoaded', async () => {
         on_hold: 'Beklemede'
     };
 
+    /** API `sales_consults_by_department` anahtarları (slug) → Türkçe; bilinmeyen anahtar olduğu gibi gösterilir. */
+    const SALES_CONSULT_DEPT_LABELS = {
+        design: 'Tasarım',
+        manufacturing: 'Üretim',
+        planning: 'Planlama',
+        procurement: 'Satın Alma',
+        painting: 'Boya',
+        logistics: 'Lojistik',
+        maintenance: 'Bakım',
+        finance: 'Finans',
+        it: 'Bilgi İşlem',
+        human_resources: 'İnsan Kaynakları',
+        management: 'Yönetim',
+        quality: 'Kalite',
+        qualitycontrol: 'Kalite kontrol',
+        quality_control: 'Kalite kontrol',
+        welding: 'Kaynak',
+        machining: 'Talaşlı',
+        cnc: 'CNC',
+        sales: 'Satış',
+        marketing: 'Pazarlama'
+    };
+
+    function salesConsultDeptLabel(key) {
+        if (key == null || key === '') return '';
+        const raw = String(key).trim();
+        const norm = raw.toLowerCase().replace(/\s+/g, '_');
+        return SALES_CONSULT_DEPT_LABELS[norm] || SALES_CONSULT_DEPT_LABELS[raw] || raw;
+    }
+
     function overtimeTeamLabel(key) {
         if (key == null || key === '') return '';
         const k = String(key).trim();
@@ -282,10 +318,52 @@ document.addEventListener('DOMContentLoaded', async () => {
                     bodyFont: { family: "'Segoe UI', system-ui, sans-serif" },
                     cornerRadius: 8,
                     padding: 10
-                }
+                },
+                datalabels: { display: false }
             }
         };
     }
+
+    const DL_FONT = { weight: '700', size: 13, family: "'Segoe UI', system-ui, sans-serif" };
+
+    /** Okunabilir çubuk etiketleri (taşmayı azaltır, küçük çubuklarda da görünür). */
+    const DL_BAR_PILL = {
+        color: '#1a1a1a',
+        backgroundColor: 'rgba(255, 255, 255, 0.94)',
+        borderColor: 'rgba(0, 0, 0, 0.1)',
+        borderWidth: 1,
+        borderRadius: 5,
+        padding: 6
+    };
+
+    /** Yüzde + kısa tutar (halka grafikleri için). */
+    function dlDoughnutPctAndEur(value, ctx) {
+        const sum = ctx.dataset.data.reduce((a, b) => a + Number(b || 0), 0);
+        if (!sum || !value) return '';
+        const pct = Math.round((Number(value) / sum) * 100);
+        return `${pct}%\n${eur(value)}`;
+    }
+
+    function dlDoughnutCountPct(value, ctx) {
+        const sum = ctx.dataset.data.reduce((a, b) => a + Number(b || 0), 0);
+        if (!sum || !value) return '';
+        const pct = Math.round((Number(value) / sum) * 100);
+        return `${pct}%\n${num(value, 0)}`;
+    }
+
+    const DL_DOUGHNUT = {
+        display: (ctx) => Number(ctx.dataset.data[ctx.dataIndex] || 0) > 0,
+        anchor: 'center',
+        align: 'center',
+        font: { ...DL_FONT, size: 14 },
+        color: '#1a1a1a',
+        backgroundColor: 'rgba(255, 255, 255, 0.95)',
+        borderColor: 'rgba(0, 0, 0, 0.1)',
+        borderWidth: 1,
+        borderRadius: 6,
+        padding: 8,
+        clip: false
+    };
 
     function scaleOpts(opts = {}) {
         return {
@@ -331,7 +409,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!btn) return;
             const target = btn.getAttribute('data-bs-target');
             const tabKey = TARGET_TO_TAB[target];
-            if (tabKey) loadTabData(tabKey);
+            if (tabKey) {
+                activeOverviewTabKey = tabKey;
+                loadTabData(tabKey);
+            }
         });
     }
 
@@ -389,28 +470,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         paneRendered[tabKey] = true;
     }
 
-    function buildTabsShell() {
+    function buildTabsShell(activeKey = 'jobs') {
         const el = document.getElementById('tabs-placeholder');
         if (!el) return;
+
+        const valid = Object.prototype.hasOwnProperty.call(TAB_ENDPOINTS, activeKey) ? activeKey : 'jobs';
+        const tabDefs = [
+            ['jobs', 'İş Emirleri'],
+            ['prod', 'Üretim'],
+            ['sales', 'Satış & Maliyet'],
+            ['sub', 'Taşeron'],
+            ['proc', 'Satınalma'],
+            ['qlt', 'Kalite']
+        ];
+        const navHtml = tabDefs.map(([key, label]) => {
+            const paneId = PANE_IDS[key];
+            const active = key === valid ? ' active' : '';
+            return `<li class="nav-item"><button class="nav-link${active}" data-bs-toggle="tab" data-bs-target="#${paneId}" type="button">${label}</button></li>`;
+        }).join('');
+        const panesHtml = tabDefs.map(([key]) => {
+            const paneId = PANE_IDS[key];
+            const active = key === valid ? ' show active' : '';
+            const inner = key === valid ? paneLoadingHtml() : paneIdleHtml();
+            return `<div class="tab-pane fade${active}" id="${paneId}">${inner}</div>`;
+        }).join('');
 
         el.innerHTML = `
         <div class="dashboard-card compact overview-tabs">
             <div class="card-body">
                 <ul class="nav nav-tabs" role="tablist">
-                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#pane-jobs" type="button">İş Emirleri</button></li>
-                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-prod" type="button">Üretim</button></li>
-                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-sales" type="button">Satış & Maliyet</button></li>
-                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-sub" type="button">Taşeron</button></li>
-                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-proc" type="button">Satınalma</button></li>
-                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-qlt" type="button">Kalite</button></li>
+                    ${navHtml}
                 </ul>
                 <div class="tab-content pt-3">
-                    <div class="tab-pane fade show active" id="pane-jobs">${paneLoadingHtml()}</div>
-                    <div class="tab-pane fade" id="pane-prod">${paneIdleHtml()}</div>
-                    <div class="tab-pane fade" id="pane-sales">${paneIdleHtml()}</div>
-                    <div class="tab-pane fade" id="pane-sub">${paneIdleHtml()}</div>
-                    <div class="tab-pane fade" id="pane-proc">${paneIdleHtml()}</div>
-                    <div class="tab-pane fade" id="pane-qlt">${paneIdleHtml()}</div>
+                    ${panesHtml}
                 </div>
             </div>
         </div>`;
@@ -423,8 +515,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             kpis.showLoading();
             clearEndpointCache();
             killCharts();
-            buildTabsShell();
-            await loadTabData('jobs');
+            const tabKey = Object.prototype.hasOwnProperty.call(TAB_ENDPOINTS, activeOverviewTabKey)
+                ? activeOverviewTabKey
+                : 'jobs';
+            buildTabsShell(tabKey);
+            await loadTabData(tabKey);
         } catch (err) {
             console.error('Overview load error:', err);
             showNotification(`Raporlar yüklenirken hata: ${err.message}`, 'error');
@@ -440,7 +535,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const cmp = data?.meta?.compare && pp;
         const hasSales = endpointCache.has('sales');
         const hasMarginData = hasSales || endpointCache.has('job-orders');
-        const hasOpsData = endpointCache.has('operations') || endpointCache.has('job-orders');
+        const hasOpsData = endpointCache.has('operations');
 
         kpis.setCards([
             {
@@ -533,10 +628,14 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         return `
         <div class="row g-3">
-            <div class="col-12">
-                ${chartCard('chart-column', 'text-info', `Departman Saatleri${cmp ? ' — karşılaştırmalı' : ''}`, 'chart-prod-hours', 'md', `
-                    <dl class="ov-kv mt-3 mb-0">
+            <div class="col-lg-6">
+                ${chartCard('chart-bar', 'text-info', `Departman saatleri${cmp ? ' — karşılaştırmalı' : ''}`, 'chart-prod-hours', 'md')}
+            </div>
+            <div class="col-lg-6">
+                ${card('clipboard-list', 'text-primary', 'Üretim özeti', `
+                    <dl class="ov-kv mb-0">
                         ${kvRow('Üretilen tonaj (dönem)', `${numLocale(m.manufactured_tonnage_kg ?? m.manufacturedTonnageKg, 2)} kg`)}
+                        ${kvRow('Üretken saat (dönem)', num(m.total_productive_hours, 1))}
                     </dl>
                 `)}
             </div>
@@ -571,34 +670,42 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function tabSalesCosts(data) {
         const s = data?.sales || {};
-        const c = data?.costs || {};
         const created = pf(s.offers_created_in_range);
         const won = pf(s.offers_won_in_range);
         const winRate = created > 0 ? (won / created) * 100 : 0;
 
+        const wonEur = pf(s.total_won_value_eur);
+        const lostEur = pf(s.total_lost_value_eur);
+        const pendingEur = pf(s.total_pending_value_eur);
+        const eurSum = wonEur + lostEur + pendingEur;
+        const eurWinSharePct = eurSum > 0 ? (wonEur / eurSum) * 100 : 0;
+
         return `
-        <div class="row g-3">
-            <div class="col-lg-4">
-                ${card('bullseye', 'text-success', 'Satış Metrikleri', `
-                    <dl class="ov-kv">
-                        ${kvRow('Oluşturulan', num(s.offers_created_in_range))}
-                        ${kvRow('Kazanılan', num(s.offers_won_in_range), 'text-success')}
-                        ${kvRow('Kaybedilen', num(s.offers_lost_in_range), 'text-danger')}
-                        ${kvRow('Kazanılan (EUR)', eur(s.total_won_value_eur))}
-                        ${kvRow('Win Rate', `${winRate.toFixed(1)}%`)}
-                    </dl>
+        <div class="row g-3 align-items-stretch">
+            <div class="col-12">
+                <div class="ov-section-label">Seçilen dönem</div>
+            </div>
+            <div class="col-lg-6 d-flex flex-column">
+                ${chartCard('chart-column', 'text-primary', 'Teklif adetleri (karşılaştırma)', 'chart-sales-period-counts', 'md', `
+                    <div class="ov-sales-footnote mt-2 pt-2 border-top">
+                        <span class="text-muted small">Oluşturulan tekliflere göre kazanma oranı</span>
+                        <strong class="ms-2 text-dark">${winRate.toFixed(1)}%</strong>
+                    </div>
                 `)}
             </div>
-            <div class="col-lg-4">
-                ${chartCard('funnel-dollar', 'text-primary', 'Pipeline (Snapshot)', 'chart-pipeline', 'md')}
+            <div class="col-lg-6 d-flex flex-column">
+                ${chartCard('chart-bar', 'text-warning', 'Kazanılan, kaybedilen ve bekleyen tutarlar', 'chart-sales-period-eur', 'md', `
+                    <div class="ov-hint mt-2 mb-0">Kazanılan ve kaybedilen: seçilen döneme göre (Euro). Bekleyen anlaşma değeri: güncel pipeline toplamı (tarih filtresinden bağımsız).</div>
+                    <div class="ov-sales-footnote mt-2 pt-2 border-top">
+                        <span class="text-muted small">Kazanılan ÷ (kazanılan + kaybedilen + bekleyen)</span>
+                        <strong class="ms-2 text-dark">${eurWinSharePct.toFixed(1)}%</strong>
+                    </div>
+                `)}
             </div>
-            <div class="col-lg-4">
-                ${chartCard('chart-pie', 'text-info', 'Maliyet Dağılımı', 'chart-costs', 'sm', `
-                    <dl class="ov-kv mt-2">
-                        ${kvRow('Satış toplam', eur(c.total_selling_price_eur))}
-                        ${kvRow('Gerçek maliyet', eur(c.total_actual_cost_eur))}
-                        ${kvRow('Ort. marj', `${num(c.avg_margin_pct, 1)}%`)}
-                    </dl>
+            <div class="col-12 d-flex flex-column">
+                <div class="ov-section-label">Satış danışmanlığı (dönem)</div>
+                ${chartCard('chart-bar', 'text-info', 'Departmanlara göre danışmanlık kayıtları', 'chart-sales-consults-dept', 'md', `
+                    <div class="ov-hint mt-2 mb-0">Danışmanlık kayıtlarının oluşturulma tarihine göre.</div>
                 `)}
             </div>
         </div>`;
@@ -692,8 +799,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         const base = chartDefaults();
 
         buildProdHoursChart(data, pp, base);
-        buildPipelineChart(data, base);
-        buildCostDonut(data, base);
+        buildSalesPeriodCountsChart(data, base);
+        buildSalesPeriodEurChart(data, base);
+        buildSalesConsultsDeptChart(data, base);
         buildJobOrdersStatusChart(data, base);
         buildJobOrdersCostDonut(data, base);
         buildSubcontractorChart(data, base);
@@ -710,104 +818,212 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const labels = ['Kaynak', 'Talaşlı', 'CNC', 'Bakım'];
         const cur = [pf(m.welding_hours), pf(m.machining_hours), pf(m.cnc_hours), maintHours];
-        const ds = [{
+        const curColors = ['#6c757d', '#0d6efd', '#198754', '#fd7e14'];
+        const prevColors = ['#adb5bd', '#9ec5fe', '#a3cfbb', '#ffc107'];
+
+        const datasets = [{
             label: 'Bu dönem',
             data: cur,
-            backgroundColor: 'rgba(13, 110, 253, 0.7)',
+            backgroundColor: curColors,
             borderRadius: 6,
-            maxBarThickness: 50
+            maxBarThickness: 44
         }];
 
         if (pp) {
             const prev = pp.manufacturing || {};
             const prevMaint = pp.maintenance || {};
             const prevMaintHours = pf(prevMaint.maintenance_hours ?? prev.maintenance_hours);
-            ds.push({
+            datasets.push({
                 label: 'Önceki dönem',
                 data: [pf(prev.welding_hours), pf(prev.machining_hours), pf(prev.cnc_hours), prevMaintHours],
-                backgroundColor: 'rgba(173, 181, 189, 0.5)',
+                backgroundColor: prevColors,
                 borderRadius: 6,
-                maxBarThickness: 50
+                maxBarThickness: 44
             });
         }
 
         charts.push(new Chart(el, {
             type: 'bar',
-            data: { labels, datasets: ds },
+            data: { labels, datasets },
             options: {
                 ...base,
-                scales: { x: scaleOpts(), y: scaleOpts() },
-                plugins: { ...base.plugins, legend: { ...base.plugins.legend, position: 'top' } }
+                layout: { padding: { top: 8, right: 52, bottom: 8, left: 8 } },
+                indexAxis: 'y',
+                scales: {
+                    x: scaleOpts(),
+                    y: { ...scaleOpts(), grid: { display: false } }
+                },
+                plugins: {
+                    ...base.plugins,
+                    legend: {
+                        ...base.plugins.legend,
+                        position: 'top',
+                        display: datasets.length > 1
+                    },
+                    datalabels: {
+                        ...DL_BAR_PILL,
+                        font: DL_FONT,
+                        display: (ctx) => Number(ctx.dataset.data[ctx.dataIndex] || 0) !== 0,
+                        anchor: 'end',
+                        align: 'end',
+                        offset: 6,
+                        clip: false,
+                        clamp: true,
+                        formatter: (v) => num(v, 1)
+                    }
+                }
             }
         }));
     }
 
-    function buildPipelineChart(data, base) {
-        const pipe = data?.sales?.pipeline_by_stage || {};
-        const el = document.getElementById('chart-pipeline');
+    function buildSalesPeriodCountsChart(data, base) {
+        const s = data?.sales || {};
+        const el = document.getElementById('chart-sales-period-counts');
         if (!el) return;
 
-        const stageMap = {
-            consultation: 'Danışmanlık',
-            pricing: 'Fiyatlandırma',
-            pending_approval: 'Onay Bekliyor',
-            submitted_customer: 'Müşteriye İletildi'
-        };
-        const keys = Object.keys(pipe);
+        const labels = ['Oluşturulan', 'Kazanılan', 'Kaybedilen'];
+        const values = [
+            pf(s.offers_created_in_range),
+            pf(s.offers_won_in_range),
+            pf(s.offers_lost_in_range)
+        ];
+
+        charts.push(new Chart(el, {
+            type: 'bar',
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Teklif sayısı',
+                    data: values,
+                    backgroundColor: ['#2563EB', '#059669', '#B91C1C'],
+                    borderRadius: 6,
+                    maxBarThickness: 56
+                }]
+            },
+            options: {
+                ...base,
+                layout: { padding: { top: 16, right: 8, bottom: 8, left: 8 } },
+                scales: {
+                    x: { ...scaleOpts(), grid: { display: false } },
+                    y: scaleOpts({ beginAtZero: true, ticks: { stepSize: 1 } })
+                },
+                plugins: {
+                    ...base.plugins,
+                    legend: { display: false },
+                    datalabels: {
+                        ...DL_BAR_PILL,
+                        font: DL_FONT,
+                        display: (ctx) => Number(ctx.dataset.data[ctx.dataIndex] || 0) !== 0,
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 4,
+                        clip: false,
+                        clamp: true,
+                        formatter: (v) => num(v, 0)
+                    }
+                }
+            }
+        }));
+    }
+
+    function buildSalesPeriodEurChart(data, base) {
+        const s = data?.sales || {};
+        const el = document.getElementById('chart-sales-period-eur');
+        if (!el) return;
+
+        const won = pf(s.total_won_value_eur);
+        const lost = pf(s.total_lost_value_eur);
+        const pending = pf(s.total_pending_value_eur);
+
+        charts.push(new Chart(el, {
+            type: 'bar',
+            data: {
+                labels: ['Kazanılan tutar', 'Kaybedilen tutar', 'Bekleyen anlaşma değeri'],
+                datasets: [{
+                    label: 'Tutar',
+                    data: [won, lost, pending],
+                    backgroundColor: ['#047857', '#B91C1C', '#1e40af'],
+                    borderRadius: 6,
+                    maxBarThickness: 48
+                }]
+            },
+            options: {
+                ...base,
+                layout: { padding: { top: 8, right: 72, bottom: 8, left: 8 } },
+                indexAxis: 'y',
+                scales: {
+                    x: scaleOpts({ beginAtZero: true }),
+                    y: { ...scaleOpts(), grid: { display: false } }
+                },
+                plugins: {
+                    ...base.plugins,
+                    legend: { display: false },
+                    tooltip: {
+                        ...base.plugins.tooltip,
+                        callbacks: {
+                            label(ctx) {
+                                return ` ${eur(ctx.raw)}`;
+                            }
+                        }
+                    },
+                    datalabels: {
+                        ...DL_BAR_PILL,
+                        font: { ...DL_FONT, size: 12 },
+                        display: (ctx) => Number(ctx.dataset.data[ctx.dataIndex] || 0) !== 0,
+                        anchor: 'end',
+                        align: 'end',
+                        offset: 8,
+                        clip: false,
+                        clamp: true,
+                        formatter: (v) => eur(v)
+                    }
+                }
+            }
+        }));
+    }
+
+    function buildSalesConsultsDeptChart(data, base) {
+        const byDept = data?.sales?.sales_consults_by_department || {};
+        const el = document.getElementById('chart-sales-consults-dept');
+        if (!el) return;
+
+        const keys = Object.keys(byDept).sort((a, b) => pf(byDept[b]) - pf(byDept[a]));
         if (keys.length === 0) return;
 
         charts.push(new Chart(el, {
             type: 'bar',
             data: {
-                labels: keys.map(k => stageMap[k] || k),
+                labels: keys.map(k => salesConsultDeptLabel(k)),
                 datasets: [{
-                    label: 'Adet',
-                    data: keys.map(k => Number(pipe[k] || 0)),
-                    backgroundColor: 'rgba(25, 135, 84, 0.65)',
+                    label: 'Danışmanlık sayısı',
+                    data: keys.map(k => Number(byDept[k] || 0)),
+                    backgroundColor: '#475569',
                     borderRadius: 6,
-                    maxBarThickness: 40
+                    maxBarThickness: 44
                 }]
             },
             options: {
                 ...base,
+                layout: { padding: { top: 8, right: 52, bottom: 8, left: 8 } },
                 indexAxis: 'y',
                 scales: {
-                    x: scaleOpts({ ticks: { stepSize: 1 } }),
+                    x: scaleOpts({ beginAtZero: true, ticks: { stepSize: 1 } }),
                     y: { ...scaleOpts(), grid: { display: false } }
                 },
-                plugins: { ...base.plugins, legend: { display: false } }
-            }
-        }));
-    }
-
-    function buildCostDonut(data, base) {
-        const c = data?.costs || {};
-        const el = document.getElementById('chart-costs');
-        if (!el) return;
-
-        const labor = pf(c.total_labor_cost_eur);
-        const material = pf(c.total_material_cost_eur);
-        const subc = pf(c.total_subcontractor_cost_eur);
-        const total = pf(c.total_actual_cost_eur);
-        const other = Math.max(0, total - labor - material - subc);
-
-        charts.push(new Chart(el, {
-            type: 'doughnut',
-            data: {
-                labels: ['İşçilik', 'Malzeme', 'Taşeron', 'Diğer'],
-                datasets: [{
-                    data: [labor, material, subc, other],
-                    backgroundColor: ['#0d6efd', '#ffc107', '#6f42c1', '#adb5bd'],
-                    borderWidth: 0,
-                    hoverOffset: 6
-                }]
-            },
-            options: {
-                ...base,
-                cutout: '55%',
                 plugins: {
                     ...base.plugins,
-                    legend: { ...base.plugins.legend, position: 'bottom' }
+                    legend: { display: false },
+                    datalabels: {
+                        ...DL_BAR_PILL,
+                        font: DL_FONT,
+                        display: (ctx) => Number(ctx.dataset.data[ctx.dataIndex] || 0) !== 0,
+                        anchor: 'end',
+                        align: 'end',
+                        offset: 6,
+                        clip: false,
+                        clamp: true,
+                        formatter: (v) => num(v, 0)
+                    }
                 }
             }
         }));
@@ -836,12 +1052,27 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             options: {
                 ...base,
+                layout: { padding: { top: 8, right: 52, bottom: 8, left: 8 } },
                 indexAxis: 'y',
                 scales: {
                     x: scaleOpts({ ticks: { stepSize: 1 } }),
                     y: { ...scaleOpts(), grid: { display: false } }
                 },
-                plugins: { ...base.plugins, legend: { display: false } }
+                plugins: {
+                    ...base.plugins,
+                    legend: { display: false },
+                    datalabels: {
+                        ...DL_BAR_PILL,
+                        font: DL_FONT,
+                        display: (ctx) => Number(ctx.dataset.data[ctx.dataIndex] || 0) !== 0,
+                        anchor: 'end',
+                        align: 'end',
+                        offset: 6,
+                        clip: false,
+                        clamp: true,
+                        formatter: (v) => num(v, 0)
+                    }
+                }
             }
         }));
     }
@@ -871,10 +1102,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             options: {
                 ...base,
+                layout: { padding: 18 },
                 cutout: '55%',
                 plugins: {
                     ...base.plugins,
-                    legend: { ...base.plugins.legend, position: 'bottom' }
+                    legend: { ...base.plugins.legend, position: 'bottom' },
+                    datalabels: {
+                        ...DL_DOUGHNUT,
+                        formatter: (v, ctx) => dlDoughnutPctAndEur(v, ctx)
+                    }
                 }
             }
         }));
@@ -899,8 +1135,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             options: {
                 ...base,
+                layout: { padding: { top: 18, right: 8, bottom: 8, left: 8 } },
                 scales: { x: { ...scaleOpts(), grid: { display: false } }, y: scaleOpts() },
-                plugins: { ...base.plugins, legend: { display: false } }
+                plugins: {
+                    ...base.plugins,
+                    legend: { display: false },
+                    datalabels: {
+                        ...DL_BAR_PILL,
+                        font: DL_FONT,
+                        display: (ctx) => Number(ctx.dataset.data[ctx.dataIndex] || 0) !== 0,
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 4,
+                        clip: false,
+                        clamp: true,
+                        formatter: (v) => num(v, 0)
+                    }
+                }
             }
         }));
     }
@@ -923,10 +1174,15 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             options: {
                 ...base,
+                layout: { padding: 18 },
                 cutout: '50%',
                 plugins: {
                     ...base.plugins,
-                    legend: { ...base.plugins.legend, position: 'bottom' }
+                    legend: { ...base.plugins.legend, position: 'bottom' },
+                    datalabels: {
+                        ...DL_DOUGHNUT,
+                        formatter: (v, ctx) => dlDoughnutCountPct(v, ctx)
+                    }
                 }
             }
         }));
@@ -954,8 +1210,23 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             options: {
                 ...base,
+                layout: { padding: { top: 18, right: 8, bottom: 8, left: 8 } },
                 scales: { x: { ...scaleOpts(), grid: { display: false } }, y: scaleOpts({ ticks: { stepSize: 1 } }) },
-                plugins: { ...base.plugins, legend: { display: false } }
+                plugins: {
+                    ...base.plugins,
+                    legend: { display: false },
+                    datalabels: {
+                        ...DL_BAR_PILL,
+                        font: DL_FONT,
+                        display: (ctx) => Number(ctx.dataset.data[ctx.dataIndex] || 0) !== 0,
+                        anchor: 'end',
+                        align: 'top',
+                        offset: 4,
+                        clip: false,
+                        clamp: true,
+                        formatter: (v) => num(v, 0)
+                    }
+                }
             }
         }));
     }

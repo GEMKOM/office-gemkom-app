@@ -85,8 +85,8 @@
 }
 
 .chart-wrap--sm  { height: 200px; }
-.chart-wrap--md  { height: 260px; }
-.chart-wrap--lg  { height: 300px; }
+.chart-wrap--md  { height: 290px; }
+.chart-wrap--lg  { height: 320px; }
 
 .chart-wrap canvas {
     display: block;
@@ -181,6 +181,20 @@
     border: 1px solid rgba(108, 117, 125, 0.2);
 }
 
+/* ---------- Section titles (reports) ---------- */
+.ov-section-label {
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: #6c757d;
+    margin-bottom: 0.35rem;
+}
+
+.ov-sales-footnote {
+    font-size: 0.85rem;
+}
+
 /* ---------- Snapshot hint ---------- */
 .ov-hint {
     font-size: 0.72rem;
@@ -218,6 +232,6 @@
     .ov-stat-grid--5 { grid-template-columns: repeat(2, 1fr); }
 
     .chart-wrap--sm  { height: 180px; }
-    .chart-wrap--md  { height: 220px; }
+    .chart-wrap--md  { height: 250px; }
     .chart-wrap--lg  { height: 250px; }
 }
