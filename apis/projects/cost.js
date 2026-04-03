@@ -15,6 +15,7 @@ import { backendBase } from '../../base.js';
  * @param {number} [options.customer] - Filter by customer ID
  * @param {string} [options.search] - Search in title / job_no
  * @param {string} [options.ordering] - Order by any field (e.g. -actual_total_cost, job_no)
+ * @param {string} [options.facility] - `rolling_mill` (RM only), `meltshop` (non-RM); omit for all jobs
  * @param {number} [options.page] - Page number
  * @param {number} [options.page_size] - Page size
  * @returns {Promise<{ count: number, next: string|null, previous: string|null, results: Array }>}
@@ -36,6 +37,9 @@ export async function getCostTable(options = {}) {
     }
     if (options.ordering != null && options.ordering !== '') {
         queryParams.append('ordering', options.ordering);
+    }
+    if (options.facility === 'rolling_mill' || options.facility === 'meltshop') {
+        queryParams.append('facility', options.facility);
     }
     if (options.page != null) {
         queryParams.append('page', String(options.page));

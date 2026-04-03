@@ -20,7 +20,26 @@ let summaryCards = null;
 let filtersComponent = null;
 let currentPage = 1;
 let pageSize = 20;
-let currentOrdering = '-actual_cost';
+let currentOrdering = '-date';
+
+/**
+ * Table column `field` → API `ordering` param (cost_table backend).
+ * Only listed keys differ from the column field name.
+ */
+const COLUMN_FIELD_TO_ORDERING = {
+    actual_total_cost: 'actual_cost',
+    total_weight_kg: 'weight',
+    target_completion_date: 'date'
+};
+
+/** All valid `ordering` query values (Sıralama dropdown + column-sort sync). */
+const ORDERING_SELECT_VALUES = new Set([
+    'job_no', '-job_no', 'title', '-title', 'weight', '-weight',
+    'actual_cost', '-actual_cost', 'price_per_kg', '-price_per_kg',
+    'selling_price', '-selling_price', 'margin_eur', '-margin_eur',
+    'margin_pct', '-margin_pct', 'completion_pct', '-completion_pct',
+    'date', '-date'
+]);
 let expandedRows = new Set();
 let costTableRoots = [];
 let childrenCache = new Map();
@@ -279,7 +298,7 @@ function buildFooter({ displayedData, columns, hasActions }) {
     vm.set('selling_price', `<span class="fw-bold">${formatMoney(s.sellingPrice)}</span>`);
     vm.set('margin_eur', `<span class="fw-bold">${formatMoney(s.marginEur)}</span>`);
     vm.set('margin_pct', mpct != null ? `<span class="fw-bold">${formatPct(mpct)}</span>` : '<span class="text-muted">-</span>');
-    vm.set('last_updated', '<span class="text-muted">-</span>');
+    vm.set('target_completion_date', '<span class="text-muted">-</span>');
 
     const tds = (columns || []).map(col => {
         const content = vm.has(col.field) ? vm.get(col.field) : '<span class="text-muted">-</span>';
@@ -368,7 +387,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     filtersComponent = new FiltersComponent('filters-placeholder', {
         title: 'Analitik Filtreleri',
-        onApply: () => { currentPage = 1; loadData(); },
+        onApply: () => {
+            const f = filtersComponent.getFilterValues();
+            if (f.ordering !== undefined && f.ordering !== '') currentOrdering = f.ordering;
+            currentPage = 1;
+            loadData();
+        },
         onClear: () => { setDefaults(); currentPage = 1; loadData(); }
     });
 
@@ -404,17 +428,42 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         })
         .addSelectFilter({
+            id: 'facility',
+            label: 'Tesis',
+            colSize: 2,
+            value: '',
+            placeholder: 'Tümü',
+            options: [
+                { value: 'rolling_mill', label: 'Haddehane' },
+                { value: 'meltshop', label: 'Çelikhane' }
+            ]
+        })
+        .addSelectFilter({
             id: 'ordering',
             label: 'Sıralama',
             colSize: 3,
-            value: '-actual_cost',
+            value: '-date',
             options: [
-                { value: '-actual_cost', label: 'Maliyet (azalan)' },
-                { value: 'actual_cost', label: 'Maliyet (artan)' },
-                { value: '-margin_pct', label: 'Marj % (azalan)' },
+                { value: '-date', label: 'Hedef tarih (yeni önce)' },
+                { value: 'date', label: 'Hedef tarih (eski önce)' },
+                { value: 'job_no', label: 'İş No (A→Z)' },
+                { value: '-job_no', label: 'İş No (Z→A)' },
+                { value: 'title', label: 'Başlık (A→Z)' },
+                { value: '-title', label: 'Başlık (Z→A)' },
+                { value: 'weight', label: 'Ağırlık (artan)' },
+                { value: '-weight', label: 'Ağırlık (azalan)' },
+                { value: '-actual_cost', label: 'Toplam maliyet (azalan)' },
+                { value: 'actual_cost', label: 'Toplam maliyet (artan)' },
+                { value: 'price_per_kg', label: 'Kg fiyatı (artan)' },
+                { value: '-price_per_kg', label: 'Kg fiyatı (azalan)' },
+                { value: 'selling_price', label: 'Satış fiyatı (artan)' },
+                { value: '-selling_price', label: 'Satış fiyatı (azalan)' },
+                { value: 'margin_eur', label: 'Marj € (artan)' },
+                { value: '-margin_eur', label: 'Marj € (azalan)' },
                 { value: 'margin_pct', label: 'Marj % (artan)' },
-                { value: 'job_no', label: 'İş No (artan)' },
-                { value: '-job_no', label: 'İş No (azalan)' }
+                { value: '-margin_pct', label: 'Marj % (azalan)' },
+                { value: 'completion_pct', label: 'Tamamlanma (artan)' },
+                { value: '-completion_pct', label: 'Tamamlanma (azalan)' }
             ]
         });
 
@@ -433,7 +482,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         columns: [
             { field: '_expand', label: '', sortable: false, width: '80px', formatter: expandColumnFormatter },
             { field: 'job_no', label: 'İş No', sortable: true, width: '160px', formatter: jobNoFormatter },
-            { field: 'title', label: 'Başlık', sortable: false },
+            { field: 'title', label: 'Başlık', sortable: true },
             {
                 field: 'customer_name', label: 'Müşteri', sortable: false, width: '220px',
                 formatter: (v, row) => {
@@ -441,16 +490,16 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return name ? `<span class="status-badge status-grey">${name}</span>` : '-';
                 }
             },
-            { field: 'status', label: 'Durum', sortable: true, formatter: v => statusBadge(v) },
+            { field: 'status', label: 'Durum', sortable: false, formatter: v => statusBadge(v) },
             { field: 'total_weight_kg', label: 'Ağırlık (kg)', sortable: true, formatter: v => (v != null && v !== '' ? parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '<span class="text-muted">-</span>') },
             /* detail columns — hidden by default, revealed via toggle */
-            { field: 'labor_cost', label: 'İşçilik + Vergi', sortable: true, formatter: laborCellFormatter },
-            { field: 'material_cost', label: 'Malzeme', sortable: true, formatter: materialCellFormatter },
-            { field: 'subcontractor_cost', label: 'Taşeron', sortable: true, formatter: subcontractorCellFormatter },
-            { field: 'paint_cost', label: 'Boya + Malzeme', sortable: true, formatter: paintCellFormatter },
-            { field: 'qc_cost', label: 'KK', sortable: true, formatter: formatMoney },
-            { field: 'shipping_cost', label: 'Sevkiyat', sortable: true, formatter: formatMoney },
-            { field: 'general_expenses_cost', label: 'Genel Giderler', sortable: true, formatter: generalExpensesCellFormatter },
+            { field: 'labor_cost', label: 'İşçilik + Vergi', sortable: false, formatter: laborCellFormatter },
+            { field: 'material_cost', label: 'Malzeme', sortable: false, formatter: materialCellFormatter },
+            { field: 'subcontractor_cost', label: 'Taşeron', sortable: false, formatter: subcontractorCellFormatter },
+            { field: 'paint_cost', label: 'Boya + Malzeme', sortable: false, formatter: paintCellFormatter },
+            { field: 'qc_cost', label: 'KK', sortable: false, formatter: formatMoney },
+            { field: 'shipping_cost', label: 'Sevkiyat', sortable: false, formatter: formatMoney },
+            { field: 'general_expenses_cost', label: 'Genel Giderler', sortable: false, formatter: generalExpensesCellFormatter },
             /* end detail columns */
             { field: 'actual_total_cost', label: 'Toplam Maliyet', sortable: true, formatter: v => `<span class="fw-bold">${formatMoney(v)}</span>` },
             { field: 'price_per_kg', label: 'Kg Fiyatı', sortable: true, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-primary">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
@@ -461,7 +510,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'margin_eur', label: 'Marj (€)', sortable: true, formatter: v => (v != null && v !== '' ? formatMoney(v) : '<span class="text-muted">-</span>') },
             { field: 'margin_pct', label: 'Marj %', sortable: true, formatter: (v, row) => marginChip(v, row?.selling_price) },
             { field: 'completion_pct', label: 'Tamamlanma', sortable: true, width: '160px', formatter: v => completionBar(v) },
-            { field: 'last_updated', label: 'Tarih', sortable: false, formatter: formatDate }
+            { field: 'target_completion_date', label: 'Hedef tarih', sortable: true, width: '120px', formatter: formatDate }
         ],
         data: [],
         footer: buildFooter,
@@ -471,8 +520,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentPage: 1,
         itemsPerPage: pageSize,
         onSort: (field, direction) => {
-            currentOrdering = direction === 'asc' ? field : `-${field}`;
+            const apiField = COLUMN_FIELD_TO_ORDERING[field] || field;
+            currentOrdering = direction === 'asc' ? apiField : `-${apiField}`;
             currentPage = 1;
+            if (filtersComponent && ORDERING_SELECT_VALUES.has(currentOrdering)) {
+                filtersComponent.setFilterValues({ ordering: currentOrdering });
+            }
             loadData();
         },
         onPageChange: (page) => { currentPage = page; loadData(); },
@@ -492,7 +545,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 function setDefaults() {
-    filtersComponent.setFilterValues({ status: [], search: '', ordering: '-actual_cost' });
+    currentOrdering = '-date';
+    filtersComponent.setFilterValues({ status: [], search: '', ordering: '-date', facility: '' });
 }
 
 /* ── cost breakdown toggle (hide/show detail columns) ──────────────── */
@@ -553,8 +607,9 @@ async function loadData() {
     const statusIn = statusArr.join(',');
     const search = filters.search || '';
     const customer = filters.customer || '';
-    const ordering = filters.ordering || currentOrdering;
-    currentOrdering = ordering;
+    const facilityRaw = filters.facility;
+    const facility = (facilityRaw === 'rolling_mill' || facilityRaw === 'meltshop') ? facilityRaw : undefined;
+    const ordering = currentOrdering;
 
     summaryCards.showLoading();
     costTable.setLoading(true);
@@ -566,6 +621,7 @@ async function loadData() {
             search: search || undefined,
             customer: customer ? parseInt(customer, 10) : undefined,
             ordering,
+            facility,
             page: currentPage,
             page_size: pageSize
         });
@@ -606,46 +662,93 @@ function ensureModalContainer(id) {
 
 function showError(msg) { console.error(msg); showNotification(msg, 'error'); }
 
+/** Cost table row for a job (exact job_no) — used to align labor + vergi with Maliyet Tablosu. */
+async function fetchCostTableRowForJob(jobNo) {
+    if (!jobNo) return null;
+    const res = await getCostTable({ search: jobNo, page_size: 100 });
+    const rows = res.results || [];
+    return rows.find(r => r.job_no === jobNo) || null;
+}
+
+/** Split job-level personel genel gideri (vergi) between machining and welding by net işçilik payı. */
+function splitEmployeeOverheadByLaborCost(overhead, machBase, weldBase) {
+    const o = toNumber(overhead);
+    const m = toNumber(machBase);
+    const w = toNumber(weldBase);
+    const sum = m + w;
+    if (sum <= 0) {
+        if (m > 0) return { mach: o, weld: 0 };
+        if (w > 0) return { mach: 0, weld: o };
+        return { mach: 0, weld: 0 };
+    }
+    const mach = o * (m / sum);
+    const weld = o - mach;
+    return { mach, weld };
+}
+
 /* ── Job details (combined) ────────────────────────────────────────── */
 
 async function showJobDetails(jobNo) {
     if (!jobNo) { showError('İş numarası bulunamadı.'); return; }
     try {
         ensureModalContainer('job-details-modal-container');
-        const data = await getCombinedJobCosts({ job_no: jobNo });
+        const [data, costRow] = await Promise.all([
+            getCombinedJobCosts({ job_no: jobNo }),
+            fetchCostTableRowForJob(jobNo)
+        ]);
         const results = data.results || [];
         if (results.length === 0) { showError('Maliyet verisi bulunamadı.'); return; }
         const jobData = results[0];
         const machining = jobData.machining || null;
         const welding = jobData.welding || null;
-        const combinedTotalCost = jobData.combined_total_cost || 0;
+        const machBase = toNumber(machining?.total_cost);
+        const weldBase = toNumber(welding?.total_cost);
+        const laborNetFromTable = costRow ? toNumber(costRow.labor_cost) : 0;
+        const overheadTotal = costRow ? toNumber(costRow.employee_overhead_cost) : 0;
+        const laborNet = laborNetFromTable > 0 ? laborNetFromTable : (machBase + weldBase);
+        const laborWithTax = laborNet + overheadTotal;
+        const { mach: machTax, weld: weldTax } = splitEmployeeOverheadByLaborCost(overheadTotal, machBase, weldBase);
+        const machWithTax = machBase + machTax;
+        const weldWithTax = weldBase + weldTax;
+
         const combinedTotalHours = jobData.combined_total_hours || 0;
-        const costPerHour = combinedTotalHours > 0 ? combinedTotalCost / combinedTotalHours : 0;
+        const costPerHourWithTax = combinedTotalHours > 0 ? laborWithTax / combinedTotalHours : 0;
 
         const modal = new DisplayModal('job-details-modal-container', { title: `${jobNo} - İş Maliyeti Detayları`, icon: 'fas fa-calculator', size: 'xl', showEditButton: false });
 
         modal.addCustomSection({ title: 'Özet', icon: 'fas fa-chart-pie', iconColor: 'text-primary', customContent: summaryRow([
-            { icon: 'euro-sign', cls: 'text-primary', value: `€${combinedTotalCost.toFixed(2)}`, label: 'Toplam Maliyet' },
-            { icon: 'clock', cls: 'text-primary', value: combinedTotalHours.toFixed(1), label: 'Toplam Saat' },
-            { icon: 'calculator', cls: 'text-primary', value: `€${costPerHour.toFixed(2)}`, label: 'Saat Başı Maliyet' }
+            { icon: 'money-bill-wave', cls: 'text-primary', value: `€${laborNet.toFixed(2)}`, label: 'İşçilik (vergi hariç)', colSize: 4 },
+            { icon: 'percent', cls: 'text-primary', value: `€${overheadTotal.toFixed(2)}`, label: 'Vergi / genel gider', colSize: 4 },
+            { icon: 'euro-sign', cls: 'text-primary', value: `€${laborWithTax.toFixed(2)}`, label: 'İşçilik + Vergi', colSize: 4 }
+        ]) + summaryRow([
+            { icon: 'clock', cls: 'text-primary', value: combinedTotalHours.toFixed(1), label: 'Toplam Saat', colSize: 6 },
+            { icon: 'calculator', cls: 'text-primary', value: `€${costPerHourWithTax.toFixed(2)}`, label: 'Saat Başı (işçilik + vergi)', colSize: 6 }
         ]) });
 
         const machTotalH = machining ? (machining.hours.weekday_work || 0) + (machining.hours.after_hours || 0) + (machining.hours.sunday || 0) : 0;
         const machOTCost = machining ? (machining.costs.after_hours || 0) + (machining.costs.sunday || 0) : 0;
+        const machCphWithTax = machTotalH > 0 ? machWithTax / machTotalH : 0;
         modal.addCustomSection({ title: 'Talaşlı İmalat', icon: 'fas fa-cog', iconColor: 'text-primary', customContent: machining ? summaryRow([
-            { icon: 'euro-sign', cls: 'text-primary', value: `€${(machining.total_cost || 0).toFixed(2)}`, label: 'Maliyet' },
-            { icon: 'clock', cls: 'text-primary', value: machTotalH.toFixed(1), label: 'Saat' },
-            { icon: 'calendar', cls: 'text-primary', value: `€${machOTCost.toFixed(2)}`, label: 'Mesai Maliyeti' },
-            { icon: 'calculator', cls: 'text-primary', value: `€${(machTotalH > 0 ? (machining.total_cost || 0) / machTotalH : 0).toFixed(2)}`, label: 'Saat/Maliyet' }
+            { icon: 'money-bill-wave', cls: 'text-primary', value: `€${machBase.toFixed(2)}`, label: 'İşçilik (vergi hariç)', colSize: 4 },
+            { icon: 'percent', cls: 'text-primary', value: `€${machTax.toFixed(2)}`, label: 'Vergi / genel gider', colSize: 4 },
+            { icon: 'euro-sign', cls: 'text-primary', value: `€${machWithTax.toFixed(2)}`, label: 'İşçilik + Vergi', colSize: 4 }
+        ]) + summaryRow([
+            { icon: 'clock', cls: 'text-primary', value: machTotalH.toFixed(1), label: 'Saat', colSize: 4 },
+            { icon: 'calendar', cls: 'text-primary', value: `€${machOTCost.toFixed(2)}`, label: 'Mesai Maliyeti', colSize: 4 },
+            { icon: 'calculator', cls: 'text-primary', value: `€${machCphWithTax.toFixed(2)}`, label: 'Saat/Maliyet (+ vergi)', colSize: 4 }
         ]) + `<div class="text-center mt-2"><button class="btn btn-primary btn-sm" onclick="window.showMachiningDetails('${jobNo}')"><i class="fas fa-table me-1"></i>Detay</button></div>` : '<div class="text-center py-3 text-muted">Talaşlı imalat verisi yok.</div>' });
 
         const weldTotalH = welding ? (welding.hours.regular || 0) + (welding.hours.after_hours || 0) + (welding.hours.holiday || 0) : 0;
         const weldOTCost = welding ? (welding.costs.after_hours || 0) + (welding.costs.holiday || 0) : 0;
+        const weldCphWithTax = weldTotalH > 0 ? weldWithTax / weldTotalH : 0;
         modal.addCustomSection({ title: 'Kaynaklı İmalat', icon: 'fas fa-fire', iconColor: 'text-danger', customContent: welding ? summaryRow([
-            { icon: 'euro-sign', cls: 'text-danger', value: `€${(welding.total_cost || 0).toFixed(2)}`, label: 'Maliyet' },
-            { icon: 'clock', cls: 'text-danger', value: weldTotalH.toFixed(1), label: 'Saat' },
-            { icon: 'calendar', cls: 'text-danger', value: `€${weldOTCost.toFixed(2)}`, label: 'Mesai Maliyeti' },
-            { icon: 'calculator', cls: 'text-danger', value: `€${(weldTotalH > 0 ? (welding.total_cost || 0) / weldTotalH : 0).toFixed(2)}`, label: 'Saat/Maliyet' }
+            { icon: 'money-bill-wave', cls: 'text-danger', value: `€${weldBase.toFixed(2)}`, label: 'İşçilik (vergi hariç)', colSize: 4 },
+            { icon: 'percent', cls: 'text-danger', value: `€${weldTax.toFixed(2)}`, label: 'Vergi / genel gider', colSize: 4 },
+            { icon: 'euro-sign', cls: 'text-danger', value: `€${weldWithTax.toFixed(2)}`, label: 'İşçilik + Vergi', colSize: 4 }
+        ]) + summaryRow([
+            { icon: 'clock', cls: 'text-danger', value: weldTotalH.toFixed(1), label: 'Saat', colSize: 4 },
+            { icon: 'calendar', cls: 'text-danger', value: `€${weldOTCost.toFixed(2)}`, label: 'Mesai Maliyeti', colSize: 4 },
+            { icon: 'calculator', cls: 'text-danger', value: `€${weldCphWithTax.toFixed(2)}`, label: 'Saat/Maliyet (+ vergi)', colSize: 4 }
         ]) + `<div class="text-center mt-2"><button class="btn btn-danger btn-sm" onclick="window.showWeldingDetails('${jobNo}')"><i class="fas fa-table me-1"></i>Detay</button></div>` : '<div class="text-center py-3 text-muted">Kaynaklı imalat verisi yok.</div>' });
 
         modal.render().show();
@@ -653,7 +756,10 @@ async function showJobDetails(jobNo) {
 }
 
 function summaryRow(items) {
-    const cols = items.map(it => `<div class="col-md-${Math.floor(12 / items.length)}"><div class="card"><div class="card-body text-center"><i class="fas fa-${it.icon} ${it.cls} mb-2"></i><div class="fw-bold">${it.value}</div><small class="text-muted">${it.label}</small></div></div></div>`).join('');
+    const cols = items.map(it => {
+        const col = it.colSize != null ? it.colSize : Math.max(1, Math.floor(12 / items.length));
+        return `<div class="col-md-${col}"><div class="card"><div class="card-body text-center"><i class="fas fa-${it.icon} ${it.cls} mb-2"></i><div class="fw-bold">${it.value}</div><small class="text-muted">${it.label}</small></div></div></div>`;
+    }).join('');
     return `<div class="row mb-3">${cols}</div>`;
 }
 
@@ -662,15 +768,28 @@ function summaryRow(items) {
 async function showMachiningDetails(jobNo) {
     try {
         ensureModalContainer('machining-details-modal-container');
-        const data = await getMachiningJobEntries({ job_no: jobNo });
+        const [data, costRow, combinedData] = await Promise.all([
+            getMachiningJobEntries({ job_no: jobNo }),
+            fetchCostTableRowForJob(jobNo),
+            getCombinedJobCosts({ job_no: jobNo })
+        ]);
         const groups = data.entries || [];
         const summary = data.summary || {};
+        const job = combinedData.results?.[0];
+        const machBase = toNumber(job?.machining?.total_cost);
+        const weldBase = toNumber(job?.welding?.total_cost);
+        const overhead = costRow ? toNumber(costRow.employee_overhead_cost) : 0;
+        const machTax = splitEmployeeOverheadByLaborCost(overhead, machBase, weldBase).mach;
+        const netMach = toNumber(summary.total_cost);
+        const machWithTax = netMach + machTax;
         const modal = new DisplayModal('machining-details-modal-container', { title: `${jobNo} - Talaşlı İmalat Detayları`, icon: 'fas fa-cog', size: 'xl', showEditButton: false });
 
         modal.addSection({ title: 'Özet', icon: 'fas fa-chart-pie', iconColor: 'text-primary', fields: [
             { id: 'te', label: 'Toplam Kayıt', value: summary.total_entries || 0, type: 'number', icon: 'fas fa-list', colSize: 2 },
             { id: 'th', label: 'Toplam Saat', value: summary.total_hours || 0, type: 'number', icon: 'fas fa-clock', format: v => `${(Number(v) || 0).toFixed(1)} saat`, colSize: 2 },
-            { id: 'tc', label: 'Toplam Maliyet', value: summary.total_cost || '0', type: 'text', icon: 'fas fa-euro-sign', format: v => formatMoney(v), colSize: 2 },
+            { id: 'tn', label: 'İşçilik (vergi hariç)', value: netMach, type: 'text', icon: 'fas fa-money-bill-wave', format: v => formatMoney(v), colSize: 2 },
+            { id: 'tv', label: 'Vergi / genel gider', value: machTax, type: 'text', icon: 'fas fa-percent', format: v => formatMoney(v), colSize: 2 },
+            { id: 'tg', label: 'İşçilik + Vergi', value: machWithTax, type: 'text', icon: 'fas fa-euro-sign', format: v => formatMoney(v), colSize: 2 },
             { id: 'ww', label: 'Hafta İçi', value: summary.breakdown_by_type?.weekday_work || 0, type: 'number', icon: 'fas fa-calendar-day', format: v => `${(Number(v) || 0).toFixed(1)} saat`, colSize: 2 },
             { id: 'ah', label: 'Mesai', value: summary.breakdown_by_type?.after_hours || 0, type: 'number', icon: 'fas fa-clock', format: v => `${(Number(v) || 0).toFixed(1)} saat`, colSize: 2 },
             { id: 'su', label: 'Pazar', value: summary.breakdown_by_type?.sunday || 0, type: 'number', icon: 'fas fa-calendar', format: v => `${(Number(v) || 0).toFixed(1)} saat`, colSize: 2 }
@@ -713,15 +832,28 @@ async function showMachiningDetails(jobNo) {
 async function showWeldingDetails(jobNo) {
     try {
         ensureModalContainer('welding-details-modal-container');
-        const data = await getWeldingJobCostDetail({ job_no: jobNo });
+        const [data, costRow, combinedData] = await Promise.all([
+            getWeldingJobCostDetail({ job_no: jobNo }),
+            fetchCostTableRowForJob(jobNo),
+            getCombinedJobCosts({ job_no: jobNo })
+        ]);
         const entries = data.entries || [];
         const summary = data.summary || {};
+        const job = combinedData.results?.[0];
+        const machBase = toNumber(job?.machining?.total_cost);
+        const weldBase = toNumber(job?.welding?.total_cost);
+        const overhead = costRow ? toNumber(costRow.employee_overhead_cost) : 0;
+        const weldTax = splitEmployeeOverheadByLaborCost(overhead, machBase, weldBase).weld;
+        const netWeld = toNumber(summary.total_cost);
+        const weldWithTax = netWeld + weldTax;
         const modal = new DisplayModal('welding-details-modal-container', { title: `${jobNo} - Kaynaklı İmalat Detayları`, icon: 'fas fa-fire', size: 'xl', showEditButton: false });
 
         modal.addSection({ title: 'Özet', icon: 'fas fa-chart-pie', iconColor: 'text-danger', fields: [
             { id: 'te', label: 'Toplam Kayıt', value: summary.total_entries || entries.length, type: 'number', icon: 'fas fa-list', colSize: 2 },
             { id: 'th', label: 'Toplam Saat', value: summary.total_hours || 0, type: 'number', icon: 'fas fa-clock', format: v => `${(Number(v) || 0).toFixed(1)} saat`, colSize: 2 },
-            { id: 'tc', label: 'Toplam Maliyet', value: summary.total_cost || '0', type: 'text', icon: 'fas fa-euro-sign', format: v => formatMoney(v), colSize: 2 },
+            { id: 'tn', label: 'İşçilik (vergi hariç)', value: netWeld, type: 'text', icon: 'fas fa-money-bill-wave', format: v => formatMoney(v), colSize: 2 },
+            { id: 'tv', label: 'Vergi / genel gider', value: weldTax, type: 'text', icon: 'fas fa-percent', format: v => formatMoney(v), colSize: 2 },
+            { id: 'tg', label: 'İşçilik + Vergi', value: weldWithTax, type: 'text', icon: 'fas fa-euro-sign', format: v => formatMoney(v), colSize: 2 },
             { id: 'rh', label: 'Normal Saat', value: summary.breakdown_by_type?.regular || 0, type: 'number', icon: 'fas fa-calendar-day', format: v => `${(Number(v) || 0).toFixed(1)} saat`, colSize: 2 },
             { id: 'ah', label: 'Mesai Saat', value: summary.breakdown_by_type?.after_hours || 0, type: 'number', icon: 'fas fa-clock', format: v => `${(Number(v) || 0).toFixed(1)} saat`, colSize: 2 },
             { id: 'hh', label: 'Tatil Saat', value: summary.breakdown_by_type?.holiday || 0, type: 'number', icon: 'fas fa-calendar', format: v => `${(Number(v) || 0).toFixed(1)} saat`, colSize: 2 }
