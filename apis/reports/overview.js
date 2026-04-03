@@ -4,11 +4,6 @@ import { backendBase } from '../../base.js';
 const REPORTS_BASE_URL = `${backendBase}/reports`;
 
 function buildOverviewQuery({ preset = null, date_from = null, date_to = null, compare = null } = {}) {
-    // Rules:
-    // - preset takes priority over date_from/date_to
-    // - If nothing is provided, defaults to current_month
-    // - Custom range requires both date_from and date_to
-    // - If date_from > date_to, swap
     const qs = new URLSearchParams();
 
     if (preset) {
@@ -43,10 +38,10 @@ function buildOverviewQuery({ preset = null, date_from = null, date_to = null, c
     return qs;
 }
 
-export async function getReportsOverview(params = {}) {
+export async function fetchOverviewSlice(pathSegment, params = {}) {
     const qs = buildOverviewQuery(params);
-    const url = `${REPORTS_BASE_URL}/overview/${qs.toString() ? `?${qs.toString()}` : ''}`;
-
+    const qsStr = qs.toString();
+    const url = `${REPORTS_BASE_URL}/overview/${pathSegment}/${qsStr ? `?${qsStr}` : ''}`;
     const resp = await authedFetch(url, { method: 'GET' });
     if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
@@ -55,3 +50,62 @@ export async function getReportsOverview(params = {}) {
     return await resp.json();
 }
 
+function pickKeyedPayload(raw, key) {
+    if (!raw || typeof raw !== 'object') return {};
+    if (key in raw && raw[key] != null && typeof raw[key] === 'object') return raw[key];
+    return raw;
+}
+
+function mergeObjects(a, b) {
+    return { ...(a && typeof a === 'object' ? a : {}), ...(b && typeof b === 'object' ? b : {}) };
+}
+
+/**
+ * Merges split overview API responses into the shape expected by the Genel Bakış UI.
+ * Missing arguments are treated as empty (undefined) slices.
+ */
+export function mergeOverviewResponses(operations, subcontracting, procurement, sales, jobOrders) {
+    const sub = pickKeyedPayload(subcontracting, 'subcontracting');
+    const proc = pickKeyedPayload(procurement, 'procurement');
+
+    const manufacturing = mergeObjects(jobOrders?.manufacturing, operations?.manufacturing);
+    const maintenance = mergeObjects(jobOrders?.maintenance, operations?.maintenance);
+    const overtime = mergeObjects(jobOrders?.overtime, operations?.overtime);
+
+    const ppOps = operations?.previous_period || {};
+    const ppSales = sales?.previous_period || {};
+    const ppSub = subcontracting?.previous_period || {};
+    const ppProc = procurement?.previous_period || {};
+    const ppJobs = jobOrders?.previous_period || {};
+
+    const previous_period = {
+        manufacturing: mergeObjects(ppJobs.manufacturing, ppOps.manufacturing),
+        maintenance: mergeObjects(ppJobs.maintenance, ppOps.maintenance),
+        overtime: mergeObjects(ppJobs.overtime, ppOps.overtime),
+        sales: ppSales.sales,
+        costs: ppSales.costs,
+        subcontracting: ppSub.subcontracting ?? ppSub,
+        procurement: ppProc.procurement ?? ppProc,
+        quality: ppJobs.quality ?? ppOps.quality
+    };
+
+    const quality = jobOrders?.quality ?? operations?.quality ?? {};
+
+    const jobOrdersMetrics = jobOrders?.job_orders;
+    const jobOrdersCosts = jobOrders?.costs;
+
+    return {
+        meta: operations?.meta ?? sales?.meta ?? jobOrders?.meta ?? {},
+        manufacturing,
+        maintenance,
+        overtime,
+        sales: sales?.sales,
+        costs: sales?.costs ?? jobOrdersCosts,
+        subcontracting: sub,
+        procurement: proc,
+        quality,
+        job_orders: jobOrdersMetrics && typeof jobOrdersMetrics === 'object' ? jobOrdersMetrics : {},
+        job_orders_costs: jobOrdersCosts && typeof jobOrdersCosts === 'object' ? jobOrdersCosts : undefined,
+        previous_period
+    };
+}

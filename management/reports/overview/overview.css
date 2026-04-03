@@ -120,6 +120,7 @@
 
 .ov-stat-grid--3 { grid-template-columns: repeat(3, 1fr); }
 .ov-stat-grid--4 { grid-template-columns: repeat(4, 1fr); }
+.ov-stat-grid--5 { grid-template-columns: repeat(5, 1fr); }
 
 .ov-stat {
     background: #fff;
@@ -213,7 +214,8 @@
 /* ---------- Responsive ---------- */
 @media (max-width: 768px) {
     .ov-stat-grid--3,
-    .ov-stat-grid--4 { grid-template-columns: repeat(2, 1fr); }
+    .ov-stat-grid--4,
+    .ov-stat-grid--5 { grid-template-columns: repeat(2, 1fr); }
 
     .chart-wrap--sm  { height: 180px; }
     .chart-wrap--md  { height: 220px; }

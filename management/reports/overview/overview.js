@@ -4,9 +4,43 @@ import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { showNotification } from '../../../components/notification/notification.js';
-import { getReportsOverview } from '../../../apis/reports/overview.js';
+import { fetchOverviewSlice, mergeOverviewResponses } from '../../../apis/reports/overview.js';
 
 let charts = [];
+
+/** Cached GET /reports/overview/{slice}/ responses for the active filter set. */
+const endpointCache = new Map();
+/** Tracks which tab panes have been rendered for the current filter set (skip redundant refetch + repaint). */
+const paneRendered = { jobs: false, prod: false, sales: false, sub: false, proc: false, qlt: false };
+
+const TAB_ENDPOINTS = {
+    jobs: ['job-orders'],
+    prod: ['operations', 'job-orders'],
+    sales: ['sales'],
+    sub: ['subcontracting'],
+    proc: ['procurement'],
+    qlt: ['operations', 'job-orders']
+};
+
+const TARGET_TO_TAB = {
+    '#pane-jobs': 'jobs',
+    '#pane-prod': 'prod',
+    '#pane-sales': 'sales',
+    '#pane-sub': 'sub',
+    '#pane-proc': 'proc',
+    '#pane-qlt': 'qlt'
+};
+
+const PANE_IDS = {
+    jobs: 'pane-jobs',
+    prod: 'pane-prod',
+    sales: 'pane-sales',
+    sub: 'pane-sub',
+    proc: 'pane-proc',
+    qlt: 'pane-qlt'
+};
+
+let tabLoadSeq = 0;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) return;
@@ -56,7 +90,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     renderSkeleton();
     setDefaultFilters();
-    await loadOverview();
 
     /* ── helpers ─────────────────────────────────────────────────────── */
 
@@ -75,13 +108,106 @@ document.addEventListener('DOMContentLoaded', async () => {
         charts = [];
     }
 
+    function getOverviewParams() {
+        const v = filters.getFilterValues();
+        return {
+            preset: v.preset || null,
+            date_from: v.date_from || null,
+            date_to: v.date_to || null,
+            compare: v.compare === true
+        };
+    }
+
+    function clearEndpointCache() {
+        endpointCache.clear();
+        paneRendered.jobs = false;
+        paneRendered.prod = false;
+        paneRendered.sales = false;
+        paneRendered.sub = false;
+        paneRendered.proc = false;
+        paneRendered.qlt = false;
+    }
+
+    async function ensureEndpoint(name) {
+        if (endpointCache.has(name)) return endpointCache.get(name);
+        const data = await fetchOverviewSlice(name, getOverviewParams());
+        endpointCache.set(name, data);
+        return data;
+    }
+
+    function buildMergedFromCache() {
+        return mergeOverviewResponses(
+            endpointCache.get('operations'),
+            endpointCache.get('subcontracting'),
+            endpointCache.get('procurement'),
+            endpointCache.get('sales'),
+            endpointCache.get('job-orders')
+        );
+    }
+
     function pf(v) {
         const n = Number.parseFloat(v);
         return Number.isFinite(n) ? n : 0;
     }
 
+    /** Handles dotted decimals, comma decimals, and thousands separators common in API strings. */
+    function pfLocale(v) {
+        if (v == null || v === '') return 0;
+        const s = String(v).trim();
+        if (/^\d{1,3}(?:\.\d{3})*,\d+$/.test(s)) {
+            return pf(s.replace(/\./g, '').replace(',', '.'));
+        }
+        if (/^\d+,\d+$/.test(s)) {
+            return pf(s.replace(',', '.'));
+        }
+        return pf(s);
+    }
+
     function num(v, d = 0) {
         return pf(v).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+
+    function numLocale(v, d = 0) {
+        return pfLocale(v).toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d });
+    }
+
+    /** Overtime block: support snake_case and camelCase; unwrap common team row shapes. */
+    function overtimeFromOverview(data) {
+        const o = data?.overtime;
+        if (!o || typeof o !== 'object') return null;
+        const teamsRaw = o.by_team ?? o.byTeam;
+        const teams = Array.isArray(teamsRaw)
+            ? teamsRaw.map(t => ({
+                team: t.team ?? t.team_name ?? t.Team ?? '',
+                hours: t.hours ?? t.Hours
+            }))
+            : [];
+        return {
+            requests_in_range: o.requests_in_range ?? o.requestsInRange,
+            requests_approved_in_range: o.requests_approved_in_range ?? o.requestsApprovedInRange,
+            total_approved_hours: o.total_approved_hours ?? o.totalApprovedHours,
+            by_team: teams
+        };
+    }
+
+    const OVERTIME_TEAM_LABELS = {
+        manufacturing: 'Üretim',
+        planning: 'Planlama',
+        qualitycontrol: 'Kalite kontrol',
+        quality_control: 'Kalite kontrol'
+    };
+
+    const JOB_ORDER_STATUS_LABELS = {
+        draft: 'Taslak',
+        active: 'Aktif',
+        completed: 'Tamamlandı',
+        on_hold: 'Beklemede'
+    };
+
+    function overtimeTeamLabel(key) {
+        if (key == null || key === '') return '';
+        const k = String(key).trim();
+        return OVERTIME_TEAM_LABELS[k] || OVERTIME_TEAM_LABELS[k.toLowerCase()] || k;
     }
 
     function eur(v) {
@@ -189,22 +315,116 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     /* ── data load ───────────────────────────────────────────────────── */
 
+    function paneLoadingHtml() {
+        return `<div class="text-center py-5 text-muted"><div class="spinner-border spinner-border-sm text-primary" role="status"></div><div class="small mt-2">Yükleniyor...</div></div>`;
+    }
+
+    function paneIdleHtml() {
+        return `<div class="text-center py-5 text-muted small ov-pane-idle">Seçildiğinde yüklenecek...</div>`;
+    }
+
+    function attachOverviewTabListeners() {
+        const nav = document.querySelector('#tabs-placeholder .overview-tabs .nav-tabs');
+        if (!nav) return;
+        nav.addEventListener('shown.bs.tab', (e) => {
+            const btn = e.target?.closest?.('[data-bs-toggle="tab"]');
+            if (!btn) return;
+            const target = btn.getAttribute('data-bs-target');
+            const tabKey = TARGET_TO_TAB[target];
+            if (tabKey) loadTabData(tabKey);
+        });
+    }
+
+    function renderPaneContent(tabKey, data) {
+        const paneEl = document.getElementById(PANE_IDS[tabKey]);
+        if (!paneEl) return;
+        const renderers = {
+            jobs: tabJobOrders,
+            prod: tabProduction,
+            sales: tabSalesCosts,
+            sub: tabSubcontracting,
+            proc: tabProcurement,
+            qlt: tabQuality
+        };
+        paneEl.innerHTML = renderers[tabKey](data);
+        requestAnimationFrame(() => {
+            killCharts();
+            buildAllCharts(data);
+        });
+    }
+
+    async function loadTabData(tabKey) {
+        const seq = ++tabLoadSeq;
+        const eps = TAB_ENDPOINTS[tabKey];
+        const needFetch = eps.filter(ep => !endpointCache.has(ep));
+
+        if (needFetch.length === 0 && paneRendered[tabKey]) {
+            return;
+        }
+
+        const paneEl = document.getElementById(PANE_IDS[tabKey]);
+        if (!paneEl) return;
+
+        if (needFetch.length > 0) {
+            paneEl.innerHTML = paneLoadingHtml();
+        }
+
+        try {
+            await Promise.all(eps.map(ep => ensureEndpoint(ep)));
+            if (seq !== tabLoadSeq) return;
+        } catch (err) {
+            if (seq !== tabLoadSeq) return;
+            console.error('Overview tab load error:', err);
+            paneEl.innerHTML = `<div class="alert alert-danger mb-0"><i class="fas fa-triangle-exclamation me-2"></i>${String(err.message || err)}</div>`;
+            showNotification(`Raporlar yüklenirken hata: ${err.message}`, 'error');
+            kpis.showEmpty('Veri yüklenemedi');
+            return;
+        }
+
+        if (seq !== tabLoadSeq) return;
+
+        const merged = buildMergedFromCache();
+        buildKpis(merged);
+        renderPaneContent(tabKey, merged);
+        paneRendered[tabKey] = true;
+    }
+
+    function buildTabsShell() {
+        const el = document.getElementById('tabs-placeholder');
+        if (!el) return;
+
+        el.innerHTML = `
+        <div class="dashboard-card compact overview-tabs">
+            <div class="card-body">
+                <ul class="nav nav-tabs" role="tablist">
+                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#pane-jobs" type="button">İş Emirleri</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-prod" type="button">Üretim</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-sales" type="button">Satış & Maliyet</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-sub" type="button">Taşeron</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-proc" type="button">Satınalma</button></li>
+                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-qlt" type="button">Kalite</button></li>
+                </ul>
+                <div class="tab-content pt-3">
+                    <div class="tab-pane fade show active" id="pane-jobs">${paneLoadingHtml()}</div>
+                    <div class="tab-pane fade" id="pane-prod">${paneIdleHtml()}</div>
+                    <div class="tab-pane fade" id="pane-sales">${paneIdleHtml()}</div>
+                    <div class="tab-pane fade" id="pane-sub">${paneIdleHtml()}</div>
+                    <div class="tab-pane fade" id="pane-proc">${paneIdleHtml()}</div>
+                    <div class="tab-pane fade" id="pane-qlt">${paneIdleHtml()}</div>
+                </div>
+            </div>
+        </div>`;
+
+        attachOverviewTabListeners();
+    }
+
     async function loadOverview() {
         try {
             kpis.showLoading();
-            renderLoading();
+            clearEndpointCache();
             killCharts();
-
-            const v = filters.getFilterValues();
-            const data = await getReportsOverview({
-                preset: v.preset || null,
-                date_from: v.date_from || null,
-                date_to: v.date_to || null,
-                compare: v.compare === true
-            });
-
-            buildKpis(data);
-            buildTabs(data);
+            buildTabsShell();
+            await loadTabData('jobs');
         } catch (err) {
             console.error('Overview load error:', err);
             showNotification(`Raporlar yüklenirken hata: ${err.message}`, 'error');
@@ -218,95 +438,114 @@ document.addEventListener('DOMContentLoaded', async () => {
     function buildKpis(data) {
         const pp = data?.previous_period;
         const cmp = data?.meta?.compare && pp;
+        const hasSales = endpointCache.has('sales');
+        const hasMarginData = hasSales || endpointCache.has('job-orders');
+        const hasOpsData = endpointCache.has('operations') || endpointCache.has('job-orders');
 
         kpis.setCards([
             {
                 id: 'won',
-                title: `Kazanılan Teklif${cmp ? ` ${trendArrow(data?.sales?.total_won_value_eur, pp?.sales?.total_won_value_eur)}` : ''}`,
-                value: eur(data?.sales?.total_won_value_eur),
+                title: `Kazanılan Teklif${cmp && hasSales ? ` ${trendArrow(data?.sales?.total_won_value_eur, pp?.sales?.total_won_value_eur)}` : ''}`,
+                value: hasSales ? eur(data?.sales?.total_won_value_eur) : '—',
                 icon: 'fas fa-handshake',
                 color: 'success'
             },
             {
                 id: 'margin',
                 title: 'Ortalama Marj',
-                value: `${num(data?.costs?.avg_margin_pct, 1)}%`,
+                value: hasMarginData ? `${num(data?.costs?.avg_margin_pct, 1)}%` : '—',
                 icon: 'fas fa-percent',
                 color: 'primary'
             },
             {
                 id: 'hours',
-                title: `Üretken Saat${cmp ? ` ${trendArrow(data?.manufacturing?.total_productive_hours, pp?.manufacturing?.total_productive_hours)}` : ''}`,
-                value: num(data?.manufacturing?.total_productive_hours, 1),
+                title: `Üretken Saat${cmp && hasOpsData ? ` ${trendArrow(data?.manufacturing?.total_productive_hours, pp?.manufacturing?.total_productive_hours)}` : ''}`,
+                value: hasOpsData ? num(data?.manufacturing?.total_productive_hours, 1) : '—',
                 icon: 'fas fa-clock',
                 color: 'info'
             },
             {
                 id: 'ncr',
                 title: 'Açık NCR',
-                value: num(data?.quality?.ncrs_open_total),
+                value: hasOpsData ? num(data?.quality?.ncrs_open_total) : '—',
                 icon: 'fas fa-triangle-exclamation',
                 color: Number(data?.quality?.ncrs_by_severity?.critical || 0) > 0 ? 'danger' : 'warning'
             }
         ]);
     }
 
-    /* ── tabs container ──────────────────────────────────────────────── */
+    /* ── TAB: İş Emirleri ─────────────────────────────────────────────── */
 
-    function buildTabs(data) {
-        const el = document.getElementById('tabs-placeholder');
-        if (!el) return;
+    function tabJobOrders(data) {
+        const jo = data?.job_orders || {};
+        const jc = data?.job_orders_costs || {};
 
-        el.innerHTML = `
-        <div class="dashboard-card compact overview-tabs">
-            <div class="card-body">
-                <ul class="nav nav-tabs" role="tablist">
-                    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#pane-prod" type="button">Üretim</button></li>
-                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-sales" type="button">Satış & Maliyet</button></li>
-                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-sub" type="button">Taşeron & Satınalma</button></li>
-                    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-qlt" type="button">Kalite</button></li>
-                </ul>
-                <div class="tab-content pt-3">
-                    <div class="tab-pane fade show active" id="pane-prod">${tabProduction(data)}</div>
-                    <div class="tab-pane fade" id="pane-sales">${tabSalesCosts(data)}</div>
-                    <div class="tab-pane fade" id="pane-sub">${tabSubProc(data)}</div>
-                    <div class="tab-pane fade" id="pane-qlt">${tabQuality(data)}</div>
-                </div>
+        return `
+        <div class="row g-3">
+            <div class="col-12">
+                ${card('clipboard-list', 'text-primary', 'Dönem özeti', `
+                    <div class="ov-stat-grid ov-stat-grid--5">
+                        ${stat('Aktif iş emirleri', num(jo.total_active), 'snapshot')}
+                        ${stat('Dönemde tamamlanan', num(jo.total_completed_in_range), 'dönem')}
+                        ${stat('Dönemde başlayan', num(jo.total_started_in_range), 'dönem')}
+                        ${stat('Gecikmiş', `<span class="text-danger">${num(jo.overdue)}</span>`, 'snapshot')}
+                        ${stat('Ort. tamamlanma', `${numLocale(jo.avg_completion_pct, 2)}%`, 'ortalama')}
+                    </div>
+                `)}
+            </div>
+            <div class="col-lg-6">
+                ${chartCard('chart-bar', 'text-info', 'Duruma göre (snapshot)', 'chart-job-order-status', 'md')}
+            </div>
+            <div class="col-lg-6">
+                ${chartCard('chart-pie', 'text-success', 'Maliyet dağılımı (iş emirleri)', 'chart-job-order-costs', 'md', `
+                    <dl class="ov-kv mt-2">
+                        ${kvRow('Maliyet verisi olan iş', num(jc.jobs_with_cost_data))}
+                        ${kvRow('Satış fiyatı olan iş', num(jc.jobs_with_selling_price))}
+                        ${kvRow('Satış toplam (EUR)', eur(jc.total_selling_price_eur))}
+                        ${kvRow('Gerçek maliyet (EUR)', eur(jc.total_actual_cost_eur))}
+                        ${kvRow('Ort. marj', `${numLocale(jc.avg_margin_pct, 2)}%`)}
+                    </dl>
+                `)}
             </div>
         </div>`;
-
-        requestAnimationFrame(() => buildAllCharts(data));
     }
 
     /* ── TAB: Üretim ─────────────────────────────────────────────────── */
 
     function tabProduction(data) {
         const m = data?.manufacturing || {};
+        const maint = data?.maintenance || {};
+        const maintUsers = maint.maintenance_active_users ?? m.maintenance_active_users;
         const pp = data?.previous_period?.manufacturing;
         const cmp = data?.meta?.compare && pp;
 
+        const ot = overtimeFromOverview(data) || {};
         const overtimeKv = `<dl class="ov-kv">
-            ${kvRow('Talep (dönem)', num(data?.overtime?.requests_submitted_in_range))}
-            ${kvRow('Onaylanan', num(data?.overtime?.requests_approved_in_range))}
-            ${kvRow('Onaylanan saat', num(data?.overtime?.total_approved_hours, 1))}
+            ${kvRow('Talep (dönem)', num(ot.requests_in_range))}
+            ${kvRow('Onaylanan', num(ot.requests_approved_in_range))}
+            ${kvRow('Onaylanan saat', numLocale(ot.total_approved_hours, 1))}
         </dl>`;
 
-        const teams = data?.overtime?.by_team;
+        const teams = ot.by_team;
         const teamHtml = Array.isArray(teams) && teams.length > 0
-            ? `<div class="ov-team-badges">${teams.map(t => `<span class="ov-team-badge">${t.team}: <strong>${num(t.hours, 1)}</strong> saat</span>`).join('')}</div>`
+            ? `<div class="ov-team-badges">${teams.map(t => `<span class="ov-team-badge">${overtimeTeamLabel(t.team)}: <strong>${numLocale(t.hours, 1)}</strong> saat</span>`).join('')}</div>`
             : '';
 
         return `
         <div class="row g-3">
             <div class="col-12">
-                ${chartCard('chart-column', 'text-info', `Departman Saatleri${cmp ? ' — karşılaştırmalı' : ''}`, 'chart-prod-hours', 'md')}
+                ${chartCard('chart-column', 'text-info', `Departman Saatleri${cmp ? ' — karşılaştırmalı' : ''}`, 'chart-prod-hours', 'md', `
+                    <dl class="ov-kv mt-3 mb-0">
+                        ${kvRow('Üretilen tonaj (dönem)', `${numLocale(m.manufactured_tonnage_kg ?? m.manufacturedTonnageKg, 2)} kg`)}
+                    </dl>
+                `)}
             </div>
             <div class="col-lg-4">
                 ${card('list-check', 'text-primary', 'Görev Durumu', `
                     <div class="ov-stat-grid ov-stat-grid--3">
-                        ${stat('Kaynak', `<span class="text-success">${num(m.welding_jobs_completed)}</span> / ${num(m.welding_jobs_remaining)}`, 'tamamlanan / kalan')}
                         ${stat('Talaşlı', `<span class="text-success">${num(m.machining_parts_completed)}</span> / ${num(m.machining_parts_remaining)}`, 'tamamlanan / kalan')}
                         ${stat('CNC', `<span class="text-success">${num(m.cnc_tasks_completed)}</span> / ${num(m.cnc_tasks_remaining)}`, 'tamamlanan / kalan')}
+                        ${stat('Bakım', `<span class="text-success">${num(maint.faults_resolved_in_range)}</span> / ${num(maint.faults_open)}`, 'çözülen / kalan')}
                     </div>
                     <div class="ov-hint">* Kalan değerleri güncel snapshot'tır.</div>
                 `)}
@@ -317,8 +556,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                         ${stat('Kaynak', num(m.welding_active_users))}
                         ${stat('Talaşlı', num(m.machining_active_users))}
                         ${stat('CNC', num(m.cnc_active_users))}
-                        ${stat('Toplam', num((m.welding_active_users || 0) + (m.machining_active_users || 0) + (m.cnc_active_users || 0)))}
+                        ${stat('Bakım', num(maintUsers))}
                     </div>
+                    <div class="mt-2">${stat('Toplam', num((m.welding_active_users || 0) + (m.machining_active_users || 0) + (m.cnc_active_users || 0) + (maintUsers || 0)))}</div>
                 `)}
             </div>
             <div class="col-lg-4">
@@ -364,11 +604,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         </div>`;
     }
 
-    /* ── TAB: Taşeron & Satınalma ────────────────────────────────────── */
+    /* ── TAB: Taşeron ────────────────────────────────────────────────── */
 
-    function tabSubProc(data) {
+    function tabSubcontracting(data) {
         const sub = data?.subcontracting || {};
-        const pr = data?.procurement || {};
 
         return `
         <div class="row g-3">
@@ -387,10 +626,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                     </dl>
                 `)}
             </div>
+        </div>`;
+    }
+
+    /* ── TAB: Satınalma ──────────────────────────────────────────────── */
+
+    function tabProcurement(data) {
+        const pr = data?.procurement || {};
+
+        return `
+        <div class="row g-3">
             <div class="col-12">
                 ${card('shopping-cart', 'text-success', 'Satınalma', `
                     <div class="ov-stat-grid ov-stat-grid--3" style="max-width:700px;">
-                        ${stat('Talep (dönem)', num(pr.requests_submitted_in_range))}
+                        ${stat('Talep (dönem)', num(pr.requests_in_range))}
                         ${stat('PO oluşturulan', num(pr.orders_created_in_range))}
                         ${stat('Sipariş (EUR)', eur(pr.total_ordered_value_eur))}
                         ${stat('Vadesi gelen', num(pr.payments_due_in_range))}
@@ -445,6 +694,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         buildProdHoursChart(data, pp, base);
         buildPipelineChart(data, base);
         buildCostDonut(data, base);
+        buildJobOrdersStatusChart(data, base);
+        buildJobOrdersCostDonut(data, base);
         buildSubcontractorChart(data, base);
         buildNcrSeverityChart(data, base);
         buildNcrDefectChart(data, base);
@@ -452,11 +703,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function buildProdHoursChart(data, pp, base) {
         const m = data?.manufacturing || {};
+        const maint = data?.maintenance || {};
+        const maintHours = pf(maint.maintenance_hours ?? m.maintenance_hours);
         const el = document.getElementById('chart-prod-hours');
         if (!el) return;
 
-        const labels = ['Kaynak', 'Talaşlı', 'CNC'];
-        const cur = [pf(m.welding_hours), pf(m.machining_hours), pf(m.cnc_hours)];
+        const labels = ['Kaynak', 'Talaşlı', 'CNC', 'Bakım'];
+        const cur = [pf(m.welding_hours), pf(m.machining_hours), pf(m.cnc_hours), maintHours];
         const ds = [{
             label: 'Bu dönem',
             data: cur,
@@ -467,9 +720,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         if (pp) {
             const prev = pp.manufacturing || {};
+            const prevMaint = pp.maintenance || {};
+            const prevMaintHours = pf(prevMaint.maintenance_hours ?? prev.maintenance_hours);
             ds.push({
                 label: 'Önceki dönem',
-                data: [pf(prev.welding_hours), pf(prev.machining_hours), pf(prev.cnc_hours)],
+                data: [pf(prev.welding_hours), pf(prev.machining_hours), pf(prev.cnc_hours), prevMaintHours],
                 backgroundColor: 'rgba(173, 181, 189, 0.5)',
                 borderRadius: 6,
                 maxBarThickness: 50
@@ -535,6 +790,73 @@ document.addEventListener('DOMContentLoaded', async () => {
         const subc = pf(c.total_subcontractor_cost_eur);
         const total = pf(c.total_actual_cost_eur);
         const other = Math.max(0, total - labor - material - subc);
+
+        charts.push(new Chart(el, {
+            type: 'doughnut',
+            data: {
+                labels: ['İşçilik', 'Malzeme', 'Taşeron', 'Diğer'],
+                datasets: [{
+                    data: [labor, material, subc, other],
+                    backgroundColor: ['#0d6efd', '#ffc107', '#6f42c1', '#adb5bd'],
+                    borderWidth: 0,
+                    hoverOffset: 6
+                }]
+            },
+            options: {
+                ...base,
+                cutout: '55%',
+                plugins: {
+                    ...base.plugins,
+                    legend: { ...base.plugins.legend, position: 'bottom' }
+                }
+            }
+        }));
+    }
+
+    function buildJobOrdersStatusChart(data, base) {
+        const byStatus = data?.job_orders?.by_status || {};
+        const el = document.getElementById('chart-job-order-status');
+        if (!el) return;
+
+        const keys = Object.keys(byStatus);
+        if (keys.length === 0) return;
+
+        const colors = ['#6c757d', '#0d6efd', '#198754', '#fd7e14'];
+        charts.push(new Chart(el, {
+            type: 'bar',
+            data: {
+                labels: keys.map(k => JOB_ORDER_STATUS_LABELS[k] || k),
+                datasets: [{
+                    label: 'Adet',
+                    data: keys.map(k => Number(byStatus[k] || 0)),
+                    backgroundColor: keys.map((_, i) => colors[i % colors.length]),
+                    borderRadius: 6,
+                    maxBarThickness: 44
+                }]
+            },
+            options: {
+                ...base,
+                indexAxis: 'y',
+                scales: {
+                    x: scaleOpts({ ticks: { stepSize: 1 } }),
+                    y: { ...scaleOpts(), grid: { display: false } }
+                },
+                plugins: { ...base.plugins, legend: { display: false } }
+            }
+        }));
+    }
+
+    function buildJobOrdersCostDonut(data, base) {
+        const c = data?.job_orders_costs || {};
+        const el = document.getElementById('chart-job-order-costs');
+        if (!el) return;
+
+        const labor = pf(c.total_labor_cost_eur);
+        const material = pf(c.total_material_cost_eur);
+        const subc = pf(c.total_subcontractor_cost_eur);
+        const total = pf(c.total_actual_cost_eur);
+        const other = Math.max(0, total - labor - material - subc);
+        if (total <= 0 && labor + material + subc + other <= 0) return;
 
         charts.push(new Chart(el, {
             type: 'doughnut',
@@ -637,4 +959,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
         }));
     }
+
+    await loadOverview();
 });
