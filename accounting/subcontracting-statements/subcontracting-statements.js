@@ -30,11 +30,11 @@ const COLUMN_SCHEMA = [
     { field: 'stock_code', label: 'Stok Kodu', aliases: ['stock_code'] },
     { field: 'b1', label: 'B1', aliases: ['b1'] },
     { field: 'b2', label: 'B2', aliases: ['b2'] },
-    { field: 'quantity_done', label: 'Yapılan Miktar', aliases: ['amount'], numeric: true },
+    { field: 'quantity_done', label: 'Yapılan Miktar', aliases: ['amount'], numeric: true, footerSum: true },
     { field: 'unit_price', label: 'Birim Fiyat', aliases: ['unit_price'], numeric: true },
     { field: 'b3', label: 'B3', aliases: ['b3'] },
     { field: 'b4', label: 'B4', aliases: ['b4'] },
-    { field: 'amount', label: 'Tutar', aliases: ['total_price'], numeric: true },
+    { field: 'amount', label: 'Tutar', aliases: ['total_price'], numeric: true, footerSum: true },
     { field: 'project_code', label: 'Proje Kodu', aliases: ['job_no'] },
     { field: 'b5_1', label: 'B5', aliases: ['b5_1'] },
     { field: 'b5_2', label: 'B5', aliases: ['b5_2'] },
@@ -264,27 +264,43 @@ function loadXLSXLibrary() {
     });
 }
 
+function cellValueForExport(col, row) {
+    if (col.numeric) {
+        const num = parseLocaleNumber(row[col.field]);
+        return num === null ? null : num;
+    }
+    const v = row[col.field];
+    return v === null || v === undefined ? '' : v;
+}
+
 async function exportMappedRowsAsXls(rows, year, month) {
     await loadXLSXLibrary();
 
     const headerRow = COLUMN_SCHEMA.map((c) => c.label);
-    const dataRows = rows.map((row) => COLUMN_SCHEMA.map((c) => (
-        c.numeric ? formatTrNumber(row[c.field]) : (row[c.field] ?? '')
-    )));
+    const dataRows = rows.map((row) => COLUMN_SCHEMA.map((c) => cellValueForExport(c, row)));
     const sheetData = [headerRow, ...dataRows];
 
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(sheetData);
 
-    // Apply uniform font settings to all cells in export.
+    const numericColSet = new Set(
+        COLUMN_SCHEMA.map((col, i) => (col.numeric ? i : -1)).filter((i) => i >= 0)
+    );
+
+    // Apply uniform font settings to all cells in export; keep numeric columns as true numbers for Excel SUM.
     if (worksheet['!ref']) {
         const range = XLSX.utils.decode_range(worksheet['!ref']);
         for (let r = range.s.r; r <= range.e.r; r++) {
             for (let c = range.s.c; c <= range.e.c; c++) {
                 const addr = XLSX.utils.encode_cell({ r, c });
                 if (!worksheet[addr]) continue;
-                worksheet[addr].s = {
-                    ...(worksheet[addr].s || {}),
+                const cell = worksheet[addr];
+                if (r > 0 && numericColSet.has(c) && typeof cell.v === 'number') {
+                    cell.t = 'n';
+                    cell.z = '#,##0.00';
+                }
+                cell.s = {
+                    ...(cell.s || {}),
                     font: {
                         name: 'Segoe UI',
                         sz: 8
@@ -336,6 +352,39 @@ async function fetchAsJson(year, month) {
     return await resp.json();
 }
 
+/**
+ * Totals row for the Sonuç table (not used in Excel export).
+ * Sums additive numeric columns; Birim Fiyat is left blank (summing unit prices is misleading).
+ */
+function buildSubcontractingTableFooter({ displayedData, columns, hasActions }) {
+    const sumsByField = {};
+    for (const col of COLUMN_SCHEMA) {
+        if (!col.footerSum) continue;
+        let sum = 0;
+        for (const row of displayedData) {
+            const n = parseLocaleNumber(row[col.field]);
+            if (n !== null) sum += n;
+        }
+        sumsByField[col.field] = sum;
+    }
+
+    const cells = columns.map((col) => {
+        const schemaCol = COLUMN_SCHEMA.find((c) => c.field === col.field);
+        if (col.field === 's') {
+            return '<td class="fw-semibold table-secondary">Toplam</td>';
+        }
+        if (schemaCol?.footerSum) {
+            const formatted = formatTrNumber(sumsByField[col.field]);
+            return `<td class="text-end fw-semibold table-secondary">${escapeHtml(formatted)}</td>`;
+        }
+        return '<td class="table-secondary"></td>';
+    });
+    if (hasActions) {
+        cells.push('<td class="table-secondary"></td>');
+    }
+    return `<tr class="subcontracting-statements-totals">${cells.join('')}</tr>`;
+}
+
 function normalizeRows(payload) {
     if (Array.isArray(payload)) return payload;
     if (payload && Array.isArray(payload.results)) return payload.results;
@@ -367,6 +416,7 @@ function ensureTable() {
         data: [],
         sortable: true,
         pagination: false,
+        footer: buildSubcontractingTableFooter,
         emptyMessage: 'Henüz veri yok. Yıl/Ay seçip "Yükle" tıklayın.',
         emptyIcon: 'fas fa-inbox'
     });
