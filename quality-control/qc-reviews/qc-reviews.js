@@ -17,6 +17,7 @@ import {
     SEVERITY_CHOICES,
     DISPOSITION_CHOICES
 } from '../../../apis/qualityControl.js';
+import { createComment } from '../../../apis/projects/topics.js';
 
 // State management
 const urlParams = new URLSearchParams(window.location.search);
@@ -405,6 +406,136 @@ async function initializeTableComponent() {
     });
 }
 
+/**
+ * Discussion topic block for QC review detail modal (same UX as sales_consult / department-tasks).
+ * @param {object|null} discussionTopic - From API as discussion_topic_data or discussion_topic
+ */
+function renderDiscussionTopicCustomHtml(discussionTopic) {
+    const escapeHtml = (value) => String(value || '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+
+    const formatCommentDate = (value) => {
+        if (!value) return '-';
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return '-';
+        return date.toLocaleString('tr-TR');
+    };
+
+    if (!discussionTopic || !discussionTopic.id) {
+        return `
+            <div class="card">
+                <div class="card-header bg-light">
+                    <i class="fas fa-comments me-2"></i>Tartışma Yorumları (0)
+                </div>
+                <div class="card-body">
+                    <p class="text-muted mb-0">Bu inceleme için tartışma konusu bulunamadı.</p>
+                </div>
+            </div>
+        `;
+    }
+
+    const discussionComments = Array.isArray(discussionTopic.comments) ? discussionTopic.comments : [];
+    const attachments = Array.isArray(discussionTopic.attachments_data) ? discussionTopic.attachments_data : [];
+
+    let html = `
+        <div class="card">
+            <div class="card-header bg-light">
+                <i class="fas fa-comments me-2"></i>Tartışma Yorumları (${discussionComments.length})
+            </div>
+            <div class="card-body">
+                <div class="mb-3 small text-muted">
+                    <strong>${escapeHtml(discussionTopic.title || '')}</strong>
+                    ${discussionTopic.priority_display ? ` · <span class="badge bg-light text-dark">${escapeHtml(discussionTopic.priority_display)}</span>` : ''}
+                    ${discussionTopic.topic_type_display ? ` · <span class="badge bg-light text-dark">${escapeHtml(discussionTopic.topic_type_display)}</span>` : ''}
+                </div>
+    `;
+
+    if (discussionTopic.content) {
+        html += `<div class="mb-3" style="white-space: pre-wrap;">${escapeHtml(discussionTopic.content)}</div>`;
+    }
+
+    if (attachments.length > 0) {
+        html += `
+            <div class="mb-3">
+                <strong class="small d-block mb-1">Ekler</strong>
+                ${attachments.map((a) => {
+                    const url = a.file_url || a.url || '#';
+                    const name = a.filename || a.name || 'Dosya';
+                    return `
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <i class="fas fa-paperclip text-secondary"></i>
+                            <a href="${url}" target="_blank" rel="noopener noreferrer">${escapeHtml(name)}</a>
+                        </div>
+                    `;
+                }).join('')}
+            </div>
+        `;
+    }
+
+    html += `
+                <div class="mb-3" id="qc-review-discussion-comments-list">
+                    ${discussionComments.length === 0
+        ? '<p class="text-muted mb-0">Henüz yorum yok.</p>'
+        : discussionComments.map((comment) => `
+                            <div class="border-bottom pb-2 mb-2">
+                                <div class="d-flex align-items-center gap-2 mb-1">
+                                    <strong>${escapeHtml(comment.created_by_name || comment.created_by_username || 'Kullanıcı')}</strong>
+                                    <small class="text-muted">${formatCommentDate(comment.created_at)}</small>
+                                </div>
+                                <div style="white-space: pre-wrap;">${escapeHtml(comment.content)}</div>
+                            </div>
+                        `).join('')}
+                </div>
+                <div class="mt-3">
+                    <label class="form-label"><i class="fas fa-pen me-1"></i>Yeni Yorum</label>
+                    <textarea class="form-control mb-2" id="qc-review-discussion-comment-input" rows="3" placeholder="Yorum yazın..."></textarea>
+                    <button type="button" class="btn btn-primary btn-sm" id="qc-review-discussion-comment-add-btn" data-topic-id="${discussionTopic.id}">
+                        <i class="fas fa-paper-plane me-1"></i>Yorum Ekle
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    return html;
+}
+
+function setupQcReviewDiscussionListeners(reviewId) {
+    const btn = reviewDetailsModal.container.querySelector('#qc-review-discussion-comment-add-btn');
+    if (!btn) return;
+
+    btn.addEventListener('click', async () => {
+        const commentInput = reviewDetailsModal.container.querySelector('#qc-review-discussion-comment-input');
+        const commentText = commentInput?.value?.trim();
+        const topicIdRaw = btn.dataset.topicId;
+        const topicId = topicIdRaw ? parseInt(topicIdRaw, 10) : null;
+
+        if (!topicId) {
+            showNotification('Tartışma konusu bulunamadı', 'error');
+            return;
+        }
+        if (!commentText) {
+            showNotification('Lütfen yorum metni girin', 'warning');
+            return;
+        }
+
+        try {
+            await createComment({
+                topic: topicId,
+                content: commentText
+            });
+            showNotification('Yorum eklendi', 'success');
+            const refreshed = await getQCReview(reviewId);
+            await showReviewDetails(refreshed);
+        } catch (e) {
+            console.error('Error adding QC review discussion comment:', e);
+            showNotification('Yorum ekleme hatası', 'error');
+        }
+    });
+}
+
 function initializeModalComponents() {
     confirmationModal = new ConfirmationModal('confirmation-modal-container');
     reviewDetailsModal = new DisplayModal('review-details-modal-container', {
@@ -544,8 +675,15 @@ async function showReviewDetails(review) {
             ]
         });
 
+        const discussionTopic = fullReview.discussion_topic_data || fullReview.discussion_topic || null;
+        reviewDetailsModal.addCustomSection({
+            customContent: renderDiscussionTopicCustomHtml(discussionTopic)
+        });
+
         // Render the modal
         reviewDetailsModal.render();
+
+        setupQcReviewDiscussionListeners(fullReview.id);
 
         // Add action buttons for QC team or superusers if status is pending
         // Use the global canDecideReviews variable
