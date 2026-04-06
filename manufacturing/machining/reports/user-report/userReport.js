@@ -4,25 +4,21 @@ import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../../../components/table/table.js';
 import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
-import { fetchDailyUserReport } from '../../../../apis/machining/dailyReport.js';
+import { fetchUserReport, fetchUserTaskDetail } from '../../../../apis/machining/userReport.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 
-// State management
 let reportData = null;
 let reportFilters = null;
 let headerComponent;
-let dailyReportStats = null;
+let userReportStats = null;
 let usersTable = null;
 
-// Initialize the report
 document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
-    
-    // Initialize header component
+
     initHeaderComponent();
-    
-    // Initialize Statistics Cards component
-    dailyReportStats = new StatisticsCards('daily-report-statistics', {
+
+    userReportStats = new StatisticsCards('user-report-statistics', {
         cards: [
             { title: 'Toplam Kullanıcı', value: '0', icon: 'fas fa-users', color: 'primary', id: 'total-users-count' },
             { title: 'Toplam Çalışma Saati', value: '0', icon: 'fas fa-clock', color: 'success', id: 'total-work-hours' },
@@ -32,16 +28,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         compact: true,
         animation: true
     });
-    
-    await initializeDailyReport();
+
+    await initializeUserReport();
 });
 
-// Initialize header component
 function initHeaderComponent() {
     headerComponent = new HeaderComponent({
-        title: 'Günlük Kullanıcı Raporu',
-        subtitle: 'Kullanıcıların günlük çalışma performansı ve zaman kullanımı analizi',
-        icon: 'calendar-day',
+        title: 'Kullanıcı Raporu',
+        subtitle: 'Seçilen tarih aralığında kullanıcı çalışma performansı ve zaman kullanımı analizi',
+        icon: 'calendar-alt',
         showBackButton: 'block',
         showRefreshButton: 'block',
         refreshButtonText: 'Yenile',
@@ -54,84 +49,77 @@ function initHeaderComponent() {
     });
 }
 
-async function initializeDailyReport() {
+async function initializeUserReport() {
     try {
-        // Initialize filters component
         initializeFiltersComponent();
-        
-        // Set default date to today
         setDefaultDateFilter();
-        
-        // Load initial report
         await loadReport();
-        
     } catch (error) {
-        console.error('Error initializing daily report:', error);
+        console.error('Error initializing user report:', error);
         showNotification('Rapor başlatılırken hata oluştu', 'error');
     }
 }
 
 function initializeFiltersComponent() {
-    // Initialize filters component
     reportFilters = new FiltersComponent('filters-placeholder', {
         title: 'Rapor Filtreleri',
-        onApply: (values) => {
-            // Apply filters and reload report
+        onApply: () => {
             loadReport();
         },
         onClear: () => {
-            // Clear filters and reload report
             setDefaultDateFilter();
             loadReport();
             showNotification('Filtreler temizlendi', 'info');
         },
         onFilterChange: (filterId, value) => {
-            // Optional: Handle individual filter changes
             console.log(`Filter ${filterId} changed to:`, value);
         }
     });
 
-    // Add date filter - default to yesterday
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    reportFilters.addDateFilter({
-        id: 'date-filter',
-        label: 'Tarih',
-        colSize: 3,
-        value: yesterday.toISOString().split('T')[0]
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
+    reportFilters.addDateRangeFilter({
+        id: 'date-range',
+        label: 'Tarih aralığı',
+        colSize: 4,
+        startDate: todayStr,
+        endDate: todayStr
     });
 }
 
 function setDefaultDateFilter() {
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
-    
+    const today = new Date();
+    const todayStr = today.toISOString().split('T')[0];
     if (reportFilters) {
         reportFilters.setFilterValues({
-            'date-filter': yesterdayStr
+            'date-range': { start: todayStr, end: todayStr }
         });
     }
+}
+
+/** @returns {{ start_date?: string, end_date?: string }} */
+function getReportDateParams() {
+    const filterValues = reportFilters ? reportFilters.getFilterValues() : {};
+    const dr = filterValues['date-range'] || { start: '', end: '' };
+    let start = dr.start || '';
+    let end = dr.end || '';
+    if (!start && !end) {
+        return {};
+    }
+    if (!start) start = end;
+    if (!end) end = start;
+    return { start_date: start, end_date: end };
 }
 
 async function loadReport() {
     try {
         showLoadingState();
-        
-        const filterValues = reportFilters ? reportFilters.getFilterValues() : {};
-        // Default to yesterday if no date is set
-        let date = filterValues['date-filter'];
-        if (!date) {
-            const yesterday = new Date();
-            yesterday.setDate(yesterday.getDate() - 1);
-            date = yesterday.toISOString().split('T')[0];
-        }
-        
-        reportData = await fetchDailyUserReport(date);
-        
+
+        const params = getReportDateParams();
+        reportData = await fetchUserReport(params);
+
         renderUsersTable();
         updateStatistics();
-        
     } catch (error) {
         console.error('Error loading report:', error);
         showNotification('Rapor yüklenirken hata oluştu', 'error');
@@ -147,7 +135,7 @@ function renderUsersTable() {
             usersTable.updateData([]);
         } else {
             usersTable = new TableComponent('users-report-table-container', {
-                title: 'Günlük Kullanıcı Raporu',
+                title: 'Kullanıcı Raporu',
                 icon: 'users',
                 iconColor: 'text-primary',
                 columns: [],
@@ -158,25 +146,21 @@ function renderUsersTable() {
         }
         return;
     }
-    
-    // Prepare table data
+
     const tableData = reportData.users.map(user => {
-        // Calculate total_time_in_office_hours if not provided
-        // Include total_hold_hours as idle time in efficiency calculation
-        const totalTimeInOffice = user.total_time_in_office_hours || 
+        const totalTimeInOffice = user.total_time_in_office_hours ||
             (user.total_work_hours + user.total_idle_hours + (user.total_hold_hours || 0));
-        
-        const efficiency = totalTimeInOffice > 0 
+
+        const efficiency = totalTimeInOffice > 0
             ? ((user.total_work_hours / totalTimeInOffice) * 100).toFixed(1)
             : '0';
-        
-        // Get user display name (fallback to username if name is empty)
-        const userDisplayName = (user.first_name && user.last_name) 
-            ? `${user.first_name} ${user.last_name}` 
+
+        const userDisplayName = (user.first_name && user.last_name)
+            ? `${user.first_name} ${user.last_name}`
             : user.username;
-        
+
         const hasWarnings = getWarnings(user, totalTimeInOffice);
-        
+
         return {
             ...user,
             _displayName: userDisplayName,
@@ -186,12 +170,9 @@ function renderUsersTable() {
             _warnings: hasWarnings
         };
     });
-    
-    // Initialize or update table
+
     if (usersTable) {
-        // If table exists but was created with empty columns, we need to recreate it
         if (usersTable.options.columns.length === 0) {
-            // Destroy old table and create new one
             const container = document.getElementById('users-report-table-container');
             if (container) {
                 container.innerHTML = '';
@@ -199,7 +180,7 @@ function renderUsersTable() {
             usersTable = null;
         }
     }
-    
+
     if (!usersTable) {
         const container = document.getElementById('users-report-table-container');
         if (!container) {
@@ -207,7 +188,7 @@ function renderUsersTable() {
             return;
         }
         usersTable = new TableComponent('users-report-table-container', {
-            title: 'Günlük Kullanıcı Raporu',
+            title: 'Kullanıcı Raporu',
             icon: 'users',
             iconColor: 'text-primary',
             columns: [
@@ -216,10 +197,10 @@ function renderUsersTable() {
                     label: 'Kullanıcı',
                     sortable: true,
                     formatter: (value, row) => {
-                        const usernameHtml = (row.first_name && row.last_name) 
-                            ? `<small class="text-muted ms-2">(@${row.username})</small>` 
+                        const usernameHtml = (row.first_name && row.last_name)
+                            ? `<small class="text-muted ms-2">(@${row.username})</small>`
                             : '';
-                        const warningBadge = row._hasWarnings 
+                        const warningBadge = row._hasWarnings
                             ? `<span class="badge bg-warning text-dark ms-2" title="${row._warnings.join('; ')}">
                                 <i class="fas fa-exclamation-triangle me-1"></i>Uyarı
                                </span>`
@@ -262,9 +243,9 @@ function renderUsersTable() {
                     label: 'Verimlilik',
                     sortable: true,
                     formatter: (value) => {
-                        let colorClass, styleAttr = '';
+                        let colorClass; let styleAttr = '';
                         if (value >= 100) {
-                            styleAttr = 'style="color: #6f42c1;"'; // Purple
+                            styleAttr = 'style="color: #6f42c1;"';
                         } else if (value >= 80) {
                             colorClass = 'text-success';
                         } else if (value >= 60) {
@@ -280,15 +261,17 @@ function renderUsersTable() {
                     label: 'Tamamlanan Görev',
                     sortable: true,
                     formatter: (value) => {
-                        return value !== undefined ? `<span class="badge bg-primary">${value}</span>` : '-';
+                        if (value === undefined) return '-';
+                        return `<span class="status-badge status-green" style="min-width: auto;">${value}</span>`;
                     }
                 },
                 {
-                    field: 'tasks',
+                    field: 'total_tasks_worked_on',
                     label: 'Görev Sayısı',
                     sortable: true,
                     formatter: (value) => {
-                        return value ? `<span class="badge bg-info">${value.length}</span>` : '0';
+                        const n = value !== undefined && value !== null ? Number(value) : 0;
+                        return `<span class="status-badge status-blue" style="min-width: auto;">${n}</span>`;
                     }
                 }
             ],
@@ -306,39 +289,72 @@ function renderUsersTable() {
             pagination: true,
             itemsPerPage: 20,
             responsive: true,
-            emptyMessage: 'Bu tarih için rapor verisi bulunamadı',
+            emptyMessage: 'Bu aralık için rapor verisi bulunamadı',
             emptyIcon: 'fas fa-inbox'
         });
     } else {
-        // Update existing table
         usersTable.updateData(tableData);
     }
 }
 
-function showUserDetails(user) {
-    // Calculate values
-    // Include total_hold_hours as idle time in efficiency calculation
-    const totalTimeInOffice = user._totalTimeInOffice || 
+function normalizeTaskDetailDays(detail) {
+    if (!detail) return [];
+    if (Array.isArray(detail.days)) return detail.days;
+    if (Array.isArray(detail.results)) return detail.results;
+    return [];
+}
+
+function enrichTaskRow(row, taskTotals) {
+    if (!taskTotals || !row || !row.task_key) return row;
+    const t = taskTotals[row.task_key];
+    if (!t) return row;
+    return {
+        ...row,
+        estimated_hours: row.estimated_hours != null ? row.estimated_hours : t.estimated_hours,
+        total_hours_spent: row.total_hours_spent != null ? row.total_hours_spent : t.total_hours_spent
+    };
+}
+
+async function showUserDetails(user) {
+    const userId = user.id ?? user.user_id;
+    if (userId == null) {
+        showNotification('Kullanıcı kimliği bulunamadı', 'error');
+        return;
+    }
+
+    const totalTimeInOffice = user._totalTimeInOffice ||
         (user.total_work_hours + user.total_idle_hours + (user.total_hold_hours || 0));
-    const efficiency = totalTimeInOffice > 0 
+    const efficiency = totalTimeInOffice > 0
         ? ((user.total_work_hours / totalTimeInOffice) * 100).toFixed(1)
         : '0';
     const hasWarnings = user._warnings || getWarnings(user, totalTimeInOffice);
-    
-    // Get user display name
-    const userDisplayName = user._displayName || 
+
+    const userDisplayName = user._displayName ||
         ((user.first_name && user.last_name) ? `${user.first_name} ${user.last_name}` : user.username);
     const modalTitle = `${userDisplayName}${(user.first_name && user.last_name) ? ` (@${user.username})` : ''}`;
-    
-    // Create DisplayModal instance
+
+    let detail;
+    try {
+        detail = await fetchUserTaskDetail(userId, getReportDateParams());
+    } catch (e) {
+        if (e.status === 404) {
+            showNotification('Kullanıcı bulunamadı veya talaşlı imalat ekibinde değil', 'error');
+        } else {
+            showNotification('Detay verisi yüklenirken hata oluştu', 'error');
+        }
+        return;
+    }
+
+    const taskTotals = detail.task_totals || detail.taskTotals || {};
+    const days = normalizeTaskDetailDays(detail);
+
     const displayModal = new DisplayModal('user-details-modal-container', {
         title: modalTitle,
         icon: 'fas fa-user',
         size: 'xl',
         showEditButton: false
     });
-    
-    // Add warnings section if there are any
+
     if (hasWarnings.length > 0) {
         displayModal.addCustomSection({
             title: 'Uyarılar',
@@ -353,19 +369,15 @@ function showUserDetails(user) {
             `
         });
     }
-    
-    // Add statistics section with custom content - compact, all on one row
-    // Calculate column size based on available fields
+
     let colSize = 3;
     const hasTasksCompleted = user.total_tasks_completed !== undefined;
+    const hasTasksWorked = user.total_tasks_worked_on !== undefined;
     const hasHoldHours = user.total_hold_hours !== undefined && user.total_hold_hours > 0;
-    
-    if (hasTasksCompleted && hasHoldHours) {
-        colSize = 2; // 6 fields: work, idle, hold, efficiency, tasks completed
-    } else if (hasTasksCompleted || hasHoldHours) {
-        colSize = 2; // 5 fields
-    }
-    
+
+    const statCount = 4 + (hasTasksCompleted ? 1 : 0) + (hasTasksWorked ? 1 : 0) + (hasHoldHours ? 1 : 0);
+    if (statCount > 5) colSize = 2;
+
     let statsContent = `
         <div class="row mb-3">
             <div class="col-md-${colSize}">
@@ -403,7 +415,7 @@ function showUserDetails(user) {
                 </div>
             </div>
     `;
-    
+
     if (hasTasksCompleted) {
         statsContent += `
             <div class="col-md-${colSize}">
@@ -416,39 +428,66 @@ function showUserDetails(user) {
             </div>
         `;
     }
-    
+
+    if (hasTasksWorked) {
+        statsContent += `
+            <div class="col-md-${colSize}">
+                <div class="stat-item" style="padding: 0.5rem;">
+                    <div class="stat-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">
+                        <i class="fas fa-tasks me-1"></i>İşlem Gördüğü Görev
+                    </div>
+                    <div class="stat-value text-primary" style="font-size: 1.25rem;">${user.total_tasks_worked_on}</div>
+                </div>
+            </div>
+        `;
+    }
+
     statsContent += `</div>`;
-    
+
     displayModal.addCustomSection({
         title: 'İstatistikler',
         icon: 'fas fa-chart-bar',
         iconColor: 'text-primary',
         customContent: statsContent
     });
-    
-    // Add tasks section with TableComponent (no section title, table has its own)
-    const tasksContainerId = `tasks-table-${Date.now()}`;
-    displayModal.addCustomSection({
-        customContent: `<div id="${tasksContainerId}"></div>`
-    });
-    
-    // Add idle periods section with TableComponent (no section title, table has its own)
-    const idlePeriodsContainerId = `idle-periods-table-${Date.now()}`;
-    displayModal.addCustomSection({
-        customContent: `<div id="${idlePeriodsContainerId}"></div>`
-    });
-    
-    // Add hold tasks section with TableComponent (no section title, table has its own)
-    const holdTasksContainerId = `hold-tasks-table-${Date.now()}`;
-    displayModal.addCustomSection({
-        customContent: `<div id="${holdTasksContainerId}"></div>`
-    });
-    
-    // Render and show modal
+
+    const daySectionIds = [];
+    const ts = Date.now();
+
+    if (days.length === 0) {
+        displayModal.addCustomSection({
+            title: 'Günlük detay',
+            icon: 'fas fa-calendar-day',
+            iconColor: 'text-muted',
+            customContent: `
+                <div class="text-muted text-center py-3">
+                    <i class="fas fa-inbox me-2"></i>Seçilen aralıkta gösterilecek günlük kayıt yok
+                </div>
+            `
+        });
+    } else {
+        days.forEach((day, dayIdx) => {
+            const dateKey = day.date || day.day || `day-${dayIdx}`;
+            const label = formatDayHeading(dateKey);
+            const tasksId = `tasks-${ts}-${dayIdx}`;
+            const idleId = `idle-${ts}-${dayIdx}`;
+            const holdId = `hold-${ts}-${dayIdx}`;
+            daySectionIds.push({ day, tasksId, idleId, holdId, taskTotals });
+            displayModal.addCustomSection({
+                title: label,
+                icon: 'fas fa-calendar-day',
+                iconColor: 'text-primary',
+                customContent: `<div class="user-detail-day-block" data-day-idx="${dayIdx}">
+                    <div id="${tasksId}"></div>
+                    <div id="${idleId}" class="mt-3"></div>
+                    <div id="${holdId}" class="mt-3"></div>
+                </div>`
+            });
+        });
+    }
+
     displayModal.render().show();
-    
-    // Set up event delegation for comment buttons on document (works even if buttons are added later)
-    // Use a one-time setup that will handle all comment buttons in the modal
+
     const handleCommentClick = (e) => {
         const btn = e.target.closest('.comment-view-btn');
         if (btn) {
@@ -461,263 +500,290 @@ function showUserDetails(user) {
             }
         }
     };
-    
-    // Attach to document with a namespace so we can remove it later if needed
+
     document.addEventListener('click', handleCommentClick);
-    
-    // Create tasks table after modal is shown
+
     setTimeout(() => {
-        const tasksContainer = document.getElementById(tasksContainerId);
-        if (tasksContainer && user.tasks && user.tasks.length > 0) {
-            const tasksTable = new TableComponent(tasksContainerId, {
-                title: `Görevler (${user.tasks.length})`,
-                icon: 'fas fa-tasks',
-                iconColor: 'text-primary',
-                columns: [
-                    {
-                        field: 'timer_id',
-                        label: '#',
+        daySectionIds.forEach(({ day, tasksId, idleId, holdId, taskTotals: totals }) => {
+            const tasks = (day.tasks || []).map(r => enrichTaskRow(r, totals));
+            const idle_periods = day.idle_periods || [];
+            const hold_tasks = (day.hold_tasks || []).map(r => enrichTaskRow(r, totals));
+
+            const tasksEl = document.getElementById(tasksId);
+            if (tasksEl) {
+                if (tasks.length > 0) {
+                    new TableComponent(tasksId, {
+                        title: `Görevler (${tasks.length})`,
+                        icon: 'fas fa-tasks',
+                        iconColor: 'text-primary',
+                        columns: buildTaskColumns(),
+                        data: tasks,
                         sortable: true,
-                        formatter: (value) => {
-                            if (!value) return '-';
-                            return `<a href="/manufacturing/machining/reports/finished-timers/?edit=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-secondary text-decoration-none" style="cursor: pointer;">#${value}</a>`;
-                        }
-                    },
-                    {
-                        field: 'start_time',
-                        label: 'Başlangıç',
+                        pagination: false,
+                        responsive: true,
+                        small: true,
+                        emptyMessage: 'Bu gün için görev kaydı yok',
+                        emptyIcon: 'fas fa-inbox'
+                    });
+                } else {
+                    tasksEl.innerHTML = `
+                        <div class="text-muted text-center py-2 small">
+                            <i class="fas fa-inbox me-2"></i>Bu gün için görev kaydı yok
+                        </div>`;
+                }
+            }
+
+            const idleEl = document.getElementById(idleId);
+            if (idleEl) {
+                if (idle_periods.length > 0) {
+                    new TableComponent(idleId, {
+                        title: `Boşta Geçen Dönemler (${idle_periods.length})`,
+                        icon: 'fas fa-hourglass-half',
+                        iconColor: 'text-warning',
+                        columns: buildIdleColumns(),
+                        data: idle_periods,
                         sortable: true,
-                        formatter: (value) => formatDateTime(value)
-                    },
-                    {
-                        field: 'finish_time',
-                        label: 'Bitiş',
+                        pagination: false,
+                        responsive: true,
+                        small: true,
+                        emptyMessage: 'Boşta geçen dönem yok',
+                        emptyIcon: 'fas fa-check-circle'
+                    });
+                } else {
+                    idleEl.innerHTML = `
+                        <div class="text-muted text-center py-2 small">
+                            <i class="fas fa-check-circle me-2"></i>Boşta geçen dönem yok
+                        </div>`;
+                }
+            }
+
+            const holdEl = document.getElementById(holdId);
+            if (holdEl) {
+                if (hold_tasks.length > 0) {
+                    new TableComponent(holdId, {
+                        title: `Bekleme Görevleri (${hold_tasks.length})`,
+                        icon: 'fas fa-pause-circle',
+                        iconColor: 'text-warning',
+                        columns: buildHoldTaskColumns(),
+                        data: hold_tasks,
                         sortable: true,
-                        formatter: (value) => formatDateTime(value)
-                    },
-                    {
-                        field: 'task_key',
-                        label: 'TI No',
-                        sortable: true,
-                        formatter: (value) => {
-                            if (!value) return '-';
-                            return `<a href="/manufacturing/machining/tasks/list/?task=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-primary text-decoration-none" style="cursor: pointer;">${value}</a>`;
-                        }
-                    },
-                    {
-                        field: 'task_name',
-                        label: 'Görev Adı',
-                        sortable: true
-                    },
-                    {
-                        field: 'job_no',
-                        label: 'İş No',
-                        sortable: true
-                    },
-                    {
-                        field: 'duration_minutes',
-                        label: 'Süre',
-                        sortable: true,
-                        formatter: (value) => formatDurationFromMinutes(value)
-                    },
-                    {
-                        field: 'estimated_hours',
-                        label: 'Tahmini',
-                        sortable: true,
-                        formatter: (value) => value !== null && value !== undefined ? `${value.toFixed(1)}s` : '-'
-                    },
-                    {
-                        field: 'total_hours_spent',
-                        label: 'Toplam Harcanan',
-                        sortable: true,
-                        formatter: (value) => value !== null && value !== undefined ? `${value.toFixed(2)}s` : '-'
-                    },
-                    {
-                        field: 'machine_name',
-                        label: 'Makine',
-                        sortable: true
-                    },
-                    {
-                        field: 'manual_entry',
-                        label: 'Manuel',
-                        sortable: true,
-                        formatter: (value) => value ? '<span class="badge bg-success">Manuel</span>' : '<span class="text-muted">-</span>'
-                    },
-                    {
-                        field: 'comment',
-                        label: 'Yorum',
-                        sortable: false,
-                        formatter: (value, row) => {
-                            if (!value) return '-';
-                            // Use encodeURIComponent to safely store in data attribute
-                            const commentEncoded = encodeURIComponent(value);
-                            return `<button class="btn btn-sm btn-outline-info comment-view-btn" data-comment="${commentEncoded}"><i class="fas fa-comment"></i></button>`;
-                        }
-                    }
-                ],
-                data: user.tasks,
-                sortable: true,
-                pagination: false,
-                responsive: true,
-                small: true,
-                emptyMessage: 'Bu kullanıcı için görev kaydı bulunmamaktadır',
-                emptyIcon: 'fas fa-inbox'
-            });
-        } else if (tasksContainer) {
-            tasksContainer.innerHTML = `
-                <div class="text-muted text-center py-3">
-                    <i class="fas fa-inbox me-2"></i>Bu kullanıcı için görev kaydı bulunmamaktadır
-                </div>
-            `;
-        }
-        
-        // Create idle periods table after modal is shown
-        const idlePeriodsContainer = document.getElementById(idlePeriodsContainerId);
-        if (idlePeriodsContainer && user.idle_periods && user.idle_periods.length > 0) {
-            const idlePeriodsTable = new TableComponent(idlePeriodsContainerId, {
-                title: `Boşta Geçen Dönemler (${user.idle_periods.length})`,
-                icon: 'fas fa-hourglass-half',
-                iconColor: 'text-warning',
-                columns: [
-                    {
-                        field: 'start_time',
-                        label: 'Başlangıç',
-                        sortable: true,
-                        formatter: (value) => formatDateTime(value)
-                    },
-                    {
-                        field: 'finish_time',
-                        label: 'Bitiş',
-                        sortable: true,
-                        formatter: (value) => formatDateTime(value)
-                    },
-                    {
-                        field: 'duration_minutes',
-                        label: 'Süre',
-                        sortable: true,
-                        formatter: (value) => formatDurationFromMinutes(value)
-                    }
-                ],
-                data: user.idle_periods,
-                sortable: true,
-                pagination: false,
-                responsive: true,
-                small: true,
-                emptyMessage: 'Boşta geçen dönem kaydı bulunmamaktadır',
-                emptyIcon: 'fas fa-check-circle'
-            });
-        } else if (idlePeriodsContainer) {
-            idlePeriodsContainer.innerHTML = `
-                <div class="text-muted text-center py-3">
-                    <i class="fas fa-check-circle me-2"></i>Boşta geçen dönem kaydı bulunmamaktadır
-                </div>
-            `;
-        }
-        
-        // Create hold tasks table after modal is shown
-        const holdTasksContainer = document.getElementById(holdTasksContainerId);
-        if (holdTasksContainer && user.hold_tasks && user.hold_tasks.length > 0) {
-            const holdTasksTable = new TableComponent(holdTasksContainerId, {
-                title: `Bekleme Görevleri (${user.hold_tasks.length})`,
-                icon: 'fas fa-pause-circle',
-                iconColor: 'text-warning',
-                columns: [
-                    {
-                        field: 'timer_id',
-                        label: '#',
-                        sortable: true,
-                        formatter: (value) => {
-                            if (!value) return '-';
-                            return `<a href="/manufacturing/machining/reports/finished-timers/?edit=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-secondary text-decoration-none" style="cursor: pointer;">#${value}</a>`;
-                        }
-                    },
-                    {
-                        field: 'start_time',
-                        label: 'Başlangıç',
-                        sortable: true,
-                        formatter: (value) => formatDateTime(value)
-                    },
-                    {
-                        field: 'finish_time',
-                        label: 'Bitiş',
-                        sortable: true,
-                        formatter: (value) => formatDateTime(value)
-                    },
-                    {
-                        field: 'task_key',
-                        label: 'TI No',
-                        sortable: true,
-                        formatter: (value) => {
-                            if (!value) return '-';
-                            return `<a href="/manufacturing/machining/tasks/list/?task=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-primary text-decoration-none" style="cursor: pointer;">${value}</a>`;
-                        }
-                    },
-                    {
-                        field: 'task_name',
-                        label: 'Görev Adı',
-                        sortable: true
-                    },
-                    {
-                        field: 'job_no',
-                        label: 'İş No',
-                        sortable: true
-                    },
-                    {
-                        field: 'duration_minutes',
-                        label: 'Süre',
-                        sortable: true,
-                        formatter: (value) => formatDurationFromMinutes(value)
-                    },
-                    {
-                        field: 'estimated_hours',
-                        label: 'Tahmini',
-                        sortable: true,
-                        formatter: (value) => value !== null && value !== undefined ? `${value.toFixed(1)}s` : '-'
-                    },
-                    {
-                        field: 'machine_name',
-                        label: 'Makine',
-                        sortable: true
-                    },
-                    {
-                        field: 'manual_entry',
-                        label: 'Manuel',
-                        sortable: true,
-                        formatter: (value) => value ? '<span class="badge bg-success">Manuel</span>' : '<span class="text-muted">-</span>'
-                    },
-                    {
-                        field: 'comment',
-                        label: 'Yorum',
-                        sortable: false,
-                        formatter: (value, row) => {
-                            if (!value) return '-';
-                            // Use encodeURIComponent to safely store in data attribute
-                            const commentEncoded = encodeURIComponent(value);
-                            return `<button class="btn btn-sm btn-outline-info comment-view-btn" data-comment="${commentEncoded}"><i class="fas fa-comment"></i></button>`;
-                        }
-                    }
-                ],
-                data: user.hold_tasks,
-                sortable: true,
-                pagination: false,
-                responsive: true,
-                small: true,
-                emptyMessage: 'Bu kullanıcı için bekleme görevi kaydı bulunmamaktadır',
-                emptyIcon: 'fas fa-inbox'
-            });
-        } else if (holdTasksContainer) {
-            holdTasksContainer.innerHTML = `
-                <div class="text-muted text-center py-3">
-                    <i class="fas fa-inbox me-2"></i>Bu kullanıcı için bekleme görevi kaydı bulunmamaktadır
-                </div>
-            `;
-        }
+                        pagination: false,
+                        responsive: true,
+                        small: true,
+                        emptyMessage: 'Bekleme görevi yok',
+                        emptyIcon: 'fas fa-inbox'
+                    });
+                } else {
+                    holdEl.innerHTML = `
+                        <div class="text-muted text-center py-2 small">
+                            <i class="fas fa-inbox me-2"></i>Bekleme görevi yok
+                        </div>`;
+                }
+            }
+        });
     }, 100);
+}
+
+function formatDayHeading(dateStr) {
+    if (!dateStr) return 'Gün';
+    const d = new Date(String(dateStr).includes('T') ? dateStr : `${dateStr}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return String(dateStr);
+    return d.toLocaleDateString('tr-TR', {
+        weekday: 'long',
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+}
+
+function buildTaskColumns() {
+    return [
+        {
+            field: 'timer_id',
+            label: '#',
+            sortable: true,
+            formatter: (value) => {
+                if (!value) return '-';
+                return `<a href="/manufacturing/machining/reports/finished-timers/?edit=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-secondary text-decoration-none" style="cursor: pointer;">#${value}</a>`;
+            }
+        },
+        {
+            field: 'start_time',
+            label: 'Başlangıç',
+            sortable: true,
+            formatter: (value) => formatDateTime(value)
+        },
+        {
+            field: 'finish_time',
+            label: 'Bitiş',
+            sortable: true,
+            formatter: (value) => formatDateTime(value)
+        },
+        {
+            field: 'task_key',
+            label: 'TI No',
+            sortable: true,
+            formatter: (value) => {
+                if (!value) return '-';
+                return `<a href="/manufacturing/machining/tasks/list/?task=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-primary text-decoration-none" style="cursor: pointer;">${value}</a>`;
+            }
+        },
+        {
+            field: 'task_name',
+            label: 'Görev Adı',
+            sortable: true
+        },
+        {
+            field: 'job_no',
+            label: 'İş No',
+            sortable: true
+        },
+        {
+            field: 'duration_minutes',
+            label: 'Süre',
+            sortable: true,
+            formatter: (value) => formatDurationFromMinutes(value)
+        },
+        {
+            field: 'estimated_hours',
+            label: 'Tahmini',
+            sortable: true,
+            formatter: (value) => value !== null && value !== undefined ? `${value.toFixed(1)}s` : '-'
+        },
+        {
+            field: 'total_hours_spent',
+            label: 'Toplam Harcanan',
+            sortable: true,
+            formatter: (value) => value !== null && value !== undefined ? `${value.toFixed(2)}s` : '-'
+        },
+        {
+            field: 'machine_name',
+            label: 'Makine',
+            sortable: true
+        },
+        {
+            field: 'manual_entry',
+            label: 'Manuel',
+            sortable: true,
+            formatter: (value) => value ? '<span class="badge bg-success">Manuel</span>' : '<span class="text-muted">-</span>'
+        },
+        {
+            field: 'comment',
+            label: 'Yorum',
+            sortable: false,
+            formatter: (value) => {
+                if (!value) return '-';
+                const commentEncoded = encodeURIComponent(value);
+                return `<button class="btn btn-sm btn-outline-info comment-view-btn" data-comment="${commentEncoded}"><i class="fas fa-comment"></i></button>`;
+            }
+        }
+    ];
+}
+
+function buildHoldTaskColumns() {
+    return [
+        {
+            field: 'timer_id',
+            label: '#',
+            sortable: true,
+            formatter: (value) => {
+                if (!value) return '-';
+                return `<a href="/manufacturing/machining/reports/finished-timers/?edit=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-secondary text-decoration-none" style="cursor: pointer;">#${value}</a>`;
+            }
+        },
+        {
+            field: 'start_time',
+            label: 'Başlangıç',
+            sortable: true,
+            formatter: (value) => formatDateTime(value)
+        },
+        {
+            field: 'finish_time',
+            label: 'Bitiş',
+            sortable: true,
+            formatter: (value) => formatDateTime(value)
+        },
+        {
+            field: 'task_key',
+            label: 'TI No',
+            sortable: true,
+            formatter: (value) => {
+                if (!value) return '-';
+                return `<a href="/manufacturing/machining/tasks/list/?task=${value}" target="_blank" rel="noopener noreferrer" class="badge bg-primary text-decoration-none" style="cursor: pointer;">${value}</a>`;
+            }
+        },
+        {
+            field: 'task_name',
+            label: 'Görev Adı',
+            sortable: true
+        },
+        {
+            field: 'job_no',
+            label: 'İş No',
+            sortable: true
+        },
+        {
+            field: 'duration_minutes',
+            label: 'Süre',
+            sortable: true,
+            formatter: (value) => formatDurationFromMinutes(value)
+        },
+        {
+            field: 'estimated_hours',
+            label: 'Tahmini',
+            sortable: true,
+            formatter: (value) => value !== null && value !== undefined ? `${value.toFixed(1)}s` : '-'
+        },
+        {
+            field: 'machine_name',
+            label: 'Makine',
+            sortable: true
+        },
+        {
+            field: 'manual_entry',
+            label: 'Manuel',
+            sortable: true,
+            formatter: (value) => value ? '<span class="badge bg-success">Manuel</span>' : '<span class="text-muted">-</span>'
+        },
+        {
+            field: 'comment',
+            label: 'Yorum',
+            sortable: false,
+            formatter: (value) => {
+                if (!value) return '-';
+                const commentEncoded = encodeURIComponent(value);
+                return `<button class="btn btn-sm btn-outline-info comment-view-btn" data-comment="${commentEncoded}"><i class="fas fa-comment"></i></button>`;
+            }
+        }
+    ];
+}
+
+function buildIdleColumns() {
+    return [
+        {
+            field: 'start_time',
+            label: 'Başlangıç',
+            sortable: true,
+            formatter: (value) => formatDateTime(value)
+        },
+        {
+            field: 'finish_time',
+            label: 'Bitiş',
+            sortable: true,
+            formatter: (value) => formatDateTime(value)
+        },
+        {
+            field: 'duration_minutes',
+            label: 'Süre',
+            sortable: true,
+            formatter: (value) => formatDurationFromMinutes(value)
+        }
+    ];
 }
 
 function getEfficiencyColorClass(value) {
     if (value >= 100) {
-        return 'class="stat-value" style="color: #6f42c1;"'; // Purple
+        return 'class="stat-value" style="color: #6f42c1;"';
     } else if (value >= 80) {
         return 'class="stat-value text-success"';
     } else if (value >= 60) {
@@ -729,29 +795,25 @@ function getEfficiencyColorClass(value) {
 
 function getWarnings(user, totalTimeInOffice) {
     const warnings = [];
-    const efficiency = totalTimeInOffice > 0 
+    const efficiency = totalTimeInOffice > 0
         ? (user.total_work_hours / totalTimeInOffice) * 100
         : 0;
-    
+
     if (user.total_work_hours === 0) {
         warnings.push('Kullanıcı hiç görev çalıştırmamış');
     }
-    
+
     if (efficiency < 50) {
         warnings.push(`Verimlilik çok düşük: %${efficiency.toFixed(1)}`);
     } else if (efficiency < 70) {
         warnings.push(`Verimlilik düşük: %${efficiency.toFixed(1)}`);
     }
-    
+
     const totalIdleTime = (user.total_idle_hours || 0) + (user.total_hold_hours || 0);
     if (totalIdleTime > user.total_work_hours * 1.5) {
         warnings.push('Boşta geçen ve bekleme süresi çalışma süresinden çok fazla');
     }
-    
-    if (user.idle_periods && user.idle_periods.length > 5) {
-        warnings.push('Çok fazla boşta geçen dönem var');
-    }
-    
+
     return warnings;
 }
 
@@ -787,12 +849,10 @@ function escapeHtml(text) {
     return div.innerHTML;
 }
 
-// Make showComment available globally
 window.showComment = function(comment) {
     const modal = document.createElement('div');
     modal.className = 'modal fade';
     modal.id = 'comment-modal-' + Date.now();
-    // Escape HTML and preserve newlines
     const commentText = escapeHtml(comment).replace(/\n/g, '<br>');
     modal.innerHTML = `
         <div class="modal-dialog">
@@ -822,8 +882,8 @@ window.showComment = function(comment) {
 
 function updateStatistics() {
     if (!reportData || !reportData.users || reportData.users.length === 0) {
-        if (dailyReportStats) {
-            dailyReportStats.updateValues({
+        if (userReportStats) {
+            userReportStats.updateValues({
                 0: '0',
                 1: '0',
                 2: '0',
@@ -832,25 +892,23 @@ function updateStatistics() {
         }
         return;
     }
-    
+
     const totalUsers = reportData.users.length;
     const totalWorkHours = reportData.users.reduce((sum, user) => sum + (user.total_work_hours || 0), 0);
     const totalIdleHours = reportData.users.reduce((sum, user) => sum + (user.total_idle_hours || 0), 0);
-    const totalHoldHours = reportData.users.reduce((sum, user) => sum + (user.total_hold_hours || 0), 0);
-    
-    // Calculate total office hours (work + idle + hold) if not provided
+
     const totalOfficeHours = reportData.users.reduce((sum, user) => {
-        const officeHours = user.total_time_in_office_hours || 
+        const officeHours = user.total_time_in_office_hours ||
             (user.total_work_hours + user.total_idle_hours + (user.total_hold_hours || 0));
         return sum + (officeHours || 0);
     }, 0);
-    
-    const avgEfficiency = totalOfficeHours > 0 
+
+    const avgEfficiency = totalOfficeHours > 0
         ? ((totalWorkHours / totalOfficeHours) * 100).toFixed(1)
         : '0';
-    
-    if (dailyReportStats) {
-        dailyReportStats.updateValues({
+
+    if (userReportStats) {
+        userReportStats.updateValues({
             0: totalUsers.toString(),
             1: totalWorkHours.toFixed(2),
             2: totalIdleHours.toFixed(2),
@@ -898,5 +956,3 @@ function renderErrorState() {
         `;
     }
 }
-
-

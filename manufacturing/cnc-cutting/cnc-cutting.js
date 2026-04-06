@@ -45,6 +45,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         icon: 'fas fa-clock',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/cnc-cutting/reports/finished-timers'
+                    },
+                    {
+                        label: 'Kullanıcı Raporu',
+                        icon: 'fas fa-calendar-alt',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/cnc-cutting/reports/user-report'
                     }
                 ]
             },

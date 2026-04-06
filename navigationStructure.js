@@ -189,9 +189,9 @@ export const NAVIGATION_STRUCTURE = {
                                 icon: 'fas fa-calendar-alt',
                                 children: {}
                             },
-                            '/manufacturing/machining/reports/daily-report': {
-                                label: 'Günlük Rapor',
-                                icon: 'fas fa-calendar-day',
+                            '/manufacturing/machining/reports/user-report': {
+                                label: 'Kullanıcı Raporu',
+                                icon: 'fas fa-calendar-alt',
                                 children: {}
                             }
                         }
@@ -278,6 +278,11 @@ export const NAVIGATION_STRUCTURE = {
                             '/manufacturing/cnc-cutting/reports/finished-timers': {
                                 label: 'Biten Zamanlayıcılar',
                                 icon: 'fas fa-clock',
+                                children: {}
+                            },
+                            '/manufacturing/cnc-cutting/reports/user-report': {
+                                label: 'Kullanıcı Raporu',
+                                icon: 'fas fa-calendar-alt',
                                 children: {}
                             }
                         }
