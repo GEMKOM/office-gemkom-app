@@ -928,6 +928,8 @@ export class TableComponent {
         editableCells.forEach(cell => {
             cell.addEventListener('click', (e) => {
                 if (this.isInlineEditing) return;
+                // Row <tr> may use onclick to open detail; stop bubbling so inline edit wins.
+                e.stopPropagation();
                 this.startInlineEdit(cell);
             });
         });
@@ -951,25 +953,32 @@ export class TableComponent {
         cell.appendChild(input);
         input.focus();
         
-        // Handle save
-        const handleSave = () => {
-            const newValue = input.value;
-            this.finishInlineEdit(cell, field, rowIndex, newValue, originalContent);
-        };
-        
-        // Handle cancel
+        let saveCommitted = false;
         const handleCancel = () => {
+            input.removeEventListener('blur', onBlurSave);
             cell.innerHTML = originalContent;
             this.isInlineEditing = false;
         };
+        const onBlurSave = () => {
+            void commitSave();
+        };
+        const commitSave = async () => {
+            if (saveCommitted) return;
+            saveCommitted = true;
+            input.removeEventListener('blur', onBlurSave);
+            const newValue = input.value;
+            await this.finishInlineEdit(cell, field, rowIndex, newValue, originalContent);
+        };
         
-        input.addEventListener('blur', handleSave);
+        input.addEventListener('blur', onBlurSave);
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Enter') {
                 e.preventDefault();
-                handleSave();
+                void commitSave();
             } else if (e.key === 'Escape') {
                 e.preventDefault();
+                saveCommitted = true;
+                input.removeEventListener('blur', onBlurSave);
                 handleCancel();
             }
         });
@@ -997,27 +1006,59 @@ export class TableComponent {
             input.className = 'form-control form-control-sm';
             input.value = value;
             return input;
+        } else if (column.type === 'number') {
+            const input = document.createElement('input');
+            input.type = 'number';
+            input.className = 'form-control form-control-sm';
+            if (column.min !== undefined && column.min !== null) input.min = String(column.min);
+            if (column.max !== undefined && column.max !== null) input.max = String(column.max);
+            input.step = column.step !== undefined && column.step !== null ? String(column.step) : '1';
+            if (value === null || value === undefined || value === '') {
+                input.value = '';
+            } else {
+                input.value = String(value);
+            }
+            return input;
         } else {
             const input = document.createElement('input');
             input.type = 'text';
             input.className = 'form-control form-control-sm';
-            input.value = value;
+            input.value = value ?? '';
             return input;
         }
+    }
+
+    /**
+     * Compare old vs new for inline edit; number columns must not use === (5 !== "5").
+     */
+    isInlineEditValueUnchanged(column, oldValue, newValue) {
+        if (column?.type === 'number') {
+            const parseNum = (v) => {
+                if (v === null || v === undefined || v === '') return null;
+                const n = Number(typeof v === 'string' ? v.trim() : v);
+                return Number.isFinite(n) ? n : null;
+            };
+            const rawNew = newValue === null || newValue === undefined ? '' : `${newValue}`.trim();
+            const o = parseNum(oldValue);
+            const n = rawNew === '' ? null : parseNum(rawNew);
+            if (o === null && n === null) return true;
+            if (o === null || n === null) return false;
+            return o === n;
+        }
+        return newValue === oldValue;
     }
     
     async finishInlineEdit(cell, field, rowIndex, newValue, originalContent) {
         const row = this.options.data[rowIndex];
         const oldValue = this.getCellValue(row, { field });
         
-        if (newValue === oldValue) {
+        // Validate the new value
+        const column = this.options.columns.find(col => col.field === field);
+        if (this.isInlineEditValueUnchanged(column, oldValue, newValue)) {
             cell.innerHTML = originalContent;
             this.isInlineEditing = false;
             return;
         }
-        
-        // Validate the new value
-        const column = this.options.columns.find(col => col.field === field);
         if (column && column.validate) {
             const validation = column.validate(newValue, row);
             if (validation !== true) {
@@ -1028,21 +1069,25 @@ export class TableComponent {
             }
         }
         
-        // Update the data
-        row[field] = newValue;
-        
-        // Call onEdit callback
+        // Call onEdit (e.g. PATCH); callback should update `row` from the response when needed
         if (this.options.onEdit) {
             try {
                 await this.options.onEdit(row, field, newValue, oldValue);
-                cell.innerHTML = this.formatCellValue(newValue, column, row);
+                const displayValue = this.getCellValue(row, { field });
+                cell.innerHTML = this.formatCellValue(displayValue, column, row);
             } catch (error) {
                 console.error('Edit failed:', error);
                 cell.innerHTML = originalContent;
-                showNotification('Düzenleme başarısız', 'error');
+                showNotification(error.message || 'Düzenleme başarısız', 'error');
             }
         } else {
-            cell.innerHTML = this.formatCellValue(newValue, column, row);
+            if (column?.type === 'number') {
+                const t = `${newValue ?? ''}`.trim();
+                row[field] = t === '' ? null : Number(t);
+            } else {
+                row[field] = newValue;
+            }
+            cell.innerHTML = this.formatCellValue(this.getCellValue(row, { field }), column, row);
         }
         
         this.isInlineEditing = false;

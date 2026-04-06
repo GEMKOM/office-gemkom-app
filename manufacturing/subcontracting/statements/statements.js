@@ -223,6 +223,8 @@ function initializeTableComponent() {
                 sortable: true,
                 editable: true,
                 type: 'number',
+                min: 0,
+                step: 1,
                 width: '140px',
                 formatter: (value) => {
                     if (value === null || value === undefined || value === '') return '-';
@@ -321,10 +323,6 @@ function initializeTableComponent() {
         editable: true,
         editableColumns: ['employee_count'],
         onEdit: async (row, field, newValue) => {
-            // Only allow editing in draft/rejected
-            if (!['draft', 'rejected'].includes(row?.status)) {
-                throw new Error('Bu hakedişte çalışan sayısı düzenlenemez');
-            }
             const n = parseInt(`${newValue}`.trim(), 10);
             if (!Number.isFinite(n) || n < 0) {
                 throw new Error('Geçersiz çalışan sayısı');
@@ -909,7 +907,6 @@ async function viewStatementDetail(statementId, options = {}) {
             }
         });
 
-        const canEditEmployeeCount = ['draft', 'rejected'].includes(statement.status);
         const employeeCountValue =
             statement.employee_count === null || statement.employee_count === undefined
                 ? ''
@@ -931,17 +928,12 @@ async function viewStatementDetail(statementId, options = {}) {
                                 min="0"
                                 step="1"
                                 value="${employeeCountValue}"
-                                ${canEditEmployeeCount ? '' : 'readonly'}
                             />
                         </div>
                         <div class="col-md-4">
-                            ${canEditEmployeeCount ? `
-                                <button type="button" class="btn btn-primary" id="save-employee-count-btn">
-                                    <i class="fas fa-save me-1"></i>Kaydet
-                                </button>
-                            ` : `
-                                <div class="text-muted small">Bu alan sadece Taslak / Reddedildi durumunda düzenlenebilir.</div>
-                            `}
+                            <button type="button" class="btn btn-primary" id="save-employee-count-btn">
+                                <i class="fas fa-save me-1"></i>Kaydet
+                            </button>
                         </div>
                     </div>
                 </div>
