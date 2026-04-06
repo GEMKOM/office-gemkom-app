@@ -5,6 +5,7 @@ import { StatisticsCards } from '../../../../components/statistics-cards/statist
 import { TableComponent } from '../../../../components/table/table.js';
 import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
 import { fetchUserReport, fetchUserTaskDetail } from '../../../../apis/machining/userReport.js';
+import { buildUserReportSummaryFooterRow } from '../../../../components/table/userReportSummaryFooter.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 
 let reportData = null;
@@ -138,6 +139,7 @@ function renderUsersTable() {
                 title: 'Kullanıcı Raporu',
                 icon: 'users',
                 iconColor: 'text-primary',
+                tableClass: 'table table-hover user-report-summary-table',
                 columns: [],
                 data: [],
                 sortable: false,
@@ -191,6 +193,7 @@ function renderUsersTable() {
             title: 'Kullanıcı Raporu',
             icon: 'users',
             iconColor: 'text-primary',
+            tableClass: 'table table-hover user-report-summary-table',
             columns: [
                 {
                     field: '_displayName',
@@ -201,14 +204,14 @@ function renderUsersTable() {
                             ? `<small class="text-muted ms-2">(@${row.username})</small>`
                             : '';
                         const warningBadge = row._hasWarnings
-                            ? `<span class="badge bg-warning text-dark ms-2" title="${row._warnings.join('; ')}">
+                            ? `<span class="badge bg-warning text-dark flex-shrink-0" title="${row._warnings.join('; ')}">
                                 <i class="fas fa-exclamation-triangle me-1"></i>Uyarı
                                </span>`
                             : '';
                         return `
-                            <div class="d-flex align-items-center">
-                                <i class="fas fa-user me-2 text-primary"></i>
-                                <span>${value}${usernameHtml}</span>
+                            <div class="d-flex align-items-center user-report-name-row">
+                                <i class="fas fa-user me-2 text-primary flex-shrink-0"></i>
+                                <span class="user-report-name-text">${value}${usernameHtml}</span>
                                 ${warningBadge}
                             </div>
                         `;
@@ -290,7 +293,8 @@ function renderUsersTable() {
             itemsPerPage: 20,
             responsive: true,
             emptyMessage: 'Bu aralık için rapor verisi bulunamadı',
-            emptyIcon: 'fas fa-inbox'
+            emptyIcon: 'fas fa-inbox',
+            footer: (ctx) => buildUserReportSummaryFooterRow(ctx)
         });
     } else {
         usersTable.updateData(tableData);
@@ -315,6 +319,88 @@ function enrichTaskRow(row, taskTotals) {
     };
 }
 
+function aggregateDetailDays(days) {
+    const allTasks = [];
+    const allIdle = [];
+    const allHold = [];
+    (days || []).forEach((day) => {
+        const dateKey = day.date || day.day || '';
+        const dateLabel = formatDayShort(dateKey);
+        const dateTitle = formatDayHeading(dateKey);
+        (day.tasks || []).forEach((t) => {
+            allTasks.push({
+                ...t,
+                _activityDateLabel: dateLabel,
+                _activityDateTitle: dateTitle
+            });
+        });
+        (day.idle_periods || []).forEach((i) => {
+            allIdle.push({
+                ...i,
+                _activityDateLabel: dateLabel,
+                _activityDateTitle: dateTitle
+            });
+        });
+        (day.hold_tasks || []).forEach((h) => {
+            allHold.push({
+                ...h,
+                _activityDateLabel: dateLabel,
+                _activityDateTitle: dateTitle
+            });
+        });
+    });
+    return { allTasks, allIdle, allHold };
+}
+
+function formatDayShort(dateStr) {
+    if (!dateStr) return '—';
+    const d = new Date(String(dateStr).includes('T') ? dateStr : `${dateStr}T12:00:00`);
+    if (Number.isNaN(d.getTime())) return String(dateStr);
+    return d.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+function buildUserDetailAccordionHtml(uid, nTasks, nIdle, nHold) {
+    return `
+<div class="accordion user-detail-accordion" id="accordion-${uid}">
+    <div class="accordion-item">
+        <h2 class="accordion-header" id="heading-tasks-${uid}">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-tasks-${uid}" aria-expanded="false" aria-controls="collapse-tasks-${uid}">
+                <i class="fas fa-tasks me-2 text-primary"></i>Görevler <span class="badge bg-secondary ms-1">${nTasks}</span>
+            </button>
+        </h2>
+        <div id="collapse-tasks-${uid}" class="accordion-collapse collapse" aria-labelledby="heading-tasks-${uid}">
+            <div class="accordion-body p-2 pt-0">
+                <div id="user-detail-tasks-${uid}"></div>
+            </div>
+        </div>
+    </div>
+    <div class="accordion-item">
+        <h2 class="accordion-header" id="heading-idle-${uid}">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-idle-${uid}" aria-expanded="false" aria-controls="collapse-idle-${uid}">
+                <i class="fas fa-hourglass-half me-2 text-warning"></i>Boşta geçen zaman <span class="badge bg-secondary ms-1">${nIdle}</span>
+            </button>
+        </h2>
+        <div id="collapse-idle-${uid}" class="accordion-collapse collapse" aria-labelledby="heading-idle-${uid}">
+            <div class="accordion-body p-2 pt-0">
+                <div id="user-detail-idle-${uid}"></div>
+            </div>
+        </div>
+    </div>
+    <div class="accordion-item">
+        <h2 class="accordion-header" id="heading-hold-${uid}">
+            <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-hold-${uid}" aria-expanded="false" aria-controls="collapse-hold-${uid}">
+                <i class="fas fa-pause-circle me-2 text-warning"></i>Bekleme görevleri <span class="badge bg-secondary ms-1">${nHold}</span>
+            </button>
+        </h2>
+        <div id="collapse-hold-${uid}" class="accordion-collapse collapse" aria-labelledby="heading-hold-${uid}">
+            <div class="accordion-body p-2 pt-0">
+                <div id="user-detail-hold-${uid}"></div>
+            </div>
+        </div>
+    </div>
+</div>`;
+}
+
 async function showUserDetails(user) {
     const userId = user.id ?? user.user_id;
     if (userId == null) {
@@ -324,9 +410,6 @@ async function showUserDetails(user) {
 
     const totalTimeInOffice = user._totalTimeInOffice ||
         (user.total_work_hours + user.total_idle_hours + (user.total_hold_hours || 0));
-    const efficiency = totalTimeInOffice > 0
-        ? ((user.total_work_hours / totalTimeInOffice) * 100).toFixed(1)
-        : '0';
     const hasWarnings = user._warnings || getWarnings(user, totalTimeInOffice);
 
     const userDisplayName = user._displayName ||
@@ -347,6 +430,10 @@ async function showUserDetails(user) {
 
     const taskTotals = detail.task_totals || detail.taskTotals || {};
     const days = normalizeTaskDetailDays(detail);
+    const { allTasks, allIdle, allHold } = aggregateDetailDays(days);
+    const includeActivityDate = days.length > 1;
+    const tasksEnriched = allTasks.map((r) => enrichTaskRow(r, taskTotals));
+    const holdEnriched = allHold.map((r) => enrichTaskRow(r, taskTotals));
 
     const displayModal = new DisplayModal('user-details-modal-container', {
         title: modalTitle,
@@ -370,119 +457,21 @@ async function showUserDetails(user) {
         });
     }
 
-    let colSize = 3;
-    const hasTasksCompleted = user.total_tasks_completed !== undefined;
-    const hasTasksWorked = user.total_tasks_worked_on !== undefined;
-    const hasHoldHours = user.total_hold_hours !== undefined && user.total_hold_hours > 0;
-
-    const statCount = 4 + (hasTasksCompleted ? 1 : 0) + (hasTasksWorked ? 1 : 0) + (hasHoldHours ? 1 : 0);
-    if (statCount > 5) colSize = 2;
-
-    let statsContent = `
-        <div class="row mb-3">
-            <div class="col-md-${colSize}">
-                <div class="stat-item" style="padding: 0.5rem;">
-                    <div class="stat-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">
-                        <i class="fas fa-clock me-1"></i>Çalışma Saati
-                    </div>
-                    <div class="stat-value text-success" style="font-size: 1.25rem;">${user.total_work_hours.toFixed(2)}</div>
-                </div>
-            </div>
-            <div class="col-md-${colSize}">
-                <div class="stat-item" style="padding: 0.5rem;">
-                    <div class="stat-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">
-                        <i class="fas fa-hourglass-half me-1"></i>Boşta Geçen Saat
-                    </div>
-                    <div class="stat-value text-danger" style="font-size: 1.25rem;">${user.total_idle_hours.toFixed(2)}</div>
-                </div>
-            </div>
-            ${hasHoldHours ? `
-            <div class="col-md-${colSize}">
-                <div class="stat-item" style="padding: 0.5rem;">
-                    <div class="stat-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">
-                        <i class="fas fa-pause-circle me-1"></i>Bekleme Saati
-                    </div>
-                    <div class="stat-value text-secondary" style="font-size: 1.25rem;">${(user.total_hold_hours || 0).toFixed(2)}</div>
-                </div>
-            </div>
-            ` : ''}
-            <div class="col-md-${colSize}">
-                <div class="stat-item" style="padding: 0.5rem;">
-                    <div class="stat-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">
-                        <i class="fas fa-chart-line me-1"></i>Verimlilik
-                    </div>
-                    <div ${getEfficiencyColorClass(parseFloat(efficiency))} style="font-size: 1.25rem;">${efficiency}%</div>
-                </div>
-            </div>
-    `;
-
-    if (hasTasksCompleted) {
-        statsContent += `
-            <div class="col-md-${colSize}">
-                <div class="stat-item" style="padding: 0.5rem;">
-                    <div class="stat-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">
-                        <i class="fas fa-check-circle me-1"></i>Tamamlanan Görev
-                    </div>
-                    <div class="stat-value text-primary" style="font-size: 1.25rem;">${user.total_tasks_completed}</div>
-                </div>
-            </div>
-        `;
-    }
-
-    if (hasTasksWorked) {
-        statsContent += `
-            <div class="col-md-${colSize}">
-                <div class="stat-item" style="padding: 0.5rem;">
-                    <div class="stat-label" style="font-size: 0.75rem; margin-bottom: 0.25rem;">
-                        <i class="fas fa-tasks me-1"></i>İşlem Gördüğü Görev
-                    </div>
-                    <div class="stat-value text-primary" style="font-size: 1.25rem;">${user.total_tasks_worked_on}</div>
-                </div>
-            </div>
-        `;
-    }
-
-    statsContent += `</div>`;
-
-    displayModal.addCustomSection({
-        title: 'İstatistikler',
-        icon: 'fas fa-chart-bar',
-        iconColor: 'text-primary',
-        customContent: statsContent
-    });
-
-    const daySectionIds = [];
-    const ts = Date.now();
+    const uid = `ud-${Date.now()}`;
 
     if (days.length === 0) {
         displayModal.addCustomSection({
-            title: 'Günlük detay',
-            icon: 'fas fa-calendar-day',
-            iconColor: 'text-muted',
+            title: null,
             customContent: `
                 <div class="text-muted text-center py-3">
-                    <i class="fas fa-inbox me-2"></i>Seçilen aralıkta gösterilecek günlük kayıt yok
+                    <i class="fas fa-inbox me-2"></i>Seçilen aralıkta gösterilecek kayıt yok
                 </div>
             `
         });
     } else {
-        days.forEach((day, dayIdx) => {
-            const dateKey = day.date || day.day || `day-${dayIdx}`;
-            const label = formatDayHeading(dateKey);
-            const tasksId = `tasks-${ts}-${dayIdx}`;
-            const idleId = `idle-${ts}-${dayIdx}`;
-            const holdId = `hold-${ts}-${dayIdx}`;
-            daySectionIds.push({ day, tasksId, idleId, holdId, taskTotals });
-            displayModal.addCustomSection({
-                title: label,
-                icon: 'fas fa-calendar-day',
-                iconColor: 'text-primary',
-                customContent: `<div class="user-detail-day-block" data-day-idx="${dayIdx}">
-                    <div id="${tasksId}"></div>
-                    <div id="${idleId}" class="mt-3"></div>
-                    <div id="${holdId}" class="mt-3"></div>
-                </div>`
-            });
+        displayModal.addCustomSection({
+            title: null,
+            customContent: buildUserDetailAccordionHtml(uid, tasksEnriched.length, allIdle.length, holdEnriched.length)
         });
     }
 
@@ -504,83 +493,76 @@ async function showUserDetails(user) {
     document.addEventListener('click', handleCommentClick);
 
     setTimeout(() => {
-        daySectionIds.forEach(({ day, tasksId, idleId, holdId, taskTotals: totals }) => {
-            const tasks = (day.tasks || []).map(r => enrichTaskRow(r, totals));
-            const idle_periods = day.idle_periods || [];
-            const hold_tasks = (day.hold_tasks || []).map(r => enrichTaskRow(r, totals));
+        const emptyMsg = (icon, text) => `
+            <div class="text-muted text-center py-3 small">
+                <i class="fas ${icon} me-2"></i>${text}
+            </div>`;
 
-            const tasksEl = document.getElementById(tasksId);
-            if (tasksEl) {
-                if (tasks.length > 0) {
-                    new TableComponent(tasksId, {
-                        title: `Görevler (${tasks.length})`,
-                        icon: 'fas fa-tasks',
-                        iconColor: 'text-primary',
-                        columns: buildTaskColumns(),
-                        data: tasks,
-                        sortable: true,
-                        pagination: false,
-                        responsive: true,
-                        small: true,
-                        emptyMessage: 'Bu gün için görev kaydı yok',
-                        emptyIcon: 'fas fa-inbox'
-                    });
-                } else {
-                    tasksEl.innerHTML = `
-                        <div class="text-muted text-center py-2 small">
-                            <i class="fas fa-inbox me-2"></i>Bu gün için görev kaydı yok
-                        </div>`;
-                }
+        const tasksContainerId = `user-detail-tasks-${uid}`;
+        const tasksEl = document.getElementById(tasksContainerId);
+        if (tasksEl) {
+            if (tasksEnriched.length > 0) {
+                new TableComponent(tasksContainerId, {
+                    title: ' ',
+                    icon: 'fas fa-tasks',
+                    iconColor: 'text-primary',
+                    columns: buildTaskColumns(includeActivityDate),
+                    data: tasksEnriched,
+                    sortable: true,
+                    pagination: false,
+                    responsive: true,
+                    small: true,
+                    emptyMessage: 'Kayıt yok',
+                    emptyIcon: 'fas fa-inbox'
+                });
+            } else {
+                tasksEl.innerHTML = emptyMsg('fa-inbox', 'Görev kaydı yok');
             }
+        }
 
-            const idleEl = document.getElementById(idleId);
-            if (idleEl) {
-                if (idle_periods.length > 0) {
-                    new TableComponent(idleId, {
-                        title: `Boşta Geçen Dönemler (${idle_periods.length})`,
-                        icon: 'fas fa-hourglass-half',
-                        iconColor: 'text-warning',
-                        columns: buildIdleColumns(),
-                        data: idle_periods,
-                        sortable: true,
-                        pagination: false,
-                        responsive: true,
-                        small: true,
-                        emptyMessage: 'Boşta geçen dönem yok',
-                        emptyIcon: 'fas fa-check-circle'
-                    });
-                } else {
-                    idleEl.innerHTML = `
-                        <div class="text-muted text-center py-2 small">
-                            <i class="fas fa-check-circle me-2"></i>Boşta geçen dönem yok
-                        </div>`;
-                }
+        const idleContainerId = `user-detail-idle-${uid}`;
+        const idleEl = document.getElementById(idleContainerId);
+        if (idleEl) {
+            if (allIdle.length > 0) {
+                new TableComponent(idleContainerId, {
+                    title: ' ',
+                    icon: 'fas fa-hourglass-half',
+                    iconColor: 'text-warning',
+                    columns: buildIdleColumns(includeActivityDate),
+                    data: allIdle,
+                    sortable: true,
+                    pagination: false,
+                    responsive: true,
+                    small: true,
+                    emptyMessage: 'Kayıt yok',
+                    emptyIcon: 'fas fa-check-circle'
+                });
+            } else {
+                idleEl.innerHTML = emptyMsg('fa-check-circle', 'Boşta geçen dönem yok');
             }
+        }
 
-            const holdEl = document.getElementById(holdId);
-            if (holdEl) {
-                if (hold_tasks.length > 0) {
-                    new TableComponent(holdId, {
-                        title: `Bekleme Görevleri (${hold_tasks.length})`,
-                        icon: 'fas fa-pause-circle',
-                        iconColor: 'text-warning',
-                        columns: buildHoldTaskColumns(),
-                        data: hold_tasks,
-                        sortable: true,
-                        pagination: false,
-                        responsive: true,
-                        small: true,
-                        emptyMessage: 'Bekleme görevi yok',
-                        emptyIcon: 'fas fa-inbox'
-                    });
-                } else {
-                    holdEl.innerHTML = `
-                        <div class="text-muted text-center py-2 small">
-                            <i class="fas fa-inbox me-2"></i>Bekleme görevi yok
-                        </div>`;
-                }
+        const holdContainerId = `user-detail-hold-${uid}`;
+        const holdEl = document.getElementById(holdContainerId);
+        if (holdEl) {
+            if (holdEnriched.length > 0) {
+                new TableComponent(holdContainerId, {
+                    title: ' ',
+                    icon: 'fas fa-pause-circle',
+                    iconColor: 'text-warning',
+                    columns: buildHoldTaskColumns(includeActivityDate),
+                    data: holdEnriched,
+                    sortable: true,
+                    pagination: false,
+                    responsive: true,
+                    small: true,
+                    emptyMessage: 'Kayıt yok',
+                    emptyIcon: 'fas fa-inbox'
+                });
+            } else {
+                holdEl.innerHTML = emptyMsg('fa-inbox', 'Bekleme görevi yok');
             }
-        });
+        }
     }, 100);
 }
 
@@ -596,8 +578,21 @@ function formatDayHeading(dateStr) {
     });
 }
 
-function buildTaskColumns() {
+function buildTaskColumns(includeActivityDate = false) {
+    const dateCols = includeActivityDate ? [{
+        field: '_activityDateLabel',
+        label: 'Tarih',
+        sortable: true,
+        formatter: (value, row) => {
+            const tip = row._activityDateTitle || '';
+            const v = value !== undefined && value !== null ? String(value) : '—';
+            if (!tip) return escapeHtml(v);
+            return `<span title="${escapeHtml(tip)}">${escapeHtml(v)}</span>`;
+        }
+    }] : [];
+
     return [
+        ...dateCols,
         {
             field: 'timer_id',
             label: '#',
@@ -631,11 +626,6 @@ function buildTaskColumns() {
         {
             field: 'task_name',
             label: 'Görev Adı',
-            sortable: true
-        },
-        {
-            field: 'job_no',
-            label: 'İş No',
             sortable: true
         },
         {
@@ -662,12 +652,6 @@ function buildTaskColumns() {
             sortable: true
         },
         {
-            field: 'manual_entry',
-            label: 'Manuel',
-            sortable: true,
-            formatter: (value) => value ? '<span class="badge bg-success">Manuel</span>' : '<span class="text-muted">-</span>'
-        },
-        {
             field: 'comment',
             label: 'Yorum',
             sortable: false,
@@ -680,8 +664,21 @@ function buildTaskColumns() {
     ];
 }
 
-function buildHoldTaskColumns() {
+function buildHoldTaskColumns(includeActivityDate = false) {
+    const dateCols = includeActivityDate ? [{
+        field: '_activityDateLabel',
+        label: 'Tarih',
+        sortable: true,
+        formatter: (value, row) => {
+            const tip = row._activityDateTitle || '';
+            const v = value !== undefined && value !== null ? String(value) : '—';
+            if (!tip) return escapeHtml(v);
+            return `<span title="${escapeHtml(tip)}">${escapeHtml(v)}</span>`;
+        }
+    }] : [];
+
     return [
+        ...dateCols,
         {
             field: 'timer_id',
             label: '#',
@@ -758,8 +755,21 @@ function buildHoldTaskColumns() {
     ];
 }
 
-function buildIdleColumns() {
+function buildIdleColumns(includeActivityDate = false) {
+    const dateCols = includeActivityDate ? [{
+        field: '_activityDateLabel',
+        label: 'Tarih',
+        sortable: true,
+        formatter: (value, row) => {
+            const tip = row._activityDateTitle || '';
+            const v = value !== undefined && value !== null ? String(value) : '—';
+            if (!tip) return escapeHtml(v);
+            return `<span title="${escapeHtml(tip)}">${escapeHtml(v)}</span>`;
+        }
+    }] : [];
+
     return [
+        ...dateCols,
         {
             field: 'start_time',
             label: 'Başlangıç',
@@ -779,18 +789,6 @@ function buildIdleColumns() {
             formatter: (value) => formatDurationFromMinutes(value)
         }
     ];
-}
-
-function getEfficiencyColorClass(value) {
-    if (value >= 100) {
-        return 'class="stat-value" style="color: #6f42c1;"';
-    } else if (value >= 80) {
-        return 'class="stat-value text-success"';
-    } else if (value >= 60) {
-        return 'class="stat-value text-warning"';
-    } else {
-        return 'class="stat-value text-danger"';
-    }
 }
 
 function getWarnings(user, totalTimeInOffice) {

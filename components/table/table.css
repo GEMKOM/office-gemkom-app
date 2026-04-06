@@ -169,6 +169,42 @@ tr[draggable="true"]:hover {
     border-bottom: 1px solid #f1f3f4;
 }
 
+/* User report summary row: stable column widths + aligned tfoot */
+.dashboard-card .table.user-report-summary-table {
+    width: 100%;
+    table-layout: fixed;
+}
+
+.dashboard-card .table.user-report-summary-table td:first-child {
+    overflow: hidden;
+    vertical-align: middle;
+}
+
+.dashboard-card .table.user-report-summary-table td:first-child .user-report-name-row {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.dashboard-card .table.user-report-summary-table td:first-child .user-report-name-text {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.dashboard-card .table tfoot {
+    display: table-footer-group;
+}
+
+.dashboard-card .table tfoot tr.user-report-summary-footer td {
+    border-top: 2px solid #dee2e6;
+    vertical-align: middle;
+    padding: 0.75rem;
+}
+
 .table tbody tr {
     transition: background-color 0.2s ease;
 }

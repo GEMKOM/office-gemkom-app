@@ -71,7 +71,7 @@ export class TableComponent {
             rowBackgroundColor: null, // Function that returns background color for each row (receives row, index)
             
             // Footer
-            footer: null, // Function that returns <tr>...</tr> HTML for <tfoot>. Receives ({ displayedData, columns, hasActions })
+            footer: null, // Function that returns <tr>...</tr> HTML for <tfoot>. Receives ({ displayedData, allData, columns, hasActions })
             
             // Drag and drop configuration
             draggable: false,
@@ -296,6 +296,7 @@ export class TableComponent {
         const hasActions = this.options.actions.length > 0;
         const footerRowHtml = this.options.footer({
             displayedData,
+            allData: this.options.data,
             columns: this.options.columns,
             hasActions
         });
