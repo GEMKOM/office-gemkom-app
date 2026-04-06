@@ -1,15 +1,23 @@
 import { backendBase } from '../../base.js';
 import { authedFetch } from '../../authService.js';
 
-export async function fetchDailyEfficiencyReport(date = null) {
+/**
+ * @param {string|null} date - ISO date (YYYY-MM-DD)
+ * @param {boolean} includeWorked - When true, include all tasks worked that day; each task includes completed_on_date
+ */
+export async function fetchDailyEfficiencyReport(date = null, includeWorked = false) {
     let url = `${backendBase}/machining/reports/daily-efficiency/`;
     const queryParams = new URLSearchParams();
 
     if (date) {
         queryParams.append('date', date);
     }
+    if (includeWorked) {
+        queryParams.append('include_worked', 'true');
+    }
 
-    url += `?${queryParams.toString()}`;
+    const qs = queryParams.toString();
+    url += qs ? `?${qs}` : '';
     
     try {
         const response = await authedFetch(url);

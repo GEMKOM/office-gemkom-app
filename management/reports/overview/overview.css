@@ -225,6 +225,381 @@
     color: #495057;
 }
 
+/* ---------- Taşeron Hakediş (özet metrikler) ---------- */
+.ov-sub-hakedis {
+    display: flex;
+    flex-direction: column;
+}
+
+.ov-sub-hakedis-metric {
+    padding: 0.9rem 0;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.ov-sub-hakedis-metric:first-child {
+    padding-top: 0;
+}
+
+.ov-sub-hakedis-metric:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.ov-sub-hakedis-metric__title {
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #6c757d;
+    margin-bottom: 0.55rem;
+}
+
+.ov-sub-hakedis-metric__single {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #212529;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25;
+}
+
+.ov-sub-hakedis-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.65rem 1.25rem;
+    align-items: start;
+}
+
+@media (max-width: 420px) {
+    .ov-sub-hakedis-compare {
+        grid-template-columns: 1fr;
+    }
+}
+
+.ov-sub-hakedis-period {
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 0.55rem 0.65rem;
+    min-width: 0;
+}
+
+.ov-sub-hakedis-period--prev {
+    background: #fafbfc;
+    border-color: #dee2e6;
+}
+
+.ov-sub-hakedis-period__label {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #868e96;
+    margin-bottom: 0.35rem;
+}
+
+.ov-sub-hakedis-period__line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem 0.5rem;
+}
+
+.ov-sub-hakedis-period__value {
+    font-size: 1.02rem;
+    font-weight: 700;
+    color: #212529;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.25;
+}
+
+.ov-sub-hakedis-period--prev .ov-sub-hakedis-period__value {
+    font-weight: 600;
+    color: #495057;
+}
+
+.ov-sub-hakedis-trend {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #6c757d;
+    white-space: nowrap;
+}
+
+.ov-sub-hakedis-unit {
+    font-size: 0.82em;
+    font-weight: 600;
+    color: #868e96;
+    margin-left: 0.15rem;
+}
+
+/* ---------- Rapor dönemi bandı (#kpi-cards-placeholder — eski KPI kartları yerine) ---------- */
+#kpi-cards-placeholder {
+    margin-bottom: 1rem;
+}
+
+.ov-report-period {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 0.85rem 1.1rem;
+    background: linear-gradient(180deg, #ffffff 0%, #f8f9fa 100%);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.ov-report-period__row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.45rem 1rem;
+}
+
+.ov-report-period__row + .ov-report-period__row {
+    margin-top: 0.55rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.ov-report-period__k {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8b0000;
+    white-space: nowrap;
+}
+
+.ov-report-period__row--prev .ov-report-period__k {
+    color: #6c757d;
+}
+
+.ov-report-period__v {
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: #212529;
+    font-variant-numeric: tabular-nums;
+}
+
+.ov-report-period--empty {
+    border: 1px dashed #dee2e6;
+    border-radius: 8px;
+}
+
+/* ---------- Satınalma (procurement) tab ---------- */
+
+.ov-proc-tab {
+    max-width: 1320px;
+    margin-left: auto;
+    margin-right: auto;
+}
+
+.ov-proc-page-title {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #1a1d21;
+    letter-spacing: -0.02em;
+    margin-bottom: 0.35rem;
+}
+
+.ov-proc-lead {
+    font-size: 0.92rem;
+    line-height: 1.45;
+}
+
+.ov-proc-kpi-tile {
+    height: 100%;
+    background: linear-gradient(165deg, #ffffff 0%, #f8fafc 100%);
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 1rem 1rem 0.9rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.ov-proc-kpi-tile:hover {
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.07);
+    border-color: #cbd5e1;
+}
+
+.ov-proc-kpi-tile--accent {
+    border-color: rgba(139, 0, 0, 0.22);
+    background: linear-gradient(165deg, #fffefd 0%, #fff5f5 100%);
+}
+
+.ov-proc-kpi-tile__label {
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: #64748b;
+    margin-bottom: 0.4rem;
+}
+
+.ov-proc-kpi-tile__value {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #0f172a;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.2;
+}
+
+.ov-proc-kpi-tile--accent .ov-proc-kpi-tile__value {
+    font-size: 1.45rem;
+    color: #8b0000;
+}
+
+.ov-proc-kpi-tile__prev {
+    margin-top: 0.45rem;
+    padding-top: 0.45rem;
+    border-top: 1px solid #e9ecef;
+    font-size: 0.72rem;
+    color: #64748b;
+}
+
+.ov-proc-kpi-tile__prev strong {
+    color: #475569;
+    font-weight: 700;
+}
+
+.ov-proc-kpi-tile__trend {
+    margin-left: 0.35rem;
+    font-weight: 800;
+    color: #94a3b8;
+}
+
+.ov-proc-alert {
+    background: linear-gradient(90deg, #fff5f5 0%, #fff 100%);
+    border: 1px solid rgba(220, 53, 69, 0.35) !important;
+    color: #495057;
+    border-radius: 10px;
+}
+
+.ov-proc-section-title {
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #212529;
+    margin-bottom: 0.25rem;
+}
+
+.ov-proc-section-head {
+    padding-top: 0.25rem;
+    border-top: 1px solid #e9ecef;
+}
+
+.ov-proc-tab .ov-card {
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+}
+
+.ov-proc-tab .ov-card-header {
+    background: linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+    border-bottom-color: #e2e8f0;
+}
+
+.ov-proc-summary {
+    max-width: none;
+}
+
+@media (min-width: 992px) {
+    .ov-proc-summary--grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0 1.5rem;
+    }
+
+    .ov-proc-summary--grid .ov-sub-hakedis-metric {
+        padding-left: 0.15rem;
+        padding-right: 0.15rem;
+    }
+}
+
+.ov-proc-thead th {
+    background: #f8fafc;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #64748b !important;
+    border-bottom-width: 2px;
+}
+
+.ov-proc-table-scroll {
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+.ov-proc-period-label {
+    font-size: 0.65rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #6c757d;
+    margin-bottom: 0.4rem;
+}
+
+.ov-proc-period-label--prev {
+    color: #868e96;
+}
+
+.ov-proc-table {
+    font-size: 0.82rem;
+}
+
+.ov-proc-table thead th {
+    font-weight: 600;
+    border-bottom: 1px solid #dee2e6;
+    white-space: nowrap;
+}
+
+.ov-proc-table tbody td {
+    vertical-align: middle;
+    padding-top: 0.4rem;
+    padding-bottom: 0.4rem;
+}
+
+.ov-proc-num {
+    font-variant-numeric: tabular-nums;
+}
+
+.ov-proc-code {
+    font-size: 0.78rem;
+    background: #fff;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    padding: 0.1rem 0.35rem;
+    color: #495057;
+}
+
+.ov-proc-job {
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: #343a40;
+}
+
+.ov-proc-compare-split {
+    margin-top: 0.15rem;
+}
+
+/* ---------- Taşeron Top 10 by_subcontractor tablosu ---------- */
+.ov-sub-compare-table {
+    font-size: 0.78rem;
+}
+
+.ov-sub-compare thead th {
+    font-weight: 600;
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 0.35rem;
+    white-space: nowrap;
+}
+
+.ov-sub-compare tbody td {
+    vertical-align: middle;
+    padding-top: 0.35rem;
+    padding-bottom: 0.35rem;
+}
+
+.ov-sub-compare-num {
+    font-variant-numeric: tabular-nums;
+}
+
 /* ---------- Responsive ---------- */
 @media (max-width: 768px) {
     .ov-stat-grid--3,

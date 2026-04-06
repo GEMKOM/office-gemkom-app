@@ -15,7 +15,7 @@ export async function fetchUsers(group = null) {
     if (group) {
         url += `?group=${group}`;
     }
-    const resp = await fetch(url);
+    const resp = await authedFetch(url);
     if (!resp.ok) return [];
     const data = await resp.json();
     return extractResultsFromResponse(data);

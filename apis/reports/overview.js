@@ -38,11 +38,28 @@ function buildOverviewQuery({ preset = null, date_from = null, date_to = null, c
     return qs;
 }
 
+function isLikelyNetworkFailure(err) {
+    if (!err) return false;
+    if (err.name === 'TypeError') return true;
+    const m = String(err.message || '');
+    return /failed to fetch|networkerror|load failed|aborted/i.test(m);
+}
+
 export async function fetchOverviewSlice(pathSegment, params = {}) {
     const qs = buildOverviewQuery(params);
     const qsStr = qs.toString();
     const url = `${REPORTS_BASE_URL}/overview/${pathSegment}/${qsStr ? `?${qsStr}` : ''}`;
-    const resp = await authedFetch(url, { method: 'GET' });
+    let resp;
+    try {
+        resp = await authedFetch(url, { method: 'GET' });
+    } catch (err) {
+        if (isLikelyNetworkFailure(err)) {
+            throw new Error(
+                `[${pathSegment}] Sunucuya ulaşılamadı. API adresi, ağ bağlantısı veya CORS ayarlarını kontrol edin. (${backendBase})`
+            );
+        }
+        throw err;
+    }
     if (!resp.ok) {
         const err = await resp.json().catch(() => ({}));
         throw new Error(err.detail || err.error || 'Dashboard verileri yüklenirken hata oluştu');
@@ -94,8 +111,19 @@ export function mergeOverviewResponses(operations, subcontracting, procurement, 
     const jobOrdersMetrics = jobOrders?.job_orders;
     const jobOrdersCosts = jobOrders?.costs;
 
+    const meta = mergeObjects(
+        mergeObjects(
+            mergeObjects(
+                mergeObjects(operations?.meta ?? {}, sales?.meta ?? {}),
+                jobOrders?.meta ?? {}
+            ),
+            subcontracting?.meta ?? {}
+        ),
+        procurement?.meta ?? {}
+    );
+
     return {
-        meta: operations?.meta ?? sales?.meta ?? jobOrders?.meta ?? {},
+        meta,
         manufacturing,
         maintenance,
         overtime,

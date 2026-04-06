@@ -27,8 +27,121 @@ function renderTaskCountBadge(count) {
     `;
 }
 
+function buildDailyEfficiencyTableColumns() {
+    const cols = [
+        {
+            field: 'task_key',
+            label: 'TI No',
+            sortable: true,
+            formatter: (value) => renderTaskKeyBadge(value)
+        }
+    ];
+    if (reportIncludeWorked) {
+        cols.push({
+            field: 'completed_on_date',
+            label: 'Tarihte tamamlandı',
+            type: 'boolean',
+            sortable: true,
+            headerClass: 'text-nowrap',
+            formatter: (value) => {
+                if (value === true) {
+                    return '<span class="badge bg-success">Evet</span>';
+                }
+                if (value === false) {
+                    return '<span class="badge bg-secondary">Hayır</span>';
+                }
+                return '-';
+            }
+        });
+    }
+    cols.push(
+        {
+            field: 'task_name',
+            label: 'Görev Adı',
+            sortable: true,
+            headerClass: 'text-nowrap',
+            cellClass: 'text-truncate',
+            formatter: (value) => {
+                if (!value) return '-';
+                const maxLength = 30;
+                return value.length > maxLength
+                    ? `<span title="${value}">${value.substring(0, maxLength)}...</span>`
+                    : value;
+            }
+        },
+        {
+            field: 'job_no',
+            label: 'İş No',
+            sortable: true,
+            headerClass: 'text-nowrap',
+            cellClass: 'text-truncate',
+            formatter: (value) => value || '-'
+        },
+        {
+            field: 'machine_name',
+            label: 'Makine',
+            sortable: true,
+            headerClass: 'text-nowrap',
+            cellClass: 'text-truncate',
+            formatter: (value) => {
+                if (!value) return '-';
+                const maxLength = 25;
+                return value.length > maxLength
+                    ? `<span title="${value}">${value.substring(0, maxLength)}...</span>`
+                    : value;
+            }
+        },
+        {
+            field: 'daily_duration_hours',
+            label: 'Günlük Süre (saat)',
+            sortable: true,
+            formatter: (value) => {
+                if (value === null || value === undefined) return '-';
+                return `<span class="text-success fw-bold">${value.toFixed(2)}</span>`;
+            }
+        },
+        {
+            field: 'estimated_hours',
+            label: 'Tahmini Saat',
+            sortable: true,
+            formatter: (value) => {
+                return value !== null && value !== undefined ? `${value.toFixed(2)}` : '-';
+            }
+        },
+        {
+            field: 'total_hours_spent',
+            label: 'Toplam Harcanan (saat)',
+            sortable: true,
+            formatter: (value) => {
+                return value !== null && value !== undefined ? `${value.toFixed(2)}` : '-';
+            }
+        },
+        {
+            field: 'efficiency',
+            label: 'Verimlilik',
+            sortable: true,
+            formatter: (value) => {
+                if (value === null || value === undefined) return '-';
+                const percentage = value;
+                let colorClass = '';
+                if (percentage >= 100) {
+                    colorClass = 'text-success';
+                } else if (percentage >= 80) {
+                    colorClass = 'text-warning';
+                } else {
+                    colorClass = 'text-danger';
+                }
+                return `<span class="${colorClass} fw-bold">${Math.round(percentage)}%</span>`;
+            }
+        }
+    );
+    return cols;
+}
+
 // State management
 let reportData = null;
+/** Mirrors last fetch: whether include_worked was requested (drives completed_on_date column). */
+let reportIncludeWorked = false;
 let reportFilters = null;
 let headerComponent;
 let dailyEfficiencyStats = null;
@@ -119,6 +232,13 @@ function initializeFiltersComponent() {
         colSize: 3,
         value: previousBusinessDay.toISOString().split('T')[0]
     });
+
+    reportFilters.addCheckboxFilter({
+        id: 'include-worked-filter',
+        label: 'O gün çalışılan tüm görevler (tamamlanmamış dahil)',
+        checked: false,
+        colSize: 4
+    });
 }
 
 function getPreviousBusinessDay() {
@@ -158,7 +278,9 @@ async function loadReport() {
             date = previousBusinessDay.toISOString().split('T')[0];
         }
         
-        reportData = await fetchDailyEfficiencyReport(date);
+        const includeWorked = !!(filterValues['include-worked-filter']);
+        reportIncludeWorked = includeWorked;
+        reportData = await fetchDailyEfficiencyReport(date, includeWorked);
         
         renderUsersTable();
         updateStatistics();
@@ -213,32 +335,16 @@ function renderUsersTable() {
                     _userTotalDailyHours: user.total_daily_hours
                 });
             });
-        } else {
-            // If user has no tasks, still show a row with user info
-            tableData.push({
-                _userDisplayName: userDisplayName,
-                _username: user.username,
-                _userId: user.user_id,
-                _userFirstName: user.first_name,
-                _userLastName: user.last_name,
-                _userTotalDailyHours: user.total_daily_hours,
-                task_key: null,
-                task_name: null,
-                job_no: null,
-                machine_name: null,
-                daily_duration_hours: null,
-                estimated_hours: null,
-                total_hours_spent: null,
-                efficiency: null
-            });
         }
     });
     
+    const columns = buildDailyEfficiencyTableColumns();
+
     // Initialize or update table
     if (usersTable) {
-        // If table exists but was created with empty columns, we need to recreate it
-        if (usersTable.options.columns.length === 0) {
-            // Destroy old table and create new one
+        const hadCompletedCol = usersTable.options.columns.some((c) => c.field === 'completed_on_date');
+        const needsCompletedCol = reportIncludeWorked;
+        if (usersTable.options.columns.length === 0 || hadCompletedCol !== needsCompletedCol) {
             const container = document.getElementById('users-report-table-container');
             if (container) {
                 container.innerHTML = '';
@@ -246,7 +352,7 @@ function renderUsersTable() {
             usersTable = null;
         }
     }
-    
+
     if (!usersTable) {
         const container = document.getElementById('users-report-table-container');
         if (!container) {
@@ -260,6 +366,7 @@ function renderUsersTable() {
             groupBy: '_userId',
             groupCollapsible: true,
             defaultGroupExpanded: true,
+            columns,
             groupHeaderFormatter: (groupValue, groupRows) => {
                 // Get user info from first row
                 const firstRow = groupRows[0];
@@ -283,96 +390,6 @@ function renderUsersTable() {
                     </div>
                 `;
             },
-            columns: [
-                {
-                    field: 'task_key',
-                    label: 'TI No',
-                    sortable: true,
-                    formatter: (value) => renderTaskKeyBadge(value)
-                },
-                {
-                    field: 'task_name',
-                    label: 'Görev Adı',
-                    sortable: true,
-                    headerClass: 'text-nowrap',
-                    cellClass: 'text-truncate',
-                    formatter: (value) => {
-                        if (!value) return '-';
-                        // Truncate long task names
-                        const maxLength = 30;
-                        return value.length > maxLength 
-                            ? `<span title="${value}">${value.substring(0, maxLength)}...</span>`
-                            : value;
-                    }
-                },
-                {
-                    field: 'job_no',
-                    label: 'İş No',
-                    sortable: true,
-                    headerClass: 'text-nowrap',
-                    cellClass: 'text-truncate',
-                    formatter: (value) => value || '-'
-                },
-                {
-                    field: 'machine_name',
-                    label: 'Makine',
-                    sortable: true,
-                    headerClass: 'text-nowrap',
-                    cellClass: 'text-truncate',
-                    formatter: (value) => {
-                        if (!value) return '-';
-                        // Truncate long machine names
-                        const maxLength = 25;
-                        return value.length > maxLength 
-                            ? `<span title="${value}">${value.substring(0, maxLength)}...</span>`
-                            : value;
-                    }
-                },
-                {
-                    field: 'daily_duration_hours',
-                    label: 'Günlük Süre (saat)',
-                    sortable: true,
-                    formatter: (value) => {
-                        if (value === null || value === undefined) return '-';
-                        return `<span class="text-success fw-bold">${value.toFixed(2)}</span>`;
-                    }
-                },
-                {
-                    field: 'estimated_hours',
-                    label: 'Tahmini Saat',
-                    sortable: true,
-                    formatter: (value) => {
-                        return value !== null && value !== undefined ? `${value.toFixed(2)}` : '-';
-                    }
-                },
-                {
-                    field: 'total_hours_spent',
-                    label: 'Toplam Harcanan (saat)',
-                    sortable: true,
-                    formatter: (value) => {
-                        return value !== null && value !== undefined ? `${value.toFixed(2)}` : '-';
-                    }
-                },
-                {
-                    field: 'efficiency',
-                    label: 'Verimlilik',
-                    sortable: true,
-                    formatter: (value) => {
-                        if (value === null || value === undefined) return '-';
-                        // Value is already a percentage (e.g., 165.0 means 165%)
-                        const percentage = value;
-                        let colorClass = '';
-                        if (percentage >= 100) {
-                            colorClass = 'text-success';
-                        } else if (percentage >= 80) {
-                            colorClass = 'text-warning';
-                        } else {
-                            colorClass = 'text-danger';
-                        }
-                        return `<span class="${colorClass} fw-bold">${Math.round(percentage)}%</span>`;
-                    }
-                }
-            ],
             data: tableData,
             sortable: true,
             pagination: false,
@@ -416,7 +433,12 @@ function setupExportWithUserColumn() {
                     if (col.field === 'task_key') {
                         return value || '-';
                     }
-                    
+                    if (col.field === 'completed_on_date') {
+                        if (value === true) return 'Evet';
+                        if (value === false) return 'Hayır';
+                        return '-';
+                    }
+
                     // Handle different data types
                     if (col.type === 'boolean') {
                         return value ? 'Evet' : 'Hayır';

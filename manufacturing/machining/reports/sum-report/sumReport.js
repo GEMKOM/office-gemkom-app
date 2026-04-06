@@ -296,18 +296,40 @@ async function processReportData(data) {
     
     if (groupBy === 'user') {
         const users = await fetchUsers('machining_team');
-        // Match by username (group_val is username string when grouping by user)
-        processedData = users.map(user => {
-            const found = data.find(row => row.group_val === user.username || row.group_val === user.id || row.group_val === String(user.id));
-            return {
-                group: user.display_name || user.username || user.id,
-                total_hours: found ? found.total_hours : 0,
-                timer_count: found ? found.timer_count : 0,
-                avg_hours: found ? (found.avg_duration || (found.total_hours / found.timer_count)) : 0
-            };
-        });
-        // Filter out users with no data
-        processedData = processedData.filter(row => row.timer_count > 0);
+        const findRowForUser = (user) => {
+            const un = String(user.username ?? '').toLowerCase();
+            const uid = user.id;
+            return data.find((row) => {
+                const gv = row.group_val;
+                if (gv == null) return false;
+                if (gv === uid || gv === String(uid)) return true;
+                return String(gv).toLowerCase() === un;
+            });
+        };
+        if (users.length > 0) {
+            // Match by username (group_val is username string when grouping by user)
+            processedData = users.map((user) => {
+                const found = findRowForUser(user);
+                return {
+                    group: user.display_name || user.username || user.id,
+                    total_hours: found ? found.total_hours : 0,
+                    timer_count: found ? found.timer_count : 0,
+                    avg_hours: found ? (found.avg_duration || (found.total_hours / found.timer_count)) : 0
+                };
+            });
+            // Filter out users with no data
+            processedData = processedData.filter((row) => row.timer_count > 0);
+        } else {
+            // User list unavailable: still show timer-report rows (group_val = username)
+            processedData = data
+                .map((row) => ({
+                    group: row.group_val?.toString() || '-',
+                    total_hours: row.total_hours || 0,
+                    timer_count: row.timer_count || 0,
+                    avg_hours: row.avg_duration || (row.timer_count ? row.total_hours / row.timer_count : 0)
+                }))
+                .filter((row) => row.timer_count > 0);
+        }
     } else if (groupBy === 'machine') {
         const machinesResponse = await fetchMachines(1, 100, { used_in: 'machining' });
         const machines = machinesResponse.results || machinesResponse || [];
