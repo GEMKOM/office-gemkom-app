@@ -108,6 +108,55 @@ let selectedTemplate = null;
 let users = [];
 let currentUser = null;
 
+/** Backend user group name for satış (matches /users/?group=...) */
+const SALES_TEAM_GROUP = 'sales_team';
+
+async function loadSalesUsers() {
+    try {
+        const usersResponse = await authFetchUsers(1, 1000, {
+            group: SALES_TEAM_GROUP,
+            ordering: 'full_name'
+        });
+        users = usersResponse.results || [];
+    } catch (e) {
+        console.error('Error loading sales users for filter:', e);
+        users = [];
+    }
+}
+
+function isCurrentUserInSalesTeam() {
+    if (!currentUser?.id) return false;
+    return users.some((u) => String(u.id) === String(currentUser.id));
+}
+
+function buildCreatedByFilterOptions() {
+    const opts = [
+        { value: '', label: 'Tümü' },
+        ...users.map((user) => ({
+            value: String(user.id),
+            label: user.full_name ? `${user.full_name} (${user.username})` : (user.username || `Kullanıcı #${user.id}`)
+        }))
+    ];
+    const params = new URLSearchParams(window.location.search);
+    const urlId = params.get('created_by');
+    if (urlId && !opts.some((o) => o.value === String(urlId))) {
+        opts.splice(1, 0, { value: String(urlId), label: `Kullanıcı #${urlId}` });
+    }
+    return opts;
+}
+
+function getDefaultCreatedByFilterValue() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.has('created_by')) {
+        const v = params.get('created_by');
+        return v === null || v === '' ? '' : String(v);
+    }
+    if (isCurrentUserInSalesTeam()) {
+        return String(currentUser.id);
+    }
+    return '';
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) return;
     await initNavbar();
@@ -143,6 +192,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     await loadCustomerOptions();
     await loadPaymentTermsOptions();
+    await loadSalesUsers();
     initFilters();
     initTable();
     initModals();
@@ -251,6 +301,15 @@ function initFilters() {
             ...Object.entries(OFFER_STATUS_MAP).map(([v, l]) => ({ value: v, label: l }))
         ],
         placeholder: 'Tümü',
+        colSize: 2
+    });
+
+    offersFilters.addDropdownFilter({
+        id: 'created-by-filter',
+        label: 'Oluşturan',
+        options: buildCreatedByFilterOptions(),
+        placeholder: 'Tümü',
+        value: getDefaultCreatedByFilterValue(),
         colSize: 2
     });
 
@@ -378,6 +437,7 @@ function initTable() {
             currentPage = 1;
             await loadOffers();
         },
+        rowBackgroundColor: (row) => (row.needs_my_approval ? '#fff3cd' : null),
         actions: [
             {
                 key: 'view',
@@ -2119,14 +2179,16 @@ function getOfferModalFooterHtml(tabId) {
     // Allow editing in any status except closed ones (won, lost, cancelled)
     const editable = !CLOSED_STATUSES.includes(s);
     const closed = CLOSED_STATUSES.includes(s);
-    const canPropose = !['won', 'cancelled'].includes(s);
     const canSendConsultations = !['won', 'lost', 'cancelled'].includes(s);
     const canSubmitApproval = s === 'pricing' && offer.total_price && parseFloat(offer.total_price) > 0;
-    const canDecide = s === 'pending_approval';
-    const hasRound = offer.approval_round > 0;
 
     const closeBtn = `<button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-1"></i>Kapat</button>`;
     const parts = [];
+
+    if (offer.needs_my_approval === true) {
+        parts.push(`<button type="button" class="btn btn-sm btn-success" id="decide-approve-btn"><i class="fas fa-check me-1"></i>Onayla</button>`);
+        parts.push(`<button type="button" class="btn btn-sm btn-danger" id="decide-reject-btn"><i class="fas fa-times me-1"></i>Reddet</button>`);
+    }
 
     const actionClass = 'btn btn-sm btn-danger';
     if (tabId === 'genel') {
@@ -2144,28 +2206,8 @@ function getOfferModalFooterHtml(tabId) {
         if (editable) parts.push(`<button type="button" class="${actionClass}" id="save-prices-btn"><i class="fas fa-save me-1"></i>Fiyatları Kaydet</button>`);
         if (canSubmitApproval) parts.push(`<button type="button" class="${actionClass}" id="submit-approval-from-pricing-btn"><i class="fas fa-gavel me-1"></i>Onaya Gönder</button>`);
     } else if (tabId === 'approval') {
-        // Determine if current user is an approver in any active stage
-        let isApprover = false;
-        if (offer.approval && Array.isArray(offer.approval.stage_instances) && currentUser && currentUser.id) {
-            const uid = currentUser.id;
-            for (const stage of offer.approval.stage_instances) {
-                if (Array.isArray(stage.approvers)) {
-                    if (stage.approvers.some(a => a.id === uid)) {
-                        isApprover = true;
-                        break;
-                    }
-                }
-            }
-        }
-
         if (canSubmitApproval) {
             parts.push(`<button type="button" class="${actionClass}" id="submit-approval-btn"><i class="fas fa-gavel me-1"></i>Onaya Gönder</button>`);
-        }
-
-        // Only approvers can see decision buttons on approval tab
-        if (canDecide && isApprover) {
-            parts.push(`<button type="button" class="${actionClass}" id="decide-approve-btn"><i class="fas fa-check me-1"></i>Onayla</button>`);
-            parts.push(`<button type="button" class="${actionClass}" id="decide-reject-btn"><i class="fas fa-times me-1"></i>Reddet</button>`);
         }
     }
 
@@ -3894,10 +3936,12 @@ async function loadOffers() {
     try {
         const fv = offersFilters ? offersFilters.getFilterValues() : {};
         const ordering = currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`;
-        const opts = { page: currentPage, ordering };
+        const pageSize = offersTable?.options?.itemsPerPage ?? 20;
+        const opts = { page: currentPage, page_size: pageSize, ordering };
         if (fv['search-filter']) opts.search = fv['search-filter'];
         if (fv['status-filter']) opts.status = fv['status-filter'];
         if (fv['customer-filter']) opts.customer = fv['customer-filter'];
+        if (fv['created-by-filter']) opts.created_by = fv['created-by-filter'];
 
         const data = await listOffers(opts);
         offers = data.results || [];
