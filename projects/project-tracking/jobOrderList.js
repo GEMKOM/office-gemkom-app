@@ -328,7 +328,8 @@ function initializeTableComponent() {
             }
             
             // Check target_completion_date for highlighting
-            if (row.target_completion_date) {
+            // Do not show overdue/due-soon highlighting for completed job orders
+            if (row.target_completion_date && row.status !== 'completed') {
                 const today = new Date();
                 today.setHours(0, 0, 0, 0);
                 
@@ -602,9 +603,14 @@ function initializeTableComponent() {
                                 month: 'short',
                                 day: 'numeric'
                             });
-                            previousHtml = `<div class="text-muted" style="font-size: 0.75rem; line-height: 1.1; margin-top: 2px; text-align:center; width:100%;">
-                                <span style="text-decoration: line-through;">${prevFormatted}</span>
-                            </div>`;
+                            previousHtml = `
+                                <div class="text-muted" style="font-size: 0.72rem; line-height: 1.15; margin-top: 3px; text-align:center; width:100%;">
+                                    <span style="display:inline-block; padding: 1px 6px; border: 1px solid rgba(108,117,125,0.35); border-radius: 999px;">
+                                        <span style="font-weight:600; margin-right:4px;">Önceki hedef</span>
+                                        <span>${prevFormatted}</span>
+                                    </span>
+                                </div>
+                            `.trim();
                         }
                     }
                     
@@ -612,7 +618,11 @@ function initializeTableComponent() {
                     // Use darker colors for better contrast, especially on yellow backgrounds
                     let dateClass = 'text-muted';
                     let fontWeight = '500';
-                    if (completionDate < today) {
+                    if (row.status === 'completed') {
+                        // Completed jobs should not look overdue/urgent; keep default styling
+                        dateClass = 'text-dark';
+                        fontWeight = '500';
+                    } else if (completionDate < today) {
                         dateClass = 'text-danger';
                         fontWeight = '700';
                     } else if (daysRemaining <= 7) {
