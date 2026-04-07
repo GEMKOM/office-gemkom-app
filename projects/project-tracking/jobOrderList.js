@@ -619,7 +619,7 @@ function initializeTableComponent() {
                         // Use dark brown/black for yellow background rows for better visibility
                         dateClass = '';
                         fontWeight = '700';
-                        const reviseBtnHtml = (!HIDE_ACTION_BUTTONS && canEditJobOrders())
+                        const reviseBtnHtml = (!HIDE_ACTION_BUTTONS)
                             ? `<button type="button"
                                       class="btn btn-xs btn-link p-0 ms-2 target-date-revise-row-btn"
                                       title="Hedef tarihi revize et"
@@ -639,7 +639,7 @@ function initializeTableComponent() {
                         dateClass = 'text-dark';
                     }
                     
-                    const reviseBtnHtml = (!HIDE_ACTION_BUTTONS && canEditJobOrders())
+                    const reviseBtnHtml = (!HIDE_ACTION_BUTTONS)
                         ? `<button type="button"
                                   class="btn btn-xs btn-link p-0 ms-2 target-date-revise-row-btn"
                                   title="Hedef tarihi revize et"
