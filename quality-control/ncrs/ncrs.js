@@ -8,7 +8,7 @@ import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { initRouteProtection } from '../../../apis/routeProtection.js';
 import { getUser } from '../../../authService.js';
-import { fetchAllUsers, authFetchUsers } from '../../../apis/users.js';
+import { fetchAllUsers, authFetchUsers, fetchUserGroups } from '../../../apis/users.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import {
@@ -49,6 +49,7 @@ let totalNCRs = 0;
 let isLoading = false;
 let allUsers = [];
 let currentUser = null;
+let ncrAssignableGroups = []; // [{id, name, display_name, ...}]
 
 function isUserInGroup(user, groupName) {
     if (!user || !groupName) return false;
@@ -161,6 +162,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
     currentUser = await getUser();
     await loadUsers();
+    await loadNcrAssignableGroups();
     await initializeComponents();
     await loadNCRs();
     
@@ -203,6 +205,57 @@ async function loadUsers() {
         console.error('Error loading users:', error);
         allUsers = [];
     }
+}
+
+async function loadNcrAssignableGroups() {
+    try {
+        const data = await fetchUserGroups();
+        const groups = Array.isArray(data) ? data : (data.results || data.data || []);
+
+        // Different backends serialize PK as `id` or `pk` (or occasionally `group_id`).
+        // Normalize so the dropdown always has a numeric PK to send.
+        ncrAssignableGroups = (groups || [])
+            .filter(Boolean)
+            .map(g => {
+                const pk = g?.id ?? g?.pk ?? g?.group_id;
+                return { ...g, id: pk };
+            })
+            .filter(g => g.id !== undefined && g.id !== null && g.id !== '')
+            .slice()
+            .sort((a, b) => {
+                const an = (a.display_name || a.name || '').toString();
+                const bn = (b.display_name || b.name || '').toString();
+                return an.localeCompare(bn, 'tr');
+            });
+    } catch (error) {
+        console.error('Error loading assignable groups:', error);
+        ncrAssignableGroups = [];
+    }
+}
+
+function buildAssignedGroupOptions({ includeEmpty = true, includeLegacyValue = null } = {}) {
+    const options = [];
+    if (includeEmpty) {
+        options.push({ value: '', label: 'Seçiniz' });
+    }
+
+    const groupOptions = (ncrAssignableGroups || []).map(g => ({
+        value: String(g.id),
+        label: g.display_name || g.name || `#${g.id}`
+    }));
+
+    options.push(...groupOptions);
+
+    // If NCR has an old/unknown assigned_team value, keep it selectable instead of dropping it.
+    if (includeLegacyValue !== null && includeLegacyValue !== undefined && includeLegacyValue !== '') {
+        const legacy = String(includeLegacyValue);
+        const alreadyIncluded = options.some(o => String(o.value) === legacy);
+        if (!alreadyIncluded) {
+            options.unshift({ value: legacy, label: legacy });
+        }
+    }
+
+    return options;
 }
 
 async function initializeComponents() {
@@ -1147,6 +1200,12 @@ async function showCreateNCRModal() {
         showNotification('İş emirleri yüklenirken hata oluştu', 'error');
     }
 
+    // Ensure groups are loaded for assigned-group dropdown
+    if (!Array.isArray(ncrAssignableGroups) || ncrAssignableGroups.length === 0) {
+        await loadNcrAssignableGroups();
+    }
+    const assignedGroupOptions = buildAssignedGroupOptions({ includeEmpty: true });
+
     ncrCreateModal
         .addSection({
             title: 'Temel Bilgiler',
@@ -1217,15 +1276,10 @@ async function showCreateNCRModal() {
                 {
                     id: 'assigned_team',
                     name: 'assigned_team',
-                    label: 'Atanan Takım',
+                    label: 'Atanan Grup',
                     type: 'dropdown',
                     required: false,
-                    options: [
-                        { value: '', label: 'Seçiniz' },
-                        { value: 'manufacturing', label: 'İmalat' },
-                        { value: 'design', label: 'Dizayn' },
-                        { value: 'planning', label: 'Planlama' }
-                    ]
+                    options: assignedGroupOptions
                 },
                 {
                     id: 'disposition',
@@ -1254,6 +1308,18 @@ async function showCreateNCRModal() {
                 formData.affected_quantity = parseInt(formData.affected_quantity);
             }
 
+            // Send assigned group PK (not legacy team name/slug)
+            if (formData.assigned_team === '' || formData.assigned_team === null || formData.assigned_team === undefined) {
+                delete formData.assigned_team;
+            } else {
+                const groupPk = parseInt(String(formData.assigned_team), 10);
+                if (Number.isFinite(groupPk)) {
+                    formData.assigned_team = groupPk;
+                } else {
+                    delete formData.assigned_team;
+                }
+            }
+
             await createNCR(formData);
             showNotification('NCR başarıyla oluşturuldu', 'success');
             ncrCreateModal.hide();
@@ -1270,6 +1336,15 @@ async function showCreateNCRModal() {
 async function showEditNCRModal(ncr) {
     try {
         const fullNCR = await getNCR(ncr.id);
+
+        // Ensure groups are loaded for assigned-group dropdown
+        if (!Array.isArray(ncrAssignableGroups) || ncrAssignableGroups.length === 0) {
+            await loadNcrAssignableGroups();
+        }
+        const assignedGroupOptions = buildAssignedGroupOptions({
+            includeEmpty: true,
+            includeLegacyValue: fullNCR.assigned_team
+        });
 
         ncrEditModal.clearAll();
 
@@ -1329,16 +1404,11 @@ async function showEditNCRModal(ncr) {
                 fields: [
                     {
                         name: 'assigned_team',
-                        label: 'Atanan Takım',
+                        label: 'Atanan Grup',
                         type: 'select',
                         required: false,
                         value: fullNCR.assigned_team || '',
-                        options: [
-                            { value: '', label: 'Seçiniz' },
-                            { value: 'manufacturing', label: 'İmalat' },
-                            { value: 'design', label: 'Dizayn' },
-                            { value: 'planning', label: 'Planlama' }
-                        ]
+                        options: assignedGroupOptions
                     }
                 ]
             });
@@ -1349,6 +1419,18 @@ async function showEditNCRModal(ncr) {
                 // Convert affected_quantity to integer if provided
                 if (formData.affected_quantity) {
                     formData.affected_quantity = parseInt(formData.affected_quantity);
+                }
+
+                // Send assigned group PK (not legacy team name/slug)
+                if (formData.assigned_team === '' || formData.assigned_team === null || formData.assigned_team === undefined) {
+                    delete formData.assigned_team;
+                } else {
+                    const groupPk = parseInt(String(formData.assigned_team), 10);
+                    if (Number.isFinite(groupPk)) {
+                        formData.assigned_team = groupPk;
+                    } else {
+                        delete formData.assigned_team;
+                    }
                 }
 
                 await updateNCR(fullNCR.id, formData);
