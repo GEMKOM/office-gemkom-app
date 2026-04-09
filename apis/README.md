@@ -5,6 +5,7 @@ This folder contains reusable service modules that provide API functionality and
 ## Overtime Service (`overtime.js`)
 
 The overtime service provides a complete API interface for managing overtime requests using the `authedFetch` function for authenticated requests.
+++++++++
 
 ### Features
 
@@ -52,6 +53,7 @@ const overtimeData = {
         { user: 1, job_no: 'JOB001', description: 'Assembly work' }
     ]
 };
+
 
 // Validate before submission
 const validation = validateOvertimeRequest(overtimeData);
@@ -102,3 +104,8 @@ Services return fetch Response objects, allowing calling code to:
 3. **Use utility functions** - Leverage built-in validation and formatting functions
 4. **Error handling** - Implement proper error handling in calling code
 5. **Type checking** - Use JSDoc comments for better IDE support
+
+
+
+
+++++

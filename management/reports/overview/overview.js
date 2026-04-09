@@ -1106,11 +1106,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function procurementTableTopQty(items) {
         const arr = Array.isArray(items) ? items : [];
-        if (arr.length === 0) return procurementTableEmptyRow(4);
+        if (arr.length === 0) return procurementTableEmptyRow(3);
         return arr.map((it, i) => `
             <tr>
                 <td class="text-muted ov-proc-num">${i + 1}</td>
-                <td class="text-nowrap"><code class="ov-proc-code">${escapeOvText(it.item_code)}</code></td>
                 <td class="text-break">${escapeOvText(it.item_name)}</td>
                 <td class="text-end text-nowrap ov-proc-num">${numLocale(it.total_quantity, 2)} <span class="text-muted small">${escapeOvText(it.unit)}</span></td>
             </tr>`).join('');
@@ -1118,11 +1117,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     function procurementTableTopCostItems(items) {
         const arr = Array.isArray(items) ? items : [];
-        if (arr.length === 0) return procurementTableEmptyRow(4);
+        if (arr.length === 0) return procurementTableEmptyRow(3);
         return arr.map((it, i) => `
             <tr>
                 <td class="text-muted ov-proc-num">${i + 1}</td>
-                <td class="text-nowrap"><code class="ov-proc-code">${escapeOvText(it.item_code)}</code></td>
                 <td class="text-break">${escapeOvText(it.item_name)}</td>
                 <td class="text-end text-nowrap ov-proc-num">${eur(it.total_cost_eur)}</td>
             </tr>`).join('');
@@ -1185,13 +1183,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         const theadQty = `<tr class="small text-muted">
             <th scope="col" class="ps-0" style="width:2rem">#</th>
-            <th scope="col" style="width:5rem">Kod</th>
             <th scope="col">Kalem</th>
             <th scope="col" class="text-end pe-0">Miktar</th>
         </tr>`;
         const theadCostItems = `<tr class="small text-muted">
             <th scope="col" class="ps-0" style="width:2rem">#</th>
-            <th scope="col" style="width:5rem">Kod</th>
             <th scope="col">Kalem</th>
             <th scope="col" class="text-end pe-0">Tutar (EUR)</th>
         </tr>`;
