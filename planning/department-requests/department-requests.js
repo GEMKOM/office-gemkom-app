@@ -1846,6 +1846,7 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
     createPlanningRequestModal.clearAll();
     // Clear file attachments
     fileAttachments = [];
+    attachmentsDirty = false;
     // Clear dropdown references
     jobOrderDropdowns.clear();
 
@@ -2128,6 +2129,7 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
         createPlanningRequestModal.clearAll();
         // Clear file attachments
         fileAttachments = [];
+        attachmentsDirty = false;
         // Clear dropdown references
         jobOrderDropdowns.clear();
         renderFilesList();
@@ -2205,6 +2207,18 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
 
 // Show edit planning request modal
 async function showEditPlanningRequestModal(request) {
+    // Always refetch full request to ensure we have latest items/files,
+    // and so file deletions/updates reflect correctly even if the table list uses a lightweight serializer.
+    let fullRequest = request;
+    try {
+        if (request?.id) {
+            fullRequest = await getPlanningRequest(request.id);
+        }
+    } catch (e) {
+        console.warn('Failed to refetch planning request for edit modal, falling back to list data.', e);
+        fullRequest = request;
+    }
+
     if (!createPlanningRequestModal) {
         // Initialize modal if not already created
         createPlanningRequestModal = new EditModal('create-planning-request-modal-container', {
@@ -2219,6 +2233,7 @@ async function showEditPlanningRequestModal(request) {
     createPlanningRequestModal.clearAll();
     // Clear file attachments
     fileAttachments = [];
+    attachmentsDirty = false;
     // Clear dropdown references
     jobOrderDropdowns.clear();
 
@@ -2231,11 +2246,11 @@ async function showEditPlanningRequestModal(request) {
     let requestIdElement = modalContainer.querySelector('[data-planning-request-id]');
     if (!requestIdElement) {
         requestIdElement = document.createElement('div');
-        requestIdElement.setAttribute('data-planning-request-id', request.id);
+        requestIdElement.setAttribute('data-planning-request-id', fullRequest.id);
         requestIdElement.style.display = 'none';
         modalContainer.appendChild(requestIdElement);
     } else {
-        requestIdElement.setAttribute('data-planning-request-id', request.id);
+        requestIdElement.setAttribute('data-planning-request-id', fullRequest.id);
     }
 
     // Store original request data for change tracking
@@ -2250,8 +2265,8 @@ async function showEditPlanningRequestModal(request) {
     // Normalize original files to match the structure we'll build for newFiles
     // Build a map of asset_id to item indices for original files
     const originalAssetIdToItemIndices = new Map();
-    if (request.items && request.items.length > 0) {
-        request.items.forEach((item, itemIndex) => {
+    if (fullRequest.items && fullRequest.items.length > 0) {
+        fullRequest.items.forEach((item, itemIndex) => {
             if (item.files && Array.isArray(item.files)) {
                 item.files.forEach(file => {
                     if (file.asset_id) {
@@ -2288,7 +2303,7 @@ async function showEditPlanningRequestModal(request) {
         });
     };
     // Request-level files
-    (request.files || []).forEach(file => {
+    (fullRequest.files || []).forEach(file => {
         const attachTo = [];
         if (file.asset_id && originalAssetIdToItemIndices.has(file.asset_id)) {
             attachTo.push(...originalAssetIdToItemIndices.get(file.asset_id));
@@ -2298,8 +2313,8 @@ async function showEditPlanningRequestModal(request) {
         addNormalizedFile(file.asset_id, attachTo, file.description);
     });
     // Item-level files
-    if (request.items && request.items.length > 0) {
-        request.items.forEach((item, itemIndex) => {
+    if (fullRequest.items && fullRequest.items.length > 0) {
+        fullRequest.items.forEach((item, itemIndex) => {
             if (item.files && Array.isArray(item.files)) {
                 item.files.forEach(file => {
                     addNormalizedFile(file.asset_id, [itemIndex], file.description);
@@ -2311,12 +2326,12 @@ async function showEditPlanningRequestModal(request) {
     
     // Store original data as JSON string
     originalRequestDataElement.setAttribute('data-original-request-data', JSON.stringify({
-        title: request.title || '',
-        description: request.description || '',
-        priority: request.priority || 'normal',
-        needed_date: request.needed_date || null,
-        check_inventory: request.check_inventory || false,
-        items: request.items || [],
+        title: fullRequest.title || '',
+        description: fullRequest.description || '',
+        priority: fullRequest.priority || 'normal',
+        needed_date: fullRequest.needed_date || null,
+        check_inventory: fullRequest.check_inventory || false,
+        items: fullRequest.items || [],
         files: normalizedOriginalFiles
     }));
 
@@ -2339,7 +2354,7 @@ async function showEditPlanningRequestModal(request) {
                 label: 'Başlık',
                 type: 'text',
                 placeholder: 'Planlama talebi başlığını girin',
-                value: request.title || '',
+                value: fullRequest.title || '',
                 required: true,
                 icon: 'fas fa-heading',
                 colSize: 12,
@@ -2351,7 +2366,7 @@ async function showEditPlanningRequestModal(request) {
                 label: 'Açıklama',
                 type: 'textarea',
                 placeholder: 'Planlama talebi açıklamasını girin',
-                value: request.description || '',
+                value: fullRequest.description || '',
                 required: false,
                 icon: 'fas fa-align-left',
                 colSize: 12,
@@ -2373,7 +2388,7 @@ async function showEditPlanningRequestModal(request) {
                 name: 'priority',
                 label: 'Öncelik',
                 type: 'dropdown',
-                value: normalizePriorityForPlanningRequest(request.priority) || 'normal',
+                value: normalizePriorityForPlanningRequest(fullRequest.priority) || 'normal',
                 required: false,
                 icon: 'fas fa-exclamation-triangle',
                 colSize: 12,
@@ -2385,7 +2400,7 @@ async function showEditPlanningRequestModal(request) {
                 name: 'needed_date',
                 label: 'İhtiyaç Tarihi',
                 type: 'date',
-                value: request.needed_date || '',
+                value: fullRequest.needed_date || '',
                 required: false,
                 icon: 'fas fa-calendar-alt',
                 colSize: 12,
@@ -2396,7 +2411,7 @@ async function showEditPlanningRequestModal(request) {
                 name: 'check_inventory',
                 label: 'Envanter Kontrolü',
                 type: 'checkbox',
-                value: request.check_inventory || false,
+                value: fullRequest.check_inventory || false,
                 required: false,
                 icon: 'fas fa-warehouse',
                 colSize: 12,
@@ -2489,51 +2504,51 @@ async function showEditPlanningRequestModal(request) {
                 items.push(itemData);
             }
 
-            // Prepare files array (includes both new uploads and existing file references)
-            const files = [];
-            
-            for (const attachment of fileAttachments) {
-                // Validate that at least one target is selected
-                if (!attachment.attachTo || attachment.attachTo.length === 0) {
-                    showNotification(`"${attachment.file.name}" dosyası için en az bir hedef seçilmelidir (Talep veya ürün)`, 'error');
-                    throw new Error('File must have at least one attachment target');
-                }
-
-                // Validate item indices are within range
-                const itemIndices = attachment.attachTo.filter(t => typeof t === 'number');
-                const maxItemIndex = items.length - 1;
-                for (const index of itemIndices) {
-                    if (index < 0 || index > maxItemIndex) {
-                        showNotification(`"${attachment.file.name}" dosyası için geçersiz ürün indeksi`, 'error');
-                        throw new Error('Invalid item index in attach_to');
+            // Only include files in update payload if user actually changed attachments in this session.
+            // Otherwise, sending the same attachments can create duplicates server-side.
+            let files;
+            if (attachmentsDirty) {
+                files = [];
+                for (const attachment of fileAttachments) {
+                    // Validate that at least one target is selected
+                    if (!attachment.attachTo || attachment.attachTo.length === 0) {
+                        showNotification(`"${attachment.file.name}" dosyası için en az bir hedef seçilmelidir (Talep veya ürün)`, 'error');
+                        throw new Error('File must have at least one attachment target');
                     }
-                }
 
-                // Build file object for API
-                // Sort attach_to array for consistent comparison (numbers first, then strings)
-                const sortedAttachTo = [...(attachment.attachTo || [])].sort((a, b) => {
-                    if (typeof a === 'number' && typeof b === 'number') {
-                        return a - b;
+                    // Validate item indices are within range
+                    const itemIndices = attachment.attachTo.filter(t => typeof t === 'number');
+                    const maxItemIndex = items.length - 1;
+                    for (const index of itemIndices) {
+                        if (index < 0 || index > maxItemIndex) {
+                            showNotification(`"${attachment.file.name}" dosyası için geçersiz ürün indeksi`, 'error');
+                            throw new Error('Invalid item index in attach_to');
+                        }
                     }
-                    if (typeof a === 'number') return -1;
-                    if (typeof b === 'number') return 1;
-                    return String(a).localeCompare(String(b));
-                });
-                
-                const fileObj = {
-                    description: attachment.description || '',
-                    attach_to: sortedAttachTo
-                };
 
-                // For existing files, use asset_id
-                // For new files, use file
-                if (attachment.isExisting) {
-                    fileObj.asset_id = attachment.assetId;
-                } else {
-                    fileObj.file = attachment.file;
+                    // Sort attach_to array for consistent comparison (numbers first, then strings)
+                    const sortedAttachTo = [...(attachment.attachTo || [])].sort((a, b) => {
+                        if (typeof a === 'number' && typeof b === 'number') {
+                            return a - b;
+                        }
+                        if (typeof a === 'number') return -1;
+                        if (typeof b === 'number') return 1;
+                        return String(a).localeCompare(String(b));
+                    });
+
+                    const fileObj = {
+                        description: attachment.description || '',
+                        attach_to: sortedAttachTo
+                    };
+
+                    if (attachment.isExisting) {
+                        fileObj.asset_id = attachment.assetId;
+                    } else {
+                        fileObj.file = attachment.file;
+                    }
+
+                    files.push(fileObj);
                 }
-
-                files.push(fileObj);
             }
 
             // Get request ID
@@ -2556,7 +2571,7 @@ async function showEditPlanningRequestModal(request) {
                 priority: normalizePriorityForPlanningRequest(formData.priority),
                 needed_date: formData.needed_date || null,
                 items: items.length > 0 ? items : [],
-                files: files.length > 0 ? files : []
+                ...(attachmentsDirty ? { files: (files && files.length > 0) ? files : [] } : {})
             };
 
             // Add check_inventory
@@ -2584,6 +2599,7 @@ async function showEditPlanningRequestModal(request) {
 
             // Close modal
             createPlanningRequestModal.hide();
+            attachmentsDirty = false;
 
             // Refresh the table
             await loadPlanningRequests();
@@ -2604,6 +2620,7 @@ async function showEditPlanningRequestModal(request) {
         createPlanningRequestModal.clearAll();
         // Clear file attachments
         fileAttachments = [];
+        attachmentsDirty = false;
         renderFilesList();
         // Remove request ID
         const requestIdElement = modalContainer.querySelector('[data-planning-request-id]');
@@ -2662,8 +2679,10 @@ async function showEditPlanningRequestModal(request) {
         setupItemsSection().then(() => {
             // Pre-fill items and files from planning request after dropdowns are ready
             setTimeout(() => {
-                prefillItemsFromPlanningRequest(request);
-                prefillFilesFromPlanningRequest(request);
+                prefillItemsFromPlanningRequest(fullRequest);
+                prefillFilesFromPlanningRequest(fullRequest);
+                // Prefill should not be considered a user-initiated change.
+                attachmentsDirty = false;
             }, 200);
         });
         setupAttachmentsSection();
@@ -2920,88 +2939,69 @@ function prefillItemsFromPlanningRequest(request) {
 
 // Pre-fill files from planning request
 function prefillFilesFromPlanningRequest(request) {
-    // Build a map of asset_id to item indices for quick lookup
-    const assetIdToItemIndices = new Map();
-    if (request.items && request.items.length > 0) {
-        request.items.forEach((item, itemIndex) => {
-            if (item.files && Array.isArray(item.files)) {
-                item.files.forEach(file => {
-                    if (file.asset_id) {
-                        if (!assetIdToItemIndices.has(file.asset_id)) {
-                            assetIdToItemIndices.set(file.asset_id, []);
-                        }
-                        assetIdToItemIndices.get(file.asset_id).push(itemIndex);
-                    }
-                });
-            }
-        });
-    }
+    // Merge files by asset_id so one physical file shows once,
+    // with attachTo containing both 'request' and any item indices.
+    const byAssetId = new Map(); // asset_id -> attachment state
 
-    // Add request-level files
-    if (request.files && request.files.length > 0) {
-        request.files.forEach(file => {
-            const fileObj = {
-                name: file.file_name ? file.file_name.split('/').pop() : 'Dosya',
-                size: 0,
-                type: '',
-                url: file.file_url,
-                id: file.id,
-                asset_id: file.asset_id
-            };
-            
-            // Determine attachment targets
-            const attachTo = [];
-            
-            // Check if this file's asset_id is mapped to any items
-            if (file.asset_id && assetIdToItemIndices.has(file.asset_id)) {
-                const itemIndices = assetIdToItemIndices.get(file.asset_id);
-                attachTo.push(...itemIndices);
-            } else {
-                // File is at request level
-                attachTo.push('request');
-            }
-            
-            fileAttachments.push({
+    const upsert = (file, target) => {
+        const assetId = file?.asset_id;
+        if (!assetId) return;
+
+        const existing = byAssetId.get(assetId);
+        const fileObj = {
+            name: file.file_name ? file.file_name.split('/').pop() : 'Dosya',
+            size: 0,
+            type: '',
+            url: file.file_url,
+            id: file.id,
+            asset_id: assetId
+        };
+
+        if (!existing) {
+            byAssetId.set(assetId, {
                 file: fileObj,
                 description: file.description || '',
-                attachTo: attachTo,
+                attachTo: [target],
                 isExisting: true,
+                // Keep one representative attachment id for reference/debugging
                 sourceAttachmentId: file.id,
-                assetId: file.asset_id
+                assetId: assetId
             });
-        });
+            return;
+        }
+
+        // Merge targets
+        if (!existing.attachTo.includes(target)) {
+            existing.attachTo.push(target);
+        }
+
+        // Prefer a non-empty description if available
+        if ((!existing.description || !existing.description.trim()) && file.description) {
+            existing.description = file.description;
+        }
+
+        // Prefer a file object with a URL if somehow missing
+        if ((!existing.file?.url) && fileObj.url) {
+            existing.file = fileObj;
+        }
+    };
+
+    // Request-level files => always mark 'request' checkbox
+    if (request.files && Array.isArray(request.files) && request.files.length > 0) {
+        request.files.forEach(file => upsert(file, 'request'));
     }
 
-    // Add item-level files
-    if (request.items && request.items.length > 0) {
+    // Item-level files => mark item index checkboxes
+    if (request.items && Array.isArray(request.items) && request.items.length > 0) {
         request.items.forEach((item, itemIndex) => {
-            if (item.files && item.files.length > 0) {
-                item.files.forEach(file => {
-                    // Check if this file is already added (might be shared between request and items)
-                    const alreadyAdded = fileAttachments.some(att => att.sourceAttachmentId === file.id);
-                    if (!alreadyAdded) {
-                        const fileObj = {
-                            name: file.file_name ? file.file_name.split('/').pop() : 'Dosya',
-                            size: 0,
-                            type: '',
-                            url: file.file_url,
-                            id: file.id,
-                            asset_id: file.asset_id
-                        };
-                        
-                        fileAttachments.push({
-                            file: fileObj,
-                            description: file.description || '',
-                            attachTo: [itemIndex],
-                            isExisting: true,
-                            sourceAttachmentId: file.id,
-                            assetId: file.asset_id
-                        });
-                    }
-                });
+            if (item.files && Array.isArray(item.files) && item.files.length > 0) {
+                item.files.forEach(file => upsert(file, itemIndex));
             }
         });
     }
+
+    // Push merged attachments into state
+    byAssetId.forEach(attachment => fileAttachments.push(attachment));
     
     // Render the files list to show the existing files
     setTimeout(() => {
@@ -3523,6 +3523,9 @@ function exportItemsToCSV(createdRequest, departmentRequestId = null) {
 // File attachments state
 // Array of { file: File|Object, description: string, attachTo: Array, isExisting: boolean, sourceAttachmentId: number }
 let fileAttachments = [];
+// Tracks whether the user actually changed attachments in the modal.
+// Prevents re-sending existing attachments on save (which can create duplicates server-side).
+let attachmentsDirty = false;
 
 // Setup attachments section with file upload and target selection
 function setupAttachmentsSection() {
@@ -3569,6 +3572,7 @@ function handleFileSelection(event) {
                 description: '',
                 attachTo: ['request'] // Default to request
             });
+            attachmentsDirty = true;
         }
     });
     
@@ -3713,9 +3717,14 @@ function updateFileAttachTo(fileIndex, target, checked) {
     if (checked) {
         if (!attachment.attachTo.includes(targetValue)) {
             attachment.attachTo.push(targetValue);
+            attachmentsDirty = true;
         }
     } else {
-        attachment.attachTo = attachment.attachTo.filter(t => t !== targetValue);
+        const nextAttachTo = attachment.attachTo.filter(t => t !== targetValue);
+        if (nextAttachTo.length !== attachment.attachTo.length) {
+            attachmentsDirty = true;
+        }
+        attachment.attachTo = nextAttachTo;
     }
 
     // Validate that at least one target is selected
@@ -3732,7 +3741,11 @@ function updateFileAttachTo(fileIndex, target, checked) {
 // Update file description
 function updateFileDescription(fileIndex, description) {
     if (fileIndex >= 0 && fileIndex < fileAttachments.length) {
+        const prev = fileAttachments[fileIndex].description || '';
         fileAttachments[fileIndex].description = description;
+        if (prev !== (description || '')) {
+            attachmentsDirty = true;
+        }
         // Update the display immediately
         const fileCard = document.querySelector(`.card[data-file-index="${fileIndex}"]`);
         if (fileCard) {
@@ -3752,6 +3765,7 @@ function updateFileDescription(fileIndex, description) {
 function removePlanningFile(fileIndex) {
     if (fileIndex >= 0 && fileIndex < fileAttachments.length) {
         fileAttachments.splice(fileIndex, 1);
+        attachmentsDirty = true;
         renderFilesList();
     }
 }
@@ -3805,6 +3819,8 @@ removePlanningItem = function(index) {
                 return t;
             });
     });
+    // Changing items changes attachment mapping; treat as attachments update.
+    attachmentsDirty = true;
     renderFilesList(); // Refresh files list
 };
 window.removePlanningItem = removePlanningItem;
