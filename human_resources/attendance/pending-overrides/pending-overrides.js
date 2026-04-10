@@ -8,7 +8,7 @@ import { showNotification } from '../../../components/notification/notification.
 
 import {
     fetchPendingAttendanceOverrides,
-    approveAttendanceOverride,
+    approveAttendanceOverrideWithPayload,
     rejectAttendanceOverride
 } from '../../../apis/attendance.js';
 
@@ -28,9 +28,11 @@ function fmtDateTime(value) {
 
 function statusBadge(status) {
     const map = {
-        pending_override: { cls: 'status-yellow', label: 'Onay Bekliyor' },
-        active: { cls: 'status-blue', label: 'Aktif' },
-        complete: { cls: 'status-green', label: 'Tamamlandı' },
+        pending_override: { cls: 'status-yellow', label: 'İnsan Kaynakları Onayı Bekliyor (GİRİŞ)' },
+        pending_checkout_override: { cls: 'status-yellow', label: 'İnsan Kaynakları Onayı Bekliyor (ÇIKIŞ)' },
+        override_rejected: { cls: 'status-red', label: 'Reddedildi' },
+        active: { cls: 'status-blue', label: 'Aktif (Giriş Yapıldı)' },
+        complete: { cls: 'status-green', label: 'Tamamlandı (Çıkış Yapıldı)' },
         rejected: { cls: 'status-red', label: 'Reddedildi' }
     };
     const v = map[status] || { cls: 'status-grey', label: status || '-' };
@@ -92,6 +94,12 @@ class PendingOverridesPage {
                     formatter: (v, row) => fmtDateTime(pick(row, ['check_in_at', 'check_in_time', 'check_in']))
                 },
                 {
+                    field: 'check_out_at',
+                    label: 'Çıkış',
+                    sortable: false,
+                    formatter: (v, row) => fmtDateTime(pick(row, ['check_out_at', 'check_out_time', 'check_out']))
+                },
+                {
                     field: 'override_reason',
                     label: 'Açıklama',
                     sortable: false,
@@ -113,7 +121,7 @@ class PendingOverridesPage {
                     label: 'Onayla',
                     icon: 'fas fa-check',
                     class: 'btn-outline-success',
-                    visible: (row) => row.status === 'pending_override',
+                    visible: (row) => row.status === 'pending_override' || row.status === 'pending_checkout_override',
                     onClick: (row) => this.confirmApprove(row)
                 },
                 {
@@ -121,7 +129,7 @@ class PendingOverridesPage {
                     label: 'Reddet',
                     icon: 'fas fa-times',
                     class: 'btn-outline-danger',
-                    visible: (row) => row.status === 'pending_override',
+                    visible: (row) => row.status === 'pending_override' || row.status === 'pending_checkout_override',
                     onClick: (row) => this.confirmReject(row)
                 }
             ],
@@ -171,16 +179,42 @@ class PendingOverridesPage {
     }
 
     confirmApprove(row) {
+        const status = row.status;
+        const isCheckIn = status === 'pending_override';
+        const isCheckOut = status === 'pending_checkout_override';
+
+        const inputId = `approve-dt-${row.id}`;
+        const label = isCheckIn ? 'Giriş saati (opsiyonel)' : 'Çıkış saati (opsiyonel)';
+        const help = isCheckIn
+            ? 'Dilerseniz giriş saatini düzeltebilirsiniz. Boş bırakırsanız mevcut saat kullanılır.'
+            : 'Dilerseniz çıkış saatini seçebilirsiniz. Boş bırakırsanız sistem şu anı kullanabilir.';
+
         this.confirmModal.show({
             title: 'Onayla',
-            message: 'Bu ofis dışı girişi onaylamak istiyor musunuz?',
-            description: `Kayıt ID: ${row.id}`,
+            message: isCheckOut ? 'Bu çıkış düzeltme talebini onaylamak istiyor musunuz?' : 'Bu giriş düzeltme talebini onaylamak istiyor musunuz?',
+            description: `${row.user_display || ''}`.trim(),
+            details: `
+                <div class="text-start">
+                    <label class="form-label mb-1">${label}</label>
+                    <input class="form-control" id="${inputId}" type="datetime-local" />
+                    <div class="form-text">${help}</div>
+                </div>
+            `,
             confirmText: 'Onayla',
             confirmButtonClass: 'btn-success',
             onConfirm: async () => {
                 try {
-                    await approveAttendanceOverride(row.id);
-                    showNotification('Kayıt onaylandı', 'success');
+                    const el = document.getElementById(inputId);
+                    const raw = (el && el.value ? el.value : '').trim();
+
+                    const payload = {};
+                    if (raw) {
+                        if (isCheckIn) payload.check_in_time = raw;
+                        if (isCheckOut) payload.check_out_time = raw;
+                    }
+
+                    await approveAttendanceOverrideWithPayload(row.id, payload);
+                    showNotification('Talep onaylandı', 'success');
                     await this.refresh();
                 } catch (e) {
                     showNotification(`Onaylama başarısız: ${e.message || e}`, 'error');
@@ -192,13 +226,16 @@ class PendingOverridesPage {
 
     confirmReject(row) {
         const textareaId = `reject-notes-${row.id}`;
+        const status = row.status;
         this.confirmModal.show({
             title: 'Reddet',
-            message: 'Bu ofis dışı girişi reddetmek istiyor musunuz?',
-            description: `Kayıt ID: ${row.id}`,
+            message: status === 'pending_checkout_override'
+                ? 'Bu çıkış düzeltme talebini reddetmek istiyor musunuz?'
+                : 'Bu giriş düzeltme talebini reddetmek istiyor musunuz?',
+            description: `${row.user_display || ''}`.trim(),
             details: `
                 <div class="text-start">
-                    <label class="form-label mb-1">Reddetme notu</label>
+                    <label class="form-label mb-1">Reddetme notu (opsiyonel)</label>
                     <textarea class="form-control" id="${textareaId}" rows="3" placeholder="Reddetme nedeni..."></textarea>
                 </div>
             `,
@@ -209,7 +246,7 @@ class PendingOverridesPage {
                 const notes = (notesEl && notesEl.value ? notesEl.value : '').trim();
                 try {
                     await rejectAttendanceOverride(row.id, notes);
-                    showNotification('Kayıt reddedildi', 'success');
+                    showNotification('Talep reddedildi', 'success');
                     await this.refresh();
                 } catch (e) {
                     showNotification(`Reddetme başarısız: ${e.message || e}`, 'error');

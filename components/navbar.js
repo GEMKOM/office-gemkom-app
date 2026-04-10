@@ -41,15 +41,27 @@ function getAttendanceUiModelFromTodayResponse(respStatus, data) {
         return { state: 'unknown', label: 'Bilinmiyor', variant: 'secondary', details: 'Beklenmeyen yanıt.' };
     }
     const status = data.status || 'unknown';
+    const statusDisplay = data.status_display || null;
     if (status === 'active') {
         const t = formatTime(pick(data, ['check_in_at', 'check_in_time', 'check_in', 'start_at', 'start_time']));
-        return { state: 'active', label: 'Giriş yapıldı', variant: 'success', details: t ? `Giriş saati: ${t}` : 'Giriş yapıldı.' };
+        const label = statusDisplay || 'Aktif (Giriş Yapıldı)';
+        return { state: 'active', label, variant: 'success', details: t ? `Giriş saati: ${t}` : label };
     }
     if (status === 'complete') {
-        return { state: 'complete', label: 'Tamamlandı', variant: 'primary', details: 'Bugün tamamlandı.' };
+        const label = statusDisplay || 'Tamamlandı (Çıkış Yapıldı)';
+        return { state: 'complete', label, variant: 'primary', details: label };
     }
     if (status === 'pending_override') {
-        return { state: 'pending_override', label: 'Onay bekliyor', variant: 'warning', details: 'İK onayı bekleniyor.' };
+        const label = statusDisplay || 'İnsan Kaynakları Onayı Bekliyor (GİRİŞ)';
+        return { state: 'pending_override', label, variant: 'warning', details: label };
+    }
+    if (status === 'pending_checkout_override') {
+        const label = statusDisplay || 'İnsan Kaynakları Onayı Bekliyor (ÇIKIŞ)';
+        return { state: 'pending_checkout_override', label, variant: 'warning', details: label };
+    }
+    if (status === 'override_rejected') {
+        const label = statusDisplay || 'Reddedildi';
+        return { state: 'override_rejected', label, variant: 'danger', details: label };
     }
     return { state: String(status), label: String(status), variant: 'secondary', details: 'Detay için açın.' };
 }
@@ -330,7 +342,7 @@ export function initNavbar() {
                                     <div class="small text-warning fw-semibold mb-1">Ofis ağı dışında</div>
                                     <input type="text" class="form-control form-control-sm mb-2" id="attendanceOverrideReason" placeholder="Açıklama" />
                                     <button type="button" class="btn btn-sm btn-warning w-100" id="attendanceOverrideSubmitBtn">
-                                        Ofis dışı giriş gönder
+                                        Ofis dışı işlem gönder
                                     </button>
                                 </li>
                                 <li class="px-3 pb-2">
@@ -393,6 +405,8 @@ export function initNavbar() {
       }
 
       // Attendance indicator (check-in / check-out)
+      let pendingOverrideAction = null; // 'checkin' | 'checkout'
+
       async function refreshAttendanceIndicator() {
           const dot = document.getElementById('attendanceDot');
           const text = document.getElementById('attendanceText');
@@ -405,6 +419,7 @@ export function initNavbar() {
           if (!dot || !text || !badge || !details || !btnIn || !btnOut || !overrideBox) return;
 
           overrideBox.classList.add('d-none');
+          pendingOverrideAction = null;
           btnIn.disabled = true;
           btnOut.disabled = true;
 
@@ -450,6 +465,7 @@ export function initNavbar() {
           const overrideBox = document.getElementById('attendanceOverrideBox');
           const overrideReason = document.getElementById('attendanceOverrideReason');
           if (overrideBox) overrideBox.classList.add('d-none');
+          pendingOverrideAction = null;
 
           const resp = await attendanceApiFetch('/attendance/check-in/', {
               method: 'POST',
@@ -463,9 +479,10 @@ export function initNavbar() {
               return;
           }
 
-          if (resp.status === 403 && data && data.reason === 'not_on_office_network') {
+          if ((resp.status === 403 || resp.status === 404) && data && data.reason === 'not_on_office_network') {
               if (overrideBox) overrideBox.classList.remove('d-none');
               if (overrideReason) overrideReason.focus();
+              pendingOverrideAction = 'checkin';
               return;
           }
 
@@ -473,11 +490,30 @@ export function initNavbar() {
       }
 
       async function doAttendanceCheckOut() {
-          await attendanceApiFetch('/attendance/check-out/', {
+          const overrideBox = document.getElementById('attendanceOverrideBox');
+          const overrideReason = document.getElementById('attendanceOverrideReason');
+          if (overrideBox) overrideBox.classList.add('d-none');
+          pendingOverrideAction = null;
+
+          const resp = await attendanceApiFetch('/attendance/check-out/', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: '{}'
           });
+          const data = await safeJson(resp);
+
+          if (resp.ok) {
+              await refreshAttendanceIndicator();
+              return;
+          }
+
+          if ((resp.status === 403 || resp.status === 404) && data && data.reason === 'not_on_office_network') {
+              if (overrideBox) overrideBox.classList.remove('d-none');
+              if (overrideReason) overrideReason.focus();
+              pendingOverrideAction = 'checkout';
+              return;
+          }
+
           await refreshAttendanceIndicator();
       }
       
@@ -532,7 +568,23 @@ export function initNavbar() {
                 }
                 attendanceOverrideSubmitBtn.disabled = true;
                 try {
-                    await doAttendanceCheckIn({ override_reason: reason });
+                    if (pendingOverrideAction === 'checkout') {
+                        const resp = await attendanceApiFetch('/attendance/check-out/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ override_reason: reason })
+                        });
+                        await refreshAttendanceIndicator();
+                        return;
+                    }
+
+                    if (pendingOverrideAction === 'checkin') {
+                        await doAttendanceCheckIn({ override_reason: reason });
+                        return;
+                    } else {
+                        // Fallback: default to check-in
+                        await doAttendanceCheckIn({ override_reason: reason });
+                    }
                 } finally {
                     attendanceOverrideSubmitBtn.disabled = false;
                 }

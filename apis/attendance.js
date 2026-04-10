@@ -53,8 +53,18 @@ export async function approveAttendanceOverride(recordId) {
     return parseJsonOrThrow(resp);
 }
 
+export async function approveAttendanceOverrideWithPayload(recordId, payload) {
+    const body = payload && Object.keys(payload).length > 0 ? JSON.stringify(payload) : '{}';
+    const resp = await authedFetch(`${backendBase}/attendance/hr/records/${recordId}/approve-override/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body
+    });
+    return parseJsonOrThrow(resp);
+}
+
 export async function rejectAttendanceOverride(recordId, notes) {
-    const payload = { notes: notes || '' };
+    const payload = notes ? { notes: String(notes) } : {};
     const resp = await authedFetch(`${backendBase}/attendance/hr/records/${recordId}/reject-override/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -67,6 +77,15 @@ export async function fetchAttendanceHrRecords(filters = {}) {
     const query = buildQuery(filters);
     const resp = await authedFetch(`${backendBase}/attendance/hr/records/${query}`, {
         method: 'GET'
+    });
+    return parseJsonOrThrow(resp);
+}
+
+export async function patchAttendanceHrRecord(recordId, patch = {}) {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/records/${recordId}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch || {})
     });
     return parseJsonOrThrow(resp);
 }
