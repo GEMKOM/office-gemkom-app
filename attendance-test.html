@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Attendance API Test</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      body {
+        background: #0b1220;
+        color: #e6edf3;
+      }
+      .card {
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        color: inherit;
+      }
+      .form-control,
+      .form-select {
+        background: rgba(0, 0, 0, 0.25);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        color: #e6edf3;
+      }
+      .form-control::placeholder {
+        color: rgba(230, 237, 243, 0.55);
+      }
+      .form-control:focus {
+        background: rgba(0, 0, 0, 0.35);
+        color: #e6edf3;
+        border-color: rgba(110, 168, 254, 0.75);
+        box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.2);
+      }
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .badge-soft {
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        background: rgba(255, 255, 255, 0.06);
+      }
+      .muted {
+        color: rgba(230, 237, 243, 0.72);
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container py-4">
+      <div class="d-flex align-items-center justify-content-between gap-3 flex-wrap">
+        <div>
+          <div class="h3 mb-1">Attendance API Test</div>
+          <div class="muted">
+            Tests <code>/attendance/today/</code>, <code>/attendance/check-in/</code>, <code>/attendance/check-out/</code>
+            using the app's existing auth (<code>authedFetch</code>).
+          </div>
+        </div>
+        <div class="d-flex gap-2">
+          <button id="btnRefresh" class="btn btn-outline-light">Refresh status</button>
+          <button id="btnDebugIp" class="btn btn-outline-info">Debug IP</button>
+          <button id="btnClear" class="btn btn-outline-warning">Clear tokens</button>
+        </div>
+      </div>
+
+      <div class="row g-3 mt-2">
+        <div class="col-12 col-lg-6">
+          <div class="card p-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <div class="h5 mb-0">Connection</div>
+              <span id="connState" class="badge badge-soft">idle</span>
+            </div>
+            <div class="muted">
+              Uses <code>backendBase</code> from <code>base.js</code> and <code>authedFetch</code> from
+              <code>authService.js</code>.
+            </div>
+            <div class="form-text muted mt-2">
+              If you're not logged in (or tokens are missing/expired), it will redirect you to <code>/login/</code>.
+            </div>
+            <div class="form-text muted mt-1">
+              Tip: open this page via the same local dev server / static hosting you use for the app (module imports need HTTP).
+            </div>
+          </div>
+        </div>
+
+        <div class="col-12 col-lg-6">
+          <div class="card p-3">
+            <div class="d-flex align-items-center justify-content-between mb-2">
+              <div class="h5 mb-0">Frontend behavior simulation</div>
+              <span id="statusBadge" class="badge badge-soft">unknown</span>
+            </div>
+
+            <div id="statusSummary" class="muted mb-3">
+              On page load: call <code>GET /attendance/today/</code> and render UI based on result.
+            </div>
+
+            <div id="actions" class="d-flex flex-wrap gap-2 mb-3">
+              <button id="btnCheckIn" class="btn btn-success" disabled>Check In</button>
+              <button id="btnCheckOut" class="btn btn-danger" disabled>Check Out</button>
+            </div>
+
+            <div id="overrideBox" class="card p-3 d-none">
+              <div class="d-flex align-items-center justify-content-between">
+                <div class="h6 mb-0">Override required</div>
+                <span class="badge text-bg-warning">403 not_on_office_network</span>
+              </div>
+              <div class="muted mt-2">
+                Provide a reason and re-submit <code>POST /attendance/check-in/</code> with
+                <code>{"override_reason": "..."}</code>.
+              </div>
+              <label class="form-label mt-3">Override reason</label>
+              <input id="overrideReason" class="form-control" placeholder="e.g. Visiting customer site" />
+              <div class="d-flex gap-2 mt-3">
+                <button id="btnSubmitOverride" class="btn btn-warning">Submit override check-in</button>
+                <button id="btnCancelOverride" class="btn btn-outline-light">Cancel</button>
+              </div>
+            </div>
+
+            <div class="mt-3">
+              <div class="h6 mb-2">Last response</div>
+              <pre id="lastResponse" class="p-3 rounded-3" style="background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.12);"></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script type="module">
+      import { authedFetch, logout, isLoggedIn } from "./authService.js";
+      import { backendBase } from "./base.js";
+
+      const elConnState = document.getElementById("connState");
+      const elStatusBadge = document.getElementById("statusBadge");
+      const elStatusSummary = document.getElementById("statusSummary");
+      const elLastResponse = document.getElementById("lastResponse");
+
+      const btnRefresh = document.getElementById("btnRefresh");
+      const btnDebugIp = document.getElementById("btnDebugIp");
+      const btnClear = document.getElementById("btnClear");
+      const btnCheckIn = document.getElementById("btnCheckIn");
+      const btnCheckOut = document.getElementById("btnCheckOut");
+
+      const overrideBox = document.getElementById("overrideBox");
+      const overrideReason = document.getElementById("overrideReason");
+      const btnSubmitOverride = document.getElementById("btnSubmitOverride");
+      const btnCancelOverride = document.getElementById("btnCancelOverride");
+
+      function setConnState(text, variant = "secondary") {
+        elConnState.textContent = text;
+        elConnState.className = `badge text-bg-${variant}`;
+      }
+
+      function setStatusBadge(text, variant = "secondary") {
+        elStatusBadge.textContent = text;
+        elStatusBadge.className = `badge text-bg-${variant}`;
+      }
+
+      function showOverrideBox(show) {
+        overrideBox.classList.toggle("d-none", !show);
+        if (show) overrideReason.focus();
+      }
+
+      function setLastResponse(obj) {
+        elLastResponse.textContent =
+          typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+      }
+
+      async function safeJson(resp) {
+        const text = await resp.text();
+        if (!text) return null;
+        try {
+          return JSON.parse(text);
+        } catch {
+          return { raw: text };
+        }
+      }
+
+      async function apiFetch(path, options = {}) {
+        const url = `${backendBase}${path}`;
+        return authedFetch(url, options);
+      }
+
+      function fmtTime(value) {
+        if (!value) return null;
+        const d = new Date(value);
+        if (Number.isNaN(d.getTime())) return String(value);
+        return d.toLocaleString();
+      }
+
+      function pick(obj, keys) {
+        for (const k of keys) {
+          if (obj && obj[k] != null) return obj[k];
+        }
+        return null;
+      }
+
+      function renderFromTodayResponse(record) {
+        btnCheckIn.disabled = true;
+        btnCheckOut.disabled = true;
+        showOverrideBox(false);
+
+        if (!record || typeof record !== "object") {
+          setStatusBadge("unknown", "secondary");
+          elStatusSummary.innerHTML =
+            "Unexpected response. See <b>Last response</b>.";
+          return;
+        }
+
+        const status = record.status || "unknown";
+        if (status === "active") {
+          setStatusBadge("active", "success");
+          btnCheckOut.disabled = false;
+          const checkInAt = pick(record, ["check_in_at", "check_in_time", "check_in", "start_at", "start_time"]);
+          const shown = fmtTime(checkInAt);
+          elStatusSummary.innerHTML = shown
+            ? `You are <b>checked in</b>. Check-in time: <b>${shown}</b>.`
+            : `You are <b>checked in</b>.`;
+          return;
+        }
+
+        if (status === "complete") {
+          setStatusBadge("complete", "primary");
+          const hours = pick(record, ["hours", "worked_hours", "total_hours", "duration_hours"]);
+          const overtime = pick(record, ["overtime", "overtime_hours"]);
+          if (hours != null) {
+            elStatusSummary.innerHTML =
+              overtime != null
+                ? `Today: <b>${hours}</b> hours. Overtime: <b>${overtime}</b>.`
+                : `Today: <b>${hours}</b> hours.`;
+          } else {
+            elStatusSummary.innerHTML =
+              `Attendance is <b>complete</b>. See details in <b>Last response</b>.`;
+          }
+          return;
+        }
+
+        if (status === "pending_override") {
+          setStatusBadge("pending_override", "warning");
+          elStatusSummary.innerHTML = `Status: <b>Awaiting HR approval</b>.`;
+          return;
+        }
+
+        setStatusBadge(String(status), "secondary");
+        elStatusSummary.innerHTML =
+          `Status: <b>${String(status)}</b>. If this is a new day, backend may return 404 instead.`;
+      }
+
+      async function loadToday() {
+        setLastResponse("");
+        btnCheckIn.disabled = true;
+        btnCheckOut.disabled = true;
+        showOverrideBox(false);
+
+        if (!isLoggedIn()) {
+          setConnState("not logged in", "warning");
+          setStatusBadge("unknown", "secondary");
+          elStatusSummary.innerHTML =
+            "Not logged in. Go to <b>/login/</b> in this app and sign in.";
+          return;
+        }
+
+        setConnState("GET /attendance/today/", "info");
+        try {
+          const resp = await apiFetch("/attendance/today/", { method: "GET" });
+          const data = await safeJson(resp);
+          setLastResponse({ request: "GET /attendance/today/", status: resp.status, data });
+
+          if (resp.status === 404) {
+            setConnState("ready", "success");
+            setStatusBadge("no record (404)", "secondary");
+            elStatusSummary.innerHTML =
+              "No record for today. Show <b>Check In</b>.";
+            btnCheckIn.disabled = false;
+            return;
+          }
+
+          if (!resp.ok) {
+            setConnState("error", "danger");
+            setStatusBadge(`error ${resp.status}`, "danger");
+            elStatusSummary.innerHTML =
+              "Failed to fetch today. See <b>Last response</b>.";
+            return;
+          }
+
+          setConnState("ready", "success");
+          renderFromTodayResponse(data);
+        } catch (e) {
+          setConnState("network error", "danger");
+          setStatusBadge("network error", "danger");
+          setLastResponse(String(e && e.message ? e.message : e));
+          elStatusSummary.innerHTML =
+            "Network error. Check base URL / CORS / VPN. See <b>Last response</b>.";
+        }
+      }
+
+      async function checkIn(payload) {
+        setConnState("POST /attendance/check-in/", "info");
+        try {
+          const resp = await apiFetch("/attendance/check-in/", {
+            method: "POST",
+            body: payload ? JSON.stringify(payload) : "{}",
+            headers: { "Content-Type": "application/json" },
+          });
+          const data = await safeJson(resp);
+          setLastResponse({
+            request: "POST /attendance/check-in/",
+            payload: payload || {},
+            status: resp.status,
+            data,
+          });
+
+          if (resp.status === 201) {
+            setConnState("checked in", "success");
+            await loadToday();
+            return;
+          }
+
+          if (resp.status === 403 && data && data.reason === "not_on_office_network") {
+            setConnState("override needed", "warning");
+            showOverrideBox(true);
+            elStatusSummary.innerHTML =
+              "Not on office network. Show <b>override form</b>.";
+            return;
+          }
+
+          setConnState("error", "danger");
+          await loadToday();
+        } catch (e) {
+          setConnState("network error", "danger");
+          setLastResponse(String(e && e.message ? e.message : e));
+        }
+      }
+
+      async function checkOut() {
+        setConnState("POST /attendance/check-out/", "info");
+        try {
+          const resp = await apiFetch("/attendance/check-out/", {
+            method: "POST",
+            body: "{}",
+            headers: { "Content-Type": "application/json" },
+          });
+          const data = await safeJson(resp);
+          setLastResponse({ request: "POST /attendance/check-out/", status: resp.status, data });
+
+          if (resp.ok) {
+            setConnState("checked out", "success");
+            await loadToday();
+            return;
+          }
+
+          setConnState("error", "danger");
+          await loadToday();
+        } catch (e) {
+          setConnState("network error", "danger");
+          setLastResponse(String(e && e.message ? e.message : e));
+        }
+      }
+
+      async function debugIp() {
+        setLastResponse("");
+
+        if (!isLoggedIn()) {
+          setConnState("not logged in", "warning");
+          setStatusBadge("unknown", "secondary");
+          elStatusSummary.innerHTML =
+            "Not logged in. Go to <b>/login/</b> in this app and sign in.";
+          return;
+        }
+
+        setConnState("GET /attendance/debug/ip/", "info");
+        try {
+          const resp = await apiFetch("/attendance/debug/ip/", { method: "GET" });
+          const data = await safeJson(resp);
+          setLastResponse({ request: "GET /attendance/debug/ip/", status: resp.status, data });
+
+          if (resp.ok) {
+            setConnState("ready", "success");
+            return;
+          }
+
+          setConnState("error", "danger");
+        } catch (e) {
+          setConnState("network error", "danger");
+          setLastResponse(String(e && e.message ? e.message : e));
+        }
+      }
+
+      btnRefresh.addEventListener("click", () => {
+        loadToday();
+      });
+      btnDebugIp.addEventListener("click", () => {
+        debugIp();
+      });
+      btnClear.addEventListener("click", () => {
+        logout();
+      });
+
+      btnCheckIn.addEventListener("click", () => {
+        checkIn(null);
+      });
+      btnCheckOut.addEventListener("click", () => {
+        checkOut();
+      });
+
+      btnSubmitOverride.addEventListener("click", () => {
+        const reason = (overrideReason.value || "").trim();
+        if (!reason) {
+          overrideReason.focus();
+          return;
+        }
+        showOverrideBox(false);
+        checkIn({ override_reason: reason });
+      });
+
+      btnCancelOverride.addEventListener("click", () => {
+        showOverrideBox(false);
+      });
+
+      loadToday();
+    </script>
+  </body>
+</html>
+
