@@ -31,6 +31,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-money-bill-wave',
                 iconColor: 'success',
                 link: '/human_resources/wages'
+            },
+            {
+                title: 'Yoklama Onayları',
+                description: 'Ofis dışı giriş taleplerini onaylayın veya reddedin',
+                icon: 'fas fa-user-check',
+                iconColor: 'warning',
+                link: '/human_resources/attendance'
+            },
+            {
+                title: 'Yoklama Kayıtları',
+                description: 'Yoklama kayıtlarını filtreleyin ve inceleyin',
+                icon: 'fas fa-clipboard-list',
+                iconColor: 'info',
+                link: '/human_resources/attendance'
             }
         ]
     });

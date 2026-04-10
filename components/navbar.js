@@ -5,6 +5,55 @@ import { filterNavigationByAccess, hasRouteAccess } from '../apis/accessControl.
 import { NAVIGATION_STRUCTURE } from '../navigationStructure.js';
 import { NotificationBell } from './notificationBell/notificationBell.js';
 
+async function safeJson(resp) {
+    const text = await resp.text();
+    if (!text) return null;
+    try {
+        return JSON.parse(text);
+    } catch {
+        return { raw: text };
+    }
+}
+
+async function attendanceApiFetch(path, options = {}) {
+    return authedFetch(`${backendBase}${path}`, options);
+}
+
+function formatTime(value) {
+    if (!value) return null;
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function pick(obj, keys) {
+    for (const k of keys) {
+        if (obj && obj[k] != null) return obj[k];
+    }
+    return null;
+}
+
+function getAttendanceUiModelFromTodayResponse(respStatus, data) {
+    if (respStatus === 404) {
+        return { state: 'not_checked_in', label: 'Giriş yapılmadı', variant: 'secondary', details: 'Bugün için kayıt yok.' };
+    }
+    if (!data || typeof data !== 'object') {
+        return { state: 'unknown', label: 'Bilinmiyor', variant: 'secondary', details: 'Beklenmeyen yanıt.' };
+    }
+    const status = data.status || 'unknown';
+    if (status === 'active') {
+        const t = formatTime(pick(data, ['check_in_at', 'check_in_time', 'check_in', 'start_at', 'start_time']));
+        return { state: 'active', label: 'Giriş yapıldı', variant: 'success', details: t ? `Giriş saati: ${t}` : 'Giriş yapıldı.' };
+    }
+    if (status === 'complete') {
+        return { state: 'complete', label: 'Tamamlandı', variant: 'primary', details: 'Bugün tamamlandı.' };
+    }
+    if (status === 'pending_override') {
+        return { state: 'pending_override', label: 'Onay bekliyor', variant: 'warning', details: 'İK onayı bekleniyor.' };
+    }
+    return { state: String(status), label: String(status), variant: 'secondary', details: 'Detay için açın.' };
+}
+
 
 // Helper function to find navigation item by path
 function findNavigationItem(path, structure = NAVIGATION_STRUCTURE) {
@@ -255,6 +304,42 @@ export function initNavbar() {
                     </ul>
                     
                     <ul class="navbar-nav ms-auto align-items-center">
+                        <li class="nav-item dropdown attendance-nav">
+                            <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button"
+                               data-bs-toggle="dropdown" aria-expanded="false" id="attendanceDropdownToggle">
+                                <span class="attendance-dot attendance-dot--secondary" id="attendanceDot" aria-hidden="true"></span>
+                                <i class="fas fa-user-check me-1"></i>
+                                <span id="attendanceText">Yoklama</span>
+                            </a>
+                            <ul class="dropdown-menu dropdown-menu-end attendance-menu" aria-labelledby="attendanceDropdownToggle">
+                                <li class="px-3 py-2">
+                                    <div class="d-flex align-items-center justify-content-between">
+                                        <div class="fw-semibold text-light">Yoklama</div>
+                                        <span class="badge text-bg-secondary" id="attendanceBadge">…</span>
+                                    </div>
+                                    <div class="small attendance-muted mt-1" id="attendanceDetails">Yükleniyor…</div>
+                                </li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li class="px-3 pb-2">
+                                    <div class="d-flex gap-2">
+                                        <button type="button" class="btn btn-sm btn-success flex-fill" id="attendanceCheckInBtn">Giriş yap</button>
+                                        <button type="button" class="btn btn-sm btn-danger flex-fill" id="attendanceCheckOutBtn">Çıkış yap</button>
+                                    </div>
+                                </li>
+                                <li class="px-3 pb-2 d-none" id="attendanceOverrideBox">
+                                    <div class="small text-warning fw-semibold mb-1">Ofis ağı dışında</div>
+                                    <input type="text" class="form-control form-control-sm mb-2" id="attendanceOverrideReason" placeholder="Açıklama" />
+                                    <button type="button" class="btn btn-sm btn-warning w-100" id="attendanceOverrideSubmitBtn">
+                                        Ofis dışı giriş gönder
+                                    </button>
+                                </li>
+                                <li class="px-3 pb-2">
+                                    <button type="button" class="btn btn-sm btn-outline-light w-100" id="attendanceRefreshBtn">
+                                        Yenile
+                                    </button>
+                                </li>
+                            </ul>
+                        </li>
                         <li class="nav-item">
                             <div class="notification-bell-container" id="notification-bell-container">
                                 <button class="notification-bell-button" type="button" aria-label="Bildirimler">
@@ -306,12 +391,155 @@ export function initNavbar() {
       if (notificationBellContainer) {
           window.notificationBell = new NotificationBell(notificationBellContainer);
       }
+
+      // Attendance indicator (check-in / check-out)
+      async function refreshAttendanceIndicator() {
+          const dot = document.getElementById('attendanceDot');
+          const text = document.getElementById('attendanceText');
+          const badge = document.getElementById('attendanceBadge');
+          const details = document.getElementById('attendanceDetails');
+          const btnIn = document.getElementById('attendanceCheckInBtn');
+          const btnOut = document.getElementById('attendanceCheckOutBtn');
+          const overrideBox = document.getElementById('attendanceOverrideBox');
+
+          if (!dot || !text || !badge || !details || !btnIn || !btnOut || !overrideBox) return;
+
+          overrideBox.classList.add('d-none');
+          btnIn.disabled = true;
+          btnOut.disabled = true;
+
+          if (!isLoggedIn()) {
+              dot.className = 'attendance-dot attendance-dot--secondary';
+              text.textContent = 'Yoklama';
+              badge.className = 'badge text-bg-secondary';
+              badge.textContent = 'Giriş';
+              details.textContent = 'Giriş yapılmadı.';
+              return;
+          }
+
+          badge.className = 'badge text-bg-secondary';
+          badge.textContent = '…';
+          details.textContent = 'Loading…';
+
+          try {
+              const resp = await attendanceApiFetch('/attendance/today/', { method: 'GET' });
+              const data = await safeJson(resp);
+              const model = getAttendanceUiModelFromTodayResponse(resp.status, data);
+
+              dot.className = `attendance-dot attendance-dot--${model.variant}`;
+              text.textContent = model.label;
+              badge.className = `badge text-bg-${model.variant}`;
+              badge.textContent = model.label;
+              details.textContent = model.details;
+
+              if (model.state === 'not_checked_in') {
+                  btnIn.disabled = false;
+              } else if (model.state === 'active') {
+                  btnOut.disabled = false;
+              }
+          } catch (e) {
+              dot.className = 'attendance-dot attendance-dot--danger';
+              text.textContent = 'Yoklama';
+              badge.className = 'badge text-bg-danger';
+              badge.textContent = 'Hata';
+              details.textContent = 'Yüklenemedi.';
+          }
+      }
+
+      async function doAttendanceCheckIn(payload) {
+          const overrideBox = document.getElementById('attendanceOverrideBox');
+          const overrideReason = document.getElementById('attendanceOverrideReason');
+          if (overrideBox) overrideBox.classList.add('d-none');
+
+          const resp = await attendanceApiFetch('/attendance/check-in/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: payload ? JSON.stringify(payload) : '{}'
+          });
+          const data = await safeJson(resp);
+
+          if (resp.status === 201) {
+              await refreshAttendanceIndicator();
+              return;
+          }
+
+          if (resp.status === 403 && data && data.reason === 'not_on_office_network') {
+              if (overrideBox) overrideBox.classList.remove('d-none');
+              if (overrideReason) overrideReason.focus();
+              return;
+          }
+
+          await refreshAttendanceIndicator();
+      }
+
+      async function doAttendanceCheckOut() {
+          await attendanceApiFetch('/attendance/check-out/', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: '{}'
+          });
+          await refreshAttendanceIndicator();
+      }
       
       // Initialize Bootstrap dropdowns after navbar is created
         const dropdownElementList = navbarContainer.querySelectorAll('.dropdown-toggle');
         dropdownElementList.forEach(dropdownToggleEl => {
             new bootstrap.Dropdown(dropdownToggleEl);
         });
+
+        const attendanceToggle = document.getElementById('attendanceDropdownToggle');
+        if (attendanceToggle) {
+            attendanceToggle.addEventListener('show.bs.dropdown', () => {
+                refreshAttendanceIndicator();
+            });
+        }
+
+        const attendanceRefreshBtn = document.getElementById('attendanceRefreshBtn');
+        if (attendanceRefreshBtn) {
+            attendanceRefreshBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                refreshAttendanceIndicator();
+            });
+        }
+
+        const attendanceInBtn = document.getElementById('attendanceCheckInBtn');
+        if (attendanceInBtn) {
+            attendanceInBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                attendanceInBtn.disabled = true;
+                await doAttendanceCheckIn(null);
+            });
+        }
+
+        const attendanceOutBtn = document.getElementById('attendanceCheckOutBtn');
+        if (attendanceOutBtn) {
+            attendanceOutBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                attendanceOutBtn.disabled = true;
+                await doAttendanceCheckOut();
+            });
+        }
+
+        const attendanceOverrideSubmitBtn = document.getElementById('attendanceOverrideSubmitBtn');
+        if (attendanceOverrideSubmitBtn) {
+            attendanceOverrideSubmitBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                const reasonEl = document.getElementById('attendanceOverrideReason');
+                const reason = (reasonEl && reasonEl.value ? reasonEl.value : '').trim();
+                if (!reason) {
+                    if (reasonEl) reasonEl.focus();
+                    return;
+                }
+                attendanceOverrideSubmitBtn.disabled = true;
+                try {
+                    await doAttendanceCheckIn({ override_reason: reason });
+                } finally {
+                    attendanceOverrideSubmitBtn.disabled = false;
+                }
+            });
+        }
+
+        refreshAttendanceIndicator();
         
         // Add hover functionality for main navbar dropdowns (top level only)
         const mainDropdownToggles = navbarContainer.querySelectorAll('.nav-item.dropdown .dropdown-toggle');

@@ -530,6 +530,22 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Maaşlar',
                 icon: 'fas fa-money-bill-wave',
                 children: {}
+            },
+            '/human_resources/attendance': {
+                label: 'Yoklama',
+                icon: 'fas fa-user-check',
+                children: {
+                    '/human_resources/attendance/pending-overrides': {
+                        label: 'Onay Bekleyenler',
+                        icon: 'fas fa-user-clock',
+                        children: {}
+                    },
+                    '/human_resources/attendance/records': {
+                        label: 'Kayıtlar',
+                        icon: 'fas fa-clipboard-list',
+                        children: {}
+                    }
+                }
             }
         }
     },

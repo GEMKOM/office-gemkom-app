@@ -596,6 +596,46 @@
     display: inline-block;
 }
 
+.attendance-nav .nav-link {
+    gap: 0.35rem;
+}
+
+.attendance-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 999px;
+    display: inline-block;
+    box-shadow: 0 0 0 2px rgba(52, 58, 64, 0.9);
+}
+
+.attendance-dot--secondary { background: #adb5bd; }
+.attendance-dot--success { background: #198754; }
+.attendance-dot--primary { background: #0d6efd; }
+.attendance-dot--warning { background: #ffc107; }
+.attendance-dot--danger { background: #dc3545; }
+
+.attendance-menu {
+    min-width: 280px !important;
+}
+
+.attendance-menu .dropdown-divider {
+    border-color: rgba(255, 255, 255, 0.12);
+}
+
+.attendance-menu .form-control {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: rgba(255, 255, 255, 0.92);
+}
+
+.attendance-menu .form-control::placeholder {
+    color: rgba(255, 255, 255, 0.55);
+}
+
+.attendance-muted {
+    color: rgba(255, 255, 255, 0.72) !important;
+}
+
 .notification-bell-button {
     position: relative;
     background: none;
