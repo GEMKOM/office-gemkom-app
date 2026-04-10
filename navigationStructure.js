@@ -544,6 +544,11 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Kayıtlar',
                         icon: 'fas fa-clipboard-list',
                         children: {}
+                    },
+                    '/human_resources/attendance/shift-rules': {
+                        label: 'Vardiya Kuralları',
+                        icon: 'fas fa-clock',
+                        children: {}
                     }
                 }
             }

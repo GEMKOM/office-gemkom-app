@@ -30,6 +30,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-clipboard-list',
                 iconColor: 'info',
                 link: '/human_resources/attendance/records'
+            },
+            {
+                title: 'Vardiya Kuralları',
+                description: 'Vardiya saatlerini ve fazla mesai eşiğini yönetin',
+                icon: 'fas fa-clock',
+                iconColor: 'primary',
+                link: '/human_resources/attendance/shift-rules'
             }
         ]
     });

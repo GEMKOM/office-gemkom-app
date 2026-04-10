@@ -10,7 +10,7 @@ import {
     fetchPendingAttendanceOverrides,
     approveAttendanceOverrideWithPayload,
     rejectAttendanceOverride
-} from '../../../apis/attendance.js';
+} from '../../../apis/human_resources/attendance.js';
 
 function pick(obj, keys) {
     for (const k of keys) {

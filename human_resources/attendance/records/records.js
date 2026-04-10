@@ -7,7 +7,7 @@ import { TableComponent } from '../../../components/table/table.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
 
-import { fetchAttendanceHrRecords, patchAttendanceHrRecord } from '../../../apis/attendance.js';
+import { fetchAttendanceHrRecords, patchAttendanceHrRecord } from '../../../apis/human_resources/attendance.js';
 import { fetchUserGroups } from '../../../apis/users.js';
 
 function pick(obj, keys) {
