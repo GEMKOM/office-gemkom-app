@@ -21,6 +21,34 @@ let attendanceRecordEditModal = null;
 let attendanceRecordEditModalBound = false;
 let attendanceRecordEditContext = null; // { userId, dateStr, recordId, loadAttendance, parentModalBody }
 
+const LEAVE_TYPE_OPTIONS = [
+    { value: 'annual_leave', label: 'Yıllık İzin' },
+    { value: 'sick_leave', label: 'Hastalık İzni' },
+    { value: 'maternity_leave', label: 'Doğum İzni' },
+    { value: 'paternity_leave', label: 'Babalık İzni' },
+    { value: 'bereavement_leave', label: 'Ölüm İzni' },
+    { value: 'marriage_leave', label: 'Evlilik İzni' },
+    { value: 'public_duty', label: 'Resmi Görev' },
+    { value: 'compensatory_leave', label: 'Mazeret İzni' },
+    { value: 'business_trip', label: 'Görev Seyahati' },
+    { value: 'half_day', label: 'Yarım Gün' },
+    { value: 'unpaid_leave', label: 'Ücretsiz İzin' },
+    { value: 'unauthorized_absence', label: 'İzinsiz Devamsızlık' }
+];
+
+const LEAVE_TYPE_PAID = new Set([
+    'annual_leave',
+    'sick_leave',
+    'maternity_leave',
+    'paternity_leave',
+    'bereavement_leave',
+    'marriage_leave',
+    'public_duty',
+    'compensatory_leave',
+    'business_trip',
+    'half_day'
+]);
+
 function ensureUserEditTabs(editModal, user) {
     const modalEl = editModal?.modal;
     const container = editModal?.container;
@@ -184,6 +212,29 @@ function ensureUserEditTabs(editModal, user) {
             colSize: 4
         });
         attendanceRecordEditModal.addField({
+            id: 'day_type',
+            name: 'day_type',
+            label: 'Gün Türü',
+            type: 'dropdown',
+            value: 'working',
+            options: [
+                { value: 'working', label: 'Çalışma Günü' },
+                { value: 'weekend', label: 'Hafta Sonu' },
+                { value: 'public_holiday', label: 'Resmi Tatil' },
+                { value: 'leave', label: 'İzin' }
+            ],
+            colSize: 4
+        });
+        attendanceRecordEditModal.addField({
+            id: 'leave_type',
+            name: 'leave_type',
+            label: 'İzin Türü',
+            type: 'dropdown',
+            value: '',
+            options: [{ value: '', label: 'Seçiniz...' }, ...LEAVE_TYPE_OPTIONS],
+            colSize: 4
+        });
+        attendanceRecordEditModal.addField({
             id: 'check_in_time',
             name: 'check_in_time',
             label: 'Giriş',
@@ -216,6 +267,45 @@ function ensureUserEditTabs(editModal, user) {
 
             const inInput = attendanceRecordEditModal.container.querySelector('#check_in_time');
             const outInput = attendanceRecordEditModal.container.querySelector('#check_out_time');
+            const dayTypeDropdownEl = attendanceRecordEditModal.container.querySelector('#dropdown-day_type');
+            const leaveTypeGroup = attendanceRecordEditModal.container.querySelector('[data-field-id="leave_type"]');
+            const inGroup = attendanceRecordEditModal.container.querySelector('[data-field-id="check_in_time"]');
+            const outGroup = attendanceRecordEditModal.container.querySelector('[data-field-id="check_out_time"]');
+
+            const setWorkingMode = (isWorking) => {
+                if (inInput) inInput.disabled = !isWorking;
+                if (outInput) outInput.disabled = !isWorking;
+                if (inGroup) inGroup.style.opacity = isWorking ? '' : '0.6';
+                if (outGroup) outGroup.style.opacity = isWorking ? '' : '0.6';
+            };
+
+            const setLeaveMode = (isLeave) => {
+                if (leaveTypeGroup) leaveTypeGroup.style.display = isLeave ? '' : 'none';
+            };
+
+            const syncTypeUi = () => {
+                const typeVal = attendanceRecordEditModal.getFieldValue('day_type') || 'working';
+                const isLeave = String(typeVal) === 'leave';
+                const isWorking = String(typeVal) === 'working';
+                setLeaveMode(isLeave);
+                setWorkingMode(isWorking);
+                if (!isLeave) {
+                    attendanceRecordEditModal.setFieldValue('leave_type', '');
+                }
+                if (!isWorking) {
+                    attendanceRecordEditModal.setFieldValue('check_in_time', '');
+                    attendanceRecordEditModal.setFieldValue('check_out_time', '');
+                }
+            };
+
+            // Initial state
+            syncTypeUi();
+
+            // React when day type changes
+            dayTypeDropdownEl?.addEventListener('dropdown:select', () => {
+                syncTypeUi();
+            });
+
             const bindDefaultOnFocus = (input) => {
                 if (!input) return;
                 if (input.getAttribute('data-default-focus-bound') === 'true') return;
@@ -255,25 +345,53 @@ function ensureUserEditTabs(editModal, user) {
                 const ctx = attendanceRecordEditContext;
                 if (!ctx) return;
 
-                const checkInIso = timeToIsoForDateOrNull(ctx.dateStr, formData?.check_in_time);
-                const checkOutIso = timeToIsoForDateOrNull(ctx.dateStr, formData?.check_out_time);
+                const dayType = (attendanceRecordEditModal.getFieldValue('day_type') || 'working').toString();
+                const leaveType = (attendanceRecordEditModal.getFieldValue('leave_type') || '').toString();
 
-                if (!checkInIso && !checkOutIso) {
-                    showNotification('En az bir alan giriniz (Giriş veya Çıkış).', 'warning');
-                    return;
+                const isLeave = dayType === 'leave';
+                const isWorking = dayType === 'working';
+
+                const checkInIso = isWorking ? timeToIsoForDateOrNull(ctx.dateStr, formData?.check_in_time) : null;
+                const checkOutIso = isWorking ? timeToIsoForDateOrNull(ctx.dateStr, formData?.check_out_time) : null;
+
+                if (isWorking) {
+                    if (!checkInIso && !checkOutIso) {
+                        showNotification('En az bir alan giriniz (Giriş veya Çıkış).', 'warning');
+                        return;
+                    }
+                }
+
+                if (isLeave) {
+                    if (!leaveType) {
+                        showNotification('Lütfen izin türü seçiniz.', 'warning');
+                        return;
+                    }
                 }
 
                 try {
                     if (ctx.recordId) {
                         const patch = {};
-                        if (checkInIso) patch.check_in_time = checkInIso;
-                        if (checkOutIso) patch.check_out_time = checkOutIso;
+                        if (isWorking) {
+                            if (checkInIso) patch.check_in_time = checkInIso;
+                            if (checkOutIso) patch.check_out_time = checkOutIso;
+                        }
+                        if (isLeave) {
+                            patch.leave_type = leaveType;
+                            // times should be empty for leave
+                            patch.check_in_time = null;
+                            patch.check_out_time = null;
+                        }
                         await patchAttendanceHrRecord(ctx.recordId, patch);
                         showNotification('Yoklama kaydı güncellendi', 'success');
                     } else {
                         const payload = { user: ctx.userId, date: ctx.dateStr };
-                        if (checkInIso) payload.check_in_time = checkInIso;
-                        if (checkOutIso) payload.check_out_time = checkOutIso;
+                        if (isWorking) {
+                            if (checkInIso) payload.check_in_time = checkInIso;
+                            if (checkOutIso) payload.check_out_time = checkOutIso;
+                        }
+                        if (isLeave) {
+                            payload.leave_type = leaveType;
+                        }
                         await createAttendanceHrRecord(payload);
                         showNotification('Yoklama kaydı oluşturuldu', 'success');
                     }
@@ -353,7 +471,8 @@ function ensureUserEditTabs(editModal, user) {
                 working: 'Çalışma Günü',
                 weekend: 'Hafta Sonu',
                 public_holiday: 'Resmi Tatil',
-                company_holiday: 'Şirket Tatili'
+                company_holiday: 'Şirket Tatili',
+                leave: 'İzin'
             };
             return map[s] || s || '-';
         };
@@ -402,7 +521,18 @@ function ensureUserEditTabs(editModal, user) {
         }
         const rows = days.map(d => {
             const rec = d.record || null;
-            const flag = d.flag ? `<span class="status-badge status-red">${flagTr(d.flag)}</span>` : '-';
+            const leaveType = rec?.leave_type || d.leave_type || '';
+            const leaveDisplay = rec?.leave_type_display || d.leave_type_display || '';
+            const isPaidLeave = rec?.is_paid_leave ?? (leaveType ? LEAVE_TYPE_PAID.has(String(leaveType)) : null);
+
+            let flag = '-';
+            if (String(d.day_type) === 'leave') {
+                const label = leaveDisplay || (LEAVE_TYPE_OPTIONS.find(o => o.value === leaveType)?.label) || 'İzin';
+                const badgeClass = isPaidLeave === false ? 'status-grey' : 'status-green';
+                flag = `<span class="status-badge ${badgeClass}">${label}</span>`;
+            } else if (d.flag) {
+                flag = `<span class="status-badge status-red">${flagTr(d.flag)}</span>`;
+            }
             const inTime = rec ? timeHM(rec.check_in_time || rec.check_in_at || rec.check_in) : '-';
             const outTime = rec ? timeHM(rec.check_out_time || rec.check_out_at || rec.check_out) : '-';
 
