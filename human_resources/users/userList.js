@@ -3,7 +3,19 @@
 
 import { initNavbar } from '../../components/navbar.js';
 import { ModernDropdown } from '../../components/dropdown/dropdown.js';
-import { authFetchUsers, deleteUser as deleteUserAPI, createUser as createUserAPI, updateUser as updateUserAPI, fetchOccupations, fetchUserGroups } from '../../apis/users.js';
+import {
+    authFetchUsers,
+    deleteUser as deleteUserAPI,
+    createUser as createUserAPI,
+    updateUser as updateUserAPI,
+    fetchOccupations,
+    fetchUserGroups,
+    fetchUserPermissionsDetail,
+    addUserToGroup,
+    removeUserFromGroup,
+    saveUserPermissionOverride,
+    deleteUserPermissionOverride
+} from '../../apis/users.js';
 import { fetchUsersSummary } from '../../apis/summaries.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
@@ -11,15 +23,25 @@ import { StatisticsCards } from '../../components/statistics-cards/statistics-ca
 import { TableComponent } from '../../components/table/table.js';
 import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { EditModal } from '../../components/edit-modal/edit-modal.js';
+import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { fetchShiftRules, assignShiftRuleToUser } from '../../apis/human_resources/attendance.js';
-import { fetchWageRatesForUser } from '../../apis/hr.js';
+import { fetchWageRatesForUser, createWageRate, deleteWageRate, formatCurrency } from '../../apis/hr.js';
 import { fetchAttendanceMonthlySummary, createAttendanceHrRecord, patchAttendanceHrRecord } from '../../apis/human_resources/attendance.js';
 
 let attendanceRecordEditModal = null;
 let attendanceRecordEditModalBound = false;
 let attendanceRecordEditContext = null; // { userId, dateStr, recordId, loadAttendance, parentModalBody }
+
+let wageRateEditModal = null;
+let wageRateEditModalBound = false;
+let wageRateEditContext = null; // { userId, userDisplay, refreshWages }
+let wageDeleteConfirmModal = null;
+
+let permissionOverrideModal = null;
+let permissionOverrideModalBound = false;
+let permissionOverrideContext = null; // { userId, reload }
 
 const LEAVE_TYPE_OPTIONS = [
     { value: 'annual_leave', label: 'Yıllık İzin' },
@@ -95,6 +117,11 @@ function ensureUserEditTabs(editModal, user) {
                     <i class="fas fa-calendar-alt me-1"></i>Yoklama Özeti
                 </button>
             </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-yetkiler-${user.id}" type="button" role="tab">
+                    <i class="fas fa-user-shield me-1"></i>Yetkiler & Gruplar
+                </button>
+            </li>
         </ul>
         <div class="tab-content" id="${contentId}">
             <div class="tab-pane fade show active" id="pane-bilgiler-${user.id}" role="tabpanel"></div>
@@ -145,6 +172,12 @@ function ensureUserEditTabs(editModal, user) {
                     <div id="att-days-${user.id}" class="mt-3"></div>
                 </div>
             </div>
+            <div class="tab-pane fade" id="pane-yetkiler-${user.id}" role="tabpanel">
+                <div class="py-2">
+                    <div class="fw-semibold mb-2">Yetkiler & Gruplar</div>
+                    <div id="perm-box-${user.id}"></div>
+                </div>
+            </div>
         </div>
     `;
 
@@ -160,6 +193,7 @@ function ensureUserEditTabs(editModal, user) {
 
     let wagesLoaded = false;
     let attendanceLoaded = false;
+    let permsLoaded = false;
     let lastAttendancePayload = null;
 
     const toIsoOrNull = (datetimeLocalVal) => {
@@ -410,32 +444,197 @@ function ensureUserEditTabs(editModal, user) {
     async function renderWages() {
         const box = container.querySelector(`#wages-box-${user.id}`);
         if (!box) return;
+
+        const userDisplay = `${user.first_name || ''} ${user.last_name || ''}`.trim() || (user.username || `#${user.id}`);
+
+        const ensureWageModal = () => {
+            if (wageRateEditModal) return wageRateEditModal;
+
+            const containerId = 'wage-rate-edit-modal-container';
+            let mount = document.getElementById(containerId);
+            if (!mount) {
+                mount = document.createElement('div');
+                mount.id = containerId;
+                document.body.appendChild(mount);
+            }
+
+            wageRateEditModal = new EditModal(containerId, {
+                title: 'Yeni Ücret Ekle',
+                icon: 'fas fa-money-bill-wave',
+                size: 'lg',
+                saveButtonText: 'Ücret Ekle',
+                showEditButton: false
+            });
+
+            wageRateEditModal.clearAll();
+            wageRateEditModal.addSection({ title: 'Yeni Ücret', icon: 'fas fa-plus-circle', iconColor: 'text-primary' });
+            wageRateEditModal.addField({
+                id: 'user_display',
+                name: 'user_display',
+                label: 'Kullanıcı',
+                type: 'text',
+                readonly: true,
+                colSize: 12
+            });
+            wageRateEditModal.addField({
+                id: 'effective_from',
+                name: 'effective_from',
+                label: 'Geçerlilik Tarihi',
+                type: 'date',
+                required: true,
+                colSize: 6
+            });
+            wageRateEditModal.addField({
+                id: 'base_monthly',
+                name: 'base_monthly',
+                label: 'Aylık Ücret',
+                type: 'number',
+                required: true,
+                step: 0.01,
+                min: 0,
+                colSize: 6
+            });
+            wageRateEditModal.render();
+
+            if (!wageRateEditModalBound) {
+                wageRateEditModalBound = true;
+                wageRateEditModal.onSaveCallback(async (data) => {
+                    const ctx = wageRateEditContext;
+                    if (!ctx) return;
+
+                    if (!data?.effective_from) {
+                        showNotification('Geçerlilik tarihi gereklidir', 'warning');
+                        return;
+                    }
+                    const amount = Number(data?.base_monthly);
+                    if (!Number.isFinite(amount) || amount <= 0) {
+                        showNotification('Aylık ücret 0\'dan büyük olmalıdır', 'warning');
+                        return;
+                    }
+
+                    try {
+                        await createWageRate({
+                            user: ctx.userId,
+                            effective_from: data.effective_from,
+                            base_monthly: amount.toFixed(4)
+                        });
+                        showNotification('Ücret oranı başarıyla kaydedildi', 'success');
+                        wageRateEditModal.hide();
+                        await ctx.refreshWages();
+                    } catch (e) {
+                        showNotification(e?.message || 'Ücret kaydedilemedi', 'error');
+                    }
+                });
+            }
+
+            return wageRateEditModal;
+        };
+
+        const ensureDeleteConfirm = () => {
+            if (wageDeleteConfirmModal) return wageDeleteConfirmModal;
+            const containerId = 'wage-delete-confirm-modal-container';
+            let mount = document.getElementById(containerId);
+            if (!mount) {
+                mount = document.createElement('div');
+                mount.id = containerId;
+                document.body.appendChild(mount);
+            }
+            wageDeleteConfirmModal = new ConfirmationModal(containerId, {
+                title: 'Onay',
+                icon: 'fas fa-exclamation-triangle',
+                message: 'Bu ücret kaydını silmek istediğinize emin misiniz?',
+                confirmText: 'Evet',
+                cancelText: 'İptal',
+                confirmButtonClass: 'btn-danger'
+            });
+            return wageDeleteConfirmModal;
+        };
+
+        const refreshWages = async () => {
+            await renderWages();
+        };
+
         box.innerHTML = '<div class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>';
         try {
             const resp = await fetchWageRatesForUser(user.id);
             const rows = resp?.results || resp || [];
-            if (!rows.length) {
-                box.innerHTML = '<div class="text-muted">Ücret kaydı bulunamadı.</div>';
-                return;
-            }
-            const items = rows
+
+            const sorted = rows
                 .slice()
-                .sort((a, b) => new Date(b.effective_from || 0) - new Date(a.effective_from || 0))
-                .map(r => {
-                    const date = r.effective_from ? new Date(r.effective_from).toLocaleDateString('tr-TR') : '-';
-                    const amount = r.base_monthly ?? r.base_hourly ?? '-';
-                    const cur = r.currency || '';
-                    return `<tr><td>${date}</td><td>${amount} ${cur}</td></tr>`;
-                })
-                .join('');
+                .sort((a, b) => new Date(b.created_at || b.effective_from || 0) - new Date(a.created_at || a.effective_from || 0));
+
+            const items = sorted.map(r => {
+                const date = r.effective_from ? new Date(r.effective_from).toLocaleDateString('tr-TR') : '-';
+                const cur = r.currency || 'TRY';
+                const amount = r.base_monthly ?? r.base_hourly ?? null;
+                const formatted = amount !== null && amount !== undefined && amount !== ''
+                    ? formatCurrency(Number(amount), cur)
+                    : '-';
+                return `
+                    <tr>
+                        <td>${date}</td>
+                        <td>${formatted}</td>
+                        <td class="text-end">
+                            <button type="button" class="btn btn-sm btn-outline-danger wage-delete-btn" data-wage-id="${r.id}">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
             box.innerHTML = `
-                <div class="table-responsive">
-                    <table class="table table-sm table-hover mb-0">
-                        <thead><tr><th>Tarih</th><th>Ücret</th></tr></thead>
-                        <tbody>${items}</tbody>
-                    </table>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="fw-semibold">Ücret Geçmişi</div>
+                    <button class="btn btn-sm btn-outline-primary wage-add-btn" type="button">
+                        <i class="fas fa-plus me-1"></i>Yeni Ücret
+                    </button>
                 </div>
+                ${sorted.length ? `
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead><tr><th>Tarih</th><th>Ücret</th><th class="text-end">Sil</th></tr></thead>
+                            <tbody>${items}</tbody>
+                        </table>
+                    </div>
+                ` : `<div class="text-muted">Ücret kaydı bulunamadı.</div>`}
             `;
+
+            // Bind actions (delegated within box)
+            box.onclick = async (ev) => {
+                const addBtn = ev.target?.closest?.('.wage-add-btn');
+                if (addBtn) {
+                    const m = ensureWageModal();
+                    wageRateEditContext = { userId: user.id, userDisplay, refreshWages };
+                    const today = new Date().toISOString().split('T')[0];
+                    m.setFormData({
+                        user_display: userDisplay,
+                        effective_from: today,
+                        base_monthly: ''
+                    });
+                    m.show();
+                    return;
+                }
+
+                const delBtn = ev.target?.closest?.('.wage-delete-btn');
+                if (delBtn) {
+                    const wageId = Number(delBtn.getAttribute('data-wage-id'));
+                    if (!wageId) return;
+                    const confirm = ensureDeleteConfirm();
+                    confirm.show({
+                        message: 'Bu ücret kaydını silmek istediğinize emin misiniz?',
+                        onConfirm: async () => {
+                            try {
+                                await deleteWageRate(wageId);
+                                showNotification('Ücret kaydı silindi', 'success');
+                                await refreshWages();
+                            } catch (e) {
+                                showNotification(e?.message || 'Ücret kaydı silinemedi', 'error');
+                            }
+                        }
+                    });
+                }
+            };
         } catch (e) {
             box.innerHTML = `<div class="text-danger">Ücretler yüklenemedi: ${e.message || e}</div>`;
         }
@@ -602,6 +801,309 @@ function ensureUserEditTabs(editModal, user) {
         }
     }
 
+    function ensurePermissionOverrideModal() {
+        if (permissionOverrideModal) return permissionOverrideModal;
+
+        const containerId = 'permission-override-modal-inline-container';
+        let mount = document.getElementById(containerId);
+        if (!mount) {
+            mount = document.createElement('div');
+            mount.id = containerId;
+            document.body.appendChild(mount);
+        }
+
+        permissionOverrideModal = new EditModal(containerId, {
+            title: 'Yetki Geçersiz Kılma',
+            icon: 'fas fa-user-shield',
+            size: 'lg',
+            showEditButton: false,
+            saveButtonText: 'Kaydet'
+        });
+
+        permissionOverrideModal.clearAll();
+        permissionOverrideModal.addSection({ title: 'Geçersiz Kılma', icon: 'fas fa-user-shield', iconColor: 'text-primary' });
+        permissionOverrideModal.addField({
+            id: 'codename',
+            name: 'codename',
+            label: 'Yetki Kodu',
+            type: 'text',
+            readonly: true,
+            colSize: 12
+        });
+        permissionOverrideModal.addField({
+            id: 'granted',
+            name: 'granted',
+            label: 'Durum',
+            type: 'dropdown',
+            value: 'true',
+            options: [
+                { value: 'true', label: 'Erişim Ver (grant)' },
+                { value: 'false', label: 'Erişimi Engelle (deny)' }
+            ],
+            colSize: 12
+        });
+        permissionOverrideModal.addField({
+            id: 'reason',
+            name: 'reason',
+            label: 'Sebep (opsiyonel)',
+            type: 'textarea',
+            value: '',
+            rows: 3,
+            colSize: 12
+        });
+        permissionOverrideModal.render();
+
+        if (!permissionOverrideModalBound) {
+            permissionOverrideModalBound = true;
+            permissionOverrideModal.onSaveCallback(async (data) => {
+                const ctx = permissionOverrideContext;
+                if (!ctx) return;
+                const codename = (data?.codename || '').toString();
+                if (!codename) return;
+                try {
+                    await saveUserPermissionOverride(ctx.userId, {
+                        codename,
+                        granted: String(data?.granted) === 'true',
+                        reason: data?.reason || ''
+                    });
+                    showNotification('Geçersiz kılma kaydedildi', 'success');
+                    permissionOverrideModal.hide();
+                    await ctx.reload();
+                } catch (e) {
+                    showNotification(e?.message || 'Geçersiz kılma kaydedilemedi', 'error');
+                }
+            });
+        }
+
+        return permissionOverrideModal;
+    }
+
+    function boolIcon(val) {
+        if (val) return '<span class="status-badge status-green"><i class="fas fa-check"></i></span>';
+        return '<span class="status-badge status-red"><i class="fas fa-times"></i></span>';
+    }
+
+    function formatPermSourceBadge(source, detail) {
+        const d = detail ? `<span class="text-muted ms-1">${detail}</span>` : '';
+        switch (source) {
+            case 'superuser':
+                return `<span class="badge bg-danger">Süper kullanıcı</span>${d}`;
+            case 'override':
+                return `<span class="badge bg-warning text-dark">Bireysel</span>${d}`;
+            case 'group':
+                return `<span class="badge bg-primary">Grup</span>${d}`;
+            case 'legacy':
+                return `<span class="badge bg-secondary">Eski</span>${d}`;
+            case 'none':
+            default:
+                return `<span class="badge bg-secondary">Yok</span>`;
+        }
+    }
+
+    async function loadPermissionsAndGroups() {
+        const box = container.querySelector(`#perm-box-${user.id}`);
+        if (!box) return;
+        box.innerHTML = '<div class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>';
+
+        let groupsAll = [];
+        try {
+            const g = await fetchUserGroups();
+            groupsAll = Array.isArray(g) ? g : (g?.results || g?.data || []);
+        } catch {
+            groupsAll = [];
+        }
+
+        const reload = async () => {
+            await loadPermissionsAndGroups();
+        };
+
+        try {
+            const detail = await fetchUserPermissionsDetail(user.id);
+            const u = detail?.user || {};
+            const groups = Array.isArray(detail?.groups) ? detail.groups : [];
+            const eff = detail?.effective_permissions || {};
+            const overrides = Array.isArray(detail?.overrides) ? detail.overrides : [];
+
+            const officePerm = eff?.office_access || { value: false, source: 'none', source_detail: '' };
+            const workshopPerm = eff?.workshop_access || { value: false, source: 'none', source_detail: '' };
+            const hasOfficeAccess = officePerm.value === true;
+            const hasWorkshopAccess = workshopPerm.value === true;
+
+            const groupChips = (groups || []).map(g => `
+                <span class="badge bg-secondary me-1 mb-1">
+                    ${g.display_name || g.name}
+                    <button type="button"
+                            class="btn btn-sm btn-link text-light p-0 ms-1 perm-remove-group-btn"
+                            data-group-name="${g.name}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </span>
+            `).join('') || '<span class="text-muted">Bu kullanıcı hiçbir grupta değil.</span>';
+
+            const groupOptions = (groupsAll || [])
+                .map(g => `<option value="${g.name}">${g.display_name || g.name}</option>`)
+                .join('');
+
+            const codes = Object.keys(eff || {}).sort((a, b) => a.localeCompare(b, 'tr'));
+            const permsRows = codes.map(code => {
+                const p = eff?.[code] || { value: false, source: 'none', source_detail: '' };
+                const value = p.value === true;
+                const sourceBadge = u.is_superuser
+                    ? formatPermSourceBadge('superuser', '')
+                    : formatPermSourceBadge(p.source, p.source_detail);
+                return `
+                    <tr>
+                        <td><code>${code}</code></td>
+                        <td>${boolIcon(value)}</td>
+                        <td>${sourceBadge}</td>
+                        <td class="text-end">
+                            ${!u.is_superuser ? `
+                            <button type="button" class="btn btn-sm btn-outline-secondary perm-override-btn" data-codename="${code}">
+                                Geçersiz Kıl
+                            </button>` : ''}
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            const overridesRows = (overrides || []).map(o => `
+                <tr>
+                    <td><code>${o.codename}</code></td>
+                    <td>${o.granted ? 'İzin' : 'Yasak'}</td>
+                    <td>${o.reason || '-'}</td>
+                    <td class="text-end">
+                        <button type="button" class="btn btn-sm btn-outline-danger perm-remove-override-btn" data-codename="${o.codename}">
+                            Sil
+                        </button>
+                    </td>
+                </tr>
+            `).join('') || `
+                <tr><td colspan="4" class="text-muted">Bireysel geçersiz kılma yok.</td></tr>
+            `;
+
+            box.innerHTML = `
+                <h6 class="mb-2">Gruplar</h6>
+                <div class="mb-2">${groupChips}</div>
+                <div class="d-flex mb-3 gap-2">
+                    <select class="form-select form-select-sm" id="perm-add-group-select-${user.id}">
+                        <option value="">Grup seçin...</option>
+                        ${groupOptions}
+                    </select>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="perm-add-group-btn-${user.id}">
+                        Ekle
+                    </button>
+                </div>
+
+                <h6 class="mt-3">Portal Erişimi</h6>
+                <div class="d-flex flex-wrap gap-2 mb-3">
+                    <button type="button"
+                            class="btn btn-sm ${hasOfficeAccess ? 'btn-success' : 'btn-outline-secondary'} perm-portal-toggle-btn"
+                            data-codename="office_access"
+                            data-current="${hasOfficeAccess ? 'true' : 'false'}">
+                        <i class="fas fa-building me-1"></i>Ofis: ${hasOfficeAccess ? 'Açık' : 'Kapalı'}
+                    </button>
+                    <button type="button"
+                            class="btn btn-sm ${hasWorkshopAccess ? 'btn-success' : 'btn-outline-secondary'} perm-portal-toggle-btn"
+                            data-codename="workshop_access"
+                            data-current="${hasWorkshopAccess ? 'true' : 'false'}">
+                        <i class="fas fa-industry me-1"></i>Atölye: ${hasWorkshopAccess ? 'Açık' : 'Kapalı'}
+                    </button>
+                </div>
+
+                <h6 class="mt-3">Yetkiler</h6>
+                <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Kod</th><th>Durum</th><th>Kaynak</th><th></th></tr></thead>
+                        <tbody>${permsRows}</tbody>
+                    </table>
+                </div>
+
+                <h6 class="mt-3">Bireysel Geçersiz Kılmalar</h6>
+                <div class="table-responsive" style="max-height: 180px; overflow-y: auto;">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead><tr><th>Kod</th><th>Durum</th><th>Sebep</th><th></th></tr></thead>
+                        <tbody>${overridesRows}</tbody>
+                    </table>
+                </div>
+            `;
+
+            // Handlers
+            box.querySelector(`#perm-add-group-btn-${user.id}`)?.addEventListener('click', async () => {
+                const sel = box.querySelector(`#perm-add-group-select-${user.id}`);
+                const groupName = sel?.value || '';
+                if (!groupName) return;
+                try {
+                    await addUserToGroup(user.id, groupName);
+                    showNotification('Kullanıcı gruba eklendi', 'success');
+                    await reload();
+                } catch (e) {
+                    showNotification(e?.message || 'Grup eklenemedi', 'error');
+                }
+            });
+
+            box.querySelectorAll('.perm-remove-group-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const groupName = btn.getAttribute('data-group-name');
+                    if (!groupName) return;
+                    try {
+                        await removeUserFromGroup(user.id, groupName);
+                        showNotification('Kullanıcı gruptan çıkarıldı', 'success');
+                        await reload();
+                    } catch (e) {
+                        showNotification(e?.message || 'Grup kaldırılamadı', 'error');
+                    }
+                });
+            });
+
+            box.querySelectorAll('.perm-portal-toggle-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const codename = btn.getAttribute('data-codename');
+                    if (!codename) return;
+                    const current = btn.getAttribute('data-current') === 'true';
+                    const nextGranted = !current;
+                    try {
+                        await saveUserPermissionOverride(user.id, {
+                            codename,
+                            granted: nextGranted,
+                            reason: ''
+                        });
+                        showNotification('Portal erişimi güncellendi', 'success');
+                        await reload();
+                    } catch (e) {
+                        showNotification(e?.message || 'Portal erişimi güncellenemedi', 'error');
+                    }
+                });
+            });
+
+            box.querySelectorAll('.perm-override-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const codename = btn.getAttribute('data-codename');
+                    if (!codename) return;
+                    const modal = ensurePermissionOverrideModal();
+                    permissionOverrideContext = { userId: user.id, reload };
+                    modal.setFormData({ codename, granted: 'true', reason: '' });
+                    modal.show();
+                });
+            });
+
+            box.querySelectorAll('.perm-remove-override-btn').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const codename = btn.getAttribute('data-codename');
+                    if (!codename) return;
+                    try {
+                        await deleteUserPermissionOverride(user.id, codename);
+                        showNotification('Geçersiz kılma kaldırıldı', 'success');
+                        await reload();
+                    } catch (e) {
+                        showNotification(e?.message || 'Geçersiz kılma silinemedi', 'error');
+                    }
+                });
+            });
+        } catch (e) {
+            box.innerHTML = `<div class="text-danger">Yüklenemedi: ${e?.message || e}</div>`;
+        }
+    }
+
     // Row edit/create actions (HR)
     container.querySelector(`#att-days-${user.id}`)?.addEventListener('click', async (e) => {
         const btn = e.target?.closest?.('.att-row-edit-btn');
@@ -680,6 +1182,10 @@ function ensureUserEditTabs(editModal, user) {
             if (target.includes(`pane-yoklama-${user.id}`) && !attendanceLoaded) {
                 attendanceLoaded = true;
                 await loadAttendance();
+            }
+            if (target.includes(`pane-yetkiler-${user.id}`) && !permsLoaded) {
+                permsLoaded = true;
+                await loadPermissionsAndGroups();
             }
         });
     });
@@ -1044,6 +1550,29 @@ function showCreateUserModal() {
     createUserModal.addField({ id: 'email', name: 'email', label: 'E-posta', type: 'email', colSize: 6 });
     createUserModal.addField({ id: 'first_name', name: 'first_name', label: 'Ad', type: 'text', required: true, colSize: 6 });
     createUserModal.addField({ id: 'last_name', name: 'last_name', label: 'Soyad', type: 'text', required: true, colSize: 6 });
+
+    createUserModal.addSection({ title: 'Yetkiler & Gruplar', icon: 'fas fa-users-cog', iconColor: 'text-info' });
+    const groupOptions = (groups || []).map(g => ({
+        value: g.value ?? g.name ?? String(g.id ?? ''),
+        label: g.display_name || g.label || g.name || String(g.id ?? '')
+    })).filter(o => o.value);
+    createUserModal.addField({
+        id: 'create_groups',
+        name: 'create_groups',
+        label: 'Gruplar',
+        type: 'dropdown',
+        multiple: true,
+        searchable: true,
+        options: groupOptions,
+        value: [],
+        colSize: 12
+    });
+
+    createUserModal.addSection({ title: 'Maaş', icon: 'fas fa-money-bill-wave', iconColor: 'text-success' });
+    const today = new Date().toISOString().split('T')[0];
+    createUserModal.addField({ id: 'wage_effective_from', name: 'wage_effective_from', label: 'Geçerlilik Tarihi', type: 'date', value: today, colSize: 6 });
+    createUserModal.addField({ id: 'wage_base_monthly', name: 'wage_base_monthly', label: 'Aylık Ücret', type: 'number', step: 0.01, min: 0, colSize: 6 });
+
     createUserModal.addSection({ title: 'İş Bilgileri', icon: 'fas fa-briefcase', iconColor: 'text-success' });
     createUserModal.addField({ id: 'is_active', name: 'is_active', label: 'Aktif', type: 'checkbox', value: true, colSize: 12 });
     createUserModal.render();
@@ -1052,8 +1581,50 @@ function showCreateUserModal() {
 
 async function createUser(formData) {
     try {
-        const response = await createUserAPI(formData);
+        const {
+            create_groups,
+            wage_effective_from,
+            wage_base_monthly,
+            ...userPayload
+        } = formData || {};
+
+        const response = await createUserAPI(userPayload);
         if (response.ok) {
+            const created = await response.json().catch(() => null);
+            const userId = created?.id ?? created?.user?.id ?? null;
+
+            // Group assignments (best effort)
+            const groupsToAddRaw = create_groups ?? [];
+            const groupsToAdd = Array.isArray(groupsToAddRaw)
+                ? groupsToAddRaw.filter(Boolean)
+                : (String(groupsToAddRaw).trim() ? [String(groupsToAddRaw).trim()] : []);
+
+            if (userId && groupsToAdd.length) {
+                for (const g of groupsToAdd) {
+                    try {
+                        await addUserToGroup(userId, g);
+                    } catch (e) {
+                        showNotification(`Grup eklenemedi (${g}): ${e?.message || e}`, 'warning');
+                    }
+                }
+            }
+
+            // Wage create (best effort)
+            const amount = wage_base_monthly !== undefined && wage_base_monthly !== null && String(wage_base_monthly).trim() !== ''
+                ? Number(wage_base_monthly)
+                : null;
+            if (userId && wage_effective_from && Number.isFinite(amount) && amount > 0) {
+                try {
+                    await createWageRate({
+                        user: userId,
+                        effective_from: wage_effective_from,
+                        base_monthly: amount.toFixed(4)
+                    });
+                } catch (e) {
+                    showNotification(`Ücret eklenemedi: ${e?.message || e}`, 'warning');
+                }
+            }
+
             showNotification('Çalışan başarıyla oluşturuldu', 'success');
             createUserModal.hide();
             currentPage = 1;
