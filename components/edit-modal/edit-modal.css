@@ -83,6 +83,74 @@
     padding: 1rem 1.5rem;
 }
 
+/* Tabs Styling (match project-tracking / display modal tabs) */
+.edit-modal-container [data-user-edit-tabs="true"] .nav-tabs {
+    border-bottom: 2px solid #e9ecef;
+    margin-bottom: 1.25rem;
+}
+
+.edit-modal-container [data-user-edit-tabs="true"] .nav-tabs .nav-item {
+    margin-bottom: -2px;
+}
+
+.edit-modal-container [data-user-edit-tabs="true"] .nav-tabs .nav-link {
+    border: none !important;
+    border-bottom: 2px solid transparent !important;
+    color: #6c757d !important;
+    padding: 0.75rem 1.25rem !important;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    background: transparent !important;
+    cursor: pointer;
+    font-size: 0.95rem;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.edit-modal-container [data-user-edit-tabs="true"] .nav-tabs .nav-link:hover {
+    border-bottom-color: #dee2e6 !important;
+    color: #495057 !important;
+    background: #f8f9fa !important;
+}
+
+.edit-modal-container [data-user-edit-tabs="true"] .nav-tabs .nav-link.active {
+    color: #0d6efd !important;
+    border-bottom-color: #DC143C !important;
+    background: transparent !important;
+    font-weight: 600;
+}
+
+.edit-modal-container [data-user-edit-tabs="true"] .nav-tabs .nav-link i {
+    font-size: 0.9rem;
+    color: inherit;
+}
+
+.edit-modal-container [data-user-edit-tabs="true"] .nav-tabs .nav-link.active i {
+    color: #DC143C;
+}
+
+.edit-modal-container [data-user-edit-tabs="true"] .tab-pane {
+    padding: 0;
+}
+
+/* Attendance summary row highlights */
+.edit-modal-container .attendance-overtime-row td {
+    background-color: #d1fae5 !important; /* light green */
+}
+
+.edit-modal-container .attendance-undertime-row td {
+    background-color: #fee2e2 !important; /* light red */
+}
+
+.edit-modal-container .attendance-overtime-row:hover td {
+    background-color: #bbf7d0 !important;
+}
+
+.edit-modal-container .attendance-undertime-row:hover td {
+    background-color: #fecaca !important;
+}
+
 /* Custom submit button styling */
 .edit-modal-container .modal-footer.compact .btn-primary {
     background-color: #8B0000;

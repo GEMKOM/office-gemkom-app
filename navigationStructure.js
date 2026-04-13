@@ -526,6 +526,11 @@ export const NAVIGATION_STRUCTURE = {
         label: 'İnsan Kaynakları',
         icon: 'fas fa-users-cog',
         children: {
+            '/human_resources/users': {
+                label: 'Çalışanlar',
+                icon: 'fas fa-users',
+                children: {}
+            },
             '/human_resources/wages': {
                 label: 'Maaşlar',
                 icon: 'fas fa-money-bill-wave',

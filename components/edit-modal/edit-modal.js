@@ -304,6 +304,7 @@ export class EditModal {
                 input.type = 'datetime-local';
                 input.className = 'form-control field-input date-field';
                 input.value = field.value;
+                if (field.step !== null && field.step !== undefined) input.step = field.step;
                 if (field.required) input.required = true;
                 if (field.readonly) {
                     input.readOnly = true;
@@ -316,6 +317,7 @@ export class EditModal {
                 input.type = 'time';
                 input.className = 'form-control field-input date-field';
                 input.value = field.value;
+                if (field.step !== null && field.step !== undefined) input.step = field.step;
                 if (field.required) input.required = true;
                 if (field.readonly) {
                     input.readOnly = true;

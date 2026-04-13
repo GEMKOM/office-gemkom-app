@@ -84,6 +84,15 @@ export async function fetchAttendanceHrRecords(filters = {}) {
     return parseJsonOrThrow(resp);
 }
 
+export async function createAttendanceHrRecord(data = {}) {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/records/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data || {})
+    });
+    return parseJsonOrThrow(resp);
+}
+
 export async function patchAttendanceHrRecord(recordId, patch = {}) {
     const resp = await authedFetch(`${backendBase}/attendance/hr/records/${recordId}/`, {
         method: 'PATCH',
@@ -144,6 +153,28 @@ export async function assignShiftRuleToUser(userId, shiftRuleId) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ user_id: userId, shift_rule_id: shiftRuleId })
+    });
+    return parseJsonOrThrow(resp);
+}
+
+// ---------------------------------------------------------------------------
+// Attendance: monthly summary
+// ---------------------------------------------------------------------------
+
+export async function fetchAttendanceMonthlySummary({ user_id, year, month } = {}) {
+    const params = new URLSearchParams();
+    if (user_id !== undefined && user_id !== null && String(user_id).trim() !== '') {
+        params.set('user_id', String(user_id).trim());
+    }
+    if (year !== undefined && year !== null && String(year).trim() !== '') {
+        params.set('year', String(year).trim());
+    }
+    if (month !== undefined && month !== null && String(month).trim() !== '') {
+        params.set('month', String(month).trim());
+    }
+    const qs = params.toString();
+    const resp = await authedFetch(`${backendBase}/attendance/monthly-summary/${qs ? `?${qs}` : ''}`, {
+        method: 'GET'
     });
     return parseJsonOrThrow(resp);
 }

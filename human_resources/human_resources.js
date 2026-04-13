@@ -33,6 +33,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/human_resources/wages'
             },
             {
+                title: 'Çalışanlar',
+                description: 'Çalışan listesini görüntüleyin ve yönetin',
+                icon: 'fas fa-users',
+                iconColor: 'primary',
+                link: '/human_resources/users'
+            },
+            {
                 title: 'Yoklama Onayları',
                 description: 'Ofis dışı giriş taleplerini onaylayın veya reddedin',
                 icon: 'fas fa-user-check',

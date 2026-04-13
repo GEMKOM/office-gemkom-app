@@ -10,6 +10,315 @@ import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { EditModal } from '../../components/edit-modal/edit-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
+import { fetchShiftRules, assignShiftRuleToUser } from '../../apis/human_resources/attendance.js';
+import { fetchWageRatesForUser } from '../../apis/hr.js';
+import { fetchAttendanceMonthlySummary } from '../../apis/human_resources/attendance.js';
+
+function ensureUserEditTabs(editModal, user) {
+    const modalEl = editModal?.modal;
+    const container = editModal?.container;
+    if (!modalEl || !container) return;
+
+    const form = container.querySelector('#edit-modal-form');
+    if (!form) return;
+
+    const existingTabs = container.querySelector('[data-user-edit-tabs="true"]');
+    const existingForUser = existingTabs?.getAttribute('data-user-id');
+    if (existingTabs) {
+        // If the modal is being reused for a different user, teardown and rebuild tabs.
+        if (existingForUser && String(existingForUser) !== String(user.id)) {
+            const existingForm = existingTabs.querySelector('#edit-modal-form') || container.querySelector('#edit-modal-form');
+            if (existingForm) {
+                container.insertBefore(existingForm, existingTabs);
+            }
+            existingTabs.remove();
+        } else {
+            return;
+        }
+    }
+
+    const tabsId = `user-edit-tabs-${user.id}`;
+    const contentId = `user-edit-tab-content-${user.id}`;
+
+    const tabsWrapper = document.createElement('div');
+    tabsWrapper.setAttribute('data-user-edit-tabs', 'true');
+    tabsWrapper.setAttribute('data-user-id', String(user.id));
+    tabsWrapper.innerHTML = `
+        <ul class="nav nav-tabs mb-3" id="${tabsId}" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-bilgiler-${user.id}" data-bs-toggle="tab" data-bs-target="#pane-bilgiler-${user.id}" type="button" role="tab">
+                    <i class="fas fa-user me-1"></i>Bilgiler
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-maaslar-${user.id}" data-bs-toggle="tab" data-bs-target="#pane-maaslar-${user.id}" type="button" role="tab">
+                    <i class="fas fa-money-bill-wave me-1"></i>Maaşlar
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-yoklama-${user.id}" data-bs-toggle="tab" data-bs-target="#pane-yoklama-${user.id}" type="button" role="tab">
+                    <i class="fas fa-calendar-alt me-1"></i>Yoklama Özeti
+                </button>
+            </li>
+        </ul>
+        <div class="tab-content" id="${contentId}">
+            <div class="tab-pane fade show active" id="pane-bilgiler-${user.id}" role="tabpanel"></div>
+            <div class="tab-pane fade" id="pane-maaslar-${user.id}" role="tabpanel">
+                <div class="py-2">
+                    <div class="d-flex align-items-center justify-content-between mb-2">
+                        <div class="fw-semibold">Ücret Geçmişi</div>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" data-wages-refresh>
+                            <i class="fas fa-sync-alt me-1"></i>Yenile
+                        </button>
+                    </div>
+                    <div class="text-muted small mb-2">Bu sekme sadece görüntüleme amaçlıdır.</div>
+                    <div id="wages-box-${user.id}"></div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="pane-yoklama-${user.id}" role="tabpanel">
+                <div class="py-2">
+                    <div class="fw-semibold mb-2">Aylık Yoklama Özeti</div>
+                    <div class="row g-2 align-items-end mb-3">
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small mb-1">Yıl</label>
+                            <input class="form-control form-control-sm" type="number" id="att-year-${user.id}" min="2000" max="2100" />
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <label class="form-label small mb-1">Ay</label>
+                            <select class="form-select form-select-sm" id="att-month-${user.id}">
+                                <option value="1">Ocak</option>
+                                <option value="2">Şubat</option>
+                                <option value="3">Mart</option>
+                                <option value="4">Nisan</option>
+                                <option value="5">Mayıs</option>
+                                <option value="6">Haziran</option>
+                                <option value="7">Temmuz</option>
+                                <option value="8">Ağustos</option>
+                                <option value="9">Eylül</option>
+                                <option value="10">Ekim</option>
+                                <option value="11">Kasım</option>
+                                <option value="12">Aralık</option>
+                            </select>
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <button class="btn btn-sm btn-primary w-100" type="button" id="att-fetch-${user.id}">
+                                <i class="fas fa-search me-1"></i>Sorgula
+                            </button>
+                        </div>
+                    </div>
+                    <div id="att-summary-${user.id}"></div>
+                    <div id="att-days-${user.id}" class="mt-3"></div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Insert tabs before the form in modal body
+    form.parentElement.insertBefore(tabsWrapper, form);
+
+    // Move the entire form into the first tab pane
+    const paneBilgiler = container.querySelector(`#pane-bilgiler-${user.id}`);
+    if (paneBilgiler) paneBilgiler.appendChild(form);
+
+    const today = new Date();
+    const yEl = container.querySelector(`#att-year-${user.id}`);
+    const mEl = container.querySelector(`#att-month-${user.id}`);
+    if (yEl) yEl.value = String(today.getFullYear());
+    if (mEl) mEl.value = String(today.getMonth() + 1);
+
+    let wagesLoaded = false;
+    let attendanceLoaded = false;
+
+    async function renderWages() {
+        const box = container.querySelector(`#wages-box-${user.id}`);
+        if (!box) return;
+        box.innerHTML = '<div class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>';
+        try {
+            const resp = await fetchWageRatesForUser(user.id);
+            const rows = resp?.results || resp || [];
+            if (!rows.length) {
+                box.innerHTML = '<div class="text-muted">Ücret kaydı bulunamadı.</div>';
+                return;
+            }
+            const items = rows
+                .slice()
+                .sort((a, b) => new Date(b.effective_from || 0) - new Date(a.effective_from || 0))
+                .map(r => {
+                    const date = r.effective_from ? new Date(r.effective_from).toLocaleDateString('tr-TR') : '-';
+                    const amount = r.base_monthly ?? r.base_hourly ?? '-';
+                    const cur = r.currency || '';
+                    return `<tr><td>${date}</td><td>${amount} ${cur}</td></tr>`;
+                })
+                .join('');
+            box.innerHTML = `
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>Tarih</th><th>Ücret</th></tr></thead>
+                        <tbody>${items}</tbody>
+                    </table>
+                </div>
+            `;
+        } catch (e) {
+            box.innerHTML = `<div class="text-danger">Ücretler yüklenemedi: ${e.message || e}</div>`;
+        }
+    }
+
+    function renderAttendance(summary) {
+        const summaryEl = container.querySelector(`#att-summary-${user.id}`);
+        const daysEl = container.querySelector(`#att-days-${user.id}`);
+        if (!summaryEl || !daysEl) return;
+
+        const shift = summary?.shift_rule || null;
+        const thresholdMin = Number(shift?.overtime_threshold_minutes ?? 0) || 0;
+
+        const weekdayTr = (w) => {
+            const s = (w || '').toString().toLowerCase();
+            const map = {
+                monday: 'Pazartesi',
+                tuesday: 'Salı',
+                wednesday: 'Çarşamba',
+                thursday: 'Perşembe',
+                friday: 'Cuma',
+                saturday: 'Cumartesi',
+                sunday: 'Pazar'
+            };
+            return map[s] || (w || '-');
+        };
+
+        const dayTypeTr = (t) => {
+            const s = (t || '').toString();
+            const map = {
+                working: 'Çalışma Günü',
+                weekend: 'Hafta Sonu',
+                public_holiday: 'Resmi Tatil',
+                company_holiday: 'Şirket Tatili'
+            };
+            return map[s] || s || '-';
+        };
+
+        const parseNum = (v) => {
+            if (v === undefined || v === null || v === '') return 0;
+            const n = Number(v);
+            return Number.isFinite(n) ? n : 0;
+        };
+
+        const timeHM = (v) => {
+            if (!v) return '-';
+            const d = new Date(v);
+            if (Number.isNaN(d.getTime())) {
+                const s = String(v);
+                // fallback: try "HH:MM:SS" or "HH:MM" somewhere in the string
+                const m = s.match(/\b(\d{2}:\d{2}:\d{2})\b/) || s.match(/\b(\d{2}:\d{2})\b/);
+                return m ? m[1] : s;
+            }
+            return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        };
+
+        const flagTr = (f) => {
+            const s = (f || '').toString();
+            const map = {
+                absent: 'Gelmedi',
+                late: 'Geç Geldi',
+                missing_checkout: 'Çıkış Eksik'
+            };
+            return map[s] || s || '-';
+        };
+
+        const s = summary?.summary || {};
+        summaryEl.innerHTML = `
+            <div class="row g-2">
+                <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Çalışma Günü</div><div class="fw-semibold">${s.total_working_days ?? '-'}</div></div></div>
+                <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Geldi</div><div class="fw-semibold">${s.total_present ?? '-'}</div></div></div>
+                <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Gelmedi</div><div class="fw-semibold">${s.total_absent ?? '-'}</div></div></div>
+                <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Fazla Mesai (s)</div><div class="fw-semibold">${s.total_overtime_hours ?? '-'}</div></div></div>
+            </div>
+        `;
+
+        const days = Array.isArray(summary?.days) ? summary.days : [];
+        if (!days.length) {
+            daysEl.innerHTML = '<div class="text-muted">Gün bulunamadı.</div>';
+            return;
+        }
+        const rows = days.map(d => {
+            const rec = d.record || null;
+            const flag = d.flag ? `<span class="status-badge status-red">${flagTr(d.flag)}</span>` : '-';
+            const inTime = rec ? timeHM(rec.check_in_time || rec.check_in_at || rec.check_in) : '-';
+            const outTime = rec ? timeHM(rec.check_out_time || rec.check_out_at || rec.check_out) : '-';
+
+            // Highlight rules:
+            // - overtime: overtime_hours exceeds threshold (minutes) from shift rule
+            // - undertime: late_minutes or early_leave_minutes exceeds same threshold
+            let rowClass = '';
+            if (rec && thresholdMin > 0) {
+                const overtimeHours = parseNum(rec.overtime_hours);
+                const overtimeMin = overtimeHours * 60;
+                const lateMin = parseNum(rec.late_minutes);
+                const earlyLeaveMin = parseNum(rec.early_leave_minutes);
+
+                const isOvertime = overtimeMin >= thresholdMin && overtimeMin > 0;
+                const isUndertime = (lateMin >= thresholdMin && lateMin > 0) || (earlyLeaveMin >= thresholdMin && earlyLeaveMin > 0);
+
+                if (isOvertime) rowClass = 'attendance-overtime-row';
+                else if (isUndertime) rowClass = 'attendance-undertime-row';
+            }
+
+            return `<tr class="${rowClass}">
+                <td>${d.date || '-'}</td>
+                <td>${weekdayTr(d.weekday)}</td>
+                <td>${dayTypeTr(d.day_type)}</td>
+                <td>${d.holiday_name || '-'}</td>
+                <td>${flag}</td>
+                <td>${inTime}</td>
+                <td>${outTime}</td>
+                </tr>`;
+        }).join('');
+
+        daysEl.innerHTML = `
+            <div class="table-responsive">
+                <table class="table table-sm table-hover">
+                    <thead>
+                        <tr>
+                            <th>Tarih</th><th>Gün</th><th>Gün Türü</th><th>Tatil</th><th>Durum Notu</th><th>Giriş</th><th>Çıkış</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+    }
+
+    async function loadAttendance() {
+        const y = Number(container.querySelector(`#att-year-${user.id}`)?.value);
+        const m = Number(container.querySelector(`#att-month-${user.id}`)?.value);
+        const daysEl = container.querySelector(`#att-days-${user.id}`);
+        if (daysEl) daysEl.innerHTML = '<div class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>';
+        try {
+            const resp = await fetchAttendanceMonthlySummary({ user_id: user.id, year: y, month: m });
+            renderAttendance(resp);
+        } catch (e) {
+            if (daysEl) daysEl.innerHTML = `<div class="text-danger">Yoklama özeti yüklenemedi: ${e.message || e}</div>`;
+        }
+    }
+
+    // Lazy-load on tab open
+    const tabButtons = container.querySelectorAll(`#${tabsId} [data-bs-toggle="tab"]`);
+    tabButtons.forEach(btn => {
+        btn.addEventListener('shown.bs.tab', async (e) => {
+            const target = e.target?.getAttribute('data-bs-target') || '';
+            if (target.includes(`pane-maaslar-${user.id}`) && !wagesLoaded) {
+                wagesLoaded = true;
+                await renderWages();
+            }
+            if (target.includes(`pane-yoklama-${user.id}`) && !attendanceLoaded) {
+                attendanceLoaded = true;
+                await loadAttendance();
+            }
+        });
+    });
+
+    container.querySelector(`[data-wages-refresh]`)?.addEventListener('click', () => renderWages());
+    container.querySelector(`#att-fetch-${user.id}`)?.addEventListener('click', () => loadAttendance());
+}
 
 // State management
 let currentPage = 1;
@@ -25,6 +334,7 @@ let userFilters = null; // Filters component instance
 let occupations = []; // Store occupations data for filters
 let groups = []; // Store groups data for filters
 let usersTable = null; // Table component instance
+let shiftRules = []; // Store shift rules for assignment dropdown
 
 // Modal component instances
 let createUserModal = null;
@@ -39,6 +349,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     await initNavbar();
+
+    // Load shift rules for user assignment dropdown
+    try {
+        const data = await fetchShiftRules();
+        shiftRules = (Array.isArray(data) ? data : (data?.results || [])).filter(r => r && r.is_active !== false);
+    } catch (e) {
+        console.warn('Failed to load shift rules:', e);
+        shiftRules = [];
+    }
     
     // Initialize header component
     const header = new HeaderComponent({
@@ -355,7 +674,7 @@ function initializeModalComponents() {
     editUserModal = new EditModal('edit-user-modal-container', {
         title: 'Çalışan Düzenle',
         icon: 'fas fa-edit',
-        size: 'lg',
+        size: 'xl',
         showEditButton: false
     });
 
@@ -666,6 +985,35 @@ function setupEventListeners() {
          iconColor: 'text-success'
      });
 
+     // Shift rule assignment dropdown (HR)
+     const currentShiftId =
+        user.shift_rule_id ??
+        user.shift_rule?.id ??
+        user.shift_rule ??
+        '';
+
+     const shiftRuleOptions = [
+        { value: '', label: 'Varsayılan (otomatik)' },
+        ...shiftRules.map(r => ({
+            value: String(r.id),
+            label: `${r.name} (${String(r.expected_start || '').slice(0, 5)}-${String(r.expected_end || '').slice(0, 5)})`
+        }))
+     ];
+
+     editUserModal.addField({
+         id: 'shift_rule_id',
+         name: 'shift_rule_id',
+         label: 'Vardiya Kuralı',
+         type: 'dropdown',
+         value: currentShiftId ? String(currentShiftId) : '',
+         options: shiftRuleOptions,
+         placeholder: 'Varsayılan (otomatik)',
+         searchable: true,
+         icon: 'fas fa-clock',
+         colSize: 12,
+         helpText: 'Seçerseniz kullanıcıya kural atanır; “Varsayılan” seçerseniz otomatik kurala döner.'
+     });
+
      // Add is_active checkbox
      editUserModal.addField({
          id: 'is_active',
@@ -680,6 +1028,7 @@ function setupEventListeners() {
 
      // Render and show modal
      editUserModal.render();
+    ensureUserEditTabs(editUserModal, user);
      editUserModal.show();
  };
 
@@ -875,9 +1224,23 @@ async function createUser(formData) {
      }
      
      try {
-         const response = await updateUserAPI(userId, formData);
+         // shift rule assignment is handled by attendance service, not the users endpoint
+         const { shift_rule_id, ...userPatch } = formData || {};
+         const response = await updateUserAPI(userId, userPatch);
          
          if (response.ok) {
+             // Assign shift rule if present in the form (empty -> default)
+             if (shift_rule_id !== undefined) {
+                 const idStr = (shift_rule_id ?? '').toString().trim();
+                 const shiftRuleId = idStr ? Number(idStr) : null;
+                 try {
+                     await assignShiftRuleToUser(Number(userId), shiftRuleId);
+                 } catch (e) {
+                     // User update succeeded; assignment failed
+                     showNotification(`Vardiya kuralı atanamadı: ${e.message || e}`, 'warning');
+                 }
+             }
+
              // Hide modal
              editUserModal.hide();
              
