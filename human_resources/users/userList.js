@@ -19,7 +19,6 @@ import {
 import { fetchUsersSummary } from '../../apis/summaries.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
-import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../components/table/table.js';
 import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { EditModal } from '../../components/edit-modal/edit-modal.js';
@@ -1200,7 +1199,6 @@ let currentSortDirection = 'asc';
 let users = [];
 let totalUsers = 0;
 let isLoading = false;
-let usersStats = null;
 let userFilters = null;
 let occupations = [];
 let groups = [];
@@ -1235,17 +1233,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         createButtonText: 'Yeni Çalışan',
         onBackClick: () => window.location.href = '/human_resources/',
         onCreateClick: () => showCreateUserModal()
-    });
-
-    usersStats = new StatisticsCards('users-statistics', {
-        cards: [
-            { title: 'Toplam Çalışan', value: '0', icon: 'fas fa-users', color: 'primary', id: 'total-users-count' },
-            { title: 'Ofis', value: '0', icon: 'fas fa-building', color: 'success', id: 'office-users-count' },
-            { title: 'Atölye', value: '0', icon: 'fas fa-industry', color: 'info', id: 'workshop-users-count' },
-            { title: 'Aktif Takım', value: '0', icon: 'fas fa-user-friends', color: 'warning', id: 'active-teams-count' }
-        ],
-        compact: true,
-        animation: true
     });
 
     await initializeUsers();
@@ -1526,17 +1513,7 @@ async function loadUsers() {
 }
 
 async function updateUserCounts() {
-    try {
-        const summary = await fetchUsersSummary();
-        if (!summary) return;
-        const byId = (id) => document.getElementById(id);
-        if (byId('total-users-count')) byId('total-users-count').textContent = String(summary.total_users ?? 0);
-        if (byId('office-users-count')) byId('office-users-count').textContent = String(summary.office_users ?? 0);
-        if (byId('workshop-users-count')) byId('workshop-users-count').textContent = String(summary.workshop_users ?? 0);
-        if (byId('active-teams-count')) byId('active-teams-count').textContent = String(summary.active_teams ?? 0);
-    } catch (e) {
-        // ignore stats errors
-    }
+    // Statistics cards removed on this page.
 }
 
 function setupEventListeners() {
