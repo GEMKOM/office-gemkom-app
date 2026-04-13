@@ -20,17 +20,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     ];
 
-    // Cost Table: only visible to management (and admin)
-    if (hasRouteAccess('/projects/cost-table')) {
-        cards.push({
-            title: 'Maliyet Tablosu',
-            description: 'Tüm iş emirlerinin maliyet özeti: işçilik, malzeme, taşeron, boya, kalite, sevkiyat.',
-            icon: 'fas fa-calculator',
-            iconColor: 'success',
-            link: '/projects/cost-table'
-        });
-    }
-
     const menuComponent = new MenuComponent('menu-container', {
         title: 'Projeler Modülü',
         subtitle: 'Proje takibi ve yönetim işlemlerinizi gerçekleştirin',

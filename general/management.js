@@ -15,13 +15,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         subtitle: 'Şirket geneli yönetim işlemlerinizi gerçekleştirin',
         cards: [
             {
-                title: 'Çalışanlar',
-                description: 'Şirket çalışanlarının yönetimi, profil bilgileri ve departman atamaları.',
-                icon: 'fas fa-users',
-                iconColor: 'primary',
-                link: '/general/users'
-            },
-            {
                 title: 'Makineler',
                 description: 'Şirket makinelerinin envanteri, durum takibi ve planlama yönetimi.',
                 icon: 'fas fa-cogs',

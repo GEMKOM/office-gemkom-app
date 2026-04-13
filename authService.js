@@ -351,9 +351,9 @@ export function navigateByTeam() {
         } else if (user.team === 'finance') {
             navigateTo('/finance/purchase-orders');
         } else if (user.team === 'human_resources') {
-            navigateTo('/human_resources/wages');
+            navigateTo('/human_resources/users');
         } else if (user.team === 'human_resouces') {
-            navigateTo('/human_resources/wages');
+            navigateTo('/human_resources/users');
         } else {
             // Fallback: redirect all other teams to home page
             navigateTo(ROUTES.HOME);

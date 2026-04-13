@@ -36,12 +36,6 @@ async function handleLandingPage() {
                     link: '/general',
                     features: [
                         {
-                            label: 'Çalışanlar',
-                            icon: 'fas fa-users',
-                            iconColor: 'rgba(139, 0, 0, 1)',
-                            link: '/general/users'
-                        },
-                        {
                             label: 'Makineler',
                             icon: 'fas fa-cogs',
                             iconColor: 'rgba(139, 0, 0, 1)',
@@ -252,10 +246,16 @@ async function handleLandingPage() {
                     link: '/human_resources',
                     features: [
                         {
-                            label: 'Maaşlar',
-                            icon: 'fas fa-money-bill-wave',
+                            label: 'Çalışanlar',
+                            icon: 'fas fa-users',
                             iconColor: 'rgba(139, 0, 0, 1)',
-                            link: '/human_resources/wages'
+                            link: '/human_resources/users'
+                        },
+                        {
+                            label: 'Yoklama',
+                            icon: 'fas fa-user-check',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/human_resources/attendance'
                         }
                     ]
                 },

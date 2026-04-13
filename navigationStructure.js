@@ -8,11 +8,6 @@ export const NAVIGATION_STRUCTURE = {
         label: 'Genel',
         icon: 'fas fa-cogs',
         children: {
-            '/general/users': {
-                label: 'Çalışanlar',
-                icon: 'fas fa-users',
-                children: {}
-            },
             '/general/machines': {
                 label: 'Makineler',
                 icon: 'fas fa-cogs',
@@ -64,11 +59,6 @@ export const NAVIGATION_STRUCTURE = {
             '/projects/project-tracking': {
                 label: 'Proje Takibi',
                 icon: 'fas fa-tasks',
-                children: {}
-            },
-            '/projects/cost-table': {
-                label: 'Maliyet Tablosu',
-                icon: 'fas fa-calculator',
                 children: {}
             }
         }
@@ -529,11 +519,6 @@ export const NAVIGATION_STRUCTURE = {
             '/human_resources/users': {
                 label: 'Çalışanlar',
                 icon: 'fas fa-users',
-                children: {}
-            },
-            '/human_resources/wages': {
-                label: 'Maaşlar',
-                icon: 'fas fa-money-bill-wave',
                 children: {}
             },
             '/human_resources/attendance': {

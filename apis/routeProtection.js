@@ -79,7 +79,6 @@ function showAccessDeniedMessage(route) {
  */
 function getRouteDisplayName(route) {
     const routeNames = {
-        '/general/users': 'Çalışanlar',
         '/general/machines': 'Makineler',
         '/general/overtime': 'Mesailer',
         '/manufacturing/machining': 'İmalat - Torna',

@@ -1,4 +1,4 @@
-// HR Users page (mirrors /general/users/)
+// HR Users page
 // Note: kept intentionally similar to general/users/userList.js for consistent UX.
 
 import { initNavbar } from '../../components/navbar.js';
@@ -85,7 +85,10 @@ function ensureUserEditTabs(editModal, user) {
         if (existingForUser && String(existingForUser) !== String(user.id)) {
             const existingForm = existingTabs.querySelector('#edit-modal-form') || container.querySelector('#edit-modal-form');
             if (existingForm) {
-                container.insertBefore(existingForm, existingTabs);
+                const parent = existingTabs.parentNode;
+                if (parent) {
+                    parent.insertBefore(existingForm, existingTabs);
+                }
             }
             existingTabs.remove();
         } else {
