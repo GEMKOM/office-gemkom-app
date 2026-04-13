@@ -712,6 +712,7 @@ function ensureUserEditTabs(editModal, user) {
                 <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Geldi</div><div class="fw-semibold">${s.total_present ?? '-'}</div></div></div>
                 <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Gelmedi</div><div class="fw-semibold">${s.total_absent ?? '-'}</div></div></div>
                 <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Fazla Mesai (s)</div><div class="fw-semibold">${s.total_overtime_hours ?? '-'}</div></div></div>
+                <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Toplam Geç Kalma (dk)</div><div class="fw-semibold">${s.total_late_minutes ?? '-'}</div></div></div>
             </div>
         `;
 
