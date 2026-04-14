@@ -27,6 +27,9 @@ import {
     proposePrice,
     getPriceHistory,
     submitApproval,
+    setOfferPrices,
+    bulkUpdateOfferItems,
+    bulkDeleteOfferItems,
     getApprovalStatus,
     recordDecision,
     submitToCustomer,
@@ -42,7 +45,7 @@ import {
     FILE_TYPE_OPTIONS,
     REVISION_TYPE_MAP
 } from '../../apis/sales/offers.js';
-import { listOfferTemplates, getOfferTemplate, getOfferTemplateNodes, getOfferTemplateNodeChildren } from '../../apis/sales/offerTemplates.js';
+import { listOfferTemplates, getOfferTemplate, getOfferTemplateNodes, getOfferTemplateNodeChildren, searchOfferTemplateNodes } from '../../apis/sales/offerTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
 import { getPaymentTerms } from '../../apis/procurement.js';
 import { createComment, getTopicComments } from '../../apis/projects/topics.js';
@@ -634,9 +637,34 @@ function initModals() {
     if (footer) {
         footer.addEventListener('click', async (e) => {
             if (!offerId || !offer) return;
-            const refreshOffer = () => viewOffer(offerId);
+            const getActiveTabId = () => {
+                try {
+                    const activeBtn = viewOfferModal.container?.querySelector('.nav-link.active[data-bs-target]');
+                    const target = activeBtn?.getAttribute('data-bs-target') || '';
+                    const m = target.match(/#tab-(.+)-pane/);
+                    return m ? m[1] : 'genel';
+                } catch (_) {
+                    return 'genel';
+                }
+            };
+            const refreshOffer = (tabId = getActiveTabId()) => viewOffer(offerId, { initialTabId: tabId });
             if (e.target.closest('#edit-offer-btn')) { showEditModal(refreshOffer); return; }
-            if (e.target.closest('#add-items-btn')) { showAddItemsModal(refreshOffer); return; }
+            if (e.target.closest('#submit-staged-items-btn')) { await submitStagedItems(); return; }
+            if (e.target.closest('#discard-kalemler-changes-btn')) {
+                showActionConfirm({
+                    title: 'Değişiklikleri Sil',
+                    message: 'Kaydedilmemiş tüm değişiklikler silinsin mi?',
+                    onConfirm: () => {
+                        kalemlerState.staged = [];
+                        kalemlerState.stagedRefs = {};
+                        kalemlerState.pendingEdits = {};
+                        kalemlerState.pendingDeletes = new Set();
+                        renderOfferItemsTree();
+                        updateKalemlerFooterStagedState();
+                    }
+                });
+                return;
+            }
             if (e.target.closest('#download-all-files-btn')) {
                 const files = offer.files || [];
                 if (files.length > 0) {
@@ -649,9 +677,15 @@ function initModals() {
             }
             if (e.target.closest('#upload-file-btn')) { showFileUploadModal(refreshOffer); return; }
             if (e.target.closest('#send-consultations-btn')) { showConsultationModal(refreshOffer); return; }
-            if (e.target.closest('#save-prices-btn')) { await saveAllPrices(); await refreshOffer(); return; }
-            if (e.target.closest('#submit-approval-from-pricing-btn')) { showSubmitApprovalConfirm(refreshOffer); return; }
-            if (e.target.closest('#submit-approval-btn')) { showSubmitApprovalConfirm(refreshOffer); return; }
+            if (e.target.closest('#save-prices-btn')) { await saveAllPrices(); await refreshOffer('pricing'); return; }
+            if (e.target.closest('#submit-approval-from-pricing-btn')) {
+                if (pricingV3State?.hasUnsavedChanges) {
+                    showNotification('Kaydedilmemiş değişiklikler var. Önce "Fiyatları Kaydet" ile kaydedin.', 'warning');
+                    return;
+                }
+                showSubmitApprovalConfirm(refreshOffer);
+                return;
+            }
             if (e.target.closest('#decide-btn')) { showDecisionModal(refreshOffer); return; }
             if (e.target.closest('#decide-approve-btn')) { showApproveDecisionModal(refreshOffer); return; }
             if (e.target.closest('#decide-reject-btn')) { showRejectDecisionModal(refreshOffer); return; }
@@ -768,11 +802,9 @@ async function loadTabDataIfNeeded(tabId) {
 
     if (tabId === 'kalemler' && !offerTabLoaded.items) {
         try {
-            const data = await getOfferItems(offerId);
-            offer.items = Array.isArray(data) ? data : (data.results || []);
             offerTabLoaded.items = true;
             pane.innerHTML = `<div class="offer-tab-content">${buildItemsTab()}</div>`;
-            renderOfferItemsTable();
+            initKalemlerTab();
         } catch (e) {
             pane.innerHTML = `<div class="offer-tab-content"><div class="text-danger text-center py-4">Kalemler yüklenemedi.</div></div>`;
         }
@@ -807,8 +839,12 @@ async function loadTabDataIfNeeded(tabId) {
 
     if (tabId === 'pricing' && !offerTabLoaded.pricing) {
         try {
-            // Load items first (required for table)
-            const itemsData = await getOfferItems(offerId);
+            const [freshOffer, itemsData] = await Promise.all([
+                getOffer(offerId),
+                getOfferItems(offerId)
+            ]);
+            offer = freshOffer;
+            offerId = offer.id;
             offer.items = Array.isArray(itemsData) ? itemsData : (itemsData.results || []);
         } catch (e) {
             pane.innerHTML = `<div class="offer-tab-content"><div class="text-danger text-center py-4">Fiyatlandırma verileri yüklenemedi.</div></div>`;
@@ -1319,97 +1355,976 @@ function setupOfferItemsExpandListeners() {
 }
 
 function buildItemsTab() {
-    return '<div id="offer-items-table-container"></div>';
+    return `
+      <div class="kalemler-layout">
+        <div class="kalemler-panel kalemler-catalog">
+          <div class="kalemler-panel-header">
+            <div class="fw-semibold"><i class="fas fa-sitemap me-2 text-primary"></i>Katalog</div>
+            <div class="kalemler-search mt-2">
+              <input id="catalog-search" class="form-control form-control-sm" placeholder="Ara (en az 2 karakter)..." />
+            </div>
+          </div>
+          <div id="catalog-panel" class="kalemler-panel-body">
+            <div class="text-muted py-3 text-center"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>
+          </div>
+        </div>
+
+        <div class="kalemler-panel kalemler-offer">
+          <div class="kalemler-panel-header d-flex align-items-center justify-content-between">
+            <div class="fw-semibold d-flex align-items-center gap-2">
+              <i class="fas fa-list me-1 text-primary"></i>Teklif Kalemleri
+              <span id="staged-count-badge" class="badge bg-warning text-dark border" style="display:none;"></span>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="add-custom-root-item-btn">
+              <i class="fas fa-plus me-1"></i>Özel Kalem Ekle
+            </button>
+          </div>
+          <div id="offer-panel" class="kalemler-panel-body">
+            <div class="text-muted py-3 text-center"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>
+          </div>
+        </div>
+      </div>
+    `;
 }
 
-function renderOfferItemsTable() {
-    const container = document.getElementById('offer-items-table-container');
+// ─── Kalemler Tab (Catalog ↔ Offer Items) ─────────────────────────────
+
+const kalemlerState = {
+    offerId: null,
+    templates: [],
+    activeTemplateId: null,
+    // node id → { id, title, code, children_count, children: [ids], loaded: bool, templateId }
+    nodes: {},
+    // Staged additions (bulk submit)
+    staged: [],
+    stagedRefs: {},
+    refCounter: 0,
+
+    // Existing items pending changes (bulk update/delete)
+    pendingEdits: {},   // { [id]: { field: value } }
+    pendingDeletes: new Set(),
+    offerItems: [],
+    offerItemsFlat: {},
+    drag: { type: null, nodeId: null, itemId: null },
+    ui: { searchMode: false, searchQ: '' }
+};
+
+function kalemlerHasChanges() {
+    return (kalemlerState.staged.length > 0)
+        || Object.keys(kalemlerState.pendingEdits || {}).length > 0
+        || (kalemlerState.pendingDeletes?.size || 0) > 0;
+}
+
+function nextKalemlerRef() {
+    kalemlerState.refCounter += 1;
+    return `item-${kalemlerState.refCounter}`;
+}
+
+function ensureStagedParent(parentRef) {
+    const p = kalemlerState.stagedRefs[parentRef];
+    if (!p) throw new Error('Parent staged ref not found');
+    if (!Array.isArray(p._children)) p._children = [];
+    return p;
+}
+
+function addNodeToStaged(nodeId, { parentRef = null, parentId = null } = {}) {
+    const node = kalemlerState.nodes[nodeId];
+    const ref = nextKalemlerRef();
+    const label = node?.title || '-';
+
+    const item = {
+        _ref: ref,
+        template_node: nodeId,
+        title_override: '',
+        quantity: 1,
+        parent_ref: parentRef,
+        parent: parentId,
+        _label: label,
+        _isCustom: false,
+        _children: []
+    };
+
+    if (parentRef) {
+        ensureStagedParent(parentRef)._children.push(item);
+    } else {
+        kalemlerState.staged.push(item);
+    }
+    kalemlerState.stagedRefs[ref] = item;
+
+    renderOfferItemsTree();
+    updateKalemlerFooterStagedState();
+}
+
+function addCustomStaged({ parentRef = null, parentId = null } = {}) {
+    const ref = nextKalemlerRef();
+    const item = {
+        _ref: ref,
+        template_node: null,
+        title_override: 'Yeni Kalem',
+        quantity: 1,
+        parent_ref: parentRef,
+        parent: parentId,
+        _label: 'Yeni Kalem',
+        _isCustom: true,
+        _children: []
+    };
+
+    if (parentRef) {
+        ensureStagedParent(parentRef)._children.push(item);
+    } else {
+        kalemlerState.staged.push(item);
+    }
+    kalemlerState.stagedRefs[ref] = item;
+
+    renderOfferItemsTree();
+    updateKalemlerFooterStagedState();
+    setTimeout(() => focusStagedTitleInput(ref), 50);
+}
+
+function focusStagedTitleInput(ref) {
+    const input = document.querySelector(`.staged-item[data-ref="${ref}"] .staged-title-input`);
+    if (input) {
+        input.focus();
+        input.select?.();
+    }
+}
+
+function onStagedTitleChange(ref, value) {
+    const item = kalemlerState.stagedRefs[ref];
+    if (!item) return;
+    item.title_override = value;
+    item._label = value || item._label;
+}
+
+function onStagedQtyChange(ref, value) {
+    const item = kalemlerState.stagedRefs[ref];
+    if (!item) return;
+    item.quantity = Math.max(1, parseInt(value, 10) || 1);
+}
+
+function removeStaged(ref) {
+    const item = kalemlerState.stagedRefs[ref];
+    if (!item) return;
+
+    if (item.parent_ref) {
+        const parent = kalemlerState.stagedRefs[item.parent_ref];
+        if (parent) parent._children = (parent._children || []).filter(c => c._ref !== ref);
+    } else {
+        kalemlerState.staged = kalemlerState.staged.filter(i => i._ref !== ref);
+    }
+
+    const purge = (i) => {
+        delete kalemlerState.stagedRefs[i._ref];
+        for (const c of (i._children || [])) purge(c);
+    };
+    purge(item);
+
+    renderOfferItemsTree();
+    updateKalemlerFooterStagedState();
+}
+
+function flattenStaged(items) {
+    const result = [];
+    const walk = (item) => {
+        const row = { _ref: item._ref, quantity: item.quantity };
+        if (item.template_node) row.template_node = item.template_node;
+        if (item.title_override) row.title_override = item.title_override;
+        if (item.parent_ref) row.parent_ref = item.parent_ref;
+        if (item.parent) row.parent = item.parent;
+        result.push(row);
+        for (const child of (item._children || [])) walk(child);
+    };
+    for (const item of items || []) walk(item);
+    return result;
+}
+
+async function submitStagedItems() {
+    const btn = viewOfferModal?.container?.querySelector('#submit-staged-items-btn');
+    const oldHtml = btn?.innerHTML;
+    if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Ekleniyor...';
+    }
+
+    try {
+        if (!kalemlerHasChanges()) return;
+
+        let freshItems = kalemlerState.offerItems;
+
+        // 1) Add new staged items
+        if (kalemlerState.staged.length > 0) {
+            freshItems = await addOfferItems(kalemlerState.offerId, flattenStaged(kalemlerState.staged));
+        }
+
+        // 2) Bulk update existing items
+        const editsPayload = Object.entries(kalemlerState.pendingEdits || {})
+            .filter(([id]) => !kalemlerState.pendingDeletes.has(parseInt(id, 10)))
+            .map(([id, edits]) => ({ id: parseInt(id, 10), ...edits }));
+        if (editsPayload.length > 0) {
+            freshItems = await bulkUpdateOfferItems(kalemlerState.offerId, editsPayload);
+        }
+
+        // 3) Bulk delete
+        if ((kalemlerState.pendingDeletes?.size || 0) > 0) {
+            freshItems = await bulkDeleteOfferItems(kalemlerState.offerId, [...kalemlerState.pendingDeletes]);
+        }
+
+        // Reset state with fresh server data (endpoints return fresh tree)
+        kalemlerState.offerItems = Array.isArray(freshItems) ? freshItems : (freshItems.results || freshItems.items || []);
+        kalemlerState.offerItemsFlat = {};
+        buildOfferItemsFlatMap(kalemlerState.offerItems);
+        kalemlerState.staged = [];
+        kalemlerState.stagedRefs = {};
+        kalemlerState.pendingEdits = {};
+        kalemlerState.pendingDeletes = new Set();
+
+        renderOfferItemsTree();
+        updateKalemlerFooterStagedState();
+        showNotification('Değişiklikler kaydedildi', 'success');
+    } catch (e) {
+        showNotification(parseError(e, 'Değişiklikler kaydedilemedi'), 'error');
+    } finally {
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = oldHtml || '<i class="fas fa-check me-1"></i>Teklife Ekle';
+        }
+    }
+}
+
+function updateKalemlerFooterStagedState() {
+    const count = Object.keys(kalemlerState.stagedRefs || {}).length;
+    const btn = viewOfferModal?.container?.querySelector('#submit-staged-items-btn');
+    if (btn) btn.disabled = !kalemlerHasChanges() || CLOSED_STATUSES.includes(offer?.status || '');
+    const badge = document.getElementById('staged-count-badge');
+    if (badge) {
+        const editCount = Object.keys(kalemlerState.pendingEdits || {}).length;
+        const deleteCount = kalemlerState.pendingDeletes?.size || 0;
+        const parts = [];
+        if (count) parts.push(`+${count}`);
+        if (editCount) parts.push(`~${editCount}`);
+        if (deleteCount) parts.push(`−${deleteCount}`);
+        badge.textContent = parts.join(' ') || '0';
+        badge.style.display = kalemlerHasChanges() ? 'inline-flex' : 'none';
+    }
+}
+
+function renderStagedTree() {
+    const container = document.getElementById('staged-panel');
     if (!container) return;
-    const items = offer.items || [];
-    const { roots, childrenByParent } = getOfferItemsForTable(items);
-    offerItemsRoots = roots;
-    offerItemsChildrenCache.clear();
-    roots.forEach(r => {
-        if (r.children?.length) offerItemsChildrenCache.set(r.id, r.children);
+    container.innerHTML = '';
+
+    if (!kalemlerState.staged.length) {
+        container.innerHTML = '<div class="text-muted small py-2">Katalogdan soldan kalem ekleyin. Kaydetmek için alttan "Teklife Ekle" tıklayın.</div>';
+        return;
+    }
+
+    for (const item of kalemlerState.staged) {
+        container.appendChild(renderStagedItem(item, 0));
+    }
+}
+
+function renderStagedItem(item, depth) {
+    const el = document.createElement('div');
+    el.className = 'kalemler-offer-item staged-item';
+    el.dataset.ref = item._ref;
+    el.style.setProperty('--kalemler-level', String(depth));
+
+    const titleVal = item.title_override || item._label || '';
+    el.innerHTML = `
+      <div class="kalemler-offer-row">
+        <div class="kalemler-offer-title-wrap">
+          <input class="staged-title-input" value="${escapeHtml(String(titleVal))}"
+                 placeholder="${escapeHtml(String(item._label || 'Başlık'))}" />
+          ${(!item._isCustom && item._label && item.title_override) ? `<span class="kalemler-offer-original" title="${escapeHtml(item._label)}">${escapeHtml(item._label)}</span>` : ''}
+        </div>
+        <input type="number" class="staged-qty-input" value="${escapeHtml(String(item.quantity || 1))}" min="1" />
+        <div class="kalemler-offer-actions">
+          <button type="button" class="btn btn-sm btn-outline-secondary staged-add-sub" title="Alt kalem ekle">+ alt</button>
+          <button type="button" class="btn btn-sm btn-outline-danger staged-remove" title="Kaldır">✕</button>
+          ${item._isCustom ? '<span class="badge bg-light text-dark border">custom</span>' : ''}
+        </div>
+      </div>
+    `;
+
+    el.querySelector('.staged-title-input')?.addEventListener('input', (e) => onStagedTitleChange(item._ref, e.target.value));
+    el.querySelector('.staged-qty-input')?.addEventListener('input', (e) => onStagedQtyChange(item._ref, e.target.value));
+    el.querySelector('.staged-add-sub')?.addEventListener('click', () => addCustomStaged({ parentRef: item._ref }));
+    el.querySelector('.staged-remove')?.addEventListener('click', () => removeStaged(item._ref));
+
+    el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('drag-over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+    el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        el.classList.remove('drag-over');
+        const nodeIdStr = e.dataTransfer?.getData('nodeId');
+        const nodeId = parseInt(nodeIdStr, 10);
+        if (nodeId) addNodeToStaged(nodeId, { parentRef: item._ref });
     });
-    offerItemsExpanded.clear();
-    const displayData = mergeExpandedOfferItems(offerItemsRoots);
+
+    if (item._children?.length) {
+        const childrenEl = document.createElement('div');
+        childrenEl.className = 'kalemler-offer-children staged-children';
+        for (const child of item._children) {
+            childrenEl.appendChild(renderStagedItem(child, depth + 1));
+        }
+        el.appendChild(childrenEl);
+    }
+
+    return el;
+}
+
+function initKalemlerTab() {
+    kalemlerState.offerId = offerId;
+    kalemlerState.nodes = {};
+    kalemlerState.offerItems = [];
+    kalemlerState.offerItemsFlat = {};
+    kalemlerState.drag = { type: null, nodeId: null, itemId: null };
+    kalemlerState.ui = { searchMode: false, searchQ: '' };
+    kalemlerState.staged = [];
+    kalemlerState.stagedRefs = {};
+    kalemlerState.refCounter = 0;
+    kalemlerState.pendingEdits = {};
+    kalemlerState.pendingDeletes = new Set();
+
     const editable = !CLOSED_STATUSES.includes(offer?.status || '');
-    const LEVEL_WIDTH = 20;
-    const LINE_THICKNESS = 2;
-    const LINE_COLOR = '#cbd5e0';
-    const BUTTON_SIZE = 24;
-    offerItemsTableInstance = new TableComponent('offer-items-table-container', {
-        title: 'Kalemler',
-        icon: 'fas fa-list',
-        iconColor: 'text-primary',
-        columns: [
-            {
-                field: '_expand',
-                label: '',
-                sortable: false,
-                width: '56px',
-                formatter: (value, row) => {
-                    const hasChildren = row.has_children === true || (offerItemsChildrenCache.get(row.id) || []).length > 0;
-                    const isExpanded = offerItemsExpanded.has(row.id);
-                    const level = row.hierarchy_level ?? 0;
-                    const buttonLeft = level * LEVEL_WIDTH;
-                    let treeLinesHtml = '';
-                    if (level > 0) {
-                        for (let i = 0; i < level; i++) {
-                            const isLast = i === level - 1;
-                            const lineLeft = i * LEVEL_WIDTH + (LEVEL_WIDTH / 2) - (LINE_THICKNESS / 2);
-                            if (!isLast) {
-                                treeLinesHtml += `<div style="position:absolute;left:${lineLeft}px;top:0;bottom:0;width:${LINE_THICKNESS}px;background:${LINE_COLOR};"></div>`;
-                            } else {
-                                treeLinesHtml += `<div style="position:absolute;left:${lineLeft}px;top:0;height:50%;width:${LINE_THICKNESS}px;background:${LINE_COLOR};"></div>`;
-                                treeLinesHtml += `<div style="position:absolute;left:${lineLeft}px;top:50%;width:${LEVEL_WIDTH/2}px;height:${LINE_THICKNESS}px;background:${LINE_COLOR};transform:translateY(-50%);"></div>`;
-                            }
-                        }
-                    }
-                    let expandBtn = '';
-                    if (hasChildren) {
-                        const icon = isExpanded ? 'fa-minus' : 'fa-plus';
-                        expandBtn = `<button type="button" class="btn btn-sm offer-item-expand-btn" data-item-id="${row.id}" style="position:absolute;left:${buttonLeft}px;top:50%;transform:translateY(-50%);width:${BUTTON_SIZE}px;height:${BUTTON_SIZE}px;padding:0;border-radius:4px;border:1.5px solid #0d6efd;background:${isExpanded ? '#0d6efd' : '#fff'};color:${isExpanded ? '#fff' : '#0d6efd'};display:inline-flex;align-items:center;justify-content:center;cursor:pointer;z-index:1;"><i class="fas ${icon}" style="font-size:10px;"></i></button>`;
-                    }
-                    return `<div style="position:relative;width:100%;height:40px;min-height:40px;">${treeLinesHtml}${expandBtn}</div>`;
-                }
-            },
-            { field: 'title', label: 'Başlık', sortable: false, formatter: (v, row) => (v || '-') + (row.notes ? `<br><small class="text-muted">${escapeHtml(row.notes)}</small>` : '') },
-            { field: 'quantity', label: 'Adet', sortable: false, width: '80px', formatter: (v) => `<span class="badge bg-primary">×${v ?? 1}</span>` }
-        ],
-        data: displayData,
-        pagination: false,
-        sortable: false,
-        emptyMessage: 'Henüz kalem eklenmemiş.',
-        emptyIcon: 'fas fa-inbox',
-        actions: editable ? [{
-            key: 'delete_item',
-            title: 'Kalemi sil',
-            icon: 'fas fa-trash',
-            class: 'btn-outline-danger',
-            onClick: (row) => {
-                showActionConfirm({
-                    message: 'Bu kalemi silmek istediğinize emin misiniz?',
-                    onConfirm: async () => {
-                        try {
-                            await deleteOfferItem(offerId, row.id);
-                            showNotification('Kalem silindi', 'success');
-                            const data = await getOffer(offerId);
-                            offer.items = data.items || [];
-                            const { roots } = getOfferItemsForTable(offer.items);
-                            offerItemsRoots = roots;
-                            offerItemsChildrenCache.clear();
-                            roots.forEach(r => { if (r.children?.length) offerItemsChildrenCache.set(r.id, r.children); });
-                            offerItemsExpanded.clear();
-                            updateOfferItemsTableData();
-                        } catch (e) { showNotification('Kalem silinirken hata oluştu', 'error'); }
-                    }
-                });
+    const addCustomBtn = document.getElementById('add-custom-root-item-btn');
+    if (addCustomBtn) {
+        addCustomBtn.disabled = !editable;
+        addCustomBtn.onclick = async () => {
+            if (!editable) return;
+            addCustomStaged({ parentRef: null, parentId: null });
+        };
+    }
+
+    setupCatalogSearch();
+    void loadTemplatesIntoCatalog();
+    void reloadOfferItems();
+    updateKalemlerFooterStagedState();
+}
+
+function setupCatalogSearch() {
+    const input = document.getElementById('catalog-search');
+    if (!input) return;
+    let timeout = null;
+    input.oninput = (e) => {
+        clearTimeout(timeout);
+        const q = (e.target?.value || '').trim();
+        if (q.length < 2) {
+            kalemlerState.ui.searchMode = false;
+            kalemlerState.ui.searchQ = '';
+            renderCatalogTree();
+            return;
+        }
+        kalemlerState.ui.searchMode = true;
+        kalemlerState.ui.searchQ = q;
+        timeout = setTimeout(async () => {
+            try {
+                const results = await searchOfferTemplateNodes(q);
+                renderCatalogSearchResults(Array.isArray(results) ? results : (results.results || []));
+            } catch (err) {
+                const panel = document.getElementById('catalog-panel');
+                if (panel) panel.innerHTML = `<div class="text-danger text-center py-3">Arama başarısız.</div>`;
             }
-        }] : []
+        }, 300);
+    };
+}
+
+async function loadTemplatesIntoCatalog() {
+    const panel = document.getElementById('catalog-panel');
+    if (!panel) return;
+    panel.innerHTML = `<div class="text-muted py-3 text-center"><i class="fas fa-spinner fa-spin me-2"></i>Şablonlar yükleniyor...</div>`;
+    try {
+        const res = await listOfferTemplates();
+        kalemlerState.templates = Array.isArray(res) ? res : (res.results || []);
+        if (!kalemlerState.templates.length) {
+            panel.innerHTML = `<div class="text-muted text-center py-3">Şablon bulunamadı.</div>`;
+            return;
+        }
+        renderCatalogTree();
+    } catch (e) {
+        panel.innerHTML = `<div class="text-danger text-center py-3">Şablonlar yüklenemedi.</div>`;
+    }
+}
+
+function renderCatalogTree() {
+    const panel = document.getElementById('catalog-panel');
+    if (!panel) return;
+    panel.innerHTML = '';
+
+    const wrap = document.createElement('div');
+    wrap.className = 'kalemler-templates';
+
+    for (const tpl of kalemlerState.templates) {
+        const tplId = tpl.id;
+        const header = document.createElement('div');
+        header.className = 'kalemler-template-header';
+        header.innerHTML = `
+          <button type="button" class="kalemler-template-toggle" data-template-id="${tplId}">
+            <span class="me-2"><i class="fas fa-chevron-right"></i></span>
+            <span class="fw-semibold">${escapeHtml(tpl.title || tpl.name || `Şablon #${tplId}`)}</span>
+          </button>
+        `;
+
+        const body = document.createElement('div');
+        body.className = 'kalemler-template-body';
+        body.dataset.templateId = String(tplId);
+        body.style.display = 'none';
+        body.innerHTML = `<div class="text-muted py-2 text-center">Açmak için tıklayın.</div>`;
+
+        header.querySelector('.kalemler-template-toggle')?.addEventListener('click', async () => {
+            const isOpen = body.style.display !== 'none';
+            // close others
+            wrap.querySelectorAll('.kalemler-template-body').forEach(el => { el.style.display = 'none'; });
+            wrap.querySelectorAll('.kalemler-template-toggle i').forEach(i => { i.className = 'fas fa-chevron-right'; });
+
+            if (isOpen) {
+                body.style.display = 'none';
+                return;
+            }
+            body.style.display = 'block';
+            header.querySelector('.kalemler-template-toggle i').className = 'fas fa-chevron-down';
+            kalemlerState.activeTemplateId = tplId;
+            await expandCatalogNode(tplId, null, body);
+        });
+
+        wrap.appendChild(header);
+        wrap.appendChild(body);
+    }
+
+    panel.appendChild(wrap);
+}
+
+async function expandCatalogNode(templateId, nodeId, containerEl) {
+    if (!containerEl) return;
+    try {
+        let children = [];
+        if (nodeId == null) {
+            const res = await getOfferTemplateNodes(templateId);
+            children = Array.isArray(res) ? res : (res.results || []);
+        } else {
+            const res = await getOfferTemplateNodeChildren(templateId, nodeId);
+            children = Array.isArray(res) ? res : (res.results || []);
+        }
+
+        // store nodes
+        for (const child of children) {
+            const existing = kalemlerState.nodes[child.id];
+            const resolvedTemplateId = child?.template ?? templateId;
+            kalemlerState.nodes[child.id] = {
+                ...(existing || {}),
+                ...child,
+                templateId: resolvedTemplateId,
+                loaded: false,
+                children: existing?.children || []
+            };
+        }
+
+        containerEl.innerHTML = '';
+        const subtree = document.createElement('div');
+        subtree.className = 'kalemler-catalog-subtree';
+        for (const child of children) {
+            subtree.appendChild(renderCatalogNodeRowFromNode(child, child?.template ?? templateId));
+        }
+        containerEl.appendChild(subtree);
+    } catch (e) {
+        containerEl.innerHTML = `<div class="text-danger text-center py-2">Katalog yüklenemedi.</div>`;
+    }
+}
+
+function renderCatalogNodeRowFromNode(node, templateId) {
+    if (!node) return document.createElement('div');
+    const resolvedTemplateId = node?.template ?? templateId;
+    // Ensure cache is populated so [+] and drag can still resolve node id later.
+    if (!kalemlerState.nodes[node.id]) {
+        kalemlerState.nodes[node.id] = { ...node, templateId: resolvedTemplateId, loaded: false, children: [] };
+    } else {
+        kalemlerState.nodes[node.id].templateId = resolvedTemplateId || kalemlerState.nodes[node.id].templateId;
+    }
+    return renderCatalogNodeRow(node.id, node);
+}
+
+function renderCatalogNodeRow(nodeId, nodeOverride = null) {
+    const node = nodeOverride || kalemlerState.nodes[nodeId];
+    const row = document.createElement('div');
+    row.className = 'kalemler-catalog-node';
+    row.dataset.nodeId = String(nodeId);
+    row.draggable = true;
+
+    const hasChildren = (node?.children_count ?? 0) > 0;
+    row.innerHTML = `
+      <button type="button" class="kalemler-node-toggle" ${hasChildren ? '' : 'disabled'}>
+        ${hasChildren ? '<i class="fas fa-chevron-right"></i>' : '<span class="text-muted">·</span>'}
+      </button>
+      <div class="kalemler-node-main">
+        <div class="kalemler-node-title">${escapeHtml(node?.title || '-')}</div>
+        ${node?.code ? `<div class="kalemler-node-code text-muted small">${escapeHtml(node.code)}</div>` : ''}
+      </div>
+      <button type="button" class="btn btn-sm btn-outline-primary kalemler-node-add" title="Teklife ekle">+</button>
+    `;
+
+    row.addEventListener('dragstart', (e) => {
+        kalemlerState.drag = { type: 'node', nodeId, itemId: null };
+        try {
+            e.dataTransfer.effectAllowed = 'copy';
+            e.dataTransfer.setData('nodeId', String(nodeId));
+        } catch (_) { /* noop */ }
     });
-    setupOfferItemsExpandListeners();
+
+    row.querySelector('.kalemler-node-add')?.addEventListener('click', async (e) => {
+        e.preventDefault();
+        addNodeToStaged(nodeId, { parentRef: null, parentId: null });
+    });
+
+    const toggleBtn = row.querySelector('.kalemler-node-toggle');
+    if (toggleBtn && hasChildren) {
+        toggleBtn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            const existing = row.querySelector(':scope > .kalemler-catalog-children');
+            if (existing) {
+                existing.remove();
+                toggleBtn.innerHTML = '<i class="fas fa-chevron-right"></i>';
+                return;
+            }
+
+            toggleBtn.innerHTML = '<i class="fas fa-chevron-down"></i>';
+            const childrenWrap = document.createElement('div');
+            childrenWrap.className = 'kalemler-catalog-children';
+            childrenWrap.innerHTML = `<div class="text-muted py-1"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>`;
+            row.appendChild(childrenWrap);
+
+            // lazy load
+            const templateId = node?.templateId || node?.template || kalemlerState.activeTemplateId;
+            if (!templateId) {
+                childrenWrap.innerHTML = `<div class="text-danger py-1">Şablon seçili değil.</div>`;
+                return;
+            }
+            await expandCatalogNode(templateId, nodeId, childrenWrap);
+        });
+    }
+
+    return row;
+}
+
+// No immediate server call; we stage items and submit in bulk.
+
+function renderCatalogSearchResults(results) {
+    const panel = document.getElementById('catalog-panel');
+    if (!panel) return;
+    panel.innerHTML = '';
+
+    if (!results.length) {
+        panel.innerHTML = `<div class="text-muted text-center py-3">Sonuç bulunamadı.</div>`;
+        return;
+    }
+
+    const list = document.createElement('div');
+    list.className = 'kalemler-search-results';
+
+    for (const node of results) {
+        // expected: { id, breadcrumb: [...] , title?, code? }
+        const row = document.createElement('div');
+        row.className = 'kalemler-search-row';
+        row.draggable = true;
+        row.innerHTML = `
+          <div class="kalemler-search-text">
+            <div class="small text-muted">${escapeHtml((node.breadcrumb || []).join(' › '))}</div>
+            <div class="fw-semibold">${escapeHtml(node.title || '-')}</div>
+          </div>
+          <button type="button" class="btn btn-sm btn-outline-primary">+</button>
+        `;
+        row.addEventListener('dragstart', (e) => {
+            kalemlerState.drag = { type: 'node', nodeId: node.id, itemId: null };
+            try { e.dataTransfer?.setData('nodeId', String(node.id)); } catch (_) { /* noop */ }
+        });
+        row.querySelector('button')?.addEventListener('click', async () => {
+            // cache minimally so add click works even if tree not expanded
+            if (!kalemlerState.nodes[node.id]) {
+                kalemlerState.nodes[node.id] = { ...node, templateId: node?.template ?? node?.templateId, loaded: false, children: [] };
+            }
+            addNodeToStaged(node.id, { parentRef: null, parentId: null });
+        });
+        list.appendChild(row);
+    }
+
+    panel.appendChild(list);
+}
+
+async function reloadOfferItems() {
+    const panel = document.getElementById('offer-panel');
+    if (panel) panel.innerHTML = `<div class="text-muted py-3 text-center"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>`;
+    try {
+        const data = await getOfferItems(kalemlerState.offerId);
+        kalemlerState.offerItems = Array.isArray(data) ? data : (data.results || []);
+        kalemlerState.offerItemsFlat = {};
+        buildOfferItemsFlatMap(kalemlerState.offerItems);
+        // when server truth refreshes, clear pending edits/deletes (they were for the old tree)
+        kalemlerState.pendingEdits = {};
+        kalemlerState.pendingDeletes = new Set();
+        renderOfferItemsTree();
+        updateKalemlerFooterStagedState();
+    } catch (e) {
+        if (panel) panel.innerHTML = `<div class="text-danger text-center py-3">Kalemler yüklenemedi.</div>`;
+    }
+}
+
+function buildOfferItemsFlatMap(items) {
+    for (const item of items || []) {
+        kalemlerState.offerItemsFlat[item.id] = item;
+        if (item.children?.length) buildOfferItemsFlatMap(item.children);
+    }
+}
+
+function renderOfferItemsTree() {
+    const panel = document.getElementById('offer-panel');
+    if (!panel) return;
+    panel.innerHTML = '';
+
+    const editable = !CLOSED_STATUSES.includes(offer?.status || '');
+
+    const combinedRoots = buildKalemlerCombinedTree();
+    if (!combinedRoots.length) {
+        panel.innerHTML = `<div class="text-muted text-center py-3"><i class="fas fa-inbox me-2"></i>Henüz kalem eklenmemiş.</div>`;
+        return;
+    }
+
+    const root = document.createElement('div');
+    root.className = 'kalemler-offer-tree';
+    for (const node of combinedRoots) {
+        root.appendChild(renderKalemlerUnifiedRow(node, 0, editable));
+    }
+    panel.appendChild(root);
+}
+
+function buildKalemlerCombinedTree() {
+    // existing items: rebuild tree from flat + pending parent edits, excluding pending deletes
+    const existingById = {};
+    const childrenByParent = new Map(); // parentId | null -> [existingNode]
+
+    for (const [idStr, original] of Object.entries(kalemlerState.offerItemsFlat || {})) {
+        const id = parseInt(idStr, 10);
+        if (!id) continue;
+        if (kalemlerState.pendingDeletes.has(id)) continue;
+        const edits = kalemlerState.pendingEdits?.[id] || {};
+        const parentId = (edits.parent !== undefined) ? edits.parent : original.parent;
+        existingById[id] = { _kind: 'existing', id, original, edits, parentId: parentId == null ? null : parentId, children: [] };
+    }
+
+    for (const node of Object.values(existingById)) {
+        const p = node.parentId;
+        if (!childrenByParent.has(p)) childrenByParent.set(p, []);
+        childrenByParent.get(p).push(node);
+    }
+    for (const node of Object.values(existingById)) {
+        node.children = childrenByParent.get(node.id) || [];
+    }
+
+    const roots = (childrenByParent.get(null) || []).slice();
+
+    // attach staged roots (only those truly root-level)
+    for (const staged of (kalemlerState.staged || [])) {
+        if (staged.parent_ref) continue;
+        if (staged.parent) continue;
+        roots.push({ _kind: 'staged', staged, children: [] });
+    }
+
+    // attach staged items under existing parents (parent PK)
+    for (const staged of Object.values(kalemlerState.stagedRefs || {})) {
+        if (!staged?.parent) continue;
+        const parentExisting = existingById[staged.parent];
+        if (!parentExisting) continue;
+        parentExisting.children.push({ _kind: 'staged', staged, children: [] });
+    }
+
+    // hydrate staged children recursively from their own _children
+    const hydrateStaged = (node) => {
+        if (node._kind !== 'staged') return;
+        node.children = (node.staged._children || []).map(c => ({ _kind: 'staged', staged: c, children: [] }));
+        for (const ch of node.children) hydrateStaged(ch);
+    };
+    const walk = (node) => {
+        if (node._kind === 'staged') hydrateStaged(node);
+        for (const ch of (node.children || [])) walk(ch);
+    };
+    for (const r of roots) walk(r);
+
+    return roots;
+}
+
+function getResolvedTitle(item) {
+    return (item?.resolved_title || item?.title_override || item?.title || '').toString();
+}
+
+function getOriginalTitle(item) {
+    // For template-based items, the original/base title comes from template_node_detail.title
+    // (API response: template_node_detail: { title: ... })
+    // For purely custom items, fall back to `title` if present.
+    return (item?.template_node_detail?.title || item?.title || '').toString();
+}
+
+function shouldShowOriginalTitle(item) {
+    const original = getOriginalTitle(item).trim();
+    const override = (item?.title_override || '').toString().trim();
+    return Boolean(original && override && original !== override);
+}
+
+function showCustomOfferItemModal({ parentItemId = null } = {}) {
+    const editable = !CLOSED_STATUSES.includes(offer?.status || '');
+    if (!editable) return;
+
+    const modal = new EditModal('custom-offer-item-modal-container', {
+        title: parentItemId ? 'Alt Kalem Ekle' : 'Özel Kalem Ekle',
+        icon: 'fas fa-plus',
+        size: 'sm',
+        saveButtonText: 'Kaydet',
+        showEditButton: false
+    });
+    modal.clearAll();
+    modal.addSection({ title: null });
+    modal.addField({
+        id: 'title_override',
+        name: 'title_override',
+        label: 'Kalem Adı',
+        type: 'text',
+        value: '',
+        required: true,
+        placeholder: 'Örn: Custom Bracket',
+        colSize: 12
+    });
+    modal.render();
+    modal.onSaveCallback(async (formData) => {
+        const title = (formData?.title_override || '').toString().trim();
+        if (!title) return;
+        try {
+            const payload = parentItemId
+                ? [{ title_override: title, parent: parentItemId }]
+                : [{ title_override: title }];
+            await addOfferItems(kalemlerState.offerId, payload);
+            await reloadOfferItems();
+            showNotification('Kalem eklendi', 'success');
+            modal.hide();
+        } catch (e) {
+            showNotification('Kalem eklenemedi', 'error');
+        }
+    });
+    modal.show();
+}
+
+function showQuantityModal(itemId) {
+    const editable = !CLOSED_STATUSES.includes(offer?.status || '');
+    if (!editable) return;
+    const item = kalemlerState.offerItemsFlat[itemId];
+    if (!item) return;
+
+    const modal = new EditModal('custom-offer-item-modal-container', {
+        title: 'Adet Güncelle',
+        icon: 'fas fa-hashtag',
+        size: 'sm',
+        saveButtonText: 'Kaydet',
+        showEditButton: false
+    });
+    modal.clearAll();
+    modal.addSection({ title: null });
+    modal.addField({
+        id: 'quantity',
+        name: 'quantity',
+        label: 'Adet',
+        type: 'number',
+        value: item.quantity ?? 1,
+        required: true,
+        min: 1,
+        step: 1,
+        colSize: 12
+    });
+    modal.render();
+    modal.onSaveCallback(async (formData) => {
+        const q = parseInt(formData?.quantity, 10);
+        if (!q || q < 1) {
+            showNotification('Adet en az 1 olmalıdır', 'warning');
+            return;
+        }
+        try {
+            await patchOfferItem(kalemlerState.offerId, itemId, { quantity: q });
+            kalemlerState.offerItemsFlat[itemId].quantity = q;
+            renderOfferItemsTree();
+            showNotification('Adet güncellendi', 'success');
+            modal.hide();
+        } catch (e) {
+            showNotification('Adet güncellenemedi', 'error');
+        }
+    });
+    modal.show();
+}
+
+function editExistingItem(id, field, value) {
+    if (!kalemlerState.pendingEdits[id]) kalemlerState.pendingEdits[id] = {};
+    kalemlerState.pendingEdits[id][field] = value;
+    updateKalemlerFooterStagedState();
+}
+
+function markDeleteExistingItem(id) {
+    const markTree = (it) => {
+        kalemlerState.pendingDeletes.add(it.id);
+        delete kalemlerState.pendingEdits[it.id];
+        for (const c of (it.children || [])) markTree(c);
+    };
+    const item = kalemlerState.offerItemsFlat[id];
+    if (!item) return;
+    markTree(item);
+    renderOfferItemsTree();
+    updateKalemlerFooterStagedState();
+}
+
+function reassignExistingParent(itemId, newParentId) {
+    if (!kalemlerState.pendingEdits[itemId]) kalemlerState.pendingEdits[itemId] = {};
+    kalemlerState.pendingEdits[itemId].parent = newParentId; // null => root
+    updateKalemlerFooterStagedState();
+}
+
+function renderOfferItemRow(item, level, editable) {
+    // Back-compat wrapper (existing callers)
+    return renderKalemlerUnifiedRow({ _kind: 'existing', id: item.id, original: item, edits: kalemlerState.pendingEdits?.[item.id] || {}, children: (item.children || []).map(c => ({ _kind: 'existing', id: c.id, original: c, edits: kalemlerState.pendingEdits?.[c.id] || {}, children: [] })) }, level, editable);
+}
+
+function renderKalemlerUnifiedRow(node, level, editable) {
+    if (!node) return document.createElement('div');
+
+    if (node._kind === 'existing') {
+        const item = node.original;
+        const edits = node.edits || {};
+        const currentTitle = (edits.title_override !== undefined) ? String(edits.title_override) : getResolvedTitle(item);
+        const currentQty = (edits.quantity !== undefined) ? (parseInt(edits.quantity, 10) || 1) : (item.quantity ?? 1);
+        const originalTitle = getOriginalTitle(item);
+        const showOriginal = Boolean(originalTitle && currentTitle && originalTitle.trim() !== String(currentTitle).trim());
+
+        const el = document.createElement('div');
+        const hasPendingEdit = Object.keys(node.edits || {}).length > 0;
+        el.className = 'kalemler-offer-item' + (hasPendingEdit ? ' pending-edit-item' : '');
+        el.dataset.itemId = String(item.id);
+        el.style.setProperty('--kalemler-level', String(level));
+
+        el.innerHTML = `
+          <div class="kalemler-offer-row">
+            <div class="kalemler-offer-title-wrap">
+              <input class="staged-title-input" value="${escapeHtml(currentTitle || '-')}" ${editable ? '' : 'disabled'} />
+              ${originalTitle ? `<span class="kalemler-offer-original" title="${escapeHtml(originalTitle)}" style="${showOriginal ? '' : 'display:none'}">${escapeHtml(originalTitle)}</span>` : ''}
+            </div>
+            <input type="number" class="staged-qty-input" value="${escapeHtml(String(currentQty))}" min="1" ${editable ? '' : 'disabled'} />
+            <div class="kalemler-offer-actions">
+              <button type="button" class="btn btn-sm btn-outline-secondary kalemler-add-child" ${editable ? '' : 'disabled'}>+ alt</button>
+              <button type="button" class="btn btn-sm btn-outline-danger kalemler-delete-item" ${editable ? '' : 'disabled'}>✕</button>
+            </div>
+          </div>
+        `;
+
+        const titleInput = el.querySelector('.staged-title-input');
+        if (titleInput && editable) titleInput.addEventListener('input', (e) => {
+            editExistingItem(item.id, 'title_override', e.target.value);
+            el.classList.add('pending-edit-item');
+            const origSpan = el.querySelector('.kalemler-offer-original');
+            if (origSpan) {
+                const differs = originalTitle && e.target.value.trim() !== originalTitle.trim();
+                origSpan.style.display = differs ? '' : 'none';
+            }
+        });
+        const qtyInput = el.querySelector('.staged-qty-input');
+        if (qtyInput && editable) qtyInput.addEventListener('input', (e) => {
+            editExistingItem(item.id, 'quantity', Math.max(1, parseInt(e.target.value, 10) || 1));
+            el.classList.add('pending-edit-item');
+        });
+
+        el.querySelector('.kalemler-add-child')?.addEventListener('click', () => {
+            if (!editable) return;
+            addCustomStaged({ parentRef: null, parentId: item.id });
+        });
+        el.querySelector('.kalemler-delete-item')?.addEventListener('click', () => {
+            if (!editable) return;
+            markDeleteExistingItem(item.id);
+        });
+
+        // drop zone: catalog -> staged child, existing -> reparent
+        el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('kalemler-drag-over'); });
+        el.addEventListener('dragleave', () => el.classList.remove('kalemler-drag-over'));
+        el.addEventListener('drop', (e) => {
+            e.preventDefault();
+            el.classList.remove('kalemler-drag-over');
+            const nodeId = parseInt(e.dataTransfer?.getData('nodeId'), 10);
+            const existingId = parseInt(e.dataTransfer?.getData('existingId'), 10);
+            if (nodeId) addNodeToStaged(nodeId, { parentRef: null, parentId: item.id });
+            if (existingId && existingId !== item.id) reassignExistingParent(existingId, item.id);
+        });
+
+        el.draggable = true;
+        el.addEventListener('dragstart', (e) => { try { e.dataTransfer?.setData('existingId', String(item.id)); } catch (_) { /* noop */ } });
+
+        if (node.children?.length) {
+            const childWrap = document.createElement('div');
+            childWrap.className = 'kalemler-offer-children';
+            for (const ch of node.children) {
+                if (ch._kind === 'existing' && kalemlerState.pendingDeletes.has(ch.id)) continue;
+                childWrap.appendChild(renderKalemlerUnifiedRow(ch, level + 1, editable));
+            }
+            el.appendChild(childWrap);
+        }
+
+        return el;
+    }
+
+    // staged
+    const item = node.staged;
+    const el = document.createElement('div');
+    el.className = 'kalemler-offer-item staged-item';
+    el.dataset.ref = item._ref;
+    el.style.setProperty('--kalemler-level', String(level));
+
+    const currentTitle = item.title_override || item._label || '';
+    const showOriginal = Boolean(item._label && item.title_override && item._label.trim() !== item.title_override.trim());
+
+    el.innerHTML = `
+      <div class="kalemler-offer-row">
+        <div class="kalemler-offer-title-wrap">
+          <input class="staged-title-input" value="${escapeHtml(String(currentTitle))}"
+                 placeholder="${escapeHtml(String(item._label || 'Başlık'))}" />
+          ${showOriginal ? `<span class="kalemler-offer-original" title="${escapeHtml(item._label)}">${escapeHtml(item._label)}</span>` : ''}
+        </div>
+        <input type="number" class="staged-qty-input" value="${escapeHtml(String(item.quantity || 1))}" min="1" />
+        <div class="kalemler-offer-actions">
+          <button type="button" class="btn btn-sm btn-outline-secondary staged-add-sub" title="Alt kalem ekle">+ alt</button>
+          <button type="button" class="btn btn-sm btn-outline-danger staged-remove" title="Kaldır">✕</button>
+          ${item._isCustom ? '<span class="badge bg-light text-dark border">custom</span>' : ''}
+        </div>
+      </div>
+    `;
+
+    el.querySelector('.staged-title-input')?.addEventListener('input', (e) => onStagedTitleChange(item._ref, e.target.value));
+    el.querySelector('.staged-qty-input')?.addEventListener('input', (e) => onStagedQtyChange(item._ref, e.target.value));
+    el.querySelector('.staged-add-sub')?.addEventListener('click', () => addCustomStaged({ parentRef: item._ref }));
+    el.querySelector('.staged-remove')?.addEventListener('click', () => removeStaged(item._ref));
+
+    // staged drop zone for catalog nodes
+    el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('kalemler-drag-over'); });
+    el.addEventListener('dragleave', () => el.classList.remove('kalemler-drag-over'));
+    el.addEventListener('drop', (e) => {
+        e.preventDefault();
+        el.classList.remove('kalemler-drag-over');
+        const nodeId = parseInt(e.dataTransfer?.getData('nodeId'), 10);
+        if (nodeId) addNodeToStaged(nodeId, { parentRef: item._ref, parentId: null });
+    });
+
+    if (node.children?.length) {
+        const childWrap = document.createElement('div');
+        childWrap.className = 'kalemler-offer-children';
+        for (const ch of node.children) childWrap.appendChild(renderKalemlerUnifiedRow(ch, level + 1, editable));
+        el.appendChild(childWrap);
+    }
+
+    return el;
+}
+
+async function handleDropOnOfferItem(targetItemId) {
+    if (kalemlerState.drag.type !== 'node' || !kalemlerState.drag.nodeId) return;
+    const nodeId = kalemlerState.drag.nodeId;
+    addNodeToStaged(nodeId, { parentRef: null, parentId: targetItemId });
+    kalemlerState.drag = { type: null, nodeId: null, itemId: null };
 }
 
 function buildFilesTab() {
@@ -1816,342 +2731,448 @@ function recalculatePricingTotalsFromInputs() {
 }
 
 function buildPricingTab() {
-    const allItems = offer.items || [];
-    // Flatten items to show all priceable items
-    const items = flattenItemsForPricing(allItems);
-    const revisions = offer.price_revisions || [];
-    const shippingPrice = offer.shipping_price ? parseFloat(offer.shipping_price) : 0;
-    const itemsTotal = items.reduce((sum, item) => {
-        const quantity = item.quantity || 1;
-        const unitPrice = item.unit_price ? parseFloat(item.unit_price) : null;
-        return unitPrice !== null && !isNaN(unitPrice) ? (sum + (unitPrice * quantity)) : sum;
-    }, 0);
-    const totalWeight = items.reduce((sum, item) => {
-        const quantity = item.quantity || 1;
-        const weightKg = item.weight_kg ? parseFloat(item.weight_kg) : null;
-        return weightKg !== null && !isNaN(weightKg) ? (sum + (weightKg * quantity)) : sum;
-    }, 0);
-    const totalPrice = itemsTotal;
-    const totalKgPrice = totalWeight > 0 ? itemsTotal / totalWeight : null;
-    
-    let html = `
-        <div class="mb-4">
-            <h6 class="mb-3 d-flex align-items-center">
-                <i class="fas fa-tag me-2 text-primary"></i>Kalem Fiyatlandırması
-            </h6>
-            <div class="row g-2 mb-3">
-                <div class="col-12 col-md-4">
-                    <label for="pricing-shipping-price" class="form-label fw-semibold mb-1">Nakliye Fiyatı (€)</label>
-                    <input type="number"
-                           id="pricing-shipping-price"
-                           class="form-control form-control-sm"
-                           value="${shippingPrice ? shippingPrice.toFixed(2) : ''}"
-                           placeholder="0.00"
-                           step="0.01"
-                           min="0">
-                </div>
-            </div>
-            ${items.length === 0 ? `
-                <div class="text-center text-muted py-4">
-                    <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
-                    Henüz kalem eklenmemiş. Önce kalemler sekmesinden kalem ekleyin.
-                </div>
-            ` : `
-                <div class="table-responsive">
-                    <table class="table table-bordered">
-                        <thead class="table-light">
-                            <tr>
-                                <th style="width: 40%;">Kalem</th>
-                                <th style="width: 10%;" class="text-center">Adet</th>
-                                <th style="width: 18%;">Birim Fiyat (€)</th>
-                                <th style="width: 14%;">Ağırlık (kg)</th>
-                                <th style="width: 16%;">Termin Süresi</th>
-                                <th style="width: 12%;" class="text-end">Kg Fiyatı (€/kg)</th>
-                                <th style="width: 15%;" class="text-end">Ara Toplam (€)</th>
-                            </tr>
-                        </thead>
-                        <tbody id="pricing-items-tbody">
-                            ${items.map(item => {
-                                const unitPrice = item.unit_price ? parseFloat(item.unit_price) : '';
-                                const weightKg = item.weight_kg ? parseFloat(item.weight_kg) : '';
-                                const quantity = item.quantity || 1;
-                                const subtotal = unitPrice !== '' ? (parseFloat(unitPrice) * quantity) : '';
-                                const title = item.resolved_title || item.title_override || item.title || '-';
-                                const kgPrice = unitPrice && weightKg ? (parseFloat(unitPrice) / parseFloat(weightKg)) : null;
-                                return `
-                                    <tr class="pricing-item-row" data-item-id="${item.id}">
-                                        <td>${escapeHtml(title)}</td>
-                                        <td class="text-center">${quantity}</td>
-                                        <td>
-                                            <input type="number" 
-                                                   class="form-control form-control-sm pricing-unit-price" 
-                                                   data-item-id="${item.id}"
-                                                   value="${unitPrice}" 
-                                                   placeholder="0.00" 
-                                                   step="0.01" 
-                                                   min="0">
-                                        </td>
-                                        <td>
-                                            <input type="number" 
-                                                   class="form-control form-control-sm pricing-weight-kg" 
-                                                   data-item-id="${item.id}"
-                                                   value="${weightKg}" 
-                                                   placeholder="0.00" 
-                                                   step="0.01" 
-                                                   min="0">
-                                        </td>
-                                        <td>
-                                            <input type="text"
-                                                   class="form-control form-control-sm pricing-delivery-period"
-                                                   data-item-id="${item.id}"
-                                                   value="${escapeHtml(String(item.delivery_period || ''))}"
-                                                   placeholder="Örn. 4 ay, 6 hafta">
-                                        </td>
-                                        <td class="text-end">
-                                                <span class="pricing-kg-price" data-item-id="${item.id}">
-                                                    ${kgPrice != null ? kgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}
-                                                </span>
-                                            </td>
-                                            <td class="text-end">
-                                            <span class="pricing-subtotal" data-item-id="${item.id}">
-                                                ${subtotal ? subtotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                `;
-                            }).join('')}
-                        </tbody>
-                        <tfoot class="table-light">
-                            <tr>
-                                <th colspan="6" class="text-end">Toplam:</th>
-                                <th class="text-end">
-                                    <span id="pricing-total-price">${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span> €
-                                </th>
-                            </tr>
-                            <tr>
-                                <th colspan="6" class="text-end">Nakliye Fiyatı:</th>
-                                <th class="text-end">
-                                    <span id="pricing-shipping-price-display">${shippingPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span> €
-                                </th>
-                            </tr>
-                            <tr>
-                                <th colspan="6" class="text-end">Toplam Ağırlık:</th>
-                                <th class="text-end">
-                                    <span id="pricing-total-weight">${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span> kg
-                                </th>
-                            </tr>
-                            <tr>
-                                <th colspan="6" class="text-end">Ortalama Kg Fiyatı:</th>
-                                <th class="text-end">
-                                    <span id="pricing-total-kg-price">${totalKgPrice != null ? totalKgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-'}</span> €/kg
-                                </th>
-                            </tr>
-                        </tfoot>
-                    </table>
-                </div>
-            `}
+    const mode = offer?.pricing_mode || 'flat';
+    const statusLabel = OFFER_STATUS_MAP[offer?.status] || offer?.status || '-';
+    const revisions = Array.isArray(offer?.price_revisions) ? offer.price_revisions : [];
+    const sortedRevisions = revisions.slice().sort((a, b) => (new Date(b.created_at || 0)).getTime() - (new Date(a.created_at || 0)).getTime());
+    const historyRows = sortedRevisions.map((r) => {
+        const dt = r?.created_at ? new Date(r.created_at) : null;
+        const createdAt = dt && !Number.isNaN(dt.getTime()) ? dt.toLocaleString('tr-TR') : '-';
+        const amount = r?.amount != null && r?.amount !== '' ? escapeHtml(String(r.amount)) : '-';
+        const currency = r?.currency_display || r?.currency || '';
+        const type = r?.revision_type_display || r?.revision_type || '-';
+        const round = r?.approval_round != null ? `R${escapeHtml(String(r.approval_round))}` : '';
+        const by = r?.created_by_name || '-';
+        const notes = r?.notes ? escapeHtml(String(r.notes)) : '';
+        const currentBadge = r?.is_current ? '<span class="badge bg-success ms-2">aktif</span>' : '';
+        return `
+          <tr>
+            <td class="text-muted small">${escapeHtml(createdAt)}</td>
+            <td>${escapeHtml(String(type))} <span class="text-muted small">${round}</span>${currentBadge}</td>
+            <td class="text-end fw-semibold">${amount} ${escapeHtml(String(currency))}</td>
+            <td>${escapeHtml(String(by))}</td>
+            <td class="text-muted small">${notes || '-'}</td>
+          </tr>
+        `;
+    }).join('');
+
+    const historyHtml = sortedRevisions.length ? `
+      <div class="pricing-history mb-3">
+        <div class="d-flex align-items-center justify-content-between mb-2">
+          <div class="fw-semibold"><i class="fas fa-history me-2 text-muted"></i>Fiyat Geçmişi</div>
         </div>
+        <div class="table-responsive">
+          <table class="table table-sm table-bordered mb-0">
+            <thead class="table-light">
+              <tr>
+                <th style="width: 190px;">Tarih</th>
+                <th>Revizyon</th>
+                <th style="width: 180px;" class="text-end">Tutar</th>
+                <th style="width: 180px;">Oluşturan</th>
+                <th>Not</th>
+              </tr>
+            </thead>
+            <tbody>${historyRows}</tbody>
+          </table>
+        </div>
+      </div>
+    ` : '';
+
+    const modeInfo = `Ana kalem modu: sadece ana kalemlerde birim fiyat girilebilir.\nAlt kalem modu: sadece alt kalemlerde birim fiyat girilebilir; üst kalemler otomatik toplanır.`;
+
+    return `
+      <div class="pricing-v2">
+        <div class="pricing-v2-header d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+          <div class="d-flex align-items-center gap-3 flex-wrap">
+            <div class="fw-semibold"><i class="fas fa-tag me-2 text-primary"></i>Fiyatlandırma</div>
+            <div class="text-muted small">Teklif: <span class="fw-semibold">${escapeHtml(String(offer?.offer_no || offer?.id || '—'))}</span></div>
+            <div class="text-muted small">Durum: <span class="fw-semibold">${escapeHtml(String(statusLabel))}</span></div>
+          </div>
+          <div class="d-flex align-items-center gap-2 flex-wrap">
+            <label class="text-muted small mb-0" for="pricing-mode-select">Mod</label>
+            <select id="pricing-mode-select" class="form-select form-select-sm" style="width: 160px;">
+              <option value="flat" ${mode === 'flat' ? 'selected' : ''}>Ana kalem</option>
+              <option value="leaf" ${mode === 'leaf' ? 'selected' : ''}>Alt kalem</option>
+            </select>
+            <span class="pricing-mode-info" data-tooltip="${escapeHtml(modeInfo)}"><i class="fas fa-info-circle"></i></span>
+            <span id="pricing-unsaved-indicator" class="badge bg-warning text-dark border" style="display:none;">
+              <i class="fas fa-exclamation-triangle me-1"></i>Kaydedilmedi
+            </span>
+          </div>
+        </div>
+
+        ${historyHtml}
+
+        ${(offer?.items || []).length === 0 ? `
+          <div class="text-center text-muted py-4">
+            <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+            Henüz kalem eklenmemiş. Önce kalemler sekmesinden kalem ekleyin.
+          </div>
+        ` : `
+          <div class="table-responsive">
+            <table class="table table-bordered table-sm align-middle pricing-table-v2">
+              <thead class="table-light">
+                <tr>
+                  <th>Kalem</th>
+                  <th style="width: 96px;" class="text-center">Adet</th>
+                  <th style="width: 180px;">Birim Fiyat</th>
+                  <th style="width: 160px;" class="text-end">Ara Toplam</th>
+                  <th style="width: 220px;">Termin</th>
+                  <th style="width: 260px;">Not</th>
+                </tr>
+              </thead>
+              <tbody id="pricing-tbody"></tbody>
+            </table>
+          </div>
+        `}
+
+        <div class="pricing-v2-totals mt-3 p-3 border rounded bg-light">
+          <div class="row g-2 align-items-center">
+            <div class="col-12 col-md-6"></div>
+            <div class="col-12 col-md-6">
+              <div class="d-flex align-items-center justify-content-end gap-2 mb-2">
+                <label class="mb-0 text-muted small" for="pricing-shipping-input">Nakliye</label>
+                <input id="pricing-shipping-input" type="number" min="0" step="0.01" class="form-control form-control-sm" style="max-width: 160px;"
+                  value="${offer?.shipping_price != null && offer?.shipping_price !== '' ? escapeHtml(String(offer.shipping_price)) : ''}"
+                  placeholder="0.00" />
+              </div>
+              <div class="pricing-bill">
+                <div class="pricing-bill-row"><span class="text-muted">Kalemler</span><strong id="pricing-items-total">—</strong></div>
+                <div class="pricing-bill-row"><span class="text-muted">Nakliye</span><strong id="pricing-shipping-total">—</strong></div>
+                <div class="pricing-bill-row pricing-bill-grand"><span class="text-muted">Genel Toplam</span><strong id="pricing-grand-total">—</strong></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     `;
-
-    if (revisions.length > 0) {
-        html += `
-            <div class="mt-4">
-                <h6 class="mb-3 d-flex align-items-center">
-                    <i class="fas fa-history me-2 text-primary"></i>Fiyatlandırma Geçmişi
-                </h6>`;
-        revisions.forEach((r) => {
-            const sym = CURRENCY_SYMBOLS[r.currency] || r.currency;
-            const counterSym = CURRENCY_SYMBOLS[r.counter_currency] || r.counter_currency || '';
-            const isCurrent = r.is_current;
-            const revisionLabel = r.revision_type_display || REVISION_TYPE_MAP[r.revision_type] || '';
-            const borderClass = isCurrent ? 'border-primary border-2' : 'border-secondary';
-            html += `
-            <div class="card mb-3 ${borderClass}">
-                <div class="card-body">
-                    <div class="d-flex justify-content-between align-items-start flex-wrap gap-2 mb-2">
-                        <div class="d-flex align-items-center flex-wrap gap-2">
-                            <span class="badge bg-light text-dark">${revisionLabel}</span>
-                            ${isCurrent ? '<span class="badge bg-success">Güncel</span>' : ''}
-                        </div>
-                        <small class="text-muted">${formatDateTime(r.created_at)} · ${r.created_by_name || '—'}</small>
-                    </div>
-                    <div class="d-flex align-items-baseline flex-wrap gap-2 mb-1">
-                        <span class="fs-5 fw-bold ${isCurrent ? 'text-primary' : ''}">${sym} ${parseFloat(r.amount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                    </div>`;
-            if (r.counter_amount != null && parseFloat(r.counter_amount) > 0) {
-                html += `
-                    <div class="mt-2 pt-2 border-top border-light">
-                        <small class="text-muted">Karşı teklif:</small>
-                        <span class="ms-2 text-warning fw-medium">${counterSym} ${parseFloat(r.counter_amount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</span>
-                    </div>`;
-            }
-            if (r.notes) {
-                html += `
-                    <div class="mt-2 pt-2 border-top border-light">
-                        <small class="text-muted d-block mb-1">Yorum</small>
-                        <p class="mb-0 small">${r.notes}</p>
-                    </div>`;
-            }
-            html += `
-                </div>
-            </div>`;
-        });
-        html += `</div>`;
-    }
-
-    return html;
 }
 
 function attachPricingTabListeners() {
-    const tbody = document.getElementById('pricing-items-tbody');
-    const shippingPriceInput = document.getElementById('pricing-shipping-price');
+    initPricingV3Tab();
+}
 
-    if (tbody) {
-        // Update subtotal, kg price and totals immediately on input (no auto-save)
-        tbody.addEventListener('input', (e) => {
-            const input = e.target;
-            if (!input.classList.contains('pricing-unit-price') && !input.classList.contains('pricing-weight-kg')) return;
+// ─── Pricing Tab v3 (local edits, one POST /set-prices/) ──────────────
 
-            const row = input.closest('tr');
-            const quantity = parseInt(row.querySelector('td:nth-child(2)').textContent.trim(), 10) || 1;
+const pricingV3State = {
+    offer: null,
+    items: [],
+    itemsFlat: {},
+    localEdits: {},
+    pricingMode: 'flat',
+    shippingPrice: 0,
+    hasUnsavedChanges: false
+};
 
-            const unitPriceInput = row.querySelector('.pricing-unit-price');
-            const weightInput = row.querySelector('.pricing-weight-kg');
-            const subtotalEl = row.querySelector('.pricing-subtotal');
-            const kgPriceEl = row.querySelector('.pricing-kg-price');
+let pricingV3BeforeUnloadAttached = false;
 
-            const unitPrice = parsePricingNumber(unitPriceInput ? unitPriceInput.value : null);
-            const weightKg = parsePricingNumber(weightInput ? weightInput.value : null);
+function initPricingV3Tab() {
+    if (!offerId || !offer) return;
 
-            if (unitPrice !== null && unitPrice >= 0) {
-                const subtotal = unitPrice * quantity;
-                if (subtotalEl) {
-                    subtotalEl.textContent = subtotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
-                }
-            } else if (subtotalEl) {
-                subtotalEl.textContent = '-';
-            }
+    pricingV3State.offer = offer;
+    pricingV3State.items = Array.isArray(offer.items) ? offer.items : [];
+    pricingV3State.itemsFlat = {};
+    pricingV3State.localEdits = {};
+    pricingV3State.pricingMode = offer.pricing_mode || 'flat';
+    pricingV3State.shippingPrice = parseFloat(offer.shipping_price) || 0;
+    pricingV3State.hasUnsavedChanges = false;
 
-            if (kgPriceEl) {
-                if (unitPrice !== null && weightKg !== null && weightKg > 0) {
-                    const kgPrice = unitPrice / weightKg;
-                    kgPriceEl.textContent = kgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 });
-                } else {
-                    kgPriceEl.textContent = '-';
-                }
-            }
+    buildPricingV3FlatMap(pricingV3State.items);
 
-            recalculatePricingTotalsFromInputs();
+    // seed local edits
+    for (const item of Object.values(pricingV3State.itemsFlat)) {
+        pricingV3State.localEdits[item.id] = {
+            unit_price: item.unit_price != null && item.unit_price !== '' ? parseFloat(item.unit_price) : null,
+            quantity: parseInt(item.quantity, 10) || 1,
+            weight_kg: item.weight_kg != null && item.weight_kg !== '' ? parseFloat(item.weight_kg) : null,
+            delivery_period: item.delivery_period || '',
+            notes: item.notes || ''
+        };
+    }
+
+    renderPricingV3Hint();
+    renderPricingV3Table();
+    renderPricingV3Totals();
+    markPricingV3Unsaved(false);
+
+    const modeSelect = document.getElementById('pricing-mode-select');
+    if (modeSelect) {
+        modeSelect.addEventListener('change', (e) => {
+            changePricingV3Mode(String(e.target.value || 'flat'));
         });
     }
 
-    if (shippingPriceInput) {
-        shippingPriceInput.addEventListener('input', () => {
-            recalculatePricingTotalsFromInputs();
+    const shippingInput = document.getElementById('pricing-shipping-input');
+    if (shippingInput) {
+        shippingInput.value = pricingV3State.shippingPrice ? String(pricingV3State.shippingPrice) : '';
+        shippingInput.addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            pricingV3State.shippingPrice = Number.isFinite(val) && val >= 0 ? val : 0;
+            pricingV3State.hasUnsavedChanges = true;
+            renderPricingV3Totals();
+            markPricingV3Unsaved(true);
         });
     }
 
-    recalculatePricingTotalsFromInputs();
+    // generic notes are captured on "submit approval" modal, not here
+
+    if (!pricingV3BeforeUnloadAttached) {
+        pricingV3BeforeUnloadAttached = true;
+        window.addEventListener('beforeunload', (e) => {
+            if (pricingV3State.hasUnsavedChanges) {
+                e.preventDefault();
+                e.returnValue = '';
+            }
+        });
+    }
+
+    // Pricing actions are handled via modal footer buttons (single action area).
+}
+
+function buildPricingV3FlatMap(items) {
+    for (const item of items || []) {
+        pricingV3State.itemsFlat[item.id] = item;
+        if (item.children?.length) buildPricingV3FlatMap(item.children);
+    }
+}
+
+function isPricingV3Editable(item) {
+    if (pricingV3State.pricingMode === 'flat') return item.parent === null;
+    if (pricingV3State.pricingMode === 'leaf') return !(item.children && item.children.length);
+    return false;
+}
+
+function computePricingV3Subtotal(item) {
+    const edits = pricingV3State.localEdits[item.id];
+    if (!edits) return null;
+
+    if (pricingV3State.pricingMode === 'leaf' && item.children?.length) {
+        let sum = 0;
+        let any = false;
+        for (const child of item.children) {
+            const s = computePricingV3Subtotal(child);
+            if (s != null) {
+                sum += s;
+                any = true;
+            }
+        }
+        return any ? sum : null;
+    }
+
+    if (edits.unit_price != null) return edits.unit_price * (edits.quantity || 1);
+    return null;
+}
+
+function renderPricingV3Hint() {
+    const el = document.getElementById('pricing-hint');
+    if (!el) return;
+    el.textContent = pricingV3State.pricingMode === 'flat'
+        ? 'Ana kalem modu: sadece ana kalemlerde birim fiyat girilebilir.'
+        : 'Alt kalem modu: sadece alt kalemlerde birim fiyat girilebilir; üst kalemler otomatik toplanır.';
+}
+
+function renderPricingV3Table() {
+    const tbody = document.getElementById('pricing-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+    for (const item of pricingV3State.items) {
+        renderPricingV3Row(item, tbody, 0);
+    }
+}
+
+function renderPricingV3Row(item, container, depth) {
+    const editable = isPricingV3Editable(item);
+    const isRolledUp = pricingV3State.pricingMode === 'leaf' && item.children?.length > 0;
+    const edits = pricingV3State.localEdits[item.id];
+
+    const tr = document.createElement('tr');
+    tr.dataset.itemId = String(item.id);
+
+    const title = item.resolved_title || item.title_override || item.title || (item.template_node_detail?.title ?? '-') || '-';
+    const isCustom = !item.template_node;
+    const subtotal = computePricingV3Subtotal(item);
+    const qty = edits?.quantity ?? 1;
+
+    tr.innerHTML = `
+      <td style="padding-left:${depth * 20 + 8}px">
+        ${depth > 0 ? '<span class="pricing-tree-prefix">└─</span>' : ''}
+        ${escapeHtml(String(title))}
+        ${isCustom ? '<span class="badge bg-light text-dark border ms-2">custom</span>' : ''}
+      </td>
+      <td class="text-center">
+        <span>${escapeHtml(String(qty))}</span>
+      </td>
+      <td>
+        ${editable
+            ? `<input type="number" min="0" step="0.01" class="form-control form-control-sm pricing-unit-input" value="${edits?.unit_price ?? ''}" placeholder="—" />`
+            : `<span class="pricing-locked ${isRolledUp ? 'is-rollup' : 'is-locked'}">
+                 ${isRolledUp ? (subtotal != null ? formatPricingV3Money(subtotal / (qty || 1)) : '—') : '—'}
+               </span>`
+        }
+      </td>
+      <td class="text-end" id="subtotal-${item.id}">
+        ${subtotal != null ? formatPricingV3Money(subtotal) : '—'}
+      </td>
+      <td>
+        ${editable
+            ? `<input type="text" class="form-control form-control-sm pricing-period-input" value="${escapeHtml(String(edits?.delivery_period || ''))}" placeholder="Örn. 6 ay" />`
+            : ''
+        }
+      </td>
+      <td>
+        ${editable
+            ? `<input type="text" class="form-control form-control-sm pricing-notes-input" value="${escapeHtml(String(edits?.notes || ''))}" placeholder="Not" />`
+            : (edits?.notes ? `<div class="text-muted small">${escapeHtml(String(edits.notes))}</div>` : '')
+        }
+      </td>
+    `;
+
+    container.appendChild(tr);
+
+    const unitInput = tr.querySelector('.pricing-unit-input');
+    if (unitInput) unitInput.addEventListener('input', (e) => setPricingV3Edit(item.id, 'unit_price', e.target.value === '' ? null : +e.target.value));
+    const periodInput = tr.querySelector('.pricing-period-input');
+    if (periodInput) periodInput.addEventListener('input', (e) => setPricingV3Edit(item.id, 'delivery_period', e.target.value));
+    const notesInput = tr.querySelector('.pricing-notes-input');
+    if (notesInput) notesInput.addEventListener('input', (e) => setPricingV3Edit(item.id, 'notes', e.target.value));
+
+    for (const child of (item.children || [])) {
+        renderPricingV3Row(child, container, depth + 1);
+    }
+}
+
+function setPricingV3Edit(itemId, field, value) {
+    if (!pricingV3State.localEdits[itemId]) return;
+    if (field === 'quantity') return; // quantity is managed in "kalemler", read-only here
+    pricingV3State.localEdits[itemId][field] = value;
+    pricingV3State.hasUnsavedChanges = true;
+
+    refreshPricingV3SubtotalDisplays(itemId);
+    renderPricingV3Totals();
+    markPricingV3Unsaved(true);
+}
+
+function refreshPricingV3SubtotalDisplays(changedItemId) {
+    const item = pricingV3State.itemsFlat[changedItemId];
+    if (!item) return;
+
+    const cell = document.getElementById(`subtotal-${changedItemId}`);
+    const s = computePricingV3Subtotal(item);
+    if (cell) cell.textContent = s != null ? formatPricingV3Money(s) : '—';
+
+    if (pricingV3State.pricingMode === 'leaf') {
+        for (const candidate of Object.values(pricingV3State.itemsFlat)) {
+            if (candidate.children?.length && pricingV3HasDescendant(candidate, changedItemId)) {
+                const c = document.getElementById(`subtotal-${candidate.id}`);
+                const ss = computePricingV3Subtotal(candidate);
+                if (c) c.textContent = ss != null ? formatPricingV3Money(ss) : '—';
+            }
+        }
+    }
+}
+
+function pricingV3HasDescendant(item, targetId) {
+    for (const child of (item.children || [])) {
+        if (child.id === targetId || pricingV3HasDescendant(child, targetId)) return true;
+    }
+    return false;
+}
+
+function formatPricingV3Money(amount) {
+    if (amount == null) return '—';
+    const currency = pricingV3State.offer?.current_price?.currency || pricingV3State.offer?.currency || 'EUR';
+    return new Intl.NumberFormat('tr-TR', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
+}
+
+function renderPricingV3Totals() {
+    let itemsTotal = 0;
+    for (const root of pricingV3State.items) {
+        const s = computePricingV3Subtotal(root);
+        if (s != null) itemsTotal += s;
+    }
+    const shipping = (pricingV3State.shippingPrice || 0);
+    const grand = itemsTotal + shipping;
+    const itemsEl = document.getElementById('pricing-items-total');
+    const shippingEl = document.getElementById('pricing-shipping-total');
+    const grandEl = document.getElementById('pricing-grand-total');
+    if (itemsEl) itemsEl.textContent = formatPricingV3Money(itemsTotal);
+    if (shippingEl) shippingEl.textContent = formatPricingV3Money(shipping);
+    if (grandEl) grandEl.textContent = formatPricingV3Money(grand);
+}
+
+function markPricingV3Unsaved(hasChanges) {
+    pricingV3State.hasUnsavedChanges = Boolean(hasChanges);
+    const ind = document.getElementById('pricing-unsaved-indicator');
+    if (ind) ind.style.display = hasChanges ? 'inline-flex' : 'none';
+}
+
+function changePricingV3Mode(newMode) {
+    if (newMode === pricingV3State.pricingMode) return;
+    const modeSelect = document.getElementById('pricing-mode-select');
+
+    const hasAnyPrice = Object.values(pricingV3State.localEdits).some(e => e.unit_price != null);
+    const apply = () => {
+        pricingV3State.pricingMode = newMode;
+        for (const edits of Object.values(pricingV3State.localEdits)) {
+            edits.unit_price = null;
+        }
+        pricingV3State.hasUnsavedChanges = true;
+        renderPricingV3Hint();
+        renderPricingV3Table();
+        renderPricingV3Totals();
+        markPricingV3Unsaved(true);
+    };
+
+    if (hasAnyPrice) {
+        showActionConfirm({
+            title: 'Fiyatlandırma Modu',
+            message: 'Mod değişikliği girilen fiyatları temizleyecek. Devam edilsin mi?',
+            onConfirm: apply,
+            onCancel: () => { if (modeSelect) modeSelect.value = pricingV3State.pricingMode; }
+        });
+    } else {
+        apply();
+    }
+}
+
+async function savePricingV3Prices() {
+    if (!pricingV3State.offer) return;
+
+    const payload = {
+        pricing_mode: pricingV3State.pricingMode,
+        shipping_price: pricingV3State.shippingPrice,
+        items: Object.entries(pricingV3State.localEdits).map(([id, edits]) => ({
+            id: parseInt(id, 10),
+            unit_price: edits.unit_price,
+            quantity: edits.quantity,
+            notes: edits.notes || '',
+            weight_kg: edits.weight_kg,
+            delivery_period: edits.delivery_period
+        }))
+    };
+
+    const footerSaveBtn = viewOfferModal?.container?.querySelector('#save-prices-btn');
+    if (footerSaveBtn) footerSaveBtn.disabled = true;
+
+    try {
+        const result = await setOfferPrices(pricingV3State.offer.id, payload);
+        // expected result: { offer, items }
+        if (result?.offer) offer = result.offer;
+        if (result?.items) offer.items = result.items;
+
+        // Re-init from server truth
+        initPricingV3Tab();
+        markPricingV3Unsaved(false);
+        showNotification('Fiyatlar kaydedildi', 'success');
+    } catch (e) {
+        showNotification(parseError(e, 'Fiyatlar kaydedilemedi'), 'error');
+    } finally {
+        if (footerSaveBtn) footerSaveBtn.disabled = false;
+    }
 }
 
 async function saveAllPrices() {
-    const tbody = document.getElementById('pricing-items-tbody');
-    const shippingPriceInput = document.getElementById('pricing-shipping-price');
-    if (!tbody && !shippingPriceInput) return;
-
-    const rows = tbody ? tbody.querySelectorAll('.pricing-item-row') : [];
-    const savePromises = [];
-
-    for (const row of rows) {
-        const itemId = parseInt(row.dataset.itemId, 10);
-        const unitPriceInput = row.querySelector('.pricing-unit-price');
-        const weightInput = row.querySelector('.pricing-weight-kg');
-        const deliveryPeriodInput = row.querySelector('.pricing-delivery-period');
-        
-        const unitPrice = unitPriceInput.value ? parseFloat(unitPriceInput.value) : null;
-        const weightKg = weightInput.value ? parseFloat(weightInput.value) : null;
-        const deliveryPeriod = deliveryPeriodInput ? String(deliveryPeriodInput.value || '').trim() : '';
-        
-        // Prepare data for API (only send fields that have values)
-        const data = {};
-        if (unitPrice !== null && !isNaN(unitPrice) && unitPrice >= 0) {
-            data.unit_price = unitPrice.toFixed(2);
-        }
-        if (weightKg !== null && !isNaN(weightKg) && weightKg >= 0) {
-            data.weight_kg = weightKg.toFixed(2);
-        }
-        // CharField (blank=True, null=False) => send '' instead of null when empty
-        if (deliveryPeriodInput) {
-            data.delivery_period = deliveryPeriod;
-        }
-        
-        // Only save if there's data to send
-        if (Object.keys(data).length > 0) {
-            savePromises.push(patchOfferItem(offerId, itemId, data));
-        }
-    }
-
-    const shippingPrice = parsePricingNumber(shippingPriceInput ? shippingPriceInput.value : null);
-    if (shippingPrice !== null && shippingPrice >= 0) {
-        savePromises.push(patchOffer(offerId, { shipping_price: shippingPrice.toFixed(2) }));
-    }
-
-    if (savePromises.length === 0) {
-        showNotification('Kaydedilecek fiyat bulunamadı', 'info');
-        return;
-    }
-
-    try {
-        await Promise.all(savePromises);
-        // Refresh offer to get updated totals and items
-        const updatedOffer = await getOffer(offerId);
-        offer.total_price = updatedOffer.total_price;
-        offer.total_weight_kg = updatedOffer.total_weight_kg;
-        offer.shipping_price = updatedOffer.shipping_price;
-        offer.items = updatedOffer.items || [];
-
-        // Update all subtotals, kg prices and input values to match server response
-        const allItems = flattenItemsForPricing(offer.items);
-        allItems.forEach(item => {
-            const subtotalEl = document.querySelector(`.pricing-subtotal[data-item-id="${item.id}"]`);
-            if (subtotalEl) {
-                subtotalEl.textContent = item.subtotal ? parseFloat(item.subtotal).toLocaleString('tr-TR', { minimumFractionDigits: 2 }) : '-';
-            }
-            const unitPriceInput = document.querySelector(`.pricing-unit-price[data-item-id="${item.id}"]`);
-            const weightInput = document.querySelector(`.pricing-weight-kg[data-item-id="${item.id}"]`);
-            const kgPriceEl = document.querySelector(`.pricing-kg-price[data-item-id="${item.id}"]`);
-            const deliveryPeriodInput = document.querySelector(`.pricing-delivery-period[data-item-id="${item.id}"]`);
-            if (unitPriceInput) {
-                unitPriceInput.value = item.unit_price ? parseFloat(item.unit_price).toFixed(2) : '';
-            }
-            if (weightInput) {
-                weightInput.value = item.weight_kg ? parseFloat(item.weight_kg).toFixed(2) : '';
-            }
-            if (deliveryPeriodInput) {
-                deliveryPeriodInput.value = item.delivery_period ? String(item.delivery_period) : '';
-            }
-            if (kgPriceEl) {
-                const u = item.unit_price ? parseFloat(item.unit_price) : null;
-                const w = item.weight_kg ? parseFloat(item.weight_kg) : null;
-                if (u != null && !isNaN(u) && w != null && !isNaN(w) && w > 0) {
-                    kgPriceEl.textContent = (u / w).toLocaleString('tr-TR', { minimumFractionDigits: 2 });
-                } else {
-                    kgPriceEl.textContent = '-';
-                }
-            }
-        });
-
-        if (shippingPriceInput) {
-            const shipping = offer.shipping_price ? parseFloat(offer.shipping_price) : 0;
-            shippingPriceInput.value = shipping > 0 ? shipping.toFixed(2) : '';
-        }
-
-        recalculatePricingTotalsFromInputs();
-        
-        showNotification('Fiyatlar kaydedildi', 'success');
-    } catch (e) {
-        showNotification(parseError(e, 'Fiyatlar kaydedilirken hata oluştu'), 'error');
-    }
+    await savePricingV3Prices();
 }
 
 function buildApprovalTab() {
@@ -2162,7 +3183,7 @@ function buildApprovalTab() {
         </h6>
         <div class="text-center text-muted py-4">
             <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
-            Henüz onay süreci başlatılmamış. Teklif fiyatlandırıldıktan sonra "Onaya Gönder" ile süreci başlatabilirsiniz.
+            Henüz onay süreci başlatılmamış.
         </div>`;
     const loadingState = `
         <h6 class="mb-3 d-flex align-items-center">
@@ -2194,7 +3215,8 @@ function getOfferModalFooterHtml(tabId) {
     if (tabId === 'genel') {
         if (editable) parts.push(`<button type="button" class="${actionClass}" id="edit-offer-btn"><i class="fas fa-edit me-1"></i>Düzenle</button>`);
     } else if (tabId === 'kalemler') {
-        if (editable) parts.push(`<button type="button" class="${actionClass}" id="add-items-btn"><i class="fas fa-plus me-1"></i>Kalem Ekle</button>`);
+        if (editable) parts.push(`<button type="button" class="${actionClass}" id="submit-staged-items-btn"><i class="fas fa-save me-1"></i>Değişiklikleri Kaydet</button>`);
+        if (editable) parts.push(`<button type="button" class="btn btn-sm btn-outline-secondary" id="discard-kalemler-changes-btn"><i class="fas fa-undo me-1"></i>Vazgeç</button>`);
     } else if (tabId === 'dosyalar') {
         if (!closed) {
             parts.push(`<button type="button" class="btn btn-sm btn-success" id="download-all-files-btn"><i class="fas fa-download me-1"></i>Tümünü İndir (ZIP)</button>`);
@@ -2203,12 +3225,10 @@ function getOfferModalFooterHtml(tabId) {
     } else if (tabId === 'consultations') {
         if (canSendConsultations) parts.push(`<button type="button" class="${actionClass}" id="send-consultations-btn"><i class="fas fa-paper-plane me-1"></i>Departman Görüşü Gönder</button>`);
     } else if (tabId === 'pricing') {
-        if (editable) parts.push(`<button type="button" class="${actionClass}" id="save-prices-btn"><i class="fas fa-save me-1"></i>Fiyatları Kaydet</button>`);
-        if (canSubmitApproval) parts.push(`<button type="button" class="${actionClass}" id="submit-approval-from-pricing-btn"><i class="fas fa-gavel me-1"></i>Onaya Gönder</button>`);
+        if (editable) parts.push(`<button type="button" class="btn btn-sm btn-primary" id="save-prices-btn"><i class="fas fa-save me-1"></i>Fiyatları Kaydet</button>`);
+        if (canSubmitApproval) parts.push(`<button type="button" class="btn btn-sm btn-danger" id="submit-approval-from-pricing-btn"><i class="fas fa-gavel me-1"></i>Onaya Gönder</button>`);
     } else if (tabId === 'approval') {
-        if (canSubmitApproval) {
-            parts.push(`<button type="button" class="${actionClass}" id="submit-approval-btn"><i class="fas fa-gavel me-1"></i>Onaya Gönder</button>`);
-        }
+        // approval actions are handled in the approval tab itself (decide buttons) when relevant
     }
 
     return `<div class="d-flex gap-2 flex-wrap align-items-center justify-content-end ms-auto">${parts.join('')}${closeBtn}</div>`;
@@ -3504,9 +4524,9 @@ function showPriceModal(onSuccess) {
     modal.show();
 }
 
-async function handleSubmitApproval(onSuccess) {
+async function handleSubmitApproval(onSuccess, notes = '') {
     try {
-        await submitApproval(offerId);
+        await submitApproval(offerId, { notes: String(notes || '') });
         showNotification('Onaya gönderildi', 'success');
         await onSuccess();
     } catch (e) {
@@ -3515,11 +4535,28 @@ async function handleSubmitApproval(onSuccess) {
 }
 
 function showSubmitApprovalConfirm(onSuccess) {
-    if (!approvalConfirmModal) return;
-    approvalConfirmModal.show({
-        message: 'Teklifi onaya göndermek istediğinize emin misiniz?',
-        onConfirm: () => handleSubmitApproval(onSuccess)
+    const modal = new EditModal('submit-approval-modal-container', {
+        title: 'Onaya Gönder',
+        icon: 'fas fa-gavel',
+        size: 'md',
+        showEditButton: false,
+        saveButtonText: 'Gönder'
     });
+    modal.clearAll();
+    modal.addSection('Not');
+    modal.addField({
+        id: 'notes',
+        label: 'Not',
+        type: 'textarea',
+        placeholder: 'Örn. Initial pricing based on Q1 material costs',
+        required: false
+    });
+    modal.onSaveCallback(async (formData) => {
+        await handleSubmitApproval(onSuccess, formData?.notes || '');
+        modal.hide();
+    });
+    modal.render();
+    modal.show();
 }
 
 function showDecisionModal(onSuccess) {

@@ -25,6 +25,112 @@
         .offer-tab-content { padding: 0.5rem 0; }
         .item-row { border-color: #eee !important; }
         .approval-stage { border: 1px solid #e9ecef; border-radius: 8px; padding: 0.75rem; margin-bottom: 0.5rem; }
+        /* Kalemler tab (Catalog ↔ Offer Items) */
+        .kalemler-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        @media (max-width: 992px) { .kalemler-layout { grid-template-columns: 1fr; } }
+        .kalemler-panel { border: 1px solid #e9ecef; border-radius: 10px; background: #fff; overflow: hidden; }
+        .kalemler-panel-header { padding: 10px 12px; border-bottom: 1px solid #f0f2f5; background: #fafbfc; }
+        .kalemler-panel-body { padding: 10px 12px; max-height: 60vh; overflow: auto; }
+        .kalemler-templates { display: flex; flex-direction: column; gap: 8px; }
+        .kalemler-template-header { border: 1px solid #f0f2f5; border-radius: 10px; overflow: hidden; }
+        .kalemler-template-toggle { width: 100%; text-align: left; padding: 10px 10px; border: 0; background: #fff; display: flex; align-items: center; }
+        .kalemler-template-toggle:hover { background: #f8f9fa; }
+        .kalemler-template-body { padding: 8px 8px 10px 8px; border-top: 1px solid #f0f2f5; background: #fff; }
+        .kalemler-catalog-node { display: grid; grid-template-columns: 28px 1fr 38px; align-items: center; gap: 8px; padding: 7px 6px; border-radius: 8px; }
+        .kalemler-catalog-node:hover { background: #f8f9fa; }
+        .kalemler-node-toggle { width: 28px; height: 28px; border: 1px solid #e9ecef; border-radius: 8px; background: #fff; display: inline-flex; align-items: center; justify-content: center; }
+        .kalemler-node-toggle:disabled { opacity: .45; cursor: default; }
+        .kalemler-node-main { min-width: 0; }
+        .kalemler-node-title { font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        /* children container is appended inside a grid row; span full width */
+        .kalemler-catalog-children { grid-column: 1 / -1; width: 100%; margin-left: 18px; padding-left: 10px; border-left: 2px solid #eef1f5; }
+        .kalemler-search-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px; border: 1px solid #f0f2f5; border-radius: 10px; }
+        .kalemler-search-row:hover { background: #f8f9fa; }
+        .kalemler-offer-tree { display: flex; flex-direction: column; gap: 10px; }
+        .kalemler-offer-item { --indent: calc(var(--kalemler-level, 0) * 18px); margin-left: var(--indent); padding: 10px 10px; border: 1px solid #f0f2f5; border-radius: 10px; background: #fff; }
+        .kalemler-offer-item:hover { background: #fbfcfe; border-color: #e6eaf0; }
+        .kalemler-offer-row { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 10px; }
+        .kalemler-offer-title-wrap { min-width: 0; display: flex; flex-direction: column; }
+        .kalemler-offer-title { font-weight: 600; outline: none; min-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .kalemler-offer-title[contenteditable="true"] { border-bottom: 1px dashed #ced4da; padding: 1px 2px; }
+        .kalemler-offer-original { font-size: .82rem; color: #6c757d; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .kalemler-qty-btn { border: 0; }
+        .kalemler-qty-btn:disabled { opacity: .65; cursor: not-allowed; }
+        .kalemler-offer-actions { display: inline-flex; gap: 6px; justify-content: flex-end; }
+        .kalemler-offer-actions .btn { min-width: 44px; }
+        .kalemler-offer-children { margin-top: 8px; margin-left: 10px; padding-left: 10px; border-left: 2px solid #eef1f5; display: flex; flex-direction: column; gap: 10px; }
+        .kalemler-drag-over { outline: 2px solid rgba(13,110,253,.35); background: rgba(13,110,253,.04); }
+        /* Unsaved-new rows: amber left accent */
+        .staged-item { border-left: 3px solid #fd7e14 !important; background: #fffaf5 !important; }
+        .staged-item:hover { background: #fff4e9 !important; }
+        /* Existing rows with local edits: blue left accent */
+        .pending-edit-item { border-left: 3px solid #0d6efd !important; background: #f5f8ff !important; }
+        .pending-edit-item:hover { background: #ebf1ff !important; }
+        /* Staged title/qty inputs (used in unified list too) */
+        .staged-title-input {
+            width: 100%;
+            border: 0;
+            border-bottom: 1px dashed #ced4da;
+            outline: none;
+            padding: 1px 2px;
+            font-weight: 600;
+            background: transparent;
+        }
+        .staged-title-input::placeholder { color: #98a2b3; font-weight: 600; }
+        .staged-qty-input {
+            width: 72px;
+            text-align: center;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            padding: 4px 6px;
+        }
+        /* Pricing tab v2 */
+        .pricing-table-v2 .pricing-tree-prefix { color: #98a2b3; margin-right: 6px; }
+        .pricing-table-v2 .pricing-locked { display: inline-block; padding: 6px 8px; border-radius: 8px; background: #f6f7f9; color: #667085; }
+        .pricing-table-v2 .pricing-locked.is-rollup { background: #eef4ff; color: #2f5fcb; }
+        .pricing-table-v2 tr.is-saving { opacity: .65; }
+        .pricing-v2-totals { position: sticky; bottom: 0; z-index: 2; }
+        .pricing-bill { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
+        .pricing-bill-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: .95rem; }
+        .pricing-bill-row strong { font-variant-numeric: tabular-nums; }
+        .pricing-bill-grand { border-top: 1px dashed #dee2e6; padding-top: 8px; margin-top: 6px; }
+
+        .pricing-mode-info {
+            position: relative;
+            z-index: 50; /* ensure tooltip stacks above header/controls */
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 26px;
+            height: 26px;
+            border-radius: 8px;
+            border: 1px solid #e9ecef;
+            color: #6c757d;
+            background: #fff;
+            cursor: help;
+        }
+        .pricing-mode-info:hover { background: #f8f9fa; color: #495057; }
+        .pricing-mode-info::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            width: 340px;
+            white-space: pre-line;
+            background: rgba(33, 37, 41, 0.95);
+            color: #fff;
+            padding: 10px 12px;
+            border-radius: 10px;
+            font-size: .85rem;
+            line-height: 1.35;
+            box-shadow: 0 10px 30px rgba(0,0,0,.18);
+            z-index: 9999; /* above sticky totals and any overlays */
+            opacity: 0;
+            pointer-events: none;
+            transform: translateY(-2px);
+            transition: opacity .12s ease, transform .12s ease;
+        }
+        .pricing-mode-info:hover::after { opacity: 1; transform: translateY(0); }
         /* Kalem Ekle modal: same tab structure and CSS as main (display) modal */
         #add-items-modal-container .display-modal-tabs-container { width: 100%; }
         #add-items-modal-container .display-modal-tabs-container .nav-tabs {
@@ -93,12 +199,14 @@
     <div id="view-offer-modal-container"></div>
     <div id="edit-offer-modal-container"></div>
     <div id="add-items-modal-container"></div>
+    <div id="custom-offer-item-modal-container"></div>
     <div id="consultation-modal-container"></div>
     <div id="edit-consultation-modal-container"></div>
     <div id="price-modal-container"></div>
     <div id="approval-modal-container"></div>
     <div id="decision-modal-container"></div>
     <div id="file-upload-modal-container"></div>
+    <div id="submit-approval-modal-container"></div>
     <div id="approval-confirm-modal-container"></div>
     <div id="submit-customer-confirm-modal-container"></div>
     <div id="action-confirm-modal-container"></div>

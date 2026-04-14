@@ -155,6 +155,45 @@ export async function deleteOfferItem(offerId, itemId) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
 
+export async function setOfferPrices(offerId, payload) {
+    const response = await authedFetch(`${BASE}/${offerId}/set-prices/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || JSON.stringify(err) || `HTTP ${response.status}`);
+    }
+    return response.json();
+}
+
+export async function bulkUpdateOfferItems(offerId, items) {
+    const response = await authedFetch(`${BASE}/${offerId}/update-items/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items })
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || JSON.stringify(err) || `HTTP ${response.status}`);
+    }
+    return response.json();
+}
+
+export async function bulkDeleteOfferItems(offerId, ids) {
+    const response = await authedFetch(`${BASE}/${offerId}/delete-items/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids })
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || JSON.stringify(err) || `HTTP ${response.status}`);
+    }
+    return response.json();
+}
+
 // ── Offer Files ──────────────────────────────────────────────────────
 export async function listOfferFiles(offerId) {
     const response = await authedFetch(`${BASE}/${offerId}/files/`);
@@ -248,11 +287,11 @@ export async function getPriceHistory(offerId) {
     return response.json();
 }
 
-export async function submitApproval(offerId) {
+export async function submitApproval(offerId, data = {}) {
     const response = await authedFetch(`${BASE}/${offerId}/submit-approval/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify(data || {})
     });
     if (!response.ok) {
         const err = await response.json().catch(() => ({}));

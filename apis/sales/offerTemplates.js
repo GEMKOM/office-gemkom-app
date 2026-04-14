@@ -33,6 +33,14 @@ export async function getOfferTemplateNodeChildren(templateId, nodeId) {
     return response.json();
 }
 
+export async function searchOfferTemplateNodes(q) {
+    const qs = new URLSearchParams();
+    if (q) qs.append('q', q);
+    const response = await authedFetch(`${BASE}/nodes/search/${qs.toString() ? `?${qs.toString()}` : ''}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+}
+
 export async function createOfferTemplate(data) {
     const response = await authedFetch(`${BASE}/`, {
         method: 'POST',
