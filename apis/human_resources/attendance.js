@@ -103,6 +103,52 @@ export async function patchAttendanceHrRecord(recordId, patch = {}) {
 }
 
 // ---------------------------------------------------------------------------
+// Attendance HR: leave intervals
+// ---------------------------------------------------------------------------
+
+export async function fetchAttendanceHrRecordIntervals(recordId) {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/records/${recordId}/intervals/`, {
+        method: 'GET'
+    });
+    return parseJsonOrThrow(resp);
+}
+
+export async function createAttendanceHrRecordInterval(recordId, data = {}) {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/records/${recordId}/intervals/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data || {})
+    });
+    return parseJsonOrThrow(resp);
+}
+
+export async function patchAttendanceHrInterval(intervalId, patch = {}) {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/intervals/${intervalId}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch || {})
+    });
+    return parseJsonOrThrow(resp);
+}
+
+export async function deleteAttendanceHrInterval(intervalId) {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/intervals/${intervalId}/`, {
+        method: 'DELETE'
+    });
+    if (!resp.ok) {
+        let body = null;
+        try {
+            body = await resp.json();
+        } catch {
+            // ignore
+        }
+        const msg = body?.detail || body?.message || `HTTP ${resp.status}`;
+        throw new Error(msg);
+    }
+    return { success: true };
+}
+
+// ---------------------------------------------------------------------------
 // Attendance HR: shift rules
 // ---------------------------------------------------------------------------
 

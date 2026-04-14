@@ -27,7 +27,15 @@ import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { fetchShiftRules, assignShiftRuleToUser } from '../../apis/human_resources/attendance.js';
 import { fetchWageRatesForUser, createWageRate, deleteWageRate, formatCurrency } from '../../apis/hr.js';
-import { fetchAttendanceMonthlySummary, createAttendanceHrRecord, patchAttendanceHrRecord } from '../../apis/human_resources/attendance.js';
+import {
+    fetchAttendanceMonthlySummary,
+    createAttendanceHrRecord,
+    patchAttendanceHrRecord,
+    fetchAttendanceHrRecordIntervals,
+    createAttendanceHrRecordInterval,
+    patchAttendanceHrInterval,
+    deleteAttendanceHrInterval
+} from '../../apis/human_resources/attendance.js';
 
 let attendanceRecordEditModal = null;
 let attendanceRecordEditModalBound = false;
@@ -42,6 +50,11 @@ let permissionOverrideModal = null;
 let permissionOverrideModalBound = false;
 let permissionOverrideContext = null; // { userId, reload }
 
+let leaveIntervalsModal = null;
+let leaveIntervalEditModal = null;
+let leaveIntervalDeleteConfirmModal = null;
+let leaveIntervalsContext = null; // { recordId, dateStr, refreshAttendance }
+
 const LEAVE_TYPE_OPTIONS = [
     { value: 'annual_leave', label: 'Yıllık İzin' },
     { value: 'sick_leave', label: 'Hastalık İzni' },
@@ -53,6 +66,7 @@ const LEAVE_TYPE_OPTIONS = [
     { value: 'compensatory_leave', label: 'Mazeret İzni' },
     { value: 'business_trip', label: 'Görev Seyahati' },
     { value: 'half_day', label: 'Yarım Gün' },
+    { value: 'paid_leave', label: 'Ücretli İzin' },
     { value: 'unpaid_leave', label: 'Ücretsiz İzin' },
     { value: 'unauthorized_absence', label: 'İzinsiz Devamsızlık' }
 ];
@@ -67,7 +81,8 @@ const LEAVE_TYPE_PAID = new Set([
     'public_duty',
     'compensatory_leave',
     'business_trip',
-    'half_day'
+    'half_day',
+    'paid_leave'
 ]);
 
 function ensureUserEditTabs(editModal, user) {
@@ -169,9 +184,15 @@ function ensureUserEditTabs(editModal, user) {
                                 <i class="fas fa-search me-1"></i>Sorgula
                             </button>
                         </div>
+                        <div class="col-12 col-md-3">
+                            <button class="btn btn-sm btn-outline-secondary w-100" type="button" id="att-export-${user.id}">
+                                <i class="fas fa-download me-1"></i>Excel’e Aktar
+                            </button>
+                        </div>
                     </div>
                     <div id="att-summary-${user.id}"></div>
                     <div id="att-days-${user.id}" class="mt-3"></div>
+                    <div id="att-export-mount-${user.id}" style="display:none;"></div>
                 </div>
             </div>
             <div class="tab-pane fade" id="pane-yetkiler-${user.id}" role="tabpanel">
@@ -197,6 +218,7 @@ function ensureUserEditTabs(editModal, user) {
     let attendanceLoaded = false;
     let permsLoaded = false;
     let lastAttendancePayload = null;
+    let attendanceExportTable = null;
 
     const toIsoOrNull = (datetimeLocalVal) => {
         const s = (datetimeLocalVal || '').toString().trim();
@@ -217,6 +239,249 @@ function ensureUserEditTabs(editModal, user) {
         if (Number.isNaN(dt.getTime())) return null;
         return dt.toISOString();
     };
+
+    const isoToLocalTimeOnly = (v) => {
+        if (!v) return '';
+        const d = new Date(v);
+        if (Number.isNaN(d.getTime())) return '';
+        const pad = (n) => String(n).padStart(2, '0');
+        return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+
+    const intervalTimeToIsoOrNull = (dateStr, timeStr) => timeToIsoForDateOrNull(dateStr, timeStr);
+
+    function ensureLeaveIntervalsUi() {
+        const ensureConfirm = () => {
+            if (leaveIntervalDeleteConfirmModal) return leaveIntervalDeleteConfirmModal;
+            const id = 'leave-interval-delete-confirm-modal-container';
+            let mount = document.getElementById(id);
+            if (!mount) {
+                mount = document.createElement('div');
+                mount.id = id;
+                document.body.appendChild(mount);
+            }
+            leaveIntervalDeleteConfirmModal = new ConfirmationModal(id, {
+                title: 'Onay',
+                icon: 'fas fa-exclamation-triangle',
+                message: 'Bu izin aralığını silmek istediğinize emin misiniz?',
+                confirmText: 'Evet',
+                cancelText: 'İptal',
+                confirmButtonClass: 'btn-danger'
+            });
+            return leaveIntervalDeleteConfirmModal;
+        };
+
+        const ensureListModal = () => {
+            if (leaveIntervalsModal) return leaveIntervalsModal;
+            const id = 'leave-intervals-modal-container';
+            let mount = document.getElementById(id);
+            if (!mount) {
+                mount = document.createElement('div');
+                mount.id = id;
+                document.body.appendChild(mount);
+            }
+            leaveIntervalsModal = new DisplayModal(id, {
+                title: 'İzin Aralıkları',
+                icon: 'fas fa-person-walking-arrow-right',
+                size: 'lg',
+                showEditButton: false
+            });
+            return leaveIntervalsModal;
+        };
+
+        const ensureEditModal = () => {
+            if (leaveIntervalEditModal) return leaveIntervalEditModal;
+            const id = 'leave-interval-edit-modal-container';
+            let mount = document.getElementById(id);
+            if (!mount) {
+                mount = document.createElement('div');
+                mount.id = id;
+                document.body.appendChild(mount);
+            }
+            leaveIntervalEditModal = new EditModal(id, {
+                title: 'İzin Aralığı',
+                icon: 'fas fa-person-walking-arrow-right',
+                size: 'lg',
+                saveButtonText: 'Kaydet',
+                showEditButton: false
+            });
+            leaveIntervalEditModal.clearAll();
+            leaveIntervalEditModal.addSection({ title: 'Aralık', icon: 'fas fa-clock', iconColor: 'text-primary' });
+            leaveIntervalEditModal.addField({ id: 'start_time', name: 'start_time', label: 'Başlangıç', type: 'time', step: 1, required: true, colSize: 4 });
+            leaveIntervalEditModal.addField({ id: 'end_time', name: 'end_time', label: 'Bitiş', type: 'time', step: 1, required: true, colSize: 4 });
+            leaveIntervalEditModal.addField({
+                id: 'leave_type',
+                name: 'leave_type',
+                label: 'İzin Türü',
+                type: 'dropdown',
+                required: true,
+                options: LEAVE_TYPE_OPTIONS,
+                colSize: 4
+            });
+            leaveIntervalEditModal.addField({ id: 'notes', name: 'notes', label: 'Not (opsiyonel)', type: 'textarea', rows: 3, colSize: 12 });
+            leaveIntervalEditModal.render();
+            return leaveIntervalEditModal;
+        };
+
+        const renderList = async () => {
+            const ctx = leaveIntervalsContext;
+            if (!ctx?.recordId) return;
+            const listModal = ensureListModal();
+            if (!listModal) return;
+
+            listModal.clearData();
+            listModal.addCustomSection({
+                title: null,
+                customContent: `<div class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>`
+            });
+            listModal.render();
+            listModal.show();
+
+            let intervals = [];
+            try {
+                const resp = await fetchAttendanceHrRecordIntervals(ctx.recordId);
+                intervals = Array.isArray(resp) ? resp : (resp?.results || resp?.data || []);
+            } catch (e) {
+                listModal.clearData();
+                listModal.addCustomSection({ title: null, customContent: `<div class="text-danger">Yüklenemedi: ${e?.message || e}</div>` });
+                listModal.render();
+                return;
+            }
+
+            const rows = (intervals || []).map(it => {
+                const s = isoToLocalTimeOnly(it.start_time);
+                const e = isoToLocalTimeOnly(it.end_time);
+                const label = it.leave_type_display || (LEAVE_TYPE_OPTIONS.find(o => o.value === it.leave_type)?.label) || it.leave_type || '-';
+                return `
+                    <tr>
+                        <td>${s || '-'}</td>
+                        <td>${e || '-'}</td>
+                        <td>${label}</td>
+                        <td>${it.notes || '-'}</td>
+                        <td class="text-end">
+                            <button type="button" class="btn btn-sm btn-outline-primary li-edit" data-id="${it.id}"><i class="fas fa-edit"></i></button>
+                            <button type="button" class="btn btn-sm btn-outline-danger li-del" data-id="${it.id}"><i class="fas fa-trash"></i></button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            const content = `
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="fw-semibold">${ctx.dateStr || ''}</div>
+                    <button type="button" class="btn btn-sm btn-outline-success li-add">
+                        <i class="fas fa-plus me-1"></i>Yeni Aralık
+                    </button>
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>Başlangıç</th><th>Bitiş</th><th>Tür</th><th>Not</th><th class="text-end">İşlem</th></tr></thead>
+                        <tbody>${rows || `<tr><td colspan="5" class="text-muted">Kayıt yok.</td></tr>`}</tbody>
+                    </table>
+                </div>
+                <div class="text-muted small mt-2">Not: Aralık değişiklikleri geç/erken çıkış hesaplarını otomatik günceller.</div>
+            `;
+
+            listModal.clearData();
+            listModal.addCustomSection({ title: null, customContent: content });
+            listModal.render();
+
+            const root = listModal.container;
+            root.onclick = async (ev) => {
+                const addBtn = ev.target?.closest?.('.li-add');
+                const editBtn = ev.target?.closest?.('.li-edit');
+                const delBtn = ev.target?.closest?.('.li-del');
+
+                if (addBtn) {
+                    const em = ensureEditModal();
+                    em.setFormData({ start_time: '', end_time: '', leave_type: 'paid_leave', notes: '' });
+                    em.onSaveCallback(async (data) => {
+                        const ctx2 = leaveIntervalsContext;
+                        const startIso = intervalTimeToIsoOrNull(ctx2.dateStr, data.start_time);
+                        const endIso = intervalTimeToIsoOrNull(ctx2.dateStr, data.end_time);
+                        if (!startIso || !endIso) {
+                            showNotification('Başlangıç ve bitiş saatleri gereklidir.', 'warning');
+                            return;
+                        }
+                        try {
+                            await createAttendanceHrRecordInterval(ctx2.recordId, {
+                                start_time: startIso,
+                                end_time: endIso,
+                                leave_type: data.leave_type,
+                                notes: data.notes || ''
+                            });
+                            em.hide();
+                            await renderList();
+                            await ctx2.refreshAttendance();
+                        } catch (e) {
+                            showNotification(e?.message || 'Kaydedilemedi', 'error');
+                        }
+                    });
+                    em.show();
+                    return;
+                }
+
+                if (editBtn) {
+                    const id = Number(editBtn.getAttribute('data-id'));
+                    const it = (intervals || []).find(x => Number(x.id) === id);
+                    if (!it) return;
+                    const em = ensureEditModal();
+                    em.setFormData({
+                        start_time: isoToLocalTimeOnly(it.start_time),
+                        end_time: isoToLocalTimeOnly(it.end_time),
+                        leave_type: it.leave_type || 'paid_leave',
+                        notes: it.notes || ''
+                    });
+                    em.onSaveCallback(async (data) => {
+                        const ctx2 = leaveIntervalsContext;
+                        const startIso = intervalTimeToIsoOrNull(ctx2.dateStr, data.start_time);
+                        const endIso = intervalTimeToIsoOrNull(ctx2.dateStr, data.end_time);
+                        if (!startIso || !endIso) {
+                            showNotification('Başlangıç ve bitiş saatleri gereklidir.', 'warning');
+                            return;
+                        }
+                        try {
+                            await patchAttendanceHrInterval(id, {
+                                start_time: startIso,
+                                end_time: endIso,
+                                leave_type: data.leave_type,
+                                notes: data.notes || ''
+                            });
+                            em.hide();
+                            await renderList();
+                            await ctx2.refreshAttendance();
+                        } catch (e) {
+                            showNotification(e?.message || 'Güncellenemedi', 'error');
+                        }
+                    });
+                    em.show();
+                    return;
+                }
+
+                if (delBtn) {
+                    const id = Number(delBtn.getAttribute('data-id'));
+                    if (!id) return;
+                    const conf = ensureConfirm();
+                    conf.show({
+                        message: 'Bu izin aralığını silmek istediğinize emin misiniz?',
+                        onConfirm: async () => {
+                            try {
+                                await deleteAttendanceHrInterval(id);
+                                showNotification('Silindi', 'success');
+                                await renderList();
+                                const ctx2 = leaveIntervalsContext;
+                                await ctx2.refreshAttendance();
+                            } catch (e) {
+                                showNotification(e?.message || 'Silinemedi', 'error');
+                            }
+                        }
+                    });
+                }
+            };
+        };
+
+        return { open: renderList };
+    }
 
     function ensureAttendanceEditModalComponent() {
         if (attendanceRecordEditModal) return attendanceRecordEditModal;
@@ -285,6 +550,15 @@ function ensureUserEditTabs(editModal, user) {
             type: 'time',
             step: 1,
             colSize: 4
+        });
+        attendanceRecordEditModal.addField({
+            id: 'notes',
+            name: 'notes',
+            label: 'Not (opsiyonel)',
+            type: 'textarea',
+            value: '',
+            rows: 3,
+            colSize: 12
         });
         attendanceRecordEditModal.render();
 
@@ -383,6 +657,7 @@ function ensureUserEditTabs(editModal, user) {
 
                 const dayType = (attendanceRecordEditModal.getFieldValue('day_type') || 'working').toString();
                 const leaveType = (attendanceRecordEditModal.getFieldValue('leave_type') || '').toString();
+                const notes = (attendanceRecordEditModal.getFieldValue('notes') || '').toString();
 
                 const isLeave = dayType === 'leave';
                 const isWorking = dayType === 'working';
@@ -417,6 +692,7 @@ function ensureUserEditTabs(editModal, user) {
                             patch.check_in_time = null;
                             patch.check_out_time = null;
                         }
+                        if (notes) patch.notes = notes;
                         await patchAttendanceHrRecord(ctx.recordId, patch);
                         showNotification('Yoklama kaydı güncellendi', 'success');
                     } else {
@@ -428,6 +704,7 @@ function ensureUserEditTabs(editModal, user) {
                         if (isLeave) {
                             payload.leave_type = leaveType;
                         }
+                        if (notes) payload.notes = notes;
                         await createAttendanceHrRecord(payload);
                         showNotification('Yoklama kaydı oluşturuldu', 'success');
                     }
@@ -705,13 +982,46 @@ function ensureUserEditTabs(editModal, user) {
             return map[s] || s || '-';
         };
 
+        const methodIcon = (rec) => {
+            const method = (rec?.method || '').toString();
+            const label =
+                rec?.method_display ||
+                (method === 'ip'
+                    ? 'IP (Ofis Ağı)'
+                    : (method === 'gps'
+                        ? 'GPS'
+                        : (method === 'manual_override'
+                            ? 'Manuel Değişim Talebi'
+                            : (method === 'hr_manual'
+                                ? 'Manuel'
+                                : (method || '-')))));
+
+            if (!method) return '-';
+
+            const iconClass =
+                method === 'ip'
+                    ? 'fas fa-network-wired'
+                    : (method === 'gps'
+                        ? 'fas fa-location-dot'
+                        : (method === 'manual_override'
+                            ? 'fas fa-hand-paper'
+                            : (method === 'hr_manual'
+                                ? 'fas fa-user-gear'
+                                : 'fas fa-question-circle')));
+
+            const safeTitle = String(label || method).replace(/"/g, '&quot;');
+            return `<span class="text-muted" title="${safeTitle}" style="display:inline-flex; align-items:center; gap:6px;">
+                        <i class="${iconClass}"></i>
+                    </span>`;
+        };
+
         const s = summary?.summary || {};
         summaryEl.innerHTML = `
             <div class="row g-2">
                 <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Çalışma Günü</div><div class="fw-semibold">${s.total_working_days ?? '-'}</div></div></div>
                 <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Geldi</div><div class="fw-semibold">${s.total_present ?? '-'}</div></div></div>
                 <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Gelmedi</div><div class="fw-semibold">${s.total_absent ?? '-'}</div></div></div>
-                <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Fazla Mesai (s)</div><div class="fw-semibold">${s.total_overtime_hours ?? '-'}</div></div></div>
+                <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Fazla Mesai (dk)</div><div class="fw-semibold">${s.total_overtime_minutes ?? '-'}</div></div></div>
                 <div class="col-6 col-md-3"><div class="p-2 border rounded small"><div class="text-muted">Toplam Geç Kalma (dk)</div><div class="fw-semibold">${s.total_late_minutes ?? '-'}</div></div></div>
             </div>
         `;
@@ -737,14 +1047,15 @@ function ensureUserEditTabs(editModal, user) {
             }
             const inTime = rec ? timeHM(rec.check_in_time || rec.check_in_at || rec.check_in) : '-';
             const outTime = rec ? timeHM(rec.check_out_time || rec.check_out_at || rec.check_out) : '-';
+            const method = rec ? methodIcon(rec) : '-';
 
             let rowClass = '';
-            if (rec && thresholdMin > 0) {
-                const overtimeHours = parseNum(rec.overtime_hours);
-                const overtimeMin = overtimeHours * 60;
-                const lateMin = parseNum(rec.late_minutes);
-                const earlyLeaveMin = parseNum(rec.early_leave_minutes);
+            const lateMin = rec ? parseNum(rec.late_minutes) : 0;
+            const earlyLeaveMin = rec ? parseNum(rec.early_leave_minutes) : 0;
+            const totalLateMin = lateMin + earlyLeaveMin;
+            const overtimeMin = rec ? parseNum(rec.overtime_minutes ?? rec.overtime_min ?? rec.overtime) : 0;
 
+            if (rec && thresholdMin > 0) {
                 const isOvertime = overtimeMin >= thresholdMin && overtimeMin > 0;
                 const isUndertime = (lateMin >= thresholdMin && lateMin > 0) || (earlyLeaveMin >= thresholdMin && earlyLeaveMin > 0);
 
@@ -762,8 +1073,11 @@ function ensureUserEditTabs(editModal, user) {
                 <td>${dayTypeTr(d.day_type)}</td>
                 <td>${d.holiday_name || '-'}</td>
                 <td>${flag}</td>
+                <td class="text-center">${method}</td>
                 <td>${inTime}</td>
                 <td>${outTime}</td>
+                <td class="text-end">${overtimeMin || 0}</td>
+                <td class="text-end">${totalLateMin || 0}</td>
                 <td class="text-end">
                     <button
                         type="button"
@@ -772,6 +1086,13 @@ function ensureUserEditTabs(editModal, user) {
                         data-att-record-id="${recId}"
                     >
                         <i class="fas fa-edit me-1"></i>${btnLabel}
+                    </button>
+                    <button type="button"
+                            class="btn btn-sm btn-outline-secondary ms-1 att-row-intervals-btn"
+                            data-att-date="${d.date || ''}"
+                            data-att-record-id="${recId}"
+                            title="İzin Aralıkları">
+                        <i class="fas fa-person-walking-arrow-right"></i>
                     </button>
                 </td>
                 </tr>`;
@@ -782,13 +1103,158 @@ function ensureUserEditTabs(editModal, user) {
                 <table class="table table-sm table-hover">
                     <thead>
                         <tr>
-                            <th>Tarih</th><th>Gün</th><th>Gün Türü</th><th>Tatil</th><th>Durum Notu</th><th>Giriş</th><th>Çıkış</th><th class="text-end">İşlem</th>
+                            <th>Tarih</th><th>Gün</th><th>Gün Türü</th><th>Tatil</th><th>Durum Notu</th><th class="text-center">Yöntem</th><th>Giriş</th><th>Çıkış</th><th class="text-end">FM (dk)</th><th class="text-end">Geç/EÇ (dk)</th><th class="text-end">İşlem</th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>
         `;
+
+        // Sync export table data (TableComponent -> proper .xlsx)
+        try {
+            const exportMountId = `att-export-mount-${user.id}`;
+
+            const safeFilePart = (s) => String(s || '')
+                .replace(/[\\/:*?"<>|]/g, '_')
+                .replace(/\s+/g, ' ')
+                .trim();
+
+            const exportRowsBase = days.map(d => {
+                const rec = d.record || null;
+                const lateMin = rec ? parseNum(rec.late_minutes) : 0;
+                const earlyLeaveMin = rec ? parseNum(rec.early_leave_minutes) : 0;
+                const totalLateMin = lateMin + earlyLeaveMin;
+                const overtimeMin = rec ? parseNum(rec.overtime_minutes ?? rec.overtime_min ?? rec.overtime) : 0;
+                const methodLabel =
+                    rec?.method_display ||
+                    (rec?.method === 'ip'
+                        ? 'IP (Ofis Ağı)'
+                        : (rec?.method === 'gps'
+                            ? 'GPS'
+                            : (rec?.method === 'manual_override'
+                                ? 'Manuel Değişim Talebi'
+                                : (rec?.method === 'hr_manual'
+                                    ? 'Manuel'
+                                    : (rec?.method || '-')))));
+
+                const leaveLabel = (String(d.day_type) === 'leave')
+                    ? (rec?.leave_type_display || d.leave_type_display || (LEAVE_TYPE_OPTIONS.find(o => o.value === (rec?.leave_type || d.leave_type))?.label) || 'İzin')
+                    : '';
+
+                const intervals = Array.isArray(rec?.leave_intervals) ? rec.leave_intervals : [];
+
+                return {
+                    date: d.date || '',
+                    weekday: weekdayTr(d.weekday),
+                    day_type: dayTypeTr(d.day_type),
+                    holiday_name: d.holiday_name || '',
+                    note: leaveLabel || (d.flag ? flagTr(d.flag) : ''),
+                    method: rec ? methodLabel : '',
+                    check_in: rec ? timeHM(rec.check_in_time || rec.check_in_at || rec.check_in) : '',
+                    check_out: rec ? timeHM(rec.check_out_time || rec.check_out_at || rec.check_out) : '',
+                    overtime_minutes: overtimeMin,
+                    total_late_minutes: totalLateMin,
+                    record_notes: rec?.notes || '',
+                    __intervals: intervals
+                };
+            });
+
+            const maxIntervals = exportRowsBase.reduce((mx, r) => {
+                const n = Array.isArray(r.__intervals) ? r.__intervals.length : 0;
+                return Math.max(mx, n);
+            }, 0);
+
+            const dynamicIntervalColumns = [];
+            for (let i = 1; i <= maxIntervals; i++) {
+                dynamicIntervalColumns.push(
+                    { field: `interval_${i}_start`, label: `İzin ${i} Başlangıç`, sortable: false },
+                    { field: `interval_${i}_end`, label: `İzin ${i} Bitiş`, sortable: false },
+                    { field: `interval_${i}_type`, label: `İzin ${i} Tür`, sortable: false },
+                    { field: `interval_${i}_notes`, label: `İzin ${i} Not`, sortable: false },
+                );
+            }
+
+            const exportRows = exportRowsBase.map(r => {
+                const intervals = Array.isArray(r.__intervals) ? r.__intervals : [];
+                const out = { ...r };
+                delete out.__intervals;
+                for (let i = 1; i <= maxIntervals; i++) {
+                    const it = intervals[i - 1] || null;
+                    out[`interval_${i}_start`] = it ? isoToLocalTimeOnly(it.start_time) : '';
+                    out[`interval_${i}_end`] = it ? isoToLocalTimeOnly(it.end_time) : '';
+                    out[`interval_${i}_type`] = it ? (it.leave_type_display || (LEAVE_TYPE_OPTIONS.find(o => o.value === it.leave_type)?.label) || it.leave_type || '') : '';
+                    out[`interval_${i}_notes`] = it ? (it.notes || '') : '';
+                }
+                return out;
+            });
+
+            // Totals row
+            const totalOvertime = exportRows.reduce((acc, r) => acc + (Number(r.overtime_minutes) || 0), 0);
+            const totalLate = exportRows.reduce((acc, r) => acc + (Number(r.total_late_minutes) || 0), 0);
+            exportRows.push({
+                date: 'TOPLAM',
+                weekday: '',
+                day_type: '',
+                holiday_name: '',
+                note: '',
+                method: '',
+                check_in: '',
+                check_out: '',
+                overtime_minutes: totalOvertime,
+                total_late_minutes: totalLate,
+                record_notes: '',
+                ...Object.fromEntries(dynamicIntervalColumns.map(c => [c.field, '']))
+            });
+
+            const baseColumns = [
+                { field: 'date', label: 'Tarih', sortable: false },
+                { field: 'weekday', label: 'Gün', sortable: false },
+                { field: 'day_type', label: 'Gün Türü', sortable: false },
+                { field: 'holiday_name', label: 'Tatil', sortable: false },
+                { field: 'note', label: 'Durum Notu', sortable: false },
+                { field: 'method', label: 'Yöntem', sortable: false },
+                { field: 'check_in', label: 'Giriş', sortable: false },
+                { field: 'check_out', label: 'Çıkış', sortable: false },
+                { field: 'overtime_minutes', label: 'FM (dk)', type: 'number', sortable: false },
+                { field: 'total_late_minutes', label: 'Geç/EÇ (dk)', type: 'number', sortable: false },
+                { field: 'record_notes', label: 'Not', sortable: false }
+            ];
+
+            const columns = [...baseColumns, ...dynamicIntervalColumns];
+
+            // (Re)create export table if columns changed
+            const colSig = columns.map(c => c.field).join('|');
+            const prevSig = attendanceExportTable?.options?.__colSig;
+            if ((!attendanceExportTable && document.getElementById(exportMountId)) || (attendanceExportTable && prevSig !== colSig)) {
+                if (attendanceExportTable) attendanceExportTable.destroy();
+                attendanceExportTable = new TableComponent(exportMountId, {
+                    title: 'Yoklama Özeti',
+                    columns,
+                    data: [],
+                    exportable: true,
+                    pagination: false,
+                    responsive: false
+                });
+                attendanceExportTable.options.__colSig = colSig;
+            }
+
+            // Filename: YoklamaOzeti_<user>_<YYYY-MM>.xlsx
+            const yVal = container.querySelector(`#att-year-${user.id}`)?.value;
+            const mVal = container.querySelector(`#att-month-${user.id}`)?.value;
+            const mm = String(mVal || '').padStart(2, '0');
+            const userDisplay = safeFilePart(`${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || `user_${user.id}`);
+            const ym = (yVal && mm) ? `${yVal}-${mm}` : new Date().toISOString().slice(0, 7);
+            if (attendanceExportTable) {
+                attendanceExportTable.options.exportFilename = `YoklamaOzeti_${userDisplay}_${ym}.xlsx`;
+            }
+
+            if (attendanceExportTable) {
+                attendanceExportTable.updateData(exportRows, exportRows.length, 1);
+            }
+        } catch {
+            // best-effort
+        }
     }
 
     async function loadAttendance() {
@@ -1110,6 +1576,39 @@ function ensureUserEditTabs(editModal, user) {
     // Row edit/create actions (HR)
     container.querySelector(`#att-days-${user.id}`)?.addEventListener('click', async (e) => {
         const btn = e.target?.closest?.('.att-row-edit-btn');
+        const intervalsBtn = e.target?.closest?.('.att-row-intervals-btn');
+
+        if (intervalsBtn) {
+            const dateStr = intervalsBtn.getAttribute('data-att-date') || '';
+            const recordIdStr = intervalsBtn.getAttribute('data-att-record-id') || '';
+            const recordId = recordIdStr ? Number(recordIdStr) : null;
+            if (!dateStr) return;
+
+            let effectiveRecordId = recordId;
+            if (!effectiveRecordId) {
+                try {
+                    const created = await createAttendanceHrRecord({ user: user.id, date: dateStr });
+                    effectiveRecordId = created?.id ?? null;
+                } catch (e2) {
+                    showNotification(`Kayıt oluşturulamadı: ${e2?.message || e2}`, 'error');
+                    return;
+                }
+                if (!effectiveRecordId) {
+                    showNotification('Kayıt oluşturulamadı', 'error');
+                    return;
+                }
+                await loadAttendance(); // refresh so row has record id
+            }
+
+            const ui = ensureLeaveIntervalsUi();
+            leaveIntervalsContext = {
+                recordId: effectiveRecordId,
+                dateStr,
+                refreshAttendance: loadAttendance
+            };
+            await ui.open();
+            return;
+        }
         if (!btn) return;
 
         const dateStr = btn.getAttribute('data-att-date') || '';
@@ -1164,6 +1663,7 @@ function ensureUserEditTabs(editModal, user) {
         // For "Ekle" keep empty, but auto-fill on first focus using shift rule defaults
         modalComp.setFieldValue('check_in_time', rec ? toLocalTimeOnly(rec.check_in_time || rec.check_in_at || rec.check_in) : '');
         modalComp.setFieldValue('check_out_time', rec ? toLocalTimeOnly(rec.check_out_time || rec.check_out_at || rec.check_out) : '');
+        modalComp.setFieldValue('notes', rec?.notes || '');
         modalComp.show();
 
         // Restore parent scroll after nested modal triggers focus changes
@@ -1195,6 +1695,17 @@ function ensureUserEditTabs(editModal, user) {
 
     container.querySelector(`[data-wages-refresh]`)?.addEventListener('click', () => renderWages());
     container.querySelector(`#att-fetch-${user.id}`)?.addEventListener('click', () => loadAttendance());
+    container.querySelector(`#att-export-${user.id}`)?.addEventListener('click', () => {
+        try {
+            if (!attendanceExportTable) {
+                showNotification('Önce yoklama özetini sorgulayın.', 'warning');
+                return;
+            }
+            attendanceExportTable.exportData('excel');
+        } catch (e) {
+            showNotification(`Dışa aktarılamadı: ${e?.message || e}`, 'error');
+        }
+    });
 }
 
 let currentPage = 1;

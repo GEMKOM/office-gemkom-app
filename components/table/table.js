@@ -1379,7 +1379,12 @@ export class TableComponent {
             });
             const link = document.createElement('a');
             link.href = URL.createObjectURL(blob);
-            link.download = `${this.containerId}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            const fallbackName = `${this.containerId}_${new Date().toISOString().split('T')[0]}.xlsx`;
+            const customName =
+                typeof this.options.exportFilename === 'function'
+                    ? this.options.exportFilename()
+                    : this.options.exportFilename;
+            link.download = (customName && String(customName).trim()) ? String(customName).trim() : fallbackName;
             link.click();
             
             // Clean up
