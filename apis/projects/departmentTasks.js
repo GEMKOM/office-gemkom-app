@@ -132,7 +132,8 @@ export async function getDepartmentTaskById(taskId) {
  */
 export async function createDepartmentTask(taskData) {
     try {
-        const response = await authedFetch(`${backendBase}/projects/department-tasks/`, {
+        const url = `${backendBase}/projects/department-tasks/`;
+        const response = await authedFetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -172,7 +173,8 @@ export async function createDepartmentTask(taskData) {
  */
 export async function bulkCreateDepartmentTasks(bulkData) {
     try {
-        const response = await authedFetch(`${backendBase}/projects/department-tasks/bulk_create/`, {
+        const url = `${backendBase}/projects/department-tasks/bulk_create/`;
+        const response = await authedFetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -189,6 +191,40 @@ export async function bulkCreateDepartmentTasks(bulkData) {
         return data;
     } catch (error) {
         console.error('Error bulk creating department tasks:', error);
+        throw error;
+    }
+}
+
+/**
+ * Apply template-like payload to one or more job orders in a single request.
+ * Endpoint: POST /projects/department-tasks/apply_template/
+ *
+ * Payload shape:
+ * {
+ *   job_orders: ["100-100-01"],
+ *   tasks: [{ temp_id: -1, department, title, sequence, weight, parent? }],
+ *   dependencies: [{ task: -2, depends_on: [-1] }]
+ * }
+ */
+export async function applyDepartmentTasksTemplate(payload) {
+    try {
+        const url = `${backendBase}/projects/department-tasks/apply_template/`;
+        const response = await authedFetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error applying department tasks template:', error);
         throw error;
     }
 }
@@ -230,7 +266,8 @@ export async function updateDepartmentTask(taskId, taskData) {
  */
 export async function patchDepartmentTask(taskId, taskData) {
     try {
-        const response = await authedFetch(`${backendBase}/projects/department-tasks/${taskId}/`, {
+        const url = `${backendBase}/projects/department-tasks/${taskId}/`;
+        const response = await authedFetch(url, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',

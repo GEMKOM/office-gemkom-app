@@ -21,7 +21,7 @@ import {
     JOB_ORDER_FILE_TYPE_OPTIONS,
     STATUS_OPTIONS
 } from '../../apis/projects/jobOrders.js';
-import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks } from '../../apis/projects/departmentTasks.js';
+import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, applyDepartmentTasksTemplate, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks } from '../../apis/projects/departmentTasks.js';
 import { listTaskTemplates, getTaskTemplateById } from '../../apis/projects/taskTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
 import { CURRENCY_OPTIONS } from '../../apis/projects/customers.js';
@@ -6488,172 +6488,76 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
             }
             
             try {
-                // Get job order to retrieve ID
-                let jobOrderId = jobNo;
-                try {
-                    const jobOrder = await getJobOrderByJobNo(jobNo);
-                    if (jobOrder && jobOrder.id) {
-                        jobOrderId = jobOrder.id;
-                    }
-                } catch (error) {
-                    console.warn('Could not fetch job order ID, using job_no:', error);
-                    // Continue with job_no, backend might accept it
-                }
-                
-                // Separate main tasks and child tasks
-                const mainTasks = window.tasksList.filter(task => !task.isChildTask);
-                const childTasks = window.tasksList.filter(task => task.isChildTask);
-                
-                // Step 1: Create main tasks first
-                const mainTasksData = mainTasks.map((task, taskIndex) => {
-                    const taskData = {
+                // New backend flow: single call with negative temp IDs for parent/deps references
+                const tasks = [];
+                const dependencies = [];
+                const indexToTempId = new Map();
+                let nextTempId = -1;
+
+                // Assign stable negative temp_ids per taskList index (preserves parentTaskIndex usage)
+                window.tasksList.forEach((t, idx) => {
+                    indexToTempId.set(idx, nextTempId);
+                    nextTempId -= 1;
+                });
+
+                // Build tasks payload (include only non-empty required fields; backend expects negatives)
+                window.tasksList.forEach((task, idx) => {
+                    const temp_id = indexToTempId.get(idx);
+                    const payloadTask = {
+                        temp_id,
                         department: task.department,
-                        title: task.title || 'Yeni Görev',
+                        title: (task.title || (task.isChildTask ? 'Alt görev' : 'Yeni Görev')).toString(),
                         sequence: task.sequence ? parseInt(task.sequence) : null,
-                        description: task.description || '',
-                        weight: task.weight || 10, // Include weight, default to 10
-                        target_start_date: task.target_start_date || null,
-                        target_completion_date: task.target_completion_date || null,
-                        notes: task.notes || null
+                        weight: task.weight ? parseFloat(task.weight) : 10,
                     };
-                    
-                    // Process depends_on: values are indices into mainTasks (new tasks in batch) or
-                    // existing department task IDs. The API expects task IDs.
-                    const existingTaskIds = (window.existingTasksForJobOrder || []).map(t => t.id);
-                    if (task.depends_on && Array.isArray(task.depends_on) && task.depends_on.length > 0) {
-                        const existingIds = [];
-                        const indicesToResolve = [];
-                        for (const dep of task.depends_on) {
-                            // Check if it's an index in mainTasks
-                            const mainTaskIndex = mainTasks.findIndex((t, idx) => {
-                                // Check if dep matches the index in the original tasksList
-                                return window.tasksList.indexOf(t) === dep;
-                            });
-                            if (mainTaskIndex >= 0 && mainTaskIndex !== taskIndex) {
-                                indicesToResolve.push(mainTaskIndex);
-                            } else if (typeof dep === 'number' && existingTaskIds.includes(dep)) {
-                                existingIds.push(dep);
-                            }
-                        }
-                        if (indicesToResolve.length > 0) {
-                            taskData._dependsOnIndices = indicesToResolve;
-                            if (existingIds.length > 0) taskData._existingDepIds = existingIds;
-                        } else if (existingIds.length > 0) {
-                            taskData.depends_on = existingIds;
-                        }
+
+                    // Parent references must exist in the same request and refer to temp_id
+                    if (task.isChildTask && task.parentTaskIndex !== undefined && task.parentTaskIndex !== null) {
+                        const parentTemp = indexToTempId.get(task.parentTaskIndex);
+                        if (parentTemp) payloadTask.parent = parentTemp;
                     }
-                    
-                    return taskData;
+
+                    // Remove null/empty values
+                    Object.keys(payloadTask).forEach(k => {
+                        if (payloadTask[k] === null || payloadTask[k] === '' || payloadTask[k] === undefined) delete payloadTask[k];
+                    });
+
+                    tasks.push(payloadTask);
                 });
-                
-                // Clean main tasks data (ensure required: department, title)
-                const cleanedMainTasks = mainTasksData.map((task, taskIndex) => {
-                    const cleaned = {};
-                    Object.keys(task).forEach(key => {
-                        if (key.startsWith('_')) return;
-                        const val = task[key];
-                        if (val !== null && val !== undefined && val !== '') {
-                            cleaned[key] = val;
+
+                // Build dependencies payload (only references within this request are allowed)
+                window.tasksList.forEach((task, idx) => {
+                    if (!task.depends_on || !Array.isArray(task.depends_on) || task.depends_on.length === 0) return;
+                    const temp_id = indexToTempId.get(idx);
+                    const deps = [];
+                    const skippedExisting = [];
+
+                    task.depends_on.forEach(dep => {
+                        if (typeof dep === 'number' && indexToTempId.has(dep)) {
+                            const depTemp = indexToTempId.get(dep);
+                            if (depTemp && depTemp !== temp_id) deps.push(depTemp);
+                        } else if (typeof dep === 'number') {
+                            // Old flow allowed existing task IDs; new backend requires refs in same request.
+                            skippedExisting.push(dep);
                         }
                     });
-                    if (!cleaned.title) cleaned.title = 'Yeni Görev';
-                    if (!cleaned.department && mainTasks[taskIndex]) cleaned.department = mainTasks[taskIndex].department || '';
-                    return cleaned;
+
+                    if (skippedExisting.length > 0) {
+                        console.warn('Skipped depends_on references to existing tasks (new endpoint requires in-request refs):', skippedExisting);
+                    }
+                    if (deps.length > 0) dependencies.push({ task: temp_id, depends_on: deps });
                 });
-                
-                // Create main tasks
-                let createdMainTasks = [];
-                if (cleanedMainTasks.length > 0) {
-                    const mainBulkData = {
-                        job_order: jobOrderId,
-                        tasks: cleanedMainTasks
-                    };
-                    const mainResponse = await bulkCreateDepartmentTasks(mainBulkData);
-                    createdMainTasks = mainResponse.tasks || mainResponse.created_tasks || [];
-                    
-                    // Resolve depends_on for main tasks
-                    const dependsOnIndicesByTask = mainTasksData.map(t => t._dependsOnIndices || []);
-                    const dependsOnExistingIdsByTask = mainTasksData.map(t => t._existingDepIds || []);
-                    
-                    for (let i = 0; i < dependsOnIndicesByTask.length; i++) {
-                        const indices = dependsOnIndicesByTask[i];
-                        const existingIds = dependsOnExistingIdsByTask[i] || [];
-                        if ((indices.length === 0 && existingIds.length === 0) || !createdMainTasks[i]?.id) continue;
-                        const resolvedIds = indices.map(idx => createdMainTasks[idx]?.id).filter(Boolean);
-                        const depIds = [...existingIds, ...resolvedIds];
-                        if (depIds.length > 0) {
-                            await patchDepartmentTask(createdMainTasks[i].id, { depends_on: depIds });
-                        }
-                    }
-                }
-                
-                // Step 2: Create child tasks with parent references
-                // Map parentTaskIndex to created main task IDs
-                const parentIndexToIdMap = new Map();
-                mainTasks.forEach((mainTask, mainIndex) => {
-                    const originalIndex = window.tasksList.indexOf(mainTask);
-                    if (createdMainTasks[mainIndex]?.id) {
-                        parentIndexToIdMap.set(originalIndex, createdMainTasks[mainIndex].id);
-                    }
-                });
-                
-                let createdChildTasks = [];
-                if (childTasks.length > 0) {
-                    const childTasksData = childTasks.map((childTask) => {
-                        const taskData = {
-                            department: childTask.department,
-                            title: childTask.title || 'Alt görev',
-                            sequence: childTask.sequence ? parseInt(childTask.sequence) : null,
-                            description: childTask.description || '',
-                            weight: childTask.weight || 10, // Include weight, default to 10
-                            target_start_date: childTask.target_start_date || null,
-                            target_completion_date: childTask.target_completion_date || null,
-                            notes: childTask.notes || null
-                        };
-                        
-                        // Set parent if available
-                        if (childTask.parentTaskIndex !== undefined && parentIndexToIdMap.has(childTask.parentTaskIndex)) {
-                            taskData.parent = parentIndexToIdMap.get(childTask.parentTaskIndex);
-                        }
-                        
-                        return taskData;
-                    });
-                    
-                    // Clean child tasks data (ensure required: department, title)
-                    const cleanedChildTasks = childTasksData.map((task, taskIndex) => {
-                        const cleaned = {};
-                        Object.keys(task).forEach(key => {
-                            const val = task[key];
-                            if (val !== null && val !== undefined && val !== '') {
-                                cleaned[key] = val;
-                            }
-                        });
-                        if (!cleaned.title) cleaned.title = 'Alt görev';
-                        if (!cleaned.department && childTasks[taskIndex]) cleaned.department = childTasks[taskIndex].department || '';
-                        return cleaned;
-                    });
-                    
-                    if (cleanedChildTasks.length > 0) {
-                        const childBulkData = {
-                            job_order: jobOrderId,
-                            tasks: cleanedChildTasks
-                        };
-                        const childResponse = await bulkCreateDepartmentTasks(childBulkData);
-                        createdChildTasks = childResponse.tasks || childResponse.created_tasks || [];
-                    }
-                }
-                
-                const response = {
-                    tasks: [...createdMainTasks, ...createdChildTasks],
-                    message: `${createdMainTasks.length} ana görev ve ${createdChildTasks.length} alt görev başarıyla oluşturuldu.`
+
+                const payload = {
+                    job_orders: [jobNo],
+                    tasks,
+                    dependencies
                 };
-                
-                // Close modal
+
+                const response = await applyDepartmentTasksTemplate(payload);
+
                 addDepartmentTaskModal.hide();
-                
-                // Show success message
-                const message = response.message || `${response.tasks?.length || window.tasksList.length} görev başarıyla oluşturuldu.`;
-                showNotification(message, 'success');
+                showNotification(response?.message || 'Görevler başarıyla oluşturuldu', 'success');
             } catch (error) {
                 console.error('Error bulk creating tasks:', error);
                 let errorMessage = 'Görevler oluşturulurken hata oluştu';
