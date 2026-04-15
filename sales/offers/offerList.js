@@ -689,6 +689,9 @@ function initModals() {
             if (e.target.closest('#decide-btn')) { showDecisionModal(refreshOffer); return; }
             if (e.target.closest('#decide-approve-btn')) { showApproveDecisionModal(refreshOffer); return; }
             if (e.target.closest('#decide-reject-btn')) { showRejectDecisionModal(refreshOffer); return; }
+            // Approval tab inline actions (new self-contained approval page)
+            if (e.target.closest('#approval-decide-approve-btn')) { showApproveDecisionModal(refreshOffer); return; }
+            if (e.target.closest('#approval-decide-reject-btn')) { showRejectDecisionModal(refreshOffer); return; }
         });
     }
 }
@@ -904,16 +907,386 @@ async function loadApprovalStatus() {
     const container = document.getElementById('approval-workflow-content');
     if (!container) return;
     try {
-        const workflowData = await getApprovalStatus(offerId);
-        const approvals = Array.isArray(workflowData) ? workflowData : (workflowData ? [workflowData] : []);
-        if (!approvals.length) {
+        // API now returns a single, self-contained payload (offer + items + workflows + permissions)
+        const approvalData = await getApprovalStatus(offerId);
+        if (!approvalData) {
             container.innerHTML = '<div class="text-muted">Aktif onay süreci bulunamadı.</div>';
             return;
         }
-        container.innerHTML = renderApprovalWorkflow(approvals);
+
+        // Keep global offer in sync (other tabs / footer depend on it)
+        offer = { ...(offer || {}), ...approvalData };
+        offer.items = approvalData.items || offer.items || [];
+        offer.price_history = approvalData.price_history || offer.price_history || [];
+        offer.workflows = approvalData.workflows || offer.workflows || [];
+        offer.needs_my_approval = approvalData.current_user_can_decide === true;
+
+        // Update footer buttons based on latest permission
+        updateOfferModalFooter('approval');
+
+        container.innerHTML = renderApprovalTabPage(approvalData);
+        initApprovalWorkflowsTable(approvalData);
     } catch (e) {
         container.innerHTML = '<div class="text-danger">Onay durumu yüklenemedi.</div>';
     }
+}
+
+function renderApprovalTabPage(approvalData) {
+    const currency = approvalData?.current_price?.currency || 'EUR';
+    const currencySymbol = CURRENCY_SYMBOLS?.[currency] || currency;
+
+    const itemsTree = Array.isArray(approvalData?.items) ? approvalData.items : [];
+    const workflows = Array.isArray(approvalData?.workflows) ? approvalData.workflows : [];
+
+    const totalPrice = approvalData?.total_price != null ? parseFloat(approvalData.total_price) : null;
+    const totalWeight = approvalData?.total_weight_kg != null ? parseFloat(approvalData.total_weight_kg) : null;
+    const avgKgPrice = (totalPrice != null && Number.isFinite(totalPrice) && totalWeight != null && Number.isFinite(totalWeight) && totalWeight > 0)
+        ? (totalPrice / totalWeight)
+        : null;
+
+    const canDecide = approvalData?.current_user_can_decide === true;
+
+    const header = `
+        <div class="d-flex flex-wrap align-items-start justify-content-between gap-2 mb-3">
+            <div class="min-w-0">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <h6 class="mb-0 d-flex align-items-center">
+                        <i class="fas fa-clipboard-check me-2 text-success"></i>Onay
+                    </h6>
+                    <span class="badge ${approvalData?.status === 'pending_approval' ? 'bg-primary' : 'bg-secondary'}">${escapeHtml(approvalData?.status_display || approvalData?.status || '-')}</span>
+                </div>
+                <div class="text-muted small mt-1">
+                    <span class="me-2"><strong>${escapeHtml(approvalData?.offer_no || '-')}</strong></span>
+                    <span class="me-2">•</span>
+                    <span class="me-2">${escapeHtml(approvalData?.customer_name || '-')}</span>
+                    ${approvalData?.customer_code ? `<span class="badge bg-light text-dark border">${escapeHtml(String(approvalData.customer_code))}</span>` : ''}
+                </div>
+            </div>
+            ${canDecide ? `
+                <div class="d-flex gap-2 flex-wrap">
+                    <button type="button" class="btn btn-sm btn-success" id="approval-decide-approve-btn">
+                        <i class="fas fa-check me-1"></i>Onayla
+                    </button>
+                    <button type="button" class="btn btn-sm btn-danger" id="approval-decide-reject-btn">
+                        <i class="fas fa-times me-1"></i>Reddet
+                    </button>
+                </div>
+            ` : `
+                <div class="text-muted small">
+                    ${approvalData?.is_rejected ? '' : 'Bu aşamada karar yetkiniz bulunmuyor.'}
+                </div>
+            `}
+        </div>
+    `;
+
+    const totals = `
+        <div class="row g-2 mb-3">
+            <div class="col-md-4">
+                <div class="card border-0" style="background:#fafbfc;">
+                    <div class="card-body py-2">
+                        <div class="text-muted small">Toplam Tutar</div>
+                        <div class="fw-semibold" style="font-variant-numeric: tabular-nums;">
+                            ${totalPrice != null && Number.isFinite(totalPrice) ? `${currencySymbol} ${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '-'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0" style="background:#fafbfc;">
+                    <div class="card-body py-2">
+                        <div class="text-muted small">Toplam Ağırlık</div>
+                        <div class="fw-semibold" style="font-variant-numeric: tabular-nums;">
+                            ${totalWeight != null && Number.isFinite(totalWeight) ? `${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kg` : '-'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card border-0" style="background:#fafbfc;">
+                    <div class="card-body py-2">
+                        <div class="text-muted small">Ortalama Kg Fiyatı</div>
+                        <div class="fw-semibold" style="font-variant-numeric: tabular-nums;">
+                            ${avgKgPrice != null ? `${currencySymbol} ${avgKgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} /kg` : '-'}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const itemsTable = renderApprovalItemsTable(itemsTree, currency, approvalData);
+    return `
+        ${header}
+        ${totals}
+        <div class="mb-3">
+            <h6 class="mb-2 d-flex align-items-center text-primary" style="font-weight: 600;">
+                <i class="fas fa-tag me-2"></i>Kalemler (Ağırlık & Fiyat)
+            </h6>
+            ${itemsTable}
+        </div>
+        <div class="mt-4">
+            <div id="approval-workflows-table"></div>
+        </div>
+    `;
+}
+
+let approvalWorkflowsTable = null;
+
+function initApprovalWorkflowsTable(approvalData) {
+    const container = document.getElementById('approval-workflows-table');
+    if (!container) return;
+
+    const workflows = Array.isArray(approvalData?.workflows) ? approvalData.workflows : [];
+    if (!workflows.length) {
+        container.innerHTML = '<div class="text-muted">Onay süreci bulunamadı.</div>';
+        return;
+    }
+
+    const currency = approvalData?.current_price?.currency || approvalData?.current_price?.currency || 'EUR';
+    const rows = workflows
+        .slice()
+        .sort((a, b) => (new Date(b?.created_at || 0)).getTime() - (new Date(a?.created_at || 0)).getTime())
+        .map((wf, idx) => {
+            const snapshot = wf?.snapshot || {};
+            const round = snapshot?.round ?? null;
+            const amount = snapshot?.amount ?? null;
+            const cur = snapshot?.currency ?? currency;
+
+            const status = wf?.is_cancelled
+                ? { key: 'cancelled', label: 'İptal', badge: 'bg-secondary' }
+                : wf?.is_rejected
+                    ? { key: 'rejected', label: 'Reddedildi', badge: 'bg-danger' }
+                    : wf?.is_complete
+                        ? { key: 'complete', label: 'Tamamlandı', badge: 'bg-success' }
+                        : { key: 'in_progress', label: 'Devam Ediyor', badge: 'bg-warning text-dark' };
+
+            const stages = Array.isArray(wf?.stage_instances) ? wf.stage_instances : [];
+            const currentStage = stages.find(s => s?.order === wf?.current_stage_order) || null;
+            const currentStageName = currentStage?.name || '-';
+            const currentApprovers = Array.isArray(currentStage?.approvers) ? currentStage.approvers : [];
+            const approverNames = currentApprovers
+                .map(a => a?.full_name || [a?.first_name, a?.last_name].filter(Boolean).join(' ') || a?.username)
+                .filter(Boolean);
+
+            // Find latest decision across all stages
+            let latestDecision = null;
+            for (const st of stages) {
+                const decisions = Array.isArray(st?.decisions) ? st.decisions : [];
+                for (const d of decisions) {
+                    const t = d?.decided_at ? Date.parse(d.decided_at) : NaN;
+                    if (!Number.isFinite(t)) continue;
+                    if (!latestDecision || t > latestDecision._t) {
+                        latestDecision = { ...d, _t: t };
+                    }
+                }
+            }
+
+            const lastDecisionBy = latestDecision?.approver_detail?.full_name
+                || [latestDecision?.approver_detail?.first_name, latestDecision?.approver_detail?.last_name].filter(Boolean).join(' ')
+                || latestDecision?.approver_detail?.username
+                || (latestDecision?.approver ? `#${latestDecision.approver}` : '-');
+            const lastDecisionAt = latestDecision?.decided_at || null;
+            const lastDecision = latestDecision?.decision === 'approve'
+                ? { key: 'approve', label: 'Onay', badge: 'bg-success' }
+                : latestDecision?.decision === 'reject'
+                    ? { key: 'reject', label: 'Red', badge: 'bg-danger' }
+                    : null;
+
+            return {
+                _order: idx,
+                created_at: wf?.created_at || null,
+                round,
+                status_key: status.key,
+                status_label: status.label,
+                status_badge: status.badge,
+                stage: currentStageName,
+                required: currentStage?.required_approvals ?? null,
+                approved: currentStage?.approved_count ?? null,
+                approvers: approverNames.join(', '),
+                amount,
+                currency: cur,
+                last_decision_key: lastDecision?.key || null,
+                last_decision_label: lastDecision?.label || '-',
+                last_decision_badge: lastDecision?.badge || 'bg-light text-dark border',
+                last_decision_by: lastDecisionBy || '-',
+                last_decision_at: lastDecisionAt,
+                comment: latestDecision?.comment || ''
+            };
+        });
+
+    // TableComponent expects a container id; ensure element has an id and is empty.
+    if (!container.id) container.id = 'approval-workflows-table';
+    container.innerHTML = '';
+
+    approvalWorkflowsTable = new TableComponent(container.id, {
+        title: 'Onay Geçmişi',
+        icon: 'fas fa-route',
+        iconColor: 'text-success',
+        data: rows,
+        columns: [
+            { field: 'created_at', label: 'Oluşturma', type: 'date', width: '160px' },
+            { field: 'round', label: 'Tur', width: '70px', formatter: (v) => v != null ? `<span class="badge bg-light text-dark border">R${escapeHtml(String(v))}</span>` : '-' },
+            {
+                field: 'status_label',
+                label: 'Durum',
+                width: '120px',
+                sortable: false,
+                formatter: (_, row) => `<span class="badge ${escapeHtml(String(row.status_badge || 'bg-secondary'))}">${escapeHtml(String(row.status_label || '-'))}</span>`
+            },
+            { field: 'stage', label: 'Aşama', width: '180px' },
+            {
+                field: 'approved',
+                label: 'Onay',
+                width: '90px',
+                sortable: false,
+                formatter: (_, row) => {
+                    const a = row.approved ?? 0;
+                    const r = row.required ?? 0;
+                    const ok = r > 0 && a >= r;
+                    return `<span class="${ok ? 'text-success fw-semibold' : 'text-muted'}">${escapeHtml(String(a))}/${escapeHtml(String(r))}</span>`;
+                }
+            },
+            { field: 'approvers', label: 'Onaylayıcılar', width: '240px', sortable: false, formatter: (v) => v ? `<div class="text-truncate" style="max-width: 240px;" title="${escapeHtml(String(v))}">${escapeHtml(String(v))}</div>` : '-' },
+            {
+                field: 'amount',
+                label: 'Tutar',
+                width: '140px',
+                type: 'number',
+                formatter: (v, row) => {
+                    if (v == null || v === '') return '-';
+                    const n = Number(v);
+                    if (!Number.isFinite(n)) return escapeHtml(String(v));
+                    return `<span class="fw-semibold">${n.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${escapeHtml(String(row.currency || ''))}</span>`;
+                }
+            },
+            {
+                field: 'last_decision_label',
+                label: 'Son Karar',
+                width: '110px',
+                sortable: false,
+                formatter: (_, row) => `<span class="badge ${escapeHtml(String(row.last_decision_badge || 'bg-light text-dark border'))}">${escapeHtml(String(row.last_decision_label || '-'))}</span>`
+            },
+            { field: 'last_decision_by', label: 'Karar Veren', width: '160px', sortable: false },
+            { field: 'last_decision_at', label: 'Karar Zamanı', type: 'date', width: '160px', sortable: false, formatter: (v) => v ? `<div style="color:#6c757d; font-weight:500;">${escapeHtml(formatDateTime(v))}</div>` : '-' },
+            { field: 'comment', label: 'Yorum', sortable: false, formatter: (v) => v ? `<div class="text-truncate" style="max-width: 360px;" title="${escapeHtml(String(v))}">${escapeHtml(String(v))}</div>` : '-' }
+        ],
+        sortable: false,
+        pagination: false,
+        striped: false,
+        bordered: true,
+        small: true,
+        stickyHeader: false,
+        emptyMessage: 'Onay kaydı bulunamadı',
+        emptyIcon: 'fas fa-clipboard-check'
+    });
+}
+
+function renderApprovalItemsTable(itemsTree, currency = 'EUR', approvalData = null) {
+    const currencySymbol = CURRENCY_SYMBOLS?.[currency] || currency;
+    const rows = [];
+
+    const walk = (nodes, depth) => {
+        (nodes || []).forEach((node) => {
+            const title = node?.resolved_title || node?.title_override || node?.title || (node?.template_node_detail?.title ?? '-') || '-';
+            const qty = node?.quantity != null ? parseInt(node.quantity, 10) : 1;
+            const unitPrice = node?.unit_price != null ? parseFloat(node.unit_price) : null;
+            const weightKg = node?.weight_kg != null ? parseFloat(node.weight_kg) : null;
+
+            const subtotal = node?.subtotal != null
+                ? parseFloat(node.subtotal)
+                : (unitPrice != null && Number.isFinite(unitPrice) ? unitPrice * (qty || 1) : null);
+
+            const totalItemWeight = (weightKg != null && Number.isFinite(weightKg) ? weightKg * (qty || 1) : null);
+            const kgPrice = (unitPrice != null && Number.isFinite(unitPrice) && weightKg != null && Number.isFinite(weightKg) && weightKg > 0)
+                ? (unitPrice / weightKg)
+                : null;
+
+            rows.push(`
+                <tr>
+                    <td style="padding-left:${depth * 20 + 8}px">
+                        ${depth > 0 ? '<span class="pricing-tree-prefix">└─</span>' : ''}
+                        ${escapeHtml(String(title))}
+                    </td>
+                    <td class="text-center">${escapeHtml(String(qty || 1))}</td>
+                    <td class="text-end" style="font-variant-numeric: tabular-nums;">
+                        ${unitPrice != null && Number.isFinite(unitPrice) ? `${currencySymbol} ${unitPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
+                    </td>
+                    <td class="text-end" style="font-variant-numeric: tabular-nums;">
+                        ${weightKg != null && Number.isFinite(weightKg) ? `${weightKg.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
+                    </td>
+                    <td class="text-end" style="font-variant-numeric: tabular-nums;">
+                        ${kgPrice != null ? `${currencySymbol} ${kgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
+                    </td>
+                    <td class="text-end" style="font-variant-numeric: tabular-nums;">
+                        ${subtotal != null && Number.isFinite(subtotal) ? `${currencySymbol} ${subtotal.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
+                    </td>
+                </tr>
+            `);
+
+            if (node?.children && node.children.length > 0) {
+                walk(node.children, depth + 1);
+            }
+        });
+    };
+
+    walk(itemsTree, 0);
+
+    if (!rows.length) {
+        return `
+            <div class="text-center text-muted py-4">
+                <i class="fas fa-inbox fa-2x mb-2 d-block"></i>
+                Kalem bulunamadı.
+            </div>
+        `;
+    }
+
+    // Totals are already provided by the approval-status payload (server truth).
+    const totalPrice = approvalData?.total_price != null ? parseFloat(approvalData.total_price) : null;
+    const totalWeight = approvalData?.total_weight_kg != null ? parseFloat(approvalData.total_weight_kg) : null;
+    const avgKgPrice = (totalPrice != null && Number.isFinite(totalPrice) && totalWeight != null && Number.isFinite(totalWeight) && totalWeight > 0)
+        ? (totalPrice / totalWeight)
+        : null;
+    const showFooterTotals = totalPrice != null || totalWeight != null;
+
+    return `
+        <div class="table-responsive">
+            <table class="table table-bordered mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th style="width: 44%;">Kalem</th>
+                        <th style="width: 8%;" class="text-center">Adet</th>
+                        <th style="width: 16%;" class="text-end">Birim Fiyat</th>
+                        <th style="width: 12%;" class="text-end">Ağırlık (kg)</th>
+                        <th style="width: 9%;" class="text-end">Kg Fiyatı</th>
+                        <th style="width: 19%;" class="text-end">Ara Toplam</th>
+                    </tr>
+                </thead>
+                <tbody>${rows.join('')}</tbody>
+                ${showFooterTotals ? `
+                    <tfoot class="table-light">
+                        <tr>
+                            <th colspan="5" class="text-end">Toplam:</th>
+                            <th class="text-end" style="font-variant-numeric: tabular-nums;">
+                                ${totalPrice != null && Number.isFinite(totalPrice) ? `${currencySymbol} ${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
+                            </th>
+                        </tr>
+                        <tr>
+                            <th colspan="5" class="text-end">Toplam Ağırlık:</th>
+                            <th class="text-end" style="font-variant-numeric: tabular-nums;">
+                                ${totalWeight != null && Number.isFinite(totalWeight) ? `${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} kg` : '—'}
+                            </th>
+                        </tr>
+                        <tr>
+                            <th colspan="5" class="text-end">Ortalama Kg Fiyatı:</th>
+                            <th class="text-end" style="font-variant-numeric: tabular-nums;">
+                                ${avgKgPrice != null ? `${currencySymbol} ${avgKgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} /kg` : '—'}
+                            </th>
+                        </tr>
+                    </tfoot>
+                ` : ''}
+            </table>
+        </div>
+    `;
 }
 
 function renderApprovalWorkflow(approvals) {
@@ -2719,11 +3092,12 @@ function recalculatePricingTotalsFromInputs() {
         const unitPrice = parsePricingNumber(unitPriceInput ? unitPriceInput.value : null);
         const weightKg = parsePricingNumber(weightInput ? weightInput.value : null);
 
-        if (unitPrice !== null && unitPrice >= 0) {
-            itemsTotal += unitPrice * quantity;
-        }
         if (weightKg !== null && weightKg >= 0) {
             totalWeight += weightKg * quantity;
+        }
+        // Pricing total is independent of weight; weight is used only for kg price display.
+        if (unitPrice !== null && unitPrice >= 0) {
+            itemsTotal += unitPrice * quantity;
         }
     });
 
@@ -2813,11 +3187,13 @@ function buildPricingTab() {
             <table class="table table-bordered table-sm align-middle pricing-table-v2">
               <thead class="table-light">
                 <tr>
-                  <th>Kalem</th>
+                  <th style="width: 44%;">Kalem</th>
                   <th style="width: 96px;" class="text-center">Adet</th>
-                  <th style="width: 180px;">Birim Fiyat</th>
-                  <th style="width: 160px;" class="text-end">Ara Toplam</th>
-                  <th style="width: 220px;">Termin</th>
+                  <th style="width: 160px;">Birim Fiyat (€/adet)</th>
+                  <th style="width: 140px;">Birim Ağırlık (kg)</th>
+                  <th style="width: 90px;" class="text-end">Kg Fiyatı</th>
+                  <th style="width: 200px;" class="text-end">Ara Toplam</th>
+                  <th style="width: 160px;">Termin</th>
                   <th style="width: 260px;">Not</th>
                 </tr>
               </thead>
@@ -2838,6 +3214,8 @@ function buildPricingTab() {
               </div>
               <div class="pricing-bill">
                 <div class="pricing-bill-row"><span class="text-muted">Kalemler</span><strong id="pricing-items-total">—</strong></div>
+                <div class="pricing-bill-row"><span class="text-muted">Toplam Ağırlık</span><strong id="pricing-total-weight">—</strong></div>
+                <div class="pricing-bill-row"><span class="text-muted">Ortalama Kg Fiyatı</span><strong id="pricing-avg-kg-price">—</strong></div>
                 <div class="pricing-bill-row"><span class="text-muted">Nakliye</span><strong id="pricing-shipping-total">—</strong></div>
                 <div class="pricing-bill-row pricing-bill-grand"><span class="text-muted">Genel Toplam</span><strong id="pricing-grand-total">—</strong></div>
               </div>
@@ -2942,6 +3320,27 @@ function isPricingV3Editable(item) {
     return false;
 }
 
+function computePricingV3WeightTotal(item) {
+    const edits = pricingV3State.localEdits[item.id];
+    if (!edits) return null;
+
+    if (pricingV3State.pricingMode === 'leaf' && item.children?.length) {
+        let sum = 0;
+        let any = false;
+        for (const child of item.children) {
+            const w = computePricingV3WeightTotal(child);
+            if (w != null) {
+                sum += w;
+                any = true;
+            }
+        }
+        return any ? sum : null;
+    }
+
+    if (edits.weight_kg != null) return edits.weight_kg * (edits.quantity || 1);
+    return null;
+}
+
 function computePricingV3Subtotal(item) {
     const edits = pricingV3State.localEdits[item.id];
     if (!edits) return null;
@@ -2959,6 +3358,7 @@ function computePricingV3Subtotal(item) {
         return any ? sum : null;
     }
 
+    // Subtotal is independent of weight; weight is used only for kg price display.
     if (edits.unit_price != null) return edits.unit_price * (edits.quantity || 1);
     return null;
 }
@@ -2991,7 +3391,12 @@ function renderPricingV3Row(item, container, depth) {
     const title = item.resolved_title || item.title_override || item.title || (item.template_node_detail?.title ?? '-') || '-';
     const isCustom = !item.template_node;
     const subtotal = computePricingV3Subtotal(item);
+    const weightTotal = computePricingV3WeightTotal(item);
     const qty = edits?.quantity ?? 1;
+    const unitWeight = (weightTotal != null && (qty || 1) > 0) ? (weightTotal / (qty || 1)) : null;
+    // Weight affects only kg price display: kg price = line total / line total weight
+    const kgPrice = (subtotal != null && weightTotal != null && weightTotal > 0) ? (subtotal / weightTotal) : null;
+    const rolledUpUnitPrice = (subtotal != null && (qty || 1) > 0) ? (subtotal / (qty || 1)) : null;
 
     tr.innerHTML = `
       <td style="padding-left:${depth * 20 + 8}px">
@@ -3006,9 +3411,20 @@ function renderPricingV3Row(item, container, depth) {
         ${editable
             ? `<input type="number" min="0" step="0.01" class="form-control form-control-sm pricing-unit-input" value="${edits?.unit_price ?? ''}" placeholder="—" />`
             : `<span class="pricing-locked ${isRolledUp ? 'is-rollup' : 'is-locked'}">
-                 ${isRolledUp ? (subtotal != null ? formatPricingV3Money(subtotal / (qty || 1)) : '—') : '—'}
+                 ${isRolledUp ? (rolledUpUnitPrice != null ? formatPricingV3Money(rolledUpUnitPrice) : '—') : '—'}
                </span>`
         }
+      </td>
+      <td>
+        ${editable
+            ? `<input type="number" min="0" step="0.01" class="form-control form-control-sm pricing-weight-input" value="${edits?.weight_kg ?? ''}" placeholder="—" />`
+            : `<span class="pricing-locked ${isRolledUp ? 'is-rollup' : 'is-locked'}">
+                 ${isRolledUp ? (unitWeight != null ? unitWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '—') : '—'}
+               </span>`
+        }
+      </td>
+      <td class="text-end" id="kgprice-${item.id}">
+        ${kgPrice != null ? formatPricingV3Money2(kgPrice) : '—'}
       </td>
       <td class="text-end" id="subtotal-${item.id}">
         ${subtotal != null ? formatPricingV3Money(subtotal) : '—'}
@@ -3031,6 +3447,8 @@ function renderPricingV3Row(item, container, depth) {
 
     const unitInput = tr.querySelector('.pricing-unit-input');
     if (unitInput) unitInput.addEventListener('input', (e) => setPricingV3Edit(item.id, 'unit_price', e.target.value === '' ? null : +e.target.value));
+    const weightInput = tr.querySelector('.pricing-weight-input');
+    if (weightInput) weightInput.addEventListener('input', (e) => setPricingV3Edit(item.id, 'weight_kg', e.target.value === '' ? null : +e.target.value));
     const periodInput = tr.querySelector('.pricing-period-input');
     if (periodInput) periodInput.addEventListener('input', (e) => setPricingV3Edit(item.id, 'delivery_period', e.target.value));
     const notesInput = tr.querySelector('.pricing-notes-input');
@@ -3060,12 +3478,22 @@ function refreshPricingV3SubtotalDisplays(changedItemId) {
     const s = computePricingV3Subtotal(item);
     if (cell) cell.textContent = s != null ? formatPricingV3Money(s) : '—';
 
+    const kgCell = document.getElementById(`kgprice-${changedItemId}`);
+    const wt = computePricingV3WeightTotal(item);
+    const kgPrice = (s != null && wt != null && wt > 0) ? (s / wt) : null;
+    if (kgCell) kgCell.textContent = kgPrice != null ? formatPricingV3Money2(kgPrice) : '—';
+
     if (pricingV3State.pricingMode === 'leaf') {
         for (const candidate of Object.values(pricingV3State.itemsFlat)) {
             if (candidate.children?.length && pricingV3HasDescendant(candidate, changedItemId)) {
                 const c = document.getElementById(`subtotal-${candidate.id}`);
                 const ss = computePricingV3Subtotal(candidate);
                 if (c) c.textContent = ss != null ? formatPricingV3Money(ss) : '—';
+
+                const kgc = document.getElementById(`kgprice-${candidate.id}`);
+                const wtt = computePricingV3WeightTotal(candidate);
+                const kgs = (ss != null && wtt != null && wtt > 0) ? (ss / wtt) : null;
+                if (kgc) kgc.textContent = kgs != null ? formatPricingV3Money2(kgs) : '—';
             }
         }
     }
@@ -3084,11 +3512,20 @@ function formatPricingV3Money(amount) {
     return new Intl.NumberFormat('tr-TR', { style: 'currency', currency, minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
 }
 
+function formatPricingV3Money2(amount) {
+    if (amount == null) return '—';
+    const currency = pricingV3State.offer?.current_price?.currency || pricingV3State.offer?.currency || 'EUR';
+    return new Intl.NumberFormat('tr-TR', { style: 'currency', currency, minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount);
+}
+
 function renderPricingV3Totals() {
     let itemsTotal = 0;
+    let totalWeight = 0;
     for (const root of pricingV3State.items) {
         const s = computePricingV3Subtotal(root);
         if (s != null) itemsTotal += s;
+        const w = computePricingV3WeightTotal(root);
+        if (w != null) totalWeight += w;
     }
     const shipping = (pricingV3State.shippingPrice || 0);
     const grand = itemsTotal + shipping;
@@ -3098,6 +3535,12 @@ function renderPricingV3Totals() {
     if (itemsEl) itemsEl.textContent = formatPricingV3Money(itemsTotal);
     if (shippingEl) shippingEl.textContent = formatPricingV3Money(shipping);
     if (grandEl) grandEl.textContent = formatPricingV3Money(grand);
+
+    const weightEl = document.getElementById('pricing-total-weight');
+    if (weightEl) weightEl.textContent = totalWeight > 0 ? `${totalWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg` : '—';
+    const avgKgEl = document.getElementById('pricing-avg-kg-price');
+    const avgKg = totalWeight > 0 ? (itemsTotal / totalWeight) : null;
+    if (avgKgEl) avgKgEl.textContent = avgKg != null ? formatPricingV3Money(avgKg) : '—';
 }
 
 function markPricingV3Unsaved(hasChanges) {
@@ -3115,6 +3558,7 @@ function changePricingV3Mode(newMode) {
         pricingV3State.pricingMode = newMode;
         for (const edits of Object.values(pricingV3State.localEdits)) {
             edits.unit_price = null;
+            edits.weight_kg = null;
         }
         pricingV3State.hasUnsavedChanges = true;
         renderPricingV3Hint();
@@ -3141,14 +3585,19 @@ async function savePricingV3Prices() {
     const payload = {
         pricing_mode: pricingV3State.pricingMode,
         shipping_price: pricingV3State.shippingPrice,
-        items: Object.entries(pricingV3State.localEdits).map(([id, edits]) => ({
-            id: parseInt(id, 10),
-            unit_price: edits.unit_price,
-            quantity: edits.quantity,
-            notes: edits.notes || '',
-            weight_kg: edits.weight_kg,
-            delivery_period: edits.delivery_period
-        }))
+        // Mode-aware: clear values from the other mode explicitly
+        items: Object.entries(pricingV3State.localEdits).map(([id, edits]) => {
+            const item = pricingV3State.itemsFlat?.[id];
+            const editable = item ? isPricingV3Editable(item) : true;
+            return {
+                id: parseInt(id, 10),
+                unit_price: editable ? edits.unit_price : null,
+                quantity: edits.quantity,
+                notes: edits.notes || '',
+                weight_kg: editable ? edits.weight_kg : null,
+                delivery_period: edits.delivery_period
+            };
+        })
     };
 
     const footerSaveBtn = viewOfferModal?.container?.querySelector('#save-prices-btn');
@@ -3190,6 +3639,7 @@ function buildApprovalTab() {
             <i class="fas fa-clipboard-check me-2 text-success"></i>Onay Süreci
         </h6>
         <div class="text-muted py-2"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>`;
+    // Content is replaced by `loadApprovalStatus()` with a full page (items + workflows + decision actions)
     return `<div id="approval-workflow-content" class="mt-2">${hasRound ? loadingState : emptyState}</div>`;
 }
 
