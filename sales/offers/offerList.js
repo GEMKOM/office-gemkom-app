@@ -129,6 +129,10 @@ async function loadSalesUsers() {
 
 function isCurrentUserInSalesTeam() {
     if (!currentUser?.id) return false;
+    const group = currentUser?.group || currentUser?.team_group || currentUser?.teamGroup || '';
+    if (String(group) === String(SALES_TEAM_GROUP)) return true;
+    const groups = currentUser?.groups;
+    if (Array.isArray(groups) && groups.some(g => String(g?.name || g) === String(SALES_TEAM_GROUP))) return true;
     return users.some((u) => String(u.id) === String(currentUser.id));
 }
 
@@ -926,6 +930,13 @@ async function loadApprovalStatus() {
 
         container.innerHTML = renderApprovalTabPage(approvalData);
         initApprovalWorkflowsTable(approvalData);
+
+        // Wire approval tab top-level decide buttons (they are in modal body, not footer)
+        const refreshApprovalTab = () => viewOffer(offerId, { initialTabId: 'approval' });
+        const approveBtn = document.getElementById('approval-decide-approve-btn');
+        if (approveBtn) approveBtn.onclick = () => showApproveDecisionModal(refreshApprovalTab);
+        const rejectBtn = document.getElementById('approval-decide-reject-btn');
+        if (rejectBtn) rejectBtn.onclick = () => showRejectDecisionModal(refreshApprovalTab);
     } catch (e) {
         container.innerHTML = '<div class="text-danger">Onay durumu yüklenemedi.</div>';
     }
@@ -1184,22 +1195,100 @@ function initApprovalWorkflowsTable(approvalData) {
 function renderApprovalItemsTable(itemsTree, currency = 'EUR', approvalData = null) {
     const currencySymbol = CURRENCY_SYMBOLS?.[currency] || currency;
     const rows = [];
+    const mode = approvalData?.pricing_mode || approvalData?.pricingMode || 'flat';
+
+    const parseNum = (v) => {
+        if (v === null || v === undefined || v === '') return null;
+        const n = typeof v === 'number' ? v : parseFloat(v);
+        return Number.isFinite(n) ? n : null;
+    };
+
+    const computeNodeRollup = (node) => {
+        const qty = node?.quantity != null ? parseInt(node.quantity, 10) : 1;
+        const unitWeight = parseNum(node?.weight_kg);
+        const selfWeightTotal = unitWeight != null ? unitWeight * (qty || 1) : null;
+        const selfSubtotal = parseNum(node?.subtotal);
+
+        const children = Array.isArray(node?.children) ? node.children : [];
+        if (!children.length) {
+            return {
+                priceTotal: selfSubtotal,
+                weightTotal: selfWeightTotal,
+                leavesPriceTotal: selfSubtotal,
+                leavesWeightTotal: selfWeightTotal
+            };
+        }
+
+        let priceTotal = selfSubtotal;
+        let weightTotal = selfWeightTotal;
+        let leavesPriceTotal = 0;
+        let leavesWeightTotal = 0;
+        let anyLeafPrice = false;
+        let anyLeafWeight = false;
+
+        for (const ch of children) {
+            const r = computeNodeRollup(ch);
+            if (r.priceTotal != null) {
+                if (priceTotal == null) priceTotal = 0;
+                priceTotal += r.priceTotal;
+            }
+            if (r.weightTotal != null) {
+                if (weightTotal == null) weightTotal = 0;
+                weightTotal += r.weightTotal;
+            }
+            if (r.leavesPriceTotal != null) {
+                leavesPriceTotal += r.leavesPriceTotal;
+                anyLeafPrice = true;
+            }
+            if (r.leavesWeightTotal != null) {
+                leavesWeightTotal += r.leavesWeightTotal;
+                anyLeafWeight = true;
+            }
+        }
+
+        return {
+            priceTotal,
+            weightTotal,
+            leavesPriceTotal: anyLeafPrice ? leavesPriceTotal : null,
+            leavesWeightTotal: anyLeafWeight ? leavesWeightTotal : null
+        };
+    };
 
     const walk = (nodes, depth) => {
         (nodes || []).forEach((node) => {
             const title = node?.resolved_title || node?.title_override || node?.title || (node?.template_node_detail?.title ?? '-') || '-';
             const qty = node?.quantity != null ? parseInt(node.quantity, 10) : 1;
-            const unitPrice = node?.unit_price != null ? parseFloat(node.unit_price) : null;
-            const weightKg = node?.weight_kg != null ? parseFloat(node.weight_kg) : null;
+            const unitPrice = parseNum(node?.unit_price);
+            const weightKg = parseNum(node?.weight_kg);
 
-            const subtotal = node?.subtotal != null
-                ? parseFloat(node.subtotal)
-                : (unitPrice != null && Number.isFinite(unitPrice) ? unitPrice * (qty || 1) : null);
+            const subtotal = parseNum(node?.subtotal) != null
+                ? parseNum(node?.subtotal)
+                : (unitPrice != null ? unitPrice * (qty || 1) : null);
 
-            const totalItemWeight = (weightKg != null && Number.isFinite(weightKg) ? weightKg * (qty || 1) : null);
-            const kgPrice = (unitPrice != null && Number.isFinite(unitPrice) && weightKg != null && Number.isFinite(weightKg) && weightKg > 0)
-                ? (unitPrice / weightKg)
-                : null;
+            const hasChildren = Boolean(node?.children && node.children.length);
+            const rollup = (mode === 'leaf' && hasChildren) ? computeNodeRollup(node) : null;
+
+            // For leaf-mode parents: show effective unit price derived from leaf totals (not total amount).
+            // effective_unit_price = sum(leaf subtotals) / parent quantity
+            const displayUnitPrice = (mode === 'leaf' && hasChildren)
+                ? (rollup?.leavesPriceTotal != null && (qty || 0) > 0 ? (rollup.leavesPriceTotal / qty) : null)
+                : unitPrice;
+
+            const totalItemWeight = (mode === 'leaf' && hasChildren)
+                ? (rollup?.weightTotal ?? null)
+                : (weightKg != null ? weightKg * (qty || 1) : null);
+
+            const displayWeight = (mode === 'leaf' && hasChildren)
+                ? totalItemWeight
+                : weightKg;
+
+            const kgPrice = (mode === 'leaf' && hasChildren)
+                ? (rollup?.leavesPriceTotal != null && rollup?.leavesWeightTotal != null && rollup.leavesWeightTotal > 0
+                    ? (rollup.leavesPriceTotal / rollup.leavesWeightTotal)
+                    : null)
+                : (subtotal != null && totalItemWeight != null && totalItemWeight > 0
+                    ? (subtotal / totalItemWeight)
+                    : null);
 
             rows.push(`
                 <tr>
@@ -1209,10 +1298,10 @@ function renderApprovalItemsTable(itemsTree, currency = 'EUR', approvalData = nu
                     </td>
                     <td class="text-center">${escapeHtml(String(qty || 1))}</td>
                     <td class="text-end" style="font-variant-numeric: tabular-nums;">
-                        ${unitPrice != null && Number.isFinite(unitPrice) ? `${currencySymbol} ${unitPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
+                        ${displayUnitPrice != null ? `${currencySymbol} ${displayUnitPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
                     <td class="text-end" style="font-variant-numeric: tabular-nums;">
-                        ${weightKg != null && Number.isFinite(weightKg) ? `${weightKg.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
+                        ${displayWeight != null ? `${displayWeight.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
                     </td>
                     <td class="text-end" style="font-variant-numeric: tabular-nums;">
                         ${kgPrice != null ? `${currencySymbol} ${kgPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
