@@ -6,7 +6,7 @@ import { ConfirmationModal } from '../../../components/confirmation-modal/confir
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
-import { searchItemsBySearch, getItem } from '../../../apis/procurement.js';
+import { searchItemsBySearch } from '../../../apis/procurement.js';
 import { listJobOrders } from '../../../apis/projects/jobOrders.js';
 import {
     listLinearCuttingSessions,
@@ -20,7 +20,6 @@ import {
 } from '../../../apis/linear_cutting/sessions.js';
 import {
     listLinearCuttingParts,
-    createLinearCuttingPart,
     createLinearCuttingPartsBulk,
     patchLinearCuttingPart,
     deleteLinearCuttingPart
@@ -39,6 +38,7 @@ let confirmResultModal = null;
 let deletePartModal   = null;
 let createPlanModal   = null;
 let jobNoDropdowns    = new Map(); // rowId -> ModernDropdown
+let partItemDropdowns = new Map(); // rowId -> ModernDropdown
 let newRowSeq         = 0;
 let jobNoSyncHandle   = null;
 
@@ -82,7 +82,8 @@ function setConfirmState(session) {
 
 function setSessionInputs(session) {
     $('lc-session-key').value         = session.key || '';
-    $('lc-session-sub').textContent   = session.title || '';
+    const sub = $('lc-session-sub');
+    if (sub) sub.textContent = session.title || '';
     $('lc-title').value               = session.title || '';
     $('lc-stock').value               = session.stock_length_mm ?? '';
     $('lc-kerf').value                = Number(session.kerf_mm ?? 0) || '';
@@ -93,91 +94,6 @@ function setSessionInputs(session) {
 function showSessionArea(show) {
     $('lc-session-area').style.display  = show ? '' : 'none';
     $('lc-no-plan-state').style.display = show ? 'none' : '';
-}
-
-// ─────────────────────────── ITEM SEARCH ──────────────────────
-function formatItemLabel(item) {
-    if (!item) return 'Seçilmedi';
-    const code = item.item_code || item.code || '';
-    const name = item.item_name || item.name || '';
-    const unit = item.item_unit || item.unit || '';
-    const left = [code, name].filter(Boolean).join(' — ') || 'Seçili malzeme';
-    return unit ? `${left} (${unit})` : left;
-}
-
-function setSelectedItem(item) {
-    $('lc-item-id').value = item ? String(item.id) : '';
-
-    const wrapEl = $('lc-item-selected-wrap');
-    if (!wrapEl) return;
-
-    if (item) {
-        wrapEl.innerHTML = `
-            <span class="lc-item-badge">
-                <i class="fas fa-box fa-xs"></i>
-                ${formatItemLabel(item)}
-                <i class="fas fa-times remove-item" data-lc-clear-item="edit"></i>
-            </span>`;
-    } else {
-        wrapEl.innerHTML = `<span id="lc-item-label" class="text-muted" style="font-size:.8rem;">Seçilmedi</span>`;
-    }
-}
-
-function showItemResults(items) {
-    const box = $('lc-item-results');
-    if (!box) return;
-    box.innerHTML = '';
-    if (!items?.length) { box.style.display = 'none'; return; }
-    items.slice(0, 10).forEach(it => {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'list-group-item list-group-item-action';
-        btn.setAttribute('data-lc-item-pk', String(it.id));
-        btn.setAttribute('data-lc-item-mode', 'edit');
-        btn.innerHTML = `
-            <div class="fw-bold" style="font-size:.85rem;">${it.item_code || it.code || '-'}</div>
-            <div class="text-muted" style="font-size:.78rem;">${it.item_name || it.name || '-'}${it.item_unit || it.unit ? ` &nbsp;·&nbsp; ${it.item_unit || it.unit}` : ''}</div>`;
-        box.appendChild(btn);
-    });
-    // Must override CSS default (display:none) for dropdown
-    box.style.display = 'block';
-}
-
-function hideItemResults() {
-    const box = $('lc-item-results');
-    if (!box) return;
-    box.style.display = 'none';
-}
-
-function makeItemSearchController({ mode }) {
-    let timer = null, reqSeq = 0;
-    if (mode !== 'edit') return;
-    const inputEl = $('lc-item-search');
-    if (!inputEl) return;
-    const run = async () => {
-        const q = (inputEl.value || '').trim();
-        if (q.length < 2) { hideItemResults(); return; }
-        const seq = ++reqSeq;
-        try {
-            const data = await searchItemsBySearch(q, { page_size: 10 });
-            if (seq !== reqSeq) return;
-            showItemResults(normalizePaginated(data));
-        } catch { hideItemResults(); }
-    };
-    const debounced = () => {
-        clearTimeout(timer);
-        timer = setTimeout(run, 250);
-    };
-    inputEl.addEventListener('input', debounced);
-    inputEl.addEventListener('focus', debounced);
-
-    // Hide results when clicking outside
-    document.addEventListener('click', e => {
-        const wrap = $('lc-item-results')?.closest?.('.lc-item-wrap');
-        if (wrap && !wrap.contains(e.target) && !inputEl.contains(e.target)) {
-            hideItemResults();
-        }
-    }, true);
 }
 
 // ─────────────────────────── PARTS TABLE ──────────────────────
@@ -207,6 +123,13 @@ function jobNoDropdownHtml({ rowId, value = '' }) {
     return `
         <input type="hidden" data-lc-row="${escapeAttr(rowId)}" data-lc-field="job_no" value="${escapeAttr(value || '')}">
         <div id="lc-jobno-dd-${escapeAttr(rowId)}" style="min-width:170px;"></div>
+    `;
+}
+
+function partItemDropdownHtml({ rowId, itemPk = '', itemText = '' }) {
+    return `
+        <input type="hidden" data-lc-row="${escapeAttr(rowId)}" data-lc-field="item" value="${escapeAttr(itemPk || '')}">
+        <div id="lc-partitem-dd-${escapeAttr(rowId)}" style="min-width:260px;"></div>
     `;
 }
 
@@ -241,6 +164,11 @@ function buildPartsTableRows(parts) {
         .map(p => ({
             __rowId: `p-${p.id}`,
             id: p.id,
+            item: p.item ?? null,
+            item_code: p.item_code ?? '',
+            item_name: p.item_name ?? '',
+            item_unit: p.item_unit ?? '',
+            stock_length_mm: p.stock_length_mm ?? null,
             label: p.label ?? '',
             nominal_length_mm: p.nominal_length_mm ?? null,
             quantity: p.quantity ?? null,
@@ -267,12 +195,37 @@ function renderPartsTable() {
                 : (row.job_no ? `<span class="fw-semibold">${escapeAttr(row.job_no)}</span>` : '<span class="text-muted">—</span>')
         },
         {
+            key: 'item', label: 'Malzeme', sortable: false, width: '300px',
+            formatter: (v, row) => {
+                const serverTxt = [row.item_code, row.item_name].filter(Boolean).join(' — ') + (row.item_unit ? ` (${row.item_unit})` : '');
+                const txt = serverTxt || row.item_display || '';
+                if (isRowEditable(row)) {
+                    return partItemDropdownHtml({
+                        rowId: row.__rowId,
+                        itemPk: row.item != null ? String(row.item) : '',
+                        itemText: txt
+                    });
+                }
+                if (txt.trim()) return `<div class="text-truncate" style="max-width:300px;" title="${escapeAttr(txt)}">${escapeAttr(txt)}</div>`;
+                return '<span class="text-muted">—</span>';
+            }
+        },
+        {
             key: 'label', label: 'Parça Adı', sortable: false, width: '220px',
             formatter: (v, row) => isRowEditable(row)
                 ? inputHtml({ rowId: row.__rowId, field: 'label', value: row.label, placeholder: 'Parça adı' })
                 : (row.label
                     ? `<div class="text-truncate" style="max-width:220px;" title="${escapeAttr(row.label)}">${escapeAttr(row.label)}</div>`
                     : '<span class="text-muted">—</span>')
+        },
+        {
+            key: 'stock_length_mm', label: 'Stok (mm)', sortable: false, width: '120px',
+            formatter: (v, row) => {
+                const ph = currentSession?.stock_length_mm ? `Varsayılan: ${currentSession.stock_length_mm}` : '';
+                return isRowEditable(row)
+                    ? inputHtml({ rowId: row.__rowId, field: 'stock_length_mm', type: 'number', value: row.stock_length_mm ?? '', placeholder: ph, min: 0 })
+                    : (row.stock_length_mm != null ? `<div class="text-end">${row.stock_length_mm}</div>` : '<span class="text-muted">—</span>');
+            }
         },
         {
             key: 'nominal_length_mm', label: 'Uzunluk (mm)', sortable: false, width: '120px',
@@ -299,31 +252,33 @@ function renderPartsTable() {
                 : `<div class="text-center">${row.angle_right_deg ?? 0}°</div>`
         },
         {
-            key: 'profile_height_mm', label: 'Profil Y.', sortable: false, width: '90px',
+            key: 'profile_height_mm', label: 'Yükseklik.', sortable: false, width: '90px',
             formatter: (v, row) => isRowEditable(row)
                 ? inputHtml({ rowId: row.__rowId, field: 'profile_height_mm', type: 'number', value: row.profile_height_mm ?? 0, min: 0 })
                 : (row.profile_height_mm ? `<div class="text-center">${row.profile_height_mm}</div>` : '<div class="text-center text-muted">—</div>')
         },
         {
-            key: 'actions', label: '', sortable: false, width: '90px',
+            key: 'actions', label: '', sortable: false, width: '140px',
             formatter: (v, row) => {
                 if (!row.id) {
-                    return `<div class="d-flex gap-1 justify-content-end">
+                    return `<div class="d-flex gap-1 justify-content-end flex-nowrap">
+                        <button class="btn btn-sm btn-outline-secondary" data-lc-dup-row="${row.__rowId}" title="Kopyala">
+                            <i class="fas fa-clone me-1"></i>Kopyala</button>
                         <button class="btn btn-sm btn-outline-danger" data-lc-remove-new-row="${row.__rowId}" title="Satırı Kaldır">
                             <i class="fas fa-trash"></i></button>
                     </div>`;
                 }
                 if (isRowEditing(row)) {
-                    return `<div class="d-flex gap-1 justify-content-end">
+                    return `<div class="d-flex gap-1 justify-content-end flex-nowrap">
                         <button class="btn btn-sm btn-success" data-lc-save-row="${row.__rowId}" title="Kaydet">
                             <i class="fas fa-check"></i></button>
                         <button class="btn btn-sm btn-outline-secondary" data-lc-cancel-row="${row.__rowId}" title="İptal">
                             <i class="fas fa-times"></i></button>
                     </div>`;
                 }
-                return `<div class="d-flex gap-1 justify-content-end">
+                return `<div class="d-flex gap-1 justify-content-end flex-nowrap">
                     <button class="btn btn-sm btn-outline-secondary" data-lc-dup-row="${row.__rowId}" title="Kopyala">
-                        <i class="fas fa-clone"></i></button>
+                        <i class="fas fa-clone me-1"></i>Kopyala</button>
                     <button class="btn btn-sm btn-outline-primary" data-lc-edit-row="${row.__rowId}" title="Düzenle">
                         <i class="fas fa-edit"></i></button>
                     ${row.id ? `<button class="btn btn-sm btn-outline-danger" data-lc-del-row="${row.__rowId}" title="Sil">
@@ -363,10 +318,44 @@ function readRowInputs(rowId) {
     return data;
 }
 
+function getRowModel(rowId) {
+    return partsTableRows.find(r => r.__rowId === rowId) || null;
+}
+
+function mergeRowFromDom(rowId) {
+    const row = getRowModel(rowId);
+    if (!row) return;
+    const raw = readRowInputs(rowId);
+    if (raw.job_no != null) row.job_no = raw.job_no;
+    if (raw.item != null) row.item = raw.item ? Number(raw.item) : null;
+    if (raw.stock_length_mm != null) {
+        row.stock_length_mm = (`${raw.stock_length_mm}`.trim() === '') ? null : castNumber(raw.stock_length_mm, null);
+    }
+    if (raw.label != null) row.label = raw.label;
+    if (raw.nominal_length_mm != null) row.nominal_length_mm = castNumber(raw.nominal_length_mm, row.nominal_length_mm);
+    if (raw.quantity != null) row.quantity = castNumber(raw.quantity, row.quantity);
+    if (raw.angle_left_deg != null) row.angle_left_deg = castNumber(raw.angle_left_deg, row.angle_left_deg);
+    if (raw.angle_right_deg != null) row.angle_right_deg = castNumber(raw.angle_right_deg, row.angle_right_deg);
+    if (raw.profile_height_mm != null) row.profile_height_mm = castNumber(raw.profile_height_mm, row.profile_height_mm);
+    if (raw.order != null) row.order = castNumber(raw.order, row.order);
+
+    // Capture dropdown display texts (so rerenders/duplication preserve visuals)
+    const itemDd = document.getElementById(`lc-partitem-dd-${rowId}`);
+    const itemTxt = itemDd?.querySelector?.('.selected-text')?.textContent?.trim();
+    if (itemTxt) row.item_display = itemTxt;
+
+    const jobDd = document.getElementById(`lc-jobno-dd-${rowId}`);
+    const jobTxt = jobDd?.querySelector?.('.selected-text')?.textContent?.trim();
+    if (jobTxt && jobTxt !== 'İş no seçin…') row.job_no_display = jobTxt;
+}
+
 function buildPartPayloadFromRowId(rowId) {
     const raw = readRowInputs(rowId);
+    const stockOverride = `${raw.stock_length_mm ?? ''}`.trim();
     return {
         session: currentSessionKey,
+        item: raw.item ? Number(raw.item) : null,
+        stock_length_mm: stockOverride === '' ? null : castNumber(stockOverride, null),
         label: raw.label || '',
         job_no: raw.job_no || '',
         nominal_length_mm: castNumber(raw.nominal_length_mm, 0),
@@ -380,6 +369,10 @@ function buildPartPayloadFromRowId(rowId) {
 
 function validatePartPayload(payload, rowLabelForError = '') {
     const prefix = rowLabelForError ? `${rowLabelForError}: ` : '';
+    if (!payload.item) {
+        showNotification(`${prefix}Malzeme seçilmelidir.`, 'warning');
+        return false;
+    }
     if (!(payload.nominal_length_mm > 0) || !(payload.quantity > 0)) {
         showNotification(`${prefix}Uzunluk ve Adet sıfırdan büyük olmalı.`, 'warning');
         return false;
@@ -392,6 +385,14 @@ function destroyJobNoDropdown(rowId) {
     if (dd) {
         try { dd.destroy?.(); } catch { /* ignore */ }
         jobNoDropdowns.delete(rowId);
+    }
+}
+
+function destroyPartItemDropdown(rowId) {
+    const dd = partItemDropdowns.get(rowId);
+    if (dd) {
+        try { dd.destroy?.(); } catch { /* ignore */ }
+        partItemDropdowns.delete(rowId);
     }
 }
 
@@ -425,6 +426,8 @@ function syncJobNoDropdowns() {
 
         const hidden = document.querySelector(`[data-lc-row="${CSS.escape(rowId)}"][data-lc-field="job_no"]`);
         const currentValue = hidden?.value || '';
+        const rowModel = getRowModel(rowId);
+        const seedText = rowModel?.job_no_display || currentValue;
 
         const dropdown = new ModernDropdown(container, {
             placeholder: 'İş no seçin…',
@@ -445,7 +448,7 @@ function syncJobNoDropdowns() {
 
         // Seed current value so it can be displayed even before searching
         if (currentValue) {
-            dropdown.setItems([{ value: currentValue, text: currentValue }]);
+            dropdown.setItems([{ value: currentValue, text: seedText || currentValue }]);
             dropdown.setValue(currentValue);
         } else {
             dropdown.setItems([]);
@@ -454,6 +457,12 @@ function syncJobNoDropdowns() {
         container.addEventListener('dropdown:select', (e) => {
             const val = e.detail?.value ?? '';
             if (hidden) hidden.value = val;
+            const row = getRowModel(rowId);
+            if (row) {
+                row.job_no = val;
+                const txt = e.detail?.item?.text;
+                if (txt) row.job_no_display = txt;
+            }
         });
 
         jobNoDropdowns.set(rowId, dropdown);
@@ -468,7 +477,72 @@ function scheduleJobNoDropdownSync() {
         requestAnimationFrame(() => {
             jobNoSyncHandle = null;
             syncJobNoDropdowns();
+            syncPartItemDropdowns();
         });
+    });
+}
+
+function syncPartItemDropdowns() {
+    const editableRowIds = new Set(
+        partsTableRows.filter(isRowEditable).map(r => r.__rowId)
+    );
+
+    [...partItemDropdowns.keys()].forEach(rowId => {
+        if (!editableRowIds.has(rowId)) destroyPartItemDropdown(rowId);
+    });
+
+    editableRowIds.forEach(rowId => {
+        const container = document.getElementById(`lc-partitem-dd-${rowId}`);
+        if (!container) {
+            destroyPartItemDropdown(rowId);
+            return;
+        }
+        if (partItemDropdowns.has(rowId)) {
+            const hasUi = !!container.querySelector('.modern-dropdown');
+            if (hasUi) return;
+            destroyPartItemDropdown(rowId);
+        }
+
+        const hidden = document.querySelector(`[data-lc-row="${CSS.escape(rowId)}"][data-lc-field="item"]`);
+        const currentValue = hidden?.value || '';
+        const rowModel = getRowModel(rowId);
+        const seedText = rowModel?.item_display || rowModel?.item_name || rowModel?.item_code || '';
+
+        const dropdown = new ModernDropdown(container, {
+            placeholder: 'Malzeme seçin…',
+            searchable: true,
+            remoteSearch: async (term) => {
+                const t = (term || '').trim();
+                if (t.length < 2) return [];
+                const data = await searchItemsBySearch(t, { page_size: 20, item_type: 'stock' });
+                const items = normalizePaginated(data);
+                return items.map(it => ({
+                    value: it.id,
+                    text: `${it.item_code || it.code || '-'} — ${it.item_name || it.name || '-'}${it.item_unit || it.unit ? ` • ${it.item_unit || it.unit}` : ''}`
+                }));
+            },
+            minSearchLength: 2,
+            remoteSearchPlaceholder: 'En az 2 karakter yazın'
+        });
+
+        if (currentValue) {
+            dropdown.setItems([{ value: currentValue, text: seedText || currentValue }]);
+            dropdown.setValue(currentValue);
+        } else {
+            dropdown.setItems([]);
+        }
+
+        container.addEventListener('dropdown:select', (e) => {
+            const val = e.detail?.value ?? '';
+            if (hidden) hidden.value = val;
+            const row = getRowModel(rowId);
+            if (row) {
+                row.item = val ? Number(val) : null;
+                row.item_display = e.detail?.item?.text || row.item_display || '';
+            }
+        });
+
+        partItemDropdowns.set(rowId, dropdown);
     });
 }
 
@@ -505,7 +579,23 @@ function addNewPartRow() {
     if (!currentSessionKey) { showNotification('Önce bir plan seçin.', 'warning'); return; }
     const tempId    = makeNewRowId();
     const nextOrder = (Math.max(0, ...partsTableRows.filter(r => r.order != null).map(r => Number(r.order) || 0)) + 1) || 1;
-    partsTableRows  = [{ __rowId: tempId, id: null, label: '', nominal_length_mm: null, quantity: 1, angle_left_deg: 0, angle_right_deg: 0, profile_height_mm: 0, job_no: '', order: nextOrder }, ...partsTableRows];
+    partsTableRows  = [{
+        __rowId: tempId,
+        id: null,
+        item: null,
+        item_code: '',
+        item_name: '',
+        item_unit: '',
+        stock_length_mm: null,
+        label: '',
+        nominal_length_mm: null,
+        quantity: 1,
+        angle_left_deg: 0,
+        angle_right_deg: 0,
+        profile_height_mm: 0,
+        job_no: '',
+        order: nextOrder
+    }, ...partsTableRows];
     renderPartsTable();
     $('lc-parts-table')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
@@ -515,11 +605,20 @@ function duplicateRow(rowId) {
     if (!row) return;
     if (!currentSessionKey) { showNotification('Önce bir plan seçin.', 'warning'); return; }
 
+    // Persist any in-progress dropdown selections before copying
+    mergeRowFromDom(rowId);
+
     const tempId    = makeNewRowId();
     const nextOrder = (Math.max(0, ...partsTableRows.filter(r => r.order != null).map(r => Number(r.order) || 0)) + 1) || 1;
     partsTableRows  = [{
         __rowId: tempId,
         id: null,
+        item: row.item ?? null,
+        item_code: row.item_code ?? '',
+        item_name: row.item_name ?? '',
+        item_unit: row.item_unit ?? '',
+        item_display: row.item_display ?? '',
+        stock_length_mm: row.stock_length_mm ?? null,
         label: row.label ?? '',
         nominal_length_mm: row.nominal_length_mm ?? null,
         quantity: row.quantity ?? 1,
@@ -527,6 +626,7 @@ function duplicateRow(rowId) {
         angle_right_deg: row.angle_right_deg ?? 0,
         profile_height_mm: row.profile_height_mm ?? 0,
         job_no: row.job_no ?? '',
+        job_no_display: row.job_no_display ?? '',
         order: nextOrder
     }, ...partsTableRows];
 
@@ -728,34 +828,34 @@ function renderOptimization(result) {
         return;
     }
 
-    const barsNeeded = result.bars_needed ?? '—';
-    const eff        = result.efficiency_pct != null ? `${result.efficiency_pct}%` : '—';
-    const waste      = result.total_waste_mm != null ? `${result.total_waste_mm} mm` : '—';
-    const kerfMm     = Number(result.kerf_mm ?? $('lc-kerf')?.value ?? 0) || 0;
+    const groups = Array.isArray(result.groups) ? result.groups : [];
+    const totalBarsNeeded = groups.reduce((s, g) => s + (Number(g.bars_needed ?? 0) || 0), 0);
+    const totalWaste = groups.reduce((s, g) => s + (Number(g.total_waste_mm ?? 0) || 0), 0);
+    const effValues = groups.map(g => Number(g.efficiency_pct)).filter(v => Number.isFinite(v));
+    const avgEff = effValues.length ? Math.round((effValues.reduce((a, b) => a + b, 0) / effValues.length) * 10) / 10 : null;
 
     if (summaryEl) {
         summaryEl.className = 'lc-opt-summary';
         summaryEl.innerHTML = `
             <div class="lc-opt-metric">
                 <div class="k"><i class="fas fa-ruler-horizontal text-primary"></i> Bar Sayısı</div>
-                <div class="v">${barsNeeded}</div>
-                <div class="s">Toplam ihtiyaç</div>
+                <div class="v">${totalBarsNeeded || '—'}</div>
+                <div class="s">${groups.length ? `${groups.length} profil grubu` : '—'}</div>
             </div>
             <div class="lc-opt-metric">
                 <div class="k"><i class="fas fa-chart-line text-success"></i> Verim</div>
-                <div class="v">${eff}</div>
-                <div class="s">Kullanım oranı</div>
+                <div class="v">${avgEff != null ? `${avgEff}%` : '—'}</div>
+                <div class="s">Gruplar ortalaması</div>
             </div>
             <div class="lc-opt-metric">
                 <div class="k"><i class="fas fa-trash-alt text-warning"></i> Toplam Fire</div>
-                <div class="v">${waste}</div>
-                <div class="s">Kerf: ${kerfMm} mm</div>
+                <div class="v">${groups.length ? `${totalWaste} mm` : '—'}</div>
+                <div class="s">Tüm profiller</div>
             </div>
         `;
     }
 
-    const bars = Array.isArray(result.bars) ? result.bars : [];
-    if (!bars.length) {
+    if (!groups.length) {
         barsEl.innerHTML = `<div class="lc-empty-state">
             <i class="fas fa-inbox"></i>
             <p>Optimizasyon sonucu boş döndü.</p>
@@ -763,45 +863,110 @@ function renderOptimization(result) {
         return;
     }
 
-    const list = document.createElement('div');
-    list.className = 'lc-opt-bars';
-    barsEl.appendChild(list);
+    // Tabs per group
+    const tabsId = `lc-opt-tabs-${Date.now()}`;
+    const nav = document.createElement('ul');
+    nav.className = 'nav nav-pills mb-3 flex-wrap gap-2 lc-opt-tabs';
+    nav.id = `${tabsId}-nav`;
+    nav.setAttribute('role', 'tablist');
 
-    bars.forEach(bar => {
-        const stock = Number(bar.stock_length_mm ?? 0) || 0;
-        const wasteMm = Number(bar.waste_mm ?? 0) || 0;
-        const cutsCount = Array.isArray(bar.cuts) ? bar.cuts.length : 0;
+    const content = document.createElement('div');
+    content.className = 'tab-content';
+    content.id = `${tabsId}-content`;
 
-        const card = document.createElement('div');
-        card.className = 'lc-bar-card';
-        card.innerHTML = `
-            <div class="head">
-                <div class="title">
-                    <i class="fas fa-grip-lines-vertical text-primary"></i>
-                    Bar #${bar.bar_index}
+    groups.forEach((g, idx) => {
+        const gid = `${tabsId}-g-${idx}`;
+        const label = (g.item_name || g.item_code || `Grup ${idx + 1}`).toString();
+        const pill = document.createElement('li');
+        pill.className = 'nav-item';
+        pill.setAttribute('role', 'presentation');
+        pill.innerHTML = `
+            <button class="nav-link ${idx === 0 ? 'active' : ''}" id="${gid}-tab"
+                    data-bs-toggle="tab" data-bs-target="#${gid}" type="button" role="tab"
+                    aria-controls="${gid}" aria-selected="${idx === 0 ? 'true' : 'false'}">
+                ${escapeAttr(label)}
+            </button>
+        `;
+        nav.appendChild(pill);
+
+        const pane = document.createElement('div');
+        pane.className = `tab-pane fade ${idx === 0 ? 'show active' : ''}`;
+        pane.id = gid;
+        pane.setAttribute('role', 'tabpanel');
+        pane.setAttribute('aria-labelledby', `${gid}-tab`);
+
+        const groupKerf = Number(g.kerf_mm ?? 0) || 0;
+        const groupStock = Number(g.stock_length_mm ?? 0) || 0;
+        const groupBars = Array.isArray(g.bars) ? g.bars : [];
+
+        pane.innerHTML = `
+            <div class="mb-3">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <span class="badge bg-light text-dark border">
+                        <i class="fas fa-ruler-horizontal me-1 text-muted"></i>${groupStock || '—'} mm
+                    </span>
+                    <span class="badge bg-light text-dark border">
+                        <i class="fas fa-cut me-1 text-muted"></i>Kerf ${groupKerf}
+                    </span>
+                    <span class="badge bg-light text-dark border">
+                        <i class="fas fa-layer-group me-1 text-muted"></i>${g.bars_needed ?? '—'} çubuk
+                    </span>
+                    <span class="badge bg-light text-dark border">
+                        <i class="fas fa-chart-line me-1 text-muted"></i>${g.efficiency_pct != null ? `${g.efficiency_pct}%` : '—'}
+                    </span>
+                    <span class="badge bg-light text-dark border">
+                        <i class="fas fa-trash-alt me-1 text-muted"></i>${g.total_waste_mm ?? '—'} mm fire
+                    </span>
                 </div>
-                <div class="meta">
-                    <span><i class="fas fa-cut text-muted me-1"></i>${cutsCount} kesim</span>
-                    <span><i class="fas fa-ruler-horizontal text-muted me-1"></i>${stock} mm</span>
-                    <span><i class="fas fa-trash-alt text-muted me-1"></i>${wasteMm} mm fire</span>
+                <div class="text-muted mt-2" style="font-size:.9rem;">
+                    ${escapeAttr(g.item_name || '')}
                 </div>
-            </div>
-            <div class="body">
             </div>
         `;
-        const body = card.querySelector('.body');
-        const canvasWrap = document.createElement('div');
-        canvasWrap.className = 'lc-canvas-wrap';
-        const canvas = document.createElement('canvas');
-        canvas.style.width = '100%';
-        canvasWrap.appendChild(canvas);
-        body.appendChild(canvasWrap);
 
-        list.appendChild(card);
+        const list = document.createElement('div');
+        list.className = 'lc-opt-bars';
+        pane.appendChild(list);
 
-        // Draw after paint so clientWidth is known
-        requestAnimationFrame(() => drawBar(canvas, bar, kerfMm, tooltipEl));
+        groupBars.forEach(bar => {
+            const stock = Number(bar.stock_length_mm ?? groupStock ?? 0) || 0;
+            const wasteMm = Number(bar.waste_mm ?? 0) || 0;
+            const cutsCount = Array.isArray(bar.cuts) ? bar.cuts.length : 0;
+            const displayBarNo = bar.global_bar_index ?? bar.bar_index;
+
+            const card = document.createElement('div');
+            card.className = 'lc-bar-card';
+            card.innerHTML = `
+                <div class="head">
+                    <div class="title">
+                        <i class="fas fa-grip-lines-vertical text-primary"></i>
+                        Çubuk #${displayBarNo}
+                    </div>
+                    <div class="meta">
+                        <span><i class="fas fa-cut text-muted me-1"></i>${cutsCount} kesim</span>
+                        <span><i class="fas fa-ruler-horizontal text-muted me-1"></i>${stock} mm</span>
+                        <span><i class="fas fa-trash-alt text-muted me-1"></i>${wasteMm} mm fire</span>
+                    </div>
+                </div>
+                <div class="body"></div>
+            `;
+            const body = card.querySelector('.body');
+            const canvasWrap = document.createElement('div');
+            canvasWrap.className = 'lc-canvas-wrap';
+            const canvas = document.createElement('canvas');
+            canvas.style.width = '100%';
+            canvasWrap.appendChild(canvas);
+            body.appendChild(canvasWrap);
+
+            list.appendChild(card);
+            requestAnimationFrame(() => drawBar(canvas, bar, groupKerf, tooltipEl));
+        });
+
+        content.appendChild(pane);
     });
+
+    barsEl.appendChild(nav);
+    barsEl.appendChild(content);
 }
 
 // ─────────────────────────── DATA LOADING ─────────────────────
@@ -818,17 +983,6 @@ async function loadSession(sessionKey) {
     currentSession    = await getLinearCuttingSession(sessionKey);
     setSessionInputs(currentSession);
     showSessionArea(true);
-
-    // Item display
-    const itemPk = currentSession?.item;
-    if (itemPk) {
-        try {
-            const itemObj = await getItem(itemPk);
-            setSelectedItem(itemObj);
-        } catch { setSelectedItem(null); }
-    } else {
-        setSelectedItem(null);
-    }
 
     // Parts
     currentParts = Array.isArray(currentSession.parts) ? currentSession.parts : [];
@@ -851,7 +1005,9 @@ async function refreshSessionsList(selectKey = null) {
     sessions.forEach(s => {
         const opt = document.createElement('option');
         opt.value       = s.key;
-        opt.textContent = `${s.key}  —  ${s.title || ''}`;
+        const sum = Array.isArray(s.optimization_summary) ? s.optimization_summary : [];
+        const totalBars = sum.reduce((acc, g) => acc + (Number(g.bars_needed ?? 0) || 0), 0);
+        opt.textContent = `${s.key}  —  ${s.title || ''}${totalBars ? ` · ${totalBars} bar` : ''}`;
         select.appendChild(opt);
     });
     if (selectKey) select.value = selectKey;
@@ -872,8 +1028,6 @@ async function onSaveSession() {
             kerf_mm: castNumber($('lc-kerf').value, 3),
             notes: $('lc-notes').value
         };
-        const itemPk = $('lc-item-id').value;
-        patch.item = itemPk ? Number(itemPk) : null;
 
         currentSession = await patchLinearCuttingSession(currentSessionKey, patch);
         setSessionInputs(currentSession);
@@ -889,8 +1043,16 @@ async function onSaveSession() {
 
 async function onOptimize() {
     if (!currentSessionKey) return;
+    if (hasNewRows()) {
+        showNotification('Önce yeni parçaları "Toplu Kaydet" ile kaydedin.', 'warning');
+        return;
+    }
     if (!currentParts.length) {
         showNotification('Önce en az bir parça ekleyin.', 'warning');
+        return;
+    }
+    if (currentParts.some(p => !p.item)) {
+        showNotification('Optimizasyon için tüm parçalarda profil (malzeme kartı) seçilmelidir.', 'warning');
         return;
     }
     const btn = $('lc-optimize-btn');
@@ -1111,25 +1273,6 @@ function initModals() {
                     colSize: 6
                 },
                 {
-                    id: 'lc-create-item',
-                    name: 'item',
-                    label: 'Malzeme Kartı',
-                    type: 'dropdown',
-                    placeholder: 'Kod veya isim ile ara…',
-                    searchable: true,
-                    remoteSearchPlaceholder: 'En az 2 karakter yazın',
-                    minSearchLength: 2,
-                    remoteSearch: async (term) => {
-                        const data = await searchItemsBySearch(term, { page_size: 10 });
-                        const items = normalizePaginated(data);
-                        return items.map(it => ({
-                            value: it.id,
-                            text: `${it.item_code || it.code || '-'} — ${it.item_name || it.name || '-'}${it.item_unit || it.unit ? ` • ${it.item_unit || it.unit}` : ''}`
-                        }));
-                    },
-                    colSize: 12
-                },
-                {
                     id: 'lc-create-notes',
                     name: 'notes',
                     label: 'Not',
@@ -1153,7 +1296,6 @@ function initModals() {
                 notes: data.notes || '',
                 parts_data: []
             };
-            if (data.item) payload.item = Number(data.item);
 
             const created = await createLinearCuttingSession(payload);
             createPlanModal.hide();
@@ -1184,28 +1326,8 @@ function wireEvents() {
     $('lc-bulk-save-parts-btn')?.addEventListener('click', bulkSaveNewParts);
     $('lc-add-part-btn').addEventListener('click', addNewPartRow);
 
-    // Delegated: parts table + item search picks + item badge clear
+    // Delegated: parts table actions
     document.body.addEventListener('click', async e => {
-        // Item pick from dropdown
-        const itemPick = e.target.closest('[data-lc-item-pk][data-lc-item-mode]');
-        if (itemPick) {
-            const pk   = Number(itemPick.getAttribute('data-lc-item-pk'));
-            try {
-                const itemObj = await getItem(pk);
-                setSelectedItem(itemObj);
-                $('lc-item-search').value = '';
-                hideItemResults();
-            } catch { showNotification('Malzeme yüklenemedi.', 'error'); }
-            return;
-        }
-
-        // Clear item badge
-        const clearBtn = e.target.closest('[data-lc-clear-item]');
-        if (clearBtn) {
-            setSelectedItem(null);
-            return;
-        }
-
         // Parts table actions
         const editBtn = e.target.closest('[data-lc-edit-row]');
         if (editBtn) {
@@ -1232,6 +1354,7 @@ function wireEvents() {
         if (removeNewBtn) {
             const rowId = removeNewBtn.getAttribute('data-lc-remove-new-row');
             destroyJobNoDropdown(rowId);
+            destroyPartItemDropdown(rowId);
             partsTableRows = partsTableRows.filter(r => r.__rowId !== rowId);
             renderPartsTable();
             return;
@@ -1268,7 +1391,6 @@ async function init() {
     initHeader();
     initModals();
     wireEvents();
-    makeItemSearchController({ mode: 'edit' });
     await bootstrapFromQuery();
 }
 

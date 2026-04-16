@@ -52,8 +52,24 @@ function initTables() {
                 formatter: (value) => `<span class="fw-bold text-primary">${value}</span>`
             },
             { key: 'title', label: 'Başlık', sortable: false, formatter: (v) => v || '-' },
-            { key: 'material', label: 'Malzeme', sortable: false, formatter: (v) => v || '-' },
             { key: 'stock_length_mm', label: 'Stok (mm)', sortable: false, formatter: (v) => v ?? '-' },
+            {
+                key: 'optimization_summary',
+                label: 'Özet',
+                sortable: false,
+                formatter: (v) => {
+                    const arr = Array.isArray(v) ? v : [];
+                    if (!arr.length) return '<span class="text-muted">—</span>';
+                    const lines = arr.slice(0, 3).map(g => {
+                        const name = g.item_code || g.item_name || '—';
+                        const bars = g.bars_needed ?? '—';
+                        const eff = g.efficiency_pct != null ? `${g.efficiency_pct}%` : '—';
+                        return `<div style="font-size:.82rem;"><span class="fw-semibold">${name}</span>: ${bars} çubuk <span class="text-muted">(${eff})</span></div>`;
+                    }).join('');
+                    const extra = arr.length > 3 ? `<div class="text-muted" style="font-size:.78rem;">+${arr.length - 3} daha…</div>` : '';
+                    return `<div>${lines}${extra}</div>`;
+                }
+            },
             {
                 key: 'confirmed',
                 label: 'Onay',
@@ -152,8 +168,8 @@ async function loadData() {
     sessionsTable.updateData(sessions.slice(0, 20).map(s => ({
         key: s.key,
         title: s.title,
-        material: s.material,
         stock_length_mm: s.stock_length_mm,
+        optimization_summary: s.optimization_summary,
         tasks_created: s.tasks_created,
         planning_request_created: s.planning_request_created
     })));
