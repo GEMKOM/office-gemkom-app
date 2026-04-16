@@ -4,6 +4,7 @@ import { TableComponent } from '../../../components/table/table.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
+import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { searchItemsBySearch, getItem } from '../../../apis/procurement.js';
 import { listJobOrders } from '../../../apis/projects/jobOrders.js';
@@ -34,6 +35,7 @@ let partsTable        = null;
 let partsTableRows    = [];
 let inlineEditRowId   = null;
 let confirmModal      = null;
+let confirmResultModal = null;
 let deletePartModal   = null;
 let createPlanModal   = null;
 let jobNoDropdowns    = new Map(); // rowId -> ModernDropdown
@@ -137,7 +139,8 @@ function showItemResults(items) {
             <div class="text-muted" style="font-size:.78rem;">${it.item_name || it.name || '-'}${it.item_unit || it.unit ? ` &nbsp;·&nbsp; ${it.item_unit || it.unit}` : ''}</div>`;
         box.appendChild(btn);
     });
-    box.style.display = '';
+    // Must override CSS default (display:none) for dropdown
+    box.style.display = 'block';
 }
 
 function hideItemResults() {
@@ -922,11 +925,72 @@ async function onConfirm() {
             btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>';
             try {
                 const res = await confirmLinearCuttingSession(currentSessionKey, {});
-                const tasks = (res.created_tasks || []).join(', ');
-                showNotification(
-                    `Onaylandı — Görevler: ${tasks || '—'} · Planlama: ${res.planning_request_number || '—'}`,
-                    'success', 8000
-                );
+                const tasks = Array.isArray(res.created_tasks) ? res.created_tasks : [];
+                const prNo  = res.planning_request_number || '';
+
+                const tasksHtml = tasks.length
+                    ? `<ul class="list-group list-group-flush">
+                        ${tasks.map(k => `
+                            <li class="list-group-item d-flex justify-content-between align-items-center">
+                                <span class="fw-semibold">${escapeAttr(k)}</span>
+                                <a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener"
+                                   href="/manufacturing/linear-cutting/cuts/?task=${encodeURIComponent(k)}">
+                                    Aç
+                                </a>
+                            </li>
+                        `).join('')}
+                    </ul>`
+                    : `<div class="text-muted">—</div>`;
+
+                const prHtml = prNo
+                    ? `<div class="d-flex align-items-center justify-content-between gap-2">
+                        <div class="fw-semibold">${escapeAttr(prNo)}</div>
+                        <a class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener"
+                           href="/planning/department-requests/?talep=${encodeURIComponent(prNo)}">
+                            Aç
+                        </a>
+                    </div>`
+                    : `<div class="text-muted">—</div>`;
+
+                // Rebuild modal content each time
+                confirmResultModal.reset();
+                confirmResultModal
+                    .addCustomSection({
+                        id: 'result-summary',
+                        title: 'Oluşturulan Kayıtlar',
+                        icon: 'fas fa-check',
+                        iconColor: 'text-success',
+                        customContent: `
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0"><i class="fas fa-tasks me-2"></i>Görevler</h6>
+                                        </div>
+                                        <div class="card-body p-0">
+                                            ${tasksHtml}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="card">
+                                        <div class="card-header">
+                                            <h6 class="mb-0"><i class="fas fa-clipboard-list me-2"></i>Planlama Talebi</h6>
+                                        </div>
+                                        <div class="card-body">
+                                            ${prHtml}
+                                            <div class="text-muted mt-2" style="font-size:.85rem;">
+                                                Not: Linkler yeni sekmede açılır.
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        `
+                    })
+                    .render()
+                    .show();
+
                 currentSession = await getLinearCuttingSession(currentSessionKey);
                 setSessionInputs(currentSession);
             } catch (e) {
@@ -989,6 +1053,12 @@ function initHeader() {
 
 function initModals() {
     confirmModal    = new ConfirmationModal('lc-confirm-modal-container');
+    confirmResultModal = new DisplayModal('lc-confirm-result-modal-container', {
+        title: 'Onay Sonucu',
+        icon: 'fas fa-check-circle',
+        showEditButton: false,
+        size: 'lg'
+    });
     deletePartModal = new ConfirmationModal('lc-delete-part-modal-container', {
         icon: 'fas fa-trash-alt',
         confirmText: 'Evet, Sil',
