@@ -11,7 +11,6 @@ import {
     getDepartmentRequest,
     getApprovedDepartmentRequests,
     getCompletedDepartmentRequests,
-    markDepartmentRequestTransferred
 } from '../../../apis/planning/departmentRequests.js';
 import { createPlanningRequest, getPlanningRequests, getPlanningRequest, markReadyForProcurement, updatePlanningRequest, partialUpdatePlanningRequest, cancelPlanningRequest as cancelPlanningRequestAPI } from '../../../apis/planning/planningRequests.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
@@ -4253,13 +4252,6 @@ async function submitTransferRequest(requestData, requestNumber, departmentReque
 
         // Create the planning request with request_number (if provided)
         const createdRequest = await createPlanningRequest(requestData);
-
-        // Mark department request as transferred
-        if (departmentRequestId) {
-            await markDepartmentRequestTransferred(departmentRequestId, {
-                request_number: requestNumber
-            });
-        }
 
         showNotification('Talep başarıyla gönderildi', 'success');
 
