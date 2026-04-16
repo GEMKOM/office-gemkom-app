@@ -110,30 +110,74 @@
     gap: 0.9rem;
 }
 
-.lc-opt-tabs .nav-link,
-#lc-bars .nav-link {
-    color: #495057;
-    background: #f8f9fa;
+/* Optimization tabs (match project tracking / display modal tabs) */
+.lc-opt-tabs-frame {
     border: 1px solid #e9ecef;
-    border-radius: 999px;
-    padding: 0.35rem 0.75rem;
+    border-radius: 12px;
+    background: #fff;
+    padding: 0.75rem 0.9rem 1rem;
+}
+
+.lc-opt-tabs.nav-tabs {
+    border-bottom: 2px solid #e9ecef;
+    margin-bottom: 1.25rem;
+}
+
+.lc-opt-tabs.nav-tabs .nav-item {
+    margin-bottom: -2px;
+}
+
+.lc-opt-tabs.nav-tabs .nav-link {
+    border: none;
+    border-bottom: 2px solid transparent;
+    color: #6c757d !important;
+    padding: 0.6rem 1rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    background: transparent !important;
+    cursor: pointer;
+    font-size: 0.95rem;
+    display: inline-flex;
+    align-items: center;
+    text-decoration: none;
+}
+
+.lc-opt-tabs.nav-tabs .nav-link:hover {
+    border-bottom-color: #dee2e6;
+    color: #495057 !important;
+    background: #f8f9fa !important;
+}
+
+.lc-opt-tabs.nav-tabs .nav-link.active {
+    color: #8B0000 !important;
+    border-bottom-color: #DC143C;
+    background: transparent !important;
     font-weight: 600;
-    font-size: 0.85rem;
 }
 
-.lc-opt-tabs .nav-link:hover,
-#lc-bars .nav-link:hover {
-    background: #eef2f6;
-    border-color: #dfe5ec;
-    color: #212529;
+.lc-opt-tabs.nav-tabs .nav-link:focus,
+.lc-opt-tabs.nav-tabs .nav-link:focus-visible {
+    outline: none;
+    box-shadow: none;
+    border-bottom-color: #DC143C;
+    color: #8B0000 !important;
 }
 
-.lc-opt-tabs .nav-link.active,
-#lc-bars .nav-link.active {
-    color: #fff;
-    background: linear-gradient(135deg, #0d6efd, #0b5ed7);
-    border-color: rgba(13, 110, 253, 0.35);
-    box-shadow: 0 4px 10px rgba(13, 110, 253, 0.18);
+/* Kill browser/Bootstrap yellow focus ring on tab buttons */
+.lc-opt-tabs.nav-tabs .nav-link,
+.lc-opt-tabs.nav-tabs .nav-link[type="button"] {
+    -webkit-tap-highlight-color: transparent;
+    outline: none !important;
+}
+
+.lc-opt-tabs.nav-tabs .nav-link:focus,
+.lc-opt-tabs.nav-tabs .nav-link:focus-visible,
+.lc-opt-tabs.nav-tabs .nav-link[type="button"]:focus,
+.lc-opt-tabs.nav-tabs .nav-link[type="button"]:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
+    /* prevent UA focus underline colors */
+    text-decoration: none !important;
 }
 
 .lc-bar-card {

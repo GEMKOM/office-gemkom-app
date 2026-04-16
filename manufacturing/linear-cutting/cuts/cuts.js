@@ -711,6 +711,24 @@ function colorForIndex(i) {
     return palette[i % palette.length];
 }
 
+const barCanvasDrawMap = new WeakMap(); // canvas -> { bar, kerfMm }
+
+function scheduleDrawBar(canvas, tooltipEl) {
+    const payload = barCanvasDrawMap.get(canvas);
+    if (!payload) return;
+    let tries = 0;
+    const run = () => {
+        const w = canvas.clientWidth || canvas.getBoundingClientRect?.().width || 0;
+        if (w < 50 && tries < 10) {
+            tries += 1;
+            requestAnimationFrame(run);
+            return;
+        }
+        drawBar(canvas, payload.bar, payload.kerfMm, tooltipEl);
+    };
+    requestAnimationFrame(run);
+}
+
 function drawBar(canvas, bar, kerfMm, tooltipEl) {
     const dpr   = window.devicePixelRatio || 1;
     const W     = canvas.clientWidth || 900;
@@ -865,8 +883,11 @@ function renderOptimization(result) {
 
     // Tabs per group
     const tabsId = `lc-opt-tabs-${Date.now()}`;
+    const frame = document.createElement('div');
+    frame.className = 'lc-opt-tabs-frame';
+
     const nav = document.createElement('ul');
-    nav.className = 'nav nav-pills mb-3 flex-wrap gap-2 lc-opt-tabs';
+    nav.className = 'nav nav-tabs lc-opt-tabs';
     nav.id = `${tabsId}-nav`;
     nav.setAttribute('role', 'tablist');
 
@@ -959,14 +980,33 @@ function renderOptimization(result) {
             body.appendChild(canvasWrap);
 
             list.appendChild(card);
-            requestAnimationFrame(() => drawBar(canvas, bar, groupKerf, tooltipEl));
+            barCanvasDrawMap.set(canvas, { bar, kerfMm: groupKerf });
+            // Only draw immediately for the initially visible (active) group
+            if (idx === 0) {
+                scheduleDrawBar(canvas, tooltipEl);
+            }
         });
 
         content.appendChild(pane);
     });
 
-    barsEl.appendChild(nav);
-    barsEl.appendChild(content);
+    frame.appendChild(nav);
+    frame.appendChild(content);
+    barsEl.appendChild(frame);
+
+    // Draw canvases only when their tab becomes visible (prevents blur/distortion)
+    setTimeout(() => {
+        try {
+            frame.querySelectorAll('button[data-bs-toggle="tab"]').forEach(btn => {
+                btn.addEventListener('shown.bs.tab', (e) => {
+                    const targetSel = e.target?.getAttribute?.('data-bs-target');
+                    const pane = targetSel ? document.querySelector(targetSel) : null;
+                    if (!pane) return;
+                    pane.querySelectorAll('canvas').forEach(c => scheduleDrawBar(c, tooltipEl));
+                });
+            });
+        } catch { /* ignore */ }
+    }, 0);
 }
 
 // ─────────────────────────── DATA LOADING ─────────────────────
