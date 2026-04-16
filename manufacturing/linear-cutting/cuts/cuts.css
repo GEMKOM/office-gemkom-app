@@ -1,0 +1,156 @@
+/* Align Linear Cutting Cuts UI with Procurement Create look */
+
+/* Card styling */
+.card {
+    border: none;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+}
+
+.card-header {
+    background: linear-gradient(135deg, #f8f9fa, #e9ecef);
+    border-bottom: 1px solid #dee2e6;
+    border-radius: 12px 12px 0 0 !important;
+    padding: 1rem 1.5rem;
+}
+
+.card-header h5 {
+    color: #495057;
+    font-weight: 600;
+    margin: 0;
+}
+
+.card-body {
+    padding: 1.25rem 1.5rem;
+}
+
+/* Form styling */
+.form-control, .form-select {
+    border: 1px solid #ced4da;
+    border-radius: 8px;
+    padding: 0.75rem;
+    transition: all 0.2s ease;
+}
+
+.form-control:focus, .form-select:focus {
+    border-color: #80bdff;
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+}
+
+/* Buttons */
+.btn {
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+}
+
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+
+.alert-sm {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 6px;
+}
+
+/* Keep table area clean inside cards */
+#lc-parts-table {
+    min-height: 80px;
+}
+
+/* ── Optimization result styling ── */
+.lc-opt-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+.lc-opt-metric {
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    padding: 0.9rem 1rem;
+    background: linear-gradient(135deg, #ffffff, #fbfbfc);
+}
+
+.lc-opt-metric .k {
+    font-size: 0.78rem;
+    color: #6c757d;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+    font-weight: 600;
+}
+
+.lc-opt-metric .v {
+    font-weight: 800;
+    color: #2a3b47;
+    font-size: 1.25rem;
+    letter-spacing: -0.2px;
+}
+
+.lc-opt-metric .s {
+    margin-top: 0.35rem;
+    font-size: 0.78rem;
+    color: #6c757d;
+}
+
+.lc-opt-bars {
+    display: grid;
+    gap: 0.9rem;
+}
+
+.lc-bar-card {
+    border: 1px solid #e9ecef;
+    border-radius: 12px;
+    overflow: hidden;
+    background: #fff;
+}
+
+.lc-bar-card .head {
+    padding: 0.75rem 1rem;
+    background: linear-gradient(135deg, #f8f9fa, #eef1f4);
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.lc-bar-card .head .title {
+    font-weight: 800;
+    color: #343a40;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.lc-bar-card .head .meta {
+    color: #6c757d;
+    font-size: 0.8rem;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    justify-content: flex-end;
+}
+
+.lc-bar-card .body {
+    padding: 0.9rem 1rem 1rem;
+}
+
+/* (removed) usage progress bar: diagram should communicate efficiency */
+
+@media (max-width: 992px) {
+    .lc-opt-summary { grid-template-columns: 1fr; }
+}
+

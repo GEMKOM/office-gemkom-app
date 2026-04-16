@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Lineer Kesim</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../style.css">
+    <link rel="stylesheet" href="../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../components/table/table.css">
+    <link rel="stylesheet" href="../../../components/notification/notification.css">
+    <link rel="stylesheet" href="../../../components/confirmation-modal/confirmation-modal.css">
+    <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
+    <link rel="stylesheet" href="../../../components/edit-modal/edit-modal.css">
+    <link rel="icon" type="image/png" href="../../../images/gemkom.png">
+    <link rel="stylesheet" href="cuts.css">
+    <style>
+        /* ── Item search dropdown (inline, edit form) ── */
+        .lc-item-wrap { position: relative; }
+        .lc-item-results {
+            position: absolute; top: 100%; left: 0; right: 0; z-index: 1050;
+            border: 1px solid rgba(0,0,0,.12); border-radius: 8px;
+            background: #fff; box-shadow: 0 4px 20px rgba(0,0,0,.12);
+            max-height: 220px; overflow-y: auto; display: none;
+        }
+        .lc-item-results .list-group-item { border: none; border-bottom: 1px solid rgba(0,0,0,.06); cursor: pointer; }
+        .lc-item-results .list-group-item:last-child { border-bottom: none; }
+        .lc-item-results .list-group-item:hover { background: rgba(13,110,253,.06); }
+        .lc-item-badge {
+            display: inline-flex; align-items: center; gap: 6px;
+            background: rgba(13,110,253,.08); border: 1px solid rgba(13,110,253,.2);
+            border-radius: 20px; padding: 4px 10px 4px 8px;
+            font-size: .8rem; color: #0d6efd; font-weight: 500;
+        }
+        .lc-item-badge .remove-item { cursor: pointer; opacity: .6; }
+        .lc-item-badge .remove-item:hover { opacity: 1; }
+
+        /* ── Bar diagram ── */
+        .lc-canvas-wrap {
+            background: #fff; border: 1px solid rgba(0,0,0,.08);
+            border-radius: 10px; padding: 14px; margin-bottom: 12px;
+        }
+        .lc-canvas-wrap canvas { width: 100%; display: block; }
+        .lc-bar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+        .lc-bar-title { font-weight: 600; font-size: .9rem; }
+        .lc-bar-meta { font-size: .8rem; color: #6c757d; }
+
+        /* ── Tooltip ── */
+        .lc-tooltip {
+            position: fixed; z-index: 9000; pointer-events: none; display: none;
+            background: rgba(20,20,30,.9); color: #fff;
+            padding: 9px 12px; border-radius: 8px; font-size: .8rem;
+            max-width: 260px; line-height: 1.5;
+            box-shadow: 0 4px 16px rgba(0,0,0,.25);
+        }
+
+        /* ── Empty state ── */
+        .lc-empty-state {
+            text-align: center; padding: 60px 20px;
+            color: #adb5bd;
+        }
+        .lc-empty-state i { font-size: 3.5rem; margin-bottom: 16px; opacity: .4; }
+        .lc-empty-state p { font-size: 1rem; margin: 0; }
+
+        /* ── Opt summary pills ── */
+        .lc-opt-pill {
+            display: inline-flex; align-items: center; gap: 5px;
+            background: rgba(25,135,84,.1); color: #198754;
+            border: 1px solid rgba(25,135,84,.25);
+            border-radius: 20px; padding: 3px 10px; font-size: .8rem; font-weight: 600;
+        }
+        .lc-opt-pill.warn { background: rgba(255,193,7,.15); color: #996600; border-color: rgba(255,193,7,.3); }
+        .lc-opt-pill.info { background: rgba(13,110,253,.1); color: #0d6efd; border-color: rgba(13,110,253,.25); }
+
+        /* ── Form section labels ── */
+        .form-label { font-size: .82rem; font-weight: 600; color: #495057; margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+    <div id="navbar-container"></div>
+
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+
+            <!-- Header -->
+            <div id="header-placeholder"></div>
+
+            <!-- Plan Selector -->
+            <div class="row mb-4">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <h5 class="mb-0">
+                                <i class="fas fa-stream me-2"></i>Kesim Planı
+                            </h5>
+                            <div class="d-flex align-items-center gap-2">
+                                <div id="lc-plan-status-pill"></div>
+                                <button class="btn btn-outline-secondary btn-sm" id="lc-refresh-sessions" title="Listeyi Yenile">
+                                    <i class="fas fa-sync me-1"></i>Yenile
+                                </button>
+                            </div>
+                        </div>
+                        <div class="card-body">
+                            <div class="row align-items-end">
+                                <div class="col-lg-8 col-md-12">
+                                    <label class="form-label">
+                                        Kesim Planı Seç
+                                    </label>
+                                    <div class="input-group">
+                                        <span class="input-group-text bg-white">
+                                            <i class="fas fa-folder-open text-primary"></i>
+                                        </span>
+                                        <select id="lc-session-select" class="form-select">
+                                            <option value="">Yükleniyor...</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div class="col-lg-4 col-md-12 mt-3 mt-lg-0 d-flex align-items-end">
+                                    <div class="alert alert-info alert-sm mb-0 w-100">
+                                        <i class="fas fa-info-circle me-2"></i>
+                                        <strong>İpucu:</strong> Plan seçtikten sonra parçaları tabloya ekleyip optimize edebilirsiniz.
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Plan detail area (hidden until a plan is selected) -->
+            <div id="lc-session-area" style="display:none;">
+
+                <!-- Plan detail -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-edit me-2"></i>Kesim Planı Detayları
+                                </h5>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span id="lc-confirm-badge"></span>
+                                    <button class="btn btn-outline-primary btn-sm" id="lc-save-session-btn">
+                                        <i class="fas fa-save me-1"></i>Kaydet
+                                    </button>
+                                    <button class="btn btn-success btn-sm" id="lc-confirm-btn">
+                                        <i class="fas fa-check-circle me-1"></i>Onayla &amp; Görevler
+                                    </button>
+                                    <button class="btn btn-outline-secondary btn-sm" id="lc-pdf-btn">
+                                        <i class="fas fa-file-pdf me-1"></i>PDF
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="row">
+                                    <div class="col-lg-8">
+                                        <div class="row">
+                                            <div class="col-md-6">
+                                                <label class="form-label">Plan No</label>
+                                                <input class="form-control" id="lc-session-key" readonly>
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">Başlık</label>
+                                                <input class="form-control" id="lc-title" placeholder="Plan başlığı">
+                                            </div>
+                                        </div>
+                                        <div class="row mt-3">
+                                            <div class="col-md-3">
+                                                <label class="form-label">Stok Boyu (mm)</label>
+                                                <input class="form-control" id="lc-stock" type="number" min="1">
+                                            </div>
+                                            <div class="col-md-3">
+                                                <label class="form-label">Kerf (mm)</label>
+                                                <input class="form-control" id="lc-kerf" type="number" min="0">
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label">Not</label>
+                                                <input class="form-control" id="lc-notes" placeholder="Opsiyonel not">
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-lg-4 mt-3 mt-lg-0">
+                                        <label class="form-label">Malzeme Kartı</label>
+                                        <div class="lc-item-wrap">
+                                            <input class="form-control" id="lc-item-search" placeholder="Kod veya isim ile ara…" autocomplete="off">
+                                            <div class="lc-item-results list-group" id="lc-item-results"></div>
+                                        </div>
+                                        <div class="mt-2" id="lc-item-selected-wrap" style="min-height:28px;">
+                                            <span id="lc-item-label" class="text-muted" style="font-size:.8rem;">Seçilmedi</span>
+                                        </div>
+                                        <input type="hidden" id="lc-item-id" value="">
+                                        <div class="mt-2">
+                                            <small class="text-muted" id="lc-session-sub"></small>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Parts table -->
+                <div class="row mb-4">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-puzzle-piece me-2"></i>Parçalar
+                                </h5>
+                                <div class="btn-group">
+                                    <button class="btn btn-outline-primary btn-sm" id="lc-bulk-save-parts-btn" disabled>
+                                        <i class="fas fa-save me-1"></i>Toplu Kaydet
+                                    </button>
+                                    <button class="btn btn-primary btn-sm" id="lc-add-part-btn">
+                                        <i class="fas fa-plus me-1"></i>Parça Ekle
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div class="alert alert-info alert-sm mb-3">
+                                    <i class="fas fa-info-circle me-2"></i>
+                                    <strong>İpucu:</strong> Satır içinden düzenleyebilir, kaydedebilir veya iptal edebilirsiniz.
+                                </div>
+                                <div id="lc-parts-table"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Optimization result -->
+                <div class="row mb-4" id="lc-opt-card">
+                    <div class="col-12">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0">
+                                    <i class="fas fa-chart-bar me-2"></i>Optimizasyon Sonucu
+                                </h5>
+                                <div class="d-flex align-items-center gap-2">
+                                    <button class="btn btn-outline-success btn-sm" id="lc-optimize-btn">
+                                        <i class="fas fa-play me-1"></i>Optimize Et
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="card-body">
+                                <div id="lc-opt-summary" class="mb-3"></div>
+                                <div id="lc-bars">
+                                    <div class="lc-empty-state">
+                                        <i class="fas fa-play-circle"></i>
+                                        <p>Optimizasyon henüz çalıştırılmadı.<br>Parçaları ekledikten sonra <strong>Optimize Et</strong> butonuna basın.</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Empty state when no plan is selected -->
+            <div id="lc-no-plan-state">
+                <div class="lc-empty-state">
+                    <i class="fas fa-ruler-horizontal d-block mb-3"></i>
+                    <p>Bir kesim planı seçin veya <strong>Yeni Kesim Planı</strong> oluşturun.</p>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+            <!-- Create Plan Modal (EditModal) -->
+            <div id="lc-create-plan-modal-container"></div>
+
+    <!-- Confirm session modal container -->
+    <div id="lc-confirm-modal-container"></div>
+    <!-- Delete part modal container -->
+    <div id="lc-delete-part-modal-container"></div>
+
+    <!-- Tooltip -->
+    <div class="lc-tooltip" id="lc-tooltip"></div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <!-- Header Component -->
+    <script src="../../../components/header/header.js"></script>
+    <script type="module" src="cuts.js"></script>
+</body>
+</html>

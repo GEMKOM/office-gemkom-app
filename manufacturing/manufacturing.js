@@ -100,6 +100,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                 ]
             },
             {
+                title: 'Lineer Kesim',
+                description: 'Profil ve çubuk kesim optimizasyonu, oturum ve bar görevleri yönetimi.',
+                icon: 'fas fa-ruler-horizontal',
+                iconColor: 'success',
+                link: '/manufacturing/linear-cutting',
+                features: [
+                    {
+                        label: 'Dashboard',
+                        icon: 'fas fa-chart-line',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/linear-cutting/dashboard'
+                    },
+                    {
+                        label: 'Kesimler',
+                        icon: 'fas fa-ruler-horizontal',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/linear-cutting/cuts'
+                    }
+                ]
+            },
+            {
                 title: 'Bakım',
                 description: 'Ekipman bakım planları, arıza takibi ve önleyici bakım yönetimi.',
                 icon: 'fas fa-wrench',

@@ -568,6 +568,57 @@ export async function searchItems(searchTerm, searchType = 'code') {
     }
 }
 
+/**
+ * Search items using DRF standard search param
+ * GET /procurement/items/?search=...
+ * @param {string} searchTerm
+ * @param {Object} [extraParams]
+ */
+export async function searchItemsBySearch(searchTerm, extraParams = {}) {
+    try {
+        const queryParams = new URLSearchParams();
+        if (searchTerm) {
+            queryParams.append('search', searchTerm);
+        }
+        Object.entries(extraParams || {}).forEach(([k, v]) => {
+            if (v !== null && v !== undefined && v !== '') {
+                queryParams.append(k, v);
+            }
+        });
+        const url = `${backendBase}/procurement/items/?${queryParams.toString()}`;
+        const response = await authedFetch(url);
+
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || errorData.detail || 'Malzemeler aranırken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error searching items (search=):', error);
+        throw error;
+    }
+}
+
+/**
+ * Get single item by id
+ * GET /procurement/items/{id}/
+ * @param {number|string} itemId
+ */
+export async function getItem(itemId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/items/${itemId}/`);
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.detail || 'Malzeme yüklenirken hata oluştu');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching item:', error);
+        throw error;
+    }
+}
+
 export async function getItems(filters = {}) {
     try {
         // Build query parameters

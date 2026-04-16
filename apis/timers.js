@@ -3,7 +3,7 @@ import { authedFetch } from '../authService.js';
 
 export async function fetchTimers(is_active = null, machine_id = null, issue_key = null, start_after = null, module = 'machining') {
     // Validate module parameter
-    const validModules = ['machining', 'cnc_cutting'];
+    const validModules = ['machining', 'cnc_cutting', 'linear_cutting'];
     const moduleName = validModules.includes(module) ? module : 'machining';
     
     let url = `${backendBase}/${moduleName}/timers/`;
@@ -33,7 +33,7 @@ export async function fetchTimers(is_active = null, machine_id = null, issue_key
 
 export async function fetchTimerById(timerId, module = 'machining') {
     // Validate module parameter
-    const validModules = ['machining', 'cnc_cutting'];
+    const validModules = ['machining', 'cnc_cutting', 'linear_cutting'];
     const moduleName = validModules.includes(module) ? module : 'machining';
     
     const res = await authedFetch(`${backendBase}/${moduleName}/timers/${timerId}/`);
@@ -44,7 +44,7 @@ export async function fetchTimerById(timerId, module = 'machining') {
 
 export async function stopTimer({ timerId, finishTime, module = 'machining' }) {
     // Validate module parameter
-    const validModules = ['machining', 'cnc_cutting'];
+    const validModules = ['machining', 'cnc_cutting', 'linear_cutting'];
     const moduleName = validModules.includes(module) ? module : 'machining';
     
     const response = await authedFetch(`${backendBase}/${moduleName}/timers/stop/`, {

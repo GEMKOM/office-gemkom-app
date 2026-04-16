@@ -290,6 +290,22 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
+            '/manufacturing/linear-cutting': {
+                label: 'Lineer Kesim',
+                icon: 'fas fa-ruler-horizontal',
+                children: {
+                    '/manufacturing/linear-cutting/dashboard': {
+                        label: 'Dashboard',
+                        icon: 'fas fa-chart-line',
+                        children: {}
+                    },
+                    '/manufacturing/linear-cutting/cuts': {
+                        label: 'Kesimler',
+                        icon: 'fas fa-ruler-horizontal',
+                        children: {}
+                    }
+                }
+            },
             '/manufacturing/welding': {
                 label: 'Kaynak',
                 icon: 'fas fa-fire',
