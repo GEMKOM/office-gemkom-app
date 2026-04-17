@@ -111,6 +111,11 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Stok Kartları',
                         icon: 'fas fa-boxes',
                         children: {}
+                    },
+                    '/planning/inventory/equipment': {
+                        label: 'Ekipman',
+                        icon: 'fas fa-toolbox',
+                        children: {}
                     }
                 }
             },

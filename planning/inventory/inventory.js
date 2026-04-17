@@ -26,6 +26,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-boxes',
                 iconColor: 'primary',
                 link: '/planning/inventory/cards'
+            },
+            {
+                title: 'Ekipman',
+                description: 'Ekipman envanteri ve zimmet işlemleri.',
+                icon: 'fas fa-toolbox',
+                iconColor: 'primary',
+                link: '/planning/inventory/equipment'
             }
         ]
     });
