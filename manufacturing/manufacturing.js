@@ -117,6 +117,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                         icon: 'fas fa-ruler-horizontal',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/linear-cutting/cuts'
+                    },
+                    {
+                        label: 'Görevler',
+                        icon: 'fas fa-tasks',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/linear-cutting/tasks'
+                    },
+                    {
+                        label: 'Kapasite Yönetimi',
+                        icon: 'fas fa-industry',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/linear-cutting/capacity'
                     }
                 ]
             },

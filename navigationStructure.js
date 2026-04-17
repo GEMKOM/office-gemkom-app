@@ -303,6 +303,22 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Kesimler',
                         icon: 'fas fa-ruler-horizontal',
                         children: {}
+                    },
+                    '/manufacturing/linear-cutting/tasks': {
+                        label: 'Görevler',
+                        icon: 'fas fa-tasks',
+                        children: {}
+                    },
+                    '/manufacturing/linear-cutting/capacity': {
+                        label: 'Kapasite Yönetimi',
+                        icon: 'fas fa-industry',
+                        children: {
+                            '/manufacturing/linear-cutting/capacity/planning': {
+                                label: 'Kapasite Planlayıcı',
+                                icon: 'fas fa-calendar-alt',
+                                children: {}
+                            }
+                        }
                     }
                 }
             },

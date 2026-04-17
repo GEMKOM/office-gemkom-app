@@ -9,8 +9,11 @@
     <link rel="stylesheet" href="../../../style.css">
     <link rel="stylesheet" href="../../../components/navbar.css">
     <link rel="stylesheet" href="../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../components/display-modal/display-modal.css">
     <link rel="stylesheet" href="../../../components/table/table.css">
     <link rel="stylesheet" href="../../../components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="../../../components/badges/badges.css">
+    <link rel="stylesheet" href="../../../components/notification/notification.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
 </head>
 <body>
@@ -19,14 +22,14 @@
     <section class="modules-section py-5">
         <div class="container-fluid">
             <div id="header-placeholder"></div>
-            <div id="lc-dashboard-stats"></div>
+            <div id="dashboard-statistics"></div>
 
             <div class="row g-3">
-                <div class="col-lg-7">
-                    <div id="lc-sessions-table"></div>
+                <div class="col-lg-8">
+                    <div id="active-timers-table"></div>
                 </div>
-                <div class="col-lg-5">
-                    <div id="lc-tasks-table"></div>
+                <div class="col-lg-4">
+                    <div id="machines-status"></div>
                 </div>
             </div>
         </div>
@@ -36,6 +39,7 @@
     <script src="../../../components/header/header.js"></script>
     <script src="../../../components/table/table.js"></script>
     <script src="../../../components/statistics-cards/statistics-cards.js"></script>
+    <script src="../../../components/display-modal/display-modal.js"></script>
     <script type="module" src="dashboard.js"></script>
 </body>
 </html>

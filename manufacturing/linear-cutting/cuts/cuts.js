@@ -70,10 +70,9 @@ function getQuery() {
 // ─────────────────────────── PLAN STATUS ──────────────────────
 function setConfirmState(session) {
     const confirmed = !!(session?.tasks_created || session?.planning_request_created);
-    $('lc-confirm-badge').innerHTML = confirmed
-        ? '<span class="badge bg-success"><i class="fas fa-check-circle me-1"></i>Onaylandı</span>'
-        : '<span class="badge bg-secondary">Bekliyor</span>';
-    $('lc-confirm-btn').disabled = confirmed;
+    // Do not disable confirm button; backend handles repeats (409)
+    const indicator = $('lc-confirm-indicator');
+    if (indicator) indicator.style.display = confirmed ? '' : 'none';
     $('lc-plan-status-pill').innerHTML = confirmed
         ? `<span class="lc-opt-pill"><i class="fas fa-check-circle"></i> Görevler Oluşturuldu</span>`
         : '';
@@ -349,6 +348,15 @@ function mergeRowFromDom(rowId) {
     if (jobTxt && jobTxt !== 'İş no seçin…') row.job_no_display = jobTxt;
 }
 
+function mergeAllEditableRowsFromDom() {
+    // Persist in-progress user input before any re-render that would replace DOM.
+    try {
+        partsTableRows
+            .filter(isRowEditable)
+            .forEach(r => mergeRowFromDom(r.__rowId));
+    } catch { /* ignore */ }
+}
+
 function buildPartPayloadFromRowId(rowId) {
     const raw = readRowInputs(rowId);
     const stockOverride = `${raw.stock_length_mm ?? ''}`.trim();
@@ -568,6 +576,7 @@ async function saveRow(rowId) {
 }
 
 function cancelRow(rowId) {
+    mergeAllEditableRowsFromDom();
     const row = partsTableRows.find(r => r.__rowId === rowId);
     if (!row) return;
     if (!row.id) partsTableRows = partsTableRows.filter(r => r.__rowId !== rowId);
@@ -577,6 +586,7 @@ function cancelRow(rowId) {
 
 function addNewPartRow() {
     if (!currentSessionKey) { showNotification('Önce bir plan seçin.', 'warning'); return; }
+    mergeAllEditableRowsFromDom();
     const tempId    = makeNewRowId();
     const nextOrder = (Math.max(0, ...partsTableRows.filter(r => r.order != null).map(r => Number(r.order) || 0)) + 1) || 1;
     partsTableRows  = [{
@@ -605,8 +615,8 @@ function duplicateRow(rowId) {
     if (!row) return;
     if (!currentSessionKey) { showNotification('Önce bir plan seçin.', 'warning'); return; }
 
-    // Persist any in-progress dropdown selections before copying
-    mergeRowFromDom(rowId);
+    // Persist any in-progress edits before copying/rerendering
+    mergeAllEditableRowsFromDom();
 
     const tempId    = makeNewRowId();
     const nextOrder = (Math.max(0, ...partsTableRows.filter(r => r.order != null).map(r => Number(r.order) || 0)) + 1) || 1;
@@ -1393,6 +1403,7 @@ function wireEvents() {
         const removeNewBtn = e.target.closest('[data-lc-remove-new-row]');
         if (removeNewBtn) {
             const rowId = removeNewBtn.getAttribute('data-lc-remove-new-row');
+            mergeAllEditableRowsFromDom();
             destroyJobNoDropdown(rowId);
             destroyPartItemDropdown(rowId);
             partsTableRows = partsTableRows.filter(r => r.__rowId !== rowId);

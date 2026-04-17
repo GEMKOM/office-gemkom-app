@@ -21,6 +21,20 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-ruler-horizontal',
                 iconColor: 'success',
                 link: '/manufacturing/linear-cutting/cuts/'
+            },
+            {
+                title: 'Görevler',
+                description: 'Oluşturulan bar görevlerini görüntüleyin, yönetin ve tamamlayın.',
+                icon: 'fas fa-tasks',
+                iconColor: 'warning',
+                link: '/manufacturing/linear-cutting/tasks/'
+            },
+            {
+                title: 'Kapasite Planlayıcı',
+                description: 'Lineer kesim görevlerini makinelere planlayın ve Gantt üzerinden takip edin.',
+                icon: 'fas fa-calendar-alt',
+                iconColor: 'primary',
+                link: '/manufacturing/linear-cutting/capacity/planning/'
             }
         ]
     });

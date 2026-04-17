@@ -98,10 +98,15 @@
                                         </select>
                                     </div>
                                 </div>
-                                <div class="col-lg-4 col-md-12 mt-3 mt-lg-0 d-flex align-items-end">
-                                    <div class="alert alert-info alert-sm mb-0 w-100">
-                                        <i class="fas fa-info-circle me-2"></i>
-                                        <strong>İpucu:</strong> Plan seçtikten sonra parçaları tabloya ekleyip optimize edebilirsiniz.
+                                <div class="col-lg-4 col-md-12 mt-3 mt-lg-0">
+                                    <div class="d-flex flex-column gap-2">
+                                        <button class="btn btn-success btn-sm w-100" id="lc-confirm-btn">
+                                            <i class="fas fa-check-circle me-1"></i>Onayla &amp; Görevler
+                                        </button>
+                                        <div id="lc-confirm-indicator" class="text-muted" style="font-size:.85rem; display:none;">
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            Bu plan daha önce onaylanmış.
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -122,12 +127,8 @@
                                     <i class="fas fa-edit me-2"></i>Kesim Planı Detayları
                                 </h5>
                                 <div class="d-flex align-items-center gap-2">
-                                    <span id="lc-confirm-badge"></span>
                                     <button class="btn btn-outline-primary btn-sm" id="lc-save-session-btn">
                                         <i class="fas fa-save me-1"></i>Kaydet
-                                    </button>
-                                    <button class="btn btn-success btn-sm" id="lc-confirm-btn">
-                                        <i class="fas fa-check-circle me-1"></i>Onayla &amp; Görevler
                                     </button>
                                     <button class="btn btn-outline-secondary btn-sm" id="lc-pdf-btn">
                                         <i class="fas fa-file-pdf me-1"></i>PDF

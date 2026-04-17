@@ -38,6 +38,25 @@ export async function getLinearCuttingTask(taskKey) {
 }
 
 /**
+ * Patch task (editable: machine_fk, estimated_hours, description, in_plan, plan_order, planned_start_ms, planned_end_ms)
+ * PATCH /linear_cutting/tasks/{key}/
+ * @param {string} taskKey
+ * @param {Object} payload
+ */
+export async function patchLinearCuttingTask(taskKey, payload) {
+    const res = await authedFetch(`${LINEAR_CUTTING_BASE_URL}/tasks/${encodeURIComponent(taskKey)}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload ?? {})
+    });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(`Failed to patch task: ${res.status} ${res.statusText} - ${JSON.stringify(err)}`);
+    }
+    return await res.json();
+}
+
+/**
  * Mark completed
  * POST /linear_cutting/tasks/mark-completed/
  * @param {string} taskKey
