@@ -1094,6 +1094,7 @@ function initializeGanttComponent() {
     ganttChart = new GanttChart(ganttHostContainerId, {
         title: 'Gantt Gorunumu',
         defaultPeriod: 'month',
+        filterByWorkingDays: false,
         onPeriodChange: async (period, date) => {
             ganttCurrentPeriod = period || 'month';
             ganttCurrentDate = date ? new Date(date) : new Date();
@@ -1124,7 +1125,8 @@ function mapDepartmentTaskToGanttTask(task, index) {
         progress_percentage: typeof task.completion_percentage === 'number'
             ? task.completion_percentage
             : undefined,
-        status: task.status
+        status: task.status,
+        is_overdue: isTaskOverdue(task)
     };
 }
 
@@ -1193,6 +1195,20 @@ function getNormalizedTaskDateRange(task) {
     return { startMs, endMs };
 }
 
+function isTaskOverdue(task) {
+    if (!task?.target_completion_date) return false;
+    if (task?.status === 'completed') return false;
+
+    const completionDate = new Date(task.target_completion_date);
+    if (isNaN(completionDate.getTime())) return false;
+
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const completionDay = new Date(completionDate.getFullYear(), completionDate.getMonth(), completionDate.getDate());
+
+    return completionDay < todayStart;
+}
+
 function getGanttTaskDisplayCode(task) {
     return task.job_order || task.offer_no || task?.offer_summary?.offer_no || task.id;
 }
@@ -1213,7 +1229,8 @@ function mapDepartmentTaskToGanttSegment(task) {
         progress_percentage: typeof task.completion_percentage === 'number'
             ? task.completion_percentage
             : undefined,
-        status: task.status
+        status: task.status,
+        is_overdue: isTaskOverdue(task)
     };
 }
 
@@ -1920,8 +1937,8 @@ async function loadTasks() {
         // returns only tasks in the currently visible date range.
         if (currentView === 'gantt') {
             const range = getGanttDateRange(ganttCurrentPeriod, ganttCurrentDate);
-            options.target_start_date__gte = range.start;
-            options.target_completion_date__lte = range.end;
+            options.date_range_start = range.start;
+            options.date_range_end = range.end;
         }
 
         // Call API
@@ -3522,6 +3539,10 @@ async function renderEditActionForm(task) {
                     </select>
                 </div>
                 <div class="col-md-6">
+                    <label class="form-label">Hedef Başlangıç Tarihi</label>
+                    <input type="date" class="form-control" id="edit-target-start-date" value="${task.target_start_date ? task.target_start_date.split('T')[0] : ''}">
+                </div>
+                <div class="col-md-6">
                     <label class="form-label">Hedef Bitiş Tarihi</label>
                     <input type="date" class="form-control" id="edit-target-completion-date" value="${task.target_completion_date ? task.target_completion_date.split('T')[0] : ''}">
                 </div>
@@ -4742,9 +4763,14 @@ async function handleEditActionSubmit(task) {
         updateData.assigned_to = assignedInput.value === '' ? null : parseInt(assignedInput.value);
     }
     
-    const targetDateInput = taskDetailsModal.container.querySelector('#edit-target-completion-date');
-    if (targetDateInput) {
-        updateData.target_completion_date = targetDateInput.value || null;
+    const targetStartDateInput = taskDetailsModal.container.querySelector('#edit-target-start-date');
+    if (targetStartDateInput) {
+        updateData.target_start_date = targetStartDateInput.value || null;
+    }
+
+    const targetCompletionDateInput = taskDetailsModal.container.querySelector('#edit-target-completion-date');
+    if (targetCompletionDateInput) {
+        updateData.target_completion_date = targetCompletionDateInput.value || null;
     }
     
     const notesInput = taskDetailsModal.container.querySelector('#edit-notes');

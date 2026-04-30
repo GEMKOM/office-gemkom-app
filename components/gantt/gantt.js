@@ -17,6 +17,7 @@ class GanttChart {
             availableViews: ['day', 'week', 'month', 'year'], // All views available by default
             showDateOverlay: true,
             showCurrentTime: true,
+            filterByWorkingDays: true,
             onPeriodChange: null,
             onTaskClick: null,
             onTaskDrag: null,
@@ -320,6 +321,12 @@ class GanttChart {
             
             if (!overlapsView) {
                 return false;
+            }
+
+            // Some consumers (e.g. department tasks) need to show every
+            // overlapping task regardless of working-day calendars/weekends.
+            if (this.options.filterByWorkingDays === false) {
+                return true;
             }
             
             // If machine calendar is available, check if task has any working days
@@ -923,6 +930,7 @@ class GanttChart {
         if (Array.isArray(task.segments)) {
             return this.generateMultiSegmentTaskBar(task);
         }
+        const overdueClass = task?.is_overdue ? 'overdue' : '';
         
         // Handle tasks without dates
         if (!task.planned_start_ms || !task.planned_end_ms) {
@@ -935,7 +943,7 @@ class GanttChart {
             
             return `
                 <div class="gantt-task-bar-container">
-                    <div class="gantt-task-bar ${taskClass} ${categoryClass} no-dates" 
+                    <div class="gantt-task-bar ${taskClass} ${categoryClass} ${overdueClass} no-dates" 
                          style="left: 0px; width: 100px; opacity: 0.6;"
                          data-task-id="${task.id}"
                          data-category="${category}"
@@ -986,7 +994,7 @@ class GanttChart {
             const segmentInfo = this.calculateSegmentInfo(task, segment.start, segment.end, workingSegments);
             
             return `
-                <div class="gantt-task-bar ${taskClass} ${categoryClass}" 
+                <div class="gantt-task-bar ${taskClass} ${categoryClass} ${overdueClass}" 
                      style="left: ${left}px; width: ${width}px;"
                      data-task-id="${task.id}"
                      data-category="${category}"
@@ -1007,6 +1015,7 @@ class GanttChart {
     generateMultiSegmentTaskBar(task) {
         const taskTitle = task.title || task.name || `Görev ${task.id}`;
         const tiNumber = task.ti_number || task.key || task.id;
+        const rowOverdueClass = task?.is_overdue ? 'overdue' : '';
         
         // Generate segments for each timer segment
         const segments = task.segments.map((segment, index) => {
@@ -1024,6 +1033,7 @@ class GanttChart {
             const categoryClass = `category-${category}`;
             const segmentTitle = segment.title || segment.name || 'Bilinmeyen';
             const segmentTiNumber = segment.ti_number || segment.key || segment.id;
+            const segmentOverdueClass = segment?.is_overdue ? 'overdue' : rowOverdueClass;
             
             // Calculate segment info for proportional progress
             const allSegments = task.segments.map(s => ({
@@ -1033,7 +1043,7 @@ class GanttChart {
             const segmentInfo = this.calculateSegmentInfo(segment, segmentStart, segmentEnd, allSegments);
             
             return `
-                <div class="gantt-task-bar unlocked ${categoryClass}" 
+                <div class="gantt-task-bar unlocked ${categoryClass} ${segmentOverdueClass}" 
                      style="left: ${left}px; width: ${width}px;"
                      data-task-id="${segment.id}"
                      data-category="${category}"
@@ -1054,6 +1064,7 @@ class GanttChart {
 
     generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, categoryClass, taskTitle, tiNumber) {
         const duration = taskEnd - taskStart;
+        const overdueClass = task?.is_overdue ? 'overdue' : '';
         
         // Calculate position and width based on current period
         let left, width;
@@ -1128,7 +1139,7 @@ class GanttChart {
         
         return `
             <div class="gantt-task-bar-container">
-                <div class="gantt-task-bar ${taskClass} ${categoryClass}" 
+                <div class="gantt-task-bar ${taskClass} ${categoryClass} ${overdueClass}" 
                      style="left: ${left}px; width: ${width}px;"
                      data-task-id="${task.id}"
                      data-category="${task.category || 'work'}"
@@ -1562,8 +1573,8 @@ class GanttChart {
     addCurrentTimeIndicator() {
         const now = new Date();
         
-        // Only show for day and week views
-        if (this.currentPeriod !== 'day' && this.currentPeriod !== 'week') return;
+        // Show for all period views (day/week/month/year)
+        if (!['day', 'week', 'month', 'year'].includes(this.currentPeriod)) return;
         
         // Check if current time is within view range
         if (now < this.viewStart || now > this.viewEnd) return;
@@ -1585,9 +1596,25 @@ class GanttChart {
                 const weekDayWidth = this.calculateCellWidth();
                 left = daysFromStart * weekDayWidth;
                 break;
+            
+            case 'month':
+                const monthDaysFromStart = (now - this.viewStart) / (1000 * 60 * 60 * 24);
+                const monthDayWidth = this.calculateCellWidth();
+                left = monthDaysFromStart * monthDayWidth;
+                break;
+            
+            case 'year':
+                const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+                const daysInCurrentMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                const dayFraction = (now.getDate() - 1 + (now.getHours() / 24)) / daysInCurrentMonth;
+                const monthWidth = this.calculateCellWidth();
+                left = (startOfCurrentMonth.getMonth() * monthWidth) + (dayFraction * monthWidth);
+                break;
         }
         
-        const timeLabel = now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+        const timeLabel = this.currentPeriod === 'day' || this.currentPeriod === 'week'
+            ? now.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })
+            : now.toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit' });
         
         const indicator = document.createElement('div');
         indicator.className = 'gantt-current-time';
