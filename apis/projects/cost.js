@@ -192,7 +192,8 @@ export async function getProcurementLines(jobOrder) {
     if (!response.ok) {
         throw new Error(`Get procurement lines failed: ${response.status}`);
     }
-    return response.json();
+    const data = await response.json();
+    return Array.isArray(data) ? data : (data.results != null ? data.results : []);
 }
 
 /**

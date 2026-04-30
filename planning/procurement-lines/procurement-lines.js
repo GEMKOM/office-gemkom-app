@@ -38,6 +38,25 @@ let currentJobOrderForLines = null;
 let editingLines = [];
 let linesTableContainerId = 'procurement-lines-table-body';
 
+function mapSavedProcurementLines(lines) {
+    if (!Array.isArray(lines)) return [];
+    return lines.map((line, idx) => ({
+        id: line.id,
+        item: line.item ?? null,
+        item_code: line.item_code ?? '',
+        item_name: line.item_name ?? '',
+        item_unit: line.item_unit ?? '',
+        item_description: line.item_description ?? '',
+        quantity: line.quantity ?? '0',
+        unit_price: line.unit_price ?? '0',
+        amount_eur: line.amount_eur ?? '0',
+        planning_request_item: line.planning_request_item ?? null,
+        order: line.order ?? idx,
+        price_source: line.price_source ?? null,
+        price_date: line.price_date ?? null
+    }));
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) return;
     await initNavbar();
@@ -410,21 +429,7 @@ async function openLinesModal(jobNo) {
     try {
         const saved = await getProcurementLines(jobNo);
         if (saved && saved.length > 0) {
-            editingLines = saved.map((line, idx) => ({
-                id: line.id,
-                item: line.item ?? null,
-                item_code: line.item_code ?? '',
-                item_name: line.item_name ?? '',
-                item_unit: line.item_unit ?? '',
-                item_description: line.item_description ?? '',
-                quantity: line.quantity ?? '0',
-                unit_price: line.unit_price ?? '0',
-                amount_eur: line.amount_eur ?? '0',
-                planning_request_item: line.planning_request_item ?? null,
-                order: line.order ?? idx,
-                price_source: line.price_source ?? null,
-                price_date: line.price_date ?? null
-            }));
+            editingLines = mapSavedProcurementLines(saved);
         } else {
             const preview = await getProcurementLinesPreview(jobNo);
             if (preview && preview.length > 0) {
@@ -594,6 +599,13 @@ async function saveLines() {
     if (!currentJobOrderForLines) return;
     syncLinesFromDom();
 
+    const saveBtn = document.getElementById('procurement-lines-save');
+    const prevSaveHtml = saveBtn ? saveBtn.innerHTML : null;
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Kaydediliyor...';
+    }
+
     const payload = editingLines.map((line, idx) => {
         const itemDesc = (line.item_description || '').trim();
         const quantity = (line.quantity != null && line.quantity !== '') ? String(line.quantity) : '0';
@@ -624,12 +636,23 @@ async function saveLines() {
     try {
         await submitProcurementLines(currentJobOrderForLines, payload);
         showNotification('Satırlar kaydedildi.', 'success');
-        linesModalBootstrap.hide();
+
+        // After successful submit, re-fetch the persisted lines (NOT preview)
+        const refreshed = await getProcurementLines(currentJobOrderForLines);
+        editingLines = mapSavedProcurementLines(refreshed);
+        renderLinesTable();
+
+        // Refresh both lists (job may move from pending -> has entries)
         await loadPendingJobOrders();
-        loadHasEntries();
+        await loadHasEntries();
     } catch (err) {
         console.error(err);
         showNotification(err.message || 'Kaydetme başarısız', 'error');
+    } finally {
+        if (saveBtn) {
+            saveBtn.disabled = false;
+            if (prevSaveHtml != null) saveBtn.innerHTML = prevSaveHtml;
+        }
     }
 }
 
