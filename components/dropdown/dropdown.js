@@ -23,6 +23,7 @@ export class ModernDropdown {
         this.selectedValue = null;
         this.selectedValues = [];
         this.items = [];
+        this.allItems = [];
         this.currentZIndex = 1; // Start with low z-index
         this.searchTerm = '';
         this.remoteSearchLoading = false;
@@ -412,7 +413,8 @@ export class ModernDropdown {
     }
     
     setItems(items) {
-        this.items = items;
+        this.allItems = Array.isArray(items) ? items : [];
+        this.items = this.allItems;
         this.renderItems();
         if (this.options.multiple) {
             this.updateCheckboxes();
@@ -608,25 +610,22 @@ export class ModernDropdown {
     }
 
     filterItems(searchTerm) {
-        if (!this.itemsContainer) return;
-        
-        const items = this.itemsContainer.querySelectorAll('.dropdown-item');
-        const term = searchTerm.toLowerCase();
-        
-        items.forEach(item => {
-            const textElement = item.querySelector('.item-text');
-            if (textElement && textElement.textContent) {
-                const text = textElement.textContent.toLowerCase();
-                if (text.includes(term)) {
-                    item.style.display = 'block';
-                } else {
-                    item.style.display = 'none';
-                }
-            } else {
-                // If no text element found, hide the item
-                item.style.display = 'none';
-            }
-        });
+        const term = (searchTerm || '').toLowerCase().trim();
+        const source = Array.isArray(this.allItems) ? this.allItems : [];
+
+        if (!term) {
+            this.items = source;
+        } else {
+            this.items = source.filter((it) => {
+                const hay = String(it?.text ?? it?.label ?? it?.value ?? '').toLowerCase();
+                return hay.includes(term);
+            });
+        }
+
+        this.renderItems();
+        if (this.options.multiple) {
+            this.updateCheckboxes();
+        }
     }
     
     getValue() {
