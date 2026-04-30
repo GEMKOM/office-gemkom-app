@@ -96,6 +96,16 @@ function isUserInAssignedTeam(user, row) {
     const groups = Array.isArray(user.groups) ? user.groups : [];
     if (!groups.length) return false;
 
+    // Prefer canonical group name (e.g. "manufacturing_team") when present.
+    const assignedTeamGroupName = row.assigned_team_group_name || '';
+    if (assignedTeamGroupName) {
+        return groups.some(group => {
+            if (typeof group === 'string') return group === assignedTeamGroupName;
+            if (group && typeof group === 'object') return group.name === assignedTeamGroupName || group.slug === assignedTeamGroupName;
+            return false;
+        });
+    }
+
     const assignedTeamName = row.assigned_team_name || '';
     const assignedTeamId = row.assigned_team;
 
