@@ -2,6 +2,7 @@ import { initNavbar } from '../navbar.js';
 import { HeaderComponent } from '../header/header.js';
 import { FiltersComponent } from '../filters/filters.js';
 import { TableComponent } from '../table/table.js';
+import { GanttChart } from '../gantt/gantt.js';
 import { ConfirmationModal } from '../confirmation-modal/confirmation-modal.js';
 import { EditModal } from '../edit-modal/edit-modal.js';
 import { DisplayModal } from '../display-modal/display-modal.js';
@@ -107,6 +108,13 @@ export async function initDepartmentTasksPage(config) {
     let expandButtonHandler = null;
     let currentSortField = ''; // Default sort field
     let currentSortDirection = 'asc'; // Default sort direction
+    let currentView = 'table';
+    let ganttRowMode = 'tasks'; // 'tasks' | 'users'
+    let ganttCurrentPeriod = 'month';
+    let ganttCurrentDate = new Date();
+    let ganttChart = null;
+    let tableHostContainerId = `${containerIds.table}-table-host`;
+    let ganttHostContainerId = `${containerIds.table}-gantt-host`;
 
     // Component instances
     let tasksFilters = null;
@@ -299,7 +307,9 @@ async function initializeComponents() {
         }
 
         initializeFiltersComponent(defaultAssignedUserId);
+        initializeViewLayout();
         initializeTableComponent();
+        initializeGanttComponent();
         initializeModalComponents();
         
         // Initialize release modal for design department
@@ -468,7 +478,7 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
 }
 
 function initializeTableComponent() {
-    tasksTable = new TableComponent(containerIds.table, {
+    tasksTable = new TableComponent(tableHostContainerId, {
         title: 'Görev Listesi',
         currentSortField: currentSortField,
         currentSortDirection: currentSortDirection,
@@ -648,22 +658,28 @@ function initializeTableComponent() {
                 formatter: (value, row) => {
                     const isSubtask = !!row.parent;
                     const indent = isSubtask ? 30 : 0;
-                    const displayText = isSubtask ? (value || '-') : (row.job_order_title || value || '-');
+                    const fullText = isSubtask ? (value || '-') : (row.job_order_title || value || '-');
+                    const maxLen = 50;
+                    const shortenedText =
+                        typeof fullText === 'string' && fullText.length > maxLen
+                            ? `${fullText.slice(0, maxLen - 1)}…`
+                            : fullText;
                     const consultationBadge = row.is_consultation
                         ? `<span class="badge bg-info text-white ms-1" title="Teklif Danışma"><i class="fas fa-handshake"></i></span>` : '';
                     const offerRef = row.is_consultation && row.offer_summary
-                        ? `<br><small class="text-muted">${row.offer_summary.offer_no || ''}</small>` : '';
+                        ? `<br><small class="text-muted">${escapeHtml(row.offer_summary.offer_no || '')}</small>` : '';
+                    const tooltip = escapeHtml(fullText);
                     
                     if (isSubtask) {
                         const taskId = row.id;
                         return `
-                            <div class="editable-title" data-task-id="${taskId}" data-title-value="${value || ''}" style="padding-left: ${indent}px; cursor: pointer;" title="Başlığı düzenlemek için tıklayın">
-                                ${displayText}${consultationBadge}${offerRef}
+                            <div class="editable-title" data-task-id="${taskId}" data-title-value="${escapeHtml(value || '')}" style="padding-left: ${indent}px; cursor: pointer;" title="${tooltip}">
+                                ${escapeHtml(shortenedText)}${consultationBadge}${offerRef}
                             </div>
                         `;
                     }
                     
-                    return `<div style="padding-left: ${indent}px;">${displayText}${consultationBadge}${offerRef}</div>`;
+                    return `<div style="padding-left: ${indent}px;" title="${tooltip}">${escapeHtml(shortenedText)}${consultationBadge}${offerRef}</div>`;
                 }
             },
             {
@@ -726,6 +742,38 @@ function initializeTableComponent() {
                 }
             },
             {
+                field: 'target_start_date',
+                label: 'Hedef Başlangıç',
+                sortable: true,
+                type: 'date',
+                editable: true,
+                formatter: (value, row) => {
+                    // Make it editable (exclude machining_part and cnc_part types)
+                    const isEditable = row.type !== 'machining_part' && row.type !== 'cnc_part';
+                    const cursorStyle = isEditable ? 'cursor: pointer;' : '';
+                    const taskId = row.id;
+
+                    let displayValue = '-';
+                    let dateValue = '';
+                    if (value) {
+                        const date = new Date(value);
+                        displayValue = date.toLocaleDateString('tr-TR', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                        });
+                        // Format for date input (YYYY-MM-DD)
+                        dateValue = date.toISOString().split('T')[0];
+                    }
+
+                    return `
+                        <div class="editable-date" data-task-id="${taskId}" data-date-field="target_start_date" data-date-value="${dateValue}" style="${cursorStyle}" ${isEditable ? 'title="Hedef başlangıç tarihini değiştirmek için tıklayın"' : ''}>
+                            ${displayValue}
+                        </div>
+                    `;
+                }
+            },
+            {
                 field: 'target_completion_date',
                 label: 'Hedef Bitiş',
                 sortable: true,
@@ -751,7 +799,7 @@ function initializeTableComponent() {
                     }
                     
                     return `
-                        <div class="editable-date" data-task-id="${taskId}" data-date-value="${dateValue}" style="${cursorStyle}" ${isEditable ? 'title="Hedef bitiş tarihini değiştirmek için tıklayın"' : ''}>
+                        <div class="editable-date" data-task-id="${taskId}" data-date-field="target_completion_date" data-date-value="${dateValue}" style="${cursorStyle}" ${isEditable ? 'title="Hedef bitiş tarihini değiştirmek için tıklayın"' : ''}>
                             ${displayValue}
                         </div>
                     `;
@@ -967,6 +1015,307 @@ function initializeTableComponent() {
         ],
         emptyMessage: 'Görev bulunamadı',
         emptyIcon: 'fas fa-tasks'
+    });
+}
+
+function initializeViewLayout() {
+    const container = document.getElementById(containerIds.table);
+    if (!container) {
+        throw new Error(`Container with id '${containerIds.table}' not found`);
+    }
+
+    container.innerHTML = `
+        <div class="dashboard-card mb-3">
+            <div class="card-body py-2">
+                <div class="d-flex flex-wrap gap-2 align-items-center">
+                    <div class="btn-group btn-group-sm" role="group" aria-label="Gorunum secimi">
+                        <button type="button" class="btn btn-outline-primary" data-department-tasks-view="table">
+                            <i class="fas fa-table me-1"></i>Tablo
+                        </button>
+                        <button type="button" class="btn btn-outline-primary" data-department-tasks-view="gantt">
+                            <i class="fas fa-chart-gantt me-1"></i>Gantt
+                        </button>
+                    </div>
+                    <div id="department-tasks-gantt-row-mode" class="btn-group btn-group-sm" role="group" aria-label="Gantt satir modu" style="display: none;">
+                        <button type="button" class="btn btn-outline-secondary" data-gantt-row-mode="tasks">
+                            <i class="fas fa-tasks me-1"></i>Görevlere Göre
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" data-gantt-row-mode="users">
+                            <i class="fas fa-users me-1"></i>Kullanıcılara Göre
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="${tableHostContainerId}"></div>
+        <div id="${ganttHostContainerId}" style="display: none;"></div>
+    `;
+
+    container.querySelectorAll('[data-department-tasks-view]').forEach((button) => {
+        button.addEventListener('click', async () => {
+            const selectedView = button.dataset.departmentTasksView;
+            if (!selectedView || selectedView === currentView) return;
+
+            currentView = selectedView;
+            currentPage = 1;
+            updateViewState();
+            await loadTasks();
+        });
+    });
+
+    container.querySelectorAll('[data-gantt-row-mode]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const selectedMode = button.dataset.ganttRowMode;
+            if (!selectedMode || selectedMode === ganttRowMode) return;
+
+            ganttRowMode = selectedMode;
+            updateViewState();
+            updateGanttData(tasks);
+        });
+    });
+
+    updateViewState();
+}
+
+function ensureGanttStylesLoaded() {
+    const existingStyleTag = document.querySelector('link[data-department-tasks-gantt-css="true"]');
+    if (existingStyleTag) return;
+
+    const styleTag = document.createElement('link');
+    styleTag.rel = 'stylesheet';
+    styleTag.href = new URL('../gantt/gantt.css', import.meta.url).href;
+    styleTag.setAttribute('data-department-tasks-gantt-css', 'true');
+    document.head.appendChild(styleTag);
+}
+
+function initializeGanttComponent() {
+    ensureGanttStylesLoaded();
+
+    ganttChart = new GanttChart(ganttHostContainerId, {
+        title: 'Gantt Gorunumu',
+        defaultPeriod: 'month',
+        onPeriodChange: async (period, date) => {
+            ganttCurrentPeriod = period || 'month';
+            ganttCurrentDate = date ? new Date(date) : new Date();
+
+            if (currentView === 'gantt') {
+                currentPage = 1;
+                await loadTasks();
+            }
+        },
+        onTaskClick: (task) => {
+            if (task?.id) {
+                viewTaskDetails(task.id);
+            }
+        }
+    });
+}
+
+function mapDepartmentTaskToGanttTask(task, index) {
+    const { startMs, endMs } = getNormalizedTaskDateRange(task);
+
+    return {
+        id: task.id,
+        title: task.title || task.job_order_title || `Gorev ${task.id}`,
+        ti_number: getGanttTaskDisplayCode(task),
+        planned_start_ms: startMs || undefined,
+        planned_end_ms: endMs || undefined,
+        plan_order: typeof task.sequence === 'number' ? task.sequence : index + 1,
+        progress_percentage: typeof task.completion_percentage === 'number'
+            ? task.completion_percentage
+            : undefined,
+        status: task.status
+    };
+}
+
+function formatDateForApi(date) {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+}
+
+function getGanttDateRange(period, baseDate) {
+    const date = new Date(baseDate || new Date());
+    let rangeStart = new Date(date);
+    let rangeEnd = new Date(date);
+
+    switch (period) {
+        case 'day':
+            rangeStart = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            rangeEnd = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+            break;
+        case 'week': {
+            const dayOfWeek = date.getDay();
+            const mondayOffset = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+            rangeStart = new Date(date);
+            rangeStart.setDate(date.getDate() + mondayOffset);
+            rangeStart.setHours(0, 0, 0, 0);
+            rangeEnd = new Date(rangeStart);
+            rangeEnd.setDate(rangeStart.getDate() + 6);
+            break;
+        }
+        case 'year':
+            rangeStart = new Date(date.getFullYear(), 0, 1);
+            rangeEnd = new Date(date.getFullYear(), 11, 31);
+            break;
+        case 'month':
+        default:
+            rangeStart = new Date(date.getFullYear(), date.getMonth(), 1);
+            rangeEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+            break;
+    }
+
+    return {
+        start: formatDateForApi(rangeStart),
+        end: formatDateForApi(rangeEnd)
+    };
+}
+
+function getNormalizedTaskDateRange(task) {
+    let startMs = null;
+    let endMs = null;
+
+    if (task.target_start_date) {
+        startMs = new Date(task.target_start_date).getTime();
+    }
+
+    if (task.target_completion_date) {
+        endMs = new Date(task.target_completion_date).getTime();
+    }
+
+    if (startMs && !endMs) {
+        endMs = startMs + (24 * 60 * 60 * 1000);
+    } else if (!startMs && endMs) {
+        startMs = endMs - (24 * 60 * 60 * 1000);
+    }
+
+    return { startMs, endMs };
+}
+
+function getGanttTaskDisplayCode(task) {
+    return task.job_order || task.offer_no || task?.offer_summary?.offer_no || task.id;
+}
+
+function mapDepartmentTaskToGanttSegment(task) {
+    const { startMs, endMs } = getNormalizedTaskDateRange(task);
+    if (!startMs || !endMs) {
+        return null;
+    }
+
+    return {
+        id: task.id,
+        timer_id: String(task.id),
+        title: task.title || task.job_order_title || `Gorev ${task.id}`,
+        ti_number: getGanttTaskDisplayCode(task),
+        planned_start_ms: startMs,
+        planned_end_ms: endMs,
+        progress_percentage: typeof task.completion_percentage === 'number'
+            ? task.completion_percentage
+            : undefined,
+        status: task.status
+    };
+}
+
+function mapDepartmentTasksToUserRows(mainTasks) {
+    const taskList = mainTasks || [];
+    const teamUsers = users || [];
+
+    const userRows = teamUsers.map((user, index) => {
+        const displayName = user.name || user.username || `Kullanici ${user.id}`;
+        return {
+            id: `user-${user.id}`,
+            ti_number: displayName,
+            title: '0 görev',
+            plan_order: index + 1,
+            segments: []
+        };
+    });
+
+    const rowByUserId = new Map();
+    userRows.forEach((row, index) => {
+        const sourceUser = teamUsers[index];
+        if (sourceUser?.id !== undefined && sourceUser?.id !== null) {
+            rowByUserId.set(Number(sourceUser.id), row);
+        }
+    });
+
+    const unassignedRow = {
+        id: 'user-unassigned',
+        ti_number: 'Atanmamis',
+        title: '0 görev',
+        plan_order: userRows.length + 1,
+        segments: []
+    };
+
+    const sortedTasks = [...taskList].sort((a, b) => {
+        const aTime = a?.target_start_date ? new Date(a.target_start_date).getTime() : Number.MAX_SAFE_INTEGER;
+        const bTime = b?.target_start_date ? new Date(b.target_start_date).getTime() : Number.MAX_SAFE_INTEGER;
+        if (aTime !== bTime) return aTime - bTime;
+        return (a.sequence || 0) - (b.sequence || 0);
+    });
+
+    sortedTasks.forEach((task) => {
+        const segment = mapDepartmentTaskToGanttSegment(task);
+        if (!segment) return;
+
+        const assignedId = task?.assigned_to !== undefined && task?.assigned_to !== null
+            ? Number(task.assigned_to)
+            : null;
+        const targetRow = assignedId !== null && rowByUserId.has(assignedId)
+            ? rowByUserId.get(assignedId)
+            : unassignedRow;
+        targetRow.segments.push(segment);
+    });
+
+    const nonEmptyRows = [...userRows];
+    if (unassignedRow.segments.length > 0) {
+        nonEmptyRows.push(unassignedRow);
+    }
+
+    nonEmptyRows.forEach((row) => {
+        row.title = `${row.segments.length} görev`;
+    });
+
+    return nonEmptyRows;
+}
+
+function updateGanttData(mainTasks) {
+    if (!ganttChart) return;
+    const mappedTasks = ganttRowMode === 'users'
+        ? mapDepartmentTasksToUserRows(mainTasks)
+        : (mainTasks || []).map(mapDepartmentTaskToGanttTask);
+    ganttChart.updateTitle(ganttRowMode === 'users' ? 'Gantt Gorunumu - Kullanicilar' : 'Gantt Gorunumu');
+    ganttChart.setTasks(mappedTasks);
+}
+
+function updateViewState() {
+    const wrapper = document.getElementById(containerIds.table);
+    if (!wrapper) return;
+
+    const tableHost = document.getElementById(tableHostContainerId);
+    const ganttHost = document.getElementById(ganttHostContainerId);
+    if (tableHost) {
+        tableHost.style.display = currentView === 'table' ? '' : 'none';
+    }
+    if (ganttHost) {
+        ganttHost.style.display = currentView === 'gantt' ? '' : 'none';
+    }
+
+    wrapper.querySelectorAll('[data-department-tasks-view]').forEach((button) => {
+        const isActive = button.dataset.departmentTasksView === currentView;
+        button.classList.toggle('btn-primary', isActive);
+        button.classList.toggle('btn-outline-primary', !isActive);
+    });
+
+    const ganttRowModeControls = wrapper.querySelector('#department-tasks-gantt-row-mode');
+    if (ganttRowModeControls) {
+        ganttRowModeControls.style.display = currentView === 'gantt' ? '' : 'none';
+    }
+    wrapper.querySelectorAll('[data-gantt-row-mode]').forEach((button) => {
+        const isActive = button.dataset.ganttRowMode === ganttRowMode;
+        button.classList.toggle('btn-secondary', isActive);
+        button.classList.toggle('btn-outline-secondary', !isActive);
     });
 }
 
@@ -1516,7 +1865,9 @@ async function loadTasks() {
         // Build ordering string (field name with optional '-' prefix for descending)
         const orderingField = currentSortField;
         const orderingDirection = currentSortDirection === 'desc' ? '-' : '';
-        const ordering = `${orderingDirection}${orderingField}`;
+        const ordering = orderingField
+            ? `${orderingDirection}${orderingField}`
+            : (currentView === 'gantt' ? 'target_start_date' : '');
         
         const options = {
             page: currentPage,
@@ -1565,6 +1916,14 @@ async function loadTasks() {
             options.target_completion_date = filterValues['target-completion-date-filter'];
         }
 
+        // Gantt view always applies period window filters so the API
+        // returns only tasks in the currently visible date range.
+        if (currentView === 'gantt') {
+            const range = getGanttDateRange(ganttCurrentPeriod, ganttCurrentDate);
+            options.target_start_date__gte = range.start;
+            options.target_completion_date__lte = range.end;
+        }
+
         // Call API
         const response = await listDepartmentTasks(options);
 
@@ -1587,6 +1946,8 @@ async function loadTasks() {
             tasksTable.options.currentSortDirection = currentSortDirection;
             tasksTable.updateData(dataToDisplay, totalTasks, currentPage);
         }
+
+        updateGanttData(mainTasks);
 
         // Setup expand button listeners after table is updated
         setTimeout(() => {
@@ -2247,6 +2608,7 @@ function setupDateEditListeners() {
         
         const taskIdAttr = dateCell.getAttribute('data-task-id');
         const currentDateValue = dateCell.getAttribute('data-date-value') || '';
+        const dateField = dateCell.getAttribute('data-date-field') || 'target_completion_date';
         
         if (!taskIdAttr) {
             console.warn('Date cell missing data-task-id attribute');
@@ -2310,24 +2672,27 @@ function setupDateEditListeners() {
             const numericTaskId = typeof taskId === 'string' && !isNaN(taskId) ? parseInt(taskId) : taskId;
             
             // Prepare update data
-            const updateData = {
-                target_completion_date: newValue || null
+            const updateData = { [dateField]: newValue || null };
+            const labelMap = {
+                target_start_date: 'Hedef başlangıç tarihi',
+                target_completion_date: 'Hedef bitiş tarihi'
             };
+            const dateLabel = labelMap[dateField] || 'Tarih';
             
             try {
                 await patchDepartmentTask(numericTaskId, updateData);
-                showNotification('Hedef bitiş tarihi güncellendi', 'success');
+                showNotification(`${dateLabel} güncellendi`, 'success');
                 // Update display without reloading
                 updateDateDisplay(newValue);
                 // Also update the task in the data array
                 const task = tasks.find(t => t.id === numericTaskId) || 
                            Array.from(subtasksCache.values()).flat().find(t => t.id === numericTaskId);
                 if (task) {
-                    task.target_completion_date = newValue || null;
+                    task[dateField] = newValue || null;
                 }
             } catch (error) {
                 console.error('Error updating date:', error);
-                let errorMessage = 'Hedef bitiş tarihi güncellenirken hata oluştu';
+                let errorMessage = `${dateLabel} güncellenirken hata oluştu`;
                 try {
                     if (error.message) {
                         const errorData = JSON.parse(error.message);

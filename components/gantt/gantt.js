@@ -588,8 +588,10 @@ class GanttChart {
                 return Math.max(60, containerWidth / totalDaysInWeek);
                 
             case 'month':
-                // Use a reasonable minimum width for month days, enable scrolling if needed
-                return 50; // Fixed width for month days
+                // Fill available width on large screens, but keep a minimum
+                // so month view can still scroll on narrow containers.
+                const daysInMonth = new Date(this.currentDate.getFullYear(), this.currentDate.getMonth() + 1, 0).getDate();
+                return Math.max(40, containerWidth / daysInMonth);
                 
             case 'year':
                 const totalMonthsInYear = 12; // Show only current year
@@ -918,7 +920,7 @@ class GanttChart {
 
     generateTaskBar(task) {
         // Handle tasks with multiple segments (for "All Machines" view)
-        if (task.segments && Array.isArray(task.segments) && task.segments.length > 0) {
+        if (Array.isArray(task.segments)) {
             return this.generateMultiSegmentTaskBar(task);
         }
         

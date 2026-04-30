@@ -22,6 +22,8 @@ import { backendBase } from '../../base.js';
  * @param {boolean} options.main_only - Custom filter for main tasks only (true)
  * @param {string} options.search - Search in title, description
  * @param {string} options.ordering - Sort: sequence, created_at, -created_at, target_completion_date, job_order__job_no, -job_order__job_no
+ * @param {string} options.target_start_date__gte - Filter tasks with target start date >= YYYY-MM-DD
+ * @param {string} options.target_completion_date__lte - Filter tasks with target completion date <= YYYY-MM-DD
  * @param {number} options.page - Page number for pagination
  * @returns {Promise<Object>} Paginated response with count, next, previous, and results
  */
@@ -64,6 +66,12 @@ export async function listDepartmentTasks(options = {}) {
         }
         if (options.search) {
             queryParams.append('search', options.search);
+        }
+        if (options.target_start_date__gte) {
+            queryParams.append('target_start_date__gte', options.target_start_date__gte);
+        }
+        if (options.target_completion_date__lte) {
+            queryParams.append('target_completion_date__lte', options.target_completion_date__lte);
         }
         if (options.ordering) {
             queryParams.append('ordering', options.ordering);
