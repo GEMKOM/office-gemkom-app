@@ -18,6 +18,7 @@ import {
     unskipDepartmentTask,
     patchDepartmentTask,
     createDepartmentTask,
+    deleteDepartmentTask,
     bulkCreateSubtasks,
     getStatusChoices,
     getDepartmentChoices,
@@ -27,6 +28,8 @@ import {
 import { authFetchUsers } from '../../apis/users.js';
 import { createRelease, completeRevision, selfStartRevision } from '../../apis/projects/design.js';
 import { markPlanningRequestItemDelivered } from '../../apis/planning/planningRequestItems.js';
+import { getCncParts } from '../../apis/cnc_cutting/parts.js';
+import { getParts as getMachiningParts } from '../../apis/machining/parts.js';
 import { 
     fetchAssignments, 
     createAssignment, 
@@ -116,6 +119,98 @@ export async function initDepartmentTasksPage(config) {
     let createReleaseModal = null;
     let completeRevisionModal = null;
     let submitQCModal = null;
+
+    function isPotentiallyDeletableDepartmentTask(task) {
+        // We only show the delete button when the task *could* be deletable.
+        // Full eligibility (CNC/Machining/Subcontracting checks) is validated at click-time.
+        const isSubtask = !!task?.parent;
+        const hasNoSubtasks = (task?.subtasks_count || 0) === 0;
+        const taskType = task?.task_type ?? null;
+        const taskTypeAllowed = taskType === null || taskType === 'part';
+        return isSubtask && hasNoSubtasks && taskTypeAllowed;
+    }
+
+    async function checkDepartmentTaskDeleteEligibility(taskId) {
+        const task = await getDepartmentTaskById(taskId);
+
+        if (!task.parent) {
+            return { canDelete: false, reason: 'Sadece alt görevler silinebilir.' };
+        }
+
+        const taskType = task.task_type ?? null;
+        if (!(taskType === null || taskType === 'part')) {
+            return { canDelete: false, reason: 'Bu görev tipi silinemez.' };
+        }
+
+        if ((task.subtasks_count || 0) > 0) {
+            return { canDelete: false, reason: 'Alt görevi olan görev silinemez.' };
+        }
+
+        // CNC tasks can only be deleted if the job has no CNC parts.
+        if (task.type === 'cnc_part') {
+            const cncParts = await getCncParts({ job_no: task.job_order, page_size: 1 });
+            const cncCount = Array.isArray(cncParts) ? cncParts.length : (cncParts?.count ?? (cncParts?.results?.length ?? 0));
+            if (cncCount > 0) {
+                return { canDelete: false, reason: 'Bu iş emrine bağlı CNC parça(lar) var. Silmeden önce CNC parçaları silin.' };
+            }
+        }
+
+        // Machining tasks can only be deleted if the job has no machining parts.
+        if (task.type === 'machining_part') {
+            const parts = await getMachiningParts({ job_no: task.job_order, page_size: 1 });
+            const partsCount = Array.isArray(parts) ? parts.length : (parts?.count ?? (parts?.results?.length ?? 0));
+            if (partsCount > 0) {
+                return { canDelete: false, reason: 'Bu iş emrine bağlı talaşlı parça(lar) var. Silmeden önce parçaları silin.' };
+            }
+        }
+
+        return { canDelete: true, reason: null, task };
+    }
+
+    async function handleDeleteDepartmentTask(taskId) {
+        try {
+            const eligibility = await checkDepartmentTaskDeleteEligibility(taskId);
+            if (!eligibility.canDelete) {
+                showNotification(eligibility.reason || 'Bu görev silinemez', 'warning');
+                return;
+            }
+
+            const task = eligibility.task || await getDepartmentTaskById(taskId);
+            const safeTitle = escapeHtml(task.title || `#${task.id}`);
+            const parentId = task.parent;
+
+            confirmationModal.show({
+                title: 'Görevi Sil',
+                message: `Bu alt görevi silmek istediğinize emin misiniz?\n\n${safeTitle}`,
+                confirmText: 'Evet, Sil',
+                cancelText: 'İptal',
+                onConfirm: async () => {
+                    try {
+                        await deleteDepartmentTask(taskId);
+                        showNotification('Görev silindi', 'success');
+
+                        // Clean caches and refresh UI
+                        if (parentId && subtasksCache.has(parentId)) {
+                            subtasksCache.delete(parentId);
+                        }
+                        if (parentId && expandedRows.has(parentId)) {
+                            await fetchTaskSubtasks(parentId);
+                        }
+
+                        await loadTasks();
+                        taskDetailsModal.hide();
+                    } catch (error) {
+                        console.error('Error deleting department task:', error);
+                        showNotification(error.message || 'Görev silinirken hata oluştu', 'error');
+                        throw error;
+                    }
+                }
+            });
+        } catch (error) {
+            console.error('Error checking delete eligibility:', error);
+            showNotification(error.message || 'Silme kontrolü sırasında hata oluştu', 'error');
+        }
+    }
 
 // Status color mapping to ensure consistency with CSS classes
 const STATUS_COLOR_MAP = {
@@ -805,6 +900,14 @@ function initializeTableComponent() {
                     if (row.task_type === 'procurement_item') return false;
                     return true;
                 }
+            },
+            {
+                key: 'delete',
+                label: 'Sil',
+                icon: 'fas fa-trash',
+                class: 'btn-outline-danger',
+                onClick: (row) => handleDeleteDepartmentTask(row.id),
+                visible: (row) => isPotentiallyDeletableDepartmentTask(row)
             },
             {
                 key: 'complete',
@@ -2845,6 +2948,16 @@ function getAvailableActions(task) {
             handler: 'add-subtask'
         });
     }
+
+    // Delete action - only for deletable tasks (validated again on click)
+    if (isPotentiallyDeletableDepartmentTask(task)) {
+        actions.push({
+            key: 'delete',
+            label: 'Sil',
+            icon: 'fas fa-trash',
+            handler: 'delete'
+        });
+    }
     
     // Bulk subtask action
     if (task.task_type !== null && task.task_type !== undefined && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item' && task.task_type !== 'subcontracting') {
@@ -2984,6 +3097,9 @@ async function loadActionContent(task, action) {
                 break;
             case 'consultation':
                 content = await renderConsultationTab(task);
+                break;
+            case 'delete':
+                content = await renderDeleteTaskActionForm(task);
                 break;
             default:
                 content = '<p>İşlem formu yüklenemedi</p>';
@@ -4148,6 +4264,17 @@ function attachActionFormListeners(task, action) {
         setupSubcontractorTabListeners(task);
         return;
     }
+
+    // Delete action: attach button click handler
+    if (action.handler === 'delete') {
+        const deleteBtn = contentContainer.querySelector('#delete-task-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', async () => {
+                await handleDeleteDepartmentTask(task.id);
+            });
+        }
+        return;
+    }
     
     // Handle form submission for actions with forms
     const form = contentContainer.querySelector(`#${action.handler}-action-form`);
@@ -4208,6 +4335,25 @@ function attachActionFormListeners(task, action) {
     
 }
 
+async function renderDeleteTaskActionForm(task) {
+    const allowed = isPotentiallyDeletableDepartmentTask(task);
+    const disabledAttr = allowed ? '' : 'disabled';
+    const infoText = allowed
+        ? 'Silme işlemi geri alınamaz. Silme koşulları kontrol edilecektir.'
+        : 'Bu görev silme koşullarını sağlamıyor (sadece belirli alt görevler silinebilir).';
+
+    return `
+        <h5 class="mb-4"><i class="fas fa-trash me-2"></i>Görevi Sil</h5>
+        <div class="alert alert-warning">
+            <i class="fas fa-exclamation-triangle me-2"></i>
+            ${infoText}
+        </div>
+        <button type="button" class="btn btn-danger" id="delete-task-btn" ${disabledAttr}>
+            <i class="fas fa-trash me-1"></i>Sil
+        </button>
+    `;
+}
+
 // Handle edit action form submission
 async function handleEditActionSubmit(task) {
     const updateData = {};
@@ -4252,16 +4398,31 @@ async function handleAddSubtaskActionSubmit(task) {
     const descriptionInput = taskDetailsModal.container.querySelector('#subtask-description');
     const sequenceInput = taskDetailsModal.container.querySelector('#subtask-sequence');
     const weightInput = taskDetailsModal.container.querySelector('#subtask-weight');
-    
-    const subtaskData = {
-        parent: task.id,
-        title: titleInput ? titleInput.value.trim() : null,
-        description: descriptionInput ? descriptionInput.value.trim() || null : null,
-        sequence: sequenceInput ? parseInt(sequenceInput.value) || 1 : 1,
-        weight: weightInput ? parseFloat(weightInput.value) || null : null
-    };
-    
+
     try {
+        // Backend requires department (and typically job_order) for creating subtasks.
+        // Do not rely on the UI state; always fetch from parent task.
+        const parentTask = await getDepartmentTaskById(task.id);
+
+        const subtaskData = {
+            job_order: parentTask.job_order,
+            parent: parentTask.id,
+            department: parentTask.department,
+            sequence: sequenceInput ? parseInt(sequenceInput.value) || 1 : 1
+        };
+
+        const title = titleInput ? titleInput.value.trim() : '';
+        if (title) subtaskData.title = title;
+
+        const description = descriptionInput ? descriptionInput.value.trim() : '';
+        if (description) subtaskData.description = description;
+
+        const weightRaw = weightInput ? weightInput.value : '';
+        if (weightRaw !== undefined && weightRaw !== null && weightRaw !== '') {
+            const weight = parseFloat(weightRaw);
+            if (!Number.isNaN(weight)) subtaskData.weight = weight;
+        }
+
         await createDepartmentTask(subtaskData);
         showNotification('Alt görev eklendi', 'success');
         taskDetailsModal.hide();
