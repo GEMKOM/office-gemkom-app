@@ -130,6 +130,43 @@ export const NAVIGATION_STRUCTURE = {
         label: 'İmalat',
         icon: 'fas fa-industry',
         children: {
+            '/manufacturing/projects': {
+                label: 'Projeler',
+                icon: 'fas fa-project-diagram',
+                children: {}
+            },
+            '/manufacturing/welding': {
+                label: 'Kaynaklı İmalat',
+                icon: 'fas fa-fire',
+                children: {
+                    '/manufacturing/welding/time-entries': {
+                        label: 'Zaman Kayıtları',
+                        icon: 'fas fa-clock',
+                        children: {}
+                    },
+                    '/manufacturing/welding/teams': {
+                        label: 'Ekipler',
+                        icon: 'fas fa-users',
+                        children: {}
+                    },
+                    '/manufacturing/welding/reports': {
+                        label: 'Raporlar',
+                        icon: 'fas fa-chart-bar',
+                        children: {
+                            '/manufacturing/welding/reports/user-work-hours': {
+                                label: 'Çalışan Çalışma Saatleri',
+                                icon: 'fas fa-user-clock',
+                                children: {}
+                            },
+                            '/manufacturing/welding/reports/cost-analysis': {
+                                label: 'Maliyet Analizi',
+                                icon: 'fas fa-calculator',
+                                children: {}
+                            }
+                        }
+                    }
+                }
+            },
             '/manufacturing/machining': {
                 label: 'Talaşlı İmalat',
                 icon: 'fas fa-cog',
@@ -327,33 +364,7 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
-            '/manufacturing/welding': {
-                label: 'Kaynak',
-                icon: 'fas fa-fire',
-                children: {
-                    '/manufacturing/welding/time-entries': {
-                        label: 'Zaman Kayıtları',
-                        icon: 'fas fa-clock',
-                        children: {}
-                    },
-                    '/manufacturing/welding/reports': {
-                        label: 'Raporlar',
-                        icon: 'fas fa-chart-bar',
-                        children: {
-                            '/manufacturing/welding/reports/user-work-hours': {
-                                label: 'Çalışan Çalışma Saatleri',
-                                icon: 'fas fa-user-clock',
-                                children: {}
-                            },
-                            '/manufacturing/welding/reports/cost-analysis': {
-                                label: 'Maliyet Analizi',
-                                icon: 'fas fa-calculator',
-                                children: {}
-                            }
-                        }
-                    }
-                }
-            },
+            
             '/manufacturing/reports': {
                 label: 'Raporlar',
                 icon: 'fas fa-chart-pie',
@@ -364,11 +375,6 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     }
                 }
-            },
-            '/manufacturing/projects': {
-                label: 'Projeler',
-                icon: 'fas fa-project-diagram',
-                children: {}
             },
             '/manufacturing/subcontracting': {
                 label: 'Taşeron',
@@ -498,14 +504,14 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Raporlar',
                 icon: 'fas fa-chart-bar',
                 children: {
-                    '/finance/reports/executive-overview': {
-                        label: 'Yönetici Özeti',
-                        icon: 'fas fa-chart-pie',
-                        children: {}
-                    },
                     '/finance/reports/projects': {
                         label: 'Proje Raporu',
                         icon: 'fas fa-chart-line',
+                        children: {}
+                    },
+                    '/finance/reports/executive-overview': {
+                        label: 'Yönetici Özeti',
+                        icon: 'fas fa-chart-pie',
                         children: {}
                     }
                 }

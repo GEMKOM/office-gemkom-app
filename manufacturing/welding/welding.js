@@ -29,6 +29,14 @@ document.addEventListener('DOMContentLoaded', async () => {
                 features: []
             },
             {
+                title: 'Ekipler',
+                description: 'Kaynak ekiplerini oluşturun, ustabaşı ve üyeleri yönetin.',
+                icon: 'fas fa-users',
+                iconColor: 'warning',
+                link: '/manufacturing/welding/teams',
+                features: []
+            },
+            {
                 title: 'Raporlar',
                 description: 'Kaynak zaman kayıtları analizleri ve performans raporları.',
                 icon: 'fas fa-chart-bar',

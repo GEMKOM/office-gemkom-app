@@ -41,6 +41,13 @@ import {
 } from '../../apis/subcontracting/assignments.js';
 import { fetchSubcontractors } from '../../apis/subcontracting/subcontractors.js';
 import { fetchPriceTiers, getPriceTierRemainingWeight, updatePriceTier } from '../../apis/subcontracting/priceTiers.js';
+import { fetchTeams } from '../../apis/welding/teams.js';
+import {
+    fetchInternalTeamAssignments,
+    createInternalTeamAssignmentWithSubtask,
+    updateInternalTeamAssignmentWithEndpoint,
+    deleteInternalTeamAssignmentWithSubtask
+} from '../../apis/welding/internalTeamAssignments.js';
 import { submitQCReview, bulkSubmitQCReviews, listQCReviews, listNCRs, getNCR } from '../../apis/qualityControl.js';
 import { createComment } from '../../apis/projects/topics.js';
 
@@ -3291,8 +3298,8 @@ function getAvailableActions(task) {
         });
     }
     
-    // NCRs tab - show for all tasks except subcontracting (NCRs cannot be created for subcontracting tasks)
-    if (task.task_type !== 'subcontracting') {
+    // NCRs tab - only for main tasks and task_type "part".
+    if (!task.parent && task.task_type === 'part') {
         actions.push({
             key: 'ncrs',
             label: 'Uygunsuzluk Raporları',
@@ -3341,8 +3348,8 @@ function getAvailableActions(task) {
         });
     }
     
-    // Bulk subtask action
-    if (task.task_type !== null && task.task_type !== undefined && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item' && task.task_type !== 'subcontracting') {
+    // Bulk subtask action - only for main tasks and task_type "part".
+    if (!task.parent && task.task_type === 'part' && task.type !== 'machining_part' && task.type !== 'cnc_part') {
         actions.push({
             key: 'bulk-subtask',
             label: 'Toplu Alt Görev Ekle',
@@ -3351,21 +3358,19 @@ function getAvailableActions(task) {
         });
     }
     
-    // Assign subcontractor action
+    // Subcontractor + internal team tabs (manufacturing/welding)
     if (department === 'manufacturing' && task.task_type === 'welding') {
-        actions.push({
-            key: 'assign-subcontractor',
-            label: 'Taşeron Ata',
-            icon: 'fas fa-handshake',
-            handler: 'assign-subcontractor'
-        });
-        
-        // Subcontractor tab - show right after "Taşeron Ata" tab
         actions.push({
             key: 'subcontractor',
             label: 'Taşeron Ataması',
             icon: 'fas fa-handshake',
             handler: 'subcontractor'
+        });
+        actions.push({
+            key: 'internal-team',
+            label: 'Takım Ataması',
+            icon: 'fas fa-users',
+            handler: 'internal-team'
         });
     }
     
@@ -3378,16 +3383,17 @@ function getAvailableActions(task) {
             handler: 'subcontractor'
         });
     }
+
+    if (department === 'manufacturing' && task.task_type === 'internal_team') {
+        actions.push({
+            key: 'internal-team',
+            label: 'Takım Ataması',
+            icon: 'fas fa-users',
+            handler: 'internal-team'
+        });
+    }
     
     if (task.task_type === 'painting') {
-        // Assign subcontractor action (painting) - fixed subcontractor=9, manual price_per_kg
-        actions.push({
-            key: 'assign-paint-subcontractor',
-            label: 'Taşeron Ata',
-            icon: 'fas fa-handshake',
-            handler: 'assign-paint-subcontractor'
-        });
-        
         actions.push({
             key: 'subcontractor',
             label: 'Taşeron Ataması',
@@ -3462,6 +3468,9 @@ async function loadActionContent(task, action) {
             case 'assign-subcontractor':
                 content = await renderAssignSubcontractorActionForm(task);
                 break;
+            case 'assign-internal-team':
+                content = await renderAssignInternalTeamActionForm(task);
+                break;
             case 'assign-paint-subcontractor':
                 content = await renderAssignPaintSubcontractorActionForm(task);
                 break;
@@ -3470,6 +3479,9 @@ async function loadActionContent(task, action) {
                 break;
             case 'subcontractor':
                 content = await renderSubcontractorTab(task);
+                break;
+            case 'internal-team':
+                content = await renderInternalTeamTab(task);
                 break;
             case 'ncrs':
                 content = await renderNCRsTab(task);
@@ -3943,6 +3955,76 @@ async function renderAssignSubcontractorActionForm(task) {
     }
 }
 
+async function renderAssignInternalTeamActionForm(task) {
+    if (task.task_type !== 'welding') {
+        return '<p class="text-warning">Bu işlem sadece Kaynaklı İmalat görevleri için kullanılabilir</p>';
+    }
+
+    try {
+        const teamsResponse = await fetchTeams({ is_active: true, ordering: 'name', page_size: 1000 });
+        const teams = teamsResponse.results || teamsResponse || [];
+
+        const teamOptions = [
+            { value: '', label: 'Takım seçin...' },
+            ...teams.map((team) => {
+                const foremanLabel = team.foreman_name || team.foreman_full_name || '';
+                const teamLabel = foremanLabel ? `${team.name} (Ustabaşı: ${foremanLabel})` : team.name;
+                return { value: team.id.toString(), label: teamLabel };
+            })
+        ];
+
+        return `
+            <h5 class="mb-4"><i class="fas fa-users me-2"></i>Takım Ata ve Alt Görev Oluştur</h5>
+            <form id="assign-internal-team-action-form">
+                <div class="mb-4">
+                    <h6 class="text-primary"><i class="fas fa-info-circle me-2"></i>Atama Bilgileri</h6>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-users me-1"></i>Takım <span class="text-danger">*</span>
+                        </label>
+                        <select class="form-select" id="internal-assignment-team" name="team" required>
+                            ${teamOptions.map(opt => `<option value="${opt.value}">${opt.label}</option>`).join('')}
+                        </select>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-weight me-1"></i>Ayrılan Ağırlık (kg) <span class="text-danger">*</span>
+                        </label>
+                        <input type="number" class="form-control" id="internal-assignment-weight" name="allocated_weight_kg" step="0.01" min="0.01" required>
+                    </div>
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-sticky-note me-1"></i>Notlar
+                        </label>
+                        <textarea class="form-control" id="internal-assignment-notes" name="notes" rows="2" placeholder="Opsiyonel not"></textarea>
+                    </div>
+                </div>
+                <div class="mb-4 mt-4">
+                    <h6 class="text-info"><i class="fas fa-tasks me-2"></i>Alt Görev Bilgileri (Opsiyonel)</h6>
+                </div>
+                <div class="row g-3">
+                    <div class="col-md-12">
+                        <label class="form-label">
+                            <i class="fas fa-heading me-1"></i>Alt Görev Başlığı
+                        </label>
+                        <input type="text" class="form-control" id="internal-assignment-title" name="title" placeholder="Boş bırakılırsa takım adı kullanılır">
+                    </div>
+                </div>
+                <div class="col-md-12 mt-3">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-save me-1"></i>Takım Ata ve Alt Görev Oluştur
+                    </button>
+                </div>
+            </form>
+        `;
+    } catch (error) {
+        console.error('Error loading internal team form data:', error);
+        return '<p class="text-danger">Form yüklenirken hata oluştu</p>';
+    }
+}
+
 // Render form for assign paint subcontractor action (fixed subcontractor=9, manual price_per_kg)
 async function renderAssignPaintSubcontractorActionForm(task) {
     if (task.task_type !== 'painting') {
@@ -4145,19 +4227,23 @@ async function renderQCReviewsTab(task) {
 // Render Subcontractor tab
 async function renderSubcontractorTab(task) {
     try {
-        // Fetch assignments for this task
-        const assignmentsResponse = await fetchAssignments({ department_task: task.id });
-        const assignments = assignmentsResponse.results || assignmentsResponse || [];
-        
-        if (assignments.length === 0) {
-            return `
-                <h5 class="mb-4"><i class="fas fa-handshake me-2"></i>Taşeron Ataması</h5>
-                <div class="alert alert-info">
-                    <i class="fas fa-info-circle me-2"></i>
-                    Bu görev için henüz taşeron ataması bulunmamaktadır.
-                </div>
-            `;
+        const isSubcontractingTask = task.task_type === 'subcontracting';
+        const isWeldingTask = task.task_type === 'welding';
+        const isPaintingTask = task.task_type === 'painting';
+
+        let assignments = [];
+        if (isWeldingTask && task.job_order) {
+            const response = await fetchAssignments({ job_no: task.job_order, page_size: 1000 });
+            const allAssignments = response.results || response || [];
+            const strictMatches = allAssignments.filter((item) => isSubcontractingAssignmentForTask(item, task));
+            // Fallback: if backend shape does not expose enough relation fields for strict matching,
+            // show job-level subcontracting assignments instead of showing an empty tab.
+            assignments = strictMatches.length > 0 ? strictMatches : allAssignments;
+        } else {
+            const response = await fetchAssignments({ department_task: task.id });
+            assignments = response.results || response || [];
         }
+        window.subcontractorAssignmentsForModal = assignments;
         
         // Format currency
         const formatCurrency = (amount, currency = 'TRY') => {
@@ -4169,8 +4255,7 @@ async function renderSubcontractorTab(task) {
             }).format(amount);
         };
         
-        const isSubcontractingTask = task.task_type === 'subcontracting';
-        const canEdit = isSubcontractingTask; // Only subcontracting tasks can edit assignments
+        const canEdit = isSubcontractingTask; // only subcontracting subtasks are fully editable
         
         const assignmentsTable = assignments.map(assignment => {
             const allocatedWeight = assignment.allocated_weight_kg || 0;
@@ -4196,6 +4281,12 @@ async function renderSubcontractorTab(task) {
                 </button>
             ` : '';
             
+            const deleteButton = canEdit ? `
+                <button class="btn btn-sm btn-outline-danger delete-subcontracting-assignment-btn" data-assignment-id="${assignment.id}">
+                    <i class="fas fa-trash me-1"></i>Sil
+                </button>
+            ` : '';
+
             return `
                 <tr>
                     <td>${assignment.subcontractor_name || '-'}</td>
@@ -4208,42 +4299,539 @@ async function renderSubcontractorTab(task) {
                     <td>${unbilledWeight} kg</td>
                     <td>${formatCurrency(unbilledCost, assignment.cost_currency || 'TRY')}</td>
                     <td>${formatCurrency(currentCost, assignment.cost_currency || 'TRY')}</td>
-                    ${canEdit ? `<td>${editButton}</td>` : ''}
+                    ${canEdit ? `<td><div class="d-flex gap-1">${editButton}${deleteButton}</div></td>` : ''}
                 </tr>
             `;
         }).join('');
         
         const actionColumnHeader = canEdit ? '<th>İşlem</th>' : '';
+
+        const canCreateFromThisTab = isWeldingTask || isPaintingTask;
+        const createFormHtml = isPaintingTask
+            ? await renderAssignPaintSubcontractorActionForm(task)
+            : await renderAssignSubcontractorActionForm(task);
+
+        const emptyStateHtml = `
+            <div class="alert alert-info">
+                <i class="fas fa-info-circle me-2"></i>
+                Bu görev için henüz taşeron ataması bulunmamaktadır.
+            </div>
+        `;
         
         return `
             <h5 class="mb-4"><i class="fas fa-handshake me-2"></i>Taşeron Ataması</h5>
-            <div class="table-responsive">
-                <table class="table table-sm table-bordered table-hover">
-                    <thead class="table-light">
-                        <tr>
-                            <th>Taşeron</th>
-                            <th>Fiyat Kademesi</th>
-                            <th>Fiyat/kg</th>
-                            <th>Ayrılan Ağırlık</th>
-                            <th>Mevcut İlerleme</th>
-                            <th>Faturalanmış İlerleme</th>
-                            <th>Faturalanmamış İlerleme</th>
-                            <th>Faturalanmamış Ağırlık</th>
-                            <th>Faturalanmamış Maliyet</th>
-                            <th>Toplam Maliyet</th>
-                            ${actionColumnHeader}
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${assignmentsTable}
-                    </tbody>
-                </table>
+            ${canCreateFromThisTab ? `
+            <div class="d-flex justify-content-end mb-3">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="subcontractor-toggle-mode-btn">
+                    <i class="fas fa-plus-circle me-1"></i>Yeni Atama
+                </button>
+            </div>
+            ` : ''}
+
+            <div id="subcontractor-list-section">
+                ${assignments.length === 0 ? emptyStateHtml : `
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Taşeron</th>
+                                <th>Fiyat Kademesi</th>
+                                <th>Fiyat/kg</th>
+                                <th>Ayrılan Ağırlık</th>
+                                <th>Mevcut İlerleme</th>
+                                <th>Faturalanmış İlerleme</th>
+                                <th>Faturalanmamış İlerleme</th>
+                                <th>Faturalanmamış Ağırlık</th>
+                                <th>Faturalanmamış Maliyet</th>
+                                <th>Toplam Maliyet</th>
+                                ${actionColumnHeader}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${assignmentsTable}
+                        </tbody>
+                    </table>
+                </div>
+                `}
+            </div>
+
+            <div id="subcontractor-create-section" class="d-none">
+                ${createFormHtml}
             </div>
         `;
     } catch (error) {
         console.error('Error loading subcontractor assignments:', error);
         return '<p class="text-danger">Taşeron atamaları yüklenirken hata oluştu</p>';
     }
+}
+
+function toNumericId(value) {
+    if (value === null || value === undefined || value === '') return null;
+    if (typeof value === 'object') {
+        if (value.id !== undefined && value.id !== null) {
+            return toNumericId(value.id);
+        }
+        return null;
+    }
+    const parsed = parseInt(value);
+    return Number.isNaN(parsed) ? null : parsed;
+}
+
+function getSubcontractingAssignmentTaskId(assignment) {
+    return (
+        toNumericId(assignment?.department_task) ??
+        toNumericId(assignment?.department_task_id) ??
+        toNumericId(assignment?.subtask) ??
+        toNumericId(assignment?.subtask_id)
+    );
+}
+
+function getSubcontractingAssignmentParentTaskId(assignment) {
+    return (
+        toNumericId(assignment?.kaynak_task) ??
+        toNumericId(assignment?.kaynak_task_id) ??
+        toNumericId(assignment?.parent_task) ??
+        toNumericId(assignment?.parent_task_id) ??
+        toNumericId(assignment?.department_task_parent) ??
+        toNumericId(assignment?.department_task_parent_id) ??
+        toNumericId(assignment?.subtask_parent) ??
+        toNumericId(assignment?.subtask?.parent)
+    );
+}
+
+function isSubcontractingAssignmentForTask(assignment, task) {
+    const taskId = toNumericId(task?.id);
+    if (!taskId) return false;
+
+    const assignmentTaskId = getSubcontractingAssignmentTaskId(assignment);
+    const assignmentParentTaskId = getSubcontractingAssignmentParentTaskId(assignment);
+
+    if (task.task_type === 'subcontracting' || task.task_type === 'painting') {
+        return assignmentTaskId === taskId;
+    }
+
+    if (task.task_type === 'welding') {
+        if (assignmentParentTaskId === taskId) return true;
+        if (toNumericId(assignment?.kaynak_task_id) === taskId) return true;
+        if (toNumericId(assignment?.kaynak_task) === taskId) return true;
+
+        if (assignmentTaskId) {
+            const directSubtasks =
+                subtasksCache.get(taskId) ||
+                subtasksCache.get(String(taskId)) ||
+                subtasksCache.get(parseInt(taskId));
+            if (Array.isArray(directSubtasks) && directSubtasks.some((st) => toNumericId(st.id) === assignmentTaskId)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function getInternalAssignmentTaskId(assignment) {
+    return (
+        toNumericId(assignment?.department_task) ??
+        toNumericId(assignment?.department_task_id) ??
+        toNumericId(assignment?.subtask) ??
+        toNumericId(assignment?.subtask_id) ??
+        toNumericId(assignment?.department_task_detail?.id)
+    );
+}
+
+function getInternalAssignmentParentTaskId(assignment) {
+    return (
+        toNumericId(assignment?.kaynak_task) ??
+        toNumericId(assignment?.kaynak_task_id) ??
+        toNumericId(assignment?.parent_task) ??
+        toNumericId(assignment?.parent_task_id) ??
+        toNumericId(assignment?.department_task_parent) ??
+        toNumericId(assignment?.department_task_parent_id) ??
+        toNumericId(assignment?.department_task_detail?.parent) ??
+        toNumericId(assignment?.subtask_parent) ??
+        toNumericId(assignment?.subtask?.parent)
+    );
+}
+
+function isInternalTeamAssignmentForTask(assignment, task) {
+    const taskId = toNumericId(task?.id);
+    if (!taskId) return false;
+
+    const assignmentTaskId = getInternalAssignmentTaskId(assignment);
+    const assignmentParentTaskId = getInternalAssignmentParentTaskId(assignment);
+
+    if (task.task_type === 'internal_team') {
+        return assignmentTaskId === taskId;
+    }
+
+    if (task.task_type === 'welding') {
+        if (assignmentParentTaskId === taskId) return true;
+        if (toNumericId(assignment?.kaynak_task_id) === taskId) return true;
+        if (toNumericId(assignment?.kaynak_task) === taskId) return true;
+
+        if (assignmentTaskId) {
+            const directSubtasks =
+                subtasksCache.get(taskId) ||
+                subtasksCache.get(String(taskId)) ||
+                subtasksCache.get(parseInt(taskId));
+            if (Array.isArray(directSubtasks) && directSubtasks.some((st) => toNumericId(st.id) === assignmentTaskId)) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+function getInternalAssignmentStatusInfo(assignment) {
+    return {
+        raw: assignment?.status ?? assignment?.department_task_status ?? '',
+        label: assignment?.status_display ?? assignment?.department_task_status_display ?? assignment?.status ?? assignment?.department_task_status ?? '-'
+    };
+}
+
+function getInternalAssignmentProgress(assignment) {
+    const value = assignment?.current_progress ??
+        assignment?.progress ??
+        assignment?.manual_progress ??
+        assignment?.department_task_manual_progress;
+    if (value === null || value === undefined || value === '') return '-';
+    const parsed = parseFloat(value);
+    if (Number.isNaN(parsed)) return value;
+    return `${parsed}%`;
+}
+
+function getInternalAssignmentTeamName(assignment) {
+    return assignment?.team_name || assignment?.team?.name || assignment?.team_display || (assignment?.team ? `#${assignment.team}` : '-');
+}
+
+function getInternalAssignmentForemanName(assignment) {
+    return assignment?.team_foreman_name ||
+        assignment?.foreman_name ||
+        assignment?.team?.foreman_name ||
+        assignment?.team?.foreman_full_name ||
+        assignment?.team?.foreman?.full_name ||
+        assignment?.team?.foreman?.username ||
+        '-';
+}
+
+function getInternalAssignmentMembersCount(assignment) {
+    if (assignment?.team_members_count !== undefined && assignment?.team_members_count !== null) {
+        return assignment.team_members_count;
+    }
+    if (assignment?.members_count !== undefined && assignment?.members_count !== null) {
+        return assignment.members_count;
+    }
+    if (Array.isArray(assignment?.team?.members)) {
+        return assignment.team.members.length;
+    }
+    return '-';
+}
+
+async function renderInternalTeamTab(task) {
+    try {
+        const response = await fetchInternalTeamAssignments({ job_no: task.job_order, page_size: 1000 });
+        const allAssignments = response.results || response || [];
+        const assignments = allAssignments.filter((item) => isInternalTeamAssignmentForTask(item, task));
+        window.internalTeamAssignmentsForModal = assignments;
+
+        const canCreateFromThisTab = task.task_type === 'welding';
+        const createFormHtml = canCreateFromThisTab ? await renderAssignInternalTeamActionForm(task) : '';
+
+        const rows = assignments.map((assignment) => {
+            const assignmentId = assignment.id;
+            const statusInfo = getInternalAssignmentStatusInfo(assignment);
+            const allocatedWeight = assignment?.allocated_weight_kg ?? '-';
+            const notes = assignment?.notes ? escapeHtml(assignment.notes) : '-';
+            return `
+                <tr>
+                    <td>${getInternalAssignmentTeamName(assignment)}</td>
+                    <td>${getInternalAssignmentForemanName(assignment)}</td>
+                    <td>${getInternalAssignmentMembersCount(assignment)}</td>
+                    <td>${allocatedWeight} kg</td>
+                    <td>${getInternalAssignmentProgress(assignment)}</td>
+                    <td><span class="badge bg-secondary">${statusInfo.label || '-'}</span></td>
+                    <td>${notes}</td>
+                    <td>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-sm btn-outline-primary edit-internal-team-assignment-btn" data-assignment-id="${assignmentId}">
+                                <i class="fas fa-edit me-1"></i>Düzenle
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger delete-internal-team-assignment-btn" data-assignment-id="${assignmentId}">
+                                <i class="fas fa-trash me-1"></i>Sil
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+        return `
+            <h5 class="mb-4"><i class="fas fa-users me-2"></i>Takım Ataması</h5>
+            ${canCreateFromThisTab ? `
+            <div class="d-flex justify-content-end mb-3">
+                <button type="button" class="btn btn-sm btn-outline-primary" id="internal-team-toggle-mode-btn">
+                    <i class="fas fa-plus-circle me-1"></i>Yeni Atama
+                </button>
+            </div>
+            ` : ''}
+
+            <div id="internal-team-list-section">
+                ${assignments.length === 0 ? `
+                <div class="alert alert-info">
+                    <i class="fas fa-info-circle me-2"></i>
+                    Bu görev için henüz takım ataması bulunmamaktadır.
+                </div>
+                ` : `
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-hover">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Takım</th>
+                                <th>Ustabaşı</th>
+                                <th>Üye Sayısı</th>
+                                <th>Ayrılan Ağırlık</th>
+                                <th>İlerleme</th>
+                                <th>Durum</th>
+                                <th>Not</th>
+                                <th>İşlem</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${rows}
+                        </tbody>
+                    </table>
+                </div>
+                `}
+            </div>
+
+            <div id="internal-team-create-section" class="d-none">
+                ${createFormHtml}
+            </div>
+        `;
+    } catch (error) {
+        console.error('Error loading internal team assignments:', error);
+        return '<p class="text-danger">Takım atamaları yüklenirken hata oluştu</p>';
+    }
+}
+
+async function refreshInternalTeamTab(task) {
+    const contentContainer = taskDetailsModal.container.querySelector('#action-content-internal-team');
+    if (!contentContainer) return;
+
+    contentContainer.dataset.loaded = 'false';
+    const updatedTask = await getDepartmentTaskById(task.id);
+    contentContainer.innerHTML = await renderInternalTeamTab(updatedTask);
+    contentContainer.dataset.loaded = 'true';
+    setupInternalTeamTabListeners(updatedTask);
+}
+
+async function showEditInternalTeamAssignmentModal(task, assignment) {
+    try {
+        const teamsResponse = await fetchTeams({ is_active: true, ordering: 'name', page_size: 1000 });
+        const teams = teamsResponse.results || teamsResponse || [];
+        const statusInfo = getInternalAssignmentStatusInfo(assignment);
+
+        const modal = new EditModal('assignment-modal-container', {
+            title: 'Takım Atamasını Düzenle',
+            icon: 'fas fa-users',
+            size: 'md',
+            showEditButton: false
+        });
+
+        modal.clearAll();
+        modal.addSection({
+            title: 'Atama Bilgileri',
+            icon: 'fas fa-info-circle',
+            iconColor: 'text-primary'
+        });
+
+        modal.addField({
+            id: 'edit-internal-team',
+            name: 'team',
+            label: 'Takım',
+            type: 'dropdown',
+            value: toNumericId(assignment?.team) ? String(toNumericId(assignment?.team)) : '',
+            required: false,
+            options: [
+                { value: '', label: 'Değiştirmemek için boş bırakın' },
+                ...teams.map((team) => ({ value: team.id.toString(), label: team.name }))
+            ],
+            icon: 'fas fa-users',
+            colSize: 12
+        });
+
+        modal.addField({
+            id: 'edit-internal-weight',
+            name: 'allocated_weight_kg',
+            label: 'Ayrılan Ağırlık (kg)',
+            type: 'number',
+            value: assignment?.allocated_weight_kg || '',
+            required: false,
+            step: '0.01',
+            min: '0.01',
+            icon: 'fas fa-weight',
+            colSize: 12
+        });
+
+        modal.addField({
+            id: 'edit-internal-progress',
+            name: 'progress',
+            label: 'İlerleme (%)',
+            type: 'number',
+            value: assignment?.progress ?? assignment?.current_progress ?? assignment?.manual_progress ?? '',
+            required: false,
+            step: '0.01',
+            min: '0',
+            max: '100',
+            icon: 'fas fa-chart-line',
+            colSize: 12
+        });
+
+        modal.addField({
+            id: 'edit-internal-status',
+            name: 'status',
+            label: 'Durum',
+            type: 'dropdown',
+            value: statusInfo.raw || '',
+            required: false,
+            options: [
+                { value: '', label: 'Değiştirmemek için boş bırakın' },
+                { value: 'pending', label: 'Beklemede' },
+                { value: 'in_progress', label: 'Devam Ediyor' },
+                { value: 'completed', label: 'Tamamlandı' },
+                { value: 'skipped', label: 'Atlandı' }
+            ],
+            icon: 'fas fa-tasks',
+            colSize: 12
+        });
+
+        modal.addField({
+            id: 'edit-internal-notes',
+            name: 'notes',
+            label: 'Notlar',
+            type: 'textarea',
+            value: assignment?.notes || '',
+            required: false,
+            icon: 'fas fa-sticky-note',
+            colSize: 12
+        });
+
+        modal.render();
+        modal.show();
+
+        window.editingInternalTeamAssignmentId = assignment.id;
+        modal.onSaveCallback(async (formData) => {
+            try {
+                const updateData = {};
+                if (formData.team !== undefined && formData.team !== null && formData.team !== '') {
+                    updateData.team = parseInt(formData.team);
+                }
+                if (formData.allocated_weight_kg !== undefined && formData.allocated_weight_kg !== null && formData.allocated_weight_kg !== '') {
+                    updateData.allocated_weight_kg = formData.allocated_weight_kg.toString();
+                }
+                if (formData.notes !== undefined) {
+                    updateData.notes = formData.notes ? formData.notes.trim() : '';
+                }
+                if (formData.progress !== undefined && formData.progress !== null && formData.progress !== '') {
+                    updateData.progress = parseFloat(formData.progress);
+                }
+                if (formData.status !== undefined && formData.status !== null && formData.status !== '') {
+                    updateData.status = formData.status;
+                }
+
+                if (Object.keys(updateData).length === 0) {
+                    showNotification('Değişiklik yapılmadı', 'warning');
+                    return;
+                }
+
+                await updateInternalTeamAssignmentWithEndpoint(window.editingInternalTeamAssignmentId, updateData);
+                showNotification('Takım ataması güncellendi', 'success');
+                modal.hide();
+                window.editingInternalTeamAssignmentId = null;
+                await refreshInternalTeamTab(task);
+            } catch (error) {
+                console.error('Error updating internal team assignment:', error);
+                showNotification(error.message || 'Takım ataması güncellenirken hata oluştu', 'error');
+            }
+        });
+    } catch (error) {
+        console.error('Error showing internal team assignment edit modal:', error);
+        showNotification('Takım atama formu yüklenirken hata oluştu', 'error');
+    }
+}
+
+function setupInternalTeamTabListeners(task) {
+    const contentContainer = taskDetailsModal.container.querySelector('#action-content-internal-team');
+    if (!contentContainer) return;
+
+    const toggleBtn = contentContainer.querySelector('#internal-team-toggle-mode-btn');
+    const listSection = contentContainer.querySelector('#internal-team-list-section');
+    const createSection = contentContainer.querySelector('#internal-team-create-section');
+
+    if (toggleBtn && listSection && createSection) {
+        toggleBtn.addEventListener('click', () => {
+            const showingCreate = !createSection.classList.contains('d-none');
+            if (showingCreate) {
+                createSection.classList.add('d-none');
+                listSection.classList.remove('d-none');
+                toggleBtn.innerHTML = '<i class="fas fa-plus-circle me-1"></i>Yeni Atama';
+            } else {
+                createSection.classList.remove('d-none');
+                listSection.classList.add('d-none');
+                toggleBtn.innerHTML = '<i class="fas fa-list me-1"></i>Atamaları Gör';
+            }
+        });
+    }
+
+    const createForm = contentContainer.querySelector('#assign-internal-team-action-form');
+    if (createForm) {
+        createForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            await handleAssignInternalTeamActionSubmit(task, { closeModal: false });
+            await refreshInternalTeamTab(task);
+        });
+    }
+
+    const assignments = Array.isArray(window.internalTeamAssignmentsForModal) ? window.internalTeamAssignmentsForModal : [];
+
+    contentContainer.querySelectorAll('.edit-internal-team-assignment-btn').forEach((btn) => {
+        btn.addEventListener('click', async () => {
+            const assignmentId = parseInt(btn.dataset.assignmentId);
+            const assignment = assignments.find((item) => item.id === assignmentId);
+            if (!assignment) {
+                showNotification('Atama detayı bulunamadı', 'error');
+                return;
+            }
+            await showEditInternalTeamAssignmentModal(task, assignment);
+        });
+    });
+
+    contentContainer.querySelectorAll('.delete-internal-team-assignment-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const assignmentId = parseInt(btn.dataset.assignmentId);
+            confirmationModal.show({
+                message: 'Takım atamasını ve bağlı alt görevi silmek istediğinizden emin misiniz?',
+                onConfirm: async () => {
+                    try {
+                        await deleteInternalTeamAssignmentWithSubtask(assignmentId);
+                        showNotification('Takım ataması silindi', 'success');
+
+                        if (task.task_type === 'internal_team') {
+                            taskDetailsModal.hide();
+                            await loadTasks();
+                            return;
+                        }
+
+                        await refreshInternalTeamTab(task);
+                    } catch (error) {
+                        console.error('Error deleting internal team assignment:', error);
+                        showNotification(error.message || 'Takım ataması silinirken hata oluştu', 'error');
+                    }
+                }
+            });
+        });
+    });
 }
 
 // Render NCRs tab
@@ -4645,9 +5233,14 @@ function attachActionFormListeners(task, action) {
         return;
     }
     
-    // Setup subcontractor tab listeners for subcontracting tasks
-    if (action.handler === 'subcontractor' && task.task_type === 'subcontracting') {
+    // Setup subcontractor tab listeners
+    if (action.handler === 'subcontractor') {
         setupSubcontractorTabListeners(task);
+        return;
+    }
+    
+    if (action.handler === 'internal-team') {
+        setupInternalTeamTabListeners(task);
         return;
     }
 
@@ -4701,6 +5294,9 @@ function attachActionFormListeners(task, action) {
                         break;
                     case 'assign-subcontractor':
                         await handleAssignSubcontractorActionSubmit(task);
+                        break;
+                    case 'assign-internal-team':
+                        await handleAssignInternalTeamActionSubmit(task);
                         break;
                     case 'assign-paint-subcontractor':
                         await handleAssignPaintSubcontractorActionSubmit(task);
@@ -5004,7 +5600,8 @@ async function handleSubmitQCActionSubmit(task) {
 }
 
 // Handle assign subcontractor action form submission
-async function handleAssignSubcontractorActionSubmit(task) {
+async function handleAssignSubcontractorActionSubmit(task, options = {}) {
+    const { closeModal = true } = options;
     const subcontractorInput = taskDetailsModal.container.querySelector('#assignment-subtask-subcontractor');
     const priceTierInput = taskDetailsModal.container.querySelector('#assignment-subtask-price-tier');
     const weightInput = taskDetailsModal.container.querySelector('#assignment-subtask-weight');
@@ -5038,15 +5635,60 @@ async function handleAssignSubcontractorActionSubmit(task) {
     try {
         await createAssignmentWithSubtask(assignmentData);
         showNotification('Taşeron ataması ve alt görev oluşturuldu', 'success');
-        taskDetailsModal.hide();
+        if (closeModal) {
+            taskDetailsModal.hide();
+        }
     } catch (error) {
         console.error('Error creating assignment with subtask:', error);
         showNotification(error.message || 'Taşeron ataması oluşturulurken hata oluştu', 'error');
     }
 }
 
+async function handleAssignInternalTeamActionSubmit(task, options = {}) {
+    const { closeModal = true } = options;
+    const teamInput = taskDetailsModal.container.querySelector('#internal-assignment-team');
+    const weightInput = taskDetailsModal.container.querySelector('#internal-assignment-weight');
+    const notesInput = taskDetailsModal.container.querySelector('#internal-assignment-notes');
+    const titleInput = taskDetailsModal.container.querySelector('#internal-assignment-title');
+
+    if (!teamInput || !teamInput.value) {
+        showNotification('Lütfen bir takım seçin', 'error');
+        return;
+    }
+
+    if (!weightInput || !weightInput.value) {
+        showNotification('Lütfen ayrılan ağırlığı girin', 'error');
+        return;
+    }
+
+    const assignmentData = {
+        kaynak_task_id: task.id,
+        team: parseInt(teamInput.value),
+        allocated_weight_kg: parseFloat(weightInput.value)
+    };
+
+    if (notesInput && notesInput.value.trim()) {
+        assignmentData.notes = notesInput.value.trim();
+    }
+    if (titleInput && titleInput.value.trim()) {
+        assignmentData.title = titleInput.value.trim();
+    }
+
+    try {
+        await createInternalTeamAssignmentWithSubtask(assignmentData);
+        showNotification('Takım ataması ve alt görev oluşturuldu', 'success');
+        if (closeModal) {
+            taskDetailsModal.hide();
+        }
+    } catch (error) {
+        console.error('Error creating internal team assignment with subtask:', error);
+        showNotification(error.message || 'Takım ataması oluşturulurken hata oluştu', 'error');
+    }
+}
+
 // Handle assign paint subcontractor action form submission (fixed subcontractor=9, manual price_per_kg)
-async function handleAssignPaintSubcontractorActionSubmit(task) {
+async function handleAssignPaintSubcontractorActionSubmit(task, options = {}) {
+    const { closeModal = true } = options;
     if (task.task_type !== 'painting') {
         showNotification('Bu işlem sadece Boya görevleri için kullanılabilir', 'error');
         return;
@@ -5078,7 +5720,9 @@ async function handleAssignPaintSubcontractorActionSubmit(task) {
     try {
         await createAssignmentWithSubtask(assignmentData);
         showNotification('Taşeron ataması ve alt görev oluşturuldu', 'success');
-        taskDetailsModal.hide();
+        if (closeModal) {
+            taskDetailsModal.hide();
+        }
     } catch (error) {
         console.error('Error creating paint assignment with subtask:', error);
         showNotification(error.message || 'Taşeron ataması oluşturulurken hata oluştu', 'error');
@@ -7199,25 +7843,94 @@ async function showEditSubcontractingAssignmentModal(task, assignment) {
     }
 }
 
-// Setup subcontractor tab listeners for subcontracting tasks
+async function refreshSubcontractorTab(task) {
+    const contentContainer = taskDetailsModal.container.querySelector('#action-content-subcontractor');
+    if (!contentContainer) return;
+
+    contentContainer.dataset.loaded = 'false';
+    const updatedTask = await getDepartmentTaskById(task.id);
+    contentContainer.innerHTML = await renderSubcontractorTab(updatedTask);
+    contentContainer.dataset.loaded = 'true';
+    setupSubcontractorTabListeners(updatedTask);
+}
+
+// Setup subcontractor tab listeners
 function setupSubcontractorTabListeners(task) {
     const contentContainer = taskDetailsModal.container.querySelector('#action-content-subcontractor');
     if (!contentContainer) return;
-    
+
+    const isWeldingTask = task.task_type === 'welding';
+    const isPaintingTask = task.task_type === 'painting';
+    const toggleBtn = contentContainer.querySelector('#subcontractor-toggle-mode-btn');
+    const listSection = contentContainer.querySelector('#subcontractor-list-section');
+    const createSection = contentContainer.querySelector('#subcontractor-create-section');
+
+    if (toggleBtn && listSection && createSection) {
+        toggleBtn.addEventListener('click', () => {
+            const showingCreate = !createSection.classList.contains('d-none');
+            if (showingCreate) {
+                createSection.classList.add('d-none');
+                listSection.classList.remove('d-none');
+                toggleBtn.innerHTML = '<i class="fas fa-plus-circle me-1"></i>Yeni Atama';
+            } else {
+                createSection.classList.remove('d-none');
+                listSection.classList.add('d-none');
+                toggleBtn.innerHTML = '<i class="fas fa-list me-1"></i>Atamaları Gör';
+            }
+        });
+    }
+
+    const createForm = isPaintingTask
+        ? contentContainer.querySelector('#assign-paint-subcontractor-action-form')
+        : contentContainer.querySelector('#assign-subcontractor-action-form');
+    if (createForm) {
+        createForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (isPaintingTask) {
+                await handleAssignPaintSubcontractorActionSubmit(task, { closeModal: false });
+            } else {
+                await handleAssignSubcontractorActionSubmit(task, { closeModal: false });
+            }
+            await refreshSubcontractorTab(task);
+        });
+    }
+
+    const assignments = Array.isArray(window.subcontractorAssignmentsForModal) ? window.subcontractorAssignmentsForModal : [];
+
     // Attach event listeners to edit buttons
     contentContainer.querySelectorAll('.edit-subcontracting-assignment-btn').forEach(btn => {
         btn.addEventListener('click', async () => {
             const assignmentId = parseInt(btn.dataset.assignmentId);
-            
-            // Fetch full assignment details
             try {
-                const { fetchAssignment } = await import('../../apis/subcontracting/assignments.js');
-                const assignment = await fetchAssignment(assignmentId);
+                let assignment = assignments.find((item) => item.id === assignmentId);
+                if (!assignment) {
+                    const { fetchAssignment } = await import('../../apis/subcontracting/assignments.js');
+                    assignment = await fetchAssignment(assignmentId);
+                }
                 await showEditSubcontractingAssignmentModal(task, assignment);
             } catch (error) {
                 console.error('Error fetching assignment details:', error);
                 showNotification('Atama detayları yüklenirken hata oluştu', 'error');
             }
+        });
+    });
+
+    contentContainer.querySelectorAll('.delete-subcontracting-assignment-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const assignmentId = parseInt(btn.dataset.assignmentId);
+            confirmationModal.show({
+                message: 'Taşeron atamasını silmek istediğinizden emin misiniz?',
+                onConfirm: async () => {
+                    try {
+                        await deleteAssignment(assignmentId);
+                        showNotification('Taşeron ataması silindi', 'success');
+                        await refreshSubcontractorTab(task);
+                    } catch (error) {
+                        console.error('Error deleting subcontracting assignment:', error);
+                        showNotification(error.message || 'Taşeron ataması silinirken hata oluştu', 'error');
+                    }
+                }
+            });
         });
     });
 }

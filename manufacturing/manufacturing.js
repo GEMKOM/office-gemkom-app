@@ -173,6 +173,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                         link: '/manufacturing/welding/time-entries'
                     },
                     {
+                        label: 'Ekipler',
+                        icon: 'fas fa-users',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/welding/teams'
+                    },
+                    {
                         label: 'Raporlar',
                         icon: 'fas fa-chart-bar',
                         iconColor: 'rgba(139, 0, 0, 1)',
