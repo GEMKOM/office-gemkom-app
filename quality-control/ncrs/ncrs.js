@@ -1472,26 +1472,29 @@ async function handleSubmitNCR(ncr) {
                 icon: 'fas fa-tools',
                 fields: [
                     {
+                        id: 'submit-root-cause',
                         name: 'root_cause',
                         label: 'Kök Neden',
                         type: 'textarea',
-                        required: false,
+                        required: true,
                         value: fullNCR.root_cause || '',
                         placeholder: 'Kök neden açıklaması'
                     },
                     {
+                        id: 'submit-corrective-action',
                         name: 'corrective_action',
                         label: 'Düzeltici Faaliyet',
                         type: 'textarea',
-                        required: false,
+                        required: true,
                         value: fullNCR.corrective_action || '',
                         placeholder: 'Düzeltici faaliyet açıklaması'
                     },
                     {
+                        id: 'submit-disposition',
                         name: 'disposition',
                         label: 'Karar',
                         type: 'select',
-                        required: false,
+                        required: true,
                         value: fullNCR.disposition || 'pending',
                         options: DISPOSITION_CHOICES.map(d => ({ value: d.value, label: d.label }))
                     }
@@ -1501,19 +1504,20 @@ async function handleSubmitNCR(ncr) {
         ncrSubmitModal.render();
         ncrSubmitModal.onSave = async (formData) => {
             try {
+                const rootCause = String(formData.root_cause || '').trim();
+                const correctiveAction = String(formData.corrective_action || '').trim();
+                const disposition = String(formData.disposition || '').trim();
+
+                if (!rootCause || !correctiveAction || !disposition) {
+                    throw new Error('Kök neden, düzeltici faaliyet ve karar alanları zorunludur');
+                }
+
                 const submitData = {
-                    root_cause: formData.root_cause || undefined,
-                    corrective_action: formData.corrective_action || undefined,
-                    disposition: formData.disposition || undefined
+                    root_cause: rootCause,
+                    corrective_action: correctiveAction,
+                    disposition: disposition
                 };
-                
-                // Remove undefined values
-                Object.keys(submitData).forEach(key => {
-                    if (submitData[key] === undefined) {
-                        delete submitData[key];
-                    }
-                });
-                
+
                 await submitNCR(fullNCR.id, submitData);
                 showNotification('NCR başarıyla gönderildi', 'success');
                 ncrSubmitModal.hide();
