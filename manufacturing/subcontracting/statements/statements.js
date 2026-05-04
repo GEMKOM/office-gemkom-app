@@ -47,6 +47,31 @@ let decideModal = null;
 let actionConfirmModal = null;
 let paintInputModal = null;
 
+function hideAllStatementModals() {
+    const modalInstances = [
+        decideModal,
+        statementDetailModal,
+        adjustmentModal,
+        generateStatementModal,
+        paintInputModal,
+        actionConfirmModal
+    ];
+
+    modalInstances.forEach((modal) => {
+        if (modal && typeof modal.hide === 'function') {
+            modal.hide();
+        }
+    });
+
+    // Fallback for any Bootstrap modal that might still be visible.
+    document.querySelectorAll('.modal.show').forEach((modalEl) => {
+        const bsModal = bootstrap.Modal.getInstance(modalEl);
+        if (bsModal) {
+            bsModal.hide();
+        }
+    });
+}
+
 // State management
 let currentPage = 1;
 let currentOrdering = '-year,-month';
@@ -1526,8 +1551,7 @@ function showDecideModal(statementId, approve) {
                 comment: formData.comment || ''
             });
             showNotification(approve ? 'Hakediş onaylandı' : 'Hakediş reddedildi', 'success');
-            decideModal.hide();
-            viewStatementDetail(statementId);
+            hideAllStatementModals();
             await loadStatements();
         } catch (error) {
             console.error('Error deciding statement:', error);
