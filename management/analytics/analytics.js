@@ -100,6 +100,7 @@ function statusBadge(status) {
 }
 
 function marginChip(marginPct, sellingPrice) {
+    if (marginPct == null || marginPct === '') return '<span class="text-muted">-</span>';
     const sp = Number.parseFloat(sellingPrice);
     if (!Number.isFinite(sp) || sp <= 0) return '<span class="margin-chip margin-amber">—</span>';
     const m = Number.parseFloat(marginPct);

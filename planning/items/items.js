@@ -153,6 +153,18 @@ function initFilters() {
         .addTextFilter({ id: 'planning_request', label: 'Planlama Talep ID', placeholder: 'örn. 5', type: 'number', colSize: 2 })
         .addTextFilter({ id: 'planning_request_number', label: 'Talep No', placeholder: 'Talep numarası...', colSize: 2 })
         .addDropdownFilter({
+            id: 'item_type',
+            label: 'Kalem Tipi',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'stock', label: 'Stok' },
+                { value: 'expenditure', label: 'Masraf' },
+                { value: 'subcontracting', label: 'Alt Yüklenici' }
+            ],
+            placeholder: 'Tümü',
+            colSize: 2
+        })
+        .addDropdownFilter({
             id: 'planning_request_status',
             label: 'Talep Durumu',
             options: [
@@ -236,6 +248,8 @@ function initTable() {
     table = new TableComponent('planning-items-table-container', {
         title: 'Kalemler',
         icon: 'fas fa-list',
+        exportable: true,
+        exportFilename: () => `planlama_kalemleri_${new Date().toISOString().slice(0, 10)}.xlsx`,
         columns: [
             { field: 'id', label: 'ID', sortable: true, formatter: (v) => v ?? '-' },
             { field: 'item_code', label: 'Ürün Kodu', sortable: true, formatter: (v) => v || '-' },
@@ -259,7 +273,7 @@ function initTable() {
                 sortable: false,
                 formatter: (v) => renderLatestUnitPriceSource(v)
             },
-            { field: 'is_delivered', label: 'Teslim', sortable: false, formatter: (v) => renderBoolIcon(v) },
+            { field: 'is_delivered', label: 'Teslim', type: 'boolean', sortable: false, formatter: (v) => renderBoolIcon(v) },
             { field: 'purchase_request_number', label: 'Satın Alma PR No', sortable: false, formatter: (v) => renderPurchaseRequestNumberBadge(v) }
         ],
         pagination: true,
@@ -324,6 +338,7 @@ async function loadItems() {
             search: values.search || undefined,
             item_code: values.item_code || undefined,
             item_name: values.item_name || undefined,
+            item_type: values.item_type || undefined,
             planning_request: values.planning_request || undefined,
             planning_request_number: values.planning_request_number || undefined,
             planning_request_status: values.planning_request_status || undefined,

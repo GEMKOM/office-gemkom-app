@@ -134,7 +134,69 @@ let ncrFilesComponent = null;
 
 function getFileExtension(fileName) {
     if (!fileName) return '';
-    return String(fileName).split('.').pop().toLowerCase();
+    const name = String(fileName);
+    const lastDotIndex = name.lastIndexOf('.');
+    if (lastDotIndex <= 0 || lastDotIndex === name.length - 1) return '';
+    return name.slice(lastDotIndex + 1).toLowerCase();
+}
+
+function sanitizeZipPathSegment(value, fallback = 'Dosyalar') {
+    const raw = String(value || '').trim();
+    const cleaned = raw
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+        .replace(/\s+/g, ' ')
+        .replace(/^\.+/, '')
+        .replace(/[. ]+$/, '')
+        .trim();
+    return cleaned || fallback;
+}
+
+function extractFileNameFromUrl(fileUrl) {
+    if (!fileUrl) return '';
+    try {
+        const url = new URL(fileUrl, window.location.origin);
+        const path = decodeURIComponent(url.pathname || '');
+        const parts = path.split('/').filter(Boolean);
+        return parts.length ? parts[parts.length - 1] : '';
+    } catch (_) {
+        return '';
+    }
+}
+
+function inferExtensionFromContentType(contentType = '') {
+    const normalized = String(contentType || '').split(';')[0].trim().toLowerCase();
+    const map = {
+        'application/pdf': 'pdf',
+        'image/jpeg': 'jpg',
+        'image/jpg': 'jpg',
+        'image/png': 'png',
+        'image/gif': 'gif',
+        'image/webp': 'webp',
+        'text/plain': 'txt',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'xlsx',
+        'application/vnd.ms-excel': 'xls',
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'docx',
+        'application/msword': 'doc'
+    };
+    return map[normalized] || '';
+}
+
+function buildUniqueFileName(baseName, usedNames) {
+    const safeBaseName = sanitizeZipPathSegment(baseName, 'dosya');
+    if (!usedNames.has(safeBaseName)) {
+        usedNames.add(safeBaseName);
+        return safeBaseName;
+    }
+    const extension = getFileExtension(safeBaseName);
+    const stem = extension ? safeBaseName.slice(0, -(extension.length + 1)) : safeBaseName;
+    let counter = 2;
+    let candidate = '';
+    do {
+        candidate = extension ? `${stem} (${counter}).${extension}` : `${stem} (${counter})`;
+        counter += 1;
+    } while (usedNames.has(candidate));
+    usedNames.add(candidate);
+    return candidate;
 }
 
 function normalizeNcrFile(file) {
@@ -733,7 +795,7 @@ async function loadNCRs() {
 }
 
 // Utility function to download all files as zip
-async function downloadAllFilesAsZip(files, zipFileName = 'files.zip') {
+async function downloadAllFilesAsZip(files, ncrNumberValue = 'NCR') {
     if (!window.JSZip) {
         showNotification('JSZip kütüphanesi yüklenemedi', 'error');
         return;
@@ -747,29 +809,51 @@ async function downloadAllFilesAsZip(files, zipFileName = 'files.zip') {
     try {
         showNotification('Dosyalar indiriliyor...', 'info');
         const zip = new JSZip();
+        const ncrNumber = sanitizeZipPathSegment(ncrNumberValue, 'NCR');
+        const rootFolder = zip.folder(ncrNumber);
+        const usedNames = new Set();
+        let addedCount = 0;
+        if (!rootFolder) {
+            showNotification('Zip klasörü oluşturulamadı', 'error');
+            return;
+        }
         
         // Fetch and add each file to the zip
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
             const fileUrl = file.file_url || file.url || file.file || '';
-            const fileName = file.file_name || file.name || file.filename || `file_${i + 1}`;
+            const rawName = file.filename || file.file_name || file.original_name || file.name || extractFileNameFromUrl(fileUrl) || `dosya_${i + 1}`;
             
             if (!fileUrl) {
-                console.warn(`Skipping file ${fileName}: no URL`);
+                console.warn(`Skipping file ${rawName}: no URL`);
                 continue;
             }
             
             try {
                 const response = await fetch(fileUrl);
                 if (!response.ok) {
-                    console.warn(`Failed to fetch ${fileName}: ${response.status}`);
+                    console.warn(`Failed to fetch ${rawName}: ${response.status}`);
                     continue;
                 }
                 const blob = await response.blob();
-                zip.file(fileName, blob);
+                const existingExtension = getFileExtension(rawName) || (file.file_extension || '').toLowerCase();
+                const guessedExtension = inferExtensionFromContentType(response.headers.get('content-type'));
+                const extension = existingExtension || guessedExtension;
+                const cleanedName = sanitizeZipPathSegment(rawName, `dosya_${i + 1}`);
+                const finalName = cleanedName.includes('.') || !extension
+                    ? cleanedName
+                    : `${cleanedName}.${extension}`;
+                const uniqueName = buildUniqueFileName(finalName, usedNames);
+                rootFolder.file(uniqueName, blob);
+                addedCount += 1;
             } catch (error) {
-                console.error(`Error fetching file ${fileName}:`, error);
+                console.error(`Error fetching file ${rawName}:`, error);
             }
+        }
+
+        if (addedCount === 0) {
+            showNotification('Zip içine eklenecek geçerli dosya bulunamadı', 'warning');
+            return;
         }
         
         // Generate zip file
@@ -779,13 +863,13 @@ async function downloadAllFilesAsZip(files, zipFileName = 'files.zip') {
         const url = window.URL.createObjectURL(zipBlob);
         const link = document.createElement('a');
         link.href = url;
-        link.download = zipFileName;
+        link.download = `${ncrNumber}.zip`;
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
         window.URL.revokeObjectURL(url);
         
-        showNotification(`${files.length} dosya zip olarak indirildi`, 'success');
+        showNotification(`${addedCount} dosya zip olarak indirildi`, 'success');
     } catch (error) {
         console.error('Error creating zip file:', error);
         showNotification('Zip dosyası oluşturulurken hata oluştu', 'error');
@@ -1171,7 +1255,7 @@ async function showNCRDetails(ncr) {
                     const files = rawList.map(normalizeNcrFile);
                     if (files.length > 0) {
                         const ncrNumber = fullNCR.ncr_number || fullNCR.id;
-                        await downloadAllFilesAsZip(files, `ncr-${ncrNumber}-files.zip`);
+                        await downloadAllFilesAsZip(files, ncrNumber);
                     } else {
                         showNotification('İndirilecek dosya yok', 'warning');
                     }
