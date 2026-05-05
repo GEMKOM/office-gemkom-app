@@ -79,6 +79,7 @@ let jobOrdersTable = null; // Table component instance
 let customers = []; // Store customers for dropdowns
 let statusOptions = STATUS_OPTIONS; // Status options
 let expandedRows = new Set(); // Track expanded rows by job_no
+const IS_COMPACT_13_INCH = window.innerWidth <= 1440;
 let childrenCache = new Map(); // Cache children data by parent job_no
 
 function normalizeJobOrderStatus(jobOrder) {
@@ -374,7 +375,7 @@ function initializeTableComponent() {
                 field: '_expand',
                 label: '',
                 sortable: false,
-                width: '80px',
+                width: IS_COMPACT_13_INCH ? '56px' : '80px',
                 formatter: (value, row) => {
                     const hasChildren = row.children_count && row.children_count > 0;
                     const isExpanded = expandedRows.has(row.job_no);
@@ -492,7 +493,7 @@ function initializeTableComponent() {
                 field: 'job_no',
                 label: 'İş Emri No',
                 sortable: true,
-                width: '160px',
+                width: IS_COMPACT_13_INCH ? '128px' : '160px',
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     
@@ -515,6 +516,7 @@ function initializeTableComponent() {
                 field: 'title',
                 label: 'Başlık',
                 sortable: true,
+                width: IS_COMPACT_13_INCH ? '190px' : undefined,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     if (!value) return '-';
@@ -527,8 +529,11 @@ function initializeTableComponent() {
                             <div style="
                                 color: #495057;
                                 font-weight: 500;
-                                font-size: 0.9rem;
+                                font-size: ${IS_COMPACT_13_INCH ? '0.82rem' : '0.9rem'};
                                 line-height: 1.4;
+                                white-space: nowrap;
+                                overflow: hidden;
+                                text-overflow: ellipsis;
                             ">${value}</div>
                         `;
                     } else {
@@ -536,8 +541,11 @@ function initializeTableComponent() {
                             <div style="
                                 color: #212529;
                                 font-weight: 600;
-                                font-size: 0.95rem;
+                                font-size: ${IS_COMPACT_13_INCH ? '0.86rem' : '0.95rem'};
                                 line-height: 1.5;
+                                white-space: nowrap;
+                                overflow: hidden;
+                                text-overflow: ellipsis;
                             ">${value}</div>
                         `;
                     }
@@ -547,7 +555,7 @@ function initializeTableComponent() {
                 field: 'customer_name',
                 label: 'Müşteri',
                 sortable: false,
-                width: '220px',
+                width: IS_COMPACT_13_INCH ? '140px' : '220px',
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     
@@ -555,13 +563,14 @@ function initializeTableComponent() {
                     
                     if (!customerDisplayName) return '-';
                     
-                    return `<span class="status-badge status-grey">${customerDisplayName}</span>`;
+                    return `<span class="status-badge status-grey" style="max-width:${IS_COMPACT_13_INCH ? '120px' : '180px'}; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${customerDisplayName}">${customerDisplayName}</span>`;
                 }
             },
             {
                 field: 'quantity',
                 label: 'Miktar',
                 sortable: true,
+                width: IS_COMPACT_13_INCH ? '72px' : undefined,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     return value || value === 0 ? value : '-';
@@ -571,6 +580,7 @@ function initializeTableComponent() {
                 field: 'status_display',
                 label: 'Durum',
                 sortable: true,
+                width: IS_COMPACT_13_INCH ? '96px' : undefined,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     const status = row.status;
@@ -593,6 +603,7 @@ function initializeTableComponent() {
                 label: 'Hedef Tamamlanma',
                 sortable: true,
                 type: 'date',
+                width: IS_COMPACT_13_INCH ? '128px' : undefined,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     if (!value) return '-';
@@ -604,9 +615,9 @@ function initializeTableComponent() {
                     const daysRemaining = Math.ceil((completionDate - today) / (1000 * 60 * 60 * 24));
                     
                     const formattedDate = date.toLocaleDateString('tr-TR', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
+                        year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
+                        month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
+                        day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
                     });
 
                     const previous = row.previous_target_date_revision;
@@ -618,9 +629,9 @@ function initializeTableComponent() {
                         if (prevDateStr) {
                             const prevDate = new Date(prevDateStr);
                             const prevFormatted = prevDate.toLocaleDateString('tr-TR', {
-                                year: 'numeric',
-                                month: 'short',
-                                day: 'numeric'
+                                year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
+                                month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
+                                day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
                             });
                             previousHtml = `
                                 <div class="text-muted" style="font-size: 0.72rem; line-height: 1.15; margin-top: 3px; text-align:center; width:100%;">
@@ -690,7 +701,7 @@ function initializeTableComponent() {
                 field: 'completion_percentage',
                 label: 'Tamamlanma',
                 sortable: false,
-                width: '300px',
+                width: IS_COMPACT_13_INCH ? '180px' : '300px',
                 headerClass: 'completion-percentage-header',
                 formatter: (value) => {
                     if (!value && value !== 0) return '-';
@@ -724,7 +735,7 @@ function initializeTableComponent() {
                     
                     return `
                         <div style="position: relative; width: 100%; padding: 4px 0;">
-                            <div class="progress" style="height: 28px; border-radius: 6px; background-color: #e5e7eb; 
+                            <div class="progress" style="height: ${IS_COMPACT_13_INCH ? '20px' : '28px'}; border-radius: 6px; background-color: #e5e7eb; 
                                                          box-shadow: inset 0 1px 2px rgba(0,0,0,0.1); overflow: hidden;">
                                 <div class="progress-bar ${colorClass}" 
                                      role="progressbar" 
@@ -745,7 +756,7 @@ function initializeTableComponent() {
                                 </div>
                             </div>
                             <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); 
-                                        font-weight: 600; font-size: 0.8rem; color: ${textColor}; 
+                                        font-weight: 600; font-size: ${IS_COMPACT_13_INCH ? '0.72rem' : '0.8rem'}; color: ${textColor}; 
                                         pointer-events: none; white-space: nowrap; z-index: 2;">
                                 ${percentage.toFixed(1)}%
                             </div>
@@ -757,7 +768,7 @@ function initializeTableComponent() {
                 field: 'last_week_progress',
                 label: 'Son Hafta',
                 sortable: true,
-                width: '170px',
+                width: IS_COMPACT_13_INCH ? '142px' : '170px',
                 formatter: (value, row) => {
                     if (row?._isDepartmentTasksRow) return '';
                     if (row?.status === 'completed') return '-';
@@ -769,22 +780,28 @@ function initializeTableComponent() {
                     const etaDisplay = eta && !Number.isNaN(eta.getTime())
                         ? eta.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' })
                         : null;
+                    const targetStr = row?.target_completion_date;
+                    const target = targetStr ? new Date(targetStr) : null;
+                    const isLateVsTarget = !!(eta && target && !Number.isNaN(eta.getTime()) && !Number.isNaN(target.getTime()) && eta > target);
 
                     // Compact progress bar (same visual language as "Tamamlanma", smaller footprint)
                     return `
                         <div style="display:flex; flex-direction:column; gap:4px; align-items:stretch; width:100%;">
                             <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                                <span style="font-weight:700; font-size:0.8rem; color:#111827; white-space:nowrap;">
+                                <span style="font-weight:700; font-size:${IS_COMPACT_13_INCH ? '0.74rem' : '0.8rem'}; color:#111827; white-space:nowrap;">
                                     ${percentage.toFixed(1)}%
                                 </span>
-                                <span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">
-                                    ilerleme
+                                ${IS_COMPACT_13_INCH ? '' : '<span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">ilerleme</span>'}
+                            </div>
+                            <div style="font-size:${IS_COMPACT_13_INCH ? '0.66rem' : '0.72rem'}; white-space:nowrap; ${isLateVsTarget ? 'color:#b91c1c;' : 'color:#6b7280;'}">
+                                ${isLateVsTarget ? '<i class="fas fa-triangle-exclamation" style="margin-right:6px;"></i>' : ''}
+                                ${IS_COMPACT_13_INCH ? 'ETA:' : 'Tahmini bitiş:'}
+                                <span style="font-weight:800; color:${isLateVsTarget ? '#b91c1c' : '#111827'};">
+                                    ${etaDisplay || '-'}
                                 </span>
+                                ${isLateVsTarget ? `<span style="margin-left:${IS_COMPACT_13_INCH ? '4px' : '8px'}; font-weight:800; background:rgba(185,28,28,0.10); border:1px solid rgba(185,28,28,0.25); padding:1px ${IS_COMPACT_13_INCH ? '6px' : '8px'}; border-radius:999px;">${IS_COMPACT_13_INCH ? 'Geç' : 'Hedefi aşıyor'}</span>` : ''}
                             </div>
-                            <div style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">
-                                Tahmini bitiş: <span style="font-weight:700; color:#111827;">${etaDisplay || '-'}</span>
-                            </div>
-                            <div class="progress" style="height: 10px; border-radius: 999px; background-color: #e5e7eb;
+                            <div class="progress" style="height: ${IS_COMPACT_13_INCH ? '8px' : '10px'}; border-radius: 999px; background-color: #e5e7eb;
                                                          box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); overflow: hidden;">
                                 <div class="progress-bar"
                                      role="progressbar"
@@ -811,7 +828,7 @@ function initializeTableComponent() {
                 field: 'weekly_avg_progress',
                 label: 'Haftalık Ort.',
                 sortable: true,
-                width: '170px',
+                width: IS_COMPACT_13_INCH ? '142px' : '170px',
                 formatter: (value, row) => {
                     if (row?._isDepartmentTasksRow) return '';
                     if (value === null || value === undefined || value === '') return '-';
@@ -823,23 +840,29 @@ function initializeTableComponent() {
                     const etaDisplay = eta && !Number.isNaN(eta.getTime())
                         ? eta.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' })
                         : null;
+                    const targetStr = row?.target_completion_date;
+                    const target = targetStr ? new Date(targetStr) : null;
+                    const isLateVsTarget = !!(showEta && eta && target && !Number.isNaN(eta.getTime()) && !Number.isNaN(target.getTime()) && eta > target);
 
                     return `
                         <div style="display:flex; flex-direction:column; gap:4px; align-items:stretch; width:100%;">
                             <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                                <span style="font-weight:700; font-size:0.8rem; color:#111827; white-space:nowrap;">
+                                <span style="font-weight:700; font-size:${IS_COMPACT_13_INCH ? '0.74rem' : '0.8rem'}; color:#111827; white-space:nowrap;">
                                     ${percentage.toFixed(1)}%
                                 </span>
-                                <span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">
-                                    ort.
-                                </span>
+                                ${IS_COMPACT_13_INCH ? '' : '<span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">ort.</span>'}
                             </div>
                             ${showEta ? `
-                                <div style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">
-                                    Tahmini bitiş: <span style="font-weight:700; color:#111827;">${etaDisplay || '-'}</span>
+                                <div style="font-size:${IS_COMPACT_13_INCH ? '0.66rem' : '0.72rem'}; white-space:nowrap; ${isLateVsTarget ? 'color:#7c2d12;' : 'color:#6b7280;'}">
+                                    ${isLateVsTarget ? '<i class="fas fa-triangle-exclamation" style="margin-right:6px;"></i>' : ''}
+                                    ${IS_COMPACT_13_INCH ? 'ETA:' : 'Tahmini bitiş:'}
+                                    <span style="font-weight:800; color:${isLateVsTarget ? '#7c2d12' : '#111827'};">
+                                        ${etaDisplay || '-'}
+                                    </span>
+                                    ${isLateVsTarget ? `<span style="margin-left:${IS_COMPACT_13_INCH ? '4px' : '8px'}; font-weight:800; background:rgba(245,158,11,0.14); border:1px solid rgba(245,158,11,0.30); padding:1px ${IS_COMPACT_13_INCH ? '6px' : '8px'}; border-radius:999px;">${IS_COMPACT_13_INCH ? 'Geç' : 'Hedefi aşıyor'}</span>` : ''}
                                 </div>
                             ` : ''}
-                            <div class="progress" style="height: 10px; border-radius: 999px; background-color: #e5e7eb;
+                            <div class="progress" style="height: ${IS_COMPACT_13_INCH ? '8px' : '10px'}; border-radius: 999px; background-color: #e5e7eb;
                                                          box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); overflow: hidden;">
                                 <div class="progress-bar"
                                      role="progressbar"
@@ -866,7 +889,7 @@ function initializeTableComponent() {
                 field: 'ncr_count',
                 label: 'NCR',
                 sortable: false,
-                width: '90px',
+                width: IS_COMPACT_13_INCH ? '70px' : '90px',
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     const count = parseInt(value) || 0;
@@ -885,7 +908,7 @@ function initializeTableComponent() {
                 field: 'revision_count',
                 label: 'Revizyon',
                 sortable: false,
-                width: '110px',
+                width: IS_COMPACT_13_INCH ? '86px' : '110px',
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     const count = parseInt(value) || 0;
@@ -904,14 +927,15 @@ function initializeTableComponent() {
                 label: 'Oluşturulma',
                 sortable: true,
                 type: 'date',
+                width: IS_COMPACT_13_INCH ? '112px' : undefined,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     if (!value) return '-';
                     const date = new Date(value);
                     const formattedDate = date.toLocaleDateString('tr-TR', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric'
+                        year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
+                        month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
+                        day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
                     });
                     return `<span class="text-dark" style="font-size: 0.875rem; font-weight: 500;">${formattedDate}</span>`;
                 }

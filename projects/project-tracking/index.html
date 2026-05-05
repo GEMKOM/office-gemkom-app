@@ -200,6 +200,30 @@
             border-top: 1px solid #d0d0d0;
             border-bottom: 1px solid #d0d0d0;
         }
+
+        /* Compact layout for 13-inch screens */
+        @media (max-width: 1440px) {
+            #job-orders-table-container .table {
+                font-size: 0.82rem;
+            }
+
+            #job-orders-table-container .table thead th {
+                padding-top: 0.45rem;
+                padding-bottom: 0.45rem;
+                white-space: nowrap;
+            }
+
+            #job-orders-table-container .table tbody td {
+                padding-top: 0.5rem;
+                padding-bottom: 0.5rem;
+                white-space: nowrap;
+            }
+
+            #job-orders-table-container .status-badge {
+                font-size: 0.72rem;
+                padding: 0.2rem 0.4rem;
+            }
+        }
     </style>
 </head>
 <body>
