@@ -3,6 +3,7 @@ import { ModernDropdown } from '../../components/dropdown/dropdown.js';
 import { 
     listJobOrders, 
     getJobOrderByJobNo, 
+    getJobOrderProgressHistory,
     createJobOrder as createJobOrderAPI, 
     updateJobOrder as updateJobOrderAPI,
     reviseTargetCompletionDate,
@@ -753,9 +754,119 @@ function initializeTableComponent() {
                 }
             },
             {
+                field: 'last_week_progress',
+                label: 'Son Hafta',
+                sortable: true,
+                width: '170px',
+                formatter: (value, row) => {
+                    if (row?._isDepartmentTasksRow) return '';
+                    if (row?.status === 'completed') return '-';
+                    if (value === null || value === undefined || value === '') return '-';
+
+                    const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
+                    const etaStr = row?.estimated_completion_by_last_week;
+                    const eta = etaStr ? new Date(etaStr) : null;
+                    const etaDisplay = eta && !Number.isNaN(eta.getTime())
+                        ? eta.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' })
+                        : null;
+
+                    // Compact progress bar (same visual language as "Tamamlanma", smaller footprint)
+                    return `
+                        <div style="display:flex; flex-direction:column; gap:4px; align-items:stretch; width:100%;">
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                                <span style="font-weight:700; font-size:0.8rem; color:#111827; white-space:nowrap;">
+                                    ${percentage.toFixed(1)}%
+                                </span>
+                                <span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">
+                                    ilerleme
+                                </span>
+                            </div>
+                            <div style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">
+                                Tahmini bitiş: <span style="font-weight:700; color:#111827;">${etaDisplay || '-'}</span>
+                            </div>
+                            <div class="progress" style="height: 10px; border-radius: 999px; background-color: #e5e7eb;
+                                                         box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); overflow: hidden;">
+                                <div class="progress-bar"
+                                     role="progressbar"
+                                     style="width:${percentage}%;
+                                            background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%);
+                                            border-radius: 999px;
+                                            transition: width 0.6s ease;
+                                            position: relative;
+                                            overflow: hidden;"
+                                     aria-valuenow="${percentage}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                    <div style="position:absolute; inset:0;
+                                                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
+                                                animation: shimmer 3s infinite;
+                                                pointer-events:none;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            },
+            {
+                field: 'weekly_avg_progress',
+                label: 'Haftalık Ort.',
+                sortable: true,
+                width: '170px',
+                formatter: (value, row) => {
+                    if (row?._isDepartmentTasksRow) return '';
+                    if (value === null || value === undefined || value === '') return '-';
+
+                    const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
+                    const showEta = row?.status !== 'completed';
+                    const etaStr = showEta ? row?.estimated_completion_by_avg : null;
+                    const eta = etaStr ? new Date(etaStr) : null;
+                    const etaDisplay = eta && !Number.isNaN(eta.getTime())
+                        ? eta.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' })
+                        : null;
+
+                    return `
+                        <div style="display:flex; flex-direction:column; gap:4px; align-items:stretch; width:100%;">
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                                <span style="font-weight:700; font-size:0.8rem; color:#111827; white-space:nowrap;">
+                                    ${percentage.toFixed(1)}%
+                                </span>
+                                <span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">
+                                    ort.
+                                </span>
+                            </div>
+                            ${showEta ? `
+                                <div style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">
+                                    Tahmini bitiş: <span style="font-weight:700; color:#111827;">${etaDisplay || '-'}</span>
+                                </div>
+                            ` : ''}
+                            <div class="progress" style="height: 10px; border-radius: 999px; background-color: #e5e7eb;
+                                                         box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); overflow: hidden;">
+                                <div class="progress-bar"
+                                     role="progressbar"
+                                     style="width:${percentage}%;
+                                            background: linear-gradient(90deg, #a78bfa 0%, #7c3aed 100%);
+                                            border-radius: 999px;
+                                            transition: width 0.6s ease;
+                                            position: relative;
+                                            overflow: hidden;"
+                                     aria-valuenow="${percentage}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                    <div style="position:absolute; inset:0;
+                                                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
+                                                animation: shimmer 3s infinite;
+                                                pointer-events:none;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            },
+            {
                 field: 'ncr_count',
-                label: 'NCR Sayısı',
+                label: 'NCR',
                 sortable: false,
+                width: '90px',
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     const count = parseInt(value) || 0;
@@ -772,8 +883,9 @@ function initializeTableComponent() {
             },
             {
                 field: 'revision_count',
-                label: 'Revizyon Sayısı',
+                label: 'Revizyon',
                 sortable: false,
+                width: '110px',
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     const count = parseInt(value) || 0;
@@ -1268,7 +1380,8 @@ function initializeModalComponents() {
             currentRelease: null,
             drawingReleasesJobNo: null,
             ncrs: null,
-            costSummary: null
+            costSummary: null,
+            progressHistory: null
         };
         
         // Remove deep-link parameters from URL
@@ -1950,7 +2063,8 @@ let jobOrderTabCache = {
     currentRelease: null,
     drawingReleasesJobNo: null,
     ncrs: null,
-    costSummary: null
+    costSummary: null,
+    progressHistory: null
 };
 
 window.viewJobOrder = async function(jobNo) {
@@ -1967,7 +2081,8 @@ window.viewJobOrder = async function(jobNo) {
             currentRelease: null,
             drawingReleasesJobNo: null,
             ncrs: null,
-            costSummary: null
+            costSummary: null,
+            progressHistory: null
         };
         
         // Fetch only basic job order data
@@ -2343,6 +2458,15 @@ window.viewJobOrder = async function(jobNo) {
             iconColor: 'text-primary',
             customContent: '<div id="ncrs-container" style="padding: 20px;"></div>'
         });
+
+        // Add İlerleme Günlüğü tab (weekly progress history)
+        viewJobOrderModal.addTab({
+            id: 'ilerleme-gunlugu',
+            label: 'İlerleme Günlüğü',
+            icon: 'fas fa-chart-line',
+            iconColor: 'text-primary',
+            customContent: '<div id="progress-history-container" style="padding: 20px;"></div>'
+        });
         
         // Add Maliyet (Cost) tab
         viewJobOrderModal.addTab({
@@ -2433,6 +2557,13 @@ function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate, formatCur
                     break;
                 case 'kalite-kontrol':
                     await loadNCRsTab(jobNo);
+                    break;
+                case 'ilerleme-gunlugu':
+                    if (typeof window.loadProgressHistoryTab === 'function') {
+                        await window.loadProgressHistoryTab(jobNo);
+                    } else {
+                        console.error('loadProgressHistoryTab is not available on window');
+                    }
                     break;
                 case 'maliyet':
                     await loadCostSummaryTab(jobNo, formatCurrency);
@@ -3837,6 +3968,31 @@ async function loadCostSummaryTab(jobNo, formatCurrency) {
     }
 }
 
+// Load Progress History Tab
+async function loadProgressHistoryTab(jobNo) {
+    if (jobOrderTabCache.progressHistory !== null) {
+        renderProgressHistoryTab(jobOrderTabCache.progressHistory, jobNo);
+        return;
+    }
+
+    const container = viewJobOrderModal.content.querySelector('#progress-history-container');
+    if (!container) return;
+
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
+
+    try {
+        const data = await getJobOrderProgressHistory(jobNo);
+        jobOrderTabCache.progressHistory = data;
+        renderProgressHistoryTab(data, jobNo);
+    } catch (error) {
+        console.error('Error loading progress history:', error);
+        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>İlerleme günlüğü yüklenirken hata oluştu.</div>';
+    }
+}
+
+// Expose for Bootstrap tab handler (avoid scope issues)
+window.loadProgressHistoryTab = loadProgressHistoryTab;
+
 // Render Cost Summary Tab
 function renderCostSummaryTab(data, jobNo, formatCurrency) {
     const container = viewJobOrderModal.content.querySelector('#cost-summary-container');
@@ -3895,6 +4051,128 @@ function renderCostSummaryTab(data, jobNo, formatCurrency) {
                 </div>
             </div>
         </div>
+    `;
+}
+
+function renderProgressHistoryTab(data, jobNo) {
+    const container = viewJobOrderModal.content.querySelector('#progress-history-container');
+    if (!container) return;
+
+    const weeks = Array.isArray(data?.weeks) ? data.weeks : [];
+    const weeklyAvg = (data?.weekly_avg !== null && data?.weekly_avg !== undefined && data?.weekly_avg !== '')
+        ? (parseFloat(data.weekly_avg) || 0)
+        : null;
+
+    const formatDate = (dateStr) => {
+        if (!dateStr) return '-';
+        const d = new Date(dateStr);
+        if (Number.isNaN(d.getTime())) return String(dateStr);
+        return d.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' });
+    };
+
+    const deltaBadge = (deltaValue) => {
+        const delta = parseFloat(deltaValue);
+        if (Number.isNaN(delta)) return '<span class="text-muted">-</span>';
+
+        const isZero = Math.abs(delta) < 0.000001;
+        const isPositive = delta > 0;
+        const badgeClass = isZero ? 'status-grey' : (isPositive ? 'status-green' : 'status-red');
+        const icon = isZero ? 'fas fa-minus' : (isPositive ? 'fas fa-arrow-up' : 'fas fa-arrow-down');
+        const sign = isPositive ? '+' : '';
+
+        return `<span class="status-badge ${badgeClass}" style="font-weight:700;">
+            <i class="${icon}" style="font-size:10px; margin-right:6px;"></i>${sign}${delta.toFixed(2)}%
+        </span>`;
+    };
+
+    const renderWeekRow = (w, idx) => {
+        const completion = Math.min(100, Math.max(0, parseFloat(w?.completion_pct) || 0));
+        const delta = parseFloat(w?.delta);
+        const deltaAbs = Number.isNaN(delta) ? 0 : Math.min(100, Math.max(0, Math.abs(delta)));
+
+        return `
+            <tr>
+                <td style="width:56px;" class="text-muted">${idx + 1}</td>
+                <td>
+                    <div style="display:flex; flex-direction:column; line-height:1.2;">
+                        <div class="fw-semibold">${formatDate(w?.week_start)} – ${formatDate(w?.week_end)}</div>
+                        <div class="text-muted" style="font-size:0.78rem;">Hafta</div>
+                    </div>
+                </td>
+                <td style="width:220px;">
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                        <div style="display:flex; align-items:center; justify-content:space-between;">
+                            <span class="fw-bold">${completion.toFixed(2)}%</span>
+                            <span class="text-muted" style="font-size:0.78rem;">toplam</span>
+                        </div>
+                        <div class="progress" style="height:10px; border-radius:999px; background-color:#e5e7eb; overflow:hidden;">
+                            <div class="progress-bar" role="progressbar"
+                                 style="width:${completion}%; background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%); border-radius:999px;"
+                                 aria-valuenow="${completion}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                </td>
+                <td style="width:220px;">
+                    <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
+                        ${deltaBadge(w?.delta)}
+                        <div class="progress" style="height:8px; border-radius:999px; background-color:#f3f4f6; overflow:hidden; width:100%;">
+                            <div class="progress-bar" role="progressbar"
+                                 style="width:${deltaAbs}%; background:${(Number.isNaN(delta) || delta >= 0) ? 'linear-gradient(90deg, #34d399 0%, #059669 100%)' : 'linear-gradient(90deg, #fb7185 0%, #e11d48 100%)'}; border-radius:999px;"
+                                 aria-valuenow="${deltaAbs}" aria-valuemin="0" aria-valuemax="100"></div>
+                        </div>
+                    </div>
+                </td>
+            </tr>
+        `;
+    };
+
+    const emptyState = `
+        <div class="text-center py-5">
+            <div style="font-size:2.2rem; color:#cbd5e1;"><i class="fas fa-chart-line"></i></div>
+            <div class="mt-2 fw-semibold">İlerleme verisi bulunamadı</div>
+            <div class="text-muted" style="font-size:0.9rem;">İş Emri: <span class="fw-semibold">${jobNo}</span></div>
+        </div>
+    `;
+
+    const summaryHtml = `
+        <div class="mb-3" style="display:flex; gap:12px; flex-wrap:wrap;">
+            <div style="flex:1; min-width:260px; border:1px solid rgba(148,163,184,0.35); border-radius:12px; padding:14px 16px; background: linear-gradient(180deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.02) 100%);">
+                <div class="text-muted" style="font-size:0.8rem;">Haftalık Ortalama İlerleme</div>
+                <div style="display:flex; align-items:baseline; gap:8px; margin-top:4px;">
+                    <div style="font-size:1.4rem; font-weight:800; color:#111827;">
+                        ${weeklyAvg === null ? '-' : `${weeklyAvg.toFixed(2)}%`}
+                    </div>
+                    <div class="text-muted" style="font-size:0.85rem;">(son haftalar)</div>
+                </div>
+            </div>
+            <div style="flex:1; min-width:260px; border:1px solid rgba(148,163,184,0.35); border-radius:12px; padding:14px 16px; background: #fff;">
+                <div class="text-muted" style="font-size:0.8rem;">Kayıtlı Hafta Sayısı</div>
+                <div style="font-size:1.4rem; font-weight:800; color:#111827; margin-top:4px;">${weeks.length}</div>
+            </div>
+        </div>
+    `;
+
+    const tableHtml = `
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle">
+                <thead>
+                    <tr>
+                        <th style="width:56px;">#</th>
+                        <th>Hafta Aralığı</th>
+                        <th style="width:220px;">Tamamlanma</th>
+                        <th style="width:220px;">Haftalık Değişim</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${weeks.map(renderWeekRow).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+
+    container.innerHTML = `
+        ${summaryHtml}
+        ${weeks.length === 0 ? emptyState : tableHtml}
     `;
 }
 

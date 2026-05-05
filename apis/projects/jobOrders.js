@@ -103,6 +103,35 @@ export async function getJobOrderByJobNo(jobNo) {
 }
 
 /**
+ * Get job order progress history (weekly)
+ * Endpoint: /projects/job-orders/{job_no}/progress-history/
+ *
+ * Response shape example:
+ *  {
+ *    weeks: [{ week_start, week_end, completion_pct, delta }],
+ *    weekly_avg: number
+ *  }
+ *
+ * @param {string} jobNo
+ * @returns {Promise<Object>}
+ */
+export async function getJobOrderProgressHistory(jobNo) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/progress-history/`);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData?.detail || JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching progress history for job order ${jobNo}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Create a new job order
  * @param {Object} jobOrderData - Job order data
  * @param {string} jobOrderData.job_no - Job order number (required). 
