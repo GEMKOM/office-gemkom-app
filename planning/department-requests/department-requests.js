@@ -301,7 +301,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-edit',
                 class: 'btn-outline-success',
                 onClick: (row) => editPlanningRequest(row.id),
-                visible: (row) => row.status !== 'cancelled' && row.status !== 'converted' && row.status !== 'completed'
+                visible: () => true
             },
             {
                 key: 'cancel',
@@ -1248,19 +1248,7 @@ async function editPlanningRequest(requestId) {
     try {
         // Get the request details
         const request = await getPlanningRequest(requestId);
-        
-        // Check if already cancelled
-        if (request.status === 'cancelled') {
-            showNotification('İptal edilmiş planlama talepleri düzenlenemez', 'error');
-            return;
-        }
-        
-        // Check if converted or completed
-        if (request.status === 'converted' || request.status === 'completed') {
-            showNotification('Dönüştürülmüş veya tamamlanmış planlama talepleri düzenlenemez', 'error');
-            return;
-        }
-        
+ 
         // Show edit modal with pre-filled data
         await showEditPlanningRequestModal(request);
     } catch (error) {
@@ -2206,11 +2194,16 @@ function showCreatePlanningRequestModal(departmentRequest = null) {
 
 // Show edit planning request modal
 async function showEditPlanningRequestModal(request) {
-    // Always refetch full request to ensure we have latest items/files,
-    // and so file deletions/updates reflect correctly even if the table list uses a lightweight serializer.
+    // Refetch only if the provided object looks "lightweight".
+    // (When opened via Edit, `editPlanningRequest()` already fetches the full request.)
     let fullRequest = request;
     try {
-        if (request?.id) {
+        const looksLightweight =
+            !request ||
+            !Array.isArray(request.items) ||
+            request.files === undefined;
+
+        if (request?.id && looksLightweight) {
             fullRequest = await getPlanningRequest(request.id);
         }
     } catch (e) {
@@ -2864,35 +2857,38 @@ function prefillItemsFromPlanningRequest(request) {
         const quantity = item.quantity || 1;
         const jobNo = item.job_no || '';
         const specifications = item.specifications || '';
+        const isConverted = item.is_converted === true;
+        const disabledAttr = isConverted ? 'disabled' : '';
+        const readonlyAttr = isConverted ? 'readonly' : '';
 
         const itemHtml = `
-            <div class="planning-item-row mb-2" data-index="${index}">
+            <div class="planning-item-row mb-2" data-index="${index}" ${isConverted ? 'data-locked="true"' : ''}>
                 <div class="row g-2">
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_code" placeholder="Ürün kodu veya ID" value="${escapeHtmlAttribute(itemCode)}" required>
+                        <input type="text" class="form-control form-control-sm" name="item_code" placeholder="Ürün kodu veya ID" value="${escapeHtmlAttribute(itemCode)}" required ${readonlyAttr} ${disabledAttr}>
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" value="${escapeHtmlAttribute(itemName)}">
+                        <input type="text" class="form-control form-control-sm" name="item_name" placeholder="Ürün adı" value="${escapeHtmlAttribute(itemName)}" ${readonlyAttr} ${disabledAttr}>
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtmlAttribute(itemDescription)}">
+                        <input type="text" class="form-control form-control-sm" name="item_description" placeholder="Ürün açıklaması" value="${escapeHtmlAttribute(itemDescription)}" ${readonlyAttr} ${disabledAttr}>
                     </div>
                     <div class="col-md-1">
-                        <div id="job-no-dropdown-${index}"></div>
+                        <div id="job-no-dropdown-${index}" ${isConverted ? 'style="pointer-events:none;opacity:0.75;"' : ''}></div>
                     </div>
                     <div class="col-md-1">
-                        <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="0.01" min="0.01" value="${quantity}" required>
+                        <input type="number" class="form-control form-control-sm" name="item_quantity" placeholder="Miktar" step="0.01" min="0.01" value="${quantity}" required ${readonlyAttr} ${disabledAttr}>
                     </div>
                     <div class="col-md-1">
-                        <select class="form-control form-control-sm" name="item_unit">
+                        <select class="form-control form-control-sm" name="item_unit" ${disabledAttr}>
                             ${UNIT_CHOICES.map(unit => `<option value="${unit.value}" ${unit.value === itemUnit ? 'selected' : ''}>${unit.label}</option>`).join('')}
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtmlAttribute(specifications)}">
+                        <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtmlAttribute(specifications)}" ${readonlyAttr} ${disabledAttr}>
                     </div>
                     <div class="col-md-1">
-                        <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePlanningItem(${index})" title="Ürünü Kaldır">
+                        <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePlanningItem(${index})" title="Ürünü Kaldır" ${disabledAttr}>
                             <i class="fas fa-trash"></i>
                         </button>
                     </div>
@@ -2918,6 +2914,14 @@ function prefillItemsFromPlanningRequest(request) {
                 setTimeout(() => clearInterval(checkDropdown), 2000);
             }
         }, 100);
+
+        // Subtle visual cue for locked rows
+        if (isConverted) {
+            const lockedRow = container.querySelector(`.planning-item-row[data-index="${index}"]`);
+            if (lockedRow) {
+                lockedRow.style.opacity = '0.8';
+            }
+        }
 
         // Add event listener to item specifications field to update file list when description changes
         const itemRow = container.querySelector(`.planning-item-row[data-index="${index}"]`);

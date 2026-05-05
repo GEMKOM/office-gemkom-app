@@ -2117,6 +2117,12 @@ window.viewJobOrder = async function(jobNo) {
                             </div>
                             <div class="field-value flex-grow-1">${jobOrder.customer_order_no || '-'}</div>
                         </div>
+                        <div class="field-row d-flex align-items-center py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-tag me-1"></i>Kaynak Teklif No
+                            </div>
+                            <div class="field-value flex-grow-1">${jobOrder.source_offer_no || '-'}</div>
+                        </div>
                     </div>
                 </div>
                 

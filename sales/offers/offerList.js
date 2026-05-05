@@ -384,13 +384,15 @@ function initTable() {
                 }
             },
             {
-                field: 'current_price',
+                field: 'total_price',
                 label: 'Güncel Fiyat',
                 sortable: false,
-                formatter: (v) => {
-                    if (!v || !v.amount) return '<span class="text-muted">-</span>';
-                    const sym = CURRENCY_SYMBOLS[v.currency] || v.currency;
-                    return `<strong>${sym} ${parseFloat(v.amount).toLocaleString('tr-TR', { minimumFractionDigits: 2 })}</strong>`;
+                formatter: (v, row) => {
+                    const amount = v ?? row?.total_price;
+                    if (amount == null || amount === '') return '<span class="text-muted">-</span>';
+                    const n = Number(amount);
+                    if (!Number.isFinite(n)) return '<span class="text-muted">-</span>';
+                    return `<strong>${n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>`;
                 }
             },
             {
@@ -452,7 +454,7 @@ function initTable() {
                 title: 'Görüntüle',
                 icon: 'fas fa-eye',
                 class: 'btn-outline-primary',
-                onClick: (row) => viewOffer(row.id)
+                onClick: async (row) => window.viewOffer(row.id)
             },
             {
                 key: 'submit_approval',
@@ -594,7 +596,7 @@ function initModals() {
             if (res && res.id) {
                 showNotification('Teklif başarıyla oluşturuldu', 'success');
                 createOfferModal.hide();
-                await viewOffer(res.id);
+                await window.viewOffer(res.id);
             }
         } catch (error) {
             console.error('Error creating offer:', error);
@@ -651,7 +653,7 @@ function initModals() {
                     return 'genel';
                 }
             };
-            const refreshOffer = (tabId = getActiveTabId()) => viewOffer(offerId, { initialTabId: tabId });
+            const refreshOffer = (tabId = getActiveTabId()) => window.viewOffer(offerId, { initialTabId: tabId });
             if (e.target.closest('#edit-offer-btn')) { showEditModal(refreshOffer); return; }
             if (e.target.closest('#submit-staged-items-btn')) { await submitStagedItems(); return; }
             if (e.target.closest('#discard-kalemler-changes-btn')) {
@@ -932,7 +934,7 @@ async function loadApprovalStatus() {
         initApprovalWorkflowsTable(approvalData);
 
         // Wire approval tab top-level decide buttons (they are in modal body, not footer)
-        const refreshApprovalTab = () => viewOffer(offerId, { initialTabId: 'approval' });
+        const refreshApprovalTab = () => window.viewOffer(offerId, { initialTabId: 'approval' });
         const approveBtn = document.getElementById('approval-decide-approve-btn');
         if (approveBtn) approveBtn.onclick = () => showApproveDecisionModal(refreshApprovalTab);
         const rejectBtn = document.getElementById('approval-decide-reject-btn');
@@ -2955,7 +2957,7 @@ function renderConsultationsTable() {
     if (!container) return;
     const canSendConsultations = !['won', 'lost', 'cancelled'].includes(offer?.status || '');
     const rows = getConsultationsTableRows();
-    const refreshOffer = () => viewOffer(offerId);
+    const refreshOffer = () => window.viewOffer(offerId);
     consultationsTableInstance = new TableComponent('consultations-table-container', {
         title: 'Departman Görüşleri',
         icon: 'fas fa-comments',
@@ -3795,7 +3797,7 @@ function attachOfferModalListeners() {
         }, { once: true });
     }
 
-    const refreshOffer = () => viewOffer(offerId);
+    const refreshOffer = () => window.viewOffer(offerId);
     updateOfferModalFooter('genel');
 
     container.querySelectorAll('.delete-item-btn').forEach(btn => {
