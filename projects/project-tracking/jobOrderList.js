@@ -3619,7 +3619,7 @@ function showJobOrderFileUploadModal(jobNo, onSuccess) {
     jobOrderFileUploadModal.addSection({ title: 'Dosya Bilgileri', icon: 'fas fa-file', iconColor: 'text-primary' });
     jobOrderFileUploadModal.addField({ id: 'file_type', name: 'file_type', label: 'Dosya Türü', type: 'dropdown', required: true, options: JOB_ORDER_FILE_TYPE_OPTIONS, icon: 'fas fa-tag', colSize: 6 });
 
-    jobOrderFileUploadModal.onSaveCallback = async (formData) => {
+    jobOrderFileUploadModal.onSaveCallback(async (formData) => {
         const fileInput = document.getElementById('job-order-file-input-field');
         const files = fileInput?.files;
         if (!files || files.length === 0) {
@@ -3660,7 +3660,7 @@ function showJobOrderFileUploadModal(jobNo, onSuccess) {
             const errorMsg = error.message || 'Dosya yükleme sırasında hata oluştu';
             showNotification(errorMsg, 'error');
         }
-    };
+    });
 
     jobOrderFileUploadModal.render();
     const body = jobOrderFileUploadModal.container?.querySelector('.modal-body');
