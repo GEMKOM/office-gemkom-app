@@ -79,8 +79,121 @@ let jobOrdersTable = null; // Table component instance
 let customers = []; // Store customers for dropdowns
 let statusOptions = STATUS_OPTIONS; // Status options
 let expandedRows = new Set(); // Track expanded rows by job_no
-const IS_COMPACT_13_INCH = window.innerWidth <= 1440;
+let IS_COMPACT_13_INCH = false; // Visual compactness flag used by cell formatters
 let childrenCache = new Map(); // Cache children data by parent job_no
+let compactModeCheckTimeout = null;
+let lastAppliedFitSignature = '';
+let currentFitLevel = 0; // 0 = normal widths, 1 = minimum widths
+const isTightLayout = () => currentFitLevel > 0.22;
+const isUltraTightLayout = () => currentFitLevel > 0.55;
+
+function getJobOrdersTableViewport() {
+    const tableContainer = document.getElementById('job-orders-table-container');
+    if (!tableContainer) return null;
+    return tableContainer.querySelector('.table-responsive') || tableContainer;
+}
+
+function getJobOrdersViewportWidth() {
+    const viewport = getJobOrdersTableViewport();
+    if (!viewport) return 0;
+    return Math.ceil(viewport.getBoundingClientRect().width || viewport.clientWidth || 0);
+}
+
+function applyAdaptiveCompactColumnConfig() {
+    if (!jobOrdersTable?.options?.columns) return;
+    const columns = jobOrdersTable.options.columns;
+    const byField = new Map(columns.map(col => [col.field, col]));
+    const setCol = (field, props) => {
+        const col = byField.get(field);
+        if (col) Object.assign(col, props);
+    };
+    const viewportWidth = getJobOrdersViewportWidth();
+    if (!viewportWidth) return;
+
+    const fitProfiles = {
+        _expand: { normal: 64, min: 20 },
+        job_no: { normal: 140, min: 82 },
+        title: { normal: 210, min: 108 },
+        customer_name: { normal: 180, min: 78 },
+        quantity: { normal: 68, min: 42 },
+        status_display: { normal: 90, min: 58 },
+        target_completion_date: { normal: 118, min: 82 },
+        completion_percentage: { normal: 240, min: 108 },
+        last_week_progress: { normal: 150, min: 86 },
+        weekly_avg_progress: { normal: 150, min: 86 },
+        ncr_count: { normal: 76, min: 38 },
+        revision_count: { normal: 94, min: 44 },
+        created_at: { normal: 100, min: 68 }
+    };
+
+    const fitFields = Object.keys(fitProfiles);
+    const actionsVisible = (jobOrdersTable.options.actions || []).length > 0;
+    const actionProfile = HIDE_ACTION_BUTTONS
+        ? { normal: 58, min: 48 }
+        : { normal: 118, min: 76 };
+    const totalNormal = fitFields.reduce((sum, f) => sum + fitProfiles[f].normal, 0) + (actionsVisible ? actionProfile.normal : 0);
+    const totalMin = fitFields.reduce((sum, f) => sum + fitProfiles[f].min, 0) + (actionsVisible ? actionProfile.min : 0);
+    const reservedPx = 36; // card paddings + scrollbar + safety margin
+    const targetPx = Math.max(320, viewportWidth - reservedPx);
+    const denominator = Math.max(1, totalNormal - totalMin);
+    const nextFitLevel = Math.max(0, Math.min(1, (totalNormal - targetPx) / denominator));
+
+    currentFitLevel = nextFitLevel;
+    IS_COMPACT_13_INCH = isTightLayout();
+
+    const widthFor = (field) => {
+        const p = fitProfiles[field];
+        const width = Math.round(p.normal - (p.normal - p.min) * currentFitLevel);
+        return `${Math.max(p.min, width)}px`;
+    };
+    const actionWidth = Math.round(actionProfile.normal - (actionProfile.normal - actionProfile.min) * currentFitLevel);
+
+    setCol('_expand', { width: widthFor('_expand') });
+    setCol('job_no', { label: IS_COMPACT_13_INCH ? 'İE No' : 'İş Emri No', width: widthFor('job_no') });
+    setCol('title', { width: widthFor('title') });
+    setCol('customer_name', { label: IS_COMPACT_13_INCH ? 'Müş.' : 'Müşteri', width: widthFor('customer_name') });
+    setCol('quantity', { label: IS_COMPACT_13_INCH ? 'Mik.' : 'Miktar', width: widthFor('quantity') });
+    setCol('status_display', { width: widthFor('status_display') });
+    setCol('target_completion_date', { label: isTightLayout() ? 'Hedef' : 'Hedef Tamamlanma', width: widthFor('target_completion_date') });
+    setCol('completion_percentage', { label: IS_COMPACT_13_INCH ? 'Tam.' : 'Tamamlanma', width: widthFor('completion_percentage') });
+    setCol('last_week_progress', { label: IS_COMPACT_13_INCH ? 'Son Hf.' : 'Son Hafta', width: widthFor('last_week_progress') });
+    setCol('weekly_avg_progress', { label: IS_COMPACT_13_INCH ? 'Hf. Ort.' : 'Haftalık Ort.', width: widthFor('weekly_avg_progress') });
+    setCol('ncr_count', { width: widthFor('ncr_count') });
+    setCol('revision_count', { label: IS_COMPACT_13_INCH ? 'Rev.' : 'Revizyon', width: widthFor('revision_count') });
+    setCol('created_at', { label: IS_COMPACT_13_INCH ? 'Oluş.' : 'Oluşturulma', width: widthFor('created_at') });
+    if (actionsVisible) {
+        jobOrdersTable.options.actionColumnWidth = `${Math.max(actionProfile.min, actionWidth)}px`;
+    }
+}
+
+function evaluateAdaptiveCompactMode() {
+    if (!jobOrdersTable) return;
+    applyAdaptiveCompactColumnConfig();
+
+    const container = document.getElementById('job-orders-table-container');
+    if (container) {
+        container.classList.toggle('job-orders-table-compact', IS_COMPACT_13_INCH);
+    }
+
+    const signature = `${IS_COMPACT_13_INCH ? '1' : '0'}|${currentFitLevel.toFixed(3)}|${jobOrdersTable.options.actionColumnWidth || ''}|${(jobOrdersTable.options.columns || []).map(c => `${c.field}:${c.width || ''}:${c.label || ''}`).join(',')}`;
+    if (signature === lastAppliedFitSignature) return;
+    lastAppliedFitSignature = signature;
+
+    jobOrdersTable.render();
+    setTimeout(() => {
+        setupExpandButtonListeners();
+        setupActionToggleButton();
+    }, 50);
+}
+
+function scheduleAdaptiveCompactModeCheck() {
+    if (compactModeCheckTimeout) {
+        clearTimeout(compactModeCheckTimeout);
+    }
+    compactModeCheckTimeout = setTimeout(() => {
+        evaluateAdaptiveCompactMode();
+    }, 80);
+}
 
 function normalizeJobOrderStatus(jobOrder) {
     if (!jobOrder || typeof jobOrder !== 'object') return jobOrder;
@@ -118,6 +231,7 @@ function toggleActionButtons() {
         setTimeout(() => {
             setupActionToggleButton();
             setupExpandButtonListeners();
+            scheduleAdaptiveCompactModeCheck();
         }, 50);
     }
 }
@@ -165,6 +279,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     await initNavbar();
+    window.addEventListener('resize', scheduleAdaptiveCompactModeCheck);
     
     // Initialize header component
     const header = new HeaderComponent({
@@ -375,7 +490,7 @@ function initializeTableComponent() {
                 field: '_expand',
                 label: '',
                 sortable: false,
-                width: IS_COMPACT_13_INCH ? '56px' : '80px',
+                width: IS_COMPACT_13_INCH ? '30px' : '80px',
                 formatter: (value, row) => {
                     const hasChildren = row.children_count && row.children_count > 0;
                     const isExpanded = expandedRows.has(row.job_no);
@@ -384,10 +499,11 @@ function initializeTableComponent() {
                     const hierarchyLevel = row.hierarchy_level || 0;
                     
                     // Constants for consistent spacing
-                    const LEVEL_WIDTH = 20; // Width per hierarchy level
-                    const LINE_THICKNESS = 2; // Thickness of tree lines
+                    const LEVEL_WIDTH = IS_COMPACT_13_INCH ? 9 : 20; // Width per hierarchy level
+                    const LINE_THICKNESS = IS_COMPACT_13_INCH ? 1 : 2; // Thickness of tree lines
                     const LINE_COLOR = '#cbd5e0';
-                    const BUTTON_SIZE = 24;
+                    const BUTTON_SIZE = IS_COMPACT_13_INCH ? 13 : 24;
+                    const ROW_HEIGHT = IS_COMPACT_13_INCH ? 24 : 40;
                     
                     // Calculate positions
                     const buttonLeftPosition = hierarchyLevel * LEVEL_WIDTH;
@@ -457,8 +573,8 @@ function initializeTableComponent() {
                                         width: ${BUTTON_SIZE}px;
                                         height: ${BUTTON_SIZE}px;
                                         padding: 0;
-                                        border-radius: 4px;
-                                        border: 1.5px solid #0d6efd;
+                                        border-radius: ${IS_COMPACT_13_INCH ? 2 : 4}px;
+                                        border: ${IS_COMPACT_13_INCH ? 1.2 : 1.5}px solid #0d6efd;
                                         background: ${isExpanded ? '#0d6efd' : '#ffffff'};
                                         color: ${isExpanded ? '#ffffff' : '#0d6efd'};
                                         display: inline-flex;
@@ -468,10 +584,10 @@ function initializeTableComponent() {
                                         cursor: pointer;
                                         z-index: 1;
                                     "
-                                    onmouseover="this.style.transform='translateY(-50%) scale(1.1)'; this.style.boxShadow='0 2px 4px rgba(13,110,253,0.3)';"
+                                    onmouseover="this.style.transform='translateY(-50%) scale(${IS_COMPACT_13_INCH ? '1.05' : '1.1'})'; this.style.boxShadow='0 2px 4px rgba(13,110,253,0.3)';"
                                     onmouseout="this.style.transform='translateY(-50%) scale(1)'; this.style.boxShadow='none';"
                                     title="${isExpanded ? 'Daralt' : 'Genişlet'}">
-                                <i class="fas ${expandIcon}" style="font-size: 10px;"></i>
+                                <i class="fas ${expandIcon}" style="font-size: ${IS_COMPACT_13_INCH ? '7px' : '10px'};"></i>
                             </button>
                         `;
                     }
@@ -480,8 +596,8 @@ function initializeTableComponent() {
                         <div style="
                             position: relative;
                             width: 100%;
-                            height: 40px;
-                            min-height: 40px;
+                            height: ${ROW_HEIGHT}px;
+                            min-height: ${ROW_HEIGHT}px;
                         ">
                             ${treeLinesHtml}
                             ${expandButton}
@@ -491,9 +607,9 @@ function initializeTableComponent() {
             },
             {
                 field: 'job_no',
-                label: 'İş Emri No',
+                label: IS_COMPACT_13_INCH ? 'İE No' : 'İş Emri No',
                 sortable: true,
-                width: IS_COMPACT_13_INCH ? '128px' : '160px',
+                width: IS_COMPACT_13_INCH ? '92px' : '160px',
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     
@@ -505,10 +621,10 @@ function initializeTableComponent() {
                     // Badge-style styling for job number (similar to talep_no in purchase requests)
                     if (hierarchyLevel > 0) {
                         // Child jobs - subtle badge styling
-                        return `<span style="font-weight: 600; color: #6c757d; font-family: 'Courier New', monospace; font-size: 0.9rem; background: rgba(108, 117, 125, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(108, 117, 125, 0.2);">${value}</span>`;
+                        return `<span title="${value}" style="font-weight: 600; color: #6c757d; font-family: 'Courier New', monospace; font-size: ${IS_COMPACT_13_INCH ? '0.74rem' : '0.9rem'}; background: rgba(108, 117, 125, 0.1); padding: ${IS_COMPACT_13_INCH ? '0.12rem 0.34rem' : '0.25rem 0.5rem'}; border-radius: 4px; border: 1px solid rgba(108, 117, 125, 0.2); max-width:${IS_COMPACT_13_INCH ? '106px' : 'unset'}; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${value}</span>`;
                     } else {
                         // Root jobs - prominent badge styling
-                        return `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value}</span>`;
+                        return `<span title="${value}" style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: ${IS_COMPACT_13_INCH ? '0.78rem' : '1rem'}; background: rgba(13, 110, 253, 0.1); padding: ${IS_COMPACT_13_INCH ? '0.12rem 0.34rem' : '0.25rem 0.5rem'}; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); max-width:${IS_COMPACT_13_INCH ? '112px' : 'unset'}; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${value}</span>`;
                     }
                 }
             },
@@ -516,7 +632,7 @@ function initializeTableComponent() {
                 field: 'title',
                 label: 'Başlık',
                 sortable: true,
-                width: IS_COMPACT_13_INCH ? '190px' : undefined,
+                width: IS_COMPACT_13_INCH ? '138px' : undefined,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     if (!value) return '-';
@@ -553,60 +669,86 @@ function initializeTableComponent() {
             },
             {
                 field: 'customer_name',
-                label: 'Müşteri',
+                label: IS_COMPACT_13_INCH ? 'Müş.' : 'Müşteri',
                 sortable: false,
-                width: IS_COMPACT_13_INCH ? '140px' : '220px',
+                width: IS_COMPACT_13_INCH ? '92px' : '220px',
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     
                     const customerDisplayName = row.customer_short_name || row.customer_name || value;
                     
                     if (!customerDisplayName) return '-';
-                    
-                    return `<span class="status-badge status-grey" style="max-width:${IS_COMPACT_13_INCH ? '120px' : '180px'}; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${customerDisplayName}">${customerDisplayName}</span>`;
+
+                    const safeCustomerTitle = String(customerDisplayName)
+                        .replace(/&/g, '&amp;')
+                        .replace(/"/g, '&quot;')
+                        .replace(/</g, '&lt;')
+                        .replace(/>/g, '&gt;');
+
+                    if (IS_COMPACT_13_INCH) {
+                        return `
+                            <div title="${safeCustomerTitle}" style="max-width:74px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#475569; font-weight:600; font-size:0.67rem; line-height:1.2;">
+                                ${safeCustomerTitle}
+                            </div>
+                        `;
+                    }
+
+                    return `
+                        <div title="${safeCustomerTitle}" style="max-width:180px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; color:#334155; font-weight:600; font-size:0.83rem; line-height:1.25;">
+                            ${safeCustomerTitle}
+                        </div>
+                    `;
                 }
             },
             {
                 field: 'quantity',
-                label: 'Miktar',
+                label: IS_COMPACT_13_INCH ? 'Mik.' : 'Miktar',
                 sortable: true,
-                width: IS_COMPACT_13_INCH ? '72px' : undefined,
+                width: IS_COMPACT_13_INCH ? '54px' : undefined,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
-                    return value || value === 0 ? value : '-';
+                    if (!(value || value === 0)) return '-';
+                    return `<span style="display:inline-block; min-width:${IS_COMPACT_13_INCH ? '28px' : '36px'}; text-align:center; font-weight:600; font-size:${IS_COMPACT_13_INCH ? '0.76rem' : '0.86rem'};">${value}</span>`;
                 }
             },
             {
                 field: 'status_display',
                 label: 'Durum',
                 sortable: true,
-                width: IS_COMPACT_13_INCH ? '96px' : undefined,
+                width: IS_COMPACT_13_INCH ? '72px' : undefined,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     const status = row.status;
+                    const tight = isTightLayout();
+                    const ultra = isUltraTightLayout();
+                    const compactBadgeStyle = tight
+                        ? `style="font-size:${ultra ? '0.58rem' : '0.64rem'}; padding:${ultra ? '0.1rem 0.24rem' : '0.14rem 0.34rem'}; letter-spacing:0; max-width:100%; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"`
+                        : 'style="max-width:100%; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"';
                     if (status === 'active') {
-                        return '<span class="status-badge status-blue">Aktif</span>';
+                        return `<span class="status-badge status-blue" ${compactBadgeStyle}>Aktif</span>`;
                     } else if (status === 'draft') {
-                        return '<span class="status-badge status-grey">Taslak</span>';
+                        return `<span class="status-badge status-grey" ${compactBadgeStyle}>Taslak</span>`;
                     } else if (status === 'on_hold') {
-                        return '<span class="status-badge status-yellow">Beklemede</span>';
+                        return `<span class="status-badge status-yellow" ${compactBadgeStyle}>${tight ? 'Bekl.' : 'Beklemede'}</span>`;
                     } else if (status === 'completed') {
-                        return '<span class="status-badge status-green">Tamamlandı</span>';
+                        return `<span class="status-badge status-green" ${compactBadgeStyle}>${tight ? 'Tam.' : 'Tamamlandı'}</span>`;
                     } else if (status === 'cancelled') {
-                        return '<span class="status-badge status-red">İptal Edildi</span>';
+                        return `<span class="status-badge status-red" ${compactBadgeStyle}>${tight ? 'İptal' : 'İptal Edildi'}</span>`;
                     }
                     return value || '-';
                 }
             },
             {
                 field: 'target_completion_date',
-                label: 'Hedef Tamamlanma',
+                label: IS_COMPACT_13_INCH ? 'Hedef' : 'Hedef Tamamlanma',
                 sortable: true,
                 type: 'date',
-                width: IS_COMPACT_13_INCH ? '128px' : undefined,
+                width: IS_COMPACT_13_INCH ? '94px' : undefined,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     if (!value) return '-';
+                    const tight = isTightLayout();
+                    const ultra = isUltraTightLayout();
                     const date = new Date(value);
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
@@ -615,30 +757,41 @@ function initializeTableComponent() {
                     const daysRemaining = Math.ceil((completionDate - today) / (1000 * 60 * 60 * 24));
                     
                     const formattedDate = date.toLocaleDateString('tr-TR', {
-                        year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
-                        month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
-                        day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
+                        year: tight ? '2-digit' : 'numeric',
+                        month: tight ? '2-digit' : 'short',
+                        day: tight ? '2-digit' : 'numeric'
                     });
 
                     const previous = row.previous_target_date_revision;
                     let previousHtml = '';
-                    if (previous) {
+                    if (previous && !tight) {
                         const prevDateStr = typeof previous === 'string'
                             ? previous
                             : (previous.previous_date || previous.date || previous.target_completion_date);
                         if (prevDateStr) {
                             const prevDate = new Date(prevDateStr);
                             const prevFormatted = prevDate.toLocaleDateString('tr-TR', {
-                                year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
-                                month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
-                                day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
+                                year: 'numeric',
+                                month: 'short',
+                                day: 'numeric'
                             });
                             previousHtml = `
-                                <div class="text-muted" style="font-size: 0.72rem; line-height: 1.15; margin-top: 3px; text-align:center; width:100%;">
-                                    <span style="display:inline-block; padding: 1px 6px; border: 1px solid rgba(108,117,125,0.35); border-radius: 999px;">
-                                        <span style="font-weight:600; margin-right:4px;">Önceki hedef</span>
-                                        <span>${prevFormatted}</span>
-                                    </span>
+                                <div class="text-muted" style="font-size: 0.72rem; line-height: 1.15; margin-top: 3px; text-align:center; width:100%; white-space:nowrap;">
+                                    <span
+                                        title="Önceki hedef ${prevFormatted}"
+                                        style="
+                                            display:inline-block;
+                                            max-width:100%;
+                                            padding: 1px 6px;
+                                            border: 1px solid rgba(108,117,125,0.35);
+                                            border-radius: 999px;
+                                            overflow:hidden;
+                                            text-overflow:ellipsis;
+                                            white-space:nowrap;
+                                            direction: rtl;
+                                            text-align: left;
+                                        "
+                                    >Önceki hedef ${prevFormatted}</span>
                                 </div>
                             `.trim();
                         }
@@ -659,7 +812,7 @@ function initializeTableComponent() {
                         // Use dark brown/black for yellow background rows for better visibility
                         dateClass = '';
                         fontWeight = '700';
-                        const reviseBtnHtml = (!HIDE_ACTION_BUTTONS)
+                        const reviseBtnHtml = (!HIDE_ACTION_BUTTONS && !tight)
                             ? `<button type="button"
                                       class="btn btn-xs btn-link p-0 ms-2 target-date-revise-row-btn"
                                       title="Hedef tarihi revize et"
@@ -668,9 +821,9 @@ function initializeTableComponent() {
                                     <i class="fas fa-pen-to-square"></i>
                                </button>`
                             : '';
-                        return `<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center;">
+                        return `<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; max-width:100%; overflow:hidden;">
                             <div style="display:flex; align-items:center; justify-content:center; gap:6px; width:100%;">
-                                <span style="color: #92400e; font-size: 0.875rem; font-weight: ${fontWeight};">${formattedDate}</span>
+                                <span style="color: #92400e; font-size: ${ultra ? '0.72rem' : (tight ? '0.78rem' : '0.875rem')}; font-weight: ${fontWeight}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;">${formattedDate}</span>
                                 ${reviseBtnHtml}
                             </div>
                             ${previousHtml}
@@ -679,7 +832,7 @@ function initializeTableComponent() {
                         dateClass = 'text-dark';
                     }
                     
-                    const reviseBtnHtml = (!HIDE_ACTION_BUTTONS)
+                    const reviseBtnHtml = (!HIDE_ACTION_BUTTONS && !tight)
                         ? `<button type="button"
                                   class="btn btn-xs btn-link p-0 ms-2 target-date-revise-row-btn"
                                   title="Hedef tarihi revize et"
@@ -688,9 +841,9 @@ function initializeTableComponent() {
                                 <i class="fas fa-pen-to-square"></i>
                            </button>`
                         : '';
-                    return `<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center;">
+                    return `<div style="display:flex; flex-direction:column; align-items:center; width:100%; text-align:center; max-width:100%; overflow:hidden;">
                         <div style="display:flex; align-items:center; justify-content:center; gap:6px; width:100%;">
-                            <span class="${dateClass}" style="font-size: 0.875rem; font-weight: ${fontWeight};">${formattedDate}</span>
+                            <span class="${dateClass}" style="font-size: ${ultra ? '0.72rem' : (tight ? '0.78rem' : '0.875rem')}; font-weight: ${fontWeight}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%;">${formattedDate}</span>
                             ${reviseBtnHtml}
                         </div>
                         ${previousHtml}
@@ -699,9 +852,9 @@ function initializeTableComponent() {
             },
             {
                 field: 'completion_percentage',
-                label: 'Tamamlanma',
+                label: IS_COMPACT_13_INCH ? 'Tam.' : 'Tamamlanma',
                 sortable: false,
-                width: IS_COMPACT_13_INCH ? '180px' : '300px',
+                width: IS_COMPACT_13_INCH ? '122px' : '300px',
                 headerClass: 'completion-percentage-header',
                 formatter: (value) => {
                     if (!value && value !== 0) return '-';
@@ -766,9 +919,9 @@ function initializeTableComponent() {
             },
             {
                 field: 'last_week_progress',
-                label: 'Son Hafta',
+                label: IS_COMPACT_13_INCH ? 'Son Hf.' : 'Son Hafta',
                 sortable: true,
-                width: IS_COMPACT_13_INCH ? '142px' : '170px',
+                width: IS_COMPACT_13_INCH ? '96px' : '170px',
                 formatter: (value, row) => {
                     if (row?._isDepartmentTasksRow) return '';
                     if (row?.status === 'completed') return '-';
@@ -778,7 +931,11 @@ function initializeTableComponent() {
                     const etaStr = row?.estimated_completion_by_last_week;
                     const eta = etaStr ? new Date(etaStr) : null;
                     const etaDisplay = eta && !Number.isNaN(eta.getTime())
-                        ? eta.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' })
+                        ? eta.toLocaleDateString('tr-TR', {
+                            year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
+                            month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
+                            day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
+                        })
                         : null;
                     const targetStr = row?.target_completion_date;
                     const target = targetStr ? new Date(targetStr) : null;
@@ -793,13 +950,13 @@ function initializeTableComponent() {
                                 </span>
                                 ${IS_COMPACT_13_INCH ? '' : '<span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">ilerleme</span>'}
                             </div>
-                            <div style="font-size:${IS_COMPACT_13_INCH ? '0.66rem' : '0.72rem'}; white-space:nowrap; ${isLateVsTarget ? 'color:#b91c1c;' : 'color:#6b7280;'}">
-                                ${isLateVsTarget ? '<i class="fas fa-triangle-exclamation" style="margin-right:6px;"></i>' : ''}
-                                ${IS_COMPACT_13_INCH ? 'ETA:' : 'Tahmini bitiş:'}
+                            <div style="font-size:${IS_COMPACT_13_INCH ? '0.62rem' : '0.72rem'}; ${isLateVsTarget ? 'color:#b91c1c;' : 'color:#6b7280;'} max-width:100%; overflow:hidden; text-overflow:ellipsis; ${IS_COMPACT_13_INCH ? 'white-space:nowrap;' : 'white-space:normal; line-height:1.15;'}">
+                                ${isLateVsTarget ? '<i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>' : ''}
+                                ${IS_COMPACT_13_INCH ? '' : 'Tahmini bitiş: '}
                                 <span style="font-weight:800; color:${isLateVsTarget ? '#b91c1c' : '#111827'};">
                                     ${etaDisplay || '-'}
                                 </span>
-                                ${isLateVsTarget ? `<span style="margin-left:${IS_COMPACT_13_INCH ? '4px' : '8px'}; font-weight:800; background:rgba(185,28,28,0.10); border:1px solid rgba(185,28,28,0.25); padding:1px ${IS_COMPACT_13_INCH ? '6px' : '8px'}; border-radius:999px;">${IS_COMPACT_13_INCH ? 'Geç' : 'Hedefi aşıyor'}</span>` : ''}
+                                ${!IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:6px; font-weight:700;">(Hedefi aşıyor)</span>' : (IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:4px; font-weight:700;">Geç</span>' : '')}
                             </div>
                             <div class="progress" style="height: ${IS_COMPACT_13_INCH ? '8px' : '10px'}; border-radius: 999px; background-color: #e5e7eb;
                                                          box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); overflow: hidden;">
@@ -826,9 +983,9 @@ function initializeTableComponent() {
             },
             {
                 field: 'weekly_avg_progress',
-                label: 'Haftalık Ort.',
+                label: IS_COMPACT_13_INCH ? 'Hf. Ort.' : 'Haftalık Ort.',
                 sortable: true,
-                width: IS_COMPACT_13_INCH ? '142px' : '170px',
+                width: IS_COMPACT_13_INCH ? '96px' : '170px',
                 formatter: (value, row) => {
                     if (row?._isDepartmentTasksRow) return '';
                     if (value === null || value === undefined || value === '') return '-';
@@ -838,7 +995,11 @@ function initializeTableComponent() {
                     const etaStr = showEta ? row?.estimated_completion_by_avg : null;
                     const eta = etaStr ? new Date(etaStr) : null;
                     const etaDisplay = eta && !Number.isNaN(eta.getTime())
-                        ? eta.toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' })
+                        ? eta.toLocaleDateString('tr-TR', {
+                            year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
+                            month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
+                            day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
+                        })
                         : null;
                     const targetStr = row?.target_completion_date;
                     const target = targetStr ? new Date(targetStr) : null;
@@ -853,13 +1014,13 @@ function initializeTableComponent() {
                                 ${IS_COMPACT_13_INCH ? '' : '<span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">ort.</span>'}
                             </div>
                             ${showEta ? `
-                                <div style="font-size:${IS_COMPACT_13_INCH ? '0.66rem' : '0.72rem'}; white-space:nowrap; ${isLateVsTarget ? 'color:#7c2d12;' : 'color:#6b7280;'}">
-                                    ${isLateVsTarget ? '<i class="fas fa-triangle-exclamation" style="margin-right:6px;"></i>' : ''}
-                                    ${IS_COMPACT_13_INCH ? 'ETA:' : 'Tahmini bitiş:'}
+                                <div style="font-size:${IS_COMPACT_13_INCH ? '0.62rem' : '0.72rem'}; ${isLateVsTarget ? 'color:#7c2d12;' : 'color:#6b7280;'} max-width:100%; overflow:hidden; text-overflow:ellipsis; ${IS_COMPACT_13_INCH ? 'white-space:nowrap;' : 'white-space:normal; line-height:1.15;'}">
+                                    ${isLateVsTarget ? '<i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>' : ''}
+                                    ${IS_COMPACT_13_INCH ? '' : 'Tahmini bitiş: '}
                                     <span style="font-weight:800; color:${isLateVsTarget ? '#7c2d12' : '#111827'};">
                                         ${etaDisplay || '-'}
                                     </span>
-                                    ${isLateVsTarget ? `<span style="margin-left:${IS_COMPACT_13_INCH ? '4px' : '8px'}; font-weight:800; background:rgba(245,158,11,0.14); border:1px solid rgba(245,158,11,0.30); padding:1px ${IS_COMPACT_13_INCH ? '6px' : '8px'}; border-radius:999px;">${IS_COMPACT_13_INCH ? 'Geç' : 'Hedefi aşıyor'}</span>` : ''}
+                                    ${!IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:6px; font-weight:700;">(Hedefi aşıyor)</span>' : (IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:4px; font-weight:700;">Geç</span>' : '')}
                                 </div>
                             ` : ''}
                             <div class="progress" style="height: ${IS_COMPACT_13_INCH ? '8px' : '10px'}; border-radius: 999px; background-color: #e5e7eb;
@@ -889,45 +1050,51 @@ function initializeTableComponent() {
                 field: 'ncr_count',
                 label: 'NCR',
                 sortable: false,
-                width: IS_COMPACT_13_INCH ? '70px' : '90px',
+                width: IS_COMPACT_13_INCH ? '46px' : '90px',
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     const count = parseInt(value) || 0;
                     if (count <= 0) return '-';
                     const badgeClass = count > 5 ? 'status-red' : (count >= 3 ? 'status-yellow' : 'status-grey');
+                    const compactBadgeStyle = IS_COMPACT_13_INCH
+                        ? 'font-size:0.62rem; padding:0.1rem 0.28rem; min-width:20px; text-align:center;'
+                        : '';
 
                     return `
                         <a href="#" class="joborder-ncr-count-link text-decoration-none" data-job-no="${row.job_no}"
                            title="Kalite Kontrol sekmesine git">
-                            <span class="status-badge ${badgeClass}">${count}</span>
+                            <span class="status-badge ${badgeClass}" style="${compactBadgeStyle}">${count}</span>
                         </a>
                     `;
                 }
             },
             {
                 field: 'revision_count',
-                label: 'Revizyon',
+                label: IS_COMPACT_13_INCH ? 'Rev.' : 'Revizyon',
                 sortable: false,
-                width: IS_COMPACT_13_INCH ? '86px' : '110px',
+                width: IS_COMPACT_13_INCH ? '50px' : '110px',
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     const count = parseInt(value) || 0;
                     if (count <= 0) return '-';
                     const badgeClass = count > 5 ? 'status-red' : (count >= 3 ? 'status-yellow' : 'status-grey');
+                    const compactBadgeStyle = IS_COMPACT_13_INCH
+                        ? 'font-size:0.62rem; padding:0.1rem 0.28rem; min-width:20px; text-align:center;'
+                        : '';
                     return `
                         <a href="#" class="joborder-revision-count-link text-decoration-none" data-job-no="${row.job_no}"
                            title="Teknik Çizimler sekmesine git">
-                            <span class="status-badge ${badgeClass}">${count}</span>
+                            <span class="status-badge ${badgeClass}" style="${compactBadgeStyle}">${count}</span>
                         </a>
                     `;
                 }
             },
             {
                 field: 'created_at',
-                label: 'Oluşturulma',
+                label: IS_COMPACT_13_INCH ? 'Oluş.' : 'Oluşturulma',
                 sortable: true,
                 type: 'date',
-                width: IS_COMPACT_13_INCH ? '112px' : undefined,
+                width: IS_COMPACT_13_INCH ? '82px' : undefined,
                 formatter: (value, row) => {
                     if (row._isDepartmentTasksRow) return '';
                     if (!value) return '-';
@@ -1088,6 +1255,9 @@ function initializeTableComponent() {
         emptyIcon: 'fas fa-tasks'
     });
     
+    applyAdaptiveCompactColumnConfig();
+    jobOrdersTable.render();
+
     // Add toggle button for action buttons visibility
     setupActionToggleButton();
 }
@@ -1559,6 +1729,7 @@ async function loadJobOrders() {
             setTimeout(() => {
                 setupExpandButtonListeners();
                 setupActionToggleButton(); // Setup toggle button after table renders
+                scheduleAdaptiveCompactModeCheck();
             }, 50);
         } else {
             console.warn('jobOrdersTable is null, cannot update data');
@@ -1573,6 +1744,9 @@ async function loadJobOrders() {
         totalJobOrders = 0;
         if (jobOrdersTable) {
             jobOrdersTable.updateData([], 0, currentPage);
+            setTimeout(() => {
+                scheduleAdaptiveCompactModeCheck();
+            }, 50);
         }
     } finally {
         isLoading = false;
@@ -1689,6 +1863,7 @@ function updateTableDataOnly() {
     setTimeout(() => {
         setupExpandButtonListeners();
         setupActionToggleButton();
+        scheduleAdaptiveCompactModeCheck();
     }, 50);
 }
 
