@@ -37,6 +37,7 @@ let confirmModal      = null;
 let confirmResultModal = null;
 let deletePartModal   = null;
 let createPlanModal   = null;
+let stockBarsModal    = null;
 let jobNoDropdowns    = new Map(); // rowId -> ModernDropdown
 let partItemDropdowns = new Map(); // rowId -> ModernDropdown
 let newRowSeq         = 0;
@@ -88,11 +89,22 @@ function setSessionInputs(session) {
     $('lc-kerf').value                = Number(session.kerf_mm ?? 0) || '';
     $('lc-notes').value               = session.notes || '';
     setConfirmState(session);
+    updateStockBarsButton(session);
 }
 
 function showSessionArea(show) {
     $('lc-session-area').style.display  = show ? '' : 'none';
     $('lc-no-plan-state').style.display = show ? 'none' : '';
+}
+
+function updateStockBarsButton(session) {
+    const btn = $('lc-stock-bars-btn');
+    if (!btn) return;
+    const bars = Array.isArray(session?.stock_bars) ? session.stock_bars : [];
+    const totalDeclared = bars.reduce((acc, bar) => acc + (Number(bar?.quantity ?? 0) || 0), 0);
+    const hasBars = bars.length > 0;
+    btn.disabled = !hasBars;
+    btn.innerHTML = `<i class="fas fa-bars-staggered me-1"></i>Stok Barlar${hasBars ? ` (${totalDeclared})` : ''}`;
 }
 
 // ─────────────────────────── PARTS TABLE ──────────────────────
@@ -721,7 +733,7 @@ function colorForIndex(i) {
     return palette[i % palette.length];
 }
 
-const barCanvasDrawMap = new WeakMap(); // canvas -> { bar, kerfMm }
+const barCanvasDrawMap = new WeakMap(); // canvas -> { bar, kerfMm, referenceStockMm }
 
 function scheduleDrawBar(canvas, tooltipEl) {
     const payload = barCanvasDrawMap.get(canvas);
@@ -734,12 +746,12 @@ function scheduleDrawBar(canvas, tooltipEl) {
             requestAnimationFrame(run);
             return;
         }
-        drawBar(canvas, payload.bar, payload.kerfMm, tooltipEl);
+        drawBar(canvas, payload.bar, payload.kerfMm, payload.referenceStockMm, tooltipEl);
     };
     requestAnimationFrame(run);
 }
 
-function drawBar(canvas, bar, kerfMm, tooltipEl) {
+function drawBar(canvas, bar, kerfMm, referenceStockMm, tooltipEl) {
     const dpr   = window.devicePixelRatio || 1;
     const W     = canvas.clientWidth || 900;
     const H     = 62;
@@ -750,16 +762,29 @@ function drawBar(canvas, bar, kerfMm, tooltipEl) {
     ctx.scale(dpr, dpr);
 
     const pad = 8, barY = 22, barH = 22;
-    const barX = pad, barW = W - pad * 2;
+    const barX = pad;
+    const maxBarW = W - pad * 2;
+    const stockLength = Number(bar.stock_length_mm ?? 0) || 0;
+    const referenceStock = Number(referenceStockMm ?? stockLength ?? 0) || stockLength || 1;
+    const barRatio = Math.min(1, Math.max(0.08, stockLength / (referenceStock || 1)));
+    const barW = Math.max(36, maxBarW * barRatio);
     ctx.clearRect(0, 0, W, H);
-    // Track background + stroke
+
+    // Draw a faint reference envelope for the max stock length in the group.
+    ctx.fillStyle = '#f8f9fb';
+    ctx.beginPath(); ctx.roundRect(barX, barY, maxBarW, barH, 6); ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.05)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    // Actual bar track background + stroke (proportional to stock length)
     ctx.fillStyle = '#f6f7f9';
     ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 6); ctx.fill();
     ctx.strokeStyle = 'rgba(0,0,0,.08)';
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    const scale = barW / (bar.stock_length_mm || 1);
+    const scale = barW / (stockLength || 1);
     const hitBoxes = [];
 
     (bar.cuts || []).forEach((cut, idx) => {
@@ -929,6 +954,10 @@ function renderOptimization(result) {
         const groupKerf = Number(g.kerf_mm ?? 0) || 0;
         const groupStock = Number(g.stock_length_mm ?? 0) || 0;
         const groupBars = Array.isArray(g.bars) ? g.bars : [];
+        const maxStockInGroup = Math.max(
+            1,
+            ...groupBars.map(b => Number(b?.stock_length_mm ?? groupStock ?? 0) || 0)
+        );
 
         pane.innerHTML = `
             <div class="mb-3">
@@ -964,6 +993,12 @@ function renderOptimization(result) {
             const wasteMm = Number(bar.waste_mm ?? 0) || 0;
             const cutsCount = Array.isArray(bar.cuts) ? bar.cuts.length : 0;
             const displayBarNo = bar.global_bar_index ?? bar.bar_index;
+            const isRemnant = !!bar.is_remnant;
+            const remnantBadge = isRemnant
+                ? `<span class="lc-bar-badge lc-bar-badge-remnant">
+                        <i class="fas fa-recycle me-1"></i>Stoktan
+                   </span>`
+                : '';
 
             const card = document.createElement('div');
             card.className = 'lc-bar-card';
@@ -974,6 +1009,7 @@ function renderOptimization(result) {
                         Çubuk #${displayBarNo}
                     </div>
                     <div class="meta">
+                        ${remnantBadge}
                         <span><i class="fas fa-cut text-muted me-1"></i>${cutsCount} kesim</span>
                         <span><i class="fas fa-ruler-horizontal text-muted me-1"></i>${stock} mm</span>
                         <span><i class="fas fa-trash-alt text-muted me-1"></i>${wasteMm} mm fire</span>
@@ -990,7 +1026,7 @@ function renderOptimization(result) {
             body.appendChild(canvasWrap);
 
             list.appendChild(card);
-            barCanvasDrawMap.set(canvas, { bar, kerfMm: groupKerf });
+            barCanvasDrawMap.set(canvas, { bar, kerfMm: groupKerf, referenceStockMm: maxStockInGroup });
             // Only draw immediately for the initially visible (active) group
             if (idx === 0) {
                 scheduleDrawBar(canvas, tooltipEl);
@@ -1057,10 +1093,67 @@ async function refreshSessionsList(selectKey = null) {
         opt.value       = s.key;
         const sum = Array.isArray(s.optimization_summary) ? s.optimization_summary : [];
         const totalBars = sum.reduce((acc, g) => acc + (Number(g.bars_needed ?? 0) || 0), 0);
-        opt.textContent = `${s.key}  —  ${s.title || ''}${totalBars ? ` · ${totalBars} bar` : ''}`;
+        const stockStatus = s.stock_entry_complete ? 'Stok: Tamam' : 'Stok: Eksik';
+        opt.textContent = `${s.key}  —  ${s.title || ''}${totalBars ? ` · ${totalBars} bar` : ''} · ${stockStatus}`;
         select.appendChild(opt);
     });
     if (selectKey) select.value = selectKey;
+}
+
+function renderStockBarsHtml(stockBars = []) {
+    if (!stockBars.length) {
+        return `
+            <div class="text-muted py-2">
+                Bu planda tanimli stok bar bulunmuyor.
+            </div>
+        `;
+    }
+
+    const rows = stockBars.map((bar, idx) => `
+        <tr>
+            <td>${idx + 1}</td>
+            <td>${escapeAttr(bar.item_code || '-')}</td>
+            <td>${escapeAttr(bar.item_name || '-')}</td>
+            <td class="text-end">${bar.length_mm ?? '-'}</td>
+            <td class="text-end">${bar.quantity ?? '-'}</td>
+            <td>${escapeAttr(bar.item_unit || '-')}</td>
+            <td>${escapeAttr(bar.declared_by_username || '-')}</td>
+        </tr>
+    `).join('');
+
+    return `
+        <div class="table-responsive">
+            <table class="table table-sm table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>#</th>
+                        <th>Malzeme Kodu</th>
+                        <th>Malzeme</th>
+                        <th class="text-end">Boy (mm)</th>
+                        <th class="text-end">Adet</th>
+                        <th>Birim</th>
+                        <th>Beyan Eden</th>
+                    </tr>
+                </thead>
+                <tbody>${rows}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function onShowStockBars() {
+    const bars = Array.isArray(currentSession?.stock_bars) ? currentSession.stock_bars : [];
+    stockBarsModal?.reset();
+    stockBarsModal
+        ?.addCustomSection({
+            id: 'stock-bars-list',
+            title: 'Stok Bar Listesi',
+            icon: 'fas fa-bars-staggered',
+            iconColor: 'text-primary',
+            customContent: renderStockBarsHtml(bars)
+        })
+        ?.render()
+        ?.show();
 }
 
 // ─────────────────────────── ACTIONS ──────────────────────────
@@ -1283,6 +1376,12 @@ function initModals() {
         saveButtonText: 'Plan Oluştur',
         size: 'lg'
     });
+    stockBarsModal = new DisplayModal('lc-stock-bars-modal-container', {
+        title: 'Stok Barlar',
+        icon: 'fas fa-bars-staggered',
+        showEditButton: false,
+        size: 'lg'
+    });
 
     createPlanModal
         .addSection({
@@ -1372,6 +1471,7 @@ function wireEvents() {
     $('lc-optimize-btn').addEventListener('click', onOptimize);
     $('lc-confirm-btn').addEventListener('click', onConfirm);
     $('lc-pdf-btn').addEventListener('click', onPdf);
+    $('lc-stock-bars-btn').addEventListener('click', onShowStockBars);
 
     $('lc-bulk-save-parts-btn')?.addEventListener('click', bulkSaveNewParts);
     $('lc-add-part-btn').addEventListener('click', addNewPartRow);

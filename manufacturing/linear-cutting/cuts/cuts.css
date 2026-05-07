@@ -214,6 +214,22 @@
     justify-content: flex-end;
 }
 
+.lc-bar-badge {
+    display: inline-flex;
+    align-items: center;
+    border-radius: 999px;
+    border: 1px solid transparent;
+    padding: 0.15rem 0.55rem;
+    font-weight: 600;
+    line-height: 1.2;
+}
+
+.lc-bar-badge-remnant {
+    color: #0d6efd;
+    background: rgba(13, 110, 253, 0.1);
+    border-color: rgba(13, 110, 253, 0.22);
+}
+
 .lc-bar-card .body {
     padding: 0.9rem 1rem 1rem;
 }
