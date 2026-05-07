@@ -13,6 +13,7 @@ export class ModernDropdown {
             multiple: false,
             maxHeight: 300,
             width: '100%',
+            viewportPadding: 8,
             remoteSearch: null,      // async (term) => Promise<Array<{value, text}>>
             minSearchLength: 3,
             remoteSearchPlaceholder: 'En az 3 karakter yazın',
@@ -319,19 +320,63 @@ export class ModernDropdown {
         if (!this.portalWrapper || !this.selectedDisplay) return;
         
         const rect = this.selectedDisplay.getBoundingClientRect();
-        // Use fixed positioning relative to viewport
-        this.portalWrapper.style.top = `${rect.bottom}px`;
-        this.portalWrapper.style.left = `${rect.left}px`;
+        const viewportPadding = Number.isFinite(this.options.viewportPadding)
+            ? this.options.viewportPadding
+            : 8;
+
+        const viewportH = window.innerHeight || document.documentElement.clientHeight || 0;
+        const spaceBelow = Math.max(0, viewportH - rect.bottom - viewportPadding);
+        const spaceAbove = Math.max(0, rect.top - viewportPadding);
+
+        // Prefer opening down unless it would be too cramped compared to above.
+        // If below can't fit the desired height but above can fit more, flip to top.
+        const desiredMax = Number.isFinite(this.options.maxHeight) ? this.options.maxHeight : 300;
+        const openUp = spaceBelow < Math.min(desiredMax, 200) && spaceAbove > spaceBelow;
+
+        // Height available for the whole menu (search + items)
+        const availableMenuH = Math.max(120, (openUp ? spaceAbove : spaceBelow));
+
+        // Use fixed positioning relative to viewport (portal wrapper).
+        // When opening up, anchor the wrapper so menu's bottom aligns to control top.
+        if (openUp) {
+            this.portalWrapper.style.top = `${Math.max(viewportPadding, rect.top - availableMenuH)}px`;
+        } else {
+            this.portalWrapper.style.top = `${rect.bottom}px`;
+        }
+        this.portalWrapper.style.left = `${Math.max(viewportPadding, rect.left)}px`;
         this.portalWrapper.style.width = `${rect.width}px`;
+        this.portalWrapper.style.height = `${availableMenuH}px`;
         
         // Ensure menu is positioned correctly within portal
         this.menu.style.position = 'absolute';
-        this.menu.style.top = '0';
+        this.menu.style.top = openUp ? 'auto' : '0';
+        this.menu.style.bottom = openUp ? '0' : 'auto';
         this.menu.style.left = '0';
         this.menu.style.right = 'auto';
         this.menu.style.width = '100%';
         this.menu.style.zIndex = this.currentZIndex;
         this.menu.style.pointerEvents = 'auto'; // Ensure menu can receive events
+
+        // Apply max-height based on available viewport space, so bottom items are reachable.
+        // Use the smaller of desired maxHeight and available viewport space.
+        const menuMaxH = Math.max(120, Math.min(desiredMax, availableMenuH));
+        // Many styles in this codebase use `!important`; use important here so the
+        // viewport-fitting behavior always wins for long menus.
+        this.menu.style.setProperty('max-height', `${menuMaxH}px`, 'important');
+        this.menu.style.setProperty('overflow-y', 'auto', 'important');
+
+        // Keep items container within the computed menu height (leave room for search if present).
+        if (this.itemsContainer) {
+            const searchH = (this.options.searchable && this.searchInput)
+                ? (this.searchInput.getBoundingClientRect().height || 44)
+                : 0;
+            const itemsMax = Math.max(80, menuMaxH - searchH);
+            this.itemsContainer.style.setProperty('max-height', `${itemsMax}px`, 'important');
+        }
+
+        // Placement class for CSS tweaks (rounded corners, border direction, etc.)
+        this.menu.classList.toggle('placement-top', openUp);
+        this.menu.classList.toggle('placement-bottom', !openUp);
     }
     
     moveMenuBackFromPortal() {

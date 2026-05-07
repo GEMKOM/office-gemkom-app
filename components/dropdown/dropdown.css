@@ -649,12 +649,25 @@
     opacity: 1 !important;
     visibility: visible !important;
     transform: translateY(0) !important;
-    max-height: 400px !important;
+    max-height: 400px !important; /* default; JS may override via inline style */
     overflow-y: auto !important;
     overflow-x: visible !important;
     pointer-events: auto !important;
     display: block !important;
     z-index: 999999 !important;
+}
+
+/* Placement variants (JS toggles these classes) */
+.modern-dropdown-menu-portal.placement-top {
+    border-top: 2px solid #e9ecef !important;
+    border-bottom: none !important;
+    border-radius: 8px 8px 0 0 !important;
+}
+
+.modern-dropdown-menu-portal.placement-bottom {
+    border-top: none !important;
+    border-bottom: 2px solid #e9ecef !important;
+    border-radius: 0 0 8px 8px !important;
 }
 
 /* Ensure search input and all interactive elements work in portal */
