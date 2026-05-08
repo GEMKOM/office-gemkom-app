@@ -749,6 +749,41 @@ function initializeTableComponent() {
                 }
             },
             {
+                field: 'assigned_subcontractors',
+                label: 'Taşeron',
+                sortable: false,
+                formatter: (value) => {
+                    if (!Array.isArray(value) || value.length === 0) {
+                        return '-';
+                    }
+
+                    const visibleSubcontractors = value.filter((item) => Number(item?.subcontractor_id) !== 9);
+                    if (visibleSubcontractors.length === 0) {
+                        return '-';
+                    }
+
+                    const subcontractorLines = visibleSubcontractors
+                        .map((item) => {
+                            const name = escapeHtml(item?.subcontractor_name || '-');
+                            const rawWeight = item?.allocated_weight_kg;
+                            const parsedWeight = Number.parseFloat(rawWeight);
+                            const formattedWeight = Number.isFinite(parsedWeight)
+                                ? `${parsedWeight.toLocaleString('tr-TR', {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2
+                                })} kg`
+                                : null;
+                            const weightHtml = formattedWeight
+                                ? ` <small class="text-muted">(${escapeHtml(formattedWeight)})</small>`
+                                : '';
+                            return `<div>${name}${weightHtml}</div>`;
+                        })
+                        .join('');
+
+                    return `<div class="small">${subcontractorLines}</div>`;
+                }
+            },
+            {
                 field: 'target_start_date',
                 label: 'Hedef Başlangıç',
                 sortable: true,
