@@ -955,6 +955,7 @@ function attachMatrixPermissionCellHandler() {
 async function loadUserDetail(userId) {
     try {
         currentUserDetail = await fetchUserPermissionsDetail(userId);
+        await ensurePermissionsCatalogLoaded();
         renderUserDetailPanel();
     } catch (e) {
         console.error(e);
@@ -985,7 +986,16 @@ function renderUserDetailPanel() {
     if (!panel || !currentUserDetail) return;
 
     const { user, groups, effective_permissions, overrides } = currentUserDetail;
-    const codenames = permissionsMatrix?.codenames || Object.keys(effective_permissions || {});
+    const catalog = Array.isArray(permissionsCatalog) ? permissionsCatalog : [];
+    const catalogMap = new Map(catalog.map(p => [p.codename, p.name || p.codename]));
+    const allCodenames = Array.from(new Set([
+        ...catalog.map(p => p.codename),
+        ...Object.keys(effective_permissions || {})
+    ])).sort((a, b) => a.localeCompare(b, 'tr'));
+    const codenames = allCodenames.length
+        ? allCodenames
+        : (permissionsMatrix?.codenames || Object.keys(effective_permissions || {}));
+    const overridesMap = new Map((overrides || []).map(o => [o.codename, o]));
 
     const officePerm = effective_permissions?.office_access || { value: false, source: 'none', source_detail: '' };
     const workshopPerm = effective_permissions?.workshop_access || { value: false, source: 'none', source_detail: '' };
@@ -1010,6 +1020,8 @@ function renderUserDetailPanel() {
     const permsRows = codenames.map(code => {
         const permObj = effective_permissions?.[code] || { value: false, source: 'none', source_detail: '' };
         const value = permObj.value === true;
+        const permName = catalogMap.get(code) || code;
+        const hasOverride = overridesMap.has(code);
 
         // Backend already resolves the permission source; render it directly.
         const sourceBadge = user.is_superuser
@@ -1017,16 +1029,43 @@ function renderUserDetailPanel() {
             : formatPermSourceBadge(permObj.source, permObj.source_detail);
         return `
             <tr>
-                <td><code>${code}</code></td>
+                <td>
+                    <div class="fw-semibold">${permName}</div>
+                    <div class="text-muted small"><code>${code}</code></div>
+                </td>
                 <td>${boolIcon(value)}</td>
                 <td>${sourceBadge}</td>
                 <td>
                     ${!user.is_superuser ? `
-                    <button type="button" 
-                            class="btn btn-sm btn-outline-secondary override-button" 
+                    <div class="btn-group btn-group-sm" role="group" aria-label="permission-actions">
+                        <button type="button"
+                                class="btn btn-outline-success quick-perm-btn"
+                                data-codename="${code}"
+                                data-action="grant"
+                                title="Bu kullanıcı için izin ver">
+                            Ver
+                        </button>
+                        <button type="button"
+                                class="btn btn-outline-warning quick-perm-btn"
+                                data-codename="${code}"
+                                data-action="deny"
+                                title="Bu kullanıcı için engelle">
+                            Engelle
+                        </button>
+                        <button type="button"
+                                class="btn btn-outline-danger clear-perm-override-btn"
+                                data-codename="${code}"
+                                ${hasOverride ? '' : 'disabled'}
+                                title="Bireysel override kaldır ve grup varsayılanına dön">
+                            Sıfırla
+                        </button>
+                    </div>
+                    <button type="button"
+                            class="btn btn-sm btn-link text-decoration-none override-button ms-1"
                             data-codename="${code}">
-                        Geçersiz Kıl
-                    </button>` : ''}
+                        Detay
+                    </button>
+                    ` : ''}
                 </td>
             </tr>
         `;
@@ -1095,7 +1134,7 @@ function renderUserDetailPanel() {
                     <table class="table table-sm align-middle mb-0">
                         <thead>
                             <tr>
-                                <th>Kod</th>
+                                <th>Yetki</th>
                                 <th>Durum</th>
                                 <th>Kaynak</th>
                                 <th></th>
@@ -1176,6 +1215,50 @@ function attachUserPanelHandlers() {
             const codename = btn.getAttribute('data-codename');
             if (codename) {
                 openOverrideModal(userId, codename);
+            }
+        });
+    });
+
+    panel.querySelectorAll('.quick-perm-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const codename = btn.getAttribute('data-codename');
+            const action = btn.getAttribute('data-action');
+            if (!codename || !action) return;
+
+            try {
+                await saveUserPermissionOverride(userId, {
+                    codename,
+                    granted: action === 'grant',
+                    reason: ''
+                });
+                showNotification(
+                    action === 'grant'
+                        ? `${codename} izni kullanıcıya verildi`
+                        : `${codename} izni kullanıcı için engellendi`,
+                    'success'
+                );
+                await loadUserDetail(userId);
+                await loadMatrix();
+            } catch (e) {
+                console.error(e);
+                showNotification(e.message || 'Yetki güncellenirken hata oluştu', 'error');
+            }
+        });
+    });
+
+    panel.querySelectorAll('.clear-perm-override-btn').forEach(btn => {
+        btn.addEventListener('click', async () => {
+            const codename = btn.getAttribute('data-codename');
+            if (!codename) return;
+
+            try {
+                await deleteUserPermissionOverride(userId, codename);
+                showNotification(`${codename} için bireysel ayar kaldırıldı`, 'success');
+                await loadUserDetail(userId);
+                await loadMatrix();
+            } catch (e) {
+                console.error(e);
+                showNotification(e.message || 'Bireysel ayar kaldırılırken hata oluştu', 'error');
             }
         });
     });
