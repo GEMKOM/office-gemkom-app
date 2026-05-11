@@ -137,7 +137,7 @@ function ensureUserEditTabs(editModal, user) {
             </li>
             <li class="nav-item" role="presentation">
                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-yoklama-${user.id}" type="button" role="tab">
-                    <i class="fas fa-calendar-alt me-1"></i>Yoklama Özeti
+                    <i class="fas fa-calendar-alt me-1"></i>PDKS Özeti
                 </button>
             </li>
             <li class="nav-item" role="presentation">
@@ -196,7 +196,7 @@ function ensureUserEditTabs(editModal, user) {
             </div>
             <div class="tab-pane fade" id="pane-yoklama-${user.id}" role="tabpanel">
                 <div class="py-2">
-                    <div class="fw-semibold mb-2">Aylık Yoklama Özeti</div>
+                    <div class="fw-semibold mb-2">Aylık PDKS Özeti</div>
                     <div class="row g-2 align-items-end mb-3">
                         <div class="col-6 col-md-3">
                             <label class="form-label small mb-1">Yıl</label>
@@ -536,7 +536,7 @@ function ensureUserEditTabs(editModal, user) {
         }
 
         attendanceRecordEditModal = new EditModal(containerId, {
-            title: 'Yoklama Kaydı',
+            title: 'PDKS Kaydı',
             icon: 'fas fa-calendar-check',
             size: 'lg',
             saveButtonText: 'Kaydet',
@@ -735,7 +735,7 @@ function ensureUserEditTabs(editModal, user) {
                         }
                         if (notes) patch.notes = notes;
                         await patchAttendanceHrRecord(ctx.recordId, patch);
-                        showNotification('Yoklama kaydı güncellendi', 'success');
+                        showNotification('PDKS kaydı güncellendi', 'success');
                     } else {
                         const payload = { user: ctx.userId, date: ctx.dateStr };
                         if (isWorking) {
@@ -747,7 +747,7 @@ function ensureUserEditTabs(editModal, user) {
                         }
                         if (notes) payload.notes = notes;
                         await createAttendanceHrRecord(payload);
-                        showNotification('Yoklama kaydı oluşturuldu', 'success');
+                        showNotification('PDKS kaydı oluşturuldu', 'success');
                     }
 
                     await ctx.loadAttendance();
@@ -1428,7 +1428,7 @@ function ensureUserEditTabs(editModal, user) {
             if ((!attendanceExportTable && document.getElementById(exportMountId)) || (attendanceExportTable && prevSig !== colSig)) {
                 if (attendanceExportTable) attendanceExportTable.destroy();
                 attendanceExportTable = new TableComponent(exportMountId, {
-                    title: 'Yoklama Özeti',
+                    title: 'PDKS Özeti',
                     columns,
                     data: [],
                     exportable: true,
@@ -1438,14 +1438,14 @@ function ensureUserEditTabs(editModal, user) {
                 attendanceExportTable.options.__colSig = colSig;
             }
 
-            // Filename: YoklamaOzeti_<user>_<YYYY-MM>.xlsx
+            // Filename: PDKSOzeti_<user>_<YYYY-MM>.xlsx
             const yVal = container.querySelector(`#att-year-${user.id}`)?.value;
             const mVal = container.querySelector(`#att-month-${user.id}`)?.value;
             const mm = String(mVal || '').padStart(2, '0');
             const userDisplay = safeFilePart(`${user.first_name || ''} ${user.last_name || ''}`.trim() || user.username || `user_${user.id}`);
             const ym = (yVal && mm) ? `${yVal}-${mm}` : new Date().toISOString().slice(0, 7);
             if (attendanceExportTable) {
-                attendanceExportTable.options.exportFilename = `YoklamaOzeti_${userDisplay}_${ym}.xlsx`;
+                attendanceExportTable.options.exportFilename = `PDKSOzeti_${userDisplay}_${ym}.xlsx`;
             }
 
             if (attendanceExportTable) {
@@ -1465,7 +1465,7 @@ function ensureUserEditTabs(editModal, user) {
             const resp = await fetchAttendanceMonthlySummary({ user_id: user.id, year: y, month: m });
             renderAttendance(resp);
         } catch (e) {
-            if (daysEl) daysEl.innerHTML = `<div class="text-danger">Yoklama özeti yüklenemedi: ${e.message || e}</div>`;
+            if (daysEl) daysEl.innerHTML = `<div class="text-danger">PDKS özeti yüklenemedi: ${e.message || e}</div>`;
         }
     }
 

@@ -121,7 +121,7 @@ class AttendanceRecordsPage {
 
     initHeader() {
         const header = new HeaderComponent({
-            title: 'Yoklama Kayıtları',
+            title: 'PDKS Kayıtları',
             subtitle: 'Kayıtları filtreleyin ve inceleyin',
             icon: 'clipboard-list',
             showBackButton: 'block',
@@ -221,7 +221,7 @@ class AttendanceRecordsPage {
 
     initTable() {
         this.tableComponent = new TableComponent('table-container', {
-            title: 'Yoklama Kayıtları',
+            title: 'PDKS Kayıtları',
             icon: 'clipboard-list',
             iconColor: 'info',
             columns: [
@@ -302,7 +302,7 @@ class AttendanceRecordsPage {
 
     initEditModal() {
         this.editModal = new EditModal('edit-modal-container', {
-            title: 'Yoklama Kaydı Düzenle',
+            title: 'PDKS Kaydı Düzenle',
             saveButtonText: 'Kaydet',
             size: 'xl'
         });

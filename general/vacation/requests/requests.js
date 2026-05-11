@@ -23,6 +23,7 @@ let requestsTable = null;
 let createModal = null;
 let detailModal = null;
 let cancelModal = null;
+let calendarModal = null;
 let currentRequest = null;
 let previewTimer = null;
 let currentPage = 1;
@@ -229,8 +230,7 @@ async function loadRequests() {
         const filters = {
             page: currentPage,
             page_size: requestsTable.options.itemsPerPage,
-            ordering: document.getElementById('filter-ordering')?.value || '-created_at',
-            status: document.getElementById('filter-status')?.value || '',
+            ordering: '-created_at',
             mine: 'true',
         };
 
@@ -261,6 +261,21 @@ function initializeAttendanceCalendar() {
     return attendanceCalendar.refresh();
 }
 
+function initializeCalendarModal() {
+    calendarModal = new DisplayModal('vacation-calendar-modal-container', {
+        title: 'PDKS Takvimi',
+        icon: 'fas fa-calendar-alt',
+        size: 'xl',
+        showEditButton: false
+    });
+    calendarModal.clearData();
+    calendarModal.addCustomSection({
+        title: null,
+        customContent: '<div id="vacation-attendance-calendar-modal"></div>'
+    });
+    calendarModal.render();
+}
+
 function setupCalendarModalButton() {
     const controls = document.querySelector('.dashboard-controls');
     const createBtn = document.getElementById('create-btn');
@@ -274,16 +289,15 @@ function setupCalendarModalButton() {
     controls.insertBefore(calendarBtn, createBtn);
 
     calendarBtn.addEventListener('click', async () => {
-        const modalEl = document.getElementById('vacationCalendarModal');
-        if (!modalEl) return;
-        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
-        modal.show();
+        if (!calendarModal) return;
 
         if (!attendanceCalendarInitialized) {
             await initializeAttendanceCalendar();
         } else {
             await attendanceCalendar?.refresh?.();
         }
+
+        calendarModal.show();
     });
 }
 
@@ -628,23 +642,6 @@ function showCancelModal(requestId) {
     });
 }
 
-function bindFilterButtons() {
-    document.getElementById('apply-filters-btn')?.addEventListener('click', () => {
-        currentPage = 1;
-        loadRequests();
-    });
-    document.getElementById('clear-filters-btn')?.addEventListener('click', () => {
-        ['filter-status', 'filter-ordering'].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = '';
-        });
-        const orderingEl = document.getElementById('filter-ordering');
-        if (orderingEl) orderingEl.value = '-created_at';
-        currentPage = 1;
-        loadRequests();
-    });
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) return;
     await initNavbar();
@@ -691,9 +688,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
-    bindFilterButtons();
     initializeCreateModal();
     initializeDetailAndCancelModals();
+    initializeCalendarModal();
     setupCalendarModalButton();
     await loadMyVacationSummary();
 

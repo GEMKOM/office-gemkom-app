@@ -252,7 +252,7 @@ async function handleLandingPage() {
                             link: '/human_resources/users'
                         },
                         {
-                            label: 'Yoklama',
+                            label: 'PDKS',
                             icon: 'fas fa-user-check',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/human_resources/attendance'

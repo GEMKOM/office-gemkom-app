@@ -33,15 +33,15 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/human_resources/users'
             },
             {
-                title: 'Yoklama Onayları',
+                title: 'PDKS Onayları',
                 description: 'Ofis dışı giriş taleplerini onaylayın veya reddedin',
                 icon: 'fas fa-user-check',
                 iconColor: 'warning',
                 link: '/human_resources/attendance'
             },
             {
-                title: 'Yoklama Kayıtları',
-                description: 'Yoklama kayıtlarını filtreleyin ve inceleyin',
+                title: 'PDKS Kayıtları',
+                description: 'PDKS kayıtlarını filtreleyin ve inceleyin',
                 icon: 'fas fa-clipboard-list',
                 iconColor: 'info',
                 link: '/human_resources/attendance'

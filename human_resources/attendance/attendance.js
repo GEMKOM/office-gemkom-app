@@ -1,5 +1,5 @@
 /**
- * Human Resources -> Attendance (Yoklama) section menu
+ * Human Resources -> Attendance (PDKS) section menu
  */
 
 import { guardRoute } from '../../authService.js';
@@ -14,8 +14,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
 
     const menuComponent = new MenuComponent('menu-container', {
-        title: 'Yoklama',
-        subtitle: 'Yoklama kayıtlarını yönetin ve ofis dışı giriş taleplerini değerlendirin',
+        title: 'PDKS',
+        subtitle: 'PDKS kayıtlarını yönetin ve ofis dışı giriş taleplerini değerlendirin',
         cards: [
             {
                 title: 'Onay Bekleyenler',
@@ -26,7 +26,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             {
                 title: 'Kayıtlar',
-                description: 'Yoklama kayıtlarını filtreleyin ve inceleyin',
+                description: 'PDKS kayıtlarını filtreleyin ve inceleyin',
                 icon: 'fas fa-clipboard-list',
                 iconColor: 'info',
                 link: '/human_resources/attendance/records'

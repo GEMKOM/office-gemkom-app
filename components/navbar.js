@@ -63,7 +63,8 @@ function getAttendanceUiModelFromTodayResponse(respStatus, data) {
         const label = statusDisplay || 'Reddedildi';
         return { state: 'override_rejected', label, variant: 'danger', details: label };
     }
-    return { state: String(status), label: String(status), variant: 'secondary', details: 'Detay için açın.' };
+    const fallbackLabel = statusDisplay || String(status);
+    return { state: String(status), label: fallbackLabel, variant: 'secondary', details: fallbackLabel };
 }
 
 
@@ -321,12 +322,12 @@ export function initNavbar() {
                                data-bs-toggle="dropdown" aria-expanded="false" id="attendanceDropdownToggle">
                                 <span class="attendance-dot attendance-dot--secondary" id="attendanceDot" aria-hidden="true"></span>
                                 <i class="fas fa-user-check me-1"></i>
-                                <span id="attendanceText">Yoklama</span>
+                                <span id="attendanceText">PDKS</span>
                             </a>
                             <ul class="dropdown-menu dropdown-menu-end attendance-menu" aria-labelledby="attendanceDropdownToggle">
                                 <li class="px-3 py-2">
                                     <div class="d-flex align-items-center justify-content-between">
-                                        <div class="fw-semibold text-light">Yoklama</div>
+                                        <div class="fw-semibold text-light">PDKS</div>
                                         <span class="badge text-bg-secondary" id="attendanceBadge">…</span>
                                     </div>
                                     <div class="small attendance-muted mt-1" id="attendanceDetails">Yükleniyor…</div>
@@ -425,7 +426,7 @@ export function initNavbar() {
 
           if (!isLoggedIn()) {
               dot.className = 'attendance-dot attendance-dot--secondary';
-              text.textContent = 'Yoklama';
+              text.textContent = 'PDKS';
               badge.className = 'badge text-bg-secondary';
               badge.textContent = 'Giriş';
               details.textContent = 'Giriş yapılmadı.';
@@ -454,7 +455,7 @@ export function initNavbar() {
               }
           } catch (e) {
               dot.className = 'attendance-dot attendance-dot--danger';
-              text.textContent = 'Yoklama';
+              text.textContent = 'PDKS';
               badge.className = 'badge text-bg-danger';
               badge.textContent = 'Hata';
               details.textContent = 'Yüklenemedi.';

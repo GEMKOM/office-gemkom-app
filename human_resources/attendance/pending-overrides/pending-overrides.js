@@ -62,7 +62,7 @@ class PendingOverridesPage {
 
     initHeader() {
         const header = new HeaderComponent({
-            title: 'Yoklama Onayları',
+            title: 'PDKS Onayları',
             subtitle: 'Ofis dışı giriş taleplerini onaylayın veya reddedin',
             icon: 'user-check',
             showBackButton: 'block',

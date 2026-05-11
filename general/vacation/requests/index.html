@@ -31,43 +31,6 @@
                 </div>
             </div>
 
-            <div class="row mb-3">
-                <div class="col-12">
-                    <div class="card">
-                        <div class="card-body">
-                            <div class="row g-2 align-items-end">
-                                <div class="col-12 col-md-3">
-                                    <label class="form-label small mb-1">Durum</label>
-                                    <select id="filter-status" class="form-select form-select-sm">
-                                        <option value="">Tümü</option>
-                                        <option value="submitted">Bekliyor</option>
-                                        <option value="approved">Onaylandı</option>
-                                        <option value="rejected">Reddedildi</option>
-                                        <option value="cancelled">İptal</option>
-                                    </select>
-                                </div>
-                                <div class="col-12 col-md-3">
-                                    <label class="form-label small mb-1">Sıralama</label>
-                                    <select id="filter-ordering" class="form-select form-select-sm">
-                                        <option value="-created_at">En Yeni Talep</option>
-                                        <option value="start_date">Başlangıç Tarihi (Artan)</option>
-                                        <option value="-start_date">Başlangıç Tarihi (Azalan)</option>
-                                    </select>
-                                </div>
-                                <div class="col-12 col-md-6 d-flex gap-2">
-                                    <button id="apply-filters-btn" class="btn btn-sm btn-primary w-100" type="button">
-                                        <i class="fas fa-search me-1"></i>Filtrele
-                                    </button>
-                                    <button id="clear-filters-btn" class="btn btn-sm btn-outline-secondary w-100" type="button">
-                                        <i class="fas fa-eraser me-1"></i>Temizle
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
             <div id="requests-table-container"></div>
         </div>
     </section>
@@ -75,21 +38,7 @@
     <div id="vacation-request-create-modal-container"></div>
     <div id="vacation-request-detail-modal-container"></div>
     <div id="vacation-request-cancel-modal-container"></div>
-    <div class="modal fade" id="vacationCalendarModal" tabindex="-1" aria-labelledby="vacationCalendarModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl modal-dialog-scrollable">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="vacationCalendarModalLabel">
-                        <i class="fas fa-calendar-alt me-2"></i>Yoklama Takvimi
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
-                </div>
-                <div class="modal-body">
-                    <div id="vacation-attendance-calendar-modal"></div>
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="vacation-calendar-modal-container"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script type="module" src="requests.js"></script>

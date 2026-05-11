@@ -581,7 +581,7 @@ export const NAVIGATION_STRUCTURE = {
                 children: {}
             },
             '/human_resources/attendance': {
-                label: 'Yoklama',
+                label: 'PDKS',
                 icon: 'fas fa-user-check',
                 children: {
                     '/human_resources/attendance/pending-overrides': {
