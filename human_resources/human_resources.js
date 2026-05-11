@@ -45,6 +45,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-clipboard-list',
                 iconColor: 'info',
                 link: '/human_resources/attendance'
+            },
+            {
+                title: 'İzin Yönetimi',
+                description: 'İzin bakiyelerini düzenleyin ve bekleyen izin taleplerini yönetin',
+                icon: 'fas fa-calendar-check',
+                iconColor: 'success',
+                link: '/human_resources/vacation'
             }
         ]
     });

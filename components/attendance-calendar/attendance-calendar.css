@@ -1,0 +1,265 @@
+.attendance-calendar {
+    display: grid;
+    gap: 1rem;
+}
+
+.ac-panel {
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+    padding: 1rem;
+}
+
+.ac-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.ac-nav {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ac-month-title {
+    min-width: 200px;
+    text-align: center;
+    margin: 0;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.ac-controls {
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.ac-controls .form-control {
+    min-width: 140px;
+}
+
+.ac-controls #ac-month-picker {
+    min-width: 180px;
+}
+
+.ac-controls .btn {
+    white-space: nowrap;
+}
+
+.ac-summary-grid {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(140px, 1fr));
+    gap: 0.75rem;
+}
+
+.ac-summary-card {
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    border-radius: 12px;
+    padding: 0.75rem;
+    background: linear-gradient(135deg, #ffffff, #f8fafc);
+}
+
+.ac-summary-label {
+    font-size: 0.78rem;
+    color: #64748b;
+    margin-bottom: 0.2rem;
+}
+
+.ac-summary-value {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.ac-shift {
+    border-radius: 12px;
+    border: 1px dashed rgba(15, 23, 42, 0.16);
+    background: #f8fafc;
+    padding: 0.75rem;
+    color: #334155;
+    font-size: 0.92rem;
+}
+
+.ac-shift strong {
+    color: #0f172a;
+}
+
+.ac-calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 0.6rem;
+}
+
+.ac-weekday {
+    font-size: 0.8rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 0.35rem;
+}
+
+.ac-day {
+    min-height: 148px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    padding: 0.6rem;
+    background: #ffffff;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    overflow: hidden;
+}
+
+.ac-day-empty {
+    background: #f8fafc;
+    border-style: dashed;
+}
+
+.ac-day-working {
+    border-color: #cbd5e1;
+}
+
+.ac-day-weekend {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+}
+
+.ac-day-public_holiday {
+    background: #fef2f2;
+    border-color: #fca5a5;
+}
+
+.ac-day-half-day-holiday {
+    background: linear-gradient(135deg, #fff7ed 0%, #ffffff 60%);
+    border-color: #fdba74;
+}
+
+.ac-day-leave {
+    background: #ecfeff;
+    border-color: #67e8f9;
+}
+
+.ac-day-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.4rem;
+}
+
+.ac-day-number {
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.ac-day-weekday {
+    font-size: 0.74rem;
+    color: #64748b;
+}
+
+.ac-chip-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+}
+
+.ac-chip {
+    border-radius: 999px;
+    font-size: 0.68rem;
+    line-height: 1;
+    padding: 0.28rem 0.45rem;
+    font-weight: 600;
+}
+
+.ac-chip-working { background: #e2e8f0; color: #334155; }
+.ac-chip-weekend { background: #e2e8f0; color: #334155; }
+.ac-chip-public_holiday { background: #fed7aa; color: #9a3412; }
+.ac-chip-half-day-holiday { background: #ffedd5; color: #9a3412; }
+.ac-chip-leave { background: #a5f3fc; color: #155e75; }
+.ac-chip-flag-absent { background: #fecaca; color: #991b1b; }
+.ac-chip-flag-pending_approval,
+.ac-chip-flag-pending_checkout_approval { background: #fde68a; color: #92400e; }
+
+.ac-day-content {
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    color: #334155;
+    font-size: 0.8rem;
+}
+
+.ac-holiday {
+    font-weight: 600;
+    color: #9a3412;
+}
+
+.ac-strong {
+    font-weight: 600;
+    color: #0f172a;
+}
+
+.ac-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.ac-legend .ac-chip {
+    font-size: 0.72rem;
+}
+
+.ac-state {
+    min-height: 260px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #64748b;
+    text-align: center;
+}
+
+@media (max-width: 1200px) {
+    .ac-summary-grid {
+        grid-template-columns: repeat(3, minmax(140px, 1fr));
+    }
+}
+
+@media (max-width: 992px) {
+    .ac-calendar-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .ac-weekday {
+        display: none;
+    }
+}
+
+@media (max-width: 768px) {
+    .ac-summary-grid {
+        grid-template-columns: repeat(2, minmax(120px, 1fr));
+    }
+
+    .ac-month-title {
+        min-width: 160px;
+        font-size: 1rem;
+    }
+}
+
+@media (max-width: 576px) {
+    .ac-controls {
+        flex-wrap: wrap;
+    }
+
+    .ac-calendar-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .ac-summary-grid {
+        grid-template-columns: 1fr;
+    }
+}

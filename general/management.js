@@ -29,6 +29,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/general/overtime'
             },
             {
+                title: 'İzin Talepleri',
+                description: 'İzin taleplerinin oluşturulması, onay süreçleri ve bakiye takibi.',
+                icon: 'fas fa-calendar-check',
+                iconColor: 'primary',
+                link: '/general/vacation'
+            },
+            {
                 title: 'Departman Talepleri',
                 description: 'Departman taleplerinin oluşturulması, onay süreçleri ve takibi.',
                 icon: 'fas fa-boxes',

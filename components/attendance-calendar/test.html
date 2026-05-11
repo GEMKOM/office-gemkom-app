@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Yoklama Takvimi Bileşen Testi</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="attendance-calendar.css">
+    <style>
+        body {
+            background: #f1f5f9;
+            color: #0f172a;
+        }
+        .test-shell {
+            max-width: 1550px;
+            margin: 0 auto;
+            padding: 1.25rem;
+        }
+        .test-header {
+            border: 1px solid rgba(15, 23, 42, 0.08);
+            border-radius: 16px;
+            background: #ffffff;
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.06);
+            padding: 1rem 1.25rem;
+            margin-bottom: 1rem;
+        }
+        .test-header code {
+            background: #e2e8f0;
+            color: #0f172a;
+            border-radius: 6px;
+            padding: 0.08rem 0.4rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-shell">
+        <div class="test-header">
+            <h4 class="mb-2">Yoklama Takvimi Bileşen Testi</h4>
+            <div class="text-muted small">
+                Bileşenin bağımsız test sayfası. Açılış yolu:
+                <code>/components/attendance-calendar/test.html</code>
+            </div>
+        </div>
+        <div id="attendance-calendar-test"></div>
+    </div>
+
+    <script type="module" src="test.js"></script>
+</body>
+</html>

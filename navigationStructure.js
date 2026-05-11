@@ -34,6 +34,22 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
+            '/general/vacation': {
+                label: 'İzin Talepleri',
+                icon: 'fas fa-calendar-check',
+                children: {
+                    '/general/vacation/requests': {
+                        label: 'İzin Taleplerim',
+                        icon: 'fas fa-calendar-plus',
+                        children: {}
+                    },
+                    '/general/vacation/pending': {
+                        label: 'Bekleyen Onaylar',
+                        icon: 'fas fa-user-check',
+                        children: {}
+                    }
+                }
+            },
             '/general/department-requests': {
                 label: 'Departman Talepleri',
                 icon: 'fas fa-boxes',
@@ -584,6 +600,11 @@ export const NAVIGATION_STRUCTURE = {
                         children: {}
                     }
                 }
+            },
+            '/human_resources/vacation': {
+                label: 'İzin Yönetimi',
+                icon: 'fas fa-calendar-check',
+                children: {}
             }
         }
     },

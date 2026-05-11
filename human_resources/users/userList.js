@@ -36,6 +36,7 @@ import {
     patchAttendanceHrInterval,
     deleteAttendanceHrInterval
 } from '../../apis/human_resources/attendance.js';
+import { fetchVacationRequests, fetchUserLeaveSetup, patchUserLeaveSetup } from '../../apis/vacationRequests.js';
 
 let attendanceRecordEditModal = null;
 let attendanceRecordEditModalBound = false;
@@ -130,6 +131,11 @@ function ensureUserEditTabs(editModal, user) {
                 </button>
             </li>
             <li class="nav-item" role="presentation">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-izinler-${user.id}" type="button" role="tab">
+                    <i class="fas fa-calendar-check me-1"></i>İzinler
+                </button>
+            </li>
+            <li class="nav-item" role="presentation">
                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#pane-yoklama-${user.id}" type="button" role="tab">
                     <i class="fas fa-calendar-alt me-1"></i>Yoklama Özeti
                 </button>
@@ -152,6 +158,40 @@ function ensureUserEditTabs(editModal, user) {
                     </div>
                     <div class="text-muted small mb-2">Bu sekme sadece görüntüleme amaçlıdır.</div>
                     <div id="wages-box-${user.id}"></div>
+                </div>
+            </div>
+            <div class="tab-pane fade" id="pane-izinler-${user.id}" role="tabpanel">
+                <div class="py-2">
+                    <div class="fw-semibold mb-2">İzin Tanımı</div>
+                    <div class="row g-2 align-items-end mb-3">
+                        <div class="col-12 col-md-3">
+                            <label class="form-label small mb-1">İşe Giriş Tarihi</label>
+                            <input type="date" class="form-control form-control-sm" id="leave-hire-date-${user.id}" />
+                        </div>
+                        <div class="col-12 col-md-3">
+                            <label class="form-label small mb-1">Toplam Gün</label>
+                            <input type="number" step="0.1" min="0" class="form-control form-control-sm" id="leave-total-days-${user.id}" />
+                        </div>
+                        <div class="col-12 col-md-2">
+                            <button class="btn btn-sm btn-primary w-100" type="button" id="leave-setup-save-${user.id}">
+                                <i class="fas fa-save me-1"></i>Kaydet
+                            </button>
+                        </div>
+                        <div class="col-12 col-md-4">
+                            <div class="small text-muted mb-1">Özet</div>
+                            <div class="d-flex flex-wrap gap-2">
+                                <span class="badge bg-light text-dark border">Kullanılan: <strong id="leave-used-days-${user.id}">-</strong></span>
+                                <span class="badge bg-light text-dark border">Kalan: <strong id="leave-remaining-days-${user.id}">-</strong></span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div class="fw-semibold">İzin Talep Geçmişi</div>
+                        <button class="btn btn-sm btn-outline-secondary" type="button" id="leave-requests-refresh-${user.id}">
+                            <i class="fas fa-sync-alt me-1"></i>Yenile
+                        </button>
+                    </div>
+                    <div id="leave-requests-table-${user.id}"></div>
                 </div>
             </div>
             <div class="tab-pane fade" id="pane-yoklama-${user.id}" role="tabpanel">
@@ -215,6 +255,7 @@ function ensureUserEditTabs(editModal, user) {
     if (mEl) mEl.value = String(today.getMonth() + 1);
 
     let wagesLoaded = false;
+    let leaveLoaded = false;
     let attendanceLoaded = false;
     let permsLoaded = false;
     let lastAttendancePayload = null;
@@ -918,6 +959,164 @@ function ensureUserEditTabs(editModal, user) {
             box.innerHTML = `<div class="text-danger">Ücretler yüklenemedi: ${e.message || e}</div>`;
         }
     }
+
+    let leaveRequestsTable = null;
+
+    const parseVacationList = (resp) => {
+        if (Array.isArray(resp)) return resp;
+        if (Array.isArray(resp?.results)) return resp.results;
+        if (Array.isArray(resp?.data)) return resp.data;
+        return [];
+    };
+
+    const leaveStatusBadge = (status, statusLabel) => {
+        const label = statusLabel || status || '-';
+        let cls = 'status-grey';
+        if (status === 'approved') cls = 'status-green';
+        else if (status === 'submitted') cls = 'status-yellow';
+        else if (status === 'rejected' || status === 'cancelled') cls = 'status-red';
+        return `<span class="status-badge ${cls}">${label}</span>`;
+    };
+
+    const leaveApprovalInfo = (request) => {
+        const approval = request?.approval;
+        if (!approval || request?.status !== 'submitted') return '<span class="text-muted">-</span>';
+        const stageInstances = Array.isArray(approval.stage_instances) ? approval.stage_instances : [];
+        const currentStage = stageInstances.find(stage => !stage?.is_complete && !stage?.is_rejected);
+        if (!currentStage) return '<span class="text-success"><i class="fas fa-check-circle me-1"></i>Tamamlandı</span>';
+        const required = Number(currentStage.required_approvals || 0);
+        const approved = Number(currentStage.approved_count || 0);
+        const remaining = Math.max(0, required - approved);
+        return `
+            <div style="line-height: 1.2;">
+                <div class="fw-semibold text-primary">${currentStage.name || 'Onay'}</div>
+                <div class="small text-muted">${remaining} onay bekleniyor</div>
+            </div>
+        `;
+    };
+
+    async function loadLeaveSetup() {
+        const hireInput = container.querySelector(`#leave-hire-date-${user.id}`);
+        const totalInput = container.querySelector(`#leave-total-days-${user.id}`);
+        const usedEl = container.querySelector(`#leave-used-days-${user.id}`);
+        const remainingEl = container.querySelector(`#leave-remaining-days-${user.id}`);
+        if (!hireInput || !totalInput || !usedEl || !remainingEl) return;
+
+        usedEl.textContent = '-';
+        remainingEl.textContent = '-';
+
+        try {
+            const setup = await fetchUserLeaveSetup(user.id);
+            hireInput.value = setup?.hire_date || '';
+            totalInput.value = setup?.total_days ?? '';
+            usedEl.textContent = setup?.used_days ?? '0.0';
+            remainingEl.textContent = setup?.remaining_days ?? '0.0';
+        } catch (e) {
+            showNotification(e?.message || 'İzin tanımı yüklenemedi', 'error');
+        }
+    }
+
+    async function saveLeaveSetup() {
+        const hireDate = container.querySelector(`#leave-hire-date-${user.id}`)?.value || '';
+        const totalRaw = container.querySelector(`#leave-total-days-${user.id}`)?.value || '';
+        const total = Number(totalRaw);
+        if (!hireDate) {
+            showNotification('İşe giriş tarihi gereklidir', 'warning');
+            return;
+        }
+        if (!Number.isFinite(total) || total < 0) {
+            showNotification('Toplam gün 0 veya daha büyük olmalıdır', 'warning');
+            return;
+        }
+        try {
+            await patchUserLeaveSetup(user.id, {
+                hire_date: hireDate,
+                total_days: total.toFixed(1)
+            });
+            showNotification('İzin tanımı güncellendi', 'success');
+            await loadLeaveSetup();
+        } catch (e) {
+            showNotification(e?.message || 'İzin tanımı güncellenemedi', 'error');
+        }
+    }
+
+    function ensureLeaveRequestsTable() {
+        if (leaveRequestsTable) return leaveRequestsTable;
+        leaveRequestsTable = new TableComponent(`leave-requests-table-${user.id}`, {
+            title: 'İzin Talepleri',
+            icon: 'fas fa-calendar-check',
+            iconColor: 'text-primary',
+            columns: [
+                {
+                    field: 'id',
+                    label: 'Talep No',
+                    sortable: true,
+                    formatter: (value) => `<span style="font-weight:700;color:#0d6efd;">#${value || '-'}</span>`
+                },
+                {
+                    field: 'leave_type_label',
+                    label: 'Tür',
+                    sortable: true,
+                    formatter: (value, row) => value || row.leave_type || '-'
+                },
+                { field: 'start_date', label: 'Başlangıç', sortable: true, type: 'date' },
+                { field: 'end_date', label: 'Bitiş', sortable: true, type: 'date' },
+                {
+                    field: 'duration_days',
+                    label: 'Süre (gün)',
+                    sortable: true,
+                    formatter: (value) => value || '0.0'
+                },
+                {
+                    field: 'approval',
+                    label: 'Onay',
+                    sortable: false,
+                    formatter: (value, row) => leaveApprovalInfo(row)
+                },
+                {
+                    field: 'status',
+                    label: 'Durum',
+                    sortable: true,
+                    formatter: (value, row) => leaveStatusBadge(value, row.status_label)
+                },
+                { field: 'created_at', label: 'Oluşturulma', sortable: true, type: 'date' }
+            ],
+            pagination: false,
+            refreshable: false,
+            emptyMessage: 'İzin talebi bulunamadı.',
+            emptyIcon: 'fas fa-calendar-times'
+        });
+        return leaveRequestsTable;
+    }
+
+    async function loadLeaveRequests() {
+        const table = ensureLeaveRequestsTable();
+        table.setLoading(true);
+        try {
+            const resp = await fetchVacationRequests({
+                requester: user.id,
+                ordering: '-created_at',
+                page_size: 200
+            });
+            const rows = parseVacationList(resp).filter(item => Number(item?.requester) === Number(user.id));
+            table.updateData(rows, rows.length, 1);
+        } catch (e) {
+            showNotification(e?.message || 'İzin talepleri yüklenemedi', 'error');
+            table.updateData([], 0, 1);
+        } finally {
+            table.setLoading(false);
+        }
+    }
+
+    async function loadLeaveTab() {
+        await Promise.all([loadLeaveSetup(), loadLeaveRequests()]);
+    }
+
+    const setMainModalSaveVisibility = (isLeaveTab) => {
+        const footerSaveBtn = container.querySelector('#save-edit-btn');
+        if (!footerSaveBtn) return;
+        footerSaveBtn.style.display = isLeaveTab ? 'none' : '';
+    };
 
     function renderAttendance(summary) {
         const summaryEl = container.querySelector(`#att-summary-${user.id}`);
@@ -1678,9 +1877,14 @@ function ensureUserEditTabs(editModal, user) {
     tabButtons.forEach(btn => {
         btn.addEventListener('shown.bs.tab', async (e) => {
             const target = e.target?.getAttribute('data-bs-target') || '';
+            setMainModalSaveVisibility(target.includes(`pane-izinler-${user.id}`));
             if (target.includes(`pane-maaslar-${user.id}`) && !wagesLoaded) {
                 wagesLoaded = true;
                 await renderWages();
+            }
+            if (target.includes(`pane-izinler-${user.id}`) && !leaveLoaded) {
+                leaveLoaded = true;
+                await loadLeaveTab();
             }
             if (target.includes(`pane-yoklama-${user.id}`) && !attendanceLoaded) {
                 attendanceLoaded = true;
@@ -1693,7 +1897,12 @@ function ensureUserEditTabs(editModal, user) {
         });
     });
 
+    // Default active tab is "Bilgiler", keep modal footer save visible initially.
+    setMainModalSaveVisibility(false);
+
     container.querySelector(`[data-wages-refresh]`)?.addEventListener('click', () => renderWages());
+    container.querySelector(`#leave-setup-save-${user.id}`)?.addEventListener('click', () => saveLeaveSetup());
+    container.querySelector(`#leave-requests-refresh-${user.id}`)?.addEventListener('click', () => loadLeaveRequests());
     container.querySelector(`#att-fetch-${user.id}`)?.addEventListener('click', () => loadAttendance());
     container.querySelector(`#att-export-${user.id}`)?.addEventListener('click', () => {
         try {
