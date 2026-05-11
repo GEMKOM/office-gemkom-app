@@ -2051,6 +2051,7 @@ function initializeTableComponent() {
             { field: 'username', label: 'Kullanıcı Adı', sortable: true, formatter: (v) => `<strong>${v || '-'}</strong>` },
             { field: 'first_name', label: 'Ad', sortable: true, formatter: (v) => v || '-' },
             { field: 'last_name', label: 'Soyad', sortable: true, formatter: (v) => v || '-' },
+            { field: 'birth_date', label: 'Doğum Tarihi', sortable: true, formatter: (v) => v || '-' },
             { field: 'email', label: 'E-posta', sortable: true, formatter: (v) => v || '-' },
             { field: 'occupation_label', label: 'Görev', sortable: true, formatter: (v) => v || '-' },
             {
@@ -2251,6 +2252,7 @@ function showCreateUserModal() {
     createUserModal.addField({ id: 'email', name: 'email', label: 'E-posta', type: 'email', colSize: 6 });
     createUserModal.addField({ id: 'first_name', name: 'first_name', label: 'Ad', type: 'text', required: true, colSize: 6 });
     createUserModal.addField({ id: 'last_name', name: 'last_name', label: 'Soyad', type: 'text', required: true, colSize: 6 });
+    createUserModal.addField({ id: 'birth_date', name: 'birth_date', label: 'Doğum Tarihi', type: 'date', colSize: 6 });
 
     createUserModal.addSection({ title: 'Yetkiler & Gruplar', icon: 'fas fa-users-cog', iconColor: 'text-info' });
     const groupOptions = (groups || []).map(g => ({
@@ -2305,6 +2307,12 @@ async function createUser(formData) {
             userPayload.email = email;
         } else {
             delete userPayload.email;
+        }
+        const birthDate = String(rawUserPayload?.birth_date ?? '').trim();
+        if (birthDate) {
+            userPayload.birth_date = birthDate;
+        } else {
+            delete userPayload.birth_date;
         }
 
         const response = await createUserAPI(userPayload);
@@ -2389,6 +2397,7 @@ window.editUser = function(userId) {
     editUserModal.addField({ id: 'email', name: 'email', label: 'E-posta', type: 'email', value: user.email || '', colSize: 6, icon: 'fas fa-envelope' });
     editUserModal.addField({ id: 'first_name', name: 'first_name', label: 'Ad', type: 'text', value: user.first_name || '', required: true, colSize: 6, icon: 'fas fa-id-card' });
     editUserModal.addField({ id: 'last_name', name: 'last_name', label: 'Soyad', type: 'text', value: user.last_name || '', required: true, colSize: 6, icon: 'fas fa-id-card' });
+    editUserModal.addField({ id: 'birth_date', name: 'birth_date', label: 'Doğum Tarihi', type: 'date', value: user.birth_date || '', colSize: 6, icon: 'fas fa-birthday-cake' });
 
     editUserModal.addSection({ title: 'İş Bilgileri', icon: 'fas fa-briefcase', iconColor: 'text-success' });
 
@@ -2459,6 +2468,8 @@ async function updateUser(formData) {
     }
     try {
         const { shift_rule_id, ...userPatch } = formData || {};
+        const birthDate = String(userPatch?.birth_date ?? '').trim();
+        userPatch.birth_date = birthDate || null;
         const resp = await updateUserAPI(userId, userPatch);
         if (resp.ok) {
             if (shift_rule_id !== undefined) {
