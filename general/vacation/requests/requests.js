@@ -116,6 +116,7 @@ async function loadRequests() {
             page_size: requestsTable.options.itemsPerPage,
             ordering: document.getElementById('filter-ordering')?.value || '-created_at',
             status: document.getElementById('filter-status')?.value || '',
+            mine: 'true',
         };
 
         const response = await fetchVacationRequests(filters);
