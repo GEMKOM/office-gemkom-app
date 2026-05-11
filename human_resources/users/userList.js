@@ -2286,8 +2286,26 @@ async function createUser(formData) {
             create_groups,
             wage_effective_from,
             wage_base_monthly,
-            ...userPayload
+            ...rawUserPayload
         } = formData || {};
+
+        // Normalize payload to match backend expectations:
+        // - trim text inputs
+        // - avoid sending empty optional strings (e.g. email: "")
+        // - force boolean shape for checkbox values
+        const userPayload = {
+            ...rawUserPayload,
+            username: String(rawUserPayload?.username ?? '').trim(),
+            first_name: String(rawUserPayload?.first_name ?? '').trim(),
+            last_name: String(rawUserPayload?.last_name ?? '').trim(),
+            is_active: rawUserPayload?.is_active !== false
+        };
+        const email = String(rawUserPayload?.email ?? '').trim();
+        if (email) {
+            userPayload.email = email;
+        } else {
+            delete userPayload.email;
+        }
 
         const response = await createUserAPI(userPayload);
         if (response.ok) {
@@ -2331,8 +2349,21 @@ async function createUser(formData) {
             currentPage = 1;
             await loadUsers();
         } else {
-            const errorData = await response.json();
-            throw new Error(errorData.message || 'Çalışan oluşturulamadı');
+            const errorData = await response.json().catch(() => null);
+            const errorMessage =
+                errorData?.message ||
+                errorData?.detail ||
+                (typeof errorData === 'string' ? errorData : null) ||
+                (errorData && typeof errorData === 'object'
+                    ? Object.entries(errorData)
+                        .map(([field, value]) => {
+                            const text = Array.isArray(value) ? value.join(', ') : String(value);
+                            return field === 'non_field_errors' ? text : `${field}: ${text}`;
+                        })
+                        .join(' | ')
+                    : null) ||
+                'Çalışan oluşturulamadı';
+            throw new Error(errorMessage);
         }
     } catch (e) {
         console.error('Error creating user:', e);

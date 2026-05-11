@@ -148,3 +148,19 @@ export async function patchUserLeaveSetup(userId, payload) {
     });
     return parseJsonOrThrow(response, 'İzin tanımı güncellenemedi.');
 }
+
+export async function fetchUserLeaveLedger(userId) {
+    const response = await authedFetch(`${backendBase}/vacation-requests/users/${userId}/leave-ledger/`);
+    return parseJsonOrThrow(response, 'İzin hareketleri yüklenemedi.');
+}
+
+export async function fetchMyVacationSummary() {
+    const response = await authedFetch(`${backendBase}/vacation-requests/my-summary/`);
+    return parseJsonOrThrow(response, 'İzin özeti yüklenemedi.');
+}
+
+export async function fetchUpcomingLeaves(filters = {}) {
+    const query = buildQuery(filters);
+    const response = await authedFetch(`${backendBase}/vacation-requests/upcoming-leaves/${query}`);
+    return parseJsonOrThrow(response, 'Yaklaşan izinler yüklenemedi.');
+}

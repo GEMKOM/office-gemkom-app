@@ -24,16 +24,44 @@ function fmtDateTime(value) {
     return d.toLocaleString('tr-TR');
 }
 
-function statusBadge(status) {
+function fmtDate(value) {
+    if (!value) return '-';
+    // If backend sends YYYY-MM-DD, keep it stable and locale-friendly
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) {
+        const d = new Date(`${value}T00:00:00`);
+        if (!Number.isNaN(d.getTime())) return d.toLocaleDateString('tr-TR');
+    }
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleDateString('tr-TR');
+}
+
+function fmtTime(value) {
+    if (!value) return '-';
+    // Accept plain HH:MM or HH:MM:SS
+    const raw = String(value);
+    const simple = raw.match(/^(\d{2}:\d{2})(?::\d{2})?$/);
+    if (simple) return simple[1];
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+}
+
+function statusBadge(status, statusDisplay = null) {
     const map = {
         pending_override: { cls: 'status-yellow', label: 'İnsan Kaynakları Onayı Bekliyor (GİRİŞ)' },
         pending_checkout_override: { cls: 'status-yellow', label: 'İnsan Kaynakları Onayı Bekliyor (ÇIKIŞ)' },
         active: { cls: 'status-blue', label: 'Aktif (Giriş Yapıldı)' },
         complete: { cls: 'status-green', label: 'Tamamlandı (Çıkış Yapıldı)' },
         override_rejected: { cls: 'status-red', label: 'Reddedildi' },
-        rejected: { cls: 'status-red', label: 'Reddedildi' }
+        rejected: { cls: 'status-red', label: 'Reddedildi' },
+        submitted: { cls: 'status-yellow', label: 'Onay Bekliyor' },
+        approved: { cls: 'status-green', label: 'Onaylandı' },
+        cancelled: { cls: 'status-grey', label: 'İptal Edildi' }
     };
-    const v = map[status] || { cls: 'status-grey', label: status || '-' };
+    const mapped = map[status] || { cls: 'status-grey', label: status || '-' };
+    const label = statusDisplay || mapped.label;
+    const v = { cls: mapped.cls, label };
     return `<span class="status-badge ${v.cls}">${v.label}</span>`;
 }
 
@@ -207,22 +235,31 @@ class AttendanceRecordsPage {
                     }
                 },
                 {
+                    field: 'date',
+                    label: 'Tarih',
+                    sortable: false,
+                    formatter: (v, row) => {
+                        const dateVal = row.date || pick(row, ['check_in_time', 'check_in_at', 'check_in', 'check_out_time', 'check_out_at', 'check_out']);
+                        return fmtDate(dateVal);
+                    }
+                },
+                {
                     field: 'check_in_at',
                     label: 'Giriş',
                     sortable: false,
-                    formatter: (v, row) => fmtDateTime(pick(row, ['check_in_at', 'check_in_time', 'check_in']))
+                    formatter: (v, row) => fmtTime(pick(row, ['check_in_at', 'check_in_time', 'check_in']))
                 },
                 {
                     field: 'check_out_at',
                     label: 'Çıkış',
                     sortable: false,
-                    formatter: (v, row) => fmtDateTime(pick(row, ['check_out_at', 'check_out_time', 'check_out']))
+                    formatter: (v, row) => fmtTime(pick(row, ['check_out_at', 'check_out_time', 'check_out']))
                 },
                 {
                     field: 'status',
                     label: 'Durum',
                     sortable: false,
-                    formatter: (v, row) => statusBadge(row.status)
+                    formatter: (v, row) => statusBadge(row.status, row.status_display || row.status_label)
                 },
                 {
                     field: 'override_reason',

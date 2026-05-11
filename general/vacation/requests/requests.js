@@ -14,7 +14,9 @@ import {
     createVacationRequest,
     fetchVacationRequests,
     fetchVacationRequest,
-    cancelVacationRequest
+    cancelVacationRequest,
+    fetchMyVacationSummary,
+    fetchUpcomingLeaves
 } from '../../../apis/vacationRequests.js';
 
 let requestsTable = null;
@@ -28,6 +30,7 @@ let currentRequests = [];
 let totalCount = 0;
 let isLoading = false;
 let attendanceCalendar = null;
+let attendanceCalendarInitialized = false;
 
 const leaveTypeLabelMap = new Map(LEAVE_TYPES.map(item => [item.value, item.label]));
 
@@ -91,6 +94,118 @@ function getStatusBadge(status, statusLabel) {
     return `<span class="status-badge ${cls}">${text}</span>`;
 }
 
+function renderSummaryCard(title, value, subtitle = '') {
+    return `
+        <div class="col-12 col-md-6 col-xl-3">
+            <div class="border rounded-3 p-3 h-100 bg-white">
+                <div class="small text-muted mb-1">${title}</div>
+                <div class="fw-bold fs-5">${value}</div>
+                ${subtitle ? `<div class="small text-muted mt-1">${subtitle}</div>` : ''}
+            </div>
+        </div>
+    `;
+}
+
+function parseUpcomingLeavesResponse(response) {
+    if (Array.isArray(response)) return response;
+    if (Array.isArray(response?.results)) return response.results;
+    return [];
+}
+
+async function loadMyVacationSummary() {
+    const container = document.getElementById('my-vacation-summary-container');
+    if (!container) return;
+
+    container.innerHTML = `
+        <div class="card">
+            <div class="card-body py-3">
+                <div class="small text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Özet yükleniyor...</div>
+            </div>
+        </div>
+    `;
+
+    try {
+        const summary = await fetchMyVacationSummary();
+        const annual = summary?.annual_leave || {};
+        const upcomingResp = await fetchUpcomingLeaves();
+        const upcomingRows = parseUpcomingLeavesResponse(upcomingResp);
+        const fromDate = upcomingResp?.from_date || null;
+        const toDate = upcomingResp?.to_date || null;
+
+        const upcomingTableHtml = upcomingRows.length
+            ? `
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Ad Soyad</th>
+                                <th>Başlangıç</th>
+                                <th>Bitiş</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${upcomingRows.map(item => `
+                                <tr>
+                                    <td class="fw-semibold">${item.full_name || '-'}</td>
+                                    <td>${formatDate(item.start_date)}</td>
+                                    <td>${formatDate(item.end_date)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            `
+            : '<div class="small text-muted">Yaklaşan izin kaydı bulunamadı.</div>';
+
+        container.innerHTML = `
+            <div class="card border-0 shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <h6 class="mb-0"><i class="fas fa-chart-line me-2 text-primary"></i>İzin Özetim</h6>
+                        <button id="refresh-my-summary-btn" type="button" class="btn btn-sm btn-outline-secondary">
+                            <i class="fas fa-sync-alt me-1"></i>Yenile
+                        </button>
+                    </div>
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-7">
+                            <div class="border rounded-3 p-3 h-100">
+                                <div class="row g-2">
+                                    ${renderSummaryCard('Kalan Yıllık İzin', `${annual.remaining_days ?? '0.0'} gün`)}
+                                    ${renderSummaryCard('Kullanılan Yıllık İzin', `${annual.used_days ?? '0.0'} gün`, annual.last_credited ? `Son kredi: ${formatDate(annual.last_credited)}` : '')}
+                                    ${renderSummaryCard('Kıdem Süresi', `${summary?.years_of_service ?? 0} yıl`, summary?.hire_date ? `İşe giriş: ${formatDate(summary.hire_date)}` : '')}
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-12 col-lg-5">
+                            <div class="border rounded-3 p-3 h-100">
+                                <div class="fw-semibold mb-1">Yaklaşan İzinler</div>
+                                <div class="small text-muted mb-2">
+                                    ${fromDate && toDate ? `${formatDate(fromDate)} - ${formatDate(toDate)}` : 'Önümüzdeki dönem'}
+                                </div>
+                                ${upcomingTableHtml}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        document.getElementById('refresh-my-summary-btn')?.addEventListener('click', () => {
+            loadMyVacationSummary();
+        });
+    } catch (error) {
+        container.innerHTML = `
+            <div class="card">
+                <div class="card-body py-3">
+                    <div class="small text-danger">
+                        <i class="fas fa-triangle-exclamation me-2"></i>${error?.message || 'İzin özeti yüklenemedi.'}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+}
+
 function renderApprovalSummary(request) {
     const approval = request?.approval;
     if (!approval || request?.status !== 'submitted') return '<span class="text-muted">-</span>';
@@ -136,13 +251,40 @@ async function loadRequests() {
 }
 
 function initializeAttendanceCalendar() {
-    attendanceCalendar = new AttendanceCalendar('vacation-attendance-calendar', {
+    attendanceCalendar = new AttendanceCalendar('vacation-attendance-calendar-modal', {
         showUserFilter: false,
         userIdPlaceholder: '',
         vacationRequestBaseUrl: '/general/vacation/requests',
         fetchMonthlySummary: ({ year, month }) => fetchAttendanceMonthlySummary({ year, month })
     });
+    attendanceCalendarInitialized = true;
     return attendanceCalendar.refresh();
+}
+
+function setupCalendarModalButton() {
+    const controls = document.querySelector('.dashboard-controls');
+    const createBtn = document.getElementById('create-btn');
+    if (!controls || !createBtn || document.getElementById('open-calendar-btn')) return;
+
+    const calendarBtn = document.createElement('button');
+    calendarBtn.id = 'open-calendar-btn';
+    calendarBtn.type = 'button';
+    calendarBtn.className = 'btn btn-sm btn-outline-primary me-2';
+    calendarBtn.innerHTML = '<i class="fas fa-calendar-alt me-1"></i>Takvim';
+    controls.insertBefore(calendarBtn, createBtn);
+
+    calendarBtn.addEventListener('click', async () => {
+        const modalEl = document.getElementById('vacationCalendarModal');
+        if (!modalEl) return;
+        const modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+        modal.show();
+
+        if (!attendanceCalendarInitialized) {
+            await initializeAttendanceCalendar();
+        } else {
+            await attendanceCalendar?.refresh?.();
+        }
+    });
 }
 
 function initializeCreateModal() {
@@ -293,7 +435,7 @@ function initializeCreateModal() {
             createModal.hide();
             showNotification('İzin talebi oluşturuldu.', 'success');
             currentPage = 1;
-            await Promise.all([loadRequests(), attendanceCalendar?.refresh?.()]);
+            await Promise.all([loadRequests(), attendanceCalendarInitialized ? attendanceCalendar?.refresh?.() : Promise.resolve(), loadMyVacationSummary()]);
         } catch (error) {
             showNotification(error?.message || 'Talep oluşturulamadı.', 'error');
         }
@@ -477,7 +619,7 @@ function showCancelModal(requestId) {
             try {
                 await cancelVacationRequest(request.id);
                 showNotification('İzin talebi iptal edildi.', 'success');
-                await Promise.all([loadRequests(), attendanceCalendar?.refresh?.()]);
+                await Promise.all([loadRequests(), attendanceCalendarInitialized ? attendanceCalendar?.refresh?.() : Promise.resolve(), loadMyVacationSummary()]);
             } catch (error) {
                 showNotification(error?.message || 'İptal işlemi başarısız.', 'error');
                 throw error;
@@ -552,7 +694,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     bindFilterButtons();
     initializeCreateModal();
     initializeDetailAndCancelModals();
-    await initializeAttendanceCalendar();
+    setupCalendarModalButton();
+    await loadMyVacationSummary();
 
     requestsTable = new TableComponent('requests-table-container', {
         title: 'İzin Talepleri',
