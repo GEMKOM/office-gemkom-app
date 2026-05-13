@@ -2462,17 +2462,6 @@ window.editUser = function(userId) {
         icon: 'fas fa-clock',
         colSize: 12
     });
-    editUserModal.addField({
-        id: 'position',
-        name: 'position',
-        label: 'Pozisyon',
-        type: 'dropdown',
-        options: [{ value: '', label: 'Pozisyon yok' }, ...getPositionOptions()],
-        value: user.position_id ? String(user.position_id) : '',
-        searchable: true,
-        icon: 'fas fa-sitemap',
-        colSize: 12
-    });
 
     editUserModal.addField({ id: 'is_active', name: 'is_active', label: 'Aktif', type: 'checkbox', value: user.is_active !== false, colSize: 12, icon: 'fas fa-check-circle' });
     editUserModal.render();
@@ -2520,9 +2509,8 @@ async function updateUser(formData) {
     }
     try {
         const { shift_rule_id, ...userPatch } = formData || {};
-        const positionRaw = String(userPatch?.position ?? '').trim();
         delete userPatch.position;
-        userPatch.position_id = positionRaw ? Number(positionRaw) : null;
+        delete userPatch.position_id;
         const birthDate = String(userPatch?.birth_date ?? '').trim();
         userPatch.birth_date = birthDate || null;
         const resp = await updateUserAPI(userId, userPatch);
