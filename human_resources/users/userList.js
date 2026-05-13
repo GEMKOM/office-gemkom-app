@@ -2327,7 +2327,8 @@ async function createUser(formData) {
             is_active: rawUserPayload?.is_active !== false
         };
         const positionRaw = String(rawUserPayload?.position ?? '').trim();
-        userPayload.position = positionRaw ? Number(positionRaw) : null;
+        delete userPayload.position;
+        userPayload.position_id = positionRaw ? Number(positionRaw) : null;
         const email = String(rawUserPayload?.email ?? '').trim();
         if (email) {
             userPayload.email = email;
@@ -2520,7 +2521,8 @@ async function updateUser(formData) {
     try {
         const { shift_rule_id, ...userPatch } = formData || {};
         const positionRaw = String(userPatch?.position ?? '').trim();
-        userPatch.position = positionRaw ? Number(positionRaw) : null;
+        delete userPatch.position;
+        userPatch.position_id = positionRaw ? Number(positionRaw) : null;
         const birthDate = String(userPatch?.birth_date ?? '').trim();
         userPatch.birth_date = birthDate || null;
         const resp = await updateUserAPI(userId, userPatch);
