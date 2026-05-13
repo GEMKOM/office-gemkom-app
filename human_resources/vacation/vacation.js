@@ -12,10 +12,12 @@ import {
     patchVacationBalance,
     fetchVacationRequest,
     fetchUserLeaveLedger,
-    fetchPendingVacationApprovalRequests,
+    fetchVacationApprovalsInbox,
     fetchVacationDecisionsByMe,
     approveVacationRequest,
-    rejectVacationRequest
+    rejectVacationRequest,
+    approveVacationCancellation,
+    rejectVacationCancellation
 } from '../../apis/vacationRequests.js';
 
 let balancesTable = null;
@@ -26,6 +28,7 @@ let approveModal = null;
 let leaveLedgerModal = null;
 let currentPending = [];
 let currentRejectRequestId = null;
+let currentRejectKind = null;
 
 const leaveTypeLabelMap = new Map(LEAVE_TYPES.map(item => [item.value, item.label]));
 
@@ -45,6 +48,33 @@ function statusBadge(status, statusLabel) {
                 ? 'status-red'
                 : 'status-grey';
     return `<span class="status-badge ${cls}">${text}</span>`;
+}
+
+function approvalKindBadge(kind) {
+    if (kind === 'cancellation_request') {
+        return '<span class="status-badge status-red">İptal Talebi</span>';
+    }
+    return '<span class="status-badge status-yellow">Onay Süreci</span>';
+}
+
+function formatDate(value) {
+    if (!value) return '-';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleDateString('tr-TR');
+}
+
+function formatDateTime(value) {
+    if (!value) return '-';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value);
+    return d.toLocaleString('tr-TR', {
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit'
+    });
 }
 
 function getBalanceFilters() {
@@ -242,7 +272,7 @@ async function loadBalances() {
 async function loadPendingApprovals() {
     pendingTable?.setLoading(true);
     try {
-        const response = await fetchPendingVacationApprovalRequests();
+        const response = await fetchVacationApprovalsInbox();
         const parsed = parseListResponse(response);
         currentPending = parsed.results;
         pendingTable?.updateData(parsed.results, parsed.count, 1);
@@ -269,24 +299,80 @@ async function loadDecisions() {
     }
 }
 
-async function showDetail(requestId) {
+async function showDetail(requestOrId) {
     try {
+        const requestId = typeof requestOrId === 'object' ? requestOrId?.id : requestOrId;
+        const contextRow = typeof requestOrId === 'object' ? requestOrId : null;
         const request = await fetchVacationRequest(requestId);
+        const merged = { ...(contextRow || {}), ...(request || {}) };
+        const kind = merged.kind || null;
+        const kindText = kind === 'cancellation_request' ? 'İptal Talebi' : 'Onay Süreci';
+        const leaveTypeText = merged.leave_type_label || leaveTypeLabelMap.get(merged.leave_type) || merged.leave_type || '-';
+        const requesterText = merged.requester_full_name || merged.requester_username || '-';
+        const requesterUserName = merged.requester_username || '-';
+        const teamText = merged.team_label || merged.team || '-';
+        const timeRange = merged.start_time && merged.end_time
+            ? `${escapeHtml(merged.start_time)} - ${escapeHtml(merged.end_time)}`
+            : '-';
+        const reasonText = merged.reason ? escapeHtml(merged.reason) : '<span class="text-muted">Belirtilmemiş</span>';
+        const cancellationReasonText = merged.cancellation_reason
+            ? escapeHtml(merged.cancellation_reason)
+            : '<span class="text-muted">Belirtilmemiş</span>';
+
         detailModal.clearData();
-        detailModal.addSection({ title: 'Talep', icon: 'fas fa-info-circle', iconColor: 'text-primary' });
-        detailModal.addField({ id: 'h-id', name: 'h-id', label: 'Talep No', type: 'text', value: String(request.id || '-'), colSize: 4 });
-        detailModal.addField({
-            id: 'h-type',
-            name: 'h-type',
-            label: 'İzin Türü',
-            type: 'text',
-            value: request.leave_type_label || leaveTypeLabelMap.get(request.leave_type) || request.leave_type || '-',
-            colSize: 4
+        detailModal.addCustomSection({
+            title: 'Özet',
+            customContent: `
+                <div class="row g-2">
+                    <div class="col-12 col-md-4">
+                        <div class="border rounded p-2 h-100">
+                            <small class="text-muted d-block">Talep No</small>
+                            <strong>#${escapeHtml(merged.id || '-')}</strong>
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="border rounded p-2 h-100">
+                            <small class="text-muted d-block">Durum</small>
+                            ${statusBadge(merged.status, merged.status_label)}
+                        </div>
+                    </div>
+                    <div class="col-12 col-md-4">
+                        <div class="border rounded p-2 h-100">
+                            <small class="text-muted d-block">Tip</small>
+                            ${approvalKindBadge(kind)}
+                            <div class="small text-muted mt-1">${escapeHtml(kindText)}</div>
+                        </div>
+                    </div>
+                </div>
+            `
         });
-        detailModal.addField({ id: 'h-status', name: 'h-status', label: 'Durum', type: 'text', value: request.status_label || request.status || '-', colSize: 4 });
-        detailModal.addField({ id: 'h-start', name: 'h-start', label: 'Başlangıç', type: 'text', value: request.start_date || '-', colSize: 6 });
-        detailModal.addField({ id: 'h-end', name: 'h-end', label: 'Bitiş', type: 'text', value: request.end_date || '-', colSize: 6 });
-        detailModal.addField({ id: 'h-reason', name: 'h-reason', label: 'Gerekçe', type: 'text', value: request.reason || '-', colSize: 12 });
+        detailModal.addCustomSection({
+            title: 'Talep Bilgisi',
+            customContent: `
+                <div class="row g-2">
+                    <div class="col-12 col-md-6"><div class="border rounded p-2"><small class="text-muted d-block">İzin Türü</small><strong>${escapeHtml(leaveTypeText)}</strong></div></div>
+                    <div class="col-12 col-md-3"><div class="border rounded p-2"><small class="text-muted d-block">Süre</small><strong>${escapeHtml(merged.duration_days || '0')} gün</strong></div></div>
+                    <div class="col-12 col-md-3"><div class="border rounded p-2"><small class="text-muted d-block">Şirket Tatili</small><strong>${merged.is_company_holiday ? 'Evet' : 'Hayır'}</strong></div></div>
+                    <div class="col-12 col-md-4"><div class="border rounded p-2"><small class="text-muted d-block">Başlangıç</small><strong>${escapeHtml(formatDate(merged.start_date))}</strong></div></div>
+                    <div class="col-12 col-md-4"><div class="border rounded p-2"><small class="text-muted d-block">Bitiş</small><strong>${escapeHtml(formatDate(merged.end_date))}</strong></div></div>
+                    <div class="col-12 col-md-4"><div class="border rounded p-2"><small class="text-muted d-block">Saat Aralığı</small><strong>${timeRange}</strong></div></div>
+                </div>
+            `
+        });
+        detailModal.addCustomSection({
+            title: 'Çalışan ve Notlar',
+            customContent: `
+                <div class="row g-2">
+                    <div class="col-12 col-md-4"><div class="border rounded p-2"><small class="text-muted d-block">Ad Soyad</small><strong>${escapeHtml(requesterText)}</strong></div></div>
+                    <div class="col-12 col-md-4"><div class="border rounded p-2"><small class="text-muted d-block">Kullanıcı Adı</small><strong>${escapeHtml(requesterUserName)}</strong></div></div>
+                    <div class="col-12 col-md-4"><div class="border rounded p-2"><small class="text-muted d-block">Takım</small><strong>${escapeHtml(teamText)}</strong></div></div>
+                    <div class="col-12 col-md-6"><div class="border rounded p-2"><small class="text-muted d-block">Talep Gerekçesi</small>${reasonText}</div></div>
+                    <div class="col-12 col-md-6"><div class="border rounded p-2"><small class="text-muted d-block">İptal Gerekçesi</small>${cancellationReasonText}</div></div>
+                    <div class="col-12 col-md-6"><div class="border rounded p-2"><small class="text-muted d-block">Oluşturulma</small><strong>${escapeHtml(formatDateTime(merged.created_at))}</strong></div></div>
+                    <div class="col-12 col-md-6"><div class="border rounded p-2"><small class="text-muted d-block">Son Güncelleme</small><strong>${escapeHtml(formatDateTime(merged.updated_at))}</strong></div></div>
+                </div>
+            `
+        });
         detailModal.render();
         detailModal.show();
     } catch (error) {
@@ -297,18 +383,28 @@ async function showDetail(requestId) {
 function showApproveModal(requestId) {
     const request = currentPending.find(item => Number(item.id) === Number(requestId));
     if (!request) return;
+    const isCancellation = request.kind === 'cancellation_request';
     approveModal.show({
-        message: `#${request.id} numaralı izin talebi onaylansın mı?`,
+        message: isCancellation
+            ? `#${request.id} numaralı izin iptal talebi onaylansın mı?`
+            : `#${request.id} numaralı izin talebi onaylansın mı?`,
         details: `
             <div class="small text-muted">
+                <div>Tip: ${isCancellation ? 'İptal Talebi' : 'Onay Süreci'}</div>
                 <div>Talep Eden: ${request.requester_username || '-'}</div>
                 <div>Tarih: ${request.start_date || '-'} - ${request.end_date || '-'}</div>
+                ${isCancellation && request.cancellation_reason ? `<div>İptal Gerekçesi: ${request.cancellation_reason}</div>` : ''}
             </div>
         `,
         onConfirm: async () => {
             try {
-                await approveVacationRequest(request.id, '');
-                showNotification('İzin talebi onaylandı.', 'success');
+                if (isCancellation) {
+                    await approveVacationCancellation(request.id, '');
+                    showNotification('İptal talebi onaylandı.', 'success');
+                } else {
+                    await approveVacationRequest(request.id, '');
+                    showNotification('İzin talebi onaylandı.', 'success');
+                }
                 await Promise.all([loadPendingApprovals(), loadDecisions(), loadBalances()]);
             } catch (error) {
                 showNotification(error?.message || 'Onaylama işlemi başarısız.', 'error');
@@ -319,9 +415,18 @@ function showApproveModal(requestId) {
 }
 
 function showRejectModal(requestId) {
+    const request = currentPending.find(item => Number(item.id) === Number(requestId));
+    if (!request) return;
     currentRejectRequestId = requestId;
+    currentRejectKind = request.kind || 'workflow_approval';
     const textarea = document.getElementById('hr-reject-comment');
     if (textarea) textarea.value = '';
+    const title = document.getElementById('hrRejectVacationModalLabel');
+    if (title) {
+        title.innerHTML = currentRejectKind === 'cancellation_request'
+            ? '<i class="fas fa-times-circle me-2"></i>İptal Talebini Reddet'
+            : '<i class="fas fa-times-circle me-2"></i>İzin Talebini Reddet';
+    }
     bootstrap.Modal.getOrCreateInstance(document.getElementById('hrRejectVacationModal')).show();
 }
 
@@ -336,8 +441,13 @@ function bindRejectModal() {
                 button.disabled = true;
                 button.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Reddediliyor...';
             }
-            await rejectVacationRequest(currentRejectRequestId, comment);
-            showNotification('İzin talebi reddedildi.', 'success');
+            if (currentRejectKind === 'cancellation_request') {
+                await rejectVacationCancellation(currentRejectRequestId, comment);
+                showNotification('İptal talebi reddedildi.', 'success');
+            } else {
+                await rejectVacationRequest(currentRejectRequestId, comment);
+                showNotification('İzin talebi reddedildi.', 'success');
+            }
             bootstrap.Modal.getOrCreateInstance(document.getElementById('hrRejectVacationModal')).hide();
             await Promise.all([loadPendingApprovals(), loadDecisions(), loadBalances()]);
         } catch (error) {
@@ -348,6 +458,7 @@ function bindRejectModal() {
                 button.innerHTML = original;
             }
             currentRejectRequestId = null;
+            currentRejectKind = null;
         }
     });
 }
@@ -449,11 +560,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     pendingTable = new TableComponent('pending-hr-approvals-table-container', {
-        title: 'Bekleyen İzin Onayları',
+        title: 'Onay Kutusu',
         icon: 'fas fa-user-check',
         iconColor: 'text-warning',
         columns: [
             { field: 'id', label: 'Talep No', sortable: true, formatter: v => `<strong>#${v || '-'}</strong>` },
+            { field: 'kind', label: 'Tip', sortable: true, formatter: v => approvalKindBadge(v) },
             { field: 'requester_username', label: 'Talep Eden', sortable: true, formatter: v => v || '-' },
             {
                 field: 'leave_type',
@@ -463,17 +575,54 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             { field: 'start_date', label: 'Başlangıç', sortable: true, type: 'date' },
             { field: 'end_date', label: 'Bitiş', sortable: true, type: 'date' },
+            { field: 'duration_days', label: 'Süre', sortable: true, formatter: v => `${v || 0} gün` },
+            {
+                field: 'cancellation_reason',
+                label: 'İptal Gerekçesi',
+                sortable: false,
+                formatter: (v, row) => row.kind === 'cancellation_request' ? (v || '-') : '-'
+            },
             { field: 'status', label: 'Durum', sortable: true, formatter: (v, row) => statusBadge(v, row.status_label) }
         ],
         actions: [
-            { key: 'detail', label: 'Detay', icon: 'fas fa-eye', class: 'btn-outline-primary', onClick: row => showDetail(row.id) },
-            { key: 'approve', label: 'Onayla', icon: 'fas fa-check', class: 'btn-outline-success', onClick: row => showApproveModal(row.id), visible: row => row.status === 'submitted' },
-            { key: 'reject', label: 'Reddet', icon: 'fas fa-times', class: 'btn-outline-danger', onClick: row => showRejectModal(row.id), visible: row => row.status === 'submitted' }
+            { key: 'detail', label: 'Detay', icon: 'fas fa-eye', class: 'btn-outline-primary', onClick: row => showDetail(row) },
+            {
+                key: 'approve-workflow',
+                label: 'Onayla',
+                icon: 'fas fa-check',
+                class: 'btn-outline-success',
+                onClick: row => showApproveModal(row.id),
+                visible: row => row.kind === 'workflow_approval' && row.status === 'submitted'
+            },
+            {
+                key: 'reject-workflow',
+                label: 'Reddet',
+                icon: 'fas fa-times',
+                class: 'btn-outline-danger',
+                onClick: row => showRejectModal(row.id),
+                visible: row => row.kind === 'workflow_approval' && row.status === 'submitted'
+            },
+            {
+                key: 'approve-cancellation',
+                label: 'İptali Onayla',
+                icon: 'fas fa-check-double',
+                class: 'btn-outline-success',
+                onClick: row => showApproveModal(row.id),
+                visible: row => row.kind === 'cancellation_request'
+            },
+            {
+                key: 'reject-cancellation',
+                label: 'İptali Reddet',
+                icon: 'fas fa-ban',
+                class: 'btn-outline-danger',
+                onClick: row => showRejectModal(row.id),
+                visible: row => row.kind === 'cancellation_request'
+            }
         ],
         refreshable: true,
         onRefresh: () => loadPendingApprovals(),
         pagination: false,
-        emptyMessage: 'Bekleyen onay bulunamadı.',
+        emptyMessage: 'Onay kutusunda kayıt bulunamadı.',
         emptyIcon: 'fas fa-hourglass-end'
     });
 
@@ -495,7 +644,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'status', label: 'Son Durum', sortable: true, formatter: (v, row) => statusBadge(v, row.status_label) }
         ],
         actions: [
-            { key: 'detail', label: 'Detay', icon: 'fas fa-eye', class: 'btn-outline-primary', onClick: row => showDetail(row.id) }
+            { key: 'detail', label: 'Detay', icon: 'fas fa-eye', class: 'btn-outline-primary', onClick: row => showDetail(row) }
         ],
         refreshable: true,
         onRefresh: () => loadDecisions(),

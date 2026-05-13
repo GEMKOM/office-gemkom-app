@@ -568,6 +568,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Bildirim Yönlendirmeleri',
                 icon: 'fas fa-bell',
                 children: {}
+            },
+            '/it/approvals': {
+                label: 'Onay Yönetimi',
+                icon: 'fas fa-check-double',
+                children: {}
             }
         }
     },
@@ -605,6 +610,17 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'İzin Yönetimi',
                 icon: 'fas fa-calendar-check',
                 children: {}
+            },
+            '/human_resources/org': {
+                label: 'Organizasyon',
+                icon: 'fas fa-sitemap',
+                children: {
+                    '/human_resources/org/positions': {
+                        label: 'Pozisyonlar',
+                        icon: 'fas fa-id-badge',
+                        children: {}
+                    }
+                }
             }
         }
     },

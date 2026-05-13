@@ -4,9 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>GEMKOM - Yetki Yönetimi</title>
-    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <!-- Font Awesome for icons -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../../style.css">
     <link rel="stylesheet" href="../../../components/navbar.css">
@@ -15,9 +13,7 @@
     <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
     <link rel="stylesheet" href="../../../components/edit-modal/edit-modal.css">
     <link rel="stylesheet" href="../../../components/badges/badges.css">
-    <!-- filters.css removed (no filters on this page) -->
     <style>
-        /* Custom tab colors for permissions page */
         #permissions-tabs .nav-link {
             background-color: #8b0000;
             color: #ffffff;
@@ -32,40 +28,71 @@
             background-color: #a00000;
             color: #ffffff;
         }
+
+        .perm-level-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 1.6rem;
+            height: 1.6rem;
+            padding: 0 0.4rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            border-radius: 0.4rem;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+        .perm-section-card {
+            border: 1px solid #e9ecef;
+            border-radius: 0.4rem;
+            background: #fafbfc;
+            margin-bottom: 0.6rem;
+        }
+        .perm-section-card__header {
+            padding: 0.4rem 0.7rem;
+            border-bottom: 1px solid #e9ecef;
+            background: #f5f6f8;
+            border-top-left-radius: 0.4rem;
+            border-top-right-radius: 0.4rem;
+        }
+        .perm-section-card__body {
+            padding: 0.4rem 0.7rem 0.6rem 0.7rem;
+        }
+        .perm-section-title {
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            letter-spacing: 0.04em;
+            color: #6b7280;
+        }
     </style>
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
 </head>
 <body>
-    <!-- Navigation -->
     <div id="navbar-container"></div>
 
-    <!-- Main Content Section -->
     <section class="modules-section py-3" style="min-height: 100vh;">
         <div class="container-fluid">
-            <!-- Header Component Placeholder -->
             <div id="header-placeholder" class="mb-3"></div>
 
-            <!-- Tabs -->
             <ul class="nav nav-tabs mb-3" id="permissions-tabs" role="tablist">
                 <li class="nav-item" role="presentation">
                     <button class="nav-link active" id="tab-users-tab" data-bs-toggle="tab" data-bs-target="#tab-users" type="button" role="tab">
-                        Kullanıcılar
+                        <i class="fas fa-users me-1"></i>Kullanıcılar
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
-                    <button class="nav-link" id="tab-groups-tab" data-bs-toggle="tab" data-bs-target="#tab-groups" type="button" role="tab">
-                        Gruplar
+                    <button class="nav-link" id="tab-positions-tab" data-bs-toggle="tab" data-bs-target="#tab-positions" type="button" role="tab">
+                        <i class="fas fa-sitemap me-1"></i>Pozisyonlar
                     </button>
                 </li>
                 <li class="nav-item" role="presentation">
                     <button class="nav-link" id="tab-perms-tab" data-bs-toggle="tab" data-bs-target="#tab-perms" type="button" role="tab">
-                        Yetkiler
+                        <i class="fas fa-key me-1"></i>Yetkiler
                     </button>
                 </li>
             </ul>
 
             <div class="tab-content" id="permissions-tabs-content" style="height: calc(100vh - 170px);">
-                <!-- Users tab -->
                 <div class="tab-pane fade show active h-100" id="tab-users" role="tabpanel">
                     <div class="row h-100">
                         <div class="col-12 col-xl-8 mb-3 mb-xl-0 h-100 d-flex flex-column">
@@ -77,19 +104,17 @@
                     </div>
                 </div>
 
-                <!-- Groups tab -->
-                <div class="tab-pane fade h-100" id="tab-groups" role="tabpanel">
+                <div class="tab-pane fade h-100" id="tab-positions" role="tabpanel">
                     <div class="row h-100">
                         <div class="col-12 col-xl-8 mb-3 mb-xl-0 h-100 d-flex flex-column">
-                            <div id="group-matrix-container" class="flex-grow-1"></div>
+                            <div id="position-matrix-container" class="flex-grow-1"></div>
                         </div>
                         <div class="col-12 col-xl-4 h-100 d-flex flex-column">
-                            <div id="group-permissions-panel" class="flex-grow-1"></div>
+                            <div id="position-permissions-panel" class="flex-grow-1"></div>
                         </div>
                     </div>
                 </div>
 
-                <!-- Permissions tab -->
                 <div class="tab-pane fade h-100" id="tab-perms" role="tabpanel">
                     <div id="permissions-list-container" class="h-100"></div>
                 </div>
@@ -97,18 +122,9 @@
         </div>
     </section>
 
-    <!-- Modals containers -->
     <div id="permission-override-modal-container"></div>
 
-    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Header Component -->
-    <script src="../../../components/header/header.js"></script>
-    <!-- Table Component -->
-    <script src="../../../components/table/table.js"></script>
-    <!-- Edit Modal Component -->
-    <script src="../../../components/edit-modal/edit-modal.js"></script>
     <script type="module" src="permissions.js"></script>
 </body>
 </html>
-

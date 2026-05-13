@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Organizasyon Şeması</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../style.css">
+    <link rel="stylesheet" href="../../components/navbar.css">
+    <link rel="stylesheet" href="../../components/header/header.css">
+    <link rel="stylesheet" href="../../components/table/table.css">
+    <link rel="stylesheet" href="../../components/organization-tree/organization-tree.css">
+    <link rel="icon" type="image/png" href="../../images/gemkom.png">
+    <style>
+        .org-detail-card .card-body { max-height: 70vh; overflow-y: auto; }
+        .org-detail__title { font-weight: 700; color: #1f2937; }
+        .org-detail__meta { color: #6b7280; font-size: 0.85rem; }
+        .org-detail__section-title {
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            letter-spacing: 0.04em;
+            color: #6b7280;
+            margin-bottom: 0.35rem;
+        }
+        .org-detail__holders li { margin-bottom: 0.15rem; }
+        .org-detail__perms .badge {
+            font-weight: 500;
+            background: #f1f3f5;
+            color: #1f2937;
+            border: 1px solid #dee2e6;
+        }
+        .org-stat {
+            background: #f8f9fa;
+            border-radius: 0.5rem;
+            padding: 0.6rem 0.8rem;
+            border: 1px solid #e9ecef;
+        }
+        .org-stat__label { font-size: 0.72rem; color: #6b7280; text-transform: uppercase; letter-spacing: 0.04em; }
+        .org-stat__value { font-size: 1.1rem; font-weight: 700; color: #1f2937; }
+        @media (min-width: 1200px) {
+            .org-layout { display: flex; gap: 1rem; align-items: flex-start; }
+            .org-layout__chart { flex: 1 1 auto; min-width: 0; }
+            .org-layout__detail { width: 320px; flex: 0 0 320px; position: sticky; top: 80px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="navbar-container"></div>
+
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <div id="header-placeholder"></div>
+
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="d-flex flex-wrap gap-2">
+                        <div class="org-stat flex-fill"><div class="org-stat__label">Toplam Pozisyon</div><div class="org-stat__value" id="stat-positions">-</div></div>
+                        <div class="org-stat flex-fill"><div class="org-stat__label">Atanmış Kişi</div><div class="org-stat__value" id="stat-holders">-</div></div>
+                        <div class="org-stat flex-fill"><div class="org-stat__label">Boş Pozisyon</div><div class="org-stat__value" id="stat-vacant">-</div></div>
+                        <div class="org-stat flex-fill"><div class="org-stat__label">Maksimum Derinlik</div><div class="org-stat__value" id="stat-depth">-</div></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="org-layout">
+                <div class="org-layout__chart">
+                    <div class="dashboard-card">
+                        <div class="card-header">
+                            <h5 class="card-title"><i class="fas fa-sitemap me-2 text-primary"></i>Organizasyon Ağacı</h5>
+                            <div class="card-actions">
+                                <a href="/human_resources/org/positions" class="btn btn-sm btn-outline-primary">
+                                    <i class="fas fa-id-badge me-1"></i>Pozisyonlar
+                                </a>
+                            </div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div id="org-tree-container"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="org-layout__detail">
+                    <div class="dashboard-card org-detail-card">
+                        <div class="card-header">
+                            <h5 class="card-title"><i class="fas fa-id-badge me-2 text-info"></i>Pozisyon Detayı</h5>
+                        </div>
+                        <div class="card-body" id="org-position-detail">
+                            <div class="text-muted text-center py-4">
+                                <i class="fas fa-mouse-pointer d-block mb-2 fs-3 text-secondary"></i>
+                                Detay görmek için ağaçtan bir pozisyon seçin.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="org.js"></script>
+</body>
+</html>

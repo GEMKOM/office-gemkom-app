@@ -8,11 +8,7 @@ import {
     deleteUser as deleteUserAPI,
     createUser as createUserAPI,
     updateUser as updateUserAPI,
-    fetchOccupations,
-    fetchUserGroups,
     fetchUserPermissionsDetail,
-    addUserToGroup,
-    removeUserFromGroup,
     saveUserPermissionOverride,
     deleteUserPermissionOverride
 } from '../../apis/users.js';
@@ -37,6 +33,7 @@ import {
     deleteAttendanceHrInterval
 } from '../../apis/human_resources/attendance.js';
 import { fetchVacationRequests, fetchUserLeaveSetup, patchUserLeaveSetup } from '../../apis/vacationRequests.js';
+import { fetchPositions as fetchOrganizationPositions, assignUserToPosition } from '../../apis/human_resources/organization.js';
 
 let attendanceRecordEditModal = null;
 let attendanceRecordEditModalBound = false;
@@ -258,6 +255,7 @@ function ensureUserEditTabs(editModal, user) {
     let leaveLoaded = false;
     let attendanceLoaded = false;
     let permsLoaded = false;
+    let positionDropdown = null;
     let lastAttendancePayload = null;
     let attendanceExportTable = null;
 
@@ -1573,14 +1571,6 @@ function ensureUserEditTabs(editModal, user) {
         if (!box) return;
         box.innerHTML = '<div class="text-muted"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>';
 
-        let groupsAll = [];
-        try {
-            const g = await fetchUserGroups();
-            groupsAll = Array.isArray(g) ? g : (g?.results || g?.data || []);
-        } catch {
-            groupsAll = [];
-        }
-
         const reload = async () => {
             await loadPermissionsAndGroups();
         };
@@ -1588,7 +1578,6 @@ function ensureUserEditTabs(editModal, user) {
         try {
             const detail = await fetchUserPermissionsDetail(user.id);
             const u = detail?.user || {};
-            const groups = Array.isArray(detail?.groups) ? detail.groups : [];
             const eff = detail?.effective_permissions || {};
             const overrides = Array.isArray(detail?.overrides) ? detail.overrides : [];
 
@@ -1597,20 +1586,18 @@ function ensureUserEditTabs(editModal, user) {
             const hasOfficeAccess = officePerm.value === true;
             const hasWorkshopAccess = workshopPerm.value === true;
 
-            const groupChips = (groups || []).map(g => `
-                <span class="badge bg-secondary me-1 mb-1">
-                    ${g.display_name || g.name}
-                    <button type="button"
-                            class="btn btn-sm btn-link text-light p-0 ms-1 perm-remove-group-btn"
-                            data-group-name="${g.name}">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </span>
-            `).join('') || '<span class="text-muted">Bu kullanıcı hiçbir grupta değil.</span>';
-
-            const groupOptions = (groupsAll || [])
-                .map(g => `<option value="${g.name}">${g.display_name || g.name}</option>`)
-                .join('');
+            const currentPositionId = Number(
+                detail?.position?.id ??
+                detail?.position ??
+                u?.position_id ??
+                u?.profile?.position_id ??
+                u?.profile?.position?.id ??
+                u?.profile?.position ??
+                u?.position?.id ??
+                u?.position ??
+                ''
+            ) || 0;
+            const selectedPos = currentPositionId ? String(currentPositionId) : '';
 
             const codes = Object.keys(eff || {}).sort((a, b) => a.localeCompare(b, 'tr'));
             const permsRows = codes.map(code => {
@@ -1650,15 +1637,11 @@ function ensureUserEditTabs(editModal, user) {
             `;
 
             box.innerHTML = `
-                <h6 class="mb-2">Gruplar</h6>
-                <div class="mb-2">${groupChips}</div>
+                <h6 class="mb-2">Pozisyon</h6>
                 <div class="d-flex mb-3 gap-2">
-                    <select class="form-select form-select-sm" id="perm-add-group-select-${user.id}">
-                        <option value="">Grup seçin...</option>
-                        ${groupOptions}
-                    </select>
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="perm-add-group-btn-${user.id}">
-                        Ekle
+                    <div class="flex-grow-1" id="perm-position-dropdown-${user.id}"></div>
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="perm-position-save-btn-${user.id}">
+                        Kaydet
                     </button>
                 </div>
 
@@ -1696,31 +1679,32 @@ function ensureUserEditTabs(editModal, user) {
             `;
 
             // Handlers
-            box.querySelector(`#perm-add-group-btn-${user.id}`)?.addEventListener('click', async () => {
-                const sel = box.querySelector(`#perm-add-group-select-${user.id}`);
-                const groupName = sel?.value || '';
-                if (!groupName) return;
+            if (positionDropdown) {
+                positionDropdown.destroy();
+                positionDropdown = null;
+            }
+            const ddMount = box.querySelector(`#perm-position-dropdown-${user.id}`);
+            positionDropdown = ddMount
+                ? new ModernDropdown(ddMount, { placeholder: 'Pozisyon seçin...', multiple: false, searchable: true })
+                : null;
+            if (positionDropdown) {
+                positionDropdown.setItems(
+                    (organizationPositions || []).map(p => ({
+                        value: String(p.id),
+                        text: `${p.title || '-'} (L${p.level || '-'})${p.department_name ? ` - ${p.department_name}` : ''}`
+                    }))
+                );
+                if (selectedPos) positionDropdown.setValue(selectedPos);
+            }
+            box.querySelector(`#perm-position-save-btn-${user.id}`)?.addEventListener('click', async () => {
+                const next = positionDropdown?.getValue?.() ?? '';
                 try {
-                    await addUserToGroup(user.id, groupName);
-                    showNotification('Kullanıcı gruba eklendi', 'success');
+                    await assignUserToPosition(user.id, next ? Number(next) : null);
+                    showNotification('Pozisyon güncellendi', 'success');
                     await reload();
                 } catch (e) {
-                    showNotification(e?.message || 'Grup eklenemedi', 'error');
+                    showNotification(e?.message || 'Pozisyon güncellenemedi', 'error');
                 }
-            });
-
-            box.querySelectorAll('.perm-remove-group-btn').forEach(btn => {
-                btn.addEventListener('click', async () => {
-                    const groupName = btn.getAttribute('data-group-name');
-                    if (!groupName) return;
-                    try {
-                        await removeUserFromGroup(user.id, groupName);
-                        showNotification('Kullanıcı gruptan çıkarıldı', 'success');
-                        await reload();
-                    } catch (e) {
-                        showNotification(e?.message || 'Grup kaldırılamadı', 'error');
-                    }
-                });
             });
 
             box.querySelectorAll('.perm-portal-toggle-btn').forEach(btn => {
@@ -1924,8 +1908,7 @@ let users = [];
 let totalUsers = 0;
 let isLoading = false;
 let userFilters = null;
-let occupations = [];
-let groups = [];
+let organizationPositions = [];
 let usersTable = null;
 let shiftRules = [];
 
@@ -1969,10 +1952,9 @@ async function initializeUsers() {
         initializeTableComponent();
         initializeModalComponents();
 
-        await loadGroups();
-        await loadOccupations();
-        updateOccupationFilterOptions();
-        updateGroupFilterOptions();
+        await loadOrganizationPositions();
+        updatePositionFilterOptions();
+        updateDepartmentFilterOptions();
 
         await loadUsers();
         updateUserCounts();
@@ -2003,30 +1985,34 @@ function initializeFiltersComponent() {
     });
 
     userFilters.addDropdownFilter({
-        id: 'group-filter',
-        label: 'Grup',
-        options: [{ value: '', label: 'Tüm Gruplar' }],
-        multiple: true,
+        id: 'position-filter',
+        label: 'Pozisyon',
+        options: [{ value: '', label: 'Tüm Pozisyonlar' }],
+        placeholder: 'Tüm Pozisyonlar',
         colSize: 3
     });
 
     userFilters.addDropdownFilter({
-        id: 'access-filter',
-        label: 'Erişim',
+        id: 'position-level-filter',
+        label: 'Seviye',
         options: [
             { value: '', label: 'Tümü' },
-            { value: 'office', label: 'Ofis' },
-            { value: 'workshop', label: 'Atölye' }
+            { value: '1', label: 'Seviye 1' },
+            { value: '2', label: 'Seviye 2' },
+            { value: '3', label: 'Seviye 3' },
+            { value: '4', label: 'Seviye 4' },
+            { value: '5', label: 'Seviye 5' },
+            { value: '6', label: 'Seviye 6' }
         ],
         placeholder: 'Tümü',
         colSize: 3
     });
 
     userFilters.addDropdownFilter({
-        id: 'occupation-filter',
-        label: 'Görev',
-        options: [{ value: '', label: 'Tüm Görevler' }],
-        placeholder: 'Tüm Görevler',
+        id: 'department-code-filter',
+        label: 'Departman',
+        options: [{ value: '', label: 'Tüm Departmanlar' }],
+        placeholder: 'Tüm Departmanlar',
         colSize: 3
     });
 
@@ -2053,21 +2039,7 @@ function initializeTableComponent() {
             { field: 'last_name', label: 'Soyad', sortable: true, formatter: (v) => v || '-' },
             { field: 'birth_date', label: 'Doğum Tarihi', sortable: true, formatter: (v) => v || '-' },
             { field: 'email', label: 'E-posta', sortable: true, formatter: (v) => v || '-' },
-            { field: 'occupation_label', label: 'Görev', sortable: true, formatter: (v) => v || '-' },
-            {
-                field: 'groups',
-                label: 'Gruplar',
-                sortable: false,
-                formatter: (v, row) => {
-                    const arr = Array.isArray(row.groups) ? row.groups : (Array.isArray(v) ? v : []);
-                    if (!arr.length) return '-';
-                    const labels = arr.map(code => {
-                        const g = (groups || []).find(x => x?.name === code || x?.value === code);
-                        return g?.display_name || g?.label || g?.name || code;
-                    });
-                    return labels.join(', ');
-                }
-            },
+            { field: 'position_title', label: 'Pozisyon', sortable: true, formatter: (v) => v || '-' },
             {
                 field: 'is_active',
                 label: 'Durum',
@@ -2157,26 +2129,60 @@ async function loadOccupations() {
     }
 }
 
-function updateOccupationFilterOptions() {
+async function loadOrganizationPositions() {
+    try {
+        const data = await fetchOrganizationPositions();
+        organizationPositions = Array.isArray(data) ? data : (data?.results || []);
+    } catch (e) {
+        console.warn('Failed to load organization positions:', e);
+        organizationPositions = [];
+    }
+}
+
+// Note: groups/occupations are not used on this page anymore.
+
+function getPositionOptions() {
+    return (organizationPositions || []).map(p => ({
+        value: String(p.id),
+        label: `${p.title || '-'} (L${p.level || '-'})${p.department_name ? ` - ${p.department_name}` : ''}`
+    }));
+}
+
+function getDepartmentOptions() {
+    const map = new Map();
+    (organizationPositions || []).forEach(p => {
+        const code = p?.department_code;
+        if (!code) return;
+        const label = p?.department_name ? String(p.department_name) : String(code);
+        if (!map.has(code)) map.set(code, label);
+    });
+    return Array.from(map.entries())
+        .sort((a, b) => String(a[1]).localeCompare(String(b[1]), 'tr'))
+        .map(([value, label]) => ({ value: String(value), label: String(label) }));
+}
+
+function updatePositionFilterOptions() {
     if (!userFilters) return;
-    userFilters.updateFilterOptions('occupation-filter', [
-        { value: '', label: 'Tüm Görevler' },
-        ...occupations.map(o => ({
-            value: o.value || o.code || o.id || o.name,
-            label: o.label || o.display_name || o.name
-        }))
+    userFilters.updateFilterOptions('position-filter', [
+        { value: '', label: 'Tüm Pozisyonlar' },
+        ...getPositionOptions()
     ]);
 }
 
-function updateGroupFilterOptions() {
+function updateDepartmentFilterOptions() {
     if (!userFilters) return;
-    userFilters.updateFilterOptions('group-filter', [
-        { value: '', label: 'Tüm Gruplar' },
-        ...groups.map(g => ({
-            value: g.value ?? g.name ?? String(g.id ?? g.pk ?? ''),
-            label: g.label ?? g.display_name ?? g.name ?? String(g.id ?? g.pk ?? '')
-        })).filter(o => o.value)
+    userFilters.updateFilterOptions('department-code-filter', [
+        { value: '', label: 'Tüm Departmanlar' },
+        ...getDepartmentOptions()
     ]);
+}
+
+function mapSortFieldToOrdering(field) {
+    // Backend expects nested ordering keys for position fields.
+    if (field === 'position_title') return 'profile__position__title';
+    if (field === 'position_level') return 'profile__position__level';
+    if (field === 'department_code') return 'profile__position__department_code';
+    return field;
 }
 
 async function loadUsers() {
@@ -2193,26 +2199,20 @@ async function loadUsers() {
 
         if (filterValues['username-filter']) params.append('username', filterValues['username-filter']);
 
-        const groupVal = filterValues['group-filter'] || [];
-        const group = Array.isArray(groupVal) ? groupVal.filter(Boolean).join(',') : (groupVal || '');
-        if (group) params.append('group', group);
-
-        const access = filterValues['access-filter'] || '';
-        if (access === 'office') params.append('office_access', 'true');
-        if (access === 'workshop') params.append('workshop_access', 'true');
-
-        if (filterValues['occupation-filter']) params.append('occupation', filterValues['occupation-filter']);
+        if (filterValues['position-filter']) params.append('position', filterValues['position-filter']);
+        if (filterValues['position-level-filter']) params.append('position_level', filterValues['position-level-filter']);
+        if (filterValues['department-code-filter']) params.append('department_code', filterValues['department-code-filter']);
         if (filterValues['is-active-filter']) params.append('is_active', filterValues['is-active-filter']);
 
-        const orderingParam = currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`;
+        const orderingField = mapSortFieldToOrdering(currentSortField);
+        const orderingParam = currentSortDirection === 'asc' ? orderingField : `-${orderingField}`;
         params.append('ordering', orderingParam);
 
         const usersResponse = await authFetchUsers(currentPage, pageSize, {
             username: filterValues['username-filter'] || '',
-            group,
-            office_access: access === 'office' ? 'true' : '',
-            workshop_access: access === 'workshop' ? 'true' : '',
-            occupation: filterValues['occupation-filter'] || '',
+            position: filterValues['position-filter'] || '',
+            position_level: filterValues['position-level-filter'] || '',
+            department_code: filterValues['department-code-filter'] || '',
             is_active: filterValues['is-active-filter'] || '',
             ordering: orderingParam
         });
@@ -2254,29 +2254,22 @@ function showCreateUserModal() {
     createUserModal.addField({ id: 'last_name', name: 'last_name', label: 'Soyad', type: 'text', required: true, colSize: 6 });
     createUserModal.addField({ id: 'birth_date', name: 'birth_date', label: 'Doğum Tarihi', type: 'date', colSize: 6 });
 
-    createUserModal.addSection({ title: 'Yetkiler & Gruplar', icon: 'fas fa-users-cog', iconColor: 'text-info' });
-    const groupOptions = (groups || []).map(g => ({
-        value: g.value ?? g.name ?? String(g.id ?? ''),
-        label: g.display_name || g.label || g.name || String(g.id ?? '')
-    })).filter(o => o.value);
-    createUserModal.addField({
-        id: 'create_groups',
-        name: 'create_groups',
-        label: 'Gruplar',
-        type: 'dropdown',
-        multiple: true,
-        searchable: true,
-        options: groupOptions,
-        value: [],
-        colSize: 12
-    });
-
     createUserModal.addSection({ title: 'Maaş', icon: 'fas fa-money-bill-wave', iconColor: 'text-success' });
     const today = new Date().toISOString().split('T')[0];
     createUserModal.addField({ id: 'wage_effective_from', name: 'wage_effective_from', label: 'Geçerlilik Tarihi', type: 'date', value: today, colSize: 6 });
     createUserModal.addField({ id: 'wage_base_monthly', name: 'wage_base_monthly', label: 'Aylık Ücret', type: 'number', step: 0.01, min: 0, colSize: 6 });
 
     createUserModal.addSection({ title: 'İş Bilgileri', icon: 'fas fa-briefcase', iconColor: 'text-success' });
+    createUserModal.addField({
+        id: 'position',
+        name: 'position',
+        label: 'Pozisyon',
+        type: 'dropdown',
+        options: [{ value: '', label: 'Pozisyon yok' }, ...getPositionOptions()],
+        value: '',
+        searchable: true,
+        colSize: 12
+    });
     createUserModal.addField({ id: 'is_active', name: 'is_active', label: 'Aktif', type: 'checkbox', value: true, colSize: 12 });
     createUserModal.render();
     createUserModal.show();
@@ -2285,7 +2278,6 @@ function showCreateUserModal() {
 async function createUser(formData) {
     try {
         const {
-            create_groups,
             wage_effective_from,
             wage_base_monthly,
             ...rawUserPayload
@@ -2302,6 +2294,8 @@ async function createUser(formData) {
             last_name: String(rawUserPayload?.last_name ?? '').trim(),
             is_active: rawUserPayload?.is_active !== false
         };
+        const positionRaw = String(rawUserPayload?.position ?? '').trim();
+        userPayload.position = positionRaw ? Number(positionRaw) : null;
         const email = String(rawUserPayload?.email ?? '').trim();
         if (email) {
             userPayload.email = email;
@@ -2319,22 +2313,6 @@ async function createUser(formData) {
         if (response.ok) {
             const created = await response.json().catch(() => null);
             const userId = created?.id ?? created?.user?.id ?? null;
-
-            // Group assignments (best effort)
-            const groupsToAddRaw = create_groups ?? [];
-            const groupsToAdd = Array.isArray(groupsToAddRaw)
-                ? groupsToAddRaw.filter(Boolean)
-                : (String(groupsToAddRaw).trim() ? [String(groupsToAddRaw).trim()] : []);
-
-            if (userId && groupsToAdd.length) {
-                for (const g of groupsToAdd) {
-                    try {
-                        await addUserToGroup(userId, g);
-                    } catch (e) {
-                        showNotification(`Grup eklenemedi (${g}): ${e?.message || e}`, 'warning');
-                    }
-                }
-            }
 
             // Wage create (best effort)
             const amount = wage_base_monthly !== undefined && wage_base_monthly !== null && String(wage_base_monthly).trim() !== ''
@@ -2421,6 +2399,17 @@ window.editUser = function(userId) {
         icon: 'fas fa-clock',
         colSize: 12
     });
+    editUserModal.addField({
+        id: 'position',
+        name: 'position',
+        label: 'Pozisyon',
+        type: 'dropdown',
+        options: [{ value: '', label: 'Pozisyon yok' }, ...getPositionOptions()],
+        value: user.position_id ? String(user.position_id) : '',
+        searchable: true,
+        icon: 'fas fa-sitemap',
+        colSize: 12
+    });
 
     editUserModal.addField({ id: 'is_active', name: 'is_active', label: 'Aktif', type: 'checkbox', value: user.is_active !== false, colSize: 12, icon: 'fas fa-check-circle' });
     editUserModal.render();
@@ -2468,6 +2457,8 @@ async function updateUser(formData) {
     }
     try {
         const { shift_rule_id, ...userPatch } = formData || {};
+        const positionRaw = String(userPatch?.position ?? '').trim();
+        userPatch.position = positionRaw ? Number(positionRaw) : null;
         const birthDate = String(userPatch?.birth_date ?? '').trim();
         userPatch.birth_date = birthDate || null;
         const resp = await updateUserAPI(userId, userPatch);

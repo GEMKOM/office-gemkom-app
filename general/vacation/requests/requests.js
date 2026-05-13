@@ -15,6 +15,7 @@ import {
     fetchVacationRequests,
     fetchVacationRequest,
     cancelVacationRequest,
+    requestVacationCancellation,
     fetchMyVacationSummary,
     fetchUpcomingLeaves
 } from '../../../apis/vacationRequests.js';
@@ -621,18 +622,27 @@ async function showRequestDetail(requestId) {
 function showCancelModal(requestId) {
     const request = currentRequests.find(item => Number(item.id) === Number(requestId));
     if (!request) return;
+    const isApproved = request.status === 'approved';
     cancelModal.show({
-        message: `#${request.id} numaralı izin talebi iptal edilsin mi?`,
+        message: isApproved
+            ? `#${request.id} numaralı izin için iptal talebi gönderilsin mi?`
+            : `#${request.id} numaralı izin talebi iptal edilsin mi?`,
         details: `
             <div class="small text-muted">
                 <div>Tür: ${request.leave_type_label || leaveTypeLabelMap.get(request.leave_type) || '-'}</div>
                 <div>Tarih: ${formatDate(request.start_date)} - ${formatDate(request.end_date)}</div>
+                <div>${isApproved ? 'Bu işlem doğrudan iptal etmez, İK onayına gönderir.' : 'Bu işlem talebi anında iptal eder.'}</div>
             </div>
         `,
         onConfirm: async () => {
             try {
-                await cancelVacationRequest(request.id);
-                showNotification('İzin talebi iptal edildi.', 'success');
+                if (isApproved) {
+                    await requestVacationCancellation(request.id, {});
+                    showNotification('İptal talebi İK onayına gönderildi.', 'success');
+                } else {
+                    await cancelVacationRequest(request.id);
+                    showNotification('İzin talebi iptal edildi.', 'success');
+                }
                 await Promise.all([loadRequests(), attendanceCalendarInitialized ? attendanceCalendar?.refresh?.() : Promise.resolve(), loadMyVacationSummary()]);
             } catch (error) {
                 showNotification(error?.message || 'İptal işlemi başarısız.', 'error');
@@ -754,7 +764,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-ban',
                 class: 'btn-outline-danger',
                 onClick: row => showCancelModal(row.id),
-                visible: row => row.status === 'submitted'
+                visible: row => row.status === 'submitted' || row.status === 'approved'
             }
         ],
         pagination: true,

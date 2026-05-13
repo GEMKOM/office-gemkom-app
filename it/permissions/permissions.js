@@ -6,54 +6,148 @@ import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { initRouteProtection } from '../../../apis/routeProtection.js';
 import {
-    fetchUserGroups,
     fetchPermissionsMatrix,
     fetchUserPermissionsDetail,
-    addUserToGroup,
-    removeUserFromGroup,
     saveUserPermissionOverride,
     deleteUserPermissionOverride,
-    fetchGroupPermissions,
-    fetchGroupsWithPermissions,
     fetchPermissionsUsersList,
-    saveGroupPermissionsBulk
+    updateUser as updateUserAPI
 } from '../../../apis/users.js';
+import {
+    fetchPositions,
+    fetchPositionById,
+    fetchPositionHolders,
+    patchPositionPermissions,
+    fetchPermissionsCatalog
+} from '../../../apis/human_resources/organization.js';
 
+const DEPT_CODE_MAP = new Map([
+    ['machining',          'Talaşlı İmalat'],
+    ['design',             'Dizayn'],
+    ['logistics',          'Lojistik'],
+    ['procurement',        'Satın Alma'],
+    ['welding',            'Kaynaklı İmalat'],
+    ['planning',           'Planlama'],
+    ['manufacturing',      'İmalat'],
+    ['maintenance',        'Bakım'],
+    ['rollingmill',        'Haddehane'],
+    ['qualitycontrol',     'Kalite Kontrol'],
+    ['cutting',            'CNC Kesim'],
+    ['warehouse',          'Ambar'],
+    ['finance',            'Finans'],
+    ['management',         'Yönetim'],
+    ['external_workshops', 'Dış Atölyeler'],
+    ['human_resources',    'İnsan Kaynakları'],
+    ['sales',              'Proje Taahhüt'],
+    ['accounting',         'Muhasebe'],
+]);
+
+// ---------------------------------------------------------------------------
 // State
+// ---------------------------------------------------------------------------
 let permissionsMatrix = null;
+let usersTableRows = [];                  // cached rows for the users table — patched in place after overrides
+let permissionsCatalog = null;            // [{codename, name, section}]
+let positionsCache = [];                  // full positions list (with permission_codenames if backend provides)
+let positionPermsCache = new Map();       // positionId -> Set(codename)
+let positionHoldersCache = new Map();     // positionId -> [{id, full_name, username}]
+
 let matrixTable = null;
-let groupMatrixTable = null;
+let positionMatrixTable = null;
 let permissionsListTable = null;
 let overrideModal = null;
+
 let currentUserDetail = null;
-let groupsCache = [];
-let groupPermsCache = new Map(); // group_name -> Set(codename)
-let currentGroupName = null;
-let currentGroupPermsOriginal = new Set();
-let currentGroupPermsDraft = new Set();
-let currentGroupDirty = false;
+
+let currentPositionId = null;
+let currentPositionPermsOriginal = new Set();
+let currentPositionPermsDraft = new Set();
+let currentPositionDirty = false;
+let sectionCollapseState = new Map();     // section -> expanded bool
+
 let usersTabLoaded = false;
-let groupsTabLoaded = false;
+let positionsTabLoaded = false;
 let permsTabLoaded = false;
-let permissionsCatalog = null; // [{codename,name,section}]
-let sectionCollapseState = new Map(); // section -> boolean (expanded)
+
+// ---------------------------------------------------------------------------
+// Utilities
+// ---------------------------------------------------------------------------
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function listFromResponse(data) {
+    if (Array.isArray(data)) return data;
+    return Array.isArray(data?.results) ? data.results : [];
+}
 
 function boolIcon(val) {
-    if (val) {
-        return '<span class="status-badge status-green"><i class="fas fa-check"></i></span>';
-    }
+    if (val) return '<span class="status-badge status-green"><i class="fas fa-check"></i></span>';
     return '<span class="status-badge status-red"><i class="fas fa-times"></i></span>';
 }
 
+function safeId(value) {
+    return (value || '').toString().toLowerCase().replace(/[^a-z0-9_-]/g, '_');
+}
+
+function setsEqual(a, b) {
+    if (a.size !== b.size) return false;
+    for (const v of a) if (!b.has(v)) return false;
+    return true;
+}
+
+function sectionLabel(section) {
+    if (section === 'office') return 'Ofis';
+    if (section === 'workshop') return 'Atölye';
+    if (section === 'manufacturing') return 'Üretim';
+    if (section === 'sales') return 'Satış';
+    if (section === 'hr' || section === 'human_resources') return 'İK';
+    if (section === 'it') return 'BT';
+    if (section === 'finance') return 'Finans';
+    if (section === 'other') return 'Diğer';
+    return section || '-';
+}
+
+function sectionBadgeClass(section) {
+    if (section === 'office') return 'bg-primary';
+    if (section === 'workshop') return 'bg-dark';
+    if (section === 'manufacturing') return 'bg-success';
+    if (section === 'sales') return 'bg-info text-dark';
+    if (section === 'hr' || section === 'human_resources') return 'bg-warning text-dark';
+    return 'bg-secondary';
+}
+
+function userPositionDisplay(user) {
+    if (!user) return '-';
+    const title = user.position_title || user.position?.title || null;
+    if (!title) return '<span class="text-muted">-</span>';
+    const level = user.position_level || user.position?.level || null;
+    const deptCode = user.position_department_code || user.position?.department_code || null;
+    const deptLabel = deptCode ? (DEPT_CODE_MAP.get(deptCode) || deptCode) : null;
+    const levelPill = level ? `<span class="perm-level-pill ms-1">L${escapeHtml(level)}</span>` : '';
+    const deptText = deptLabel ? ` <span class="text-muted small">&middot; ${escapeHtml(deptLabel)}</span>` : '';
+    return `${escapeHtml(title)}${levelPill}${deptText}`;
+}
+
+function getUserPositionId(user) {
+    if (!user) return null;
+    if (user.position_id != null) return Number(user.position_id);
+    if (user.position && typeof user.position === 'object' && user.position.id != null) return Number(user.position.id);
+    if (typeof user.position === 'number') return user.position;
+    return null;
+}
+
+// ---------------------------------------------------------------------------
+// Bootstrapping
+// ---------------------------------------------------------------------------
 document.addEventListener('DOMContentLoaded', async () => {
-    if (!guardRoute()) {
-        return;
-    }
-
-    if (!initRouteProtection()) {
-        return;
-    }
-
+    if (!guardRoute()) return;
+    if (!initRouteProtection()) return;
     await initNavbar();
 
     const user = await getUser();
@@ -66,44 +160,50 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     new HeaderComponent({
         title: 'Yetki Yönetimi',
-        subtitle: 'Kullanıcı gruplarını ve yetkilerini yönetin',
-        icon: 'fas fa-user-shield',
+        subtitle: 'Pozisyonlara göre yetki dağılımını yönetin',
+        icon: 'user-shield',
         showBackButton: 'block',
         backUrl: '/it/',
         showCreateButton: 'none',
         showRefreshButton: 'block',
-        onRefreshClick: async () => {
-            await refreshActiveTab();
-        }
+        onRefreshClick: async () => { await refreshActiveTab(); }
     });
 
     overrideModal = new EditModal('permission-override-modal-container', {
         title: 'Yetki Geçersiz Kılma',
         icon: 'fas fa-user-shield',
-        size: 'lg',
-        showEditButton: false
+        size: 'lg'
     });
 
-    await loadGroups();
-    initMatrixTable();
-    initGroupMatrixTable();
     initPermissionsListTable();
+    setContainerPlaceholder('permissions-matrix-container', 'Yükleniyor...');
+    setContainerPlaceholder('position-matrix-container', 'Yükleniyor...');
 
     attachTabLazyLoadHandlers();
-
-    // Default tab is "Kullanıcılar" -> load immediately
     await ensureUsersTabLoaded();
 });
 
+function setContainerPlaceholder(containerId, text) {
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.innerHTML = `
+        <div class="dashboard-card">
+            <div class="card-body text-muted text-center py-5">
+                <i class="fas fa-spinner fa-spin me-1"></i>${escapeHtml(text)}
+            </div>
+        </div>
+    `;
+}
+
 function getActiveTabId() {
     const active = document.querySelector('#permissions-tabs .nav-link.active');
-    return active ? active.getAttribute('data-bs-target') : null; // e.g. "#tab-users"
+    return active ? active.getAttribute('data-bs-target') : null;
 }
 
 async function refreshActiveTab() {
     const active = getActiveTabId();
-    if (active === '#tab-groups') {
-        await ensureGroupsTabLoaded(true);
+    if (active === '#tab-positions') {
+        await ensurePositionsTabLoaded(true);
         return;
     }
     if (active === '#tab-perms') {
@@ -114,26 +214,9 @@ async function refreshActiveTab() {
 }
 
 function attachTabLazyLoadHandlers() {
-    const usersBtn = document.getElementById('tab-users-tab');
-    const groupsBtn = document.getElementById('tab-groups-tab');
-    const permsBtn = document.getElementById('tab-perms-tab');
-
-    // Bootstrap tab event fires when a tab becomes active
-    if (usersBtn) {
-        usersBtn.addEventListener('shown.bs.tab', async () => {
-            await ensureUsersTabLoaded();
-        });
-    }
-    if (groupsBtn) {
-        groupsBtn.addEventListener('shown.bs.tab', async () => {
-            await ensureGroupsTabLoaded();
-        });
-    }
-    if (permsBtn) {
-        permsBtn.addEventListener('shown.bs.tab', async () => {
-            await ensurePermsTabLoaded();
-        });
-    }
+    document.getElementById('tab-users-tab')?.addEventListener('shown.bs.tab', () => ensureUsersTabLoaded());
+    document.getElementById('tab-positions-tab')?.addEventListener('shown.bs.tab', () => ensurePositionsTabLoaded());
+    document.getElementById('tab-perms-tab')?.addEventListener('shown.bs.tab', () => ensurePermsTabLoaded());
 }
 
 async function ensureUsersTabLoaded(force = false) {
@@ -142,24 +225,24 @@ async function ensureUsersTabLoaded(force = false) {
     usersTabLoaded = true;
 }
 
-async function ensureGroupsTabLoaded(force = false) {
-    if (!force && groupsTabLoaded) return;
-
-    // Group matrix needs codenames from permissionsMatrix
+async function ensurePositionsTabLoaded(force = false) {
+    if (!force && positionsTabLoaded) return;
     if (!permissionsMatrix) {
         await ensureUsersTabLoaded();
     }
-    await loadGroupPermissionsMatrix();
-    groupsTabLoaded = true;
+    await loadPositionMatrix();
+    positionsTabLoaded = true;
 }
 
 async function ensurePermsTabLoaded(force = false) {
     if (!force && permsTabLoaded) return;
-
-    // Yetkiler tab prefers /users/permissions/, but may fall back to matrix-derived list.
     if (!permissionsMatrix) {
         await ensureUsersTabLoaded();
     }
+    // Ensure the lean positions list is loaded so positionsCache is available.
+    // positionPermsCache is populated lazily on click; the Permissions tab shows
+    // positions for any permissions that have already been loaded via detail clicks.
+    await loadPositionsList();
     await loadPermissionsList();
     permsTabLoaded = true;
 }
@@ -167,9 +250,9 @@ async function ensurePermsTabLoaded(force = false) {
 async function ensurePermissionsCatalogLoaded() {
     if (Array.isArray(permissionsCatalog) && permissionsCatalog.length) return;
     try {
-        // Reuse /users/permissions/ which already includes {codename, name, portal}
-        const perms = await fetchPermissionsUsersList();
-        permissionsCatalog = (perms || [])
+        const perms = await fetchPermissionsCatalog();
+        const rows = listFromResponse(perms);
+        permissionsCatalog = rows
             .filter(p => p && p.codename)
             .map(p => ({
                 codename: p.codename,
@@ -179,783 +262,130 @@ async function ensurePermissionsCatalogLoaded() {
     } catch (e) {
         console.warn('Failed to load permissions catalog; falling back to matrix codenames', e);
         const codenames = permissionsMatrix?.codenames || [];
-        permissionsCatalog = codenames.map(code => ({
-            codename: code,
-            name: code,
-            section: 'other'
-        }));
+        permissionsCatalog = codenames.map(code => ({ codename: code, name: code, section: 'other' }));
     }
 }
 
-function sectionLabel(section) {
-    if (section === 'office') return 'Ofis';
-    if (section === 'workshop') return 'Atölye';
-    if (section === 'manufacturing') return 'Üretim';
-    return section || '-';
-}
-
-function sectionBadgeClass(section) {
-    if (section === 'office') return 'bg-primary';
-    if (section === 'workshop') return 'bg-dark';
-    if (section === 'manufacturing') return 'bg-success';
-    return 'bg-secondary';
-}
-
-function safeId(s) {
-    return (s || '')
-        .toString()
-        .toLowerCase()
-        .replace(/[^a-z0-9\-_]/g, '_');
-}
-
-function captureSectionCollapseState(panelEl) {
-    if (!panelEl) return;
-    panelEl.querySelectorAll('.accordion-collapse').forEach(el => {
-        const section = el.querySelector('.group-panel-checkbox')?.getAttribute('data-section');
-        if (!section) return;
-        const expanded = el.classList.contains('show');
-        sectionCollapseState.set(section, expanded);
-    });
-}
-
-async function loadGroups() {
-    try {
-        // Prefer bulk group payload (includes member_count/portal/permissions)
-        groupsCache = await fetchGroupsWithPermissions();
-    } catch (e) {
-        console.error('Error loading groups', e);
-        groupsCache = [];
-    }
-}
-
+// ---------------------------------------------------------------------------
+// USERS TAB
+// ---------------------------------------------------------------------------
 async function loadMatrix(params = {}) {
     try {
         if (matrixTable) matrixTable.setLoading(true);
         permissionsMatrix = await fetchPermissionsMatrix(params);
         const codenames = permissionsMatrix.codenames || [];
         const rows = (permissionsMatrix.users || []).map(u => {
-            const grantedCodes = codenames.filter(code => {
-                const perm = u.permissions ? u.permissions[code] : null;
-                return perm && perm.value === true;
-            });
-            const base = {
+            const permCount = u.is_superuser
+                ? null  // superuser has all — display differently
+                : codenames.filter(code => {
+                    const perm = u.permissions ? u.permissions[code] : null;
+                    return perm && perm.value === true;
+                }).length;
+            return {
                 id: u.id,
                 username: u.username,
                 full_name: u.full_name || u.username,
                 is_superuser: u.is_superuser,
-                groups_display: (u.groups || []).join(', ') || '-',
-                permissions_display: grantedCodes.length ? grantedCodes.join(', ') : '-',
+                position_display: userPositionDisplay(u),
+                permission_count: permCount,
                 raw: u
             };
-            codenames.forEach(code => {
-                const perm = u.permissions ? u.permissions[code] : null;
-                base[code] = perm ? perm.value === true : false;
-            });
-            return base;
         });
-        matrixTable.updateData(rows, rows.length, 1);
+
+        usersTableRows = rows;
+        if (!matrixTable) initMatrixTable();
+        matrixTable.updateData(usersTableRows, usersTableRows.length, 1);
     } catch (e) {
         console.error(e);
-        showNotification(e.message || 'Yetki matrisi yüklenirken hata oluştu', 'error');
+        showNotification(e.message || 'Kullanıcı listesi yüklenirken hata oluştu', 'error');
         if (matrixTable) matrixTable.updateData([], 0, 1);
     } finally {
         if (matrixTable) matrixTable.setLoading(false);
     }
 }
 
-async function loadGroupPermissionsMatrix() {
-    try {
-        if (!groupMatrixTable || !permissionsMatrix) return;
-        groupMatrixTable.setLoading(true);
+/**
+ * Patch the single user row in the cached table list from the already-loaded
+ * currentUserDetail — zero extra GET requests.
+ */
+function refreshUserTableRow() {
+    if (!currentUserDetail || !matrixTable) return;
+    const user = currentUserDetail.user || currentUserDetail;
+    const effective = currentUserDetail.effective_permissions || {};
+    const codenames = permissionsMatrix?.codenames || [];
+    const newCount = user.is_superuser
+        ? null
+        : codenames.filter(code => {
+            const p = effective[code];
+            return p && p.value === true;
+        }).length;
 
-        const codenames = permissionsMatrix.codenames || [];
-
-        // Preferred: single backend call returning groups with permissions.
-        // Fallback: per-group permissions calls (older backend).
-        groupPermsCache = new Map();
-        let groupsWithPerms = [];
-        try {
-            groupsWithPerms = await fetchGroupsWithPermissions();
-        } catch (e) {
-            console.warn('Bulk group permissions fetch failed; falling back to per-group requests', e);
-            groupsWithPerms = [];
-        }
-
-        const hasInlinePerms = (groupsWithPerms || []).some(g => Array.isArray(g?.permissions));
-        if (hasInlinePerms) {
-            // keep groupsCache in sync so filters + panels show updated info like member_count/portal
-            groupsCache = groupsWithPerms;
-            for (const g of groupsWithPerms) {
-                const codes = Array.isArray(g.permissions) ? g.permissions : [];
-                groupPermsCache.set(g.name, new Set(codes));
-            }
-        } else {
-            await Promise.all((groupsCache || []).map(async (g) => {
-                try {
-                    const resp = await fetchGroupPermissions(g.name);
-                    // Expecting either {codenames: [...]} or plain array; normalize to array
-                    const codes = Array.isArray(resp) ? resp : (resp.codenames || resp.permissions || []);
-                    groupPermsCache.set(g.name, new Set(codes));
-                } catch (e) {
-                    console.error('Failed to fetch permissions for group', g.name, e);
-                    groupPermsCache.set(g.name, new Set());
-                }
-            }));
-        }
-
-        let rows = (groupsCache || []).map(g => {
-            const set = groupPermsCache.get(g.name) || new Set();
-            const permsArr = Array.from(set);
-            const permissionsDisplay = permsArr.length ? permsArr.join(', ') : '-';
-            const base = {
-                id: g.name,
-                portal: g.portal || '-',
-                group_name: g.name,
-                group_display_name: g.display_name || g.name,
-                member_count: g.member_count ?? '-',
-                permissions_display: permissionsDisplay
-            };
-            codenames.forEach(code => {
-                base[code] = set.has(code);
-            });
-            return base;
-        });
-
-        // Group visually by portal by sorting rows (office/workshop/other).
-        rows = rows.sort((a, b) => {
-            const ap = (a.portal || '').toString();
-            const bp = (b.portal || '').toString();
-            if (ap !== bp) return ap.localeCompare(bp, 'tr');
-            const an = (a.group_display_name || a.group_name || '').toString();
-            const bn = (b.group_display_name || b.group_name || '').toString();
-            return an.localeCompare(bn, 'tr');
-        });
-
-        groupMatrixTable.updateData(rows, rows.length, 1);
-
-        // If a group is currently selected, refresh its panel too
-        if (currentGroupName) {
-            await loadGroupDetail(currentGroupName);
-        }
-    } catch (e) {
-        console.error(e);
-        showNotification(e.message || 'Grup matrisi yüklenirken hata oluştu', 'error');
-        if (groupMatrixTable) groupMatrixTable.updateData([], 0, 1);
-    } finally {
-        if (groupMatrixTable) groupMatrixTable.setLoading(false);
-    }
-}
-
-async function loadPermissionsList() {
-    try {
-        if (!permissionsListTable) return;
-        permissionsListTable.setLoading(true);
-
-        // Preferred: backend-provided permission -> users (+ overrides) list
-        let perms = [];
-        try {
-            perms = await fetchPermissionsUsersList();
-        } catch (e) {
-            console.warn('Failed to load /users/permissions/; falling back to matrix-derived list', e);
-            perms = [];
-        }
-
-        let rows = [];
-        if (Array.isArray(perms) && perms.length) {
-            rows = perms.map(p => {
-                const users = Array.isArray(p.users) ? p.users : [];
-                const overrides = Array.isArray(p.overrides) ? p.overrides : [];
-
-                const usersPart = users.length
-                    ? users.map(u => u.username).join(', ')
-                    : '-';
-                const overridesPart = overrides.length
-                    ? overrides.map(o => `${o.username}(${o.granted ? '+' : '-'})`).join(', ')
-                    : '-';
-
-                const overridesDisplay = overrides.length ? ` | Override: ${overridesPart}` : '';
-
-                return {
-                    id: p.codename,
-                    codename: p.codename,
-                    user_count: users.length,
-                    users_display: `${usersPart}${overridesDisplay}`
-                };
-            });
-        } else if (permissionsMatrix) {
-            // Fallback: derive from matrix (no overrides info)
-            const codenames = permissionsMatrix.codenames || [];
-            rows = codenames.map(code => {
-                const usersWith = (permissionsMatrix.users || []).filter(u => {
-                    const perm = u.permissions ? u.permissions[code] : null;
-                    return perm && perm.value === true;
-                });
-                return {
-                    id: code,
-                    codename: code,
-                    user_count: usersWith.length,
-                    users_display: usersWith.map(u => u.username).join(', ') || '-'
-                };
-            });
-        }
-
-        permissionsListTable.updateData(rows, rows.length, 1);
-    } catch (e) {
-        console.error(e);
-        showNotification(e.message || 'Yetki listesi yüklenirken hata oluştu', 'error');
-        if (permissionsListTable) permissionsListTable.updateData([], 0, 1);
-    } finally {
-        if (permissionsListTable) permissionsListTable.setLoading(false);
+    const idx = usersTableRows.findIndex(r => Number(r.id) === Number(user.id));
+    if (idx !== -1) {
+        usersTableRows[idx] = {
+            ...usersTableRows[idx],
+            permission_count: newCount,
+            position_display: userPositionDisplay(user)
+        };
+        matrixTable.updateData(usersTableRows, usersTableRows.length, 1);
     }
 }
 
 function initMatrixTable() {
-    const staticColumns = [
-        {
-            field: 'username',
-            label: 'Kullanıcı',
-            width: '160px',
-            sortable: true,
-            formatter: (value, row) => {
-                const badge = row.is_superuser
-                    ? '<span class="badge bg-danger ms-1">Süper Kullanıcı</span>'
-                    : '';
-                return `<button type="button" class="btn btn-link p-0 user-detail-btn" data-user-id="${row.id}">
-                            ${value}
-                        </button>${badge}`;
-            }
-        },
-        {
-            field: 'full_name',
-            label: 'Ad Soyad',
-            width: '200px',
-            sortable: true
-        },
-        {
-            field: 'groups_display',
-            label: 'Gruplar',
-            width: '220px',
-            sortable: false
-        },
-        {
-            field: 'permissions_display',
-            label: 'Yetkiler',
-            sortable: false
-        }
-    ];
-
-    // dynamic permission columns (header icons/text only; actual set when data loaded)
-    const permColumns = (permissionsMatrix?.codenames || []).map(code => ({
-        field: code,
-        label: code,
-        width: '80px',
-        sortable: false,
-        formatter: (val, row) => {
-            if (row.is_superuser) {
-                return '<span class="badge bg-danger">Süper kullanıcı</span>';
-            }
-            return `<button type="button" 
-                        class="btn btn-sm btn-light border permission-cell-btn" 
-                        data-user-id="${row.id}" 
-                        data-codename="${code}">
-                        ${boolIcon(val)}
-                    </button>`;
-        }
-    }));
-
     matrixTable = new TableComponent('permissions-matrix-container', {
-        title: 'Yetki Matrisi',
-        columns: [...staticColumns, ...permColumns],
-        actions: [],
-        pagination: false,
-        loading: true,
-        emptyMessage: 'Kullanıcı bulunamadı.',
-        onRowClick: (row) => {
-            if (row && row.id) {
-                loadUserDetail(row.id);
-            }
-        }
-    });
-
-    attachMatrixPermissionCellHandler();
-}
-
-function initGroupMatrixTable() {
-    const staticColumns = [
-        {
-            field: 'portal',
-            label: 'Portal',
-            width: '120px',
-            sortable: true,
-            formatter: (val) => {
-                const v = (val || '').toString();
-                if (!v || v === '-') return '-';
-                const label = sectionLabel(v);
-                const cls = v === 'office'
-                    ? 'status-badge status-blue'
-                    : (v === 'workshop'
-                        ? 'status-badge status-grey'
-                        : 'status-badge status-grey');
-                return `<span class="${cls}">${label.toUpperCase()}</span>`;
-            }
-        },
-        {
-            field: 'group_name',
-            label: 'Grup',
-            width: '180px',
-            sortable: true
-        },
-        {
-            field: 'group_display_name',
-            label: 'Türkçe',
-            width: '200px',
-            sortable: true
-        },
-        {
-            field: 'member_count',
-            label: 'Kullanıcı Sayısı',
-            width: '120px',
-            sortable: true
-        },
-        {
-            field: 'permissions_display',
-            label: 'Yetkiler',
-            sortable: false
-        }
-    ];
-
-    const permColumns = (permissionsMatrix?.codenames || []).map(code => ({
-        field: code,
-        label: code,
-        width: '90px',
-        sortable: false,
-        formatter: (val, row) => {
-            const checked = val === true ? 'checked' : '';
-            return `
-                <div class="form-check m-0 d-flex justify-content-center">
-                    <input class="form-check-input group-perm-checkbox"
-                           type="checkbox"
-                           ${checked}
-                           data-group-name="${row.group_name}"
-                           data-codename="${code}"
-                           onclick="event.stopPropagation();"
-                           disabled>
-                </div>
-            `;
-        }
-    }));
-
-    groupMatrixTable = new TableComponent('group-matrix-container', {
-        title: 'Grup Bazlı Yetki Matrisi',
-        columns: [...staticColumns, ...permColumns],
-        actions: [],
-        pagination: false,
-        loading: true,
-        emptyMessage: 'Grup bulunamadı.',
-        onRowClick: (row) => {
-            if (row && row.group_name) {
-                loadGroupDetail(row.group_name);
-            }
-        },
-        onRendered: () => {}
-    });
-}
-
-async function loadGroupDetail(groupName) {
-    const prevGroupName = currentGroupName;
-    currentGroupName = groupName;
-    const panel = document.getElementById('group-permissions-panel');
-    if (!panel) return;
-
-    const groupInfo = (groupsCache || []).find(g => g.name === groupName) || { name: groupName, display_name: groupName };
-    const portalBadgeHtml = groupInfo.portal === 'office'
-        ? '<span class="badge bg-primary ms-2">Ofis</span>'
-        : (groupInfo.portal === 'workshop'
-            ? '<span class="badge bg-dark ms-2">Atölye</span>'
-            : (groupInfo.portal ? `<span class="badge bg-secondary ms-2">${groupInfo.portal}</span>` : ''));
-
-    panel.innerHTML = `
-        <div class="card shadow-sm">
-            <div class="card-body">
-                <h5 class="card-title mb-1">
-                    <i class="fas fa-users-cog me-2"></i>${groupInfo.display_name || groupInfo.name}${portalBadgeHtml}
-                </h5>
-                <p class="text-muted mb-3"><code>${groupInfo.name}</code></p>
-                <div class="text-muted">Yükleniyor...</div>
-            </div>
-        </div>
-    `;
-
-    try {
-        const isSameGroup =
-            prevGroupName === groupName &&
-            currentGroupPermsDraft instanceof Set &&
-            currentGroupPermsOriginal instanceof Set;
-
-        // Prefer cache filled by bulk groups-with-permissions fetch.
-        let codes = [];
-        if (groupPermsCache?.has(groupName)) {
-            codes = Array.from(groupPermsCache.get(groupName) || []);
-        } else {
-            const resp = await fetchGroupPermissions(groupName);
-            codes = Array.isArray(resp) ? resp : (resp.codenames || resp.permissions || []);
-        }
-        const fetchedSet = new Set(codes);
-
-        // Keep cache in sync only when not actively editing this same group.
-        if (!isSameGroup || !currentGroupDirty) {
-            groupPermsCache.set(groupName, fetchedSet);
-        }
-
-        // Initialize draft state only when switching groups (or first load).
-        if (!isSameGroup) {
-            currentGroupPermsOriginal = new Set(codes);
-            currentGroupPermsDraft = new Set(codes);
-            currentGroupDirty = false;
-        }
-
-        await ensurePermissionsCatalogLoaded();
-        const catalog = Array.isArray(permissionsCatalog) ? permissionsCatalog : [];
-        const bySection = new Map(); // section -> [{codename,name}]
-        for (const p of catalog) {
-            const section = p.section || 'other';
-            if (!bySection.has(section)) bySection.set(section, []);
-            bySection.get(section).push({ codename: p.codename, name: p.name || p.codename, section });
-        }
-        // Sort portals + items for stable UI
-        const sections = Array.from(bySection.keys()).sort((a, b) => a.localeCompare(b, 'tr'));
-        for (const section of sections) {
-            bySection.get(section).sort((a, b) => (a.name || '').localeCompare((b.name || ''), 'tr'));
-        }
-
-        const members = (permissionsMatrix?.users || [])
-            .filter(u => (u.groups || []).includes(groupName))
-            .map(u => u.full_name || u.username);
-
-        const sectionAccordions = sections.map((section) => {
-            const items = bySection.get(section) || [];
-            const total = items.length;
-            const selectedCount = items.reduce((acc, it) => acc + (currentGroupPermsDraft.has(it.codename) ? 1 : 0), 0);
-            const allSelected = total > 0 && selectedCount === total;
-
-            const sectionId = safeId(section);
-            const collapseId = `section-collapse-${safeId(groupName)}-${sectionId}`;
-            const headerId = `section-header-${safeId(groupName)}-${sectionId}`;
-
-            const expanded = sectionCollapseState.has(section) ? sectionCollapseState.get(section) : false;
-
-            const children = items.map(it => {
-                const checked = currentGroupPermsDraft.has(it.codename) ? 'checked' : '';
-                return `
-                    <div class="d-flex align-items-start justify-content-between py-1 border-bottom">
-                        <div class="me-2">
-                            <div class="text-body">${it.name || '-'}</div>
-                            <div class="text-muted small"><code>${it.codename}</code></div>
-                        </div>
-                        <div class="form-check m-0 pt-1">
-                            <input class="form-check-input group-panel-checkbox"
-                                   type="checkbox"
-                                   ${checked}
-                                   data-group-name="${groupName}"
-                                   data-codename="${it.codename}"
-                                   data-section="${section}">
-                        </div>
-                    </div>
-                `;
-            }).join('');
-
-            return `
-                <div class="accordion-item">
-                    <h2 class="accordion-header" id="${headerId}">
-                        <div class="d-flex align-items-stretch">
-                            <button class="accordion-button ${expanded ? '' : 'collapsed'} flex-grow-1" type="button"
-                                    data-bs-toggle="collapse"
-                                    data-bs-target="#${collapseId}"
-                                    aria-expanded="${expanded ? 'true' : 'false'}"
-                                    aria-controls="${collapseId}">
-                                <div class="d-flex align-items-center gap-2 w-100">
-                                    <span class="badge ${sectionBadgeClass(section)}">${sectionLabel(section)}</span>
-                                    <span class="text-muted small">${selectedCount}/${total}</span>
-                                </div>
-                            </button>
-                            <div class="px-3 d-flex align-items-center border-start">
-                                <div class="form-check m-0">
-                                    <input class="form-check-input section-parent-checkbox"
-                                           type="checkbox"
-                                           ${allSelected ? 'checked' : ''}
-                                           data-section="${section}"
-                                           onclick="event.stopPropagation();">
-                                </div>
-                            </div>
-                        </div>
-                    </h2>
-                    <div id="${collapseId}" class="accordion-collapse collapse ${expanded ? 'show' : ''}"
-                         aria-labelledby="${headerId}">
-                        <div class="accordion-body py-2">
-                            ${children || `<div class="text-muted">-</div>`}
-                        </div>
-                    </div>
-                </div>
-            `;
-        }).join('');
-
-        const permsList = `
-            <div class="accordion" id="group-portal-accordion">
-                ${sectionAccordions || `<div class="text-muted">-</div>`}
-            </div>
-        `;
-
-        panel.innerHTML = `
-            <div class="card shadow-sm h-100">
-                <div class="card-body d-flex flex-column">
-                    <h5 class="card-title mb-1">
-                        <i class="fas fa-users-cog me-2"></i>${groupInfo.display_name || groupInfo.name}${portalBadgeHtml}
-                    </h5>
-                    <p class="text-muted mb-2"><code>${groupInfo.name}</code></p>
-                    <div class="d-flex flex-wrap gap-2 mb-3">
-                        <span class="badge bg-secondary">Üye: ${groupInfo.member_count ?? members.length ?? '-'}</span>
-                        <span class="badge bg-secondary">Yetki: ${currentGroupPermsDraft.size}</span>
-                    </div>
-
-                    <div class="d-flex gap-2 mb-3">
-                        <button type="button" class="btn btn-sm btn-success" id="group-save-btn" ${currentGroupDirty ? '' : 'disabled'}>
-                            <i class="fas fa-save me-1"></i>Kaydet
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary" id="group-discard-btn" ${currentGroupDirty ? '' : 'disabled'}>
-                            <i class="fas fa-undo me-1"></i>Vazgeç
-                        </button>
-                        <div class="ms-auto text-muted small" id="group-dirty-indicator">${currentGroupDirty ? 'Kaydedilmemiş değişiklikler' : ''}</div>
-                    </div>
-
-                    <h6>Üyeler</h6>
-                    <div class="mb-3" style="max-height: 120px; overflow-y: auto;">
-                        ${members.length ? members.map(m => `<div class="text-body">${m}</div>`).join('') : `<span class="text-muted">-</span>`}
-                    </div>
-
-                    <h6>Yetkiler</h6>
-                    <div class="flex-grow-1" style="overflow-y: auto;">
-                        ${permsList}
-                    </div>
-                </div>
-            </div>
-        `;
-
-        attachGroupPanelHandlers();
-    } catch (e) {
-        console.error(e);
-        showNotification(e.message || 'Grup detayları yüklenirken hata oluştu', 'error');
-        panel.innerHTML = `
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <h5 class="card-title mb-1">
-                        <i class="fas fa-users-cog me-2"></i>${groupInfo.display_name || groupInfo.name}
-                    </h5>
-                    <p class="text-muted mb-3"><code>${groupInfo.name}</code></p>
-                    <div class="text-muted">Detaylar yüklenemedi.</div>
-                </div>
-            </div>
-        `;
-    }
-}
-
-function attachGroupPanelHandlers() {
-    const panel = document.getElementById('group-permissions-panel');
-    if (!panel) return;
-
-    const saveBtn = panel.querySelector('#group-save-btn');
-    const discardBtn = panel.querySelector('#group-discard-btn');
-    const dirtyIndicator = panel.querySelector('#group-dirty-indicator');
-
-    function setDirty(isDirty) {
-        currentGroupDirty = isDirty;
-        if (saveBtn) saveBtn.disabled = !isDirty;
-        if (discardBtn) discardBtn.disabled = !isDirty;
-        if (dirtyIndicator) dirtyIndicator.textContent = isDirty ? 'Kaydedilmemiş değişiklikler' : '';
-    }
-
-    // Sync initial UI state on each re-render
-    setDirty(currentGroupDirty === true);
-
-    if (discardBtn) {
-        discardBtn.addEventListener('click', () => {
-            currentGroupPermsDraft = new Set(currentGroupPermsOriginal);
-            // Re-render panel checkboxes quickly by reloading detail from cache state
-            // (no network)
-            loadGroupDetail(currentGroupName);
-        });
-    }
-
-    if (saveBtn) {
-        saveBtn.addEventListener('click', async () => {
-            const groupName = currentGroupName;
-            if (!groupName) return;
-
-            if (setsEqual(currentGroupPermsDraft, currentGroupPermsOriginal)) {
-                setDirty(false);
-                return;
-            }
-
-            saveBtn.disabled = true;
-            discardBtn.disabled = true;
-            if (dirtyIndicator) dirtyIndicator.textContent = 'Kaydediliyor...';
-
-            try {
-                // Bulk replace (send only leaf/child codenames)
-                const payload = Array.from(currentGroupPermsDraft);
-                await saveGroupPermissionsBulk(groupName, payload);
-
-                // Update caches
-                currentGroupPermsOriginal = new Set(currentGroupPermsDraft);
-                groupPermsCache.set(groupName, new Set(currentGroupPermsDraft));
-
-                showNotification('Grup yetkileri kaydedildi', 'success');
-
-                // Refresh other tabs data
-                await loadMatrix({});
-                await loadPermissionsList();
-                await loadGroupPermissionsMatrix();
-                setDirty(false);
-            } catch (e) {
-                console.error(e);
-                showNotification(e.message || 'Kaydetme sırasında hata oluştu', 'error');
-                setDirty(true);
-            }
-        });
-    }
-
-    panel.querySelectorAll('.group-panel-checkbox').forEach(cb => {
-        cb.addEventListener('change', async () => {
-            const groupName = cb.getAttribute('data-group-name');
-            const codename = cb.getAttribute('data-codename');
-            const checked = cb.checked === true;
-            if (!groupName || !codename) return;
-
-            // Update draft only (no network)
-            if (checked) currentGroupPermsDraft.add(codename);
-            else currentGroupPermsDraft.delete(codename);
-
-            const isDirty = !setsEqual(currentGroupPermsDraft, currentGroupPermsOriginal);
-            setDirty(isDirty);
-
-            // Update the portal header counters/indeterminate state by re-rendering panel (no network)
-            // Preserve collapse state.
-            captureSectionCollapseState(panel);
-            await loadGroupDetail(currentGroupName);
-        });
-    });
-
-    // Parent portal checkbox: select/deselect all children in that portal.
-    panel.querySelectorAll('.section-parent-checkbox').forEach(pcb => {
-        // set indeterminate if partially selected
-        const section = pcb.getAttribute('data-section');
-        if (section) {
-            const children = panel.querySelectorAll(`.group-panel-checkbox[data-section="${section}"]`);
-            let total = 0;
-            let selected = 0;
-            children.forEach(ch => {
-                total += 1;
-                if (ch.checked) selected += 1;
-            });
-            pcb.indeterminate = selected > 0 && selected < total;
-        }
-
-        pcb.addEventListener('change', async () => {
-            const section = pcb.getAttribute('data-section');
-            if (!section) return;
-            const wantChecked = pcb.checked === true;
-
-            // Preserve collapse state while we update/re-render
-            captureSectionCollapseState(panel);
-
-            panel.querySelectorAll(`.group-panel-checkbox[data-section="${section}"]`).forEach(ch => {
-                const codename = ch.getAttribute('data-codename');
-                if (!codename) return;
-                if (wantChecked) currentGroupPermsDraft.add(codename);
-                else currentGroupPermsDraft.delete(codename);
-            });
-
-            const isDirty = !setsEqual(currentGroupPermsDraft, currentGroupPermsOriginal);
-            setDirty(isDirty);
-            await loadGroupDetail(currentGroupName);
-        });
-    });
-
-    // Track expand/collapse state so re-renders don't lose it.
-    panel.querySelectorAll('.accordion-collapse').forEach(el => {
-        el.addEventListener('shown.bs.collapse', () => {
-            const section = el.querySelector('.group-panel-checkbox')?.getAttribute('data-section');
-            if (section) sectionCollapseState.set(section, true);
-        });
-        el.addEventListener('hidden.bs.collapse', () => {
-            const section = el.querySelector('.group-panel-checkbox')?.getAttribute('data-section');
-            if (section) sectionCollapseState.set(section, false);
-        });
-    });
-}
-
-function setsEqual(a, b) {
-    if (a.size !== b.size) return false;
-    for (const v of a) {
-        if (!b.has(v)) return false;
-    }
-    return true;
-}
-
-function initPermissionsListTable() {
-    permissionsListTable = new TableComponent('permissions-list-container', {
-        title: 'Yetkiler',
+        title: 'Kullanıcılar',
+        icon: 'fas fa-users',
+        iconColor: 'text-primary',
         columns: [
             {
-                field: 'codename',
-                label: 'Kod',
+                field: 'username',
+                label: 'Kullanıcı Adı',
+                width: '160px',
                 sortable: true,
-                width: '220px'
+                formatter: (v, row) => {
+                    const badge = row.is_superuser
+                        ? '<span class="badge bg-danger ms-1">Süper</span>'
+                        : '';
+                    return `<strong>${escapeHtml(v || '-')}</strong>${badge}`;
+                }
             },
             {
-                field: 'user_count',
-                label: 'Kullanıcı Sayısı',
+                field: 'full_name',
+                label: 'Ad Soyad',
+                width: '200px',
                 sortable: true,
-                width: '140px'
+                formatter: v => escapeHtml(v || '-')
             },
             {
-                field: 'users_display',
-                label: 'Kullanıcılar',
+                field: 'position_display',
+                label: 'Pozisyon',
                 sortable: false
+            },
+            {
+                field: 'permission_count',
+                label: 'Yetki',
+                width: '80px',
+                sortable: true,
+                formatter: (v, row) => row.is_superuser
+                    ? '<span class="badge bg-danger">Tümü</span>'
+                    : String(v ?? 0)
             }
         ],
         actions: [],
         pagination: false,
         loading: true,
-        emptyMessage: 'Yetki bulunamadı.'
-    });
-}
-
-// No filters on this page.
-
-function attachMatrixPermissionCellHandler() {
-    const container = document.getElementById('permissions-matrix-container');
-    if (!container) return;
-    if (container.dataset.permHandlersAttached === 'true') return;
-    container.dataset.permHandlersAttached = 'true';
-
-    container.addEventListener('click', (e) => {
-        const permBtn = e.target.closest('.permission-cell-btn');
-        if (!permBtn) return;
-
-        const userId = permBtn.getAttribute('data-user-id');
-        const codename = permBtn.getAttribute('data-codename');
-        if (userId && codename) {
-            openOverrideModal(parseInt(userId, 10), codename);
+        emptyMessage: 'Kullanıcı bulunamadı.',
+        onRowClick: (row) => {
+            if (row && row.id) loadUserDetail(row.id);
         }
     });
 }
-
-// Permission cell clicks use inline formatter buttons; username row click handled via onRowClick above.
 
 async function loadUserDetail(userId) {
     try {
         currentUserDetail = await fetchUserPermissionsDetail(userId);
         await ensurePermissionsCatalogLoaded();
+        await loadPositionsList();
         renderUserDetailPanel();
     } catch (e) {
         console.error(e);
@@ -964,15 +394,15 @@ async function loadUserDetail(userId) {
 }
 
 function formatPermSourceBadge(source, sourceDetail) {
-    const detail = sourceDetail ? `<span class="text-muted ms-1">${sourceDetail}</span>` : '';
-
+    const detail = sourceDetail ? `<span class="text-muted ms-1">${escapeHtml(sourceDetail)}</span>` : '';
     switch (source) {
         case 'superuser':
             return `<span class="badge bg-danger">Süper kullanıcı</span>${detail}`;
         case 'override':
             return `<span class="badge bg-warning text-dark">Bireysel</span>${detail}`;
+        case 'position':
         case 'group':
-            return `<span class="badge bg-primary">Grup</span>${detail}`;
+            return `<span class="badge bg-primary">Pozisyon</span>${detail}`;
         case 'legacy':
             return `<span class="badge bg-secondary">Eski sistem</span>${detail}`;
         case 'none':
@@ -985,100 +415,80 @@ function renderUserDetailPanel() {
     const panel = document.getElementById('user-permissions-panel');
     if (!panel || !currentUserDetail) return;
 
-    const { user, groups, effective_permissions, overrides } = currentUserDetail;
+    const detail = currentUserDetail;
+    const user = detail.user || detail;
+    const effective = detail.effective_permissions || {};
+    const overrides = Array.isArray(detail.overrides) ? detail.overrides : [];
+
     const catalog = Array.isArray(permissionsCatalog) ? permissionsCatalog : [];
     const catalogMap = new Map(catalog.map(p => [p.codename, p.name || p.codename]));
     const allCodenames = Array.from(new Set([
         ...catalog.map(p => p.codename),
-        ...Object.keys(effective_permissions || {})
+        ...Object.keys(effective || {})
     ])).sort((a, b) => a.localeCompare(b, 'tr'));
-    const codenames = allCodenames.length
-        ? allCodenames
-        : (permissionsMatrix?.codenames || Object.keys(effective_permissions || {}));
-    const overridesMap = new Map((overrides || []).map(o => [o.codename, o]));
+    const codenames = allCodenames.length ? allCodenames : (permissionsMatrix?.codenames || Object.keys(effective || {}));
+    const overridesMap = new Map(overrides.map(o => [o.codename, o]));
 
-    const officePerm = effective_permissions?.office_access || { value: false, source: 'none', source_detail: '' };
-    const workshopPerm = effective_permissions?.workshop_access || { value: false, source: 'none', source_detail: '' };
+    const officePerm = effective.office_access || { value: false, source: 'none', source_detail: '' };
+    const workshopPerm = effective.workshop_access || { value: false, source: 'none', source_detail: '' };
     const hasOfficeAccess = officePerm.value === true;
     const hasWorkshopAccess = workshopPerm.value === true;
 
-    const groupChips = (groups || []).map(g => `
-        <span class="badge bg-secondary me-1 mb-1">
-            ${g.display_name || g.name}
-            <button type="button" 
-                    class="btn btn-sm btn-link text-light p-0 ms-1 remove-group-btn" 
-                    data-group-name="${g.name}">
-                <i class="fas fa-times"></i>
-            </button>
-        </span>
-    `).join('') || '<span class="text-muted">Bu kullanıcı hiçbir grupta değil.</span>';
-
-    const groupOptions = groupsCache.map(g => `
-        <option value="${g.name}">${g.display_name || g.name}</option>
-    `).join('');
+    const currentPosId = getUserPositionId(user);
+    const positionOptions = positionsCache.map(p => {
+        const selected = currentPosId != null && Number(p.id) === currentPosId ? 'selected' : '';
+        const dept = p.department_name ? ` — ${p.department_name}` : '';
+        return `<option value="${p.id}" ${selected}>${escapeHtml(p.title)} (L${escapeHtml(p.level)})${escapeHtml(dept)}</option>`;
+    }).join('');
 
     const permsRows = codenames.map(code => {
-        const permObj = effective_permissions?.[code] || { value: false, source: 'none', source_detail: '' };
+        const permObj = effective[code] || { value: false, source: 'none', source_detail: '' };
         const value = permObj.value === true;
         const permName = catalogMap.get(code) || code;
         const hasOverride = overridesMap.has(code);
 
-        // Backend already resolves the permission source; render it directly.
         const sourceBadge = user.is_superuser
             ? formatPermSourceBadge('superuser', '')
             : formatPermSourceBadge(permObj.source, permObj.source_detail);
+
         return `
             <tr>
                 <td>
-                    <div class="fw-semibold">${permName}</div>
-                    <div class="text-muted small"><code>${code}</code></div>
+                    <div class="fw-semibold">${escapeHtml(permName)}</div>
+                    <div class="text-muted small"><code>${escapeHtml(code)}</code></div>
                 </td>
                 <td>${boolIcon(value)}</td>
                 <td>${sourceBadge}</td>
                 <td>
                     ${!user.is_superuser ? `
-                    <div class="btn-group btn-group-sm" role="group" aria-label="permission-actions">
-                        <button type="button"
-                                class="btn btn-outline-success quick-perm-btn"
-                                data-codename="${code}"
-                                data-action="grant"
-                                title="Bu kullanıcı için izin ver">
-                            Ver
-                        </button>
-                        <button type="button"
-                                class="btn btn-outline-warning quick-perm-btn"
-                                data-codename="${code}"
-                                data-action="deny"
-                                title="Bu kullanıcı için engelle">
-                            Engelle
-                        </button>
-                        <button type="button"
-                                class="btn btn-outline-danger clear-perm-override-btn"
-                                data-codename="${code}"
+                    <div class="btn-group btn-group-sm" role="group">
+                        <button type="button" class="btn btn-outline-success quick-perm-btn"
+                                data-codename="${escapeHtml(code)}" data-action="grant"
+                                title="Bu kullanıcı için izin ver">Ver</button>
+                        <button type="button" class="btn btn-outline-warning quick-perm-btn"
+                                data-codename="${escapeHtml(code)}" data-action="deny"
+                                title="Bu kullanıcı için engelle">Engelle</button>
+                        <button type="button" class="btn btn-outline-danger clear-perm-override-btn"
+                                data-codename="${escapeHtml(code)}"
                                 ${hasOverride ? '' : 'disabled'}
-                                title="Bireysel override kaldır ve grup varsayılanına dön">
-                            Sıfırla
-                        </button>
+                                title="Bireysel ayarı kaldır">Sıfırla</button>
                     </div>
-                    <button type="button"
-                            class="btn btn-sm btn-link text-decoration-none override-button ms-1"
-                            data-codename="${code}">
-                        Detay
-                    </button>
+                    <button type="button" class="btn btn-sm btn-link text-decoration-none override-button ms-1"
+                            data-codename="${escapeHtml(code)}">Detay</button>
                     ` : ''}
                 </td>
             </tr>
         `;
     }).join('');
 
-    const overridesRows = (overrides || []).map(o => `
+    const overridesRows = overrides.map(o => `
         <tr>
-            <td><code>${o.codename}</code></td>
-            <td>${o.granted ? 'İzin' : 'Yasak'}</td>
-            <td>${o.reason || '-'}</td>
+            <td><code>${escapeHtml(o.codename)}</code></td>
+            <td>${o.granted ? '<span class="badge bg-success">İzin</span>' : '<span class="badge bg-danger">Yasak</span>'}</td>
+            <td>${escapeHtml(o.reason || '-')}</td>
             <td>${o.created_at ? new Date(o.created_at).toLocaleString('tr-TR') : '-'}</td>
             <td>
-                <button type="button" class="btn btn-sm btn-outline-danger remove-override-btn" data-codename="${o.codename}">
+                <button type="button" class="btn btn-sm btn-outline-danger remove-override-btn" data-codename="${escapeHtml(o.codename)}">
                     Sil
                 </button>
             </td>
@@ -1090,28 +500,26 @@ function renderUserDetailPanel() {
     `;
 
     panel.innerHTML = `
-        <div class="card shadow-sm">
-            <div class="card-body">
+        <div class="card shadow-sm h-100">
+            <div class="card-body d-flex flex-column">
                 <h5 class="card-title mb-1">
-                    <i class="fas fa-user-shield me-2"></i>${user.full_name || user.username}
+                    <i class="fas fa-user-shield me-2"></i>${escapeHtml(user.full_name || user.username)}
                 </h5>
-                <p class="text-muted mb-3">@${user.username}</p>
+                <p class="text-muted mb-3">@${escapeHtml(user.username)}</p>
 
-                <h6 class="mb-2">Gruplar</h6>
-                <div class="mb-2">
-                    ${groupChips}
-                </div>
+                <h6 class="mb-2">Pozisyon</h6>
+                <div class="mb-3">${userPositionDisplay(user)}</div>
                 <div class="d-flex mb-3">
-                    <select class="form-select form-select-sm me-2" id="add-group-select">
-                        <option value="">Grup seçin...</option>
-                        ${groupOptions}
+                    <select class="form-select form-select-sm me-2" id="set-position-select">
+                        <option value="">Pozisyonu Kaldır</option>
+                        ${positionOptions}
                     </select>
-                    <button type="button" class="btn btn-sm btn-outline-primary" id="add-group-btn">
-                        Ekle
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="set-position-btn">
+                        Uygula
                     </button>
                 </div>
 
-                <h6 class="mt-3">Portal Erişimi</h6>
+                <h6 class="mt-1">Portal Erişimi</h6>
                 <div class="d-flex flex-wrap gap-2 mb-3">
                     <button type="button"
                             class="btn btn-sm ${hasOfficeAccess ? 'btn-success' : 'btn-outline-secondary'} portal-toggle-btn"
@@ -1129,8 +537,8 @@ function renderUserDetailPanel() {
                     </button>
                 </div>
 
-                <h6 class="mt-3">Yetkiler</h6>
-                <div class="table-responsive" style="max-height: 280px; overflow-y: auto;">
+                <h6 class="mt-1">Etkin Yetkiler</h6>
+                <div class="table-responsive flex-grow-1" style="overflow-y: auto;">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
                             <tr>
@@ -1140,9 +548,7 @@ function renderUserDetailPanel() {
                                 <th></th>
                             </tr>
                         </thead>
-                        <tbody>
-                            ${permsRows}
-                        </tbody>
+                        <tbody>${permsRows}</tbody>
                     </table>
                 </div>
 
@@ -1158,9 +564,7 @@ function renderUserDetailPanel() {
                                 <th></th>
                             </tr>
                         </thead>
-                        <tbody>
-                            ${overridesRows}
-                        </tbody>
+                        <tbody>${overridesRows}</tbody>
                     </table>
                 </div>
             </div>
@@ -1174,48 +578,35 @@ function attachUserPanelHandlers() {
     const panel = document.getElementById('user-permissions-panel');
     if (!panel || !currentUserDetail) return;
 
-    const userId = currentUserDetail.user.id;
+    const user = currentUserDetail.user || currentUserDetail;
+    const userId = user.id;
 
-    const addGroupBtn = panel.querySelector('#add-group-btn');
-    const addGroupSelect = panel.querySelector('#add-group-select');
-    if (addGroupBtn && addGroupSelect) {
-        addGroupBtn.addEventListener('click', async () => {
-            const groupName = addGroupSelect.value;
-            if (!groupName) return;
+    const setPositionBtn = panel.querySelector('#set-position-btn');
+    const setPositionSelect = panel.querySelector('#set-position-select');
+    if (setPositionBtn && setPositionSelect) {
+        setPositionBtn.addEventListener('click', async () => {
+            const raw = setPositionSelect.value;
+            const positionId = raw ? Number(raw) : null;
             try {
-                await addUserToGroup(userId, groupName);
-                showNotification('Kullanıcı gruba eklendi', 'success');
+                const resp = await updateUserAPI(userId, { position: positionId });
+                if (!resp.ok) {
+                    const body = await resp.json().catch(() => ({}));
+                    throw new Error(body?.detail || body?.message || 'Pozisyon güncellenemedi.');
+                }
+                showNotification(positionId ? 'Kullanıcının pozisyonu güncellendi.' : 'Kullanıcının pozisyonu kaldırıldı.', 'success');
                 await loadUserDetail(userId);
-                await loadMatrix();
+                refreshUserTableRow();
             } catch (e) {
                 console.error(e);
-                showNotification(e.message || 'Grup eklenirken hata oluştu', 'error');
+                showNotification(e.message || 'Pozisyon güncellenirken hata oluştu', 'error');
             }
         });
     }
 
-    panel.querySelectorAll('.remove-group-btn').forEach(btn => {
-        btn.addEventListener('click', async () => {
-            const groupName = btn.getAttribute('data-group-name');
-            if (!groupName) return;
-            try {
-                await removeUserFromGroup(userId, groupName);
-                showNotification('Kullanıcı gruptan çıkarıldı', 'success');
-                await loadUserDetail(userId);
-                await loadMatrix();
-            } catch (e) {
-                console.error(e);
-                showNotification(e.message || 'Grup kaldırılırken hata oluştu', 'error');
-            }
-        });
-    });
-
     panel.querySelectorAll('.override-button').forEach(btn => {
         btn.addEventListener('click', () => {
             const codename = btn.getAttribute('data-codename');
-            if (codename) {
-                openOverrideModal(userId, codename);
-            }
+            if (codename) openOverrideModal(userId, codename);
         });
     });
 
@@ -1224,7 +615,6 @@ function attachUserPanelHandlers() {
             const codename = btn.getAttribute('data-codename');
             const action = btn.getAttribute('data-action');
             if (!codename || !action) return;
-
             try {
                 await saveUserPermissionOverride(userId, {
                     codename,
@@ -1238,7 +628,7 @@ function attachUserPanelHandlers() {
                     'success'
                 );
                 await loadUserDetail(userId);
-                await loadMatrix();
+                refreshUserTableRow();
             } catch (e) {
                 console.error(e);
                 showNotification(e.message || 'Yetki güncellenirken hata oluştu', 'error');
@@ -1250,12 +640,11 @@ function attachUserPanelHandlers() {
         btn.addEventListener('click', async () => {
             const codename = btn.getAttribute('data-codename');
             if (!codename) return;
-
             try {
                 await deleteUserPermissionOverride(userId, codename);
                 showNotification(`${codename} için bireysel ayar kaldırıldı`, 'success');
                 await loadUserDetail(userId);
-                await loadMatrix();
+                refreshUserTableRow();
             } catch (e) {
                 console.error(e);
                 showNotification(e.message || 'Bireysel ayar kaldırılırken hata oluştu', 'error');
@@ -1278,7 +667,7 @@ function attachUserPanelHandlers() {
                 const label = codename === 'office_access' ? 'Ofis erişimi' : 'Atölye erişimi';
                 showNotification(`${label} ${nextGranted ? 'açıldı' : 'kapatıldı'}`, 'success');
                 await loadUserDetail(userId);
-                await loadMatrix();
+                refreshUserTableRow();
             } catch (e) {
                 console.error(e);
                 showNotification(e.message || 'Portal erişimi güncellenirken hata oluştu', 'error');
@@ -1294,7 +683,7 @@ function attachUserPanelHandlers() {
                 await deleteUserPermissionOverride(userId, codename);
                 showNotification('Geçersiz kılma kaldırıldı', 'success');
                 await loadUserDetail(userId);
-                await loadMatrix();
+                refreshUserTableRow();
             } catch (e) {
                 console.error(e);
                 showNotification(e.message || 'Geçersiz kılma silinirken hata oluştu', 'error');
@@ -1304,9 +693,10 @@ function attachUserPanelHandlers() {
 }
 
 function openOverrideModal(userId, codename) {
-    if (!overrideModal || !permissionsMatrix) return;
+    if (!overrideModal) return;
 
     overrideModal.clearAll();
+    overrideModal.setTitle(`${codename} — Yetki Geçersiz Kılma`);
 
     overrideModal.addSection({
         title: 'Yetki Geçersiz Kılma',
@@ -1315,36 +705,21 @@ function openOverrideModal(userId, codename) {
     });
 
     overrideModal.addField({
-        id: 'codename',
-        name: 'codename',
-        label: 'Yetki Kodu',
-        type: 'text',
-        value: codename,
-        readonly: true,
-        colSize: 12
+        id: 'codename', name: 'codename', label: 'Yetki Kodu', type: 'text',
+        value: codename, readonly: true, colSize: 12
     });
-
     overrideModal.addField({
-        id: 'granted',
-        name: 'granted',
-        label: 'Durum',
-        type: 'dropdown',
+        id: 'granted', name: 'granted', label: 'Durum', type: 'dropdown',
         value: 'true',
         options: [
-            { value: 'true', label: 'Erişim Ver (grant)' },
-            { value: 'false', label: 'Erişimi Engelle (deny)' }
+            { value: 'true', label: 'Erişim Ver' },
+            { value: 'false', label: 'Erişimi Engelle' }
         ],
         colSize: 12
     });
-
     overrideModal.addField({
-        id: 'reason',
-        name: 'reason',
-        label: 'Sebep (opsiyonel)',
-        type: 'textarea',
-        value: '',
-        rows: 3,
-        colSize: 12
+        id: 'reason', name: 'reason', label: 'Sebep (opsiyonel)', type: 'textarea',
+        value: '', rows: 3, colSize: 12
     });
 
     overrideModal.onSaveCallback(async (formData) => {
@@ -1357,7 +732,7 @@ function openOverrideModal(userId, codename) {
             overrideModal.hide();
             showNotification('Geçersiz kılma kaydedildi', 'success');
             await loadUserDetail(userId);
-            await loadMatrix();
+            refreshUserTableRow();
         } catch (e) {
             console.error(e);
             showNotification(e.message || 'Geçersiz kılma kaydedilirken hata oluştu', 'error');
@@ -1368,3 +743,594 @@ function openOverrideModal(userId, codename) {
     overrideModal.show();
 }
 
+// ---------------------------------------------------------------------------
+// POSITIONS TAB
+// ---------------------------------------------------------------------------
+
+/** Load the lean positions list — one request, no N+1. */
+async function loadPositionsList(force = false) {
+    if (!force && positionsCache.length) return;
+    const resp = await fetchPositions();
+    positionsCache = listFromResponse(resp);
+    // positionPermsCache is populated lazily in loadPositionDetail (on click).
+}
+
+async function loadPositionMatrix(force = true) {
+    try {
+        if (positionMatrixTable) positionMatrixTable.setLoading(true);
+
+        await loadPositionsList(force);
+
+        const rows = positionsCache
+            .map(p => ({
+                id: p.id,
+                title: p.title || '-',
+                level: p.level,
+                department_name: p.department_name || p.department_code || '-',
+                parent_title: p.parent_title || '-',
+                holder_count: Number(p.holder_count || 0),
+                // Use list-level count; detail fills positionPermsCache on click.
+                permission_count: Number(p.permission_count || 0),
+                is_active: p.is_active !== false
+            }))
+            .sort((a, b) => {
+                const diff = Number(a.level || 0) - Number(b.level || 0);
+                return diff !== 0 ? diff : (a.title || '').localeCompare(b.title || '', 'tr');
+            });
+
+        if (!positionMatrixTable) initPositionMatrixTable();
+        positionMatrixTable.updateData(rows, rows.length, 1);
+
+        if (currentPositionId) {
+            await loadPositionDetail(currentPositionId);
+        }
+    } catch (e) {
+        console.error(e);
+        showNotification(e.message || 'Pozisyon listesi yüklenirken hata oluştu', 'error');
+        if (positionMatrixTable) positionMatrixTable.updateData([], 0, 1);
+    } finally {
+        if (positionMatrixTable) positionMatrixTable.setLoading(false);
+    }
+}
+
+function initPositionMatrixTable() {
+    positionMatrixTable = new TableComponent('position-matrix-container', {
+        title: 'Pozisyon Listesi',
+        icon: 'fas fa-sitemap',
+        iconColor: 'text-primary',
+        columns: [
+            {
+                field: 'title',
+                label: 'Pozisyon',
+                sortable: true,
+                formatter: (v, row) => {
+                    const level = row.level
+                        ? `<span class="perm-level-pill ms-1">L${escapeHtml(row.level)}</span>`
+                        : '';
+                    return `<strong>${escapeHtml(v || '-')}</strong>${level}`;
+                }
+            },
+            { field: 'department_name', label: 'Departman', width: '180px', sortable: true, formatter: v => escapeHtml(v || '-') },
+            { field: 'parent_title', label: 'Bağlı Olduğu', width: '180px', sortable: true, formatter: v => escapeHtml(v || '-') },
+            { field: 'holder_count', label: 'Kişi', width: '70px', sortable: true, type: 'number' },
+            { field: 'permission_count', label: 'Yetki', width: '70px', sortable: true, type: 'number' },
+            {
+                field: 'is_active', label: 'Durum', width: '90px', sortable: true,
+                formatter: v => v
+                    ? '<span class="status-badge status-green">Aktif</span>'
+                    : '<span class="status-badge status-grey">Pasif</span>'
+            }
+        ],
+        actions: [],
+        pagination: false,
+        loading: true,
+        emptyMessage: 'Pozisyon bulunamadı.',
+        onRowClick: (row) => {
+            if (row && row.id) loadPositionDetail(row.id);
+        }
+    });
+}
+
+async function loadPositionDetail(positionId) {
+    const prevPositionId = currentPositionId;
+    currentPositionId = Number(positionId);
+    const panel = document.getElementById('position-permissions-panel');
+    if (!panel) return;
+
+    const positionInfo = positionsCache.find(p => Number(p.id) === currentPositionId) || { title: '-' };
+    panel.innerHTML = `
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <h5 class="card-title mb-1">
+                    <i class="fas fa-sitemap me-2"></i>${escapeHtml(positionInfo.title || '-')}
+                </h5>
+                <div class="text-muted">Yükleniyor...</div>
+            </div>
+        </div>
+    `;
+
+    try {
+        const isSamePosition =
+            prevPositionId === currentPositionId &&
+            currentPositionPermsDraft instanceof Set &&
+            currentPositionPermsOriginal instanceof Set;
+
+        // One request: detail returns permission_codenames + holders array.
+        const detail = await fetchPositionById(currentPositionId);
+        // Accept holders from the detail payload; fall back to a separate call
+        // if the backend doesn't embed them yet.
+        let holders = Array.isArray(detail.holders) ? detail.holders : null;
+        if (holders === null) {
+            const holdersResp = await fetchPositionHolders(currentPositionId);
+            holders = listFromResponse(holdersResp);
+        }
+        positionHoldersCache.set(currentPositionId, holders);
+
+        // Backend may return selected permission list as either `permission_codenames` (newer)
+        // or `codenames` (older / different serializer). Support both.
+        const codes = Array.isArray(detail.permission_codenames)
+            ? detail.permission_codenames
+            : (Array.isArray(detail.codenames) ? detail.codenames : []);
+        const fetchedSet = new Set(codes);
+
+        if (!isSamePosition || !currentPositionDirty) {
+            positionPermsCache.set(currentPositionId, fetchedSet);
+        }
+        if (!isSamePosition) {
+            currentPositionPermsOriginal = new Set(codes);
+            currentPositionPermsDraft = new Set(codes);
+            currentPositionDirty = false;
+        }
+
+        await ensurePermissionsCatalogLoaded();
+        const catalog = Array.isArray(permissionsCatalog) ? permissionsCatalog : [];
+        const bySection = new Map();
+        for (const p of catalog) {
+            const section = p.section || 'other';
+            if (!bySection.has(section)) bySection.set(section, []);
+            bySection.get(section).push({ codename: p.codename, name: p.name || p.codename, section });
+        }
+        const sections = Array.from(bySection.keys()).sort((a, b) => a.localeCompare(b, 'tr'));
+        for (const section of sections) {
+            bySection.get(section).sort((a, b) => (a.name || '').localeCompare((b.name || ''), 'tr'));
+        }
+
+        const sectionCards = sections.map(section => {
+            const items = bySection.get(section) || [];
+            const total = items.length;
+            const selectedCount = items.reduce((acc, it) => acc + (currentPositionPermsDraft.has(it.codename) ? 1 : 0), 0);
+            const allSelected = total > 0 && selectedCount === total;
+
+            const sectionId = safeId(section);
+            const collapseId = `pos-section-collapse-${currentPositionId}-${sectionId}`;
+            const headerId = `pos-section-header-${currentPositionId}-${sectionId}`;
+            const expanded = sectionCollapseState.has(section) ? sectionCollapseState.get(section) : false;
+
+            const children = items.map(it => {
+                const checked = currentPositionPermsDraft.has(it.codename) ? 'checked' : '';
+                return `
+                    <div class="d-flex align-items-start justify-content-between py-1 border-bottom">
+                        <div class="me-2">
+                            <div class="text-body">${escapeHtml(it.name || '-')}</div>
+                            <div class="text-muted small"><code>${escapeHtml(it.codename)}</code></div>
+                        </div>
+                        <div class="form-check m-0 pt-1">
+                            <input class="form-check-input position-panel-checkbox"
+                                   type="checkbox"
+                                   ${checked}
+                                   data-codename="${escapeHtml(it.codename)}"
+                                   data-section="${escapeHtml(section)}">
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            return `
+                <div class="accordion-item">
+                    <h2 class="accordion-header" id="${headerId}">
+                        <div class="d-flex align-items-stretch">
+                            <button class="accordion-button ${expanded ? '' : 'collapsed'} flex-grow-1" type="button"
+                                    data-bs-toggle="collapse"
+                                    data-bs-target="#${collapseId}"
+                                    aria-expanded="${expanded ? 'true' : 'false'}"
+                                    aria-controls="${collapseId}">
+                                <div class="d-flex align-items-center gap-2 w-100">
+                                    <span class="badge ${sectionBadgeClass(section)}">${escapeHtml(sectionLabel(section))}</span>
+                                    <span class="text-muted small position-section-count" data-section="${escapeHtml(section)}">${selectedCount}/${total}</span>
+                                </div>
+                            </button>
+                            <div class="px-3 d-flex align-items-center border-start">
+                                <div class="form-check m-0">
+                                    <input class="form-check-input section-parent-checkbox"
+                                           type="checkbox"
+                                           ${allSelected ? 'checked' : ''}
+                                           data-section="${escapeHtml(section)}"
+                                           onclick="event.stopPropagation();">
+                                </div>
+                            </div>
+                        </div>
+                    </h2>
+                    <div id="${collapseId}" class="accordion-collapse collapse ${expanded ? 'show' : ''}"
+                         aria-labelledby="${headerId}">
+                        <div class="accordion-body py-2">
+                            ${children || '<div class="text-muted">-</div>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        const permsList = `
+            <div class="accordion" id="position-section-accordion">
+                ${sectionCards || '<div class="text-muted">-</div>'}
+            </div>
+        `;
+
+        panel.innerHTML = `
+            <div class="card shadow-sm h-100">
+                <div class="card-body d-flex flex-column">
+                    <h5 class="card-title mb-1">
+                        <i class="fas fa-sitemap me-2"></i>${escapeHtml(detail.title || '-')}
+                        <span class="perm-level-pill ms-2">L${escapeHtml(detail.level || '-')}</span>
+                    </h5>
+                    <p class="text-muted mb-2">
+                        ${detail.department_name ? escapeHtml(detail.department_name) : ''}
+                        ${detail.parent_title ? ` &middot; Bağlı: <strong>${escapeHtml(detail.parent_title)}</strong>` : ''}
+                    </p>
+                    <div class="d-flex flex-wrap gap-2 mb-3">
+                        <span class="badge bg-secondary">Kişi: ${holders.length}</span>
+                        <span class="badge bg-secondary" id="position-perm-count-badge">Yetki: ${currentPositionPermsDraft.size}</span>
+                        <span class="badge ${detail.is_active ? 'bg-success' : 'bg-secondary'}">${detail.is_active ? 'Aktif' : 'Pasif'}</span>
+                    </div>
+
+                    <div class="d-flex gap-2 mb-3">
+                        <button type="button" class="btn btn-sm btn-success" id="position-save-btn" ${currentPositionDirty ? '' : 'disabled'}>
+                            <i class="fas fa-save me-1"></i>Kaydet
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="position-discard-btn" ${currentPositionDirty ? '' : 'disabled'}>
+                            <i class="fas fa-undo me-1"></i>Vazgeç
+                        </button>
+                        <div class="ms-auto text-muted small" id="position-dirty-indicator">
+                            ${currentPositionDirty ? 'Kaydedilmemiş değişiklikler' : ''}
+                        </div>
+                    </div>
+
+                    <h6>Mevcut Kullanıcılar</h6>
+                    <div class="mb-3" style="max-height: 120px; overflow-y: auto;">
+                        ${holders.length
+                            ? holders.map(h => `<div class="text-body">${escapeHtml(h.full_name || h.username || '-')}</div>`).join('')
+                            : '<span class="text-muted">Bu pozisyonda kullanıcı yok.</span>'}
+                    </div>
+
+                    <h6>Yetkiler</h6>
+                    <div class="flex-grow-1" style="overflow-y: auto;">
+                        ${permsList}
+                    </div>
+                </div>
+            </div>
+        `;
+
+        attachPositionPanelHandlers();
+    } catch (e) {
+        console.error(e);
+        showNotification(e.message || 'Pozisyon detayları yüklenirken hata oluştu', 'error');
+        panel.innerHTML = `
+            <div class="card shadow-sm h-100">
+                <div class="card-body">
+                    <h5 class="card-title mb-1">
+                        <i class="fas fa-sitemap me-2"></i>${escapeHtml(positionInfo.title || '-')}
+                    </h5>
+                    <div class="text-muted">Detaylar yüklenemedi.</div>
+                </div>
+            </div>
+        `;
+    }
+}
+
+function captureSectionCollapseState(panelEl) {
+    if (!panelEl) return;
+    panelEl.querySelectorAll('.accordion-collapse').forEach(el => {
+        const section = el.querySelector('.position-panel-checkbox')?.getAttribute('data-section');
+        if (!section) return;
+        sectionCollapseState.set(section, el.classList.contains('show'));
+    });
+}
+
+/** Update panel DOM from `currentPositionPermsDraft` without refetching the position. */
+function syncPositionPanelUiFromDraft(panel) {
+    if (!panel) return;
+    const badge = panel.querySelector('#position-perm-count-badge');
+    if (badge) badge.textContent = `Yetki: ${currentPositionPermsDraft.size}`;
+
+    panel.querySelectorAll('.position-panel-checkbox').forEach(ch => {
+        const codename = ch.getAttribute('data-codename');
+        if (codename) ch.checked = currentPositionPermsDraft.has(codename);
+    });
+
+    panel.querySelectorAll('.accordion-item').forEach(item => {
+        const sectionCb = item.querySelector('.section-parent-checkbox');
+        const section = sectionCb?.getAttribute('data-section');
+        if (!section) return;
+
+        let total = 0;
+        let selected = 0;
+        item.querySelectorAll('.position-panel-checkbox').forEach(ch => {
+            if (ch.getAttribute('data-section') !== section) return;
+            total += 1;
+            const codename = ch.getAttribute('data-codename');
+            if (codename && currentPositionPermsDraft.has(codename)) selected += 1;
+        });
+
+        item.querySelectorAll('.position-section-count').forEach(el => {
+            if (el.getAttribute('data-section') === section) {
+                el.textContent = `${selected}/${total}`;
+            }
+        });
+
+        if (sectionCb) {
+            sectionCb.checked = total > 0 && selected === total;
+            sectionCb.indeterminate = selected > 0 && selected < total;
+        }
+    });
+}
+
+function attachPositionPanelHandlers() {
+    const panel = document.getElementById('position-permissions-panel');
+    if (!panel) return;
+
+    const saveBtn = panel.querySelector('#position-save-btn');
+    const discardBtn = panel.querySelector('#position-discard-btn');
+    const dirtyIndicator = panel.querySelector('#position-dirty-indicator');
+
+    function setDirty(isDirty) {
+        currentPositionDirty = isDirty;
+        if (saveBtn) saveBtn.disabled = !isDirty;
+        if (discardBtn) discardBtn.disabled = !isDirty;
+        if (dirtyIndicator) dirtyIndicator.textContent = isDirty ? 'Kaydedilmemiş değişiklikler' : '';
+    }
+
+    setDirty(currentPositionDirty === true);
+
+    if (discardBtn) {
+        discardBtn.addEventListener('click', () => {
+            currentPositionPermsDraft = new Set(currentPositionPermsOriginal);
+            setDirty(false);
+            syncPositionPanelUiFromDraft(panel);
+        });
+    }
+
+    if (saveBtn) {
+        saveBtn.addEventListener('click', async () => {
+            if (!currentPositionId) return;
+            if (setsEqual(currentPositionPermsDraft, currentPositionPermsOriginal)) {
+                setDirty(false);
+                return;
+            }
+            saveBtn.disabled = true;
+            if (discardBtn) discardBtn.disabled = true;
+            if (dirtyIndicator) dirtyIndicator.textContent = 'Kaydediliyor...';
+
+            try {
+                const payload = Array.from(currentPositionPermsDraft);
+                await patchPositionPermissions(currentPositionId, payload);
+
+                currentPositionPermsOriginal = new Set(currentPositionPermsDraft);
+                positionPermsCache.set(currentPositionId, new Set(currentPositionPermsDraft));
+
+                // Update the list-level permission_count in the cache so the
+                // table row reflects the new count without a re-fetch.
+                const cachedRow = positionsCache.find(p => Number(p.id) === currentPositionId);
+                if (cachedRow) cachedRow.permission_count = currentPositionPermsDraft.size;
+
+                showNotification('Pozisyon yetkileri kaydedildi', 'success');
+
+                await loadMatrix({});
+                await loadPositionMatrix(false); // rebuilds from updated cache, no network
+                await loadPermissionsList();
+                setDirty(false);
+            } catch (e) {
+                console.error(e);
+                showNotification(e.message || 'Kaydetme sırasında hata oluştu', 'error');
+                setDirty(true);
+            }
+        });
+    }
+
+    panel.querySelectorAll('.position-panel-checkbox').forEach(cb => {
+        cb.addEventListener('change', () => {
+            const codename = cb.getAttribute('data-codename');
+            const checked = cb.checked === true;
+            if (!codename) return;
+
+            if (checked) currentPositionPermsDraft.add(codename);
+            else currentPositionPermsDraft.delete(codename);
+
+            const isDirty = !setsEqual(currentPositionPermsDraft, currentPositionPermsOriginal);
+            setDirty(isDirty);
+
+            captureSectionCollapseState(panel);
+            syncPositionPanelUiFromDraft(panel);
+        });
+    });
+
+    panel.querySelectorAll('.section-parent-checkbox').forEach(pcb => {
+        const section = pcb.getAttribute('data-section');
+        if (section) {
+            const children = panel.querySelectorAll(`.position-panel-checkbox[data-section="${section}"]`);
+            let total = 0;
+            let selected = 0;
+            children.forEach(ch => {
+                total += 1;
+                if (ch.checked) selected += 1;
+            });
+            pcb.indeterminate = selected > 0 && selected < total;
+        }
+
+        pcb.addEventListener('change', () => {
+            const section = pcb.getAttribute('data-section');
+            if (!section) return;
+            const wantChecked = pcb.checked === true;
+
+            captureSectionCollapseState(panel);
+
+            panel.querySelectorAll(`.position-panel-checkbox[data-section="${section}"]`).forEach(ch => {
+                const codename = ch.getAttribute('data-codename');
+                if (!codename) return;
+                ch.checked = wantChecked;
+                if (wantChecked) currentPositionPermsDraft.add(codename);
+                else currentPositionPermsDraft.delete(codename);
+            });
+
+            const isDirty = !setsEqual(currentPositionPermsDraft, currentPositionPermsOriginal);
+            setDirty(isDirty);
+            syncPositionPanelUiFromDraft(panel);
+        });
+    });
+
+    panel.querySelectorAll('.accordion-collapse').forEach(el => {
+        el.addEventListener('shown.bs.collapse', () => {
+            const section = el.querySelector('.position-panel-checkbox')?.getAttribute('data-section');
+            if (section) sectionCollapseState.set(section, true);
+        });
+        el.addEventListener('hidden.bs.collapse', () => {
+            const section = el.querySelector('.position-panel-checkbox')?.getAttribute('data-section');
+            if (section) sectionCollapseState.set(section, false);
+        });
+    });
+}
+
+// ---------------------------------------------------------------------------
+// PERMISSIONS TAB
+// ---------------------------------------------------------------------------
+async function loadPermissionsList() {
+    try {
+        if (!permissionsListTable) return;
+        permissionsListTable.setLoading(true);
+
+        await ensurePermissionsCatalogLoaded();
+
+        // Fetch per-permission user list (with overrides) when available.
+        let perms = [];
+        try {
+            perms = await fetchPermissionsUsersList();
+        } catch (e) {
+            console.warn('Failed to load /users/permissions/; falling back to matrix-derived list', e);
+            perms = [];
+        }
+
+        const catalogMap = new Map((permissionsCatalog || []).map(p => [p.codename, p]));
+
+        // Build positions-with-permission map from positionPermsCache
+        const positionsByPerm = new Map();
+        positionPermsCache.forEach((permSet, posId) => {
+            const positionInfo = positionsCache.find(p => Number(p.id) === Number(posId));
+            if (!positionInfo) return;
+            permSet.forEach(code => {
+                if (!positionsByPerm.has(code)) positionsByPerm.set(code, []);
+                positionsByPerm.get(code).push(positionInfo);
+            });
+        });
+
+        let rows = [];
+        if (Array.isArray(perms) && perms.length) {
+            rows = perms.map(p => {
+                const meta = catalogMap.get(p.codename) || { name: p.codename, section: p.section || p.portal || 'other' };
+                const users = Array.isArray(p.users) ? p.users : [];
+                const overrides = Array.isArray(p.overrides) ? p.overrides : [];
+                const positionsWith = positionsByPerm.get(p.codename) || [];
+
+                const positionsDisplay = positionsWith.length
+                    ? positionsWith.map(pos => `${pos.title} (L${pos.level})`).join(', ')
+                    : '-';
+
+                const overridesDisplay = overrides.length
+                    ? overrides.map(o => `${o.username}(${o.granted ? '+' : '-'})`).join(', ')
+                    : '-';
+
+                return {
+                    id: p.codename,
+                    codename: p.codename,
+                    name: meta.name || p.codename,
+                    section: meta.section || 'other',
+                    position_count: positionsWith.length,
+                    user_count: users.length,
+                    positions_display: positionsDisplay,
+                    users_display: users.length ? users.map(u => u.username).join(', ') : '-',
+                    overrides_display: overridesDisplay
+                };
+            });
+        } else if (permissionsMatrix) {
+            const codenames = permissionsMatrix.codenames || [];
+            rows = codenames.map(code => {
+                const meta = catalogMap.get(code) || { name: code, section: 'other' };
+                const usersWith = (permissionsMatrix.users || []).filter(u => {
+                    const perm = u.permissions ? u.permissions[code] : null;
+                    return perm && perm.value === true;
+                });
+                const positionsWith = positionsByPerm.get(code) || [];
+                return {
+                    id: code,
+                    codename: code,
+                    name: meta.name || code,
+                    section: meta.section || 'other',
+                    position_count: positionsWith.length,
+                    user_count: usersWith.length,
+                    positions_display: positionsWith.length
+                        ? positionsWith.map(pos => `${pos.title} (L${pos.level})`).join(', ')
+                        : '-',
+                    users_display: usersWith.map(u => u.username).join(', ') || '-',
+                    overrides_display: '-'
+                };
+            });
+        }
+
+        rows.sort((a, b) => (a.section || '').localeCompare(b.section || '', 'tr') || (a.name || '').localeCompare(b.name || '', 'tr'));
+
+        permissionsListTable.updateData(rows, rows.length, 1);
+    } catch (e) {
+        console.error(e);
+        showNotification(e.message || 'Yetki listesi yüklenirken hata oluştu', 'error');
+        if (permissionsListTable) permissionsListTable.updateData([], 0, 1);
+    } finally {
+        if (permissionsListTable) permissionsListTable.setLoading(false);
+    }
+}
+
+function initPermissionsListTable() {
+    permissionsListTable = new TableComponent('permissions-list-container', {
+        title: 'Yetkiler',
+        icon: 'fas fa-key',
+        iconColor: 'text-primary',
+        columns: [
+            {
+                field: 'section',
+                label: 'Bölüm',
+                width: '120px',
+                sortable: true,
+                formatter: v => `<span class="badge ${sectionBadgeClass(v)}">${escapeHtml(sectionLabel(v))}</span>`
+            },
+            {
+                field: 'name',
+                label: 'Yetki',
+                width: '240px',
+                sortable: true,
+                formatter: (v, row) => `
+                    <div class="fw-semibold">${escapeHtml(v || row.codename)}</div>
+                    <div class="text-muted small"><code>${escapeHtml(row.codename)}</code></div>
+                `
+            },
+            { field: 'position_count', label: 'Pozisyon', width: '90px', sortable: true, type: 'number' },
+            { field: 'user_count', label: 'Kullanıcı', width: '90px', sortable: true, type: 'number' },
+            { field: 'positions_display', label: 'Pozisyonlar', sortable: false, formatter: v => escapeHtml(v || '-') },
+            { field: 'users_display', label: 'Kullanıcılar', sortable: false, formatter: v => escapeHtml(v || '-') },
+            {
+                field: 'overrides_display', label: 'Bireysel', sortable: false,
+                formatter: v => v && v !== '-' ? `<span class="text-warning">${escapeHtml(v)}</span>` : '-'
+            }
+        ],
+        actions: [],
+        pagination: false,
+        loading: true,
+        emptyMessage: 'Yetki bulunamadı.'
+    });
+}

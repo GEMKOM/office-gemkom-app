@@ -256,6 +256,12 @@ async function handleLandingPage() {
                             icon: 'fas fa-user-check',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/human_resources/attendance'
+                        },
+                        {
+                            label: 'Organizasyon',
+                            icon: 'fas fa-sitemap',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/human_resources/org'
                         }
                     ]
                 },

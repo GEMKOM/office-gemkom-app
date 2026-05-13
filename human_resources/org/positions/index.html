@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Pozisyonlar</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../style.css">
+    <link rel="stylesheet" href="../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../components/table/table.css">
+    <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
+    <link rel="stylesheet" href="../../../components/edit-modal/edit-modal.css">
+    <link rel="stylesheet" href="../../../components/filters/filters.css">
+    <link rel="stylesheet" href="../../../components/badges/badges.css">
+    <link rel="icon" type="image/png" href="../../../images/gemkom.png">
+    <style>
+        .org-stat {
+            background: #ffffff;
+            border: 1px solid #e9ecef;
+            border-radius: 0.5rem;
+            padding: 0.6rem 0.85rem;
+        }
+        .org-stat__label {
+            font-size: 0.7rem;
+            color: #6b7280;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .org-stat__value {
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: #1f2937;
+        }
+
+        .org-detail-card .card-body {
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        .detail-holders-list {
+            max-height: 240px;
+            overflow-y: auto;
+            border: 1px solid #e9ecef;
+            border-radius: 0.4rem;
+            padding: 0.25rem 0.5rem;
+        }
+        .org-detail__title { font-weight: 700; color: #1f2937; }
+        .org-detail__meta { color: #6b7280; font-size: 0.85rem; }
+        .org-detail__section-title {
+            text-transform: uppercase;
+            font-size: 0.72rem;
+            letter-spacing: 0.04em;
+            color: #6b7280;
+            margin-bottom: 0.35rem;
+        }
+        .org-level-pill {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 1.6rem;
+            height: 1.6rem;
+            font-size: 0.78rem;
+            font-weight: 700;
+            border-radius: 0.4rem;
+            background: #eff6ff;
+            color: #1d4ed8;
+        }
+
+        @media (min-width: 1200px) {
+            .org-layout { display: flex; gap: 1rem; align-items: flex-start; }
+            .org-layout__main { flex: 1 1 auto; min-width: 0; }
+            .org-layout__detail { width: 380px; flex: 0 0 380px; position: sticky; top: 80px; }
+        }
+    </style>
+</head>
+<body>
+    <div id="navbar-container"></div>
+
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <div id="header-placeholder"></div>
+
+            <div class="row mb-3 g-2">
+                <div class="col-6 col-md-3">
+                    <div class="org-stat"><div class="org-stat__label">Toplam Pozisyon</div><div class="org-stat__value" id="stat-total">-</div></div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="org-stat"><div class="org-stat__label">Aktif</div><div class="org-stat__value text-success" id="stat-active">-</div></div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="org-stat"><div class="org-stat__label">Atanmış Kişi</div><div class="org-stat__value" id="stat-holders">-</div></div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="org-stat"><div class="org-stat__label">Boş Pozisyon</div><div class="org-stat__value text-warning" id="stat-vacant">-</div></div>
+                </div>
+            </div>
+
+            <div id="position-filters"></div>
+
+            <div class="org-layout">
+                <div class="org-layout__main">
+                    <div id="positions-table-container"></div>
+                </div>
+                <div class="org-layout__detail">
+                    <div class="dashboard-card org-detail-card">
+                        <div class="card-header">
+                            <h5 class="card-title"><i class="fas fa-cog me-2 text-info"></i>Pozisyon İşlemleri</h5>
+                        </div>
+                        <div class="card-body" id="position-detail-panel">
+                            <div class="text-muted text-center py-4">
+                                <i class="fas fa-mouse-pointer d-block mb-2 fs-3 text-secondary"></i>
+                                Detay görmek için listeden bir pozisyon seçin.
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div id="position-edit-modal-container"></div>
+    <div id="position-confirm-modal-container"></div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="positions.js"></script>
+</body>
+</html>

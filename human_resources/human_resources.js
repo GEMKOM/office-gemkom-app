@@ -33,6 +33,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/human_resources/users'
             },
             {
+                title: 'Organizasyon',
+                description: 'Organizasyon şemasını, departmanları ve pozisyonları yönetin',
+                icon: 'fas fa-sitemap',
+                iconColor: 'dark',
+                link: '/human_resources/org'
+            },
+            {
                 title: 'PDKS Onayları',
                 description: 'Ofis dışı giriş taleplerini onaylayın veya reddedin',
                 icon: 'fas fa-user-check',

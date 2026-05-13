@@ -33,6 +33,9 @@ export async function authFetchUsers(page = 1, pageSize = 20, filters = {}) {
     if (filters.workshop_access) params.append('workshop_access', filters.workshop_access);
     if (filters.occupation)     params.append('occupation', filters.occupation);
     if (filters.is_active)      params.append('is_active', filters.is_active);
+    if (filters.position)       params.append('position', String(filters.position));
+    if (filters.position_level) params.append('position_level', String(filters.position_level));
+    if (filters.department_code) params.append('department_code', String(filters.department_code));
     if (filters.ordering)       params.append('ordering', filters.ordering);
     
     const url = `${backendBase}/users/?${params.toString()}`;

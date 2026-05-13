@@ -1,0 +1,306 @@
+/* ============================================================
+   Organization Tree Component
+   Centered hierarchical org-chart using the proven CSS3 pattern:
+   - UL is centered using display:table
+   - LI uses table-cell so siblings sit horizontally with even spacing
+   - Connectors drawn via ::before / ::after on LI and ::before on UL
+   ============================================================ */
+
+.org-chart {
+    --org-line: #b7c0cb;
+    --org-line-width: 1.5px;
+    --org-step: 28px;
+    --org-card-bg: #f4f5f1;
+    --org-card-border: #b8b6a8;
+    --org-card-radius: 4px;
+    --org-card-width: 200px;
+    --org-text: #1f2937;
+    --org-muted: #5f6c7b;
+    width: 100%;
+    background: #fff;
+    border-radius: 12px;
+}
+
+.org-chart__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #eceff3;
+    background: #fbfcfd;
+    border-radius: 12px 12px 0 0;
+}
+
+.org-chart__search {
+    flex: 1 1 220px;
+    min-width: 200px;
+    max-width: 320px;
+}
+
+.org-chart__viewport {
+    position: relative;
+    width: 100%;
+    overflow: auto;
+    padding: 1.5rem 1rem 2rem;
+    background:
+        radial-gradient(circle at 10px 10px, #eef1f5 1px, transparent 1px);
+    background-size: 22px 22px;
+    background-color: #fafbfc;
+    border-radius: 0 0 12px 12px;
+}
+
+.org-chart__canvas {
+    display: inline-block;
+    min-width: 100%;
+    text-align: center;
+}
+
+/* ---------------- tree structure ---------------- */
+
+.org-chart__tree,
+.org-chart__tree ul {
+    padding-top: var(--org-step);
+    position: relative;
+    display: table;
+    margin: 0 auto;
+    list-style: none;
+}
+
+/* Root has no incoming line so it doesn't need the top padding/connector */
+.org-chart__tree--root {
+    padding-top: 0;
+}
+
+.org-chart__tree--root > .org-chart__node {
+    padding-top: 0;
+}
+
+.org-chart__tree--root > .org-chart__node::before,
+.org-chart__tree--root > .org-chart__node::after {
+    display: none;
+}
+
+.org-chart__node {
+    display: table-cell;
+    vertical-align: top;
+    text-align: center;
+    padding: var(--org-step) 14px 0;
+    position: relative;
+    list-style: none;
+}
+
+/* horizontal half-lines at the top of every LI */
+.org-chart__node::before,
+.org-chart__node::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    right: 50%;
+    border-top: var(--org-line-width) solid var(--org-line);
+    width: 50%;
+    height: var(--org-step);
+}
+
+/* ::after sits on the right half AND draws the vertical drop down to its card */
+.org-chart__node::after {
+    right: auto;
+    left: 50%;
+    border-left: var(--org-line-width) solid var(--org-line);
+}
+
+/* only-child: no row line is needed; just sits directly under the parent drop */
+.org-chart__node:only-child::before,
+.org-chart__node:only-child::after {
+    display: none;
+}
+
+.org-chart__node:only-child {
+    padding-top: 0;
+}
+
+/* outer half-line trimming on the first/last sibling */
+.org-chart__node:first-child::before,
+.org-chart__node:last-child::after {
+    border: 0 none;
+}
+
+/* round corners + vertical join on the trimmed ends */
+.org-chart__node:last-child::before {
+    border-right: var(--org-line-width) solid var(--org-line);
+    border-radius: 0 6px 0 0;
+}
+
+.org-chart__node:first-child::after {
+    border-radius: 6px 0 0 0;
+}
+
+/* Vertical connector from parent card DOWN into the children's row */
+.org-chart__tree ul::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 50%;
+    width: 0;
+    height: var(--org-step);
+    border-left: var(--org-line-width) solid var(--org-line);
+}
+
+/* root tree never draws a top line from "nothing" */
+.org-chart__tree--root::before {
+    display: none;
+}
+
+/* ---------------- cards ---------------- */
+
+.org-card {
+    display: inline-block;
+    width: var(--org-card-width);
+    background: var(--org-card-bg);
+    border: 1px solid var(--org-card-border);
+    border-radius: var(--org-card-radius);
+    padding: 10px 10px 10px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--org-text);
+    box-shadow: 0 1px 0 rgba(0, 0, 0, 0.04), 0 1px 3px rgba(0, 0, 0, 0.06);
+    transition: box-shadow 0.15s ease, transform 0.15s ease, border-color 0.15s ease;
+    position: relative;
+}
+
+.org-card:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(9, 30, 66, 0.12);
+    border-color: #8a8a78;
+}
+
+.org-card.is-selected {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 2px rgba(13, 110, 253, 0.18);
+}
+
+.org-card__title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #2b2f36;
+    line-height: 1.25;
+    margin: 0;
+    word-break: break-word;
+}
+
+.org-card__sub {
+    margin-top: 6px;
+    font-size: 0.72rem;
+    color: var(--org-muted);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.45rem;
+    flex-wrap: wrap;
+}
+
+.org-card__pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 18px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #ffffff;
+    border: 1px solid #d5d9df;
+    font-size: 0.68rem;
+    color: #475467;
+    line-height: 1;
+}
+
+.org-card__pill .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--org-dept-color, #6c757d);
+}
+
+.org-card__badge {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    min-width: 22px;
+    height: 22px;
+    padding: 0 6px;
+    border-radius: 999px;
+    background: #0d6efd;
+    color: #fff;
+    font-size: 0.7rem;
+    font-weight: 700;
+    line-height: 22px;
+    text-align: center;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+}
+
+.org-card--vacant .org-card__badge {
+    background: #adb5bd;
+}
+
+.org-card--vacant {
+    background: #fbfbf8;
+    border-style: dashed;
+    color: #6b7280;
+}
+
+.org-card__accent {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    border-radius: var(--org-card-radius) var(--org-card-radius) 0 0;
+    background: var(--org-dept-color, transparent);
+}
+
+.org-card__toggle {
+    position: absolute;
+    left: 50%;
+    bottom: -12px;
+    transform: translateX(-50%);
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    background: #fff;
+    border: 1px solid var(--org-line);
+    color: #5f6c7b;
+    font-size: 0.7rem;
+    line-height: 20px;
+    text-align: center;
+    cursor: pointer;
+    user-select: none;
+    z-index: 2;
+}
+
+.org-card__toggle:hover {
+    color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+/* search dim / match */
+.org-card.is-dimmed {
+    opacity: 0.35;
+    filter: saturate(0.6);
+}
+
+.org-card.is-match {
+    border-color: #f59e0b;
+    box-shadow: 0 0 0 2px rgba(245, 158, 11, 0.25);
+}
+
+/* ---------------- empty state ---------------- */
+
+.org-chart__empty {
+    padding: 2rem;
+    border: 1px dashed #c8d1db;
+    border-radius: 0.5rem;
+    color: #637381;
+    text-align: center;
+    background: #fff;
+}

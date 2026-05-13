@@ -26,6 +26,7 @@ import {
     listOfferFiles,
     proposePrice,
     getPriceHistory,
+    getJobOrderHistoryByTemplateNode,
     submitApproval,
     setOfferPrices,
     bulkUpdateOfferItems,
@@ -3334,6 +3335,14 @@ const pricingV3State = {
 };
 
 let pricingV3BeforeUnloadAttached = false;
+const JOB_ORDER_STATUS_LABELS = {
+    draft: 'Taslak',
+    planned: 'Planlandı',
+    in_progress: 'Devam Ediyor',
+    on_hold: 'Beklemede',
+    completed: 'Tamamlandı',
+    cancelled: 'İptal'
+};
 
 function initPricingV3Tab() {
     if (!offerId || !offer) return;
@@ -3481,6 +3490,7 @@ function renderPricingV3Row(item, container, depth) {
 
     const title = item.resolved_title || item.title_override || item.title || (item.template_node_detail?.title ?? '-') || '-';
     const isCustom = !item.template_node;
+    const nodeId = getPricingItemNodeId(item);
     const subtotal = computePricingV3Subtotal(item);
     const weightTotal = computePricingV3WeightTotal(item);
     const qty = edits?.quantity ?? 1;
@@ -3494,6 +3504,11 @@ function renderPricingV3Row(item, container, depth) {
         ${depth > 0 ? '<span class="pricing-tree-prefix">└─</span>' : ''}
         ${escapeHtml(String(title))}
         ${isCustom ? '<span class="badge bg-light text-dark border ms-2">custom</span>' : ''}
+        ${nodeId != null ? `
+          <button type="button" class="btn btn-outline-secondary btn-sm ms-2 pricing-node-history-btn" title="Bu kalemin geçmiş iş emirlerini görüntüle">
+            <i class="fas fa-clock-rotate-left me-1"></i>Geçmiş
+          </button>
+        ` : ''}
       </td>
       <td class="text-center">
         <span>${escapeHtml(String(qty))}</span>
@@ -3544,9 +3559,141 @@ function renderPricingV3Row(item, container, depth) {
     if (periodInput) periodInput.addEventListener('input', (e) => setPricingV3Edit(item.id, 'delivery_period', e.target.value));
     const notesInput = tr.querySelector('.pricing-notes-input');
     if (notesInput) notesInput.addEventListener('input', (e) => setPricingV3Edit(item.id, 'notes', e.target.value));
+    const historyBtn = tr.querySelector('.pricing-node-history-btn');
+    if (historyBtn) historyBtn.addEventListener('click', () => showPricingNodeHistoryModal(item));
 
     for (const child of (item.children || [])) {
         renderPricingV3Row(child, container, depth + 1);
+    }
+}
+
+function getPricingItemNodeId(item) {
+    const raw = item?.template_node ?? item?.node_id ?? item?.template_node_detail?.id;
+    if (raw === null || raw === undefined || raw === '') return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+}
+
+function formatJobOrderDate(value) {
+    if (!value) return '-';
+    const d = new Date(value);
+    return Number.isNaN(d.getTime()) ? '-' : d.toLocaleDateString('tr-TR');
+}
+
+function formatJobOrderAmount(amount, currency = 'EUR') {
+    if (amount === null || amount === undefined || amount === '') return '-';
+    const parsed = Number(amount);
+    if (!Number.isFinite(parsed)) return '-';
+    try {
+        return new Intl.NumberFormat('tr-TR', {
+            style: 'currency',
+            currency: currency || 'EUR',
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }).format(parsed);
+    } catch {
+        return `${parsed.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ${escapeHtml(String(currency || ''))}`;
+    }
+}
+
+function renderPricingNodeHistoryRows(job, depth = 0) {
+    const children = Array.isArray(job?.children) ? job.children : [];
+    const row = `
+      <tr>
+        <td style="padding-left:${depth * 20 + 10}px;">
+          ${depth > 0 ? '<span class="text-muted me-1">└─</span>' : ''}
+          <span class="fw-semibold">${escapeHtml(String(job?.job_no || '-'))}</span>
+        </td>
+        <td>
+          <div class="fw-semibold">${escapeHtml(String(job?.title || '-'))}</div>
+          <div class="small text-muted">${escapeHtml(String(job?.customer_name || '-'))}</div>
+        </td>
+        <td>${escapeHtml(String(JOB_ORDER_STATUS_LABELS[job?.status] || job?.status || '-'))}</td>
+        <td>${escapeHtml(formatJobOrderDate(job?.target_completion_date))}</td>
+        <td class="text-end">${escapeHtml(formatJobOrderAmount(job?.estimated_cost, 'EUR'))}</td>
+        <td class="text-end">${escapeHtml(formatJobOrderAmount(job?.offer_unit_price, 'EUR'))}</td>
+        <td class="text-end">${escapeHtml(formatJobOrderAmount(job?.cost_summary?.actual_total_cost, job?.cost_summary?.selling_price_currency || 'EUR'))}</td>
+        <td class="text-end">${escapeHtml(formatJobOrderAmount(job?.cost_summary?.selling_price, job?.cost_summary?.selling_price_currency || 'EUR'))}</td>
+      </tr>
+    `;
+    return row + children.map((child) => renderPricingNodeHistoryRows(child, depth + 1)).join('');
+}
+
+function renderPricingNodeHistoryContent(item, nodeId, history) {
+    const rows = Array.isArray(history) ? history : [];
+    if (!rows.length) {
+        return `
+          <div class="text-center text-muted py-4">
+            <i class="fas fa-clock-rotate-left fa-2x mb-2 d-block"></i>
+            Bu kalem için geçmiş iş emri bulunamadı.
+          </div>
+        `;
+    }
+    const itemTitle = item?.resolved_title || item?.title_override || item?.title || item?.template_node_detail?.title || `Node #${nodeId}`;
+    return `
+      <div class="mb-2 text-muted small">
+        Kalem: <span class="fw-semibold">${escapeHtml(String(itemTitle))}</span> · Node ID: <span class="fw-semibold">${escapeHtml(String(nodeId))}</span>
+      </div>
+      <div class="table-responsive">
+        <table class="table table-sm table-bordered align-middle mb-0">
+          <thead class="table-light">
+            <tr>
+              <th style="width: 130px;">İş Emri</th>
+              <th>Başlık / Müşteri</th>
+              <th style="width: 130px;">Durum</th>
+              <th style="width: 135px;">Hedef Termin</th>
+              <th style="width: 160px;" class="text-end">Tahmini Maliyet</th>
+              <th style="width: 160px;" class="text-end">Teklif Birim Fiyat</th>
+              <th style="width: 160px;" class="text-end">Gerçek Toplam</th>
+              <th style="width: 160px;" class="text-end">Satış Fiyatı</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map((job) => renderPricingNodeHistoryRows(job, 0)).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+}
+
+async function showPricingNodeHistoryModal(item) {
+    const nodeId = getPricingItemNodeId(item);
+    if (nodeId == null) {
+        showNotification('Bu kalem için node bilgisi bulunamadı.', 'warning');
+        return;
+    }
+
+    let historyModalContainer = document.getElementById('pricing-node-history-modal-container');
+    if (!historyModalContainer) {
+        historyModalContainer = document.createElement('div');
+        historyModalContainer.id = 'pricing-node-history-modal-container';
+        document.body.appendChild(historyModalContainer);
+    }
+
+    const title = item?.resolved_title || item?.title_override || item?.title || item?.template_node_detail?.title || `Node #${nodeId}`;
+    const historyModal = new DisplayModal('pricing-node-history-modal-container', {
+        title: `${title} - Geçmiş İş Emirleri`,
+        icon: 'fas fa-clock-rotate-left',
+        size: 'xl',
+        showEditButton: false
+    });
+
+    historyModal.addCustomSection({
+        id: 'pricing-node-history-section',
+        customContent: '<div class="text-center py-4"><i class="fas fa-spinner fa-spin me-2"></i>Geçmiş yükleniyor...</div>'
+    });
+    historyModal.render();
+    historyModal.show();
+
+    const sectionContainer = historyModal.container?.querySelector('[data-section-id="pricing-node-history-section"] .custom-content');
+    if (!sectionContainer) return;
+
+    try {
+        const data = await getJobOrderHistoryByTemplateNode(nodeId, offerId);
+        sectionContainer.innerHTML = renderPricingNodeHistoryContent(item, nodeId, data);
+    } catch (err) {
+        console.error('Error loading node history in pricing tab:', err);
+        sectionContainer.innerHTML = '<div class="text-danger text-center py-4">Geçmiş yüklenirken hata oluştu.</div>';
     }
 }
 

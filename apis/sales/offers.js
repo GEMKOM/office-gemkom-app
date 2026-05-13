@@ -287,6 +287,17 @@ export async function getPriceHistory(offerId) {
     return response.json();
 }
 
+export async function getJobOrderHistoryByTemplateNode(nodeId, excludeOfferId = null) {
+    const params = new URLSearchParams();
+    params.append('node_id', String(nodeId));
+    if (excludeOfferId !== null && excludeOfferId !== undefined && excludeOfferId !== '') {
+        params.append('exclude_offer_id', String(excludeOfferId));
+    }
+    const response = await authedFetch(`${backendBase}/projects/job-orders/history-by-template-node/?${params.toString()}`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
+}
+
 export async function submitApproval(offerId, data = {}) {
     const response = await authedFetch(`${BASE}/${offerId}/submit-approval/`, {
         method: 'POST',

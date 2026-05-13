@@ -90,10 +90,25 @@ export async function cancelVacationRequest(requestId) {
     return parseJsonOrThrow(response, 'İzin talebi iptal edilemedi.');
 }
 
+export async function requestVacationCancellation(requestId, payload = {}) {
+    const response = await authedFetch(`${backendBase}/vacation-requests/requests/${requestId}/request-cancellation/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+    });
+    return parseJsonOrThrow(response, 'İptal talebi gönderilemedi.');
+}
+
 export async function fetchPendingVacationApprovalRequests(filters = {}) {
     const query = buildQuery(filters);
     const response = await authedFetch(`${backendBase}/vacation-requests/requests/pending_approval/${query}`);
     return parseJsonOrThrow(response, 'Bekleyen izin talepleri yüklenemedi.');
+}
+
+export async function fetchVacationApprovalsInbox(filters = {}) {
+    const query = buildQuery(filters);
+    const response = await authedFetch(`${backendBase}/vacation-requests/requests/approvals-inbox/${query}`);
+    return parseJsonOrThrow(response, 'Onay kutusu yüklenemedi.');
 }
 
 export async function approveVacationRequest(requestId, comment = '') {
@@ -112,6 +127,24 @@ export async function rejectVacationRequest(requestId, comment = '') {
         body: JSON.stringify({ comment })
     });
     return parseJsonOrThrow(response, 'Reddetme işlemi başarısız.');
+}
+
+export async function approveVacationCancellation(requestId, comment = '') {
+    const response = await authedFetch(`${backendBase}/vacation-requests/requests/${requestId}/approve-cancellation/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment })
+    });
+    return parseJsonOrThrow(response, 'İptal onayı başarısız.');
+}
+
+export async function rejectVacationCancellation(requestId, comment = '') {
+    const response = await authedFetch(`${backendBase}/vacation-requests/requests/${requestId}/reject-cancellation/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ comment })
+    });
+    return parseJsonOrThrow(response, 'İptal reddi başarısız.');
 }
 
 export async function fetchVacationDecisionsByMe(filters = {}) {
