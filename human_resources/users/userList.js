@@ -35,6 +35,14 @@ import {
 import { fetchVacationRequests, fetchUserLeaveSetup, patchUserLeaveSetup } from '../../apis/vacationRequests.js';
 import { fetchPositions as fetchOrganizationPositions, assignUserToPosition } from '../../apis/human_resources/organization.js';
 
+/** Çalışan oluşturma / düzenleme formları: kullanıcı adı ve ad-soyad kuralları (Türkçe). */
+const HR_USER_FIELD_HELP_TR = {
+    username:
+        'Türkçe karakter kullanılmaz (ı, ğ, ü, ş, ö, ç, İ vb.). Ad ve soyadın arada boşluk olmadan, tamamı küçük harf birleşik yazımı kullanılır (örnek: Mehmet Ali → mehmetali).',
+    first_name: 'Çalışanın gerçek adı: yalnızca ilk harf büyük, diğer harfler küçük (örnek: Mehmet).',
+    last_name: 'Çalışanın gerçek soyadı: yalnızca ilk harf büyük, diğer harfler küçük (örnek: Ali).'
+};
+
 let attendanceRecordEditModal = null;
 let attendanceRecordEditModalBound = false;
 let attendanceRecordEditContext = null; // { userId, dateStr, recordId, loadAttendance, parentModalBody }
@@ -2248,10 +2256,34 @@ function setupEventListeners() {
 function showCreateUserModal() {
     createUserModal.clearAll();
     createUserModal.addSection({ title: 'Temel Bilgiler', icon: 'fas fa-info-circle', iconColor: 'text-primary' });
-    createUserModal.addField({ id: 'username', name: 'username', label: 'Kullanıcı Adı', type: 'text', required: true, colSize: 6 });
+    createUserModal.addField({
+        id: 'username',
+        name: 'username',
+        label: 'Kullanıcı Adı',
+        type: 'text',
+        required: true,
+        colSize: 6,
+        help: HR_USER_FIELD_HELP_TR.username
+    });
     createUserModal.addField({ id: 'email', name: 'email', label: 'E-posta', type: 'email', colSize: 6 });
-    createUserModal.addField({ id: 'first_name', name: 'first_name', label: 'Ad', type: 'text', required: true, colSize: 6 });
-    createUserModal.addField({ id: 'last_name', name: 'last_name', label: 'Soyad', type: 'text', required: true, colSize: 6 });
+    createUserModal.addField({
+        id: 'first_name',
+        name: 'first_name',
+        label: 'Ad',
+        type: 'text',
+        required: true,
+        colSize: 6,
+        help: HR_USER_FIELD_HELP_TR.first_name
+    });
+    createUserModal.addField({
+        id: 'last_name',
+        name: 'last_name',
+        label: 'Soyad',
+        type: 'text',
+        required: true,
+        colSize: 6,
+        help: HR_USER_FIELD_HELP_TR.last_name
+    });
     createUserModal.addField({ id: 'birth_date', name: 'birth_date', label: 'Doğum Tarihi', type: 'date', colSize: 6 });
 
     createUserModal.addSection({ title: 'Maaş', icon: 'fas fa-money-bill-wave', iconColor: 'text-success' });
@@ -2371,10 +2403,40 @@ window.editUser = function(userId) {
     editUserModal.clearAll();
 
     editUserModal.addSection({ title: 'Temel Bilgiler', icon: 'fas fa-info-circle', iconColor: 'text-primary' });
-    editUserModal.addField({ id: 'username', name: 'username', label: 'Kullanıcı Adı', type: 'text', value: user.username || '', required: true, colSize: 6, icon: 'fas fa-user' });
+    editUserModal.addField({
+        id: 'username',
+        name: 'username',
+        label: 'Kullanıcı Adı',
+        type: 'text',
+        value: user.username || '',
+        required: true,
+        colSize: 6,
+        icon: 'fas fa-user',
+        help: HR_USER_FIELD_HELP_TR.username
+    });
     editUserModal.addField({ id: 'email', name: 'email', label: 'E-posta', type: 'email', value: user.email || '', colSize: 6, icon: 'fas fa-envelope' });
-    editUserModal.addField({ id: 'first_name', name: 'first_name', label: 'Ad', type: 'text', value: user.first_name || '', required: true, colSize: 6, icon: 'fas fa-id-card' });
-    editUserModal.addField({ id: 'last_name', name: 'last_name', label: 'Soyad', type: 'text', value: user.last_name || '', required: true, colSize: 6, icon: 'fas fa-id-card' });
+    editUserModal.addField({
+        id: 'first_name',
+        name: 'first_name',
+        label: 'Ad',
+        type: 'text',
+        value: user.first_name || '',
+        required: true,
+        colSize: 6,
+        icon: 'fas fa-id-card',
+        help: HR_USER_FIELD_HELP_TR.first_name
+    });
+    editUserModal.addField({
+        id: 'last_name',
+        name: 'last_name',
+        label: 'Soyad',
+        type: 'text',
+        value: user.last_name || '',
+        required: true,
+        colSize: 6,
+        icon: 'fas fa-id-card',
+        help: HR_USER_FIELD_HELP_TR.last_name
+    });
     editUserModal.addField({ id: 'birth_date', name: 'birth_date', label: 'Doğum Tarihi', type: 'date', value: user.birth_date || '', colSize: 6, icon: 'fas fa-birthday-cake' });
 
     editUserModal.addSection({ title: 'İş Bilgileri', icon: 'fas fa-briefcase', iconColor: 'text-success' });

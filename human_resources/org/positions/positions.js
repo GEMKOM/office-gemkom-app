@@ -68,6 +68,23 @@ function listFromResponse(data) {
     return Array.isArray(data?.results) ? data.results : [];
 }
 
+/** Backend may send is_active as bool, 0/1, or string. */
+function userIsActive(u) {
+    if (!u) return false;
+    const v = u.is_active;
+    if (v === false || v === 0) return false;
+    const s = String(v).toLowerCase();
+    if (s === 'false' || s === '0') return false;
+    return true;
+}
+
+/** Keep holder row if API omits is_active; otherwise require active. */
+function holderRowIsShown(h) {
+    if (!h) return false;
+    if (h.is_active === undefined || h.is_active === null) return true;
+    return userIsActive(h);
+}
+
 function setStat(id, value) {
     const el = document.getElementById(id);
     if (el) el.textContent = String(value);
@@ -621,7 +638,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     try {
-        const usersResp = await fetchAllUsers();
+        const usersResp = await fetchAllUsers({ is_active: true });
         users = Array.isArray(usersResp) ? usersResp : [];
     } catch (error) {
         showNotification(error?.message || 'Kullanıcılar yüklenemedi.', 'error');

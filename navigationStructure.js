@@ -573,6 +573,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Onay Yönetimi',
                 icon: 'fas fa-check-double',
                 children: {}
+            },
+            '/it/groups': {
+                label: 'Organizasyon Grupları',
+                icon: 'fas fa-object-group',
+                children: {}
             }
         }
     },

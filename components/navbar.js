@@ -37,6 +37,16 @@ function getAttendanceUiModelFromTodayResponse(respStatus, data) {
     if (respStatus === 404) {
         return { state: 'not_checked_in', label: 'Giriş yapılmadı', variant: 'secondary', details: 'Bugün için kayıt yok.' };
     }
+    // Backend may return 200 with empty body / null JSON when there is no attendance row yet (same as "not checked in").
+    const okEmpty =
+        respStatus >= 200 &&
+        respStatus < 300 &&
+        (data == null ||
+            (Array.isArray(data) && data.length === 0) ||
+            (typeof data === 'object' && !Array.isArray(data) && Object.keys(data).length === 0));
+    if (okEmpty) {
+        return { state: 'not_checked_in', label: 'Giriş yapılmadı', variant: 'secondary', details: 'Bugün için kayıt yok.' };
+    }
     if (!data || typeof data !== 'object') {
         return { state: 'unknown', label: 'Bilinmiyor', variant: 'secondary', details: 'Beklenmeyen yanıt.' };
     }

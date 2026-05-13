@@ -221,7 +221,7 @@ export async function getNotificationConfigs() {
 /**
  * Update a notification config
  * @param {string} notificationType - Notification type (e.g., 'job_on_hold')
- * @param {Object} data - Update data (title_template, body_template, link_template, user_ids, teams, enabled)
+ * @param {Object} data - Update data (title_template, body_template, link_template, user_ids, groups, user_groups, enabled, default_send_email, default_send_in_app)
  * @returns {Promise<Object>} Updated config object
  */
 export async function updateNotificationConfig(notificationType, data) {

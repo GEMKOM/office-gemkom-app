@@ -3,8 +3,18 @@ import { extractResultsFromResponse } from "./paginationHelper.js";
 import { authedFetch } from "../authService.js";
 
 
-export async function fetchAllUsers() {
-    const resp = await authedFetch(`${backendBase}/users/?for_dropdown=true&page_size=10000`);
+/**
+ * Large user list for dropdowns (paginated on backend).
+ * @param {{ is_active?: boolean | string, page_size?: number }} [options]
+ */
+export async function fetchAllUsers(options = {}) {
+    const params = new URLSearchParams();
+    params.set('for_dropdown', 'true');
+    params.set('page_size', String(options.page_size ?? 10000));
+    if (options.is_active !== undefined && options.is_active !== null && options.is_active !== '') {
+        params.set('is_active', String(options.is_active));
+    }
+    const resp = await authedFetch(`${backendBase}/users/?${params.toString()}`);
     if (!resp.ok) return [];
     const data = await resp.json();
     return data.results;

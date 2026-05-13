@@ -12,11 +12,14 @@ import {
     resetNotificationConfigs
 } from '../../../apis/notification/notifications.js';
 import { fetchAllUsers, fetchGroupsWithPermissions } from '../../../apis/users.js';
+import { fetchOrganizationGroups } from '../../../apis/human_resources/organization.js';
 
 // State management
 let notificationConfigs = [];
 let groupChoices = [];
 let allUsers = [];
+/** Built once on page load from /organization/groups/ for edit-modal dropdowns */
+let cachedOrgUserGroupOptions = [];
 let currentUser = null;
 let configsTable = null;
 let editConfigModal = null;
@@ -41,6 +44,54 @@ function normalizeConfigGroup(item) {
     const display = item.display ?? item.label ?? name;
     if (!name) return null;
     return { name: String(name), display: String(display ?? name) };
+}
+
+function normalizeConfigUserGroupDisplay(item) {
+    if (item == null || item === '') return null;
+    if (typeof item === 'string') return String(item);
+    const name = item.name ?? item.title;
+    if (name) return String(name);
+    if (item.id != null) return `#${item.id}`;
+    return null;
+}
+
+function configUserGroupToSelectedId(ug, nameToId) {
+    if (ug == null || ug === '') return null;
+    if (typeof ug === 'object') {
+        if (ug.id != null && ug.id !== '') return String(ug.id);
+        const n = ug.name ?? ug.title;
+        if (n != null && nameToId?.has(String(n))) return nameToId.get(String(n));
+        return null;
+    }
+    const s = String(ug).trim();
+    if (!s) return null;
+    if (/^\d+$/.test(s)) return s;
+    if (nameToId?.has(s)) return nameToId.get(s);
+    return null;
+}
+
+function organizationGroupsResponseToOptions(data) {
+    const list = Array.isArray(data) ? data : (data?.results || data?.data || []);
+    return (list || [])
+        .map((g) => {
+            if (g == null || g.id == null || g.id === '') return null;
+            const label =
+                (g.name != null && String(g.name).trim() !== '')
+                    ? String(g.name)
+                    : `#${g.id}`;
+            return { value: String(g.id), label: label };
+        })
+        .filter(Boolean);
+}
+
+async function loadOrganizationUserGroupsCatalog() {
+    try {
+        const data = await fetchOrganizationGroups();
+        cachedOrgUserGroupOptions = organizationGroupsResponseToOptions(data);
+    } catch (error) {
+        console.warn('Error loading organization groups catalog:', error);
+        cachedOrgUserGroupOptions = [];
+    }
 }
 
 function escapeHtml(text) {
@@ -125,8 +176,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         showEditButton: false
     });
 
-    // Load users for dropdown
+    // Load users and org groups once for edit-modal dropdowns
     await loadUsers();
+    await loadOrganizationUserGroupsCatalog();
 
     // Initialize table
     initializeTable();
@@ -164,13 +216,20 @@ async function loadConfigs() {
                     .filter(Boolean)
                     .map(g => g.display || g.name)
                     .filter(Boolean);
+                const rawUserGroups = config.user_groups || [];
+                const userGroupLabels = rawUserGroups
+                    .map(normalizeConfigUserGroupDisplay)
+                    .filter(Boolean);
                 
                 let routingDisplay = [];
                 if (userCount > 0) {
                     routingDisplay.push(`${userCount} kullanıcı`);
                 }
                 if (groupLabels.length > 0) {
-                    routingDisplay.push(groupLabels.join(', '));
+                    routingDisplay.push(`Departman: ${groupLabels.join(', ')}`);
+                }
+                if (userGroupLabels.length > 0) {
+                    routingDisplay.push(`Org. gruplar: ${userGroupLabels.join(', ')}`);
                 }
                 const routingText = routingDisplay.length > 0 ? routingDisplay.join(' + ') : '-';
 
@@ -443,6 +502,8 @@ async function showEditConfigModal(configRow) {
 
     // Routing section (only if routable)
     if (config.is_routable) {
+        const orgUserGroupOptions = [...cachedOrgUserGroupOptions];
+
         editConfigModal.addSection({
             title: 'Yönlendirme',
             icon: 'fas fa-route',
@@ -503,12 +564,15 @@ async function showEditConfigModal(configRow) {
             console.warn('Error fetching live groups list, falling back to cached choices:', error);
         }
 
-        const groupOptions = liveGroupOptions.length > 0
-            ? liveGroupOptions
-            : (groupChoices || []).map(g => ({
-                value: String(g.value),
-                label: g.label || g.value
-            }));
+        const fromConfigChoices = (groupChoices || []).map(g => ({
+            value: String(g.value),
+            label: g.label || g.value
+        }));
+        const groupOptions = fromConfigChoices.length > 0
+            ? fromConfigChoices
+            : (liveGroupOptions.length > 0
+                ? liveGroupOptions
+                : []);
         const currentGroupValues = (config.groups || [])
             .map(normalizeConfigGroup)
             .filter(Boolean)
@@ -517,15 +581,46 @@ async function showEditConfigModal(configRow) {
         editConfigModal.addField({
             id: 'groups',
             name: 'groups',
-            label: 'Gruplar',
+            label: 'Departmanlar (department_code)',
             type: 'dropdown',
             value: currentGroupValues,
             multiple: true,
             options: groupOptions,
-            placeholder: 'Grup seçin',
+            placeholder: 'Departman kodu seçin',
             searchable: true,
             icon: 'fas fa-sitemap',
-            colSize: 12
+            colSize: 12,
+            help: 'Pozisyon departman koduna göre geniş yönlendirme (ör. planning, manufacturing).'
+        });
+
+        const nameToId = new Map(
+            orgUserGroupOptions.map((o) => [o.label, o.value])
+        );
+        const currentUserGroupIds = (config.user_groups || [])
+            .map((ug) => configUserGroupToSelectedId(ug, nameToId))
+            .filter(Boolean);
+
+        const orgUserGroupOptionValues = new Set(orgUserGroupOptions.map((o) => o.value));
+        const userGroupOptionsMerged = [...orgUserGroupOptions];
+        currentUserGroupIds.forEach((id) => {
+            if (!orgUserGroupOptionValues.has(id)) {
+                userGroupOptionsMerged.push({ value: id, label: `#${id} (listeden eksik)` });
+            }
+        });
+
+        editConfigModal.addField({
+            id: 'user_groups',
+            name: 'user_groups',
+            label: 'Organizasyon kullanıcı grupları',
+            type: 'dropdown',
+            value: currentUserGroupIds,
+            multiple: true,
+            options: userGroupOptionsMerged,
+            placeholder: 'Org. grup seçin',
+            searchable: true,
+            icon: 'fas fa-object-group',
+            colSize: 12,
+            help: 'Organizasyon /organization/groups/ altındaki gruplar; aynı departmandan daha ince kırılım (ör. yalnızca Planlama Ofisi).'
         });
     }
 
@@ -569,6 +664,11 @@ async function showEditConfigModal(configRow) {
                     ? formData.groups.map(v => String(v)).filter(Boolean)
                     : [];
                 updateData.groups = groups;
+
+                const userGroups = Array.isArray(formData.user_groups)
+                    ? formData.user_groups.map((id) => parseInt(id, 10)).filter((id) => !isNaN(id))
+                    : [];
+                updateData.user_groups = userGroups;
             }
 
             await updateNotificationConfig(config.notification_type, updateData);

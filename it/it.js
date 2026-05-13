@@ -79,6 +79,13 @@ async function handleITPage() {
                 icon: 'fas fa-user-shield',
                 iconColor: 'danger',
                 link: '/it/permissions'
+            },
+            {
+                title: 'Organizasyon Grupları',
+                description: 'Pozisyon gruplarını oluşturun, düzenleyin ve gruba toplu pozisyon atayın.',
+                icon: 'fas fa-object-group',
+                iconColor: 'secondary',
+                link: '/it/groups'
             }
         ];
 

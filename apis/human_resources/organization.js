@@ -87,6 +87,64 @@ export async function fetchPositionHolders(positionId) {
     return parseJsonOrThrow(response, 'Pozisyon kullanıcıları yüklenemedi.');
 }
 
+// Organization groups (IT / org)
+export async function fetchOrganizationGroups() {
+    const response = await authedFetch(`${backendBase}/organization/groups/`);
+    return parseJsonOrThrow(response, 'Gruplar yüklenemedi.');
+}
+
+export async function fetchOrganizationGroupById(groupId) {
+    const response = await authedFetch(`${backendBase}/organization/groups/${groupId}/`);
+    return parseJsonOrThrow(response, 'Grup detayı yüklenemedi.');
+}
+
+export async function createOrganizationGroup(payload) {
+    const response = await authedFetch(`${backendBase}/organization/groups/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {})
+    });
+    return parseJsonOrThrow(response, 'Grup oluşturulamadı.');
+}
+
+export async function patchOrganizationGroup(groupId, payload) {
+    const response = await authedFetch(`${backendBase}/organization/groups/${groupId}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload || {})
+    });
+    return parseJsonOrThrow(response, 'Grup güncellenemedi.');
+}
+
+export async function patchOrganizationGroupPositions(groupId, positionIds) {
+    const response = await authedFetch(`${backendBase}/organization/groups/${groupId}/positions/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ position_ids: Array.isArray(positionIds) ? positionIds : [] })
+    });
+    return parseJsonOrThrow(response, 'Grup pozisyonları güncellenemedi.');
+}
+
+export async function deleteOrganizationGroup(groupId) {
+    const response = await authedFetch(`${backendBase}/organization/groups/${groupId}/`, {
+        method: 'DELETE'
+    });
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        const message =
+            data?.detail ||
+            data?.message ||
+            data?.error ||
+            'Grup silinemedi.';
+        const err = new Error(message);
+        err.status = response.status;
+        err.response = data;
+        throw err;
+    }
+    if (response.status === 204) return null;
+    return response.json().catch(() => null);
+}
+
 export async function fetchPermissionsCatalog() {
     const response = await authedFetch(`${backendBase}/users/permissions/`);
     return parseJsonOrThrow(response, 'Yetki listesi yüklenemedi.');
