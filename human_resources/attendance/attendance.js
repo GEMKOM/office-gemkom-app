@@ -32,6 +32,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/human_resources/attendance/records'
             },
             {
+                title: 'Özet',
+                description: 'Kullanıcı bazlı PDKS özet metriklerini görüntüleyin',
+                icon: 'fas fa-chart-bar',
+                iconColor: 'primary',
+                link: '/human_resources/attendance/summary'
+            },
+            {
                 title: 'Vardiya Kuralları',
                 description: 'Vardiya saatlerini ve fazla mesai eşiğini yönetin',
                 icon: 'fas fa-clock',

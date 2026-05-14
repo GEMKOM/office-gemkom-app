@@ -53,7 +53,10 @@ function getAttendanceUiModelFromTodayResponse(respStatus, data) {
     const status = data.status || 'unknown';
     const statusDisplay = data.status_display || null;
     if (status === 'active') {
-        const t = formatTime(pick(data, ['check_in_at', 'check_in_time', 'check_in', 'start_at', 'start_time']));
+        const t = formatTime(
+            pick(data, ['first_check_in']) ||
+            (data.sessions && data.sessions.length > 0 ? data.sessions[0].check_in_time : null)
+        );
         const label = statusDisplay || 'Aktif (Giriş Yapıldı)';
         return { state: 'active', label, variant: 'success', details: t ? `Giriş saati: ${t}` : label };
     }
@@ -394,7 +397,7 @@ export function initNavbar() {
                                 <li><a class="dropdown-item" href="#" id="edit-profile-btn">
                                     <i class="fas fa-user-edit me-2"></i>Profili Düzenle
                                 </a></li>
-                                <li><h6 class="dropdown-item">Takım: ${user.team_label || 'Atanmamış'}</h6></li>
+                                <li><h6 class="dropdown-item">Departman: ${user?.position?.department_code || user?.department_code || 'Atanmamış'}</h6></li>
                                 <li><hr class="dropdown-divider"></li>
                                 <li><a class="dropdown-item text-danger" href="#" id="logout-button">
                                     <i class="fas fa-sign-out-alt me-2"></i>Çıkış Yap
@@ -461,6 +464,7 @@ export function initNavbar() {
               if (model.state === 'not_checked_in') {
                   btnIn.disabled = false;
               } else if (model.state === 'active') {
+                  btnIn.disabled = false;
                   btnOut.disabled = false;
               }
           } catch (e) {
@@ -822,11 +826,8 @@ export function initNavbar() {
       if (teamInfoBtn) {
           teamInfoBtn.addEventListener('click', (e) => {
               e.preventDefault();
-              // Show team info in a simple alert for now
-                             const teamName = user.team ? 
-                   (user.team === 'manufacturing' ? 'İmalat' : 
-                    user.team === 'procurement' ? 'Satın Alma' : user.team) : 'Atanmamış';
-              alert(`Takımınız: ${teamName}`);
+              const departmentCode = user?.position?.department_code || user?.department_code || null;
+              alert(`Departmanınız: ${departmentCode || 'Atanmamış'}`);
           });
       }
 

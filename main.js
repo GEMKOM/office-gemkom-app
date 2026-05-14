@@ -350,12 +350,13 @@ async function handleLandingPage() {
         menuComponent.render();
 
         // Highlight user's team module (if needed)
-        if (user.team) {
-            // This can be implemented later if needed for team highlighting
+        const userDepartmentCode = user?.position?.department_code || user?.department_code;
+        if (userDepartmentCode) {
+            // This can be implemented later if needed for department highlighting
         }
 
         // Only redirect on fresh logins, not manual navigation
-        if (user.team && !isAdmin()) {
+        if (userDepartmentCode && !isAdmin()) {
             navigateByTeamIfFreshLogin();
         }
 

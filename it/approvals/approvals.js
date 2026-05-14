@@ -5,6 +5,7 @@ import { TableComponent } from '../../../components/table/table.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { initRouteProtection } from '../../../apis/routeProtection.js';
+import { fetchOrganizationUserGroups } from '../../../apis/human_resources/organization.js';
 import {
     fetchPolicies,
     fetchPolicy,
@@ -55,6 +56,7 @@ let pendingDeleteCallback = null;
 
 let policyEditModal = null;
 let cachedApprovalSubjectTypes = null; // [{value,label}]
+let cachedOrganizationUserGroups = null; // [{id,name,display_name}]
 
 let stageEditModal = null;
 
@@ -116,6 +118,24 @@ async function ensureApprovalSubjectTypesLoaded() {
     return cachedApprovalSubjectTypes;
 }
 
+async function ensureOrganizationUserGroupsLoaded() {
+    if (Array.isArray(cachedOrganizationUserGroups) && cachedOrganizationUserGroups.length) return cachedOrganizationUserGroups;
+    try {
+        const data = await fetchOrganizationUserGroups({ page_size: 1000 });
+        const list = Array.isArray(data) ? data : (Array.isArray(data?.results) ? data.results : []);
+        cachedOrganizationUserGroups = list
+            .filter(Boolean)
+            .map(group => ({
+                ...group,
+                id: group?.id ?? group?.pk ?? group?.group_id
+            }))
+            .filter(group => group.id !== undefined && group.id !== null && group.id !== '');
+    } catch {
+        cachedOrganizationUserGroups = [];
+    }
+    return cachedOrganizationUserGroups;
+}
+
 function statusBadge(wf) {
     if (wf.is_cancelled) return '<span class="status-badge status-grey">İptal</span>';
     if (wf.is_rejected)  return '<span class="status-badge status-red">Reddedildi</span>';
@@ -126,7 +146,12 @@ function statusBadge(wf) {
 function resolverDesc(stage) {
     const parts = [];
     if (stage.climb_levels != null) parts.push(`${stage.climb_levels} kademe yukarı`);
-    if (stage.role_department_code) parts.push(`Departman: ${stage.role_department_code}`);
+    if (stage.role_user_group_name) {
+        parts.push(`Grup: ${stage.role_user_group_name}`);
+    } else if (stage.role_user_group != null) {
+        const matchedGroup = (cachedOrganizationUserGroups || []).find(g => String(g.id) === String(stage.role_user_group));
+        parts.push(`Grup: ${matchedGroup?.display_name || matchedGroup?.name || `#${stage.role_user_group}`}`);
+    }
     const users = Array.isArray(stage.approver_users_detail) ? stage.approver_users_detail : [];
     if (users.length) parts.push(`Sabit: ${users.map(u => u.full_name || u.username).join(', ')}`);
     else if (Array.isArray(stage.approver_users) && stage.approver_users.length) {
@@ -175,6 +200,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         onRefreshClick: async () => { await refreshActiveTab(); }
     });
 
+    await ensureOrganizationUserGroupsLoaded();
     initPoliciesTable();
     initSubjectTypesTable();
     await loadPolicies();
@@ -630,6 +656,7 @@ function ensureStageEditModal() {
         }
 
         const resolverType = String(data?.resolver_type ?? 'none').trim();
+        const parsedRoleUserGroup = Number.parseInt(String(data?.role_user_group ?? ''), 10);
         const payload = {
             name,
             order,
@@ -638,8 +665,8 @@ function ensureStageEditModal() {
             climb_levels: resolverType === 'climb'
                 ? (Number.parseInt(String(data?.climb_levels ?? ''), 10) || 1)
                 : null,
-            role_department_code: resolverType === 'department'
-                ? (String(data?.role_department_code ?? '').trim() || null)
+            role_user_group: resolverType === 'department' && Number.isFinite(parsedRoleUserGroup)
+                ? parsedRoleUserGroup
                 : null
         };
 
@@ -663,11 +690,12 @@ function ensureStageEditModal() {
     return stageEditModal;
 }
 
-function openStageModal(mode, policyId, stage = null) {
+async function openStageModal(mode, policyId, stage = null) {
     stageModalMode = mode;
     stageModalPolicyId = policyId;
     stageModalStageId = stage?.id ?? null;
 
+    await ensureOrganizationUserGroupsLoaded();
     const modal = ensureStageEditModal();
     modal._mode = mode;
     modal._policyId = policyId;
@@ -679,7 +707,23 @@ function openStageModal(mode, policyId, stage = null) {
 
     const resolverType =
         stage?.climb_levels != null ? 'climb'
-            : (stage?.role_department_code ? 'department' : 'none');
+            : ((stage?.role_user_group != null || stage?.role_user_group_name) ? 'department' : 'none');
+
+    const selectedRoleUserGroup =
+        stage?.role_user_group != null ? String(stage.role_user_group) : '';
+    const userGroupOptions = [
+        { value: '', label: 'Seçiniz...' },
+        ...(cachedOrganizationUserGroups || []).map(group => ({
+            value: String(group.id),
+            label: group.display_name || group.name || `#${group.id}`
+        }))
+    ];
+    if (selectedRoleUserGroup && !userGroupOptions.some(option => option.value === selectedRoleUserGroup)) {
+        userGroupOptions.push({
+            value: selectedRoleUserGroup,
+            label: stage?.role_user_group_name || `#${selectedRoleUserGroup}`
+        });
+    }
 
     modal.addField({ id: 'name', name: 'name', label: 'Ad', type: 'text', value: stage?.name ?? '', required: true, colSize: 8 });
     modal.addField({ id: 'order', name: 'order', label: 'Sıra', type: 'number', value: stage?.order ?? '', min: 1, required: true, colSize: 4 });
@@ -694,7 +738,7 @@ function openStageModal(mode, policyId, stage = null) {
         options: [
             { value: 'none', label: 'Sabit kullanıcılar' },
             { value: 'climb', label: 'Kademeye göre (yukarı tırman)' },
-            { value: 'department', label: 'Departman rolü' }
+            { value: 'department', label: 'Kullanıcı grubu rolü' }
         ],
         value: resolverType,
         colSize: 6
@@ -711,12 +755,13 @@ function openStageModal(mode, policyId, stage = null) {
     });
 
     modal.addField({
-        id: 'role_department_code',
-        name: 'role_department_code',
-        label: 'Departman Kodu',
-        type: 'text',
-        value: stage?.role_department_code ?? '',
-        placeholder: 'örn: machining',
+        id: 'role_user_group',
+        name: 'role_user_group',
+        label: 'Kullanıcı Grubu',
+        type: 'dropdown',
+        searchable: true,
+        options: userGroupOptions,
+        value: selectedRoleUserGroup,
         colSize: 12
     });
 
@@ -740,7 +785,7 @@ function openStageModal(mode, policyId, stage = null) {
         if (!c) return;
         const grp = (id) => c.querySelector(`[data-field-id="${id}"]`);
         const climbGrp = grp('climb_levels');
-        const deptGrp = grp('role_department_code');
+        const deptGrp = grp('role_user_group');
         const usersGrp = grp('approver_users');
 
         const setLayout = (rtRaw) => {

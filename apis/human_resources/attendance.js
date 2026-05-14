@@ -47,18 +47,9 @@ export async function fetchPendingAttendanceOverrides() {
     return parseJsonOrThrow(resp);
 }
 
-export async function approveAttendanceOverride(recordId) {
-    const resp = await authedFetch(`${backendBase}/attendance/hr/records/${recordId}/approve-override/`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: '{}'
-    });
-    return parseJsonOrThrow(resp);
-}
-
-export async function approveAttendanceOverrideWithPayload(recordId, payload) {
+export async function approveAttendanceSessionOverride(sessionId, payload = {}) {
     const body = payload && Object.keys(payload).length > 0 ? JSON.stringify(payload) : '{}';
-    const resp = await authedFetch(`${backendBase}/attendance/hr/records/${recordId}/approve-override/`, {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/sessions/${sessionId}/approve/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body
@@ -66,9 +57,9 @@ export async function approveAttendanceOverrideWithPayload(recordId, payload) {
     return parseJsonOrThrow(resp);
 }
 
-export async function rejectAttendanceOverride(recordId, notes) {
+export async function rejectAttendanceSessionOverride(sessionId, notes) {
     const payload = notes ? { notes: String(notes) } : {};
-    const resp = await authedFetch(`${backendBase}/attendance/hr/records/${recordId}/reject-override/`, {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/sessions/${sessionId}/reject/`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -79,6 +70,14 @@ export async function rejectAttendanceOverride(recordId, notes) {
 export async function fetchAttendanceHrRecords(filters = {}) {
     const query = buildQuery(filters);
     const resp = await authedFetch(`${backendBase}/attendance/hr/records/${query}`, {
+        method: 'GET'
+    });
+    return parseJsonOrThrow(resp);
+}
+
+export async function fetchAttendanceHrSummary(filters = {}) {
+    const query = buildQuery(filters);
+    const resp = await authedFetch(`${backendBase}/attendance/hr/summary/${query}`, {
         method: 'GET'
     });
     return parseJsonOrThrow(resp);
@@ -100,6 +99,43 @@ export async function patchAttendanceHrRecord(recordId, patch = {}) {
         body: JSON.stringify(patch || {})
     });
     return parseJsonOrThrow(resp);
+}
+
+export async function fetchAttendanceHrRecordSessions(recordId) {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/records/${recordId}/sessions/`, {
+        method: 'GET'
+    });
+    return parseJsonOrThrow(resp);
+}
+
+export async function createAttendanceHrSession(recordId, data = {}) {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/records/${recordId}/sessions/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data)
+    });
+    return parseJsonOrThrow(resp);
+}
+
+export async function patchAttendanceHrSession(sessionId, patch = {}) {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/sessions/${sessionId}/`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(patch)
+    });
+    return parseJsonOrThrow(resp);
+}
+
+export async function deleteAttendanceHrSession(sessionId) {
+    const resp = await authedFetch(`${backendBase}/attendance/hr/sessions/${sessionId}/`, {
+        method: 'DELETE'
+    });
+    if (!resp.ok) {
+        let body = null;
+        try { body = await resp.json(); } catch {}
+        throw new Error(body?.detail || `HTTP ${resp.status}`);
+    }
+    return { success: true };
 }
 
 // ---------------------------------------------------------------------------

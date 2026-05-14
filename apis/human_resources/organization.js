@@ -87,6 +87,12 @@ export async function fetchPositionHolders(positionId) {
     return parseJsonOrThrow(response, 'Pozisyon kullanıcıları yüklenemedi.');
 }
 
+// User groups (domain model for team assignment / approval roles)
+export async function fetchOrganizationUserGroups(filters = {}) {
+    const response = await authedFetch(`${backendBase}/organization/user-groups/${buildQuery(filters)}`);
+    return parseJsonOrThrow(response, 'Kullanıcı grupları yüklenemedi.');
+}
+
 // Organization groups (IT / org)
 export async function fetchOrganizationGroups() {
     const response = await authedFetch(`${backendBase}/organization/groups/`);

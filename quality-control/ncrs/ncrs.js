@@ -8,9 +8,10 @@ import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { initRouteProtection } from '../../../apis/routeProtection.js';
 import { getUser } from '../../../authService.js';
-import { fetchAllUsers, authFetchUsers, fetchUserGroups } from '../../../apis/users.js';
+import { fetchAllUsers, authFetchUsers } from '../../../apis/users.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
+import { fetchOrganizationUserGroups } from '../../../apis/human_resources/organization.js';
 import {
     listNCRs,
     getNCR,
@@ -107,7 +108,7 @@ function isUserInAssignedTeam(user, row) {
     }
 
     const assignedTeamName = row.assigned_team_name || '';
-    const assignedTeamId = row.assigned_team;
+    const assignedTeamId = row.assigned_team_id ?? row.assigned_team;
 
     return groups.some(group => doesGroupMatchAssignedTeam(group, assignedTeamName, assignedTeamId));
 }
@@ -281,7 +282,7 @@ async function loadUsers() {
 
 async function loadNcrAssignableGroups() {
     try {
-        const data = await fetchUserGroups();
+        const data = await fetchOrganizationUserGroups({ page_size: 1000 });
         const groups = Array.isArray(data) ? data : (data.results || data.data || []);
 
         // Different backends serialize PK as `id` or `pk` (or occasionally `group_id`).
@@ -456,17 +457,17 @@ function initializeFiltersComponent() {
         colSize: 2
     });
 
-    // Assigned team filter
+    const assignedTeamFilterOptions = [
+        { value: '', label: 'Tümü' },
+        ...buildAssignedGroupOptions({ includeEmpty: false })
+    ];
+
+    // Assigned group filter
     ncrsFilters.addDropdownFilter({
         id: 'assigned-team-filter',
-        label: 'Atanan Takım',
-        options: [
-            { value: '', label: 'Tümü' },
-            { value: 'manufacturing', label: 'İmalat' },
-            { value: 'design', label: 'Dizayn' },
-            { value: 'planning', label: 'Planlama' }
-        ],
-        placeholder: 'Takım seçin',
+        label: 'Atanan Grup',
+        options: assignedTeamFilterOptions,
+        placeholder: 'Grup seçin',
         colSize: 2
     });
 
@@ -578,18 +579,13 @@ function initializeTableComponent(canDecideNCRs) {
         },
         {
             field: 'assigned_team_name',
-            label: 'Atanan Takım',
+            label: 'Atanan Grup',
             sortable: false,
             width: '150px',
             formatter: (value, row) => {
-                const teamMap = {
-                    'manufacturing': 'İmalat',
-                    'welding': 'Kaynak',
-                    'qualitycontrol': 'Kalite Kontrol',
-                    'design': 'Dizayn',
-                    'planning': 'Planlama'
-                };
-                const displayValue = value || teamMap[row.assigned_team] || row.assigned_team;
+                const assignedId = row.assigned_team_id ?? row.assigned_team;
+                const matchedGroup = (ncrAssignableGroups || []).find(g => String(g.id) === String(assignedId));
+                const displayValue = value || matchedGroup?.display_name || matchedGroup?.name || assignedId;
                 if (!displayValue || displayValue === '-') return '-';
                 return `<span class="status-badge status-grey">${displayValue}</span>`;
             }
@@ -639,7 +635,8 @@ function initializeTableComponent(canDecideNCRs) {
             class: 'btn-outline-success',
             // Only users from the assigned group/team can submit
             visible: (row) => {
-                if (!row.assigned_team && !row.assigned_team_name) return false;
+                const assignedId = row.assigned_team_id ?? row.assigned_team;
+                if (!assignedId && !row.assigned_team_name) return false;
                 if (!(row.status === 'draft' || row.status === 'rejected')) return false;
                 return isUserInAssignedTeam(currentUser, row);
             },
@@ -680,7 +677,8 @@ function initializeTableComponent(canDecideNCRs) {
             // QC team or superuser can always close
             if (canDecideNCRs) return true;
             // Assigned group/team can close if NCR is assigned to one of user's groups
-            if (!row.assigned_team && !row.assigned_team_name) return false;
+            const assignedId = row.assigned_team_id ?? row.assigned_team;
+            if (!assignedId && !row.assigned_team_name) return false;
             return isUserInAssignedTeam(currentUser, row);
         },
         onClick: (row) => handleCloseNCR(row)
@@ -1148,7 +1146,7 @@ async function showNCRDetails(ncr) {
                     colSize: 6
                 },
                 { 
-                    label: 'Atanan Takım', 
+                    label: 'Atanan Grup', 
                     value: fullNCR.assigned_team_name || '-',
                     colSize: 6
                 }

@@ -40,7 +40,7 @@ let isRedirecting = false;
 
 // Track if this is a fresh login to prevent redirects on manual navigation
 // This flag is set to true only when a user successfully logs in
-// and is reset to false after the first team-based navigation
+// and is reset to false after the first department-based navigation
 let isFreshLogin = false;
 
 export async function getUser() {
@@ -200,9 +200,13 @@ export function clearCachedUser() {
 export async function getUserTeam() {
     try {
         const userData = await getUser();
-        return userData.team || 'other';
+        const departmentCode =
+            userData?.position?.department_code ||
+            userData?.department_code ||
+            null;
+        return departmentCode || 'other';
     } catch (error) {
-        console.error('Failed to get user team:', error);
+        console.error('Failed to get user department code:', error);
         return 'other';
     }
 }
@@ -333,38 +337,43 @@ export function navigateTo(path, options = {}) {
 export function navigateByTeam() {
     try {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
-        
-        if (isAdmin() || user.team === null){
+
+        const departmentCode =
+            user?.position?.department_code ||
+            user?.department_code ||
+            null;
+
+        if (isAdmin() || !departmentCode) {
             navigateTo(ROUTES.HOME);
             return;
         }
-        if (user.team === 'machining') {
+        if (departmentCode === 'machining') {
             navigateTo(ROUTES.MACHINING);
-        } else if (user.team === 'maintenance') {
+        } else if (departmentCode === 'maintenance') {
             navigateTo(ROUTES.MAINTENANCE);
-        } else if (user.team === 'manufacturing') {
+        } else if (departmentCode === 'manufacturing') {
             navigateTo(ROUTES.MANUFACTURING);
-        } else if (user.team === 'planning') {
+        } else if (departmentCode === 'planning') {
             navigateTo('/manufacturing/machining/capacity/planning');
-        } else if (user.team === 'procurement') {
+        } else if (departmentCode === 'procurement') {
             navigateTo('/procurement/purchase-requests');
-        } else if (user.team === 'finance') {
+        } else if (departmentCode === 'finance') {
             navigateTo('/finance/purchase-orders');
-        } else if (user.team === 'human_resources') {
+        } else if (departmentCode === 'human_resources') {
             navigateTo('/human_resources/users');
-        } else if (user.team === 'human_resouces') {
+        } else if (departmentCode === 'human_resouces') {
             navigateTo('/human_resources/users');
         } else {
-            // Fallback: redirect all other teams to home page
+            // Fallback: redirect all other departments to home page
             navigateTo(ROUTES.HOME);
         }
     } catch (error) {
-        console.warn('Failed to parse user data for team navigation:', error);
+        console.warn('Failed to parse user data for department-based navigation:', error);
         navigateTo(ROUTES.HOME);
     }
 }
 
-// New function to handle team-based navigation only on fresh logins
+// Handle department-based navigation only on fresh logins
 // This prevents unwanted redirects when users manually navigate to pages
 export function navigateByTeamIfFreshLogin() {
     if (isFreshLogin) {

@@ -604,6 +604,11 @@ export const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-clipboard-list',
                         children: {}
                     },
+                    '/human_resources/attendance/summary': {
+                        label: 'Özet',
+                        icon: 'fas fa-chart-bar',
+                        children: {}
+                    },
                     '/human_resources/attendance/shift-rules': {
                         label: 'Vardiya Kuralları',
                         icon: 'fas fa-clock',

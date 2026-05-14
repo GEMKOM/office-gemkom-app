@@ -374,15 +374,16 @@ export class AttendanceCalendar {
 
         if (record) {
             if (record.status) out.push(`<div class="ac-strong">${this.escapeHtml(this.recordStatusLabel(record.status))}</div>`);
-            if (record.check_in_time || record.check_out_time) {
+            if (record.first_check_in || record.last_check_out) {
                 out.push(`
                     <div>
-                        <i class="fas fa-right-to-bracket me-1 text-success"></i>${this.escapeHtml(this.formatTime(record.check_in_time))}
+                        <i class="fas fa-right-to-bracket me-1 text-success"></i>${this.escapeHtml(this.formatTime(record.first_check_in))}
                         <span class="mx-1">-</span>
-                        <i class="fas fa-right-from-bracket me-1 text-danger"></i>${this.escapeHtml(this.formatTime(record.check_out_time))}
+                        <i class="fas fa-right-from-bracket me-1 text-danger"></i>${this.escapeHtml(this.formatTime(record.last_check_out))}
                     </div>
                 `);
             }
+            if ((record.total_present_minutes || 0) > 0) out.push(`<div class="text-primary">${this.escapeHtml(record.total_present_minutes)} dk ofiste</div>`);
             if ((record.overtime_minutes || 0) > 0) out.push(`<div class="text-success">+${this.escapeHtml(record.overtime_minutes)} dk mesai</div>`);
             if ((record.late_minutes || 0) > 0) out.push(`<div class="text-warning">${this.escapeHtml(record.late_minutes)} dk gecikme</div>`);
             if ((record.early_leave_minutes || 0) > 0) out.push(`<div class="text-danger">${this.escapeHtml(record.early_leave_minutes)} dk erken çıkış</div>`);
