@@ -181,6 +181,7 @@ function buildPartsTableRows(parts) {
             item_unit: p.item_unit ?? '',
             stock_length_mm: p.stock_length_mm ?? null,
             label: p.label ?? '',
+            image_no: p.image_no ?? '',
             nominal_length_mm: p.nominal_length_mm ?? null,
             quantity: p.quantity ?? null,
             angle_left_deg: p.angle_left_deg ?? 0,
@@ -227,6 +228,14 @@ function renderPartsTable() {
                 ? inputHtml({ rowId: row.__rowId, field: 'label', value: row.label, placeholder: 'Parça adı' })
                 : (row.label
                     ? `<div class="text-truncate" style="max-width:220px;" title="${escapeAttr(row.label)}">${escapeAttr(row.label)}</div>`
+                    : '<span class="text-muted">—</span>')
+        },
+        {
+            key: 'image_no', label: 'Resim No', sortable: false, width: '120px',
+            formatter: (v, row) => isRowEditable(row)
+                ? inputHtml({ rowId: row.__rowId, field: 'image_no', value: row.image_no ?? '', placeholder: 'Resim no' })
+                : (row.image_no
+                    ? `<div class="text-truncate" style="max-width:120px;" title="${escapeAttr(row.image_no)}">${escapeAttr(row.image_no)}</div>`
                     : '<span class="text-muted">—</span>')
         },
         {
@@ -343,6 +352,7 @@ function mergeRowFromDom(rowId) {
         row.stock_length_mm = (`${raw.stock_length_mm}`.trim() === '') ? null : castNumber(raw.stock_length_mm, null);
     }
     if (raw.label != null) row.label = raw.label;
+    if (raw.image_no != null) row.image_no = raw.image_no;
     if (raw.nominal_length_mm != null) row.nominal_length_mm = castNumber(raw.nominal_length_mm, row.nominal_length_mm);
     if (raw.quantity != null) row.quantity = castNumber(raw.quantity, row.quantity);
     if (raw.angle_left_deg != null) row.angle_left_deg = castNumber(raw.angle_left_deg, row.angle_left_deg);
@@ -377,6 +387,7 @@ function buildPartPayloadFromRowId(rowId) {
         item: raw.item ? Number(raw.item) : null,
         stock_length_mm: stockOverride === '' ? null : castNumber(stockOverride, null),
         label: raw.label || '',
+        image_no: `${raw.image_no ?? ''}`.trim(),
         job_no: raw.job_no || '',
         nominal_length_mm: castNumber(raw.nominal_length_mm, 0),
         quantity: castNumber(raw.quantity, 1),
@@ -610,6 +621,7 @@ function addNewPartRow() {
         item_unit: '',
         stock_length_mm: null,
         label: '',
+        image_no: '',
         nominal_length_mm: null,
         quantity: 1,
         angle_left_deg: 0,
@@ -642,6 +654,7 @@ function duplicateRow(rowId) {
         item_display: row.item_display ?? '',
         stock_length_mm: row.stock_length_mm ?? null,
         label: row.label ?? '',
+        image_no: row.image_no ?? '',
         nominal_length_mm: row.nominal_length_mm ?? null,
         quantity: row.quantity ?? 1,
         angle_left_deg: row.angle_left_deg ?? 0,
