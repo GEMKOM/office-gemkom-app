@@ -89,7 +89,7 @@ export async function fetchPositionHolders(positionId) {
 
 // User groups (domain model for team assignment / approval roles)
 export async function fetchOrganizationUserGroups(filters = {}) {
-    const response = await authedFetch(`${backendBase}/organization/user-groups/${buildQuery(filters)}`);
+    const response = await authedFetch(`${backendBase}/organization/groups/${buildQuery(filters)}`);
     return parseJsonOrThrow(response, 'Kullanıcı grupları yüklenemedi.');
 }
 
