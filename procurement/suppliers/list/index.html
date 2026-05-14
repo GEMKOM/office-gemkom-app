@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="../../../style.css">
     <link rel="stylesheet" href="../../../components/navbar.css">
     <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
+    <link rel="stylesheet" href="../../../components/edit-modal/edit-modal.css">
     <link rel="stylesheet" href="../../../components/badges/badges.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
     <link rel="stylesheet" href="../../../pre-auth.css">
@@ -122,108 +123,7 @@
         </div>
     </section>
 
-    <!-- Add/Edit Supplier Modal -->
-    <div class="modal fade" id="supplierFormModal" tabindex="-1" aria-labelledby="supplierFormModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="supplierFormModalLabel">
-                        <i class="fas fa-plus me-2"></i>
-                        Yeni Tedarikçi
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="supplier-form">
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="supplier-name" class="form-label">Tedarikçi Adı *</label>
-                                    <input type="text" class="form-control" id="supplier-name" required>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="supplier-contact" class="form-label">İletişim Kişisi</label>
-                                    <input type="text" class="form-control" id="supplier-contact">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="supplier-phone" class="form-label">Telefon</label>
-                                    <input type="tel" class="form-control" id="supplier-phone">
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="supplier-email" class="form-label">E-posta</label>
-                                    <input type="email" class="form-control" id="supplier-email">
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label for="supplier-currency" class="form-label">Varsayılan Para Birimi</label>
-                                    <select class="form-select" id="supplier-currency">
-                                        <option value="TRY">TRY - Türk Lirası</option>
-                                        <option value="USD">USD - Amerikan Doları</option>
-                                        <option value="EUR">EUR - Euro</option>
-                                        <option value="GBP">GBP - İngiliz Sterlini</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label for="supplier-payment-terms" class="form-label">Varsayılan Ödeme Koşulları</label>
-                                    <select class="form-select" id="supplier-payment-terms">
-                                        <option value="">Ödeme koşulu seçin...</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label for="supplier-tax-rate" class="form-label">Varsayılan Vergi Oranı (%)</label>
-                                    <input type="number" class="form-control" id="supplier-tax-rate" min="0" max="100" step="0.01" value="18.00">
-                                    <div class="form-text">Vergi oranını yüzde olarak girin (örn: 18.00)</div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="supplier-has-dbs">
-                                        <label class="form-check-label" for="supplier-has-dbs">
-                                            DBS Kullanıyor
-                                        </label>
-                                        <div class="form-text">Tedarikçinin DBS (Doğrudan Borçlanma Sistemi) kullanıp kullanmadığını belirtir</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="col-md-6">
-                                <div class="mb-3">
-                                    <label for="supplier-dbs-limit" class="form-label">DBS Limiti</label>
-                                    <input type="number" class="form-control" id="supplier-dbs-limit" min="0" step="0.01" placeholder="DBS limitini girin...">
-                                    <div class="form-text">DBS limitini para birimi cinsinden girin</div>
-                                </div>
-                            </div>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-primary" id="save-supplier-btn">
-                        <i class="fas fa-save me-1"></i>Kaydet
-                    </button>
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-1"></i>İptal
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="supplier-form-modal-container"></div>
 
     <!-- Bootstrap JS -->
     <div id="action-confirm-modal-container"></div>

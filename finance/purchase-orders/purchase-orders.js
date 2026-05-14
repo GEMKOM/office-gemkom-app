@@ -6,12 +6,21 @@ import {
     markSchedulePaid,
     deletePurchaseOrder
 } from '../../apis/purchaseOrders.js';
+import {
+    getSuppliers,
+    getSupplier,
+    listDbsPayments,
+    createDbsPayment,
+    deleteDbsPayment
+} from '../../apis/procurement.js';
 import { isAdmin } from '../../authService.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { TableComponent } from '../../components/table/table.js';
 import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
+import { EditModal } from '../../components/edit-modal/edit-modal.js';
+import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { backendBase } from '../../base.js';
 
 // Global variables
@@ -22,6 +31,14 @@ let itemsPerPage = 20;
 let selectedPurchaseOrder = null;
 let selectedPaymentSchedule = null;
 let actionConfirmModal = null;
+let pageHeader = null;
+let financeActiveTab = 'po';
+let dbsSuppliers = [];
+let dbsPaySupplier = null;
+let poDetailsDisplayModal = null;
+let markPaidEditModal = null;
+let dbsPayEditModal = null;
+let dbsPaymentsDisplayModal = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async function() {
@@ -33,9 +50,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         cancelText: 'İptal',
         confirmButtonClass: 'btn-danger'
     });
+    initFinancePurchaseOrderModals();
     initNavbar();
-    // Initialize header component
-    new HeaderComponent({
+    pageHeader = new HeaderComponent({
         title: 'Satın Alma Siparişleri',
         subtitle: 'Finansal takip ve fatura yönetimi',
         icon: 'shopping-cart',
@@ -45,8 +62,20 @@ document.addEventListener('DOMContentLoaded', async function() {
         exportButtonText: 'Dışa Aktar',
         refreshButtonText: 'Yenile',
         onBackClick: () => window.location.href = '/finance',
-        onExportClick: exportPurchaseOrdersData,
-        onRefreshClick: loadPurchaseOrders
+        onExportClick: () => {
+            if (financeActiveTab === 'dbs') {
+                showErrorMessage('DBS sekmesinde dışa aktarma kullanılamaz.');
+                return;
+            }
+            exportPurchaseOrdersData();
+        },
+        onRefreshClick: () => {
+            if (financeActiveTab === 'dbs') {
+                loadDbsSuppliers();
+            } else {
+                loadPurchaseOrders();
+            }
+        }
     });
 
     // Build actions, include delete only for admins
@@ -154,6 +183,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         emptyMessage: 'Henüz satın alma siparişi bulunmamaktadır.',
         emptyIcon: 'fas fa-inbox'
     });
+
+    initDbsSuppliersTable();
+    setupFinanceMainTabs();
     
     // Check for order ID in URL parameters
     const urlParams = new URLSearchParams(window.location.search);
@@ -271,24 +303,554 @@ document.addEventListener('DOMContentLoaded', async function() {
     addEventListeners();
 });
 
-// Add event listeners
-function addEventListeners() {
-    // Mark payment as paid
-    document.getElementById('confirm-mark-paid').addEventListener('click', confirmMarkPaid);
-    
-    // Handle paid with tax checkbox change
-    document.getElementById('paid-with-tax').addEventListener('change', updatePaymentAmountDisplay);
-    
-    // Handle modal close to clean up URL
-    const purchaseOrderDetailsModal = document.getElementById('purchaseOrderDetailsModal');
-    if (purchaseOrderDetailsModal) {
-        purchaseOrderDetailsModal.addEventListener('hidden.bs.modal', function () {
-            // Remove order parameter from URL when modal is closed
-            const url = new URL(window.location);
-            url.searchParams.delete('order');
-            window.history.pushState({}, '', url);
+function initFinancePurchaseOrderModals() {
+    poDetailsDisplayModal = new DisplayModal('purchase-order-details-modal-container', {
+        title: 'Sipariş Detayları',
+        icon: 'fas fa-shopping-cart',
+        size: 'xl',
+        showEditButton: false
+    });
+    poDetailsDisplayModal.onCloseCallback(() => {
+        const url = new URL(window.location);
+        url.searchParams.delete('order');
+        window.history.pushState({}, '', url);
+    });
+
+    markPaidEditModal = new EditModal('mark-paid-modal-container', {
+        title: 'Ödeme İşaretle',
+        icon: 'fas fa-check-circle text-success',
+        saveButtonText: 'Ödeme İşaretle',
+        size: 'lg'
+    });
+    markPaidEditModal.addSection({
+        id: 'mark-paid-section',
+        title: null,
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'schedule_label_ro',
+                name: 'schedule_label_ro',
+                label: 'Ödeme planı',
+                type: 'text',
+                readonly: true,
+                colSize: 12
+            },
+            {
+                id: 'payment_display_amount',
+                name: 'payment_display_amount',
+                label: 'Ödeme tutarı',
+                type: 'text',
+                readonly: true,
+                colSize: 6
+            },
+            {
+                id: 'payment_currency_ro',
+                name: 'payment_currency_ro',
+                label: 'Para birimi',
+                type: 'text',
+                readonly: true,
+                colSize: 6
+            },
+            {
+                id: 'payment_due_date_ro',
+                name: 'payment_due_date_ro',
+                label: 'Vade tarihi',
+                type: 'text',
+                readonly: true,
+                colSize: 12
+            },
+            {
+                id: 'paid_with_tax',
+                name: 'paid_with_tax',
+                label: 'KDV dahil ödeme yapıldı',
+                type: 'checkbox',
+                value: true,
+                colSize: 12,
+                help: 'İşaretliyse ödeme KDV dahil olarak işaretlenir.'
+            }
+        ]
+    });
+    markPaidEditModal.render();
+    markPaidEditModal.onSaveCallback(handleMarkPaidSave);
+    markPaidEditModal.modal.addEventListener('change', (e) => {
+        if (e.target && e.target.id === 'paid_with_tax') {
+            updatePaymentAmountDisplay();
+        }
+    });
+
+    dbsPayEditModal = new EditModal('dbs-pay-modal-container', {
+        title: 'DBS Ödemesi',
+        icon: 'fas fa-money-bill-wave',
+        saveButtonText: 'Ödemeyi Kaydet',
+        size: 'md'
+    });
+    dbsPayEditModal.addSection({
+        id: 'dbs-pay-section',
+        title: null,
+        icon: 'fas fa-university',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'dbs_supplier_display',
+                name: 'dbs_supplier_display',
+                label: 'Tedarikçi',
+                type: 'text',
+                readonly: true,
+                colSize: 12
+            },
+            {
+                id: 'dbs_pay_amount',
+                name: 'amount',
+                label: 'Tutar',
+                type: 'number',
+                required: true,
+                min: 0.01,
+                step: 0.01,
+                placeholder: '0,00',
+                colSize: 8
+            },
+            {
+                id: 'dbs_currency_ro',
+                name: 'dbs_currency_ro',
+                label: 'Para birimi',
+                type: 'text',
+                readonly: true,
+                colSize: 4
+            },
+            {
+                id: 'dbs_pay_note',
+                name: 'note',
+                label: 'Not',
+                type: 'textarea',
+                rows: 2,
+                placeholder: 'İsteğe bağlı',
+                required: false,
+                colSize: 12
+            }
+        ]
+    });
+    dbsPayEditModal.render();
+    dbsPayEditModal.onSaveCallback(handleDbsPaySave);
+    dbsPayEditModal.modal.addEventListener('input', () => {
+        updateDbsPayOverpaymentWarning();
+    });
+
+    const amountGroup = dbsPayEditModal.container.querySelector('[data-field-id="dbs_pay_amount"]');
+    if (amountGroup && !amountGroup.querySelector('#dbs-pay-over-warning')) {
+        const warn = document.createElement('div');
+        warn.id = 'dbs-pay-over-warning';
+        warn.className = 'alert alert-warning py-2 px-3 mt-2 mb-0 d-none';
+        warn.setAttribute('role', 'alert');
+        warn.innerHTML =
+            '<i class="fas fa-exclamation-triangle me-1"></i>Girilen tutar kullanılan krediden büyük. Sunucu fazla tutarı yok sayabilir; tutarı kontrol edin.';
+        amountGroup.appendChild(warn);
+    }
+
+    dbsPaymentsDisplayModal = new DisplayModal('dbs-payments-display-modal-container', {
+        title: 'DBS Ödeme Geçmişi',
+        icon: 'fas fa-list',
+        size: 'lg',
+        showEditButton: false
+    });
+    setupDbsPaymentsCancelDelegation();
+}
+
+function setupFinanceMainTabs() {
+    const tabBar = document.getElementById('finance-po-main-tabs');
+    if (!tabBar) return;
+    tabBar.querySelectorAll('[data-finance-tab]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const tab = btn.getAttribute('data-finance-tab');
+            if (tab) switchFinanceMainTab(tab);
+        });
+    });
+    tabBarActiveClasses(financeActiveTab);
+}
+
+function relocateFinanceViewSwitcher(tab) {
+    const card = document.getElementById('finance-po-view-switcher-card');
+    const anchorPo = document.getElementById('finance-view-switcher-anchor-po');
+    const anchorDbs = document.getElementById('finance-view-switcher-anchor-dbs');
+    if (!card || !anchorPo || !anchorDbs) return;
+    const target = tab === 'dbs' ? anchorDbs : anchorPo;
+    target.appendChild(card);
+}
+
+function switchFinanceMainTab(tab) {
+    financeActiveTab = tab;
+    const poPane = document.getElementById('finance-tab-pane-po');
+    const dbsPane = document.getElementById('finance-tab-pane-dbs');
+    if (poPane) poPane.classList.toggle('d-none', tab !== 'po');
+    if (dbsPane) dbsPane.classList.toggle('d-none', tab !== 'dbs');
+
+    relocateFinanceViewSwitcher(tab);
+    tabBarActiveClasses(tab);
+
+    if (pageHeader) {
+        pageHeader.updateConfig({
+            showExportButton: tab === 'po' ? 'block' : 'none'
         });
     }
+
+    if (tab === 'dbs') {
+        loadDbsSuppliers();
+    }
+}
+
+function tabBarActiveClasses(activeTab) {
+    document.querySelectorAll('#finance-po-main-tabs [data-finance-tab]').forEach((btn) => {
+        const t = btn.getAttribute('data-finance-tab');
+        const isActive = t === activeTab;
+        btn.classList.toggle('btn-primary', isActive);
+        btn.classList.toggle('btn-outline-primary', !isActive);
+    });
+}
+
+function initDbsSuppliersTable() {
+    if (!document.getElementById('dbs-suppliers-table-container')) return;
+
+    window.dbsSuppliersTable = new TableComponent('dbs-suppliers-table-container', {
+        title: 'DBS Tedarikçileri',
+        icon: 'university',
+        iconColor: 'text-primary',
+        sortable: false,
+        loading: false,
+        pagination: false,
+        refreshable: true,
+        onRefresh: loadDbsSuppliers,
+        columns: [
+            {
+                field: 'name',
+                label: 'Tedarikçi',
+                sortable: true,
+                formatter: (value) => (value ? `<strong>${escapeHtml(String(value))}</strong>` : '—')
+            },
+            {
+                field: 'dbs_bank',
+                label: 'Banka',
+                sortable: true,
+                formatter: (value) => (value ? escapeHtml(String(value)) : '—')
+            },
+            {
+                field: 'dbs_currency',
+                label: 'Para birimi',
+                sortable: true,
+                formatter: (value) => (value ? `<span class="currency-badge">${escapeHtml(String(value))}</span>` : '—')
+            },
+            {
+                field: 'dbs_limit',
+                label: 'Limit',
+                sortable: true,
+                formatter: (value, row) => formatDbsMoneyCell(value, row.dbs_currency)
+            },
+            {
+                field: 'dbs_used',
+                label: 'Kullanılan',
+                sortable: true,
+                formatter: (value, row) => formatDbsMoneyCell(value, row.dbs_currency)
+            },
+            {
+                field: '_available',
+                label: 'Kullanılabilir',
+                sortable: false,
+                formatter: (_v, row) => formatDbsAvailable(row)
+            },
+            {
+                field: 'dbs_expiry_date',
+                label: 'Vade',
+                sortable: true,
+                formatter: (value) => formatDbsExpiryCell(value)
+            },
+            {
+                field: '_actions',
+                label: 'İşlemler',
+                sortable: false,
+                formatter: (_v, row) => {
+                    const id = row.id;
+                    return `
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-primary" onclick="window.openDbsPayModal(${id})" title="Öde">
+                                <i class="fas fa-money-bill-wave me-1"></i>Öde
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" onclick="window.openDbsPaymentsDrawer(${id})" title="Ödemeleri görüntüle">
+                                <i class="fas fa-list me-1"></i>Ödemeler
+                            </button>
+                        </div>`;
+                }
+            }
+        ],
+        data: [],
+        skeleton: false,
+        emptyMessage: 'DBS kaydı olan tedarikçi bulunmamaktadır.',
+        emptyIcon: 'fas fa-university'
+    });
+}
+
+function escapeHtml(str) {
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function parseMoneyNumber(val) {
+    if (val === null || val === undefined || val === '') return NaN;
+    const n = typeof val === 'number' ? val : parseFloat(String(val).replace(',', '.'));
+    return n;
+}
+
+function formatDbsMoneyCell(amount, currency) {
+    const c = currency || 'TRY';
+    const n = parseMoneyNumber(amount);
+    if (Number.isNaN(n)) return '—';
+    return formatCurrency(n, c);
+}
+
+function formatDbsAvailable(row) {
+    const limit = parseMoneyNumber(row.dbs_limit);
+    if (Number.isNaN(limit)) return '—';
+    const used = parseMoneyNumber(row.dbs_used);
+    const u = Number.isNaN(used) ? 0 : used;
+    const cur = row.dbs_currency || 'TRY';
+    return formatCurrency(limit - u, cur);
+}
+
+function formatDbsExpiryCell(dateStr) {
+    if (!dateStr) return '—';
+    const cls = getDbsExpiryAlertClass(dateStr);
+    const label = formatDate(dateStr);
+    return cls ? `<span class="${cls}">${label}</span>` : label;
+}
+
+function getDbsExpiryAlertClass(dateStr) {
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return '';
+    const now = new Date();
+    const msPerDay = 86400000;
+    const daysUntil = (d.getTime() - now.getTime()) / msPerDay;
+    if (daysUntil < 0) return 'text-danger fw-semibold';
+    if (daysUntil <= 30) return 'text-danger';
+    return '';
+}
+
+function normalizeApiList(data) {
+    if (Array.isArray(data)) return data;
+    if (data && Array.isArray(data.results)) return data.results;
+    return [];
+}
+
+async function loadDbsSuppliers() {
+    if (!window.dbsSuppliersTable) return;
+    try {
+        window.dbsSuppliersTable.setLoading(true);
+        const raw = await getSuppliers({ has_dbs: true });
+        dbsSuppliers = normalizeApiList(raw);
+        window.dbsSuppliersTable.setLoading(false);
+        window.dbsSuppliersTable.updateData(dbsSuppliers, dbsSuppliers.length, 1);
+    } catch (error) {
+        console.error('Error loading DBS suppliers:', error);
+        showErrorMessage(error.message || 'DBS tedarikçileri yüklenirken hata oluştu.');
+        if (window.dbsSuppliersTable) {
+            window.dbsSuppliersTable.setLoading(false);
+            window.dbsSuppliersTable.updateData([]);
+        }
+    }
+}
+
+async function refreshDbsSupplierRow(supplierId) {
+    try {
+        const updated = await getSupplier(supplierId);
+        const idx = dbsSuppliers.findIndex((s) => Number(s.id) === Number(supplierId));
+        if (idx >= 0) {
+            dbsSuppliers[idx] = { ...dbsSuppliers[idx], ...updated };
+        } else {
+            dbsSuppliers.push(updated);
+        }
+        if (window.dbsSuppliersTable) {
+            window.dbsSuppliersTable.updateData([...dbsSuppliers], dbsSuppliers.length, 1);
+        }
+    } catch (e) {
+        console.error(e);
+        await loadDbsSuppliers();
+    }
+}
+
+function openDbsPayModal(supplierId) {
+    const row = dbsSuppliers.find((s) => Number(s.id) === Number(supplierId));
+    if (!row || !dbsPayEditModal) {
+        showErrorMessage('Tedarikçi bulunamadı.');
+        return;
+    }
+    dbsPaySupplier = row;
+    dbsPayEditModal.setFormData({
+        dbs_supplier_display: row.name || `Tedarikçi #${supplierId}`,
+        dbs_pay_amount: '',
+        dbs_currency_ro: row.dbs_currency || 'TRY',
+        dbs_pay_note: ''
+    });
+    updateDbsPayOverpaymentWarning();
+    dbsPayEditModal.show();
+}
+
+function updateDbsPayOverpaymentWarning() {
+    const warn = dbsPayEditModal?.container.querySelector('#dbs-pay-over-warning');
+    if (!warn || !dbsPaySupplier) return;
+    const raw = String(dbsPayEditModal.getFieldValue('dbs_pay_amount') ?? '').trim().replace(',', '.');
+    const amt = parseFloat(raw);
+    const used = parseMoneyNumber(dbsPaySupplier.dbs_used);
+    const show = Number.isFinite(amt) && Number.isFinite(used) && amt > used;
+    warn.classList.toggle('d-none', !show);
+}
+
+function setupDbsPaymentsCancelDelegation() {
+    if (!dbsPaymentsDisplayModal?.modal) return;
+    const root = dbsPaymentsDisplayModal.modal;
+    if (root.dataset.dbsCancelDelegBound === '1') return;
+    root.dataset.dbsCancelDelegBound = '1';
+    root.addEventListener('click', (e) => {
+        const btn = e.target.closest('.dbs-payment-cancel-btn');
+        if (!btn) return;
+        const paymentId = parseInt(btn.dataset.paymentId, 10);
+        const supplierId = parseInt(btn.dataset.supplierId, 10);
+        const amount = parseFloat(btn.dataset.amount);
+        const currency = btn.dataset.currency || 'TRY';
+        if (!Number.isFinite(paymentId) || !Number.isFinite(supplierId)) return;
+        confirmCancelDbsPayment(paymentId, supplierId, amount, currency);
+    });
+}
+
+async function handleDbsPaySave(formData) {
+    if (!dbsPaySupplier) return;
+    const raw = String(formData.amount ?? '').trim().replace(',', '.');
+    const amt = parseFloat(raw);
+    if (!Number.isFinite(amt) || amt <= 0) {
+        showErrorMessage('Geçerli pozitif bir tutar girin.');
+        return;
+    }
+    const noteVal = String(formData.note ?? '').trim();
+    const payload = {
+        supplier: dbsPaySupplier.id,
+        amount: amt.toFixed(2)
+    };
+    if (noteVal) payload.note = noteVal;
+    try {
+        await createDbsPayment(payload);
+        showSuccessMessage('DBS ödemesi kaydedildi.');
+        dbsPayEditModal.hide();
+        await refreshDbsSupplierRow(dbsPaySupplier.id);
+    } catch (error) {
+        console.error(error);
+        showErrorMessage(error.message || 'Ödeme kaydedilirken hata oluştu.');
+    }
+}
+
+async function openDbsPaymentsDrawer(supplierId) {
+    const row = dbsSuppliers.find((s) => Number(s.id) === Number(supplierId));
+    const name = row?.name || `Tedarikçi #${supplierId}`;
+    if (!dbsPaymentsDisplayModal) return;
+
+    dbsPaymentsDisplayModal.clearData();
+    dbsPaymentsDisplayModal.addCustomSection({
+        id: 'dbs-payments-section',
+        customContent: `<p class="text-muted small mb-2">${escapeHtml(name)}</p><div id="dbs-payments-list-host"><div class="text-center text-muted py-4">Yükleniyor…</div></div>`
+    });
+    dbsPaymentsDisplayModal.render();
+    dbsPaymentsDisplayModal.show();
+
+    const host = document.getElementById('dbs-payments-list-host');
+    try {
+        const raw = await listDbsPayments(supplierId);
+        const payments = normalizeApiList(raw);
+        renderDbsPaymentsListIntoHost(host, payments, supplierId);
+    } catch (error) {
+        console.error(error);
+        if (host) {
+            host.innerHTML = `<div class="alert alert-danger m-0">${escapeHtml(error.message || 'Liste yüklenemedi.')}</div>`;
+        }
+    }
+}
+
+function renderDbsPaymentsListIntoHost(host, payments, supplierId) {
+    if (!host) return;
+    if (!payments.length) {
+        host.innerHTML = '<p class="text-muted text-center py-4 mb-0">Kayıtlı ödeme yok.</p>';
+        return;
+    }
+    const rowsHtml = payments.map((p) => {
+        const dateLabel = formatDate(p.paid_at || p.created_at);
+        const amountStr = formatCurrency(parseMoneyNumber(p.amount), p.currency || 'TRY');
+        const by = p.paid_by_username ? escapeHtml(String(p.paid_by_username)) : '—';
+        const note = p.note ? escapeHtml(String(p.note)) : '—';
+        const amtNum = parseMoneyNumber(p.amount);
+        const safeAmt = Number.isFinite(amtNum) ? amtNum : 0;
+        const cur = p.currency || 'TRY';
+        return `
+            <tr data-payment-id="${p.id}">
+                <td>${escapeHtml(dateLabel)}</td>
+                <td><strong>${amountStr}</strong></td>
+                <td>${by}</td>
+                <td class="small text-muted">${note}</td>
+                <td>
+                    <button type="button" class="btn btn-sm btn-outline-danger dbs-payment-cancel-btn"
+                        data-payment-id="${p.id}"
+                        data-supplier-id="${supplierId}"
+                        data-amount="${safeAmt}"
+                        data-currency="${escapeHtml(String(cur))}">
+                        İptal
+                    </button>
+                </td>
+            </tr>`;
+    }).join('');
+
+    host.innerHTML = `
+        <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Tarih</th>
+                        <th>Tutar</th>
+                        <th>Ödeyen</th>
+                        <th>Not</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        </div>`;
+}
+
+function confirmCancelDbsPayment(paymentId, supplierId, amount, currency) {
+    const cur = currency || 'TRY';
+    const formatted = formatCurrency(amount, cur);
+    actionConfirmModal.show({
+        message: `Bu işlem tedarikçinin kullanılan kredisine ${formatted} geri ekler. Devam etmek istiyor musunuz?`,
+        onConfirm: async () => {
+            try {
+                await deleteDbsPayment(paymentId);
+                showSuccessMessage('Ödeme iptal edildi.');
+                const row = document.querySelector(`#dbs-payments-list-host tr[data-payment-id="${paymentId}"]`);
+                if (row) row.remove();
+                const tbody = document.querySelector('#dbs-payments-list-host tbody');
+                if (tbody && !tbody.querySelector('tr')) {
+                    const host = document.getElementById('dbs-payments-list-host');
+                    if (host) {
+                        host.innerHTML = '<p class="text-muted text-center py-4 mb-0">Kayıtlı ödeme yok.</p>';
+                    }
+                }
+                await refreshDbsSupplierRow(supplierId);
+            } catch (error) {
+                console.error(error);
+                showErrorMessage(error.message || 'İptal sırasında hata oluştu.');
+            }
+        }
+    });
+}
+
+// Add event listeners
+function addEventListeners() {
+    // PO detayı, ödeme işaretleme ve DBS formları DisplayModal / EditModal üzerinden (initFinancePurchaseOrderModals).
 }
 
 // Load purchase orders
@@ -495,114 +1057,94 @@ function renderPaymentSchedules(order) {
 
 // Show mark paid modal
 function showMarkPaidModal(orderId, scheduleId) {
-    const order = currentPurchaseOrders.find(o => o.id === orderId);
-    const schedule = order.payment_schedules.find(s => s.id === scheduleId);
-    
-    if (!order || !schedule) {
+    const order = currentPurchaseOrders.find((o) => Number(o.id) === Number(orderId));
+    const schedule = order?.payment_schedules?.find((s) => Number(s.id) === Number(scheduleId));
+
+    if (!order || !schedule || !markPaidEditModal) {
         showErrorMessage('Ödeme planı bulunamadı.');
         return;
     }
-    
+
     selectedPaymentSchedule = { orderId, scheduleId, schedule };
-    
-    // Check if this is the last sequence
-    const unpaidSchedules = order.payment_schedules.filter(s => !s.is_paid);
+
+    const unpaidSchedules = order.payment_schedules.filter((s) => !s.is_paid);
     const isLastSequence = unpaidSchedules.length === 1 && unpaidSchedules[0].id === scheduleId;
-    
-    // Populate modal
-    document.getElementById('schedule-label').textContent = schedule.label;
-    document.getElementById('payment-amount').value = formatCurrency(schedule.amount, schedule.currency);
-    document.getElementById('payment-currency').textContent = schedule.currency;
-    document.getElementById('payment-due-date').value = formatDate(schedule.due_date);
-    
-    // Handle checkbox based on whether it's the last sequence
-    const paidWithTaxCheckbox = document.getElementById('paid-with-tax');
-    if (isLastSequence) {
-        // Last sequence: force KDV to be selected and disabled
-        paidWithTaxCheckbox.checked = true;
-        paidWithTaxCheckbox.disabled = true;
-        paidWithTaxCheckbox.parentElement.classList.add('text-muted');
-    } else {
-        // Not last sequence: allow user to choose
-        paidWithTaxCheckbox.checked = true;
-        paidWithTaxCheckbox.disabled = false;
-        paidWithTaxCheckbox.parentElement.classList.remove('text-muted');
+
+    markPaidEditModal.setFormData({
+        schedule_label_ro: schedule.label,
+        payment_currency_ro: schedule.currency,
+        payment_due_date_ro: formatDate(schedule.due_date),
+        paid_with_tax: true
+    });
+
+    const cb = markPaidEditModal.container.querySelector('#paid_with_tax');
+    if (cb) {
+        cb.disabled = isLastSequence;
+        const wrap = cb.closest('.checkbox-field') || cb.parentElement;
+        if (wrap) wrap.classList.toggle('text-muted', isLastSequence);
     }
-    
-    // Update payment amount display
+
     updatePaymentAmountDisplay();
-    
-    const modal = new bootstrap.Modal(document.getElementById('markPaidModal'));
-    modal.show();
+    markPaidEditModal.show();
 }
 
-// Update payment amount display based on checkbox
-function updatePaymentAmountDisplay() {
-    if (!selectedPaymentSchedule) return;
-    
-    const { schedule } = selectedPaymentSchedule;
-    const paidWithTaxCheckbox = document.getElementById('paid-with-tax');
-    const paidWithTax = paidWithTaxCheckbox.checked;
-    const paymentAmountField = document.getElementById('payment-amount');
-    
-    // Check if this is the last sequence
-    const order = currentPurchaseOrders.find(o => o.id === selectedPaymentSchedule.orderId);
-    const unpaidSchedules = order.payment_schedules.filter(s => !s.is_paid);
-    const isLastSequence = unpaidSchedules.length === 1 && unpaidSchedules[0].id === selectedPaymentSchedule.scheduleId;
-    
-    if (isLastSequence) {
-        // Last sequence: always show total with tax and disable checkbox
-        const totalWithTax = parseFloat(schedule.amount || 0) + parseFloat(schedule.effective_tax_due || 0);
-        paymentAmountField.value = formatCurrency(totalWithTax, schedule.currency);
-        paymentAmountField.classList.add('text-success', 'fw-bold');
-        paidWithTaxCheckbox.checked = true;
-        paidWithTaxCheckbox.disabled = true;
-        paidWithTaxCheckbox.parentElement.classList.add('text-muted');
-    } else {
-        // Not last sequence: allow user choice
-        if (paidWithTax) {
-            // Show total amount with tax
-            const totalWithTax = parseFloat(schedule.amount || 0) + parseFloat(schedule.effective_tax_due || 0);
-            paymentAmountField.value = formatCurrency(totalWithTax, schedule.currency);
-            paymentAmountField.classList.add('text-success', 'fw-bold');
-        } else {
-            // Show only base amount
-            paymentAmountField.value = formatCurrency(schedule.amount || 0, schedule.currency);
-            paymentAmountField.classList.remove('text-success', 'fw-bold');
-        }
-        paidWithTaxCheckbox.disabled = false;
-        paidWithTaxCheckbox.parentElement.classList.remove('text-muted');
-    }
-}
-
-// Confirm mark as paid
-async function confirmMarkPaid() {
+async function handleMarkPaidSave(formData) {
     if (!selectedPaymentSchedule) {
         showErrorMessage('Ödeme planı seçilmedi.');
         return;
     }
-    
+    const { orderId, scheduleId } = selectedPaymentSchedule;
+    const paidWithTax = !!formData.paid_with_tax;
     try {
-        const { orderId, scheduleId, schedule } = selectedPaymentSchedule;
-        const paidWithTax = document.getElementById('paid-with-tax').checked;
-        
-        // The checkbox is already handled in updatePaymentAmountDisplay for last sequence
-        
         await markSchedulePaid(orderId, scheduleId, paidWithTax);
-        
         showSuccessMessage('Ödeme başarıyla işaretlendi.');
-        
-        // Close modal
-        const modal = bootstrap.Modal.getInstance(document.getElementById('markPaidModal'));
-        modal.hide();
-        
-        // Refresh data
+        markPaidEditModal.hide();
         loadPurchaseOrders();
-        
     } catch (error) {
         console.error('Error marking payment as paid:', error);
         showErrorMessage(error.message || 'Ödeme işaretlenirken hata oluştu.');
     }
+}
+
+// Update payment amount display based on checkbox
+function updatePaymentAmountDisplay() {
+    if (!selectedPaymentSchedule || !markPaidEditModal) return;
+
+    const { schedule } = selectedPaymentSchedule;
+    const paidWithTaxCheckbox = markPaidEditModal.container.querySelector('#paid_with_tax');
+    const paidWithTax = paidWithTaxCheckbox ? paidWithTaxCheckbox.checked : true;
+
+    const order = currentPurchaseOrders.find((o) => Number(o.id) === Number(selectedPaymentSchedule.orderId));
+    if (!order) return;
+    const unpaidSchedules = order.payment_schedules.filter((s) => !s.is_paid);
+    const isLastSequence =
+        unpaidSchedules.length === 1 && unpaidSchedules[0].id === selectedPaymentSchedule.scheduleId;
+
+    let displayAmount;
+    if (isLastSequence) {
+        const totalWithTax = parseFloat(schedule.amount || 0) + parseFloat(schedule.effective_tax_due || 0);
+        displayAmount = formatCurrency(totalWithTax, schedule.currency);
+        if (paidWithTaxCheckbox) {
+            paidWithTaxCheckbox.checked = true;
+            paidWithTaxCheckbox.disabled = true;
+            const wrap = paidWithTaxCheckbox.closest('.checkbox-field') || paidWithTaxCheckbox.parentElement;
+            if (wrap) wrap.classList.add('text-muted');
+        }
+    } else {
+        if (paidWithTax) {
+            const totalWithTax = parseFloat(schedule.amount || 0) + parseFloat(schedule.effective_tax_due || 0);
+            displayAmount = formatCurrency(totalWithTax, schedule.currency);
+        } else {
+            displayAmount = formatCurrency(schedule.amount || 0, schedule.currency);
+        }
+        if (paidWithTaxCheckbox) {
+            paidWithTaxCheckbox.disabled = false;
+            const wrap = paidWithTaxCheckbox.closest('.checkbox-field') || paidWithTaxCheckbox.parentElement;
+            if (wrap) wrap.classList.remove('text-muted');
+        }
+    }
+
+    markPaidEditModal.setFieldValue('payment_display_amount', displayAmount);
 }
 
 
@@ -618,9 +1160,7 @@ function confirmAndDeletePurchaseOrder(orderId) {
             try {
                 await deletePurchaseOrder(orderId);
                 if (selectedPurchaseOrder && selectedPurchaseOrder.id === orderId) {
-                    const modalEl = document.getElementById('purchaseOrderDetailsModal');
-                    const modal = bootstrap.Modal.getInstance(modalEl) || bootstrap.Modal.getOrCreateInstance(modalEl);
-                    modal.hide();
+                    poDetailsDisplayModal?.hide();
                     selectedPurchaseOrder = null;
                 }
                 showSuccessMessage('Satın alma siparişi silindi.');
@@ -638,16 +1178,13 @@ async function viewPurchaseOrderDetails(orderId) {
     try {
         const order = await getPurchaseOrderById(orderId);
         selectedPurchaseOrder = order;
-        
+
         // Update URL to include the order ID
         const url = new URL(window.location);
         url.searchParams.set('order', orderId);
         window.history.pushState({}, '', url);
-        
-        const modal = new bootstrap.Modal(document.getElementById('purchaseOrderDetailsModal'));
-        const content = document.getElementById('purchase-order-details-content');
-        
-        content.innerHTML = `
+
+        const detailsHtml = `
             <div class="row">
                 <div class="col-md-6">
                     <h6 class="text-primary">Genel</h6>
@@ -686,10 +1223,17 @@ async function viewPurchaseOrderDetails(orderId) {
             </div>
             ` : ''}
         `;
-        
+
+        poDetailsDisplayModal.clearData();
+        poDetailsDisplayModal.addCustomSection({
+            id: 'po-detail-main',
+            customContent: detailsHtml
+        });
+        poDetailsDisplayModal.render();
+
         // Create payment schedule table using the table component
         if (order.payment_schedules && order.payment_schedules.length > 0) {
-            const paymentScheduleTable = new TableComponent('payment-schedule-table-container', {
+            new TableComponent('payment-schedule-table-container', {
                 title: 'Ödeme Planı',
                 columns: [
                     { field: 'sequence', label: 'Sıra', sortable: false, formatter: (value) => `<span class="text-center">${value}</span>` },
@@ -699,8 +1243,8 @@ async function viewPurchaseOrderDetails(orderId) {
                     { field: 'amount', label: 'Tutar', sortable: false, formatter: (value, row) => `<span class="text-end"><strong>${formatCurrency(value, row.currency)}</strong></span>` },
                     { field: 'tax_amount', label: 'KDV Tutarı', sortable: false, formatter: (value, row) => {
                         const isPaid = row.is_paid;
-                        const taxAmount = isPaid ? 
-                            (row.paid_with_tax ? (row.base_tax || 0) : 0) : 
+                        const taxAmount = isPaid ?
+                            (row.paid_with_tax ? (row.base_tax || 0) : 0) :
                             row.effective_tax_due;
                         return `<span class="text-end">${formatCurrency(taxAmount, row.currency)}</span>`;
                     }},
@@ -731,10 +1275,10 @@ async function viewPurchaseOrderDetails(orderId) {
                 pagination: false
             });
         }
-        
+
         // Create order lines table using the table component
         if (order.lines && order.lines.length > 0) {
-            const orderLinesTable = new TableComponent('order-lines-table-container', {
+            new TableComponent('order-lines-table-container', {
                 title: 'Sipariş Kalemleri',
                 columns: [
                     { field: 'item_code', label: 'Malzeme Kodu', sortable: false, formatter: (value) => `<code>${value}</code>` },
@@ -760,9 +1304,9 @@ async function viewPurchaseOrderDetails(orderId) {
                 pagination: false
             });
         }
-        
-        modal.show();
-        
+
+        poDetailsDisplayModal.show();
+
     } catch (error) {
         console.error('Error loading purchase order details:', error);
         showErrorMessage('Sipariş detayları yüklenirken hata oluştu.');
@@ -840,11 +1384,18 @@ function getPaymentStatusText(status) {
 }
 
 function formatCurrency(amount, currency = 'TRY') {
-    if (!amount) return '₺0,00';
+    const cur = currency || 'TRY';
+    if (amount === null || amount === undefined || amount === '') {
+        return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: cur }).format(0);
+    }
+    const num = typeof amount === 'number' ? amount : parseFloat(String(amount).replace(',', '.'));
+    if (Number.isNaN(num)) {
+        return new Intl.NumberFormat('tr-TR', { style: 'currency', currency: cur }).format(0);
+    }
     return new Intl.NumberFormat('tr-TR', {
         style: 'currency',
-        currency: currency
-    }).format(amount);
+        currency: cur
+    }).format(num);
 }
 
 function formatDate(dateString) {
@@ -866,3 +1417,5 @@ function showErrorMessage(message) {
 // Global functions for onclick handlers
 window.viewPurchaseOrderDetails = viewPurchaseOrderDetails;
 window.showMarkPaidModal = showMarkPaidModal;
+window.openDbsPayModal = openDbsPayModal;
+window.openDbsPaymentsDrawer = openDbsPaymentsDrawer;

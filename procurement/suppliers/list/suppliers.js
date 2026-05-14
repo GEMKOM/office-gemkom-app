@@ -13,6 +13,7 @@ import {
 } from '../../../apis/procurement.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
+import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
 
 // State management
@@ -30,6 +31,14 @@ let supplierFilters = null; // Filters component instance
 let isEditMode = false; // Track if we're editing an existing supplier
 let paymentTerms = []; // Payment terms for dropdown
 let actionConfirmModal = null;
+let supplierFormModal = null;
+
+const CURRENCY_DROPDOWN_OPTIONS = [
+    { value: 'TRY', label: 'TRY — Türk Lirası' },
+    { value: 'USD', label: 'USD — Amerikan Doları' },
+    { value: 'EUR', label: 'EUR — Euro' },
+    { value: 'GBP', label: 'GBP — İngiliz Sterlini' },
+];
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -86,8 +95,8 @@ async function initializeSuppliers() {
         await initializeFiltersComponent();
         initializeSortableHeaders();
         
-        // Load payment terms first, then suppliers
         await loadPaymentTerms();
+        initSupplierFormModal();
         await loadSuppliers();
         updateSupplierCounts();
     } catch (error) {
@@ -311,13 +320,39 @@ async function loadSuppliers() {
     }
 }
 
+function currencyBadge(code) {
+    const c = code || 'TRY';
+    return `<span class="status-badge status-grey">${c}</span>`;
+}
+
+function taxRateBadge(rate) {
+    const n = rate != null && rate !== '' ? Number(rate) : null;
+    const t =
+        n != null && Number.isFinite(n)
+            ? n.toLocaleString('tr-TR', { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+            : '—';
+    return `<span class="status-badge status-blue">${t}%</span>`;
+}
+
+function statusBadge(isActive) {
+    return isActive
+        ? '<span class="status-badge status-green">Aktif</span>'
+        : '<span class="status-badge status-red">Pasif</span>';
+}
+
+function dbsYesNoBadge(hasDbs) {
+    return hasDbs
+        ? '<span class="status-badge status-blue">Evet</span>'
+        : '<span class="status-badge status-grey">Hayır</span>';
+}
+
 function renderSuppliersTable(suppliers) {
     const tbody = document.getElementById('suppliers-table-body');
     
     if (!suppliers || suppliers.length === 0) {
                  tbody.innerHTML = `
              <tr>
-                 <td colspan="11" class="text-center">
+                 <td colspan="12" class="text-center">
                     <div class="empty-state">
                         <i class="fas fa-building"></i>
                         <h5>Henüz tedarikçi bulunmuyor</h5>
@@ -356,22 +391,22 @@ function renderSuppliersTable(suppliers) {
                 </div>
             </td>
             <td class="text-center">
-                <span class="currency-badge">${supplier.default_currency || 'TRY'}</span>
+                ${currencyBadge(supplier.default_currency)}
             </td>
             <td class="text-center">
-                <span class="tax-rate-badge">${supplier.default_tax_rate || '18.00'}%</span>
+                ${taxRateBadge(supplier.default_tax_rate)}
             </td>
             <td class="text-center">
-                ${getStatusBadge(supplier.is_active)}
+                ${statusBadge(supplier.is_active)}
             </td>
             <td>
                 <div class="payment-terms">${getPaymentTermName(supplier.default_payment_terms)}</div>
             </td>
             <td class="text-center">
-                ${getDbsStatusBadge(supplier.has_dbs)}
+                ${dbsYesNoBadge(supplier.has_dbs)}
             </td>
             <td class="text-center">
-                <div class="dbs-limit">${formatDbsLimit(supplier.dbs_limit, supplier.default_currency)}</div>
+                <div class="dbs-limit">${formatDbsLimit(supplier.dbs_limit, supplier.dbs_currency || supplier.default_currency)}</div>
             </td>
              <td class="text-center">
                 <div class="action-buttons">
@@ -482,8 +517,7 @@ function setupEventListeners() {
     const addBtn = document.getElementById('add-supplier-btn');
     if (addBtn) {
         addBtn.addEventListener('click', () => {
-            isEditMode = false;
-            showSupplierFormModal();
+            openSupplierFormForCreate();
         });
     }
     
@@ -498,185 +532,338 @@ function setupEventListeners() {
     if (refreshBtn) {
         refreshBtn.addEventListener('click', loadSuppliers);
     }
-    
-    // Save supplier button
-    const saveBtn = document.getElementById('save-supplier-btn');
-    if (saveBtn) {
-        saveBtn.addEventListener('click', saveSupplier);
-    }
-    
-    // DBS checkbox change handler
-    const hasDbsCheckbox = document.getElementById('supplier-has-dbs');
-    const dbsLimitInput = document.getElementById('supplier-dbs-limit');
-    if (hasDbsCheckbox && dbsLimitInput) {
-        hasDbsCheckbox.addEventListener('change', (e) => {
-            dbsLimitInput.disabled = !e.target.checked;
-            if (!e.target.checked) {
-                dbsLimitInput.value = '';
-            }
-        });
-    }
 }
 
 
 
-function showSupplierFormModal() {
-    const modal = document.getElementById('supplierFormModal');
-    const title = document.getElementById('supplierFormModalLabel');
-    const form = document.getElementById('supplier-form');
-    
-    // Always populate payment terms dropdown
-    populatePaymentTermsDropdown();
-    
-    if (isEditMode && currentSupplier) {
-        // Edit existing supplier
-        title.innerHTML = '<i class="fas fa-edit me-2"></i>Tedarikçi Düzenle';
-        populateSupplierForm();
-    } else {
-        // Add new supplier
-        title.innerHTML = '<i class="fas fa-plus me-2"></i>Yeni Tedarikçi';
-        form.reset();
+function initSupplierFormModal() {
+    if (supplierFormModal) {
+        supplierFormModal.destroy();
+        supplierFormModal = null;
+    }
+
+    const paymentTermOptions = [
+        { value: '', label: 'Ödeme koşulu seçin...' },
+        ...paymentTerms.map((pt) => ({ value: String(pt.id), label: pt.name })),
+    ];
+
+    supplierFormModal = new EditModal('supplier-form-modal-container', {
+        title: 'Yeni Tedarikçi',
+        icon: 'fas fa-handshake',
+        saveButtonText: 'Kaydet',
+        size: 'xl',
+    });
+
+    supplierFormModal.addSection({
+        id: 'supplier-basic',
+        title: 'Temel Bilgiler',
+        icon: 'fas fa-id-card',
+        iconColor: 'text-primary',
+        fields: [
+            { id: 'code', name: 'code', label: 'Kod', type: 'text', placeholder: 'Opsiyonel', help: 'Tedarikçi kodu (opsiyonel)', colSize: 4 },
+            {
+                id: 'name',
+                name: 'name',
+                label: 'Tedarikçi Adı',
+                type: 'text',
+                required: true,
+                placeholder: 'Firma unvanı',
+                icon: 'fas fa-building',
+                colSize: 8,
+            },
+            { id: 'contact_person', name: 'contact_person', label: 'İletişim Kişisi', type: 'text', colSize: 6, icon: 'fas fa-user' },
+            { id: 'phone', name: 'phone', label: 'Telefon', type: 'text', colSize: 6, icon: 'fas fa-phone' },
+            { id: 'email', name: 'email', label: 'E-posta', type: 'email', colSize: 6, icon: 'fas fa-envelope' },
+            {
+                id: 'is_active',
+                name: 'is_active',
+                label: 'Aktif kayıt',
+                type: 'checkbox',
+                colSize: 6,
+                value: true,
+                help: 'Pasif tedarikçiler listelerde pasif olarak görünür',
+            },
+            { id: 'address', name: 'address', label: 'Adres', type: 'textarea', rows: 2, colSize: 12 },
+            {
+                id: 'bank_info',
+                name: 'bank_info',
+                label: 'Banka / IBAN bilgisi',
+                type: 'textarea',
+                rows: 2,
+                colSize: 12,
+                help: 'Ödeme için banka hesabı, IBAN vb.',
+            },
+        ],
+    });
+
+    supplierFormModal.addSection({
+        id: 'supplier-commercial',
+        title: 'Para Birimi ve Ödeme',
+        icon: 'fas fa-coins',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'default_currency',
+                name: 'default_currency',
+                label: 'Varsayılan para birimi',
+                type: 'dropdown',
+                options: CURRENCY_DROPDOWN_OPTIONS,
+                placeholder: 'Seçiniz...',
+                colSize: 4,
+            },
+            {
+                id: 'default_payment_terms',
+                name: 'default_payment_terms',
+                label: 'Varsayılan ödeme koşulları',
+                type: 'dropdown',
+                options: paymentTermOptions,
+                placeholder: 'Seçiniz...',
+                colSize: 5,
+            },
+            {
+                id: 'default_tax_rate',
+                name: 'default_tax_rate',
+                label: 'Varsayılan vergi oranı (%)',
+                type: 'number',
+                min: 0,
+                max: 100,
+                step: 0.01,
+                value: '20',
+                required: true,
+                colSize: 3,
+                help: '0–100 arası yüzde',
+            },
+        ],
+    });
+
+    supplierFormModal.addSection({
+        id: 'supplier-dbs',
+        title: 'DBS (Doğrudan Borçlanma Sistemi)',
+        icon: 'fas fa-landmark',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'has_dbs',
+                name: 'has_dbs',
+                label: 'DBS kullanıyor',
+                type: 'checkbox',
+                colSize: 12,
+                value: false,
+                help: 'İşaretliyse aşağıdaki DBS alanları kullanılır',
+            },
+            {
+                id: 'dbs_bank',
+                name: 'dbs_bank',
+                label: 'DBS bankası',
+                type: 'text',
+                placeholder: 'Örn: İşbank, Garanti...',
+                colSize: 6,
+            },
+            {
+                id: 'dbs_limit',
+                name: 'dbs_limit',
+                label: 'DBS limiti',
+                type: 'number',
+                min: 0,
+                step: 0.01,
+                placeholder: '0',
+                colSize: 6,
+                help: 'Onaylı DBS limit tutarı',
+            },
+            {
+                id: 'dbs_used',
+                name: 'dbs_used',
+                label: 'Kullanılan DBS',
+                type: 'number',
+                min: 0,
+                step: 0.01,
+                value: '0',
+                readonly: true,
+                colSize: 4,
+                help: 'Sunucu tarafından güncellenir (salt okunur)',
+            },
+            {
+                id: 'dbs_currency',
+                name: 'dbs_currency',
+                label: 'DBS para birimi',
+                type: 'dropdown',
+                options: CURRENCY_DROPDOWN_OPTIONS,
+                placeholder: 'Seçiniz...',
+                colSize: 4,
+            },
+            { id: 'dbs_agreement_no', name: 'dbs_agreement_no', label: 'Sözleşme no', type: 'text', colSize: 4 },
+            { id: 'dbs_expiry_date', name: 'dbs_expiry_date', label: 'Limit bitiş tarihi', type: 'date', colSize: 6 },
+            { id: 'dbs_details', name: 'dbs_details', label: 'DBS notları', type: 'textarea', rows: 2, colSize: 12 },
+        ],
+    });
+
+    supplierFormModal.render();
+    supplierFormModal.onSaveCallback(handleSupplierModalSave);
+    supplierFormModal.onCancelCallback(() => {
         currentSupplier = null;
-        
-        // Ensure DBS limit field starts disabled
-        const dbsLimitInput = document.getElementById('supplier-dbs-limit');
-        if (dbsLimitInput) {
-            dbsLimitInput.disabled = true;
-        }
-    }
-    
-    const modalInstance = new bootstrap.Modal(modal);
-    modalInstance.show();
-}
-
-function populateSupplierForm() {
-    if (!currentSupplier) return;
-    
-    document.getElementById('supplier-name').value = currentSupplier.name || '';
-    document.getElementById('supplier-contact').value = currentSupplier.contact_person || '';
-    document.getElementById('supplier-phone').value = currentSupplier.phone || '';
-    document.getElementById('supplier-email').value = currentSupplier.email || '';
-    document.getElementById('supplier-currency').value = currentSupplier.default_currency || 'TRY';
-    document.getElementById('supplier-tax-rate').value = currentSupplier.default_tax_rate || '18.00';
-    
-    // Populate DBS fields
-    const hasDbsCheckbox = document.getElementById('supplier-has-dbs');
-    const dbsLimitInput = document.getElementById('supplier-dbs-limit');
-    hasDbsCheckbox.checked = currentSupplier.has_dbs || false;
-    dbsLimitInput.value = currentSupplier.dbs_limit || '';
-    dbsLimitInput.disabled = !hasDbsCheckbox.checked;
-    
-    // Populate payment terms dropdown
-    populatePaymentTermsDropdown();
-    
-    // Set selected payment term
-    const paymentTermsSelect = document.getElementById('supplier-payment-terms');
-    if (currentSupplier.default_payment_terms) {
-        // Try to find the payment term by name or ID
-        const selectedTerm = paymentTerms.find(pt => 
-            pt.id === currentSupplier.default_payment_terms || 
-            pt.name === currentSupplier.default_payment_terms
-        );
-        if (selectedTerm) {
-            paymentTermsSelect.value = selectedTerm.id;
-        } else {
-            paymentTermsSelect.value = '';
-        }
-    } else {
-        paymentTermsSelect.value = '';
-    }
-}
-
-function populatePaymentTermsDropdown() {
-    const paymentTermsSelect = document.getElementById('supplier-payment-terms');
-    if (!paymentTermsSelect) return;
-    
-    // Clear existing options except the first placeholder
-    paymentTermsSelect.innerHTML = '<option value="">Ödeme koşulu seçin...</option>';
-    
-    // Add payment terms options
-    paymentTerms.forEach(paymentTerm => {
-        const option = document.createElement('option');
-        option.value = paymentTerm.id;
-        option.textContent = paymentTerm.name;
-        paymentTermsSelect.appendChild(option);
+        isEditMode = false;
     });
 }
 
-function getPaymentTermName(paymentTermId) {
-    if (!paymentTermId) return '-';
-    const paymentTerm = paymentTerms.find(pt => pt.id === paymentTermId);
-    return paymentTerm ? paymentTerm.name : '-';
+function toDateInputValue(value) {
+    if (value == null || value === '') return '';
+    const s = String(value);
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+    return '';
 }
 
-async function saveSupplier() {
-    const form = document.getElementById('supplier-form');
-    
-    if (!form.checkValidity()) {
-        form.reportValidity();
-        return;
+function normalizePaymentTermId(ref) {
+    if (ref == null || ref === '') return '';
+    if (typeof ref === 'object' && ref !== null && 'id' in ref) return String(ref.id);
+    return String(ref);
+}
+
+function openSupplierFormForCreate() {
+    if (!supplierFormModal) initSupplierFormModal();
+    isEditMode = false;
+    currentSupplier = null;
+    supplierFormModal.setIcon('fas fa-plus');
+    supplierFormModal.setTitle('Yeni Tedarikçi');
+    supplierFormModal.setSaveButtonText('Kaydet');
+    supplierFormModal.clearForm();
+    supplierFormModal.setFormData({
+        code: '',
+        name: '',
+        contact_person: '',
+        phone: '',
+        email: '',
+        address: '',
+        bank_info: '',
+        default_currency: 'TRY',
+        default_payment_terms: '',
+        default_tax_rate: '20',
+        is_active: true,
+        has_dbs: false,
+        dbs_bank: '',
+        dbs_limit: '',
+        dbs_used: '0',
+        dbs_currency: 'TRY',
+        dbs_agreement_no: '',
+        dbs_expiry_date: '',
+        dbs_details: '',
+    });
+    supplierFormModal.show();
+}
+
+function openSupplierFormForEdit() {
+    if (!supplierFormModal) initSupplierFormModal();
+    if (!currentSupplier) return;
+    supplierFormModal.setIcon('fas fa-edit');
+    supplierFormModal.setTitle('Tedarikçi Düzenle');
+    supplierFormModal.setSaveButtonText('Güncelle');
+    supplierFormModal.clearForm();
+    supplierFormModal.setFormData({
+        code: currentSupplier.code || '',
+        name: currentSupplier.name || '',
+        contact_person: currentSupplier.contact_person || '',
+        phone: currentSupplier.phone || '',
+        email: currentSupplier.email || '',
+        address: currentSupplier.address || '',
+        bank_info: currentSupplier.bank_info || '',
+        default_currency: currentSupplier.default_currency || 'TRY',
+        default_payment_terms: normalizePaymentTermId(currentSupplier.default_payment_terms),
+        default_tax_rate:
+            currentSupplier.default_tax_rate != null ? String(currentSupplier.default_tax_rate) : '20',
+        is_active: currentSupplier.is_active !== false,
+        has_dbs: !!currentSupplier.has_dbs,
+        dbs_bank: currentSupplier.dbs_bank || '',
+        dbs_limit: currentSupplier.dbs_limit != null ? String(currentSupplier.dbs_limit) : '',
+        dbs_used: currentSupplier.dbs_used != null ? String(currentSupplier.dbs_used) : '0',
+        dbs_currency: currentSupplier.dbs_currency || 'TRY',
+        dbs_agreement_no: currentSupplier.dbs_agreement_no || '',
+        dbs_expiry_date: toDateInputValue(currentSupplier.dbs_expiry_date),
+        dbs_details: currentSupplier.dbs_details || '',
+    });
+    supplierFormModal.show();
+}
+
+async function handleSupplierModalSave(formData) {
+    const taxRate = parseFloat(formData.default_tax_rate);
+    if (
+        formData.default_tax_rate === '' ||
+        formData.default_tax_rate == null ||
+        Number.isNaN(taxRate) ||
+        taxRate < 0 ||
+        taxRate > 100
+    ) {
+        showNotification('Geçerli bir vergi oranı giriniz (0–100 arası)', 'error');
+        throw new Error('validation');
     }
-    
-    // Validate tax rate
-    const taxRateInput = document.getElementById('supplier-tax-rate');
-    const taxRate = parseFloat(taxRateInput.value);
-    
-    if (!taxRateInput.value || isNaN(taxRate) || taxRate < 0 || taxRate > 100) {
-        showNotification('Geçerli bir vergi oranı giriniz (0-100 arası)', 'error');
-        taxRateInput.focus();
-        return;
+
+    const hasDbs = !!formData.has_dbs;
+    if (hasDbs && formData.dbs_limit !== '' && formData.dbs_limit != null) {
+        const lim = parseFloat(formData.dbs_limit);
+        if (Number.isNaN(lim) || lim < 0) {
+            showNotification('Geçerli bir DBS limiti giriniz (0 veya daha büyük)', 'error');
+            throw new Error('validation');
+        }
     }
-    
-    // Get DBS limit value and validate if has_dbs is checked
-    const hasDbs = document.getElementById('supplier-has-dbs').checked;
-    const dbsLimitInput = document.getElementById('supplier-dbs-limit');
-    const dbsLimit = dbsLimitInput.value.trim();
-    
-    // Validate DBS limit if has_dbs is checked
-    if (hasDbs && dbsLimit && (isNaN(parseFloat(dbsLimit)) || parseFloat(dbsLimit) < 0)) {
-        showNotification('Geçerli bir DBS limiti giriniz (0 veya daha büyük bir sayı)', 'error');
-        dbsLimitInput.focus();
-        return;
+
+    const name = (formData.name || '').trim();
+    if (!name) {
+        showNotification('Tedarikçi adı zorunludur', 'error');
+        throw new Error('validation');
     }
-    
+
     const supplierData = {
-        name: document.getElementById('supplier-name').value.trim(),
-        contact_person: document.getElementById('supplier-contact').value.trim(),
-        phone: document.getElementById('supplier-phone').value.trim(),
-        email: document.getElementById('supplier-email').value.trim(),
-        default_currency: document.getElementById('supplier-currency').value,
-        default_payment_terms: document.getElementById('supplier-payment-terms').value || null,
+        code: (formData.code || '').trim(),
+        name,
+        contact_person: (formData.contact_person || '').trim(),
+        phone: (formData.phone || '').trim(),
+        email: (formData.email || '').trim(),
+        address: (formData.address || '').trim(),
+        bank_info: (formData.bank_info || '').trim(),
+        default_currency: formData.default_currency || 'TRY',
+        default_payment_terms: formData.default_payment_terms ? Number(formData.default_payment_terms) : null,
         default_tax_rate: taxRate,
+        is_active: !!formData.is_active,
         has_dbs: hasDbs,
-        dbs_limit: hasDbs && dbsLimit ? parseFloat(dbsLimit) : null
+        dbs_bank: hasDbs ? (formData.dbs_bank || '').trim() : '',
+        dbs_limit:
+            hasDbs && formData.dbs_limit !== '' && formData.dbs_limit != null ? parseFloat(formData.dbs_limit) : null,
+        dbs_currency: hasDbs ? formData.dbs_currency || 'TRY' : 'TRY',
+        dbs_agreement_no: hasDbs ? (formData.dbs_agreement_no || '').trim() : '',
+        dbs_expiry_date: hasDbs && formData.dbs_expiry_date ? formData.dbs_expiry_date : null,
+        dbs_details: hasDbs ? (formData.dbs_details || '').trim() : '',
     };
-    
+
     try {
         showLoading(true);
-        
         if (isEditMode && currentSupplier) {
-            // Update existing supplier
             await updateSupplier(currentSupplier.id, supplierData);
             showNotification('Tedarikçi başarıyla güncellendi', 'success');
         } else {
-            // Create new supplier
             await createSupplier(supplierData);
             showNotification('Tedarikçi başarıyla oluşturuldu', 'success');
         }
-        
-        // Close modal and refresh list
-        const modal = bootstrap.Modal.getInstance(document.getElementById('supplierFormModal'));
-        modal.hide();
-        
+        supplierFormModal.hide();
+        currentSupplier = null;
+        isEditMode = false;
         await loadSuppliers();
         updateSupplierCounts();
-        
     } catch (error) {
         console.error('Error saving supplier:', error);
         showNotification('Tedarikçi kaydedilirken hata oluştu: ' + error.message, 'error');
+        throw error;
     } finally {
         showLoading(false);
     }
+}
+
+function getPaymentTermName(paymentTermRef) {
+    if (paymentTermRef == null || paymentTermRef === '') return '-';
+    if (typeof paymentTermRef === 'object' && paymentTermRef !== null) {
+        return paymentTermRef.name || '-';
+    }
+    const paymentTerm = paymentTerms.find(
+        (pt) => pt.id === paymentTermRef || String(pt.id) === String(paymentTermRef),
+    );
+    return paymentTerm ? paymentTerm.name : '-';
 }
 
 async function handleToggleStatus() {
@@ -695,10 +882,6 @@ async function handleToggleStatus() {
                 showLoading(true);
                 await toggleSupplierStatus(id);
                 showNotification(`Tedarikçi başarıyla ${action} yapıldı`, 'success');
-                const modal = bootstrap.Modal.getInstance(document.getElementById('supplierDetailsModal'));
-                if (modal) {
-                    modal.hide();
-                }
                 await loadSuppliers();
                 updateSupplierCounts();
             } catch (error) {
@@ -726,10 +909,6 @@ async function handleDeleteSupplier() {
                 showLoading(true);
                 await deleteSupplier(id);
                 showNotification('Tedarikçi başarıyla silindi', 'success');
-                const modal = bootstrap.Modal.getInstance(document.getElementById('supplierDetailsModal'));
-                if (modal) {
-                    modal.hide();
-                }
                 await loadSuppliers();
                 updateSupplierCounts();
             } catch (error) {
@@ -748,22 +927,6 @@ function exportSuppliers() {
 }
 
 // Utility functions
-function getStatusBadge(isActive) {
-    if (isActive) {
-        return '<span class="status-badge status-active">Aktif</span>';
-    } else {
-        return '<span class="status-badge status-inactive">Pasif</span>';
-    }
-}
-
-function getDbsStatusBadge(hasDbs) {
-    if (hasDbs) {
-        return '<span class="status-badge status-active">Evet</span>';
-    } else {
-        return '<span class="status-badge status-inactive">Hayır</span>';
-    }
-}
-
 function formatDbsLimit(dbsLimit, currency) {
     if (!dbsLimit) return '-';
     const currencySymbol = currency || 'TRY';
@@ -807,6 +970,7 @@ function showLoadingState() {
                      <td><div class="loading-skeleton" style="width: 120px;"></div></td>
                      <td><div class="loading-skeleton" style="width: 80px;"></div></td>
                      <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                     <td><div class="loading-skeleton" style="width: 72px;"></div></td>
                  </tr>
             `);
         }
@@ -821,8 +985,7 @@ window.editSupplier = async (supplierId) => {
         showLoading(true);
         isEditMode = true;
         currentSupplier = await getSupplier(supplierId);
-        populateSupplierForm();
-        showSupplierFormModal();
+        openSupplierFormForEdit();
     } catch (error) {
         console.error('Error loading supplier for edit:', error);
         showNotification('Tedarikçi bilgileri yüklenirken hata oluştu: ' + error.message, 'error');

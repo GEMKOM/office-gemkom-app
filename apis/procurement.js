@@ -979,3 +979,75 @@ export async function getBasisChoices() {
         throw error;
     }
 }
+
+/** @typedef {{ supplier: number, amount: string, note?: string }} DbsPaymentCreatePayload */
+
+/**
+ * List DBS payments for a supplier (newest first from API).
+ * @param {number|string} supplierId
+ * @returns {Promise<Array|{ results: Array }>}
+ */
+export async function listDbsPayments(supplierId) {
+    try {
+        const url = `${backendBase}/procurement/dbs-payments/?supplier=${encodeURIComponent(supplierId)}`;
+        const response = await authedFetch(url);
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.detail || 'DBS ödemeleri yüklenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error listing DBS payments:', error);
+        throw error;
+    }
+}
+
+/**
+ * Create a DBS payment.
+ * @param {DbsPaymentCreatePayload} payload
+ */
+export async function createDbsPayment(payload) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/dbs-payments/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.detail || 'DBS ödemesi oluşturulurken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error creating DBS payment:', error);
+        throw error;
+    }
+}
+
+/**
+ * Cancel (delete) a DBS payment; restores used credit on the backend.
+ * @param {number|string} paymentId
+ */
+export async function deleteDbsPayment(paymentId) {
+    try {
+        const response = await authedFetch(`${backendBase}/procurement/dbs-payments/${paymentId}/`, {
+            method: 'DELETE',
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.error || errorData.detail || 'DBS ödemesi iptal edilirken hata oluştu');
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error deleting DBS payment:', error);
+        throw error;
+    }
+}

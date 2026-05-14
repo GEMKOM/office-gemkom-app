@@ -122,25 +122,6 @@
     padding: 0.25rem 0.5rem;
 }
 
-/* Payment Schedule Modal Styles */
-#markPaidModal .modal-body {
-    padding: 1.5rem;
-}
-
-#markPaidModal .alert {
-    border-radius: 8px;
-    border: none;
-}
-
-#markPaidModal .form-check {
-    margin-top: 1rem;
-}
-
-#markPaidModal .form-check-input:checked {
-    background-color: #28a745;
-    border-color: #28a745;
-}
-
 /* Payment Schedule Table Styles - Now using TableComponent */
 .payment-schedule-table-container {
     margin-top: 1rem;

@@ -21,6 +21,8 @@
     <link rel="stylesheet" href="../../components/filters/filters.css">
     <link rel="stylesheet" href="../../components/table/table.css">
     <link rel="stylesheet" href="../../components/confirmation-modal/confirmation-modal.css">
+    <link rel="stylesheet" href="../../components/edit-modal/edit-modal.css">
+    <link rel="stylesheet" href="../../components/display-modal/display-modal.css">
 </head>
 <body class="pre-auth">
     <!-- Navigation -->
@@ -31,17 +33,45 @@
         <div class="container-fluid">
             <!-- Header Component Placeholder -->
             <div id="header-placeholder"></div>
-            
-            <!-- Statistics Cards -->
-            <div id="purchase-orders-statistics"></div>
 
-            <!-- Filters Section -->
-            <div id="filters-placeholder"></div>
+            <div id="finance-tab-pane-po">
+                <!-- Statistics Cards -->
+                <div id="purchase-orders-statistics"></div>
 
-            <!-- Purchase Orders Table Section -->
-            <div class="row">
-                <div class="col-12">
-                    <div id="purchase-orders-table-container"></div>
+                <!-- Filters Section -->
+                <div id="filters-placeholder"></div>
+
+                <div id="finance-view-switcher-anchor-po">
+                    <div class="dashboard-card mb-3" id="finance-po-view-switcher-card">
+                        <div class="card-body py-2">
+                            <div class="d-flex flex-wrap gap-2 align-items-center">
+                                <div class="btn-group btn-group-sm" role="group" aria-label="Görünüm seçimi" id="finance-po-main-tabs">
+                                    <button type="button" class="btn btn-outline-primary" data-finance-tab="po" id="tab-po-trigger">
+                                        <i class="fas fa-shopping-cart me-1"></i>Satın Alma Siparişleri
+                                    </button>
+                                    <button type="button" class="btn btn-outline-primary" data-finance-tab="dbs" id="tab-dbs-trigger">
+                                        <i class="fas fa-university me-1"></i>DBS Tedarikçileri
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Purchase Orders Table Section -->
+                <div class="row">
+                    <div class="col-12">
+                        <div id="purchase-orders-table-container"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="finance-tab-pane-dbs" class="d-none">
+                <div id="finance-view-switcher-anchor-dbs"></div>
+                <div class="row">
+                    <div class="col-12">
+                        <div id="dbs-suppliers-table-container"></div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -49,81 +79,10 @@
 
 
 
-    <!-- Purchase Order Details Modal -->
-    <div class="modal fade" id="purchaseOrderDetailsModal" tabindex="-1" aria-labelledby="purchaseOrderDetailsModalLabel" aria-hidden="true">
-        <div class="modal-dialog modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="purchaseOrderDetailsModalLabel">
-                        <i class="fas fa-shopping-cart me-2"></i>
-                        Sipariş Detayları
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body" id="purchase-order-details-content">
-                    <!-- Purchase order details will be loaded here -->
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Mark Payment Schedule as Paid Modal -->
-    <div class="modal fade" id="markPaidModal" tabindex="-1" aria-labelledby="markPaidModalLabel" aria-hidden="true">
-        <div class="modal-dialog">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="markPaidModalLabel">
-                        <i class="fas fa-check-circle me-2 text-success"></i>
-                        Ödeme İşaretle
-                    </h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="alert alert-info">
-                        <i class="fas fa-info-circle me-2"></i>
-                        <strong>Ödeme Planı:</strong> <span id="schedule-label"></span>
-                    </div>
-                    <div class="row">
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Ödeme Tutarı</label>
-                                <div class="input-group">
-                                    <input type="text" class="form-control" id="payment-amount" readonly>
-                                    <span class="input-group-text" id="payment-currency"></span>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="col-md-6">
-                            <div class="mb-3">
-                                <label class="form-label">Vade Tarihi</label>
-                                <input type="text" class="form-control" id="payment-due-date" readonly>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="mb-3">
-                        <div class="form-check">
-                            <input class="form-check-input" type="checkbox" id="paid-with-tax" checked>
-                            <label class="form-check-label" for="paid-with-tax">
-                                KDV dahil ödeme yapıldı
-                            </label>
-                        </div>
-                        <small class="form-text text-muted">
-                            Bu seçenek işaretliyse, ödeme KDV dahil olarak işaretlenir.
-                        </small>
-                    </div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
-                    <button type="button" class="btn btn-success" id="confirm-mark-paid">
-                        <i class="fas fa-check me-1"></i>Ödeme İşaretle
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
+    <div id="purchase-order-details-modal-container"></div>
+    <div id="mark-paid-modal-container"></div>
+    <div id="dbs-pay-modal-container"></div>
+    <div id="dbs-payments-display-modal-container"></div>
 
     <!-- Footer -->
     <footer class="footer-section">
