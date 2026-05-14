@@ -243,12 +243,13 @@ function showPasswordResetConfirmation(user) {
             ]
         });
     
-    // Add team field if available
-    if (user.team) {
+    // Add groups field if available
+    const userGroups = user.user_groups || [];
+    if (userGroups.length > 0) {
         window.passwordResetModal.addField({
-            id: 'team',
-            label: 'Takım',
-            value: user.team,
+            id: 'user_groups',
+            label: 'Gruplar',
+            value: userGroups.join(', '),
             icon: 'fas fa-users',
             colSize: 12
         });

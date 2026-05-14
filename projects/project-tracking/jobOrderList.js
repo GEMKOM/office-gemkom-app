@@ -240,7 +240,8 @@ function toggleActionButtons() {
 function canEditJobOrders() {
     try {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
-        return user.team === 'planning' || isAdmin();
+        const groups = user.user_groups || [];
+        return groups.includes('planlama') || isAdmin();
     } catch (error) {
         console.warn('Failed to parse user data for permission check:', error);
         return false;
@@ -251,7 +252,8 @@ function canEditJobOrders() {
 function canViewSubcontracting() {
     try {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
-        return user.team === 'planning' || user.team === 'management' || isAdmin();
+        const groups = user.user_groups || [];
+        return groups.includes('planlama') || groups.includes('yonetim') || isAdmin();
     } catch (error) {
         console.warn('Failed to parse user data for permission check:', error);
         return false;

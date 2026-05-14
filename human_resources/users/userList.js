@@ -2117,26 +2117,6 @@ function initializeModalComponents() {
     });
 }
 
-async function loadGroups() {
-    try {
-        const data = await fetchUserGroups();
-        groups = Array.isArray(data) ? data : (data?.results || data?.data || []);
-    } catch (e) {
-        console.warn('Failed to load groups:', e);
-        groups = [];
-    }
-}
-
-async function loadOccupations() {
-    try {
-        const data = await fetchOccupations();
-        occupations = Array.isArray(data) ? data : (data?.results || []);
-    } catch (e) {
-        console.warn('Failed to load occupations:', e);
-        occupations = [];
-    }
-}
-
 async function loadOrganizationPositions() {
     try {
         const data = await fetchOrganizationPositions();
@@ -2146,8 +2126,6 @@ async function loadOrganizationPositions() {
         organizationPositions = [];
     }
 }
-
-// Note: groups/occupations are not used on this page anymore.
 
 function getPositionOptions() {
     return (organizationPositions || []).map(p => ({

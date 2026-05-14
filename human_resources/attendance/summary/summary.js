@@ -7,7 +7,7 @@ import { TableComponent } from '../../../components/table/table.js';
 import { showNotification } from '../../../components/notification/notification.js';
 
 import { fetchAttendanceHrSummary } from '../../../apis/human_resources/attendance.js';
-import { fetchUserGroups } from '../../../apis/users.js';
+import { fetchPositions } from '../../../apis/human_resources/organization.js';
 
 function fmtDate(value) {
     if (!value) return '-';
@@ -173,21 +173,17 @@ class AttendanceSummaryPage {
 
     async loadGroups() {
         try {
-            const data = await fetchUserGroups();
-            const groups = Array.isArray(data) ? data : (data?.results || data?.data || []);
+            const data = await fetchPositions();
+            const positions = Array.isArray(data) ? data : (data?.results || data?.data || []);
             const options = [
                 { value: '', label: 'Tümü' },
-                ...groups.map((g) => {
-                    const id = g?.id ?? g?.pk ?? g?.group_id;
-                    return {
-                        value: id != null ? String(id) : '',
-                        label: g.display_name || g.label || g.name || String(id || '')
-                    };
-                }).filter((o) => o.value !== '')
+                ...positions
+                    .filter(p => p.is_active !== false)
+                    .map(p => ({ value: String(p.id), label: p.title || String(p.id) }))
             ];
             this.filtersComponent.updateFilterOptions('group_id', options);
         } catch (e) {
-            console.error('Failed to load groups:', e);
+            console.error('Failed to load positions:', e);
             this.filtersComponent.updateFilterOptions('group_id', [{ value: '', label: 'Tümü' }]);
         }
     }

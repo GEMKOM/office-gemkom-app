@@ -8,8 +8,7 @@ import {
     canCancelOvertime,
     validateOvertimeRequest
 } from '../../../apis/overtime.js';
-import { fetchTeams, authFetchUsers } from '../../../apis/users.js';
-import { getAllowedTeams } from '../../../apis/teams.js';
+import { authFetchUsers } from '../../../apis/users.js';
 import { formatDateTime } from '../../../apis/formatters.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
@@ -34,7 +33,6 @@ let itemsPerPage = 20;
 let selectedOvertimeRequest = null;
 let currentUser = null;
 let allUsers = [];
-let allTeams = [];
 let overtimeTable = null; // TableComponent instance
 let userDropdowns = new Map(); // Store dropdown references
 let jobOrderDropdowns = new Map(); // Store job order dropdown references
@@ -154,8 +152,21 @@ document.addEventListener('DOMContentLoaded', function() {
         id: 'team-filter',
         label: 'Takım',
         options: [
-            { value: '', label: 'Tümü' }
-            // Teams will be loaded dynamically
+            { value: '',               label: 'Tümü' },
+            { value: 'machining',      label: 'Talaşlı İmalat' },
+            { value: 'design',         label: 'Dizayn' },
+            { value: 'logistics',      label: 'Lojistik' },
+            { value: 'procurement',    label: 'Satın Alma' },
+            { value: 'welding',        label: 'Kaynaklı İmalat' },
+            { value: 'planning',       label: 'Planlama' },
+            { value: 'manufacturing',  label: 'İmalat' },
+            { value: 'maintenance',    label: 'Bakım' },
+            { value: 'qualitycontrol', label: 'Kalite Kontrol' },
+            { value: 'cutting',        label: 'CNC Kesim' },
+            { value: 'warehouse',      label: 'Ambar' },
+            { value: 'finance',        label: 'Finans' },
+            { value: 'management',     label: 'Yönetim' },
+            { value: 'sales',          label: 'Proje Taahhüt' },
         ],
         colSize: 2
     }).addDateFilter({
@@ -349,36 +360,9 @@ function initializeTableComponent() {
 // Load initial data
 async function loadInitialData() {
     try {
-        // Load teams only
-        const teams = await fetchTeams();
-        allTeams = teams;
-        
-        // Update team filter options
-        updateTeamFilterOptions();
-        
-        // Load overtime requests
         await loadOvertimeRequests();
-        
     } catch (error) {
         showErrorMessage('Veriler yüklenirken hata oluştu.');
-    }
-}
-
-// Update team filter options
-function updateTeamFilterOptions() {
-    const teamOptions = [
-        { value: '', label: 'Tümü' },
-        ...allTeams.map(team => ({
-            value: team.value || team.code || team.id || team.name,
-            label: team.label || team.display_name || team.name
-        }))
-    ];
-    
-    // Find filters component and update team options
-    const filtersContainer = document.getElementById('filters-placeholder');
-    if (filtersContainer) {
-        // This would need to be implemented in the FiltersComponent
-        // For now, we'll handle it when creating the filter
     }
 }
 
@@ -687,8 +671,7 @@ async function loadOvertimeRequests() {
             delete apiFilters['status-filter'];
         }
         if (apiFilters['team-filter']) {
-            // Backend expects group name (from /users/groups/), not team
-            apiFilters.group = apiFilters['team-filter'];
+            apiFilters.team = apiFilters['team-filter'];
             delete apiFilters['team-filter'];
         }
         if (apiFilters['start-date-filter']) {
@@ -798,53 +781,13 @@ function renderStatistics() {
 
 // Pagination is now handled by TableComponent
 
-// Load users for modal based on current user's allowed teams
+// Load users for modal
 async function loadUsersForModal() {
     if (!currentUser) {
         throw new Error('Current user not available');
     }
-    
-    // Get allowed teams for current user
-    // Prefer group (e.g. "machining_team") over team (e.g. "machining") if available
-    const baseTeam = (currentUser.group || currentUser.team || '').replace(/_team$/, '');
-    const allowedTeams = getAllowedTeams(baseTeam);
-    
-    if (allowedTeams.length === 0) {
-        // If no specific teams, fetch all users
-        const response = await authFetchUsers(1, 1000);
-        allUsers = response.results || response;
-        return;
-    }
-    
-    // Fetch users for all allowed teams
-    const userPromises = allowedTeams.map(team => {
-        const groupName = team ? (team.endsWith('_team') ? team : `${team}_team`) : team;
-        return authFetchUsers(1, 1000, { group: groupName });
-    });
-    
-    const userResponses = await Promise.all(userPromises);
-    
-    // Combine all users from different teams
-    allUsers = [];
-    userResponses.forEach(response => {
-        const users = response.results || response;
-        if (Array.isArray(users)) {
-            allUsers.push(...users);
-        }
-    });
-    
-    // Remove duplicates based on username
-    const uniqueUsers = [];
-    const seenUsernames = new Set();
-    
-    allUsers.forEach(user => {
-        if (!seenUsernames.has(user.username)) {
-            seenUsernames.add(user.username);
-            uniqueUsers.push(user);
-        }
-    });
-    
-    allUsers = uniqueUsers;
+    const response = await authFetchUsers(1, 1000);
+    allUsers = response.results || response;
 }
 
 // Show/hide loading state for submit button

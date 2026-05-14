@@ -62,15 +62,10 @@ export async function authFetchUsers(page = 1, pageSize = 20, filters = {}) {
 }
 
 export async function fetchTeams() {
-    // NOTE: "teams" dropdown has been migrated to user groups.
-    // GET /users/groups/
-    // Response items now include: { name, display_name, portal, member_count, permissions: [] }
-    const resp = await authedFetch(`${backendBase}/users/groups/`);
+    const resp = await authedFetch(`${backendBase}/organization/groups/`);
     if (!resp.ok) return [];
     const data = await resp.json();
-    // backend returns array (not paginated) for groups in this project
     const groups = Array.isArray(data) ? data : (data.results || data.data || []);
-    // Normalize to legacy dropdown consumers that expect {value,label,...}
     return groups.map(g => ({
         ...g,
         value: g.value ?? g.name,
@@ -194,10 +189,10 @@ export async function fetchPermissionsMatrix(params = {}) {
 
 /**
  * Fetch all groups.
- * GET /users/groups/
+ * GET /organization/groups/
  */
 export async function fetchUserGroups() {
-    const resp = await authedFetch(`${backendBase}/users/groups/`);
+    const resp = await authedFetch(`${backendBase}/organization/groups/`);
     if (!resp.ok) {
         throw new Error('Kullanıcı grupları alınamadı');
     }
@@ -216,33 +211,6 @@ export async function fetchUserPermissionsDetail(userId) {
     return await resp.json();
 }
 
-/**
- * Add user to group.
- * POST /users/{id}/groups/{group_name}/
- */
-export async function addUserToGroup(userId, groupName) {
-    const resp = await authedFetch(`${backendBase}/users/${userId}/groups/${groupName}/`, {
-        method: 'POST'
-    });
-    if (!resp.ok) {
-        throw new Error('Kullanıcı gruba eklenemedi');
-    }
-    return await resp.json();
-}
-
-/**
- * Remove user from group.
- * DELETE /users/{id}/groups/{group_name}/
- */
-export async function removeUserFromGroup(userId, groupName) {
-    const resp = await authedFetch(`${backendBase}/users/${userId}/groups/${groupName}/`, {
-        method: 'DELETE'
-    });
-    if (!resp.ok) {
-        throw new Error('Kullanıcı gruptan çıkarılamadı');
-    }
-    return await resp.json();
-}
 
 /**
  * Create or update a per-user permission override.
@@ -277,17 +245,6 @@ export async function deleteUserPermissionOverride(userId, codename) {
     return await resp.json();
 }
 
-/**
- * Group permissions
- * GET /users/groups/<group_name>/permissions/
- */
-export async function fetchGroupPermissions(groupName) {
-    const resp = await authedFetch(`${backendBase}/users/groups/${encodeURIComponent(groupName)}/permissions/`);
-    if (!resp.ok) {
-        throw new Error('Grup yetkileri alınamadı');
-    }
-    return await resp.json();
-}
 
 /**
  * Fetch groups including permissions in a single request (preferred).
@@ -300,12 +257,11 @@ export async function fetchGroupPermissions(groupName) {
  *  }
  */
 export async function fetchGroupsWithPermissions() {
-    const resp = await authedFetch(`${backendBase}/users/groups/`);
+    const resp = await authedFetch(`${backendBase}/organization/groups/`);
     if (!resp.ok) {
         throw new Error('Kullanıcı grupları alınamadı');
     }
     const data = await resp.json();
-    // backend returns array (not paginated) for groups in this project
     return Array.isArray(data) ? data : (data.results || data.data || []);
 }
 
@@ -331,48 +287,3 @@ export async function fetchPermissionsUsersList() {
     return Array.isArray(data) ? data : (data.results || data.data || []);
 }
 
-/**
- * Add a permission to a group
- * POST /users/groups/<group_name>/permissions/  body: { codename }
- */
-export async function addPermissionToGroup(groupName, codename) {
-    const resp = await authedFetch(`${backendBase}/users/groups/${encodeURIComponent(groupName)}/permissions/`, {
-        method: 'POST',
-        body: JSON.stringify({ codename })
-    });
-    if (!resp.ok) {
-        throw new Error('Gruba yetki eklenemedi');
-    }
-    return await resp.json();
-}
-
-/**
- * Remove a permission from a group
- * DELETE /users/groups/<group_name>/permissions/<codename>/
- */
-export async function removePermissionFromGroup(groupName, codename) {
-    const resp = await authedFetch(`${backendBase}/users/groups/${encodeURIComponent(groupName)}/permissions/${encodeURIComponent(codename)}/`, {
-        method: 'DELETE'
-    });
-    if (!resp.ok) {
-        throw new Error('Gruptan yetki kaldırılamadı');
-    }
-    return await resp.json();
-}
-
-/**
- * Replace a group's permission list in bulk.
- * PUT /users/groups/<group_name>/permissions/  body: ["access_x", ...]
- */
-export async function saveGroupPermissionsBulk(groupName, codenames) {
-    const resp = await authedFetch(`${backendBase}/users/groups/${encodeURIComponent(groupName)}/permissions/`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(Array.isArray(codenames) ? codenames : [])
-    });
-    if (!resp.ok) {
-        throw new Error('Grup yetkileri kaydedilemedi');
-    }
-    // Backend may return updated permissions or a status payload; just pass through.
-    return await resp.json().catch(() => ({}));
-}
