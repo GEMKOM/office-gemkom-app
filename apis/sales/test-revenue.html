@@ -92,9 +92,24 @@
       import { getRevenueReport } from "./reports.js";
 
       const SAMPLE = {
-        kpis: { total_revenue_eur: "1407684.72", offer_count: 21, customer_count: 13, mom_percent: -69.0, yoy_percent: null },
-        series: [{ month: "2026-07", revenue_eur: "790603.00", offer_count: 9, customer_count: 5 }],
-        undated: { revenue_eur: "0.00", offer_count: 0 }
+        kpis: {
+          total_inflow_eur: "616667.00",
+          total_sales_offers_eur: "616667.00",
+          total_expected_receipts_eur: "0.00",
+          offer_count: 5,
+          customer_count: 4,
+          mom_percent: -69.0,
+          yoy_percent: null
+        },
+        series: [{
+          month: "2026-05",
+          sales_offers_eur: "152000.00",
+          expected_receipts_eur: "0.00",
+          total_inflow_eur: "152000.00",
+          offer_count: 1,
+          customer_count: 1
+        }],
+        undated: { total_inflow_eur: "0.00", offer_count: 0 }
       };
 
       const elFrom = document.getElementById("paramFrom");
@@ -153,7 +168,7 @@
         elRawJson.textContent = JSON.stringify(data, null, 2);
         elKpiRow.classList.remove("d-none");
         const k = data?.kpis || {};
-        document.getElementById("kpiTotalRevenue").textContent = fmtEur(k.total_revenue_eur);
+        document.getElementById("kpiTotalRevenue").textContent = fmtEur(k.total_inflow_eur ?? k.total_revenue_eur);
         document.getElementById("kpiOfferCount").textContent = fmtInt(k.offer_count);
         document.getElementById("kpiCustomerCount").textContent = fmtInt(k.customer_count);
         const momEl = document.getElementById("kpiMom");
@@ -163,10 +178,10 @@
         document.getElementById("kpiYoy").textContent = fmtPct(k.yoy_percent);
         const series = Array.isArray(data?.series) ? data.series : [];
         elSeriesBody.innerHTML = series.length
-          ? series.map((row) => `<tr><td><code>${row.month ?? "—"}</code></td><td class="text-end">${fmtEur(row.revenue_eur)}</td><td class="text-end">${fmtInt(row.offer_count)}</td><td class="text-end">${fmtInt(row.customer_count)}</td></tr>`).join("")
+          ? series.map((row) => `<tr><td><code>${row.month ?? "—"}</code></td><td class="text-end">${fmtEur(row.total_inflow_eur ?? row.revenue_eur)}</td><td class="text-end">${fmtInt(row.offer_count)}</td><td class="text-end">${fmtInt(row.customer_count)}</td></tr>`).join("")
           : '<tr><td colspan="4" class="muted text-center py-3">Empty series</td></tr>';
         const u = data?.undated || {};
-        document.getElementById("undatedRevenue").textContent = fmtEur(u.revenue_eur);
+        document.getElementById("undatedRevenue").textContent = fmtEur(u.total_inflow_eur ?? u.revenue_eur);
         document.getElementById("undatedOffers").textContent = fmtInt(u.offer_count);
       }
 

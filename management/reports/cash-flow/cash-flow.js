@@ -368,11 +368,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     function renderKpis(outflow, inflow) {
-        const totalIn = num(inflow?.kpis?.total_revenue_eur);
-        const totalOut = num(outflow?.kpis?.total_spent_eur);
+        const totalIn = pickNum(inflow?.kpis, 'total_inflow_eur', 'total_revenue_eur');
+        const totalOut = pickNum(outflow?.kpis, 'total_outflow_eur', 'total_spent_eur');
         const net = totalIn - totalOut;
-        const paid = num(outflow?.kpis?.total_paid_eur);
-        const awaiting = num(outflow?.kpis?.total_awaiting_eur);
+        const paid = hasAmount(outflow?.kpis, 'total_procurement_paid_eur', 'total_paid_eur')
+            ? pickNum(outflow?.kpis, 'total_procurement_paid_eur', 'total_paid_eur')
+            : sumSeries(outflow?.series, 'procurement_paid_eur', 'paid_eur');
+        const awaiting = hasAmount(
+            outflow?.kpis,
+            'total_procurement_awaiting_eur',
+            'total_awaiting_eur'
+        )
+            ? pickNum(outflow?.kpis, 'total_procurement_awaiting_eur', 'total_awaiting_eur')
+            : sumSeries(outflow?.series, 'procurement_awaiting_eur', 'awaiting_eur');
         const dbsUsed = num(outflow?.dbs_summary?.total_dbs_used_eur);
 
         const momIn = inflow?.kpis?.mom_percent;
@@ -601,7 +609,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             'undated-out-card',
             'Tarihsiz Çıkış',
             outflow?.undated_schedules,
-            'total_eur',
+            ['total_outflow_eur', 'total_eur'],
             'po_count',
             'PO',
             'Vadesi atanmamış ödeme planları — aylık görünüme dahil değil.'
@@ -610,16 +618,17 @@ document.addEventListener('DOMContentLoaded', async () => {
             'undated-in-card',
             'Tarihsiz Giriş',
             inflow?.undated,
-            'revenue_eur',
+            ['total_inflow_eur', 'revenue_eur'],
             'offer_count',
             'teklif',
             'Tarihsiz gelir kalemleri — aylık görünüme dahil değil.'
         );
     }
 
-    function renderUndatedCard(elId, title, data, amountKey, countKey, unit, hint) {
+    function renderUndatedCard(elId, title, data, amountKeys, countKey, unit, hint) {
         const el = document.getElementById(elId);
-        const amount = num(data?.[amountKey]);
+        const keys = Array.isArray(amountKeys) ? amountKeys : [amountKeys];
+        const amount = pickNum(data, ...keys);
         const count = data?.[countKey] ?? 0;
         const warn = amount > 0;
         el.innerHTML = `
@@ -688,8 +697,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         const rows = sorted.map((month) => {
             const o = outByMonth[month] || {};
             const i = inByMonth[month] || {};
-            const inflowAmt = num(i.revenue_eur);
-            const outflowAmt = num(o.total_spent_eur);
+            const inflowAmt = pickNum(i, 'total_inflow_eur', 'revenue_eur');
+            const outflowAmt = pickNum(o, 'total_outflow_eur', 'total_spent_eur');
             const net = inflowAmt - outflowAmt;
             prevCum = cumulative;
             cumulative += net;
@@ -705,8 +714,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 outflow: outflowAmt,
                 net,
                 cumulative,
-                paid: num(o.paid_eur),
-                awaiting: num(o.awaiting_eur),
+                paid: pickNum(o, 'procurement_paid_eur', 'paid_eur'),
+                awaiting: pickNum(o, 'procurement_awaiting_eur', 'awaiting_eur'),
                 po_count: o.po_count ?? 0,
                 offer_count: i.offer_count ?? 0,
                 _netNegative: net < 0,
@@ -735,6 +744,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     function num(v) {
         const n = parseFloat(v);
         return Number.isFinite(n) ? n : 0;
+    }
+
+    /** First defined numeric field on obj (supports API renames). */
+    function pickNum(obj, ...keys) {
+        if (!obj) return 0;
+        for (const key of keys) {
+            const v = obj[key];
+            if (v != null && v !== '') return num(v);
+        }
+        return 0;
+    }
+
+    function hasAmount(obj, ...keys) {
+        if (!obj) return false;
+        return keys.some((key) => obj[key] != null && obj[key] !== '');
+    }
+
+    function sumSeries(series, ...keys) {
+        return (series || []).reduce((acc, row) => acc + pickNum(row, ...keys), 0);
     }
 
     function fmtMoney(v) {
