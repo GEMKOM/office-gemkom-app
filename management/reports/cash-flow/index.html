@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Nakit Akış Tablosu</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Chart.js for charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <link rel="stylesheet" href="../../../style.css">
+    <link rel="stylesheet" href="../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../components/filters/filters.css">
+    <link rel="stylesheet" href="../../../components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="../../../components/table/table.css">
+    <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
+    <link rel="stylesheet" href="../../../components/notification/notification.css">
+    <link rel="stylesheet" href="../../../components/badges/badges.css">
+    <link rel="icon" type="image/png" href="../../../images/gemkom.png">
+    <link rel="stylesheet" href="../../../pre-auth.css">
+    <link rel="stylesheet" href="cash-flow.css">
+</head>
+<body class="pre-auth cf-page">
+    <!-- Navigation -->
+    <div id="navbar-container"></div>
+
+    <!-- Floating Elements -->
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+
+    <!-- Main Content -->
+    <section class="modules-section py-5">
+        <div class="container-fluid">
+            <div class="row">
+                <div class="col-12">
+                    <!-- Header Component Container -->
+                    <div id="header-placeholder"></div>
+                    
+                    
+                    <div id="filters-placeholder"></div>
+                    <div id="alert-banner" class="alert d-none mb-3" role="alert"></div>
+                    <div id="kpi-cards-placeholder"></div>
+                    <div id="charts-placeholder"></div>
+                    <div id="table-placeholder"></div>
+                    <div class="row g-4 mt-1">
+                        <div class="col-12 col-lg-7">
+                            <div id="dbs-table-placeholder"></div>
+                        </div>
+                        <div class="col-12 col-lg-5">
+                            <div id="undated-out-card" class="mb-3"></div>
+                            <div id="undated-in-card"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <div class="offcanvas offcanvas-end cf-drilldown-offcanvas" tabindex="-1" id="cf-drilldown-offcanvas" aria-labelledby="cf-drilldown-title">
+        <div class="offcanvas-header border-bottom">
+            <h5 class="offcanvas-title" id="cf-drilldown-title">Nakit Akış Detayı</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="offcanvas" aria-label="Kapat"></button>
+        </div>
+        <div class="offcanvas-body p-0 d-flex flex-column">
+            <div id="cf-drilldown-loading" class="cf-drilldown-loading d-none p-4">
+                <div class="placeholder-glow">
+                    <span class="placeholder col-12 mb-2"></span>
+                    <span class="placeholder col-8"></span>
+                </div>
+            </div>
+            <div id="cf-drilldown-error" class="alert alert-danger m-3 d-none" role="alert"></div>
+            <div id="cf-drilldown-empty" class="cf-empty p-4 d-none">
+                <i class="fas fa-calendar-xmark d-block mb-2"></i>
+                <p class="mb-0">Bu ay için nakit hareketi yok.</p>
+            </div>
+            <div id="cf-drilldown-summary" class="p-3 border-bottom d-none"></div>
+            <div id="cf-drilldown-tabs-wrap" class="flex-grow-1 d-flex flex-column min-h-0 d-none">
+                <ul class="nav nav-tabs px-3 pt-2 cf-drill-tabs" role="tablist">
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link active" id="cf-tab-inflow-btn" data-bs-toggle="tab" data-bs-target="#cf-tab-inflow" type="button" role="tab">
+                            <span id="cf-tab-inflow-label">Gelen</span>
+                        </button>
+                    </li>
+                    <li class="nav-item" role="presentation">
+                        <button class="nav-link" id="cf-tab-outflow-btn" data-bs-toggle="tab" data-bs-target="#cf-tab-outflow" type="button" role="tab">
+                            <span id="cf-tab-outflow-label">Giden</span>
+                        </button>
+                    </li>
+                </ul>
+                <div class="tab-content flex-grow-1 overflow-auto p-3">
+                    <div class="tab-pane fade show active" id="cf-tab-inflow" role="tabpanel"></div>
+                    <div class="tab-pane fade" id="cf-tab-outflow" role="tabpanel"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer-section">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6">
+                    <h5>GEMKOM</h5>
+                </div>
+                <div class="col-md-6 text-md-end">
+                    <p class="text-light mb-0">&copy; 2024 GEMKOM. Tüm hakları saklıdır.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="cash-flow.js"></script>
+</body>
+</html>

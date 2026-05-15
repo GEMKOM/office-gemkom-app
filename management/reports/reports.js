@@ -16,6 +16,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-chart-line',
                 iconColor: 'primary',
                 link: '/management/reports/overview'
+            },
+            {
+                title: 'Nakit Akış Tablosu',
+                description: 'Satış girişleri ile satınalma çıkışlarının birleşik nakit akış tablosu.',
+                icon: 'fas fa-money-bill-wave',
+                iconColor: 'success',
+                link: '/management/reports/cash-flow'
             }
         ]
     });

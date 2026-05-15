@@ -4,7 +4,7 @@ import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../../components/table/table.js';
-import { getExecutiveReport } from '../../../apis/procurement/reports.js';
+import { getPaymentForecastReport } from '../../../apis/procurement/reports.js';
 import { showNotification } from '../../../components/notification/notification.js';
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -194,7 +194,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             params.append('export', 'excel');
             
             const queryString = params.toString();
-            const exportUrl = `/api/procurement/reports/executive/export${queryString ? `?${queryString}` : ''}`;
+            const exportUrl = `/api/procurement/reports/payment-forecast/export${queryString ? `?${queryString}` : ''}`;
             
             // Trigger download
             window.open(exportUrl, '_blank');
@@ -217,7 +217,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (filters['created-gte']) apiFilters.created_gte = filters['created-gte'];
             if (filters['created-lte']) apiFilters.created_lte = filters['created-lte'];
             
-            const data = await getExecutiveReport(apiFilters);
+            const data = await getPaymentForecastReport(apiFilters);
             
             // Update KPI cards
             updateKPICards(data.kpis);

@@ -13,9 +13,33 @@ import {
     createDbsPayment,
     deleteDbsPayment
 } from '../../apis/procurement.js';
+import {
+    getExpenses,
+    createExpense,
+    cancelExpense
+} from '../../apis/finance/expenses.js';
+import {
+    getLoans,
+    createLoan,
+    cancelLoan,
+    getLoanInstallments,
+    markLoanInstallmentPaid
+} from '../../apis/finance/loans.js';
+import {
+    getTaxes,
+    createTax,
+    markTaxPaid
+} from '../../apis/finance/taxes.js';
+import {
+    getExpectedReceipts,
+    createExpectedReceipt,
+    cancelExpectedReceipt,
+    getExpectedReceiptInstallments,
+    createExpectedReceiptInstallment,
+    markExpectedReceiptInstallmentReceived
+} from '../../apis/finance/expected-receipts.js';
 import { isAdmin } from '../../authService.js';
 import { HeaderComponent } from '../../components/header/header.js';
-import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { TableComponent } from '../../components/table/table.js';
 import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
@@ -39,6 +63,60 @@ let poDetailsDisplayModal = null;
 let markPaidEditModal = null;
 let dbsPayEditModal = null;
 let dbsPaymentsDisplayModal = null;
+let currentExpenses = [];
+let currentExpenseFilters = { status: 'active' };
+let expenseFormModal = null;
+let currentLoans = [];
+let currentLoanFilters = { status: 'active' };
+let loanFormModal = null;
+let loanInstallmentsDisplayModal = null;
+let activeLoanContext = null;
+let currentTaxes = [];
+let currentTaxFilters = { is_paid: 'false' };
+let taxFormModal = null;
+let currentExpectedReceipts = [];
+let currentReceiptFilters = { status: 'expected' };
+let expectedReceiptFormModal = null;
+let expectedReceiptInstallmentFormModal = null;
+let expectedReceiptInstallmentsDisplayModal = null;
+let activeReceiptContext = null;
+
+const RECEIPT_STATUS_OPTIONS = [
+    { value: 'expected', label: 'Bekleniyor' },
+    { value: 'cancelled', label: 'İptal' }
+];
+
+const RECEIPT_STATUS_LABELS = Object.fromEntries(RECEIPT_STATUS_OPTIONS.map((o) => [o.value, o.label]));
+
+const TAX_TYPE_OPTIONS = [
+    { value: 'vat', label: 'KDV' },
+    { value: 'corporate_tax', label: 'Kurumlar Vergisi' },
+    { value: 'sgk', label: 'SGK' },
+    { value: 'income_tax_withholding', label: 'Gelir Vergisi Stopajı' },
+    { value: 'other', label: 'Diğer' }
+];
+
+const TAX_TYPE_LABELS = Object.fromEntries(TAX_TYPE_OPTIONS.map((o) => [o.value, o.label]));
+
+const EXPENSE_CATEGORY_OPTIONS = [
+    { value: 'catering', label: 'Yemekhane / Catering' },
+    { value: 'security', label: 'Güvenlik' },
+    { value: 'transport', label: 'Ulaşım' },
+    { value: 'rent', label: 'Kira' },
+    { value: 'utilities', label: 'Kamu hizmetleri' },
+    { value: 'insurance', label: 'Sigorta' },
+    { value: 'other', label: 'Diğer' }
+];
+
+const EXPENSE_RECURRENCE_OPTIONS = [
+    { value: 'once', label: 'Tek seferlik' },
+    { value: 'monthly', label: 'Aylık' },
+    { value: 'quarterly', label: 'Üç aylık' },
+    { value: 'annual', label: 'Yıllık' }
+];
+
+const EXPENSE_CATEGORY_LABELS = Object.fromEntries(EXPENSE_CATEGORY_OPTIONS.map((o) => [o.value, o.label]));
+const EXPENSE_RECURRENCE_LABELS = Object.fromEntries(EXPENSE_RECURRENCE_OPTIONS.map((o) => [o.value, o.label]));
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async function() {
@@ -63,19 +141,14 @@ document.addEventListener('DOMContentLoaded', async function() {
         refreshButtonText: 'Yenile',
         onBackClick: () => window.location.href = '/finance',
         onExportClick: () => {
-            if (financeActiveTab === 'dbs') {
-                showErrorMessage('DBS sekmesinde dışa aktarma kullanılamaz.');
+            if (financeActiveTab !== 'po') {
+                showErrorMessage('Bu sekmede dışa aktarma kullanılamaz.');
                 return;
             }
             exportPurchaseOrdersData();
         },
-        onRefreshClick: () => {
-            if (financeActiveTab === 'dbs') {
-                loadDbsSuppliers();
-            } else {
-                loadPurchaseOrders();
-            }
-        }
+        onCreateClick: () => handleFinanceCreateClick(),
+        onRefreshClick: () => handleFinanceRefreshClick()
     });
 
     // Build actions, include delete only for admins
@@ -185,6 +258,19 @@ document.addEventListener('DOMContentLoaded', async function() {
     });
 
     initDbsSuppliersTable();
+    initMonthlyExpensesTable();
+    initExpenseFormModal();
+    initExpensesFilters();
+    initLoansFilters();
+    initLoansTable();
+    initLoanFormModal();
+    initTaxesFilters();
+    initTaxesTable();
+    initTaxFormModal();
+    initExpectedReceiptsFilters();
+    initExpectedReceiptsTable();
+    initExpectedReceiptFormModal();
+    initExpectedReceiptInstallmentFormModal();
     setupFinanceMainTabs();
     
     // Check for order ID in URL parameters
@@ -195,40 +281,6 @@ document.addEventListener('DOMContentLoaded', async function() {
         // Load the specific order directly instead of all orders
         await loadSpecificPurchaseOrder(orderId);
     }
-    
-    // Initialize statistics cards component
-    window.purchaseOrdersStats = new StatisticsCards('purchase-orders-statistics', {
-        cards: [
-            {
-                title: 'Toplam Sipariş',
-                value: '0',
-                icon: 'shopping-cart',
-                color: 'primary',
-                trend: null
-            },
-            {
-                title: 'Toplam Tutar',
-                value: '₺0,00',
-                icon: 'lira-sign',
-                color: 'success',
-                trend: null
-            },
-            {
-                title: 'Ödeme Bekleyen',
-                value: '0',
-                icon: 'clock',
-                color: 'warning',
-                trend: null
-            },
-            {
-                title: 'Ödenen',
-                value: '0',
-                icon: 'check-circle',
-                color: 'success',
-                trend: null
-            }
-        ]
-    });
     
     // Initialize filters component
     new FiltersComponent('filters-placeholder', {
@@ -374,7 +426,7 @@ function initFinancePurchaseOrderModals() {
     markPaidEditModal.render();
     markPaidEditModal.onSaveCallback(handleMarkPaidSave);
     markPaidEditModal.modal.addEventListener('change', (e) => {
-        if (e.target && e.target.id === 'paid_with_tax') {
+        if (e.target && e.target.name === 'paid_with_tax' && e.target.type === 'checkbox') {
             updatePaymentAmountDisplay();
         }
     });
@@ -454,6 +506,54 @@ function initFinancePurchaseOrderModals() {
         showEditButton: false
     });
     setupDbsPaymentsCancelDelegation();
+
+    loanInstallmentsDisplayModal = new DisplayModal('loan-installments-display-modal-container', {
+        title: 'Kredi Taksitleri',
+        icon: 'fas fa-list-ol',
+        size: 'xl',
+        showEditButton: false
+    });
+    setupLoanInstallmentMarkPaidDelegation();
+
+    expectedReceiptInstallmentsDisplayModal = new DisplayModal('expected-receipt-installments-display-modal-container', {
+        title: 'Tahsilat Taksitleri',
+        icon: 'fas fa-list-ol',
+        size: 'xl',
+        showEditButton: false
+    });
+    setupExpectedReceiptInstallmentDelegation();
+}
+
+function handleFinanceRefreshClick() {
+    if (financeActiveTab === 'dbs') loadDbsSuppliers();
+    else if (financeActiveTab === 'expenses') loadExpenses();
+    else if (financeActiveTab === 'loans') loadLoans();
+    else if (financeActiveTab === 'taxes') loadTaxes();
+    else if (financeActiveTab === 'receipts') loadExpectedReceipts();
+    else loadPurchaseOrders();
+}
+
+function handleFinanceCreateClick() {
+    if (financeActiveTab === 'expenses') openCreateExpenseModal();
+    else if (financeActiveTab === 'loans') openCreateLoanModal();
+    else if (financeActiveTab === 'taxes') openCreateTaxModal();
+    else if (financeActiveTab === 'receipts') openCreateExpectedReceiptModal();
+}
+
+function updateFinanceHeaderForTab(tab) {
+    if (!pageHeader) return;
+    let createButtonText = 'Yeni Oluştur';
+    if (tab === 'expenses') createButtonText = 'Yeni Gider';
+    if (tab === 'loans') createButtonText = 'Yeni Kredi';
+    if (tab === 'taxes') createButtonText = 'Yeni Vergi Kaydı';
+    if (tab === 'receipts') createButtonText = 'Yeni Tahsilat';
+    pageHeader.updateConfig({
+        showExportButton: tab === 'po' ? 'block' : 'none',
+        showCreateButton: tab === 'expenses' || tab === 'loans' || tab === 'taxes' || tab === 'receipts' ? 'block' : 'none',
+        createButtonText,
+        onCreateClick: () => handleFinanceCreateClick(),
+        onRefreshClick: () => handleFinanceRefreshClick()
+    });
 }
 
 function setupFinanceMainTabs() {
@@ -468,33 +568,34 @@ function setupFinanceMainTabs() {
     tabBarActiveClasses(financeActiveTab);
 }
 
-function relocateFinanceViewSwitcher(tab) {
-    const card = document.getElementById('finance-po-view-switcher-card');
-    const anchorPo = document.getElementById('finance-view-switcher-anchor-po');
-    const anchorDbs = document.getElementById('finance-view-switcher-anchor-dbs');
-    if (!card || !anchorPo || !anchorDbs) return;
-    const target = tab === 'dbs' ? anchorDbs : anchorPo;
-    target.appendChild(card);
-}
-
 function switchFinanceMainTab(tab) {
     financeActiveTab = tab;
     const poPane = document.getElementById('finance-tab-pane-po');
     const dbsPane = document.getElementById('finance-tab-pane-dbs');
+    const expensesPane = document.getElementById('finance-tab-pane-expenses');
+    const loansPane = document.getElementById('finance-tab-pane-loans');
+    const taxesPane = document.getElementById('finance-tab-pane-taxes');
+    const receiptsPane = document.getElementById('finance-tab-pane-receipts');
     if (poPane) poPane.classList.toggle('d-none', tab !== 'po');
     if (dbsPane) dbsPane.classList.toggle('d-none', tab !== 'dbs');
+    if (expensesPane) expensesPane.classList.toggle('d-none', tab !== 'expenses');
+    if (loansPane) loansPane.classList.toggle('d-none', tab !== 'loans');
+    if (taxesPane) taxesPane.classList.toggle('d-none', tab !== 'taxes');
+    if (receiptsPane) receiptsPane.classList.toggle('d-none', tab !== 'receipts');
 
-    relocateFinanceViewSwitcher(tab);
     tabBarActiveClasses(tab);
-
-    if (pageHeader) {
-        pageHeader.updateConfig({
-            showExportButton: tab === 'po' ? 'block' : 'none'
-        });
-    }
+    updateFinanceHeaderForTab(tab);
 
     if (tab === 'dbs') {
         loadDbsSuppliers();
+    } else if (tab === 'expenses') {
+        loadExpenses();
+    } else if (tab === 'loans') {
+        loadLoans();
+    } else if (tab === 'taxes') {
+        loadTaxes();
+    } else if (tab === 'receipts') {
+        loadExpectedReceipts();
     }
 }
 
@@ -584,6 +685,1897 @@ function initDbsSuppliersTable() {
         skeleton: false,
         emptyMessage: 'DBS kaydı olan tedarikçi bulunmamaktadır.',
         emptyIcon: 'fas fa-university'
+    });
+}
+
+function initExpensesFilters() {
+    if (!document.getElementById('expenses-filters-placeholder')) return;
+
+    new FiltersComponent('expenses-filters-placeholder', {
+        title: 'Filtreler',
+        onApply: (filters) => {
+            currentExpenseFilters = filters;
+            loadExpenses();
+        },
+        onClear: () => {
+            currentExpenseFilters = { status: 'active' };
+            loadExpenses();
+        }
+    })
+        .addSelectFilter({
+            id: 'status',
+            label: 'Durum',
+            value: 'active',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'active', label: 'Aktif' },
+                { value: 'cancelled', label: 'İptal' }
+            ],
+            colSize: 2
+        })
+        .addSelectFilter({
+            id: 'category',
+            label: 'Kategori',
+            options: [{ value: '', label: 'Tümü' }, ...EXPENSE_CATEGORY_OPTIONS],
+            colSize: 2
+        })
+        .addSelectFilter({
+            id: 'recurrence',
+            label: 'Tekrar',
+            options: [{ value: '', label: 'Tümü' }, ...EXPENSE_RECURRENCE_OPTIONS],
+            colSize: 2
+        })
+        .addSelectFilter({
+            id: 'currency',
+            label: 'Para Birimi',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'TRY', label: 'Türk Lirası' },
+                { value: 'USD', label: 'Amerikan Doları' },
+                { value: 'EUR', label: 'Euro' }
+            ],
+            colSize: 2
+        });
+}
+
+function initMonthlyExpensesTable() {
+    if (!document.getElementById('monthly-expenses-table-container')) return;
+
+    window.monthlyExpensesTable = new TableComponent('monthly-expenses-table-container', {
+        title: 'Aylık Giderler',
+        icon: 'calendar-alt',
+        iconColor: 'text-primary',
+        loading: false,
+        pagination: false,
+        refreshable: true,
+        onRefresh: loadExpenses,
+        columns: [
+            {
+                field: 'category',
+                label: 'Kategori',
+                sortable: true,
+                formatter: (value) => escapeHtml(getExpenseCategoryLabel(value))
+            },
+            {
+                field: 'description',
+                label: 'Açıklama',
+                sortable: true,
+                formatter: (value) => (value ? `<strong>${escapeHtml(String(value))}</strong>` : '—')
+            },
+            {
+                field: 'amount',
+                label: 'Tutar',
+                sortable: true,
+                formatter: (value, row) => formatCurrency(value, row.currency)
+            },
+            {
+                field: 'currency',
+                label: 'Para Birimi',
+                sortable: true,
+                formatter: (value) => (value ? `<span class="currency-badge">${escapeHtml(String(value))}</span>` : '—')
+            },
+            {
+                field: 'recurrence',
+                label: 'Tekrar',
+                sortable: true,
+                formatter: (value) => escapeHtml(getExpenseRecurrenceLabel(value))
+            },
+            {
+                field: 'start_date',
+                label: 'Başlangıç',
+                sortable: true,
+                formatter: (value) => formatDate(value)
+            },
+            {
+                field: 'end_date',
+                label: 'Bitiş',
+                sortable: true,
+                formatter: (value) => (value ? formatDate(value) : '—')
+            },
+            {
+                field: 'status',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value) =>
+                    `<span class="status-badge ${getExpenseStatusBadgeClass(value)}">${escapeHtml(getExpenseStatusLabel(value))}</span>`
+            },
+            {
+                field: 'created_by_username',
+                label: 'Oluşturan',
+                sortable: true,
+                formatter: (value) => (value ? escapeHtml(String(value)) : '—')
+            }
+        ],
+        actions: [
+            {
+                key: 'cancel',
+                label: 'İptal Et',
+                icon: 'fas fa-ban',
+                class: 'btn-outline-danger',
+                visible: (row) => row.status === 'active',
+                onClick: (row) => confirmCancelExpense(row.id, row.description)
+            }
+        ],
+        data: [],
+        skeleton: false,
+        emptyMessage: 'Kayıtlı gider bulunmamaktadır.',
+        emptyIcon: 'fas fa-calendar-alt'
+    });
+}
+
+function initExpenseFormModal() {
+    if (!document.getElementById('expense-form-modal-container')) return;
+
+    expenseFormModal = new EditModal('expense-form-modal-container', {
+        title: 'Yeni Gider',
+        icon: 'fas fa-plus',
+        saveButtonText: 'Kaydet',
+        size: 'lg'
+    });
+    expenseFormModal.addSection({
+        id: 'expense-form-section',
+        title: null,
+        icon: 'fas fa-receipt',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'expense_category',
+                name: 'category',
+                label: 'Kategori',
+                type: 'select',
+                required: true,
+                colSize: 6,
+                options: EXPENSE_CATEGORY_OPTIONS
+            },
+            {
+                id: 'expense_recurrence',
+                name: 'recurrence',
+                label: 'Tekrar',
+                type: 'select',
+                required: true,
+                colSize: 6,
+                value: 'monthly',
+                options: EXPENSE_RECURRENCE_OPTIONS
+            },
+            {
+                id: 'expense_description',
+                name: 'description',
+                label: 'Açıklama',
+                type: 'text',
+                required: true,
+                placeholder: 'Örn. Yemekhane servisi',
+                colSize: 12
+            },
+            {
+                id: 'expense_amount',
+                name: 'amount',
+                label: 'Tutar',
+                type: 'number',
+                required: true,
+                min: 0.01,
+                step: 0.01,
+                placeholder: '0,00',
+                colSize: 6
+            },
+            {
+                id: 'expense_currency',
+                name: 'currency',
+                label: 'Para birimi',
+                type: 'select',
+                required: true,
+                value: 'TRY',
+                colSize: 6,
+                options: [
+                    { value: 'TRY', label: 'TRY' },
+                    { value: 'USD', label: 'USD' },
+                    { value: 'EUR', label: 'EUR' }
+                ]
+            },
+            {
+                id: 'expense_start_date',
+                name: 'start_date',
+                label: 'Başlangıç tarihi',
+                type: 'date',
+                required: true,
+                colSize: 6
+            },
+            {
+                id: 'expense_end_date',
+                name: 'end_date',
+                label: 'Bitiş tarihi',
+                type: 'date',
+                required: false,
+                colSize: 6,
+                help: 'Boş bırakılırsa süresiz geçerlidir.'
+            },
+            {
+                id: 'expense_notes',
+                name: 'notes',
+                label: 'Notlar',
+                type: 'textarea',
+                rows: 2,
+                required: false,
+                colSize: 12
+            }
+        ]
+    });
+    expenseFormModal.render();
+    expenseFormModal.onSaveCallback(handleCreateExpenseSave);
+}
+
+function getExpenseCategoryLabel(value) {
+    return EXPENSE_CATEGORY_LABELS[value] || value || '—';
+}
+
+function getExpenseRecurrenceLabel(value) {
+    return EXPENSE_RECURRENCE_LABELS[value] || value || '—';
+}
+
+function getExpenseStatusLabel(status) {
+    const labels = { active: 'Aktif', cancelled: 'İptal' };
+    return labels[status] || status || '—';
+}
+
+function getExpenseStatusBadgeClass(status) {
+    const classes = { active: 'status-green', cancelled: 'status-red' };
+    return classes[status] || 'status-grey';
+}
+
+function openCreateExpenseModal() {
+    if (!expenseFormModal) return;
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    expenseFormModal.setFormData({
+        category: 'catering',
+        recurrence: 'monthly',
+        description: '',
+        amount: '',
+        currency: 'TRY',
+        start_date: `${y}-${m}-${d}`,
+        end_date: '',
+        notes: ''
+    });
+    expenseFormModal.show();
+}
+
+async function handleCreateExpenseSave(formData) {
+    const rawAmount = String(formData.amount ?? '').trim().replace(',', '.');
+    const amountNum = parseFloat(rawAmount);
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        showErrorMessage('Geçerli pozitif bir tutar girin.');
+        return;
+    }
+
+    const payload = {
+        category: formData.category,
+        description: String(formData.description ?? '').trim(),
+        amount: amountNum.toFixed(2),
+        currency: formData.currency || 'TRY',
+        recurrence: formData.recurrence,
+        start_date: formData.start_date,
+        end_date: formData.end_date ? formData.end_date : null,
+        status: 'active',
+        notes: String(formData.notes ?? '').trim()
+    };
+
+    if (!payload.description) {
+        showErrorMessage('Açıklama zorunludur.');
+        return;
+    }
+    if (!payload.start_date) {
+        showErrorMessage('Başlangıç tarihi zorunludur.');
+        return;
+    }
+
+    try {
+        await createExpense(payload);
+        showSuccessMessage('Gider kaydedildi.');
+        expenseFormModal.hide();
+        await loadExpenses();
+    } catch (error) {
+        console.error(error);
+        showErrorMessage(error.message || 'Gider kaydedilirken hata oluştu.');
+    }
+}
+
+async function loadExpenses() {
+    if (!window.monthlyExpensesTable) return;
+    try {
+        window.monthlyExpensesTable.setLoading(true);
+        const raw = await getExpenses(currentExpenseFilters);
+        currentExpenses = normalizeApiList(raw);
+        window.monthlyExpensesTable.setLoading(false);
+        window.monthlyExpensesTable.updateData(currentExpenses, currentExpenses.length, 1);
+    } catch (error) {
+        console.error('Error loading expenses:', error);
+        showErrorMessage(error.message || 'Giderler yüklenirken hata oluştu.');
+        if (window.monthlyExpensesTable) {
+            window.monthlyExpensesTable.setLoading(false);
+            window.monthlyExpensesTable.updateData([]);
+        }
+    }
+}
+
+function confirmCancelExpense(expenseId, description) {
+    const label = description ? `"${description}"` : `#${expenseId}`;
+    actionConfirmModal.show({
+        message: `${label} giderini iptal etmek istediğinize emin misiniz?`,
+        confirmText: 'İptal Et',
+        confirmButtonClass: 'btn-danger',
+        onConfirm: async () => {
+            try {
+                await cancelExpense(expenseId);
+                showSuccessMessage('Gider iptal edildi.');
+                await loadExpenses();
+            } catch (error) {
+                console.error(error);
+                showErrorMessage(error.message || 'Gider iptal edilirken hata oluştu.');
+            }
+        }
+    });
+}
+
+function initTaxesFilters() {
+    if (!document.getElementById('taxes-filters-placeholder')) return;
+
+    new FiltersComponent('taxes-filters-placeholder', {
+        title: 'Filtreler',
+        onApply: (filters) => {
+            currentTaxFilters = filters;
+            loadTaxes();
+        },
+        onClear: () => {
+            currentTaxFilters = { is_paid: 'false' };
+            loadTaxes();
+        }
+    })
+        .addSelectFilter({
+            id: 'is_paid',
+            label: 'Ödeme durumu',
+            value: 'false',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'false', label: 'Ödenmedi' },
+                { value: 'true', label: 'Ödendi' }
+            ],
+            colSize: 2
+        })
+        .addSelectFilter({
+            id: 'tax_type',
+            label: 'Vergi türü',
+            options: [{ value: '', label: 'Tümü' }, ...TAX_TYPE_OPTIONS],
+            colSize: 2
+        })
+        .addSelectFilter({
+            id: 'currency',
+            label: 'Para Birimi',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'TRY', label: 'Türk Lirası' },
+                { value: 'USD', label: 'Amerikan Doları' },
+                { value: 'EUR', label: 'Euro' }
+            ],
+            colSize: 2
+        });
+}
+
+function initTaxesTable() {
+    if (!document.getElementById('taxes-table-container')) return;
+
+    window.taxesTable = new TableComponent('taxes-table-container', {
+        title: 'Vergi Kayıtları',
+        icon: 'file-invoice-dollar',
+        iconColor: 'text-primary',
+        loading: false,
+        pagination: false,
+        refreshable: true,
+        onRefresh: loadTaxes,
+        columns: [
+            {
+                field: 'tax_type',
+                label: 'Tür',
+                sortable: true,
+                formatter: (value) => escapeHtml(getTaxTypeLabel(value))
+            },
+            {
+                field: 'period_label',
+                label: 'Dönem',
+                sortable: true,
+                formatter: (value) => (value ? `<strong>${escapeHtml(String(value))}</strong>` : '—')
+            },
+            {
+                field: 'description',
+                label: 'Açıklama',
+                sortable: true,
+                formatter: (value) => (value ? escapeHtml(String(value)) : '—')
+            },
+            {
+                field: 'amount',
+                label: 'Tutar',
+                sortable: true,
+                formatter: (value, row) => formatCurrency(value, row.currency)
+            },
+            {
+                field: 'currency',
+                label: 'Para Birimi',
+                sortable: true,
+                formatter: (value) => (value ? `<span class="currency-badge">${escapeHtml(String(value))}</span>` : '—')
+            },
+            {
+                field: 'due_date',
+                label: 'Son ödeme',
+                sortable: true,
+                formatter: (value, row) => formatTaxDueDateCell(value, row.is_paid)
+            },
+            {
+                field: 'is_paid',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value) =>
+                    `<span class="status-badge ${value ? 'status-green' : 'status-yellow'}">${value ? 'Ödendi' : 'Ödenmedi'}</span>`
+            },
+            {
+                field: 'paid_by_username',
+                label: 'Ödeyen',
+                sortable: true,
+                formatter: (value, row) => (row.is_paid && value ? escapeHtml(String(value)) : '—')
+            },
+            {
+                field: 'created_by_username',
+                label: 'Oluşturan',
+                sortable: true,
+                formatter: (value) => (value ? escapeHtml(String(value)) : '—')
+            }
+        ],
+        actions: [
+            {
+                key: 'mark-paid',
+                label: 'Ödendi İşaretle',
+                icon: 'fas fa-check',
+                class: 'btn-outline-success',
+                visible: (row) => !row.is_paid,
+                onClick: (row) => confirmMarkTaxPaid(row.id, row.period_label)
+            }
+        ],
+        data: [],
+        skeleton: false,
+        emptyMessage: 'Kayıtlı vergi bulunmamaktadır.',
+        emptyIcon: 'fas fa-file-invoice-dollar'
+    });
+}
+
+function initTaxFormModal() {
+    if (!document.getElementById('tax-form-modal-container')) return;
+
+    taxFormModal = new EditModal('tax-form-modal-container', {
+        title: 'Yeni Vergi Kaydı',
+        icon: 'fas fa-plus',
+        saveButtonText: 'Kaydet',
+        size: 'lg'
+    });
+    taxFormModal.addSection({
+        id: 'tax-form-section',
+        title: null,
+        icon: 'fas fa-file-invoice-dollar',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'tax_type',
+                name: 'tax_type',
+                label: 'Vergi türü',
+                type: 'select',
+                required: true,
+                value: 'vat',
+                colSize: 6,
+                options: TAX_TYPE_OPTIONS
+            },
+            {
+                id: 'tax_currency',
+                name: 'currency',
+                label: 'Para birimi',
+                type: 'select',
+                required: true,
+                value: 'TRY',
+                colSize: 6,
+                options: [
+                    { value: 'TRY', label: 'TRY' },
+                    { value: 'USD', label: 'USD' },
+                    { value: 'EUR', label: 'EUR' }
+                ]
+            },
+            {
+                id: 'tax_period_label',
+                name: 'period_label',
+                label: 'Dönem etiketi',
+                type: 'text',
+                required: true,
+                placeholder: 'Örn. Nisan 2026 KDV',
+                colSize: 12
+            },
+            {
+                id: 'tax_amount',
+                name: 'amount',
+                label: 'Tutar',
+                type: 'number',
+                required: true,
+                min: 0.01,
+                step: 0.01,
+                placeholder: '0,00',
+                colSize: 6
+            },
+            {
+                id: 'tax_due_date',
+                name: 'due_date',
+                label: 'Son ödeme tarihi',
+                type: 'date',
+                required: true,
+                colSize: 6
+            },
+            {
+                id: 'tax_description',
+                name: 'description',
+                label: 'Açıklama',
+                type: 'text',
+                required: false,
+                colSize: 12
+            },
+            {
+                id: 'tax_notes',
+                name: 'notes',
+                label: 'Notlar',
+                type: 'textarea',
+                rows: 2,
+                required: false,
+                colSize: 12
+            }
+        ]
+    });
+    taxFormModal.render();
+    taxFormModal.onSaveCallback(handleCreateTaxSave);
+}
+
+function getTaxTypeLabel(value) {
+    return TAX_TYPE_LABELS[value] || value || '—';
+}
+
+function formatTaxDueDateCell(dateStr, isPaid) {
+    if (!dateStr) return '—';
+    const label = formatDate(dateStr);
+    if (isPaid) return label;
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return label;
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    d.setHours(0, 0, 0, 0);
+    if (d < now) return `<span class="text-danger fw-semibold">${escapeHtml(label)}</span>`;
+    const msPerDay = 86400000;
+    const daysUntil = (d.getTime() - now.getTime()) / msPerDay;
+    if (daysUntil <= 7) return `<span class="text-warning fw-semibold">${escapeHtml(label)}</span>`;
+    return label;
+}
+
+function openCreateTaxModal() {
+    if (!taxFormModal) return;
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    taxFormModal.setFormData({
+        tax_type: 'vat',
+        period_label: '',
+        description: '',
+        amount: '',
+        currency: 'TRY',
+        due_date: `${y}-${m}-${d}`,
+        notes: ''
+    });
+    taxFormModal.show();
+}
+
+async function handleCreateTaxSave(formData) {
+    const rawAmount = String(formData.amount ?? '').trim().replace(',', '.');
+    const amountNum = parseFloat(rawAmount);
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        showErrorMessage('Geçerli pozitif bir tutar girin.');
+        return;
+    }
+
+    const periodLabel = String(formData.period_label ?? '').trim();
+    if (!periodLabel) {
+        showErrorMessage('Dönem etiketi zorunludur.');
+        return;
+    }
+    if (!formData.due_date) {
+        showErrorMessage('Son ödeme tarihi zorunludur.');
+        return;
+    }
+
+    const payload = {
+        tax_type: formData.tax_type,
+        period_label: periodLabel,
+        description: String(formData.description ?? '').trim(),
+        amount: amountNum.toFixed(2),
+        currency: formData.currency || 'TRY',
+        due_date: formData.due_date,
+        notes: String(formData.notes ?? '').trim()
+    };
+
+    try {
+        await createTax(payload);
+        showSuccessMessage('Vergi kaydı oluşturuldu.');
+        taxFormModal.hide();
+        await loadTaxes();
+    } catch (error) {
+        console.error(error);
+        showErrorMessage(error.message || 'Vergi kaydı oluşturulurken hata oluştu.');
+    }
+}
+
+async function loadTaxes() {
+    if (!window.taxesTable) return;
+    try {
+        window.taxesTable.setLoading(true);
+        const raw = await getTaxes(currentTaxFilters);
+        currentTaxes = normalizeApiList(raw);
+        window.taxesTable.setLoading(false);
+        window.taxesTable.updateData(currentTaxes, currentTaxes.length, 1);
+    } catch (error) {
+        console.error('Error loading taxes:', error);
+        showErrorMessage(error.message || 'Vergi kayıtları yüklenirken hata oluştu.');
+        if (window.taxesTable) {
+            window.taxesTable.setLoading(false);
+            window.taxesTable.updateData([]);
+        }
+    }
+}
+
+function confirmMarkTaxPaid(taxId, periodLabel) {
+    const label = periodLabel ? `"${periodLabel}"` : `#${taxId}`;
+    actionConfirmModal.show({
+        message: `${label} vergi kaydı ödendi olarak işaretlensin mi?`,
+        confirmText: 'Ödendi İşaretle',
+        confirmButtonClass: 'btn-success',
+        onConfirm: async () => {
+            try {
+                await markTaxPaid(taxId);
+                showSuccessMessage('Vergi ödendi olarak işaretlendi.');
+                await loadTaxes();
+            } catch (error) {
+                console.error(error);
+                showErrorMessage(error.message || 'Vergi işaretlenirken hata oluştu.');
+            }
+        }
+    });
+}
+
+function initExpectedReceiptsFilters() {
+    if (!document.getElementById('receipts-filters-placeholder')) return;
+
+    new FiltersComponent('receipts-filters-placeholder', {
+        title: 'Filtreler',
+        onApply: (filters) => {
+            currentReceiptFilters = filters;
+            loadExpectedReceipts();
+        },
+        onClear: () => {
+            currentReceiptFilters = { status: 'expected' };
+            loadExpectedReceipts();
+        }
+    })
+        .addSelectFilter({
+            id: 'status',
+            label: 'Durum',
+            value: 'expected',
+            options: [{ value: '', label: 'Tümü' }, ...RECEIPT_STATUS_OPTIONS],
+            colSize: 2
+        })
+        .addSelectFilter({
+            id: 'currency',
+            label: 'Para Birimi',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'TRY', label: 'Türk Lirası' },
+                { value: 'USD', label: 'Amerikan Doları' },
+                { value: 'EUR', label: 'Euro' }
+            ],
+            colSize: 2
+        });
+}
+
+function initExpectedReceiptsTable() {
+    if (!document.getElementById('expected-receipts-table-container')) return;
+
+    window.expectedReceiptsTable = new TableComponent('expected-receipts-table-container', {
+        title: 'Beklenen Tahsilatlar',
+        icon: 'hand-holding-usd',
+        iconColor: 'text-primary',
+        loading: false,
+        pagination: false,
+        refreshable: true,
+        onRefresh: loadExpectedReceipts,
+        columns: [
+            {
+                field: 'title',
+                label: 'Başlık',
+                sortable: true,
+                formatter: (value) => (value ? `<strong>${escapeHtml(String(value))}</strong>` : '—')
+            },
+            {
+                field: 'customer_name',
+                label: 'Müşteri',
+                sortable: true,
+                formatter: (value) => (value ? escapeHtml(String(value)) : '—')
+            },
+            {
+                field: 'job_no',
+                label: 'İş emri',
+                sortable: true,
+                formatter: (value) => (value ? escapeHtml(String(value)) : '—')
+            },
+            {
+                field: 'reference_no',
+                label: 'Referans',
+                sortable: true,
+                formatter: (value) => (value ? escapeHtml(String(value)) : '—')
+            },
+            {
+                field: 'total_amount',
+                label: 'Toplam',
+                sortable: true,
+                formatter: (value, row) => formatCurrency(value, row.currency)
+            },
+            {
+                field: 'currency',
+                label: 'Para Birimi',
+                sortable: true,
+                formatter: (value) => (value ? `<span class="currency-badge">${escapeHtml(String(value))}</span>` : '—')
+            },
+            {
+                field: '_installment_progress',
+                label: 'Taksitler',
+                sortable: false,
+                formatter: (_v, row) => escapeHtml(formatReceiptInstallmentProgress(row))
+            },
+            {
+                field: 'status',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value) =>
+                    `<span class="status-badge ${getReceiptStatusBadgeClass(value)}">${escapeHtml(getReceiptStatusLabel(value))}</span>`
+            },
+            {
+                field: 'created_by_username',
+                label: 'Oluşturan',
+                sortable: true,
+                formatter: (value) => (value ? escapeHtml(String(value)) : '—')
+            }
+        ],
+        actions: [
+            {
+                key: 'installments',
+                label: 'Taksitler',
+                icon: 'fas fa-list-ol',
+                class: 'btn-outline-primary',
+                onClick: (row) => openExpectedReceiptInstallmentsDrawer(row.id)
+            },
+            {
+                key: 'cancel',
+                label: 'İptal Et',
+                icon: 'fas fa-ban',
+                class: 'btn-outline-danger',
+                visible: (row) => row.status === 'expected',
+                onClick: (row) => confirmCancelExpectedReceipt(row.id, row.title)
+            }
+        ],
+        data: [],
+        skeleton: false,
+        emptyMessage: 'Kayıtlı tahsilat bulunmamaktadır.',
+        emptyIcon: 'fas fa-hand-holding-usd'
+    });
+}
+
+function initExpectedReceiptFormModal() {
+    if (!document.getElementById('expected-receipt-form-modal-container')) return;
+
+    expectedReceiptFormModal = new EditModal('expected-receipt-form-modal-container', {
+        title: 'Yeni Beklenen Tahsilat',
+        icon: 'fas fa-plus',
+        saveButtonText: 'Kaydet',
+        size: 'lg'
+    });
+    expectedReceiptFormModal.addSection({
+        id: 'expected-receipt-form-section',
+        title: null,
+        icon: 'fas fa-hand-holding-usd',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'er_title',
+                name: 'title',
+                label: 'Başlık',
+                type: 'text',
+                required: true,
+                placeholder: 'Örn. Petkim Retention Release',
+                colSize: 12
+            },
+            {
+                id: 'er_customer_name',
+                name: 'customer_name',
+                label: 'Müşteri',
+                type: 'text',
+                required: true,
+                colSize: 6
+            },
+            {
+                id: 'er_reference_no',
+                name: 'reference_no',
+                label: 'Referans no',
+                type: 'text',
+                required: false,
+                colSize: 6
+            },
+            {
+                id: 'er_total_amount',
+                name: 'total_amount',
+                label: 'Toplam tutar',
+                type: 'number',
+                required: true,
+                min: 0.01,
+                step: 0.01,
+                colSize: 6
+            },
+            {
+                id: 'er_currency',
+                name: 'currency',
+                label: 'Para birimi',
+                type: 'select',
+                required: true,
+                value: 'TRY',
+                colSize: 6,
+                options: [
+                    { value: 'TRY', label: 'TRY' },
+                    { value: 'USD', label: 'USD' },
+                    { value: 'EUR', label: 'EUR' }
+                ]
+            },
+            {
+                id: 'er_job_order',
+                name: 'job_order',
+                label: 'İş emri ID',
+                type: 'number',
+                required: false,
+                min: 1,
+                step: 1,
+                colSize: 6,
+                help: 'Opsiyonel. Boş bırakılabilir.'
+            },
+            {
+                id: 'er_description',
+                name: 'description',
+                label: 'Açıklama',
+                type: 'text',
+                required: false,
+                colSize: 6
+            },
+            {
+                id: 'er_notes',
+                name: 'notes',
+                label: 'Notlar',
+                type: 'textarea',
+                rows: 2,
+                required: false,
+                colSize: 12
+            }
+        ]
+    });
+    expectedReceiptFormModal.render();
+    expectedReceiptFormModal.onSaveCallback(handleCreateExpectedReceiptSave);
+}
+
+function initExpectedReceiptInstallmentFormModal() {
+    if (!document.getElementById('expected-receipt-installment-form-modal-container')) return;
+
+    expectedReceiptInstallmentFormModal = new EditModal('expected-receipt-installment-form-modal-container', {
+        title: 'Taksit Ekle',
+        icon: 'fas fa-plus',
+        saveButtonText: 'Kaydet',
+        size: 'md'
+    });
+    expectedReceiptInstallmentFormModal.addSection({
+        id: 'er-installment-form-section',
+        title: null,
+        icon: 'fas fa-list-ol',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'er_inst_sequence',
+                name: 'sequence',
+                label: 'Sıra',
+                type: 'number',
+                required: true,
+                min: 1,
+                step: 1,
+                colSize: 4
+            },
+            {
+                id: 'er_inst_label',
+                name: 'label',
+                label: 'Etiket',
+                type: 'text',
+                required: true,
+                placeholder: 'Örn. Avans',
+                colSize: 8
+            },
+            {
+                id: 'er_inst_amount',
+                name: 'amount',
+                label: 'Tutar',
+                type: 'number',
+                required: true,
+                min: 0.01,
+                step: 0.01,
+                colSize: 6
+            },
+            {
+                id: 'er_inst_due_date',
+                name: 'due_date',
+                label: 'Vade tarihi',
+                type: 'date',
+                required: true,
+                colSize: 6
+            },
+            {
+                id: 'er_inst_notes',
+                name: 'notes',
+                label: 'Notlar',
+                type: 'textarea',
+                rows: 2,
+                required: false,
+                colSize: 12
+            }
+        ]
+    });
+    expectedReceiptInstallmentFormModal.render();
+    expectedReceiptInstallmentFormModal.onSaveCallback(handleAddExpectedReceiptInstallmentSave);
+}
+
+function getReceiptStatusLabel(status) {
+    return RECEIPT_STATUS_LABELS[status] || status || '—';
+}
+
+function getReceiptStatusBadgeClass(status) {
+    const classes = { expected: 'status-yellow', cancelled: 'status-red' };
+    return classes[status] || 'status-grey';
+}
+
+function formatReceiptInstallmentProgress(row) {
+    const installments = row.installments;
+    const currency = row.currency || 'TRY';
+    const total = parseMoneyNumber(row.total_amount);
+    if (!Array.isArray(installments) || !installments.length) {
+        return 'Taksit yok';
+    }
+    const receivedCount = installments.filter((i) => i.is_received).length;
+    const receivedSum = installments
+        .filter((i) => i.is_received)
+        .reduce((sum, i) => sum + (parseMoneyNumber(i.amount) || 0), 0);
+    const totalFmt = Number.isFinite(total) ? formatCurrency(total, currency) : '—';
+    const receivedFmt = formatCurrency(receivedSum, currency);
+    return `${receivedCount}/${installments.length} · ${receivedFmt} / ${totalFmt}`;
+}
+
+function openCreateExpectedReceiptModal() {
+    if (!expectedReceiptFormModal) return;
+    expectedReceiptFormModal.setFormData({
+        title: '',
+        customer_name: '',
+        reference_no: '',
+        total_amount: '',
+        currency: 'TRY',
+        job_order: '',
+        description: '',
+        notes: ''
+    });
+    expectedReceiptFormModal.show();
+}
+
+async function handleCreateExpectedReceiptSave(formData) {
+    const rawTotal = String(formData.total_amount ?? '').trim().replace(',', '.');
+    const totalNum = parseFloat(rawTotal);
+    if (!Number.isFinite(totalNum) || totalNum <= 0) {
+        showErrorMessage('Geçerli pozitif bir tutar girin.');
+        return;
+    }
+
+    const title = String(formData.title ?? '').trim();
+    const customerName = String(formData.customer_name ?? '').trim();
+    if (!title) {
+        showErrorMessage('Başlık zorunludur.');
+        return;
+    }
+    if (!customerName) {
+        showErrorMessage('Müşteri adı zorunludur.');
+        return;
+    }
+
+    let jobOrder = null;
+    const jobRaw = String(formData.job_order ?? '').trim();
+    if (jobRaw) {
+        const jobId = parseInt(jobRaw, 10);
+        if (!Number.isFinite(jobId) || jobId < 1) {
+            showErrorMessage('Geçerli bir iş emri ID girin veya boş bırakın.');
+            return;
+        }
+        jobOrder = jobId;
+    }
+
+    const payload = {
+        title,
+        description: String(formData.description ?? '').trim(),
+        reference_no: String(formData.reference_no ?? '').trim(),
+        customer_name: customerName,
+        job_order: jobOrder,
+        total_amount: totalNum.toFixed(2),
+        currency: formData.currency || 'TRY',
+        status: 'expected',
+        notes: String(formData.notes ?? '').trim()
+    };
+
+    try {
+        const created = await createExpectedReceipt(payload);
+        showSuccessMessage('Tahsilat kaydı oluşturuldu.');
+        expectedReceiptFormModal.hide();
+        await loadExpectedReceipts();
+        if (created?.id) {
+            openExpectedReceiptInstallmentsDrawer(created.id, created);
+        }
+    } catch (error) {
+        console.error(error);
+        showErrorMessage(error.message || 'Tahsilat kaydı oluşturulurken hata oluştu.');
+    }
+}
+
+async function loadExpectedReceipts() {
+    if (!window.expectedReceiptsTable) return;
+    try {
+        window.expectedReceiptsTable.setLoading(true);
+        const raw = await getExpectedReceipts(currentReceiptFilters);
+        currentExpectedReceipts = normalizeApiList(raw);
+        window.expectedReceiptsTable.setLoading(false);
+        window.expectedReceiptsTable.updateData(currentExpectedReceipts, currentExpectedReceipts.length, 1);
+    } catch (error) {
+        console.error('Error loading expected receipts:', error);
+        showErrorMessage(error.message || 'Tahsilatlar yüklenirken hata oluştu.');
+        if (window.expectedReceiptsTable) {
+            window.expectedReceiptsTable.setLoading(false);
+            window.expectedReceiptsTable.updateData([]);
+        }
+    }
+}
+
+function confirmCancelExpectedReceipt(receiptId, title) {
+    const label = title ? `"${title}"` : `#${receiptId}`;
+    actionConfirmModal.show({
+        message: `${label} tahsilat kaydını iptal etmek istediğinize emin misiniz?`,
+        confirmText: 'İptal Et',
+        confirmButtonClass: 'btn-danger',
+        onConfirm: async () => {
+            try {
+                await cancelExpectedReceipt(receiptId);
+                showSuccessMessage('Tahsilat iptal edildi.');
+                if (activeReceiptContext && Number(activeReceiptContext.id) === Number(receiptId)) {
+                    activeReceiptContext.status = 'cancelled';
+                }
+                await loadExpectedReceipts();
+                if (expectedReceiptInstallmentsDisplayModal?.modal?.classList.contains('show')) {
+                    await refreshExpectedReceiptInstallmentsList(receiptId);
+                }
+            } catch (error) {
+                console.error(error);
+                showErrorMessage(error.message || 'Tahsilat iptal edilirken hata oluştu.');
+            }
+        }
+    });
+}
+
+function setupExpectedReceiptInstallmentDelegation() {
+    if (!expectedReceiptInstallmentsDisplayModal?.modal) return;
+    const root = expectedReceiptInstallmentsDisplayModal.modal;
+    if (root.dataset.erInstallmentDelegBound === '1') return;
+    root.dataset.erInstallmentDelegBound = '1';
+    root.addEventListener('click', (e) => {
+        const addBtn = e.target.closest('#er-add-installment-btn');
+        if (addBtn) {
+            if (activeReceiptContext?.status !== 'expected') {
+                showErrorMessage('İptal edilmiş tahsilata taksit eklenemez.');
+                return;
+            }
+            openAddExpectedReceiptInstallmentModal();
+            return;
+        }
+        const markBtn = e.target.closest('.er-installment-mark-received-btn');
+        if (!markBtn) return;
+        const receiptId = parseInt(markBtn.dataset.receiptId, 10);
+        const installmentId = parseInt(markBtn.dataset.installmentId, 10);
+        const label = markBtn.dataset.label || '';
+        if (!Number.isFinite(receiptId) || !Number.isFinite(installmentId)) return;
+        confirmMarkExpectedReceiptInstallmentReceived(receiptId, installmentId, label);
+    });
+}
+
+async function openExpectedReceiptInstallmentsDrawer(receiptId, receiptRow = null) {
+    const row =
+        receiptRow ||
+        currentExpectedReceipts.find((r) => Number(r.id) === Number(receiptId)) ||
+        null;
+    const title = row?.title || `Tahsilat #${receiptId}`;
+    const currency = row?.currency || 'TRY';
+    const status = row?.status || 'expected';
+    const customer = row?.customer_name || '';
+
+    activeReceiptContext = {
+        id: receiptId,
+        title,
+        currency,
+        status,
+        customer_name: customer,
+        installments: row?.installments || []
+    };
+
+    if (!expectedReceiptInstallmentsDisplayModal) return;
+
+    const addBtnHtml =
+        status === 'expected'
+            ? `<button type="button" class="btn btn-sm btn-primary" id="er-add-installment-btn"><i class="fas fa-plus me-1"></i>Taksit Ekle</button>`
+            : '';
+
+    expectedReceiptInstallmentsDisplayModal.clearData();
+    expectedReceiptInstallmentsDisplayModal.addCustomSection({
+        id: 'expected-receipt-installments-section',
+        customContent: `
+            <div class="d-flex flex-wrap justify-content-between align-items-start gap-2 mb-2">
+                <div>
+                    <p class="text-muted small mb-0">${escapeHtml(customer)}</p>
+                    <p class="mb-0"><strong>${escapeHtml(title)}</strong></p>
+                </div>
+                ${addBtnHtml}
+            </div>
+            <div id="expected-receipt-installments-list-host"><div class="text-center text-muted py-4">Yükleniyor…</div></div>`
+    });
+    expectedReceiptInstallmentsDisplayModal.render();
+    expectedReceiptInstallmentsDisplayModal.show();
+
+    await refreshExpectedReceiptInstallmentsList(receiptId);
+}
+
+async function refreshExpectedReceiptInstallmentsList(receiptId) {
+    const host = document.getElementById('expected-receipt-installments-list-host');
+    if (!host) return;
+
+    try {
+        const installments = await getExpectedReceiptInstallments(receiptId);
+        const cached = currentExpectedReceipts.find((r) => Number(r.id) === Number(receiptId));
+        if (cached) cached.installments = installments;
+        if (activeReceiptContext && Number(activeReceiptContext.id) === Number(receiptId)) {
+            activeReceiptContext.installments = installments;
+            activeReceiptContext.status = cached?.status || activeReceiptContext.status;
+        }
+        renderExpectedReceiptInstallmentsListIntoHost(host, installments, receiptId);
+    } catch (error) {
+        console.error(error);
+        host.innerHTML = `<div class="alert alert-danger m-0">${escapeHtml(error.message || 'Taksitler yüklenemedi.')}</div>`;
+    }
+}
+
+function renderExpectedReceiptInstallmentsListIntoHost(host, installments, receiptId) {
+    if (!host) return;
+    if (!installments.length) {
+        host.innerHTML = '<p class="text-muted text-center py-4 mb-0">Henüz taksit eklenmemiş.</p>';
+        return;
+    }
+
+    const currency = activeReceiptContext?.currency || 'TRY';
+    const receiptActive = activeReceiptContext?.status === 'expected';
+
+    const rowsHtml = installments
+        .slice()
+        .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
+        .map((inst) => {
+            const isReceived = !!inst.is_received;
+            const statusClass = isReceived ? 'success' : 'warning';
+            const statusLabel = isReceived ? 'Tahsil edildi' : 'Bekliyor';
+            const dueLabel = formatDate(inst.due_date);
+            const amountStr = formatCurrency(inst.amount, currency);
+            const receivedBy = inst.received_by_username ? escapeHtml(String(inst.received_by_username)) : '—';
+            const receivedAt = inst.received_at ? escapeHtml(formatDate(inst.received_at)) : '—';
+            const markBtn =
+                receiptActive && !isReceived
+                    ? `<button type="button" class="btn btn-sm btn-outline-success er-installment-mark-received-btn"
+                        data-receipt-id="${receiptId}"
+                        data-installment-id="${inst.id}"
+                        data-label="${escapeHtml(String(inst.label || ''))}">
+                        Tahsil edildi
+                    </button>`
+                    : isReceived
+                      ? '<span class="text-success"><i class="fas fa-check-circle"></i></span>'
+                      : '—';
+
+            return `
+            <tr data-installment-id="${inst.id}">
+                <td class="text-center">${escapeHtml(String(inst.sequence ?? '—'))}</td>
+                <td>${escapeHtml(String(inst.label || '—'))}</td>
+                <td>${escapeHtml(dueLabel)}</td>
+                <td class="text-end"><strong>${amountStr}</strong></td>
+                <td class="text-center"><span class="badge bg-${statusClass}">${statusLabel}</span></td>
+                <td class="small">${receivedAt}</td>
+                <td class="small">${receivedBy}</td>
+                <td class="text-center">${markBtn}</td>
+            </tr>`;
+        })
+        .join('');
+
+    host.innerHTML = `
+        <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center">#</th>
+                        <th>Etiket</th>
+                        <th>Vade</th>
+                        <th class="text-end">Tutar</th>
+                        <th class="text-center">Durum</th>
+                        <th>Tahsilat tarihi</th>
+                        <th>Tahsil eden</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        </div>`;
+}
+
+function openAddExpectedReceiptInstallmentModal() {
+    if (!expectedReceiptInstallmentFormModal || !activeReceiptContext) return;
+
+    const installments = activeReceiptContext.installments || [];
+    const maxSeq = installments.reduce((max, i) => Math.max(max, Number(i.sequence) || 0), 0);
+    const nextSeq = maxSeq + 1;
+
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+
+    expectedReceiptInstallmentFormModal.setFormData({
+        sequence: String(nextSeq),
+        label: '',
+        amount: '',
+        due_date: `${y}-${m}-${d}`,
+        notes: ''
+    });
+    expectedReceiptInstallmentFormModal.show();
+}
+
+async function handleAddExpectedReceiptInstallmentSave(formData) {
+    if (!activeReceiptContext) return;
+
+    const receiptId = activeReceiptContext.id;
+    const sequence = parseInt(String(formData.sequence ?? '').trim(), 10);
+    const rawAmount = String(formData.amount ?? '').trim().replace(',', '.');
+    const amountNum = parseFloat(rawAmount);
+
+    if (!Number.isFinite(sequence) || sequence < 1) {
+        showErrorMessage('Geçerli bir sıra numarası girin.');
+        return;
+    }
+    if (!Number.isFinite(amountNum) || amountNum <= 0) {
+        showErrorMessage('Geçerli pozitif bir tutar girin.');
+        return;
+    }
+    const label = String(formData.label ?? '').trim();
+    if (!label) {
+        showErrorMessage('Etiket zorunludur.');
+        return;
+    }
+    if (!formData.due_date) {
+        showErrorMessage('Vade tarihi zorunludur.');
+        return;
+    }
+
+    const payload = {
+        sequence,
+        label,
+        amount: amountNum.toFixed(2),
+        due_date: formData.due_date,
+        notes: String(formData.notes ?? '').trim()
+    };
+
+    try {
+        await createExpectedReceiptInstallment(receiptId, payload);
+        showSuccessMessage('Taksit eklendi.');
+        expectedReceiptInstallmentFormModal.hide();
+        await loadExpectedReceipts();
+        await refreshExpectedReceiptInstallmentsList(receiptId);
+    } catch (error) {
+        console.error(error);
+        showErrorMessage(error.message || 'Taksit eklenirken hata oluştu.');
+    }
+}
+
+function confirmMarkExpectedReceiptInstallmentReceived(receiptId, installmentId, label) {
+    const seqLabel = label ? `"${label}"` : 'Bu taksit';
+    actionConfirmModal.show({
+        message: `${seqLabel} tahsil edildi olarak işaretlensin mi?`,
+        confirmText: 'Tahsil Edildi',
+        confirmButtonClass: 'btn-success',
+        onConfirm: async () => {
+            try {
+                const updated = await markExpectedReceiptInstallmentReceived(receiptId, installmentId);
+                showSuccessMessage('Taksit tahsil edildi olarak işaretlendi.');
+                const receipt = currentExpectedReceipts.find((r) => Number(r.id) === Number(receiptId));
+                if (receipt?.installments) {
+                    const idx = receipt.installments.findIndex((i) => Number(i.id) === Number(installmentId));
+                    if (idx >= 0) receipt.installments[idx] = { ...receipt.installments[idx], ...updated };
+                }
+                if (window.expectedReceiptsTable) {
+                    window.expectedReceiptsTable.updateData([...currentExpectedReceipts], currentExpectedReceipts.length, 1);
+                }
+                await refreshExpectedReceiptInstallmentsList(receiptId);
+            } catch (error) {
+                console.error(error);
+                showErrorMessage(error.message || 'Taksit işaretlenirken hata oluştu.');
+            }
+        }
+    });
+}
+
+function initLoansFilters() {
+    if (!document.getElementById('loans-filters-placeholder')) return;
+
+    new FiltersComponent('loans-filters-placeholder', {
+        title: 'Filtreler',
+        onApply: (filters) => {
+            currentLoanFilters = filters;
+            loadLoans();
+        },
+        onClear: () => {
+            currentLoanFilters = { status: 'active' };
+            loadLoans();
+        }
+    })
+        .addSelectFilter({
+            id: 'status',
+            label: 'Durum',
+            value: 'active',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'active', label: 'Aktif' },
+                { value: 'cancelled', label: 'İptal' }
+            ],
+            colSize: 2
+        })
+        .addSelectFilter({
+            id: 'currency',
+            label: 'Para Birimi',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'TRY', label: 'Türk Lirası' },
+                { value: 'USD', label: 'Amerikan Doları' },
+                { value: 'EUR', label: 'Euro' }
+            ],
+            colSize: 2
+        });
+}
+
+function initLoansTable() {
+    if (!document.getElementById('loans-table-container')) return;
+
+    window.loansTable = new TableComponent('loans-table-container', {
+        title: 'Krediler',
+        icon: 'hand-holding-usd',
+        iconColor: 'text-primary',
+        loading: false,
+        pagination: false,
+        refreshable: true,
+        onRefresh: loadLoans,
+        columns: [
+            {
+                field: 'name',
+                label: 'Kredi',
+                sortable: true,
+                formatter: (value) => (value ? `<strong>${escapeHtml(String(value))}</strong>` : '—')
+            },
+            {
+                field: 'principal',
+                label: 'Anapara',
+                sortable: true,
+                formatter: (value, row) => formatCurrency(value, row.currency)
+            },
+            {
+                field: 'interest_rate',
+                label: 'Faiz',
+                sortable: true,
+                formatter: (value) => formatInterestRate(value)
+            },
+            {
+                field: 'term_months',
+                label: 'Vade (Ay)',
+                sortable: true,
+                formatter: (value) => (value != null && value !== '' ? escapeHtml(String(value)) : '—')
+            },
+            {
+                field: 'currency',
+                label: 'Para Birimi',
+                sortable: true,
+                formatter: (value) => (value ? `<span class="currency-badge">${escapeHtml(String(value))}</span>` : '—')
+            },
+            {
+                field: 'first_payment_date',
+                label: 'İlk Ödeme',
+                sortable: true,
+                formatter: (value) => formatDate(value)
+            },
+            {
+                field: '_installment_progress',
+                label: 'Taksitler',
+                sortable: false,
+                formatter: (_v, row) => escapeHtml(formatLoanInstallmentProgress(row))
+            },
+            {
+                field: 'status',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value) =>
+                    `<span class="status-badge ${getFinanceRecordStatusBadgeClass(value)}">${escapeHtml(getFinanceRecordStatusLabel(value))}</span>`
+            },
+            {
+                field: 'created_by_username',
+                label: 'Oluşturan',
+                sortable: true,
+                formatter: (value) => (value ? escapeHtml(String(value)) : '—')
+            }
+        ],
+        actions: [
+            {
+                key: 'installments',
+                label: 'Taksitler',
+                icon: 'fas fa-list-ol',
+                class: 'btn-outline-primary',
+                onClick: (row) => openLoanInstallmentsDrawer(row.id)
+            },
+            {
+                key: 'cancel',
+                label: 'İptal Et',
+                icon: 'fas fa-ban',
+                class: 'btn-outline-danger',
+                visible: (row) => row.status === 'active',
+                onClick: (row) => confirmCancelLoan(row.id, row.name)
+            }
+        ],
+        data: [],
+        skeleton: false,
+        emptyMessage: 'Kayıtlı kredi bulunmamaktadır.',
+        emptyIcon: 'fas fa-hand-holding-usd'
+    });
+}
+
+function initLoanFormModal() {
+    if (!document.getElementById('loan-form-modal-container')) return;
+
+    loanFormModal = new EditModal('loan-form-modal-container', {
+        title: 'Yeni Kredi',
+        icon: 'fas fa-plus',
+        saveButtonText: 'Kaydet',
+        size: 'lg'
+    });
+    loanFormModal.addSection({
+        id: 'loan-form-section',
+        title: null,
+        icon: 'fas fa-hand-holding-usd',
+        iconColor: 'text-primary',
+        fields: [
+            {
+                id: 'loan_name',
+                name: 'name',
+                label: 'Kredi adı',
+                type: 'text',
+                required: true,
+                placeholder: 'Örn. Garanti Bank — Ekipman Kredisi',
+                colSize: 12
+            },
+            {
+                id: 'loan_principal',
+                name: 'principal',
+                label: 'Anapara',
+                type: 'number',
+                required: true,
+                min: 0.01,
+                step: 0.01,
+                placeholder: '0,00',
+                colSize: 6
+            },
+            {
+                id: 'loan_interest_rate',
+                name: 'interest_rate',
+                label: 'Yıllık faiz (%)',
+                type: 'number',
+                required: true,
+                min: 0,
+                step: 0.01,
+                placeholder: '42,50',
+                colSize: 6
+            },
+            {
+                id: 'loan_term_months',
+                name: 'term_months',
+                label: 'Vade (ay)',
+                type: 'number',
+                required: true,
+                min: 1,
+                step: 1,
+                placeholder: '24',
+                colSize: 6
+            },
+            {
+                id: 'loan_currency',
+                name: 'currency',
+                label: 'Para birimi',
+                type: 'select',
+                required: true,
+                value: 'TRY',
+                colSize: 6,
+                options: [
+                    { value: 'TRY', label: 'TRY' },
+                    { value: 'USD', label: 'USD' },
+                    { value: 'EUR', label: 'EUR' }
+                ]
+            },
+            {
+                id: 'loan_first_payment_date',
+                name: 'first_payment_date',
+                label: 'İlk ödeme tarihi',
+                type: 'date',
+                required: true,
+                colSize: 6
+            },
+            {
+                id: 'loan_notes',
+                name: 'notes',
+                label: 'Notlar',
+                type: 'textarea',
+                rows: 2,
+                required: false,
+                colSize: 12
+            }
+        ]
+    });
+    loanFormModal.render();
+    loanFormModal.onSaveCallback(handleCreateLoanSave);
+}
+
+function getFinanceRecordStatusLabel(status) {
+    const labels = { active: 'Aktif', cancelled: 'İptal' };
+    return labels[status] || status || '—';
+}
+
+function getFinanceRecordStatusBadgeClass(status) {
+    const classes = { active: 'status-green', cancelled: 'status-red' };
+    return classes[status] || 'status-grey';
+}
+
+function formatInterestRate(rate) {
+    const n = parseMoneyNumber(rate);
+    if (!Number.isFinite(n)) return '—';
+    return `${n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+}
+
+function formatLoanInstallmentProgress(row) {
+    const installments = row.installments;
+    if (!Array.isArray(installments) || !installments.length) return '—';
+    const paid = installments.filter((i) => i.is_paid).length;
+    return `${paid} / ${installments.length} ödendi`;
+}
+
+function openCreateLoanModal() {
+    if (!loanFormModal) return;
+    const today = new Date();
+    const y = today.getFullYear();
+    const m = String(today.getMonth() + 1).padStart(2, '0');
+    const d = String(today.getDate()).padStart(2, '0');
+    loanFormModal.setFormData({
+        name: '',
+        principal: '',
+        interest_rate: '',
+        term_months: '24',
+        currency: 'TRY',
+        first_payment_date: `${y}-${m}-${d}`,
+        notes: ''
+    });
+    loanFormModal.show();
+}
+
+async function handleCreateLoanSave(formData) {
+    const principal = parseFloat(String(formData.principal ?? '').trim().replace(',', '.'));
+    const interestRate = parseFloat(String(formData.interest_rate ?? '').trim().replace(',', '.'));
+    const termMonths = parseInt(String(formData.term_months ?? '').trim(), 10);
+
+    if (!Number.isFinite(principal) || principal <= 0) {
+        showErrorMessage('Geçerli bir anapara girin.');
+        return;
+    }
+    if (!Number.isFinite(interestRate) || interestRate < 0) {
+        showErrorMessage('Geçerli bir faiz oranı girin.');
+        return;
+    }
+    if (!Number.isFinite(termMonths) || termMonths < 1) {
+        showErrorMessage('Vade en az 1 ay olmalıdır.');
+        return;
+    }
+
+    const name = String(formData.name ?? '').trim();
+    if (!name) {
+        showErrorMessage('Kredi adı zorunludur.');
+        return;
+    }
+    if (!formData.first_payment_date) {
+        showErrorMessage('İlk ödeme tarihi zorunludur.');
+        return;
+    }
+
+    const payload = {
+        name,
+        principal: principal.toFixed(2),
+        interest_rate: interestRate.toFixed(2),
+        term_months: termMonths,
+        currency: formData.currency || 'TRY',
+        first_payment_date: formData.first_payment_date,
+        status: 'active',
+        notes: String(formData.notes ?? '').trim()
+    };
+
+    try {
+        const created = await createLoan(payload);
+        showSuccessMessage('Kredi kaydedildi.');
+        loanFormModal.hide();
+        await loadLoans();
+        if (created?.id) {
+            openLoanInstallmentsDrawer(created.id, created);
+        }
+    } catch (error) {
+        console.error(error);
+        showErrorMessage(error.message || 'Kredi kaydedilirken hata oluştu.');
+    }
+}
+
+async function loadLoans() {
+    if (!window.loansTable) return;
+    try {
+        window.loansTable.setLoading(true);
+        const raw = await getLoans(currentLoanFilters);
+        currentLoans = normalizeApiList(raw);
+        window.loansTable.setLoading(false);
+        window.loansTable.updateData(currentLoans, currentLoans.length, 1);
+    } catch (error) {
+        console.error('Error loading loans:', error);
+        showErrorMessage(error.message || 'Krediler yüklenirken hata oluştu.');
+        if (window.loansTable) {
+            window.loansTable.setLoading(false);
+            window.loansTable.updateData([]);
+        }
+    }
+}
+
+function confirmCancelLoan(loanId, name) {
+    const label = name ? `"${name}"` : `#${loanId}`;
+    actionConfirmModal.show({
+        message: `${label} kredisini iptal etmek istediğinize emin misiniz?`,
+        confirmText: 'İptal Et',
+        confirmButtonClass: 'btn-danger',
+        onConfirm: async () => {
+            try {
+                await cancelLoan(loanId);
+                showSuccessMessage('Kredi iptal edildi.');
+                if (activeLoanContext && Number(activeLoanContext.id) === Number(loanId)) {
+                    activeLoanContext.status = 'cancelled';
+                }
+                await loadLoans();
+                if (loanInstallmentsDisplayModal?.modal?.classList.contains('show')) {
+                    await refreshLoanInstallmentsList(loanId);
+                }
+            } catch (error) {
+                console.error(error);
+                showErrorMessage(error.message || 'Kredi iptal edilirken hata oluştu.');
+            }
+        }
+    });
+}
+
+function setupLoanInstallmentMarkPaidDelegation() {
+    if (!loanInstallmentsDisplayModal?.modal) return;
+    const root = loanInstallmentsDisplayModal.modal;
+    if (root.dataset.loanMarkPaidBound === '1') return;
+    root.dataset.loanMarkPaidBound = '1';
+    root.addEventListener('click', (e) => {
+        const btn = e.target.closest('.loan-installment-mark-paid-btn');
+        if (!btn) return;
+        const loanId = parseInt(btn.dataset.loanId, 10);
+        const installmentId = parseInt(btn.dataset.installmentId, 10);
+        const sequence = btn.dataset.sequence || '';
+        if (!Number.isFinite(loanId) || !Number.isFinite(installmentId)) return;
+        confirmMarkLoanInstallmentPaid(loanId, installmentId, sequence);
+    });
+}
+
+async function openLoanInstallmentsDrawer(loanId, loanRow = null) {
+    const row =
+        loanRow ||
+        currentLoans.find((l) => Number(l.id) === Number(loanId)) ||
+        null;
+    const name = row?.name || `Kredi #${loanId}`;
+    const currency = row?.currency || 'TRY';
+    const status = row?.status || 'active';
+
+    activeLoanContext = {
+        id: loanId,
+        name,
+        currency,
+        status
+    };
+
+    if (!loanInstallmentsDisplayModal) return;
+
+    loanInstallmentsDisplayModal.clearData();
+    loanInstallmentsDisplayModal.addCustomSection({
+        id: 'loan-installments-section',
+        customContent: `<p class="text-muted small mb-2">${escapeHtml(name)}</p><div id="loan-installments-list-host"><div class="text-center text-muted py-4">Yükleniyor…</div></div>`
+    });
+    loanInstallmentsDisplayModal.render();
+    loanInstallmentsDisplayModal.show();
+
+    await refreshLoanInstallmentsList(loanId);
+}
+
+async function refreshLoanInstallmentsList(loanId) {
+    const host = document.getElementById('loan-installments-list-host');
+    if (!host) return;
+
+    try {
+        let installments;
+        const cached = currentLoans.find((l) => Number(l.id) === Number(loanId));
+        if (cached?.installments?.length) {
+            installments = cached.installments;
+        } else {
+            installments = await getLoanInstallments(loanId);
+            if (cached) cached.installments = installments;
+        }
+        if (activeLoanContext && Number(activeLoanContext.id) === Number(loanId)) {
+            activeLoanContext.status = cached?.status || activeLoanContext.status;
+        }
+        renderLoanInstallmentsListIntoHost(host, installments, loanId);
+    } catch (error) {
+        console.error(error);
+        host.innerHTML = `<div class="alert alert-danger m-0">${escapeHtml(error.message || 'Taksitler yüklenemedi.')}</div>`;
+    }
+}
+
+function renderLoanInstallmentsListIntoHost(host, installments, loanId) {
+    if (!host) return;
+    if (!installments.length) {
+        host.innerHTML = '<p class="text-muted text-center py-4 mb-0">Taksit bulunamadı.</p>';
+        return;
+    }
+
+    const currency = activeLoanContext?.currency || 'TRY';
+    const loanActive = activeLoanContext?.status === 'active';
+
+    const rowsHtml = installments
+        .slice()
+        .sort((a, b) => (a.sequence || 0) - (b.sequence || 0))
+        .map((inst) => {
+            const isPaid = !!inst.is_paid;
+            const statusClass = isPaid ? 'success' : 'warning';
+            const statusLabel = isPaid ? 'Ödendi' : 'Bekliyor';
+            const dueLabel = formatDate(inst.due_date);
+            const totalStr = formatCurrency(inst.total_payment, currency);
+            const principalStr = formatCurrency(inst.principal_component, currency);
+            const interestStr = formatCurrency(inst.interest_component, currency);
+            const paidBy = inst.paid_by_username ? escapeHtml(String(inst.paid_by_username)) : '—';
+            const paidAt = inst.paid_at ? escapeHtml(formatDate(inst.paid_at)) : '—';
+            const markPaidBtn =
+                loanActive && !isPaid
+                    ? `<button type="button" class="btn btn-sm btn-outline-success loan-installment-mark-paid-btn"
+                        data-loan-id="${loanId}"
+                        data-installment-id="${inst.id}"
+                        data-sequence="${inst.sequence}">
+                        Ödendi
+                    </button>`
+                    : isPaid
+                      ? '<span class="text-success"><i class="fas fa-check-circle"></i></span>'
+                      : '—';
+
+            return `
+            <tr data-installment-id="${inst.id}">
+                <td class="text-center">${escapeHtml(String(inst.sequence ?? '—'))}</td>
+                <td>${escapeHtml(dueLabel)}</td>
+                <td class="text-end">${principalStr}</td>
+                <td class="text-end">${interestStr}</td>
+                <td class="text-end"><strong>${totalStr}</strong></td>
+                <td class="text-center"><span class="badge bg-${statusClass}">${statusLabel}</span></td>
+                <td class="small">${paidAt}</td>
+                <td class="small">${paidBy}</td>
+                <td class="text-center">${markPaidBtn}</td>
+            </tr>`;
+        })
+        .join('');
+
+    host.innerHTML = `
+        <div class="table-responsive">
+            <table class="table table-sm table-striped align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th class="text-center">#</th>
+                        <th>Vade</th>
+                        <th class="text-end">Anapara</th>
+                        <th class="text-end">Faiz</th>
+                        <th class="text-end">Toplam</th>
+                        <th class="text-center">Durum</th>
+                        <th>Ödeme tarihi</th>
+                        <th>Ödeyen</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+            </table>
+        </div>
+    `;
+}
+
+function confirmMarkLoanInstallmentPaid(loanId, installmentId, sequence) {
+    const seqLabel = sequence ? `${sequence}. taksit` : 'Bu taksit';
+    actionConfirmModal.show({
+        message: `${seqLabel} ödendi olarak işaretlensin mi?`,
+        confirmText: 'Ödendi İşaretle',
+        confirmButtonClass: 'btn-success',
+        onConfirm: async () => {
+            try {
+                const updated = await markLoanInstallmentPaid(loanId, installmentId);
+                showSuccessMessage('Taksit ödendi olarak işaretlendi.');
+                const loan = currentLoans.find((l) => Number(l.id) === Number(loanId));
+                if (loan?.installments) {
+                    const idx = loan.installments.findIndex((i) => Number(i.id) === Number(installmentId));
+                    if (idx >= 0) loan.installments[idx] = { ...loan.installments[idx], ...updated };
+                }
+                if (window.loansTable) {
+                    window.loansTable.updateData([...currentLoans], currentLoans.length, 1);
+                }
+                await refreshLoanInstallmentsList(loanId);
+            } catch (error) {
+                console.error(error);
+                showErrorMessage(error.message || 'Taksit işaretlenirken hata oluştu.');
+            }
+        }
     });
 }
 
@@ -894,8 +2886,6 @@ async function loadPurchaseOrders() {
             }
         }
         
-        renderStatistics();
-        
     } catch (error) {
         console.error('Error loading purchase orders:', error);
         showErrorMessage('Satın alma siparişleri yüklenirken hata oluştu.');
@@ -927,7 +2917,6 @@ async function loadSpecificPurchaseOrder(orderId) {
         
         // Update statistics with just this order
         currentPurchaseOrders = [order];
-        renderStatistics();
         
         // Show the modal for the specific order
         await viewPurchaseOrderDetails(orderId);
@@ -973,25 +2962,6 @@ function handlePageSizeChange(newPageSize) {
     // Reset to page 1 and load with new page size
     currentPage = 1;
     loadPurchaseOrders();
-}
-
-// Render statistics
-function renderStatistics() {
-    const totalOrders = currentPurchaseOrders.length;
-    const totalAmount = currentPurchaseOrders.reduce((sum, order) => sum + parseFloat(order.total_amount || 0), 0);
-    const awaitingPayment = currentPurchaseOrders.filter(order => order.status === 'awaiting_payment').length;
-    const paidOrders = currentPurchaseOrders.filter(order => order.status === 'paid').length;
-    
-    // Update statistics cards
-    const statsComponent = window.purchaseOrdersStats;
-    if (statsComponent) {
-        statsComponent.updateValues({
-            0: totalOrders.toString(),
-            1: formatCurrency(totalAmount, 'TRY'),
-            2: awaitingPayment.toString(),
-            3: paidOrders.toString()
-        });
-    }
 }
 
 // Render payment schedules
@@ -1067,22 +3037,12 @@ function showMarkPaidModal(orderId, scheduleId) {
 
     selectedPaymentSchedule = { orderId, scheduleId, schedule };
 
-    const unpaidSchedules = order.payment_schedules.filter((s) => !s.is_paid);
-    const isLastSequence = unpaidSchedules.length === 1 && unpaidSchedules[0].id === scheduleId;
-
     markPaidEditModal.setFormData({
         schedule_label_ro: schedule.label,
         payment_currency_ro: schedule.currency,
         payment_due_date_ro: formatDate(schedule.due_date),
         paid_with_tax: true
     });
-
-    const cb = markPaidEditModal.container.querySelector('#paid_with_tax');
-    if (cb) {
-        cb.disabled = isLastSequence;
-        const wrap = cb.closest('.checkbox-field') || cb.parentElement;
-        if (wrap) wrap.classList.toggle('text-muted', isLastSequence);
-    }
 
     updatePaymentAmountDisplay();
     markPaidEditModal.show();
@@ -1106,42 +3066,25 @@ async function handleMarkPaidSave(formData) {
     }
 }
 
+function getPaidWithTaxCheckbox() {
+    if (!markPaidEditModal) return null;
+    return markPaidEditModal.container.querySelector('[data-field-id="paid_with_tax"] input[type="checkbox"]');
+}
+
 // Update payment amount display based on checkbox
 function updatePaymentAmountDisplay() {
     if (!selectedPaymentSchedule || !markPaidEditModal) return;
 
     const { schedule } = selectedPaymentSchedule;
-    const paidWithTaxCheckbox = markPaidEditModal.container.querySelector('#paid_with_tax');
+    const paidWithTaxCheckbox = getPaidWithTaxCheckbox();
     const paidWithTax = paidWithTaxCheckbox ? paidWithTaxCheckbox.checked : true;
 
-    const order = currentPurchaseOrders.find((o) => Number(o.id) === Number(selectedPaymentSchedule.orderId));
-    if (!order) return;
-    const unpaidSchedules = order.payment_schedules.filter((s) => !s.is_paid);
-    const isLastSequence =
-        unpaidSchedules.length === 1 && unpaidSchedules[0].id === selectedPaymentSchedule.scheduleId;
-
     let displayAmount;
-    if (isLastSequence) {
+    if (paidWithTax) {
         const totalWithTax = parseFloat(schedule.amount || 0) + parseFloat(schedule.effective_tax_due || 0);
         displayAmount = formatCurrency(totalWithTax, schedule.currency);
-        if (paidWithTaxCheckbox) {
-            paidWithTaxCheckbox.checked = true;
-            paidWithTaxCheckbox.disabled = true;
-            const wrap = paidWithTaxCheckbox.closest('.checkbox-field') || paidWithTaxCheckbox.parentElement;
-            if (wrap) wrap.classList.add('text-muted');
-        }
     } else {
-        if (paidWithTax) {
-            const totalWithTax = parseFloat(schedule.amount || 0) + parseFloat(schedule.effective_tax_due || 0);
-            displayAmount = formatCurrency(totalWithTax, schedule.currency);
-        } else {
-            displayAmount = formatCurrency(schedule.amount || 0, schedule.currency);
-        }
-        if (paidWithTaxCheckbox) {
-            paidWithTaxCheckbox.disabled = false;
-            const wrap = paidWithTaxCheckbox.closest('.checkbox-field') || paidWithTaxCheckbox.parentElement;
-            if (wrap) wrap.classList.remove('text-muted');
-        }
+        displayAmount = formatCurrency(schedule.amount || 0, schedule.currency);
     }
 
     markPaidEditModal.setFieldValue('payment_display_amount', displayAmount);

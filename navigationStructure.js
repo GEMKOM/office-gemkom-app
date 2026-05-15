@@ -677,6 +677,11 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Genel Bakış',
                         icon: 'fas fa-chart-line',
                         children: {}
+                    },
+                    '/management/reports/cash-flow': {
+                        label: 'Nakit Akış Tablosu',
+                        icon: 'fas fa-money-bill-wave',
+                        children: {}
                     }
                 }
             },

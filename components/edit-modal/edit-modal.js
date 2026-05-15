@@ -344,7 +344,7 @@ export class EditModal {
                 
             case 'checkbox':
                 return this.createCheckboxElement(field);
-                
+
             case 'radio':
                 return this.createRadioElement(field);
                 
@@ -366,7 +366,7 @@ export class EditModal {
                 
             case 'range':
                 return this.createRangeElement(field);
-                
+
             default:
                 input = document.createElement('input');
                 input.type = 'text';
@@ -375,10 +375,14 @@ export class EditModal {
                 input.value = field.value;
                 if (field.required) input.required = true;
         }
-        
-        input.id = field.id;
-        input.name = field.name;
-        
+
+        // Checkbox/radio/range return a wrapper; id/name live on the real control(s) inside.
+        const isWrapperField = field.type === 'checkbox' || field.type === 'radio' || field.type === 'range';
+        if (!isWrapperField) {
+            input.id = field.id;
+            input.name = field.name;
+        }
+
         return input;
     }
     

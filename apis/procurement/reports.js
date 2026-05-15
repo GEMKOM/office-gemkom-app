@@ -224,7 +224,23 @@ export async function getProjectsReport(filters = {}, ordering = '-forecast_eur'
     }
 }
 
-export async function getExecutiveReport(filters = {}) {
+export async function getOutflowDetail(month) {
+    try {
+        const params = new URLSearchParams({ month });
+        const url = `${backendBase}/procurement/reports/outflow-detail/?${params.toString()}`;
+        const response = await authedFetch(url);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Çıkış detayı yüklenirken hata oluştu');
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching outflow detail:', error);
+        throw error;
+    }
+}
+
+export async function getPaymentForecastReport(filters = {}) {
     try {
         // Build query parameters
         const params = new URLSearchParams();
@@ -237,20 +253,19 @@ export async function getExecutiveReport(filters = {}) {
             params.append('created_lte', filters['created_lte']);
         }
         
-        // Note: No ordering parameter for executive report
         const queryString = params.toString();
-        const url = `${backendBase}/procurement/reports/executive${queryString ? `?${queryString}` : ''}`;
+        const url = `${backendBase}/procurement/reports/payment-forecast${queryString ? `?${queryString}` : ''}`;
         
         const response = await authedFetch(url);
         
         if (!response.ok) {
             const errorData = await response.json();
-            throw new Error(errorData.error || 'Yönetici raporu yüklenirken hata oluştu');
+            throw new Error(errorData.error || 'Ödeme tahmini raporu yüklenirken hata oluştu');
         }
 
         return await response.json();
     } catch (error) {
-        console.error('Error fetching executive report:', error);
+        console.error('Error fetching payment forecast report:', error);
         throw error;
     }
 }
