@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GEMKOM - Finans - Satın Alma Siparişleri</title>
+    <title>GEMKOM - Finans - Finans İşlemleri</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="stylesheet" href="../../style.css">
@@ -46,6 +46,9 @@
                             </button>
                             <button type="button" class="btn btn-outline-primary" data-finance-tab="taxes" id="tab-taxes-trigger">
                                 <i class="fas fa-file-invoice-dollar me-1"></i>Vergiler
+                            </button>
+                            <button type="button" class="btn btn-outline-primary" data-finance-tab="adhoc-costs" id="tab-adhoc-costs-trigger">
+                                <i class="fas fa-briefcase me-1"></i>Ek Giderler
                             </button>
                             <button type="button" class="btn btn-outline-primary" data-finance-tab="receipts" id="tab-receipts-trigger">
                                 <i class="fas fa-hand-holding-usd me-1"></i>Beklenen Tahsilatlar
@@ -99,6 +102,15 @@
                 </div>
             </div>
 
+            <div id="finance-tab-pane-adhoc-costs" class="d-none">
+                <div id="adhoc-costs-filters-placeholder"></div>
+                <div class="row">
+                    <div class="col-12">
+                        <div id="adhoc-job-costs-table-container"></div>
+                    </div>
+                </div>
+            </div>
+
             <div id="finance-tab-pane-receipts" class="d-none">
                 <div id="receipts-filters-placeholder"></div>
                 <div class="row">
@@ -118,9 +130,10 @@
     <div id="loan-form-modal-container"></div>
     <div id="loan-installments-display-modal-container"></div>
     <div id="tax-form-modal-container"></div>
+    <div id="adhoc-job-cost-form-modal-container"></div>
     <div id="expected-receipt-form-modal-container"></div>
     <div id="expected-receipt-installment-form-modal-container"></div>
-    <div id="expected-receipt-installments-display-modal-container"></div>
+    <div id="inflow-offer-notes-modal-container"></div>
 
     <footer class="footer-section">
         <div class="container">

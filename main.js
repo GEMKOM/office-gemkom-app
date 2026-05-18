@@ -201,8 +201,8 @@ async function handleLandingPage() {
                     link: '/finance',
                     features: [
                         {
-                            label: 'Satın Alma Siparişleri',
-                            icon: 'fas fa-shopping-cart',
+                            label: 'Finans İşlemleri',
+                            icon: 'fas fa-coins',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/finance/purchase-orders'
                         }

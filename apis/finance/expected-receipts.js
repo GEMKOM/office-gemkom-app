@@ -117,3 +117,55 @@ export async function markExpectedReceiptInstallmentReceived(receiptId, installm
     }
     return data;
 }
+
+/**
+ * @param {string|number} receiptId
+ * @param {Object} payload
+ */
+export async function updateExpectedReceipt(receiptId, payload) {
+    const response = await authedFetch(`${RECEIPTS_BASE}${receiptId}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(await parseErrorResponse(response, 'Tahsilat kaydı güncellenirken hata oluştu.'));
+    }
+    return data;
+}
+
+/**
+ * @param {string|number} receiptId
+ * @param {string|number} installmentId
+ * @param {Object} payload
+ */
+export async function updateExpectedReceiptInstallment(receiptId, installmentId, payload) {
+    const response = await authedFetch(`${RECEIPTS_BASE}${receiptId}/installments/${installmentId}/`, {
+        method: 'PATCH',
+        body: JSON.stringify(payload)
+    });
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(await parseErrorResponse(response, 'Taksit güncellenirken hata oluştu.'));
+    }
+    return data;
+}
+
+/**
+ * @param {string|number} receiptId
+ * @param {string|number} installmentId
+ */
+export async function deleteExpectedReceiptInstallment(receiptId, installmentId) {
+    const response = await authedFetch(`${RECEIPTS_BASE}${receiptId}/installments/${installmentId}/`, {
+        method: 'DELETE'
+    });
+    if (!response.ok) {
+        throw new Error(await parseErrorResponse(response, 'Taksit silinirken hata oluştu.'));
+    }
+    if (response.status === 204) return null;
+    try {
+        return await response.json();
+    } catch {
+        return null;
+    }
+}

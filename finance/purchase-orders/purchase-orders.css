@@ -173,14 +173,13 @@
     font-weight: 500;
 }
 
-/* Procurement badge integration */
-.table tbody td .status-badge,
-.table tbody td .status-badge {
+/* Procurement badge integration (PO table only) */
+#purchase-orders-table-container .table tbody td .status-badge {
     display: inline-block;
     margin: 0 auto;
 }
 
-.table tbody td .currency-badge {
+#purchase-orders-table-container .table tbody td .currency-badge {
     display: inline-block;
     margin: 0 auto;
     background-color: #6c757d;
@@ -191,10 +190,10 @@
     margin-left: 0.25rem;
 }
 
-/* Ensure proper alignment for badge columns */
-.table tbody td:nth-child(3), /* Status column */
-.table tbody td:nth-child(5), /* Currency column */
-.table tbody td:nth-child(6) { /* Priority column */
+/* PO table: status, currency, priority columns */
+#purchase-orders-table-container .table tbody td:nth-child(3),
+#purchase-orders-table-container .table tbody td:nth-child(5),
+#purchase-orders-table-container .table tbody td:nth-child(6) {
     text-align: center;
 }
 
@@ -470,4 +469,74 @@
 
 .table-responsive::-webkit-scrollbar-thumb:hover {
     background: #20c997;
+}
+
+/* Inflow tracker (Beklenen Tahsilatlar) */
+.inflow-source-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 999px;
+    white-space: nowrap;
+}
+
+.inflow-source-sales-offer {
+    background: rgba(13, 110, 253, 0.12);
+    color: #0d6efd;
+    border: 1px solid rgba(13, 110, 253, 0.25);
+}
+
+.inflow-source-expected-receipt {
+    background: rgba(111, 66, 193, 0.12);
+    color: #6f42c1;
+    border: 1px solid rgba(111, 66, 193, 0.25);
+}
+
+.inflow-row-received td {
+    background-color: rgba(25, 135, 84, 0.06) !important;
+}
+
+.inflow-row-received td:not(.action-column) {
+    text-decoration: line-through;
+    text-decoration-color: rgba(25, 135, 84, 0.45);
+}
+
+.inflow-row-received .action-column,
+.inflow-row-received .inflow-source-badge,
+.inflow-row-received .status-badge {
+    text-decoration: none;
+}
+
+.inflow-ref-link {
+    font-weight: 600;
+}
+
+.inflow-eur-sub {
+    line-height: 1.2;
+}
+
+.er-inst-row .form-label {
+    font-weight: 500;
+    color: #6c757d;
+}
+
+/* Inflow tracker table — stable column alignment */
+#expected-receipts-table-container .table {
+    table-layout: fixed;
+    width: 100%;
+}
+
+#expected-receipts-table-container .table thead th,
+#expected-receipts-table-container .table tbody td {
+    vertical-align: middle;
+}
+
+#expected-receipts-table-container .table tbody td .inflow-source-badge {
+    margin: 0;
+}
+
+#expected-receipts-table-container .table tbody td .status-badge {
+    margin: 0;
 }

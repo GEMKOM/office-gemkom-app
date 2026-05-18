@@ -512,8 +512,8 @@ export const NAVIGATION_STRUCTURE = {
         icon: 'fas fa-dollar-sign',
         children: {
             '/finance/purchase-orders': {
-                label: 'Satın Alma Siparişleri',
-                icon: 'fas fa-shopping-cart',
+                label: 'Finans İşlemleri',
+                icon: 'fas fa-coins',
                 children: {}
             },
             '/finance/reports': {

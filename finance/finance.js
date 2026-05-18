@@ -19,9 +19,9 @@ document.addEventListener('DOMContentLoaded', async function() {
         subtitle: 'Finansal süreçlerinizi yönetin ve mali durumunuzu takip edin',
         cards: [
             {
-                title: 'Satın Alma Siparişleri',
-                description: 'Satın alma siparişlerini görüntüle, fatura oluştur ve finansal takip yap.',
-                icon: 'fas fa-shopping-cart',
+                title: 'Finans İşlemleri',
+                description: 'Satın alma siparişleri, ödemeler, tahsilatlar, giderler, krediler ve vergiler.',
+                icon: 'fas fa-coins',
                 iconColor: 'primary',
                 link: '/finance/purchase-orders'
             },

@@ -339,6 +339,12 @@ export class EditModal {
                 break;
                 
             case 'select':
+                if (this.shouldUseNativeSelect(field)) {
+                    input = this.createNativeSelectElement(field);
+                    break;
+                }
+                return this.createDropdownElement(field);
+
             case 'dropdown':
                 return this.createDropdownElement(field);
                 
@@ -385,6 +391,40 @@ export class EditModal {
 
         return input;
     }
+
+    shouldUseNativeSelect(field) {
+        return field.type === 'select' && !field.remoteSearch && !field.searchable;
+    }
+
+    createNativeSelectElement(field) {
+        const select = document.createElement('select');
+        select.className = 'form-select field-input';
+        select.id = field.id;
+        select.name = field.name;
+        if (field.required) select.required = true;
+        if (field.placeholder) {
+            const placeholder = document.createElement('option');
+            placeholder.value = '';
+            placeholder.textContent = field.placeholder;
+            placeholder.disabled = true;
+            placeholder.selected = !field.value;
+            select.appendChild(placeholder);
+        }
+        (field.options || []).forEach((option, index) => {
+            const opt = document.createElement('option');
+            const val = option.value !== undefined ? option.value : option.id ?? String(index);
+            opt.value = val;
+            opt.textContent = option.label || option.text || option.name || String(val);
+            if (String(field.value) === String(val)) opt.selected = true;
+            select.appendChild(opt);
+        });
+        select.addEventListener('change', () => {
+            field.value = select.value;
+            this.fields.set(field.id, field);
+            this.validateField(select);
+        });
+        return select;
+    }
     
     createDropdownElement(field) {
         const container = document.createElement('div');
@@ -429,6 +469,8 @@ export class EditModal {
             
             // Add change event listener
             dropdownContainer.addEventListener('dropdown:select', (e) => {
+                field.value = e.detail?.value ?? field.value;
+                this.fields.set(field.id, field);
                 this.validateField(dropdownContainer);
             });
         }, 100);
@@ -534,6 +576,9 @@ export class EditModal {
             const dropdown = this.dropdowns.get(fieldId);
             if (dropdown) {
                 dropdown.setValue(value);
+            } else if (this.shouldUseNativeSelect(field)) {
+                const select = fieldElement.querySelector('select.field-input');
+                if (select) select.value = value ?? '';
             }
         } else {
             const input = fieldElement.querySelector('.field-input');
@@ -561,7 +606,15 @@ export class EditModal {
         
         if (field.type === 'select' || field.type === 'dropdown') {
             const dropdown = this.dropdowns.get(fieldId);
-            return dropdown ? dropdown.getValue() : null;
+            if (dropdown) {
+                const fromDropdown = dropdown.getValue();
+                if (fromDropdown !== null && fromDropdown !== undefined && fromDropdown !== '') {
+                    return fromDropdown;
+                }
+            }
+            const select = fieldElement.querySelector('select.field-input');
+            if (select) return select.value;
+            return field.value ?? null;
         } else {
             const input = fieldElement.querySelector('.field-input');
             if (input) {
@@ -647,12 +700,28 @@ export class EditModal {
         
         this.fields.forEach((field, fieldId) => {
             const fieldElement = this.container.querySelector(`[data-field-id="${fieldId}"]`);
-            if (fieldElement) {
-                const input = fieldElement.querySelector('.field-input');
-                if (input) {
-                    if (!this.validateField(input)) {
-                        isValid = false;
-                    }
+            if (!fieldElement) return;
+
+            if (field.type === 'select' || field.type === 'dropdown') {
+                const value = this.getFieldValue(fieldId);
+                const valid = this.isFieldValid(field, value);
+                fieldElement.classList.remove('has-error', 'has-success');
+                const errorElement = fieldElement.querySelector('.field-error');
+                if (!valid) {
+                    isValid = false;
+                    fieldElement.classList.add('has-error');
+                    if (errorElement) errorElement.classList.add('show');
+                } else if (value !== null && value !== undefined && value !== '') {
+                    fieldElement.classList.add('has-success');
+                    if (errorElement) errorElement.classList.remove('show');
+                }
+                return;
+            }
+
+            const input = fieldElement.querySelector('.field-input');
+            if (input) {
+                if (!this.validateField(input)) {
+                    isValid = false;
                 }
             }
         });

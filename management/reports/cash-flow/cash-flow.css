@@ -98,6 +98,11 @@
 .cf-drilldown-offcanvas .table-responsive {
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    width: 100%;
+}
+
+.cf-drilldown-offcanvas .cf-drill-groups {
+    width: 100%;
 }
 
 .cf-drill-chip {
@@ -198,6 +203,38 @@
     table-layout: auto;
 }
 
+.cf-drill-table-inflow,
+.cf-drill-table-outflow {
+    table-layout: fixed;
+    width: 100%;
+    min-width: 0;
+}
+
+.cf-drill-table-inflow .cf-col-title,
+.cf-drill-table-outflow .cf-col-title {
+    max-width: none;
+}
+
+.cf-drill-table-inflow .cf-col-truncate,
+.cf-drill-table-outflow .cf-col-truncate {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cf-drill-table-inflow .cf-col-nowrap,
+.cf-drill-table-outflow .cf-col-nowrap {
+    white-space: nowrap;
+}
+
+.cf-drill-table-inflow .cf-col-progress {
+    min-width: 0;
+}
+
+.cf-drill-table-inflow .cf-col-progress .cf-drill-progress {
+    max-width: 100%;
+}
+
 .cf-drill-table th {
     font-size: 0.75rem;
     text-transform: uppercase;
@@ -250,4 +287,59 @@
     height: 6px;
     min-width: 64px;
     margin-bottom: 2px;
+}
+
+.cf-drill-subgroup .table-responsive {
+    width: 100%;
+}
+
+.cf-drill-subgroup {
+    border-top: 1px solid #eef1f4;
+}
+
+.cf-drill-subgroup:first-child {
+    border-top: 0;
+}
+
+.cf-drill-subgroup-title {
+    padding: 0.5rem 0.85rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    background: #fafbfc;
+    color: #495057;
+}
+
+.cf-drill-row-paid {
+    opacity: 0.55;
+}
+
+.cf-drill-row-paid td {
+    color: #6c757d;
+}
+
+.cf-wages-summary {
+    background: #fafbfc;
+}
+
+.cf-wages-line-label {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+    color: #6c757d;
+    margin-bottom: 0.15rem;
+}
+
+.cf-wages-line-value {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.cf-wages-line-value.cf-wages-total {
+    font-size: 1.125rem;
+    color: #dc3545;
+}
+
+.cf-wages-subtitle {
+    font-size: 0.875rem;
+    color: #6c757d;
 }

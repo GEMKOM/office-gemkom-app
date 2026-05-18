@@ -64,25 +64,65 @@ function isUserInGroup(user, groupName) {
     });
 }
 
-function doesGroupMatchAssignedTeam(group, assignedTeamName, assignedTeamId) {
-    if (!group) return false;
+/** Normalize assigned team from list/detail payload (supports assigned_team_data). */
+function getAssignedTeamFromRow(row) {
+    const data = row?.assigned_team_data;
+    return {
+        id: data?.id ?? row?.assigned_team_id ?? row?.assigned_team ?? null,
+        name: data?.name ?? row?.assigned_team_name ?? '',
+        slug: data?.slug ?? row?.assigned_team_slug ?? '',
+        groupName: row?.assigned_team_group_name ?? ''
+    };
+}
 
-    if (typeof group === 'string') {
-        return Boolean(assignedTeamName) && group === assignedTeamName;
+function rowHasAssignedTeam(row) {
+    const assigned = getAssignedTeamFromRow(row);
+    if (assigned.id !== null && assigned.id !== undefined && assigned.id !== '') return true;
+    return Boolean(assigned.slug || assigned.name || assigned.groupName);
+}
+
+function getUserTeamMemberships(user) {
+    const memberships = [];
+    const addAll = (list) => {
+        if (!Array.isArray(list)) return;
+        list.forEach(item => {
+            if (item === null || item === undefined || item === '') return;
+            memberships.push(item);
+        });
+    };
+    // Django permission groups (e.g. qualitycontrol_team)
+    addAll(user?.groups);
+    // Organization group slugs from /users/me/ (e.g. "imalat")
+    addAll(user?.user_groups);
+    // Organization group PKs from /users/me/ (e.g. [3, 7])
+    addAll(user?.user_group_ids);
+    return memberships;
+}
+
+function membershipMatchesAssigned(membership, assigned) {
+    if (!membership || !assigned) return false;
+
+    const labels = [assigned.slug, assigned.name, assigned.groupName].filter(Boolean);
+    const id = assigned.id;
+
+    if (typeof membership === 'string' || typeof membership === 'number') {
+        const token = String(membership);
+        if (id !== null && id !== undefined && token === String(id)) return true;
+        return labels.some(label => token === String(label));
     }
 
-    if (typeof group === 'object') {
-        const groupName = group.name;
-        const groupSlug = group.slug;
-        const groupId = group.id;
+    if (typeof membership === 'object') {
+        const mId = membership.id;
+        const mName = membership.name;
+        const mSlug = membership.slug;
 
-        if (assignedTeamName && (groupName === assignedTeamName || groupSlug === assignedTeamName)) {
+        if (id !== null && id !== undefined && mId !== null && mId !== undefined && String(mId) === String(id)) {
             return true;
         }
 
-        if (assignedTeamId !== null && assignedTeamId !== undefined && groupId !== undefined && groupId !== null) {
-            return String(groupId) === String(assignedTeamId);
-        }
+        return labels.some(label =>
+            mName === label || mSlug === label
+        );
     }
 
     return false;
@@ -94,23 +134,13 @@ function isUserInAssignedTeam(user, row) {
     const isSuperuser = user.is_superuser || user.is_admin;
     if (isSuperuser) return true;
 
-    const groups = Array.isArray(user.groups) ? user.groups : [];
-    if (!groups.length) return false;
+    if (!rowHasAssignedTeam(row)) return false;
 
-    // Prefer canonical group name (e.g. "manufacturing_team") when present.
-    const assignedTeamGroupName = row.assigned_team_group_name || '';
-    if (assignedTeamGroupName) {
-        return groups.some(group => {
-            if (typeof group === 'string') return group === assignedTeamGroupName;
-            if (group && typeof group === 'object') return group.name === assignedTeamGroupName || group.slug === assignedTeamGroupName;
-            return false;
-        });
-    }
+    const memberships = getUserTeamMemberships(user);
+    if (!memberships.length) return false;
 
-    const assignedTeamName = row.assigned_team_name || '';
-    const assignedTeamId = row.assigned_team_id ?? row.assigned_team;
-
-    return groups.some(group => doesGroupMatchAssignedTeam(group, assignedTeamName, assignedTeamId));
+    const assigned = getAssignedTeamFromRow(row);
+    return memberships.some(membership => membershipMatchesAssigned(membership, assigned));
 }
 
 function canCurrentUserDecideNCRs() {
@@ -583,9 +613,9 @@ function initializeTableComponent(canDecideNCRs) {
             sortable: false,
             width: '150px',
             formatter: (value, row) => {
-                const assignedId = row.assigned_team_id ?? row.assigned_team;
-                const matchedGroup = (ncrAssignableGroups || []).find(g => String(g.id) === String(assignedId));
-                const displayValue = value || matchedGroup?.display_name || matchedGroup?.name || assignedId;
+                const assigned = getAssignedTeamFromRow(row);
+                const matchedGroup = (ncrAssignableGroups || []).find(g => String(g.id) === String(assigned.id));
+                const displayValue = value || assigned.name || matchedGroup?.display_name || matchedGroup?.name || assigned.id;
                 if (!displayValue || displayValue === '-') return '-';
                 return `<span class="status-badge status-grey">${displayValue}</span>`;
             }
@@ -635,8 +665,7 @@ function initializeTableComponent(canDecideNCRs) {
             class: 'btn-outline-success',
             // Only users from the assigned group/team can submit
             visible: (row) => {
-                const assignedId = row.assigned_team_id ?? row.assigned_team;
-                if (!assignedId && !row.assigned_team_name) return false;
+                if (!rowHasAssignedTeam(row)) return false;
                 if (!(row.status === 'draft' || row.status === 'rejected')) return false;
                 return isUserInAssignedTeam(currentUser, row);
             },
@@ -677,8 +706,7 @@ function initializeTableComponent(canDecideNCRs) {
             // QC team or superuser can always close
             if (canDecideNCRs) return true;
             // Assigned group/team can close if NCR is assigned to one of user's groups
-            const assignedId = row.assigned_team_id ?? row.assigned_team;
-            if (!assignedId && !row.assigned_team_name) return false;
+            if (!rowHasAssignedTeam(row)) return false;
             return isUserInAssignedTeam(currentUser, row);
         },
         onClick: (row) => handleCloseNCR(row)
@@ -1147,7 +1175,7 @@ async function showNCRDetails(ncr) {
                 },
                 { 
                     label: 'Atanan Grup', 
-                    value: fullNCR.assigned_team_name || '-',
+                    value: getAssignedTeamFromRow(fullNCR).name || '-',
                     colSize: 6
                 }
             ]
@@ -1370,8 +1398,9 @@ async function showCreateNCRModal() {
                     name: 'assigned_team',
                     label: 'Atanan Grup',
                     type: 'dropdown',
-                    required: false,
-                    options: assignedGroupOptions
+                    required: true,
+                    options: assignedGroupOptions,
+                    placeholder: 'Grup seçin'
                 },
                 {
                     id: 'disposition',
@@ -1400,17 +1429,12 @@ async function showCreateNCRModal() {
                 formData.affected_quantity = parseInt(formData.affected_quantity);
             }
 
-            // Send assigned group PK (not legacy team name/slug)
-            if (formData.assigned_team === '' || formData.assigned_team === null || formData.assigned_team === undefined) {
-                delete formData.assigned_team;
-            } else {
-                const groupPk = parseInt(String(formData.assigned_team), 10);
-                if (Number.isFinite(groupPk)) {
-                    formData.assigned_team = groupPk;
-                } else {
-                    delete formData.assigned_team;
-                }
+            const groupPk = parseInt(String(formData.assigned_team), 10);
+            if (!Number.isFinite(groupPk)) {
+                showNotification('Atanan grup seçilmelidir', 'error');
+                return;
             }
+            formData.assigned_team = groupPk;
 
             await createNCR(formData);
             showNotification('NCR başarıyla oluşturuldu', 'success');

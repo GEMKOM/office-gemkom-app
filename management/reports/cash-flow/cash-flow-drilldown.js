@@ -3,6 +3,116 @@ import { getOutflowDetail } from '../../../apis/procurement/reports.js';
 import { showNotification } from '../../../components/notification/notification.js';
 
 const EUR = 'EUR';
+const JOB_TRACKING_BASE = '/projects/project-tracking/?job_no=';
+
+const TAX_TYPE_LABELS = {
+    vat: 'KDV',
+    corporate_tax: 'Kurumlar Vergisi',
+    sgk: 'SGK',
+    income_tax_withholding: 'Gelir Vergisi Stopajı',
+    other: 'Diğer'
+};
+
+const EXPENSE_CATEGORY_LABELS = {
+    catering: 'Yemekhane / Catering',
+    security: 'Güvenlik',
+    transport: 'Ulaşım',
+    rent: 'Kira',
+    utilities: 'Kamu hizmetleri',
+    insurance: 'Sigorta',
+    other: 'Diğer'
+};
+
+const EXPENSE_RECURRENCE_LABELS = {
+    once: 'Tek seferlik',
+    monthly: 'Aylık',
+    quarterly: 'Üç aylık',
+    annual: 'Yıllık'
+};
+
+const ADHOC_CATEGORY_LABELS = {
+    material: 'Malzeme',
+    transport: 'Taşıma',
+    labor: 'İşçilik',
+    subcontract: 'Taşeron',
+    other: 'Diğer'
+};
+
+const OUTFLOW_SECTIONS = [
+    { key: 'procurement', totalKey: 'procurement_eur', title: 'Tedarik / Satın Alma' },
+    { key: 'wages', totalKey: 'wages_eur', title: 'Maaşlar' },
+    { key: 'expenses', totalKey: 'expenses_eur', title: 'Genel Giderler' },
+    { key: 'loans', totalKey: 'loans_eur', title: 'Krediler' },
+    { key: 'taxes', totalKey: 'taxes_eur', title: 'Vergiler' },
+    { key: 'adhoc_costs', totalKey: 'adhoc_eur', title: 'Proje Giderleri' }
+];
+
+/** Percent widths — same on every group table so columns align and fill the drawer. */
+const INFLOW_TABLE_COLGROUP = `<colgroup>
+    <col style="width:7%">
+    <col style="width:22%">
+    <col style="width:7%">
+    <col style="width:9%">
+    <col style="width:10%">
+    <col style="width:14%">
+    <col style="width:8%">
+    <col style="width:9%">
+    <col style="width:8%">
+    <col style="width:6%">
+</colgroup>`;
+
+const INFLOW_TABLE_HEAD = `<thead><tr>
+    <th>Teklif</th>
+    <th>Başlık</th>
+    <th>İş Emri</th>
+    <th>Durum</th>
+    <th>İlerleme</th>
+    <th>Taksit</th>
+    <th>Vade</th>
+    <th class="text-end">Tutar</th>
+    <th class="text-end">EUR</th>
+    <th>Sipariş</th>
+</tr></thead>`;
+
+const OUTFLOW_PROCUREMENT_COLGROUP = `<colgroup>
+    <col style="width:42%"><col style="width:18%"><col style="width:13%">
+    <col style="width:15%"><col style="width:12%">
+</colgroup>`;
+const OUTFLOW_PROCUREMENT_HEAD = `<thead><tr>
+    <th>Başlık</th><th>Ödeme</th><th>Vade</th><th class="text-end">EUR</th><th>Durum</th>
+</tr></thead>`;
+
+const OUTFLOW_EXPENSES_COLGROUP = `<colgroup>
+    <col style="width:18%"><col style="width:52%"><col style="width:15%"><col style="width:15%">
+</colgroup>`;
+const OUTFLOW_EXPENSES_HEAD = `<thead><tr>
+    <th>Kategori</th><th>Açıklama</th><th>Periyot</th><th class="text-end">EUR</th>
+</tr></thead>`;
+
+const OUTFLOW_LOANS_COLGROUP = `<colgroup>
+    <col style="width:42%"><col style="width:10%"><col style="width:13%">
+    <col style="width:15%"><col style="width:12%">
+</colgroup>`;
+const OUTFLOW_LOANS_HEAD = `<thead><tr>
+    <th>Kredi</th><th>Taksit</th><th>Vade</th><th class="text-end">EUR</th><th>Durum</th>
+</tr></thead>`;
+
+const OUTFLOW_TAXES_COLGROUP = `<colgroup>
+    <col style="width:18%"><col style="width:38%"><col style="width:13%">
+    <col style="width:15%"><col style="width:12%">
+</colgroup>`;
+const OUTFLOW_TAXES_HEAD = `<thead><tr>
+    <th>Tür</th><th>Dönem</th><th>Vade</th><th class="text-end">EUR</th><th>Durum</th>
+</tr></thead>`;
+
+const OUTFLOW_ADHOC_COLGROUP = `<colgroup>
+    <col style="width:10%"><col style="width:40%"><col style="width:15%">
+    <col style="width:13%"><col style="width:15%">
+</colgroup>`;
+const OUTFLOW_ADHOC_HEAD = `<thead><tr>
+    <th>İş Emri</th><th>Açıklama</th><th>Kategori</th><th>Tarih</th><th class="text-end">EUR</th>
+</tr></thead>`;
+
 let offcanvasInstance = null;
 
 export function initCashFlowDrilldown() {
@@ -45,14 +155,17 @@ async function loadDrilldown(month) {
     ]);
 
     let inflow = [];
-    let outflow = [];
+    let outflow = null;
     const warnings = [];
 
     if (inRes.status === 'fulfilled') inflow = Array.isArray(inRes.value) ? inRes.value : [];
     else warnings.push('Giriş detayı yüklenemedi.');
 
-    if (outRes.status === 'fulfilled') outflow = Array.isArray(outRes.value) ? outRes.value : [];
-    else warnings.push('Çıkış detayı yüklenemedi.');
+    if (outRes.status === 'fulfilled' && outRes.value && typeof outRes.value === 'object' && !Array.isArray(outRes.value)) {
+        outflow = outRes.value;
+    } else if (outRes.status === 'rejected') {
+        warnings.push('Çıkış detayı yüklenemedi.');
+    }
 
     if (warnings.length === 2) {
         showDrawerError('Detay verisi yüklenemedi.');
@@ -62,19 +175,20 @@ async function loadDrilldown(month) {
     if (warnings.length) showNotification(warnings.join(' '), 'warning');
 
     const inTotal = inflow.reduce((s, r) => s + num(r.installment_amount_eur), 0);
-    const outTotal = outflow.reduce((s, r) => s + num(r.amount_eur), 0);
+    const outTotal = num(outflow?.totals?.grand_total_eur);
+    const hasOutflow = hasOutflowContent(outflow);
     renderSummary(inTotal, outTotal, inTotal - outTotal);
-    renderTabs(inflow.length, outflow.length);
+    renderTabs(inflow.length, outflowItemCount(outflow));
     renderInflowTab(inflow);
     renderOutflowTab(outflow);
 
     setDrawerLoading(false);
-    if (!inflow.length && !outflow.length) {
+    if (!inflow.length && !hasOutflow) {
         document.getElementById('cf-drilldown-empty')?.classList.remove('d-none');
         document.getElementById('cf-drilldown-tabs-wrap')?.classList.add('d-none');
     } else {
         document.getElementById('cf-drilldown-empty')?.classList.add('d-none');
-        const showOut = !inflow.length && outflow.length;
+        const showOut = !inflow.length && hasOutflow;
         bootstrap.Tab.getOrCreateInstance(
             document.getElementById(showOut ? 'cf-tab-outflow-btn' : 'cf-tab-inflow-btn')
         ).show();
@@ -121,55 +235,206 @@ function renderInflowTab(rows) {
                 <span>${esc(name)}</span><span class="cf-drill-group-sub">${fmtMoney(sub)}</span>
             </button>
             <div id="${cid}" class="collapse show"><div class="table-responsive">
-            <table class="table table-sm cf-drill-table mb-0"><thead><tr>
-                <th>Teklif</th><th>Başlık</th><th>İş Emri</th><th>Durum</th><th>İlerleme</th>
-                <th>Taksit</th><th>Vade</th><th class="text-end">Tutar</th><th class="text-end">EUR</th><th>Sipariş</th>
-            </tr></thead><tbody>${items.map(inflowRowHtml).join('')}</tbody></table>
+            <table class="table table-sm cf-drill-table cf-drill-table-inflow mb-0">
+            ${INFLOW_TABLE_COLGROUP}
+            ${INFLOW_TABLE_HEAD}
+            <tbody>${items.map(inflowRowHtml).join('')}</tbody></table>
             </div></div></div>`;
     });
     html += `</div><div class="cf-drill-table-footer"><span>Toplam</span><span class="fw-bold">${fmtMoney(total)}</span></div>`;
     host.innerHTML = html;
 }
 
-function renderOutflowTab(rows) {
+function hasOutflowContent(data) {
+    if (!data) return false;
+    if (num(data.totals?.grand_total_eur) > 0) return true;
+    return outflowItemCount(data) > 0;
+}
+
+function outflowItemCount(data) {
+    if (!data) return 0;
+    let n = (data.procurement || []).length;
+    if (num(data.wages?.total_eur) > 0) n += 1;
+    n += (data.expenses || []).length;
+    n += (data.loans || []).length;
+    n += (data.taxes || []).length;
+    n += (data.adhoc_costs || []).length;
+    return n;
+}
+
+function sectionTotal(data, totalKey) {
+    return num(data?.totals?.[totalKey]);
+}
+
+function sectionHasContent(data, sectionKey) {
+    if (!data) return false;
+    if (sectionKey === 'wages') return num(data.wages?.total_eur) > 0;
+    const arr = data[sectionKey];
+    return Array.isArray(arr) && arr.length > 0;
+}
+
+function renderOutflowTab(data) {
     const host = document.getElementById('cf-tab-outflow');
     if (!host) return;
-    if (!rows.length) {
+    if (!hasOutflowContent(data)) {
         host.innerHTML = emptyStateHtml('Bu ay için giden ödeme yok.');
         return;
     }
-    const sorted = [...rows].sort((a, b) => String(a.due_date || '').localeCompare(String(b.due_date || '')));
-    const groups = groupBy(sorted, (r) => r.supplier_name || '—');
-    const paidTotal = rows.filter((r) => r.is_paid).reduce((s, r) => s + num(r.amount_eur), 0);
-    const awaitTotal = rows.filter((r) => !r.is_paid).reduce((s, r) => s + num(r.amount_eur), 0);
-    let html = `<div class="cf-drill-groups">`;
-    Object.keys(groups).sort((a, b) => a.localeCompare(b, 'tr')).forEach((name, gi) => {
-        const items = groups[name];
-        const sub = items.reduce((s, r) => s + num(r.amount_eur), 0);
-        const cid = `cf-out-g-${gi}`;
+
+    const { paidTotal, awaitTotal } = sumOutflowPaidAwaiting(data);
+    let html = '<div class="cf-drill-groups">';
+    let groupIndex = 0;
+
+    OUTFLOW_SECTIONS.forEach((section) => {
+        if (!sectionHasContent(data, section.key)) return;
+        const sectionAmt = sectionTotal(data, section.totalKey);
+        const cid = `cf-out-sec-${groupIndex}`;
+        groupIndex += 1;
+        const body = renderOutflowSectionBody(data, section.key);
         html += `<div class="cf-drill-group">
             <button class="cf-drill-group-header" type="button" data-bs-toggle="collapse" data-bs-target="#${cid}" aria-expanded="true">
-                <span>${esc(name)}</span><span class="cf-drill-group-sub">${fmtMoney(sub)}</span>
+                <span>${esc(section.title)}</span><span class="cf-drill-group-sub">${fmtMoney(sectionAmt)}</span>
             </button>
-            <div id="${cid}" class="collapse show"><div class="table-responsive">
-            <table class="table table-sm cf-drill-table mb-0"><thead><tr>
-                <th>PO</th><th>PR</th><th>Başlık</th><th>Taksit</th><th>Vade</th>
-                <th class="text-end">Tutar</th><th class="text-end">EUR</th><th>KDV</th><th>Durum</th><th>İhtiyaç</th>
-            </tr></thead><tbody>${items.map(outflowRowHtml).join('')}</tbody></table>
-            </div></div></div>`;
+            <div id="${cid}" class="collapse show">${body}</div>
+        </div>`;
     });
-    html += `</div><div class="cf-drill-table-footer cf-drill-table-footer-split">
-        <span>Ödenen <strong class="cf-in">${fmtMoney(paidTotal)}</strong></span>
-        <span>Bekleyen <strong class="cf-await">${fmtMoney(awaitTotal)}</strong></span>
-    </div>`;
+
+    html += '</div>';
+    if (paidTotal > 0 || awaitTotal > 0) {
+        html += `<div class="cf-drill-table-footer cf-drill-table-footer-split">
+            <span>Ödenen <strong class="cf-in">${fmtMoney(paidTotal)}</strong></span>
+            <span>Bekleyen <strong class="cf-await">${fmtMoney(awaitTotal)}</strong></span>
+        </div>`;
+    }
     host.innerHTML = html;
+}
+
+function renderOutflowSectionBody(data, sectionKey) {
+    switch (sectionKey) {
+        case 'procurement':
+            return renderProcurementSection(data.procurement || []);
+        case 'wages':
+            return renderWagesSection(data.wages);
+        case 'expenses':
+            return renderExpensesSection(data.expenses || []);
+        case 'loans':
+            return renderLoansSection(data.loans || []);
+        case 'taxes':
+            return renderTaxesSection(data.taxes || []);
+        case 'adhoc_costs':
+            return renderAdhocSection(data.adhoc_costs || []);
+        default:
+            return '';
+    }
+}
+
+function renderProcurementSection(rows) {
+    const sorted = [...rows].sort((a, b) => String(a.due_date || '').localeCompare(String(b.due_date || '')));
+    const groups = groupBy(sorted, (r) => r.supplier_name || r.supplier_code || '—');
+    let html = '';
+    Object.keys(groups).sort((a, b) => a.localeCompare(b, 'tr')).forEach((name) => {
+        const items = groups[name];
+        const code = items[0]?.supplier_code;
+        const header = code ? `${esc(name)} <span class="text-muted fw-normal small">(${esc(code)})</span>` : esc(name);
+        html += `<div class="cf-drill-subgroup">
+            <div class="cf-drill-subgroup-title">${header}</div>
+            <div class="table-responsive">
+            <table class="table table-sm cf-drill-table cf-drill-table-outflow cf-drill-table-outflow-procurement mb-0">
+            ${OUTFLOW_PROCUREMENT_COLGROUP}
+            ${OUTFLOW_PROCUREMENT_HEAD}
+            <tbody>${items.map(procurementRowHtml).join('')}</tbody></table>
+            </div></div>`;
+    });
+    return html;
+}
+
+function renderWagesSection(wages) {
+    if (!wages || num(wages.total_eur) <= 0) return '';
+    const count = wages.employee_count;
+    const countLabel = count != null
+        ? `${Number(count).toLocaleString('tr-TR')} çalışan`
+        : '';
+    return `<div class="cf-wages-summary p-3">
+        <div class="row g-3">
+            <div class="col-sm-6 col-lg-4">
+                <div class="cf-wages-line-label">Bordro</div>
+                <div class="cf-wages-line-value">${fmtMoney(wages.base_payroll_eur)}</div>
+            </div>
+            <div class="col-sm-6 col-lg-4">
+                <div class="cf-wages-line-label">Mesai primi</div>
+                <div class="cf-wages-line-value">${fmtMoney(wages.overtime_premium_eur)}</div>
+            </div>
+            <div class="col-sm-12 col-lg-4">
+                <div class="cf-wages-line-label">Toplam</div>
+                <div class="cf-wages-line-value cf-wages-total">${fmtMoney(wages.total_eur)}</div>
+            </div>
+        </div>
+        ${countLabel ? `<p class="cf-wages-subtitle mb-0 mt-2">${esc(countLabel)}</p>` : ''}
+    </div>`;
+}
+
+function renderExpensesSection(rows) {
+    const sorted = [...rows].sort((a, b) => String(a.description || '').localeCompare(String(b.description || ''), 'tr'));
+    return `<div class="table-responsive">
+        <table class="table table-sm cf-drill-table cf-drill-table-outflow cf-drill-table-outflow-expenses mb-0">
+        ${OUTFLOW_EXPENSES_COLGROUP}
+        ${OUTFLOW_EXPENSES_HEAD}
+        <tbody>${sorted.map(expenseRowHtml).join('')}</tbody></table>
+    </div>`;
+}
+
+function renderLoansSection(rows) {
+    const sorted = [...rows].sort((a, b) => String(a.due_date || '').localeCompare(String(b.due_date || '')));
+    return `<div class="table-responsive">
+        <table class="table table-sm cf-drill-table cf-drill-table-outflow cf-drill-table-outflow-loans mb-0">
+        ${OUTFLOW_LOANS_COLGROUP}
+        ${OUTFLOW_LOANS_HEAD}
+        <tbody>${sorted.map(loanRowHtml).join('')}</tbody></table>
+    </div>`;
+}
+
+function renderTaxesSection(rows) {
+    const sorted = [...rows].sort((a, b) => String(a.due_date || '').localeCompare(String(b.due_date || '')));
+    return `<div class="table-responsive">
+        <table class="table table-sm cf-drill-table cf-drill-table-outflow cf-drill-table-outflow-taxes mb-0">
+        ${OUTFLOW_TAXES_COLGROUP}
+        ${OUTFLOW_TAXES_HEAD}
+        <tbody>${sorted.map(taxRowHtml).join('')}</tbody></table>
+    </div>`;
+}
+
+function renderAdhocSection(rows) {
+    const sorted = [...rows].sort((a, b) => String(a.cost_date || '').localeCompare(String(b.cost_date || '')));
+    return `<div class="table-responsive">
+        <table class="table table-sm cf-drill-table cf-drill-table-outflow cf-drill-table-outflow-adhoc mb-0">
+        ${OUTFLOW_ADHOC_COLGROUP}
+        ${OUTFLOW_ADHOC_HEAD}
+        <tbody>${sorted.map(adhocRowHtml).join('')}</tbody></table>
+    </div>`;
+}
+
+function sumOutflowPaidAwaiting(data) {
+    const trackable = [
+        ...(data?.procurement || []),
+        ...(data?.loans || []),
+        ...(data?.taxes || [])
+    ];
+    return trackable.reduce(
+        (acc, r) => {
+            const amt = num(r.amount_eur);
+            if (r.is_paid) acc.paidTotal += amt;
+            else acc.awaitTotal += amt;
+            return acc;
+        },
+        { paidTotal: 0, awaitTotal: 0 }
+    );
 }
 
 function inflowRowHtml(r) {
     const overdue = isInflowOverdue(r);
     const rowCls = overdue ? 'cf-drill-row-overdue' : '';
     const job = r.job_no
-        ? `<a href="/projects/project-tracking/?job_no=${encodeURIComponent(r.job_no)}" target="_blank" rel="noopener">${esc(r.job_no)}</a>`
+        ? `<a href="${JOB_TRACKING_BASE}${encodeURIComponent(r.job_no)}" target="_blank" rel="noopener">${esc(r.job_no)}</a>`
         : '<span class="text-muted">—</span>';
     const offerLink = r.offer_no
         ? `<a href="/sales/offers?offer_no=${encodeURIComponent(r.offer_no)}" target="_blank" rel="noopener">${esc(r.offer_no)}</a>`
@@ -178,48 +443,110 @@ function inflowRowHtml(r) {
     const cur = (r.original_currency || EUR).toUpperCase();
     const showEurLine = cur !== EUR;
     return `<tr class="${rowCls}">
-        <td>${offerLink}</td>
-        <td class="cf-col-title" title="${esc(r.offer_title)}">${esc(r.offer_title)}</td>
-        <td>${job}</td>
-        <td>${jobStatusBadge(r.job_status)}</td>
-        <td>${progressBarHtml(pct)}</td>
-        <td class="cf-col-installment">${esc(r.installment_label || '')} · ${fmtPctPlain(r.installment_percentage)}</td>
-        <td class="${overdue ? 'text-danger fw-semibold' : ''}">${esc(r.installment_due_date || '—')}</td>
-        <td class="text-end">${fmtAmountCur(r.installment_amount_original, cur)}${showEurLine ? `<div class="cf-eur-sub">${fmtMoney(r.installment_amount_eur)}</div>` : ''}</td>
-        <td class="text-end fw-bold">${showEurLine ? fmtMoney(r.installment_amount_eur) : '—'}</td>
-        <td class="small text-muted">${esc(r.order_no || '')}</td>
+        <td class="cf-col-truncate">${offerLink}</td>
+        <td class="cf-col-title cf-col-truncate" title="${esc(r.offer_title)}">${esc(r.offer_title)}</td>
+        <td class="cf-col-truncate">${job}</td>
+        <td class="cf-col-nowrap">${jobStatusBadge(r.job_status)}</td>
+        <td class="cf-col-progress">${progressBarHtml(pct)}</td>
+        <td class="cf-col-installment cf-col-truncate">${esc(r.installment_label || '')} · ${fmtPctPlain(r.installment_percentage)}</td>
+        <td class="cf-col-nowrap ${overdue ? 'text-danger fw-semibold' : ''}">${esc(r.installment_due_date || '—')}</td>
+        <td class="text-end cf-col-nowrap">${fmtAmountCur(r.installment_amount_original, cur)}${showEurLine ? `<div class="cf-eur-sub">${fmtMoney(r.installment_amount_eur)}</div>` : ''}</td>
+        <td class="text-end fw-bold cf-col-nowrap">${showEurLine ? fmtMoney(r.installment_amount_eur) : '—'}</td>
+        <td class="small text-muted cf-col-truncate">${esc(r.order_no || '')}</td>
     </tr>`;
 }
 
-function outflowRowHtml(r) {
+function procurementRowHtml(r) {
     const overdue = isOutflowOverdue(r);
-    const rowCls = overdue ? 'cf-drill-row-overdue' : '';
-    const cur = (r.currency || EUR).toUpperCase();
-    const showEurLine = cur !== EUR;
-    const poLabel = r.po_id != null ? `PO-${r.po_id}` : '—';
-    const poLink = r.po_id != null
-        ? `<a href="/finance/purchase-orders/?order=${r.po_id}" target="_blank" rel="noopener">${poLabel}</a>`
-        : '—';
-    const taxBadge = r.paid_with_tax
-        ? `<span class="badge bg-light text-dark border" title="KDV %${esc(r.po_tax_rate ?? '0')}">KDV dahil</span>`
-        : '<span class="text-muted">—</span>';
-    const status = r.is_paid
-        ? `<span class="badge bg-success">Ödendi</span>${r.paid_at ? `<div class="small text-muted d-block">${esc(r.paid_at)}</div>` : ''}`
-        : '<span class="badge bg-warning text-dark">Bekliyor</span>';
+    const rowCls = paidRowClass(r, overdue);
     const title = String(r.pr_title || '');
-    const titleShort = title.length > 40 ? `${esc(title.slice(0, 40))}…` : esc(title);
     return `<tr class="${rowCls}">
-        <td>${poLink}</td>
-        <td class="small text-muted">${esc(r.pr_number || '—')}</td>
-        <td class="cf-col-title" title="${esc(title)}">${titleShort}</td>
-        <td class="cf-col-installment">${esc(r.label || '')} · ${fmtPctPlain(r.percentage)}</td>
-        <td class="${overdue ? 'text-danger fw-semibold' : ''}">${esc(r.due_date || '—')}</td>
-        <td class="text-end">${fmtAmountCur(r.amount, cur)}${showEurLine ? `<div class="cf-eur-sub">${fmtMoney(r.amount_eur)}</div>` : ''}</td>
-        <td class="text-end fw-bold">${showEurLine ? fmtMoney(r.amount_eur) : '—'}</td>
-        <td>${taxBadge}</td>
-        <td>${status}</td>
-        <td class="small text-muted">${esc(r.pr_needed_date || '—')}</td>
+        <td class="cf-col-title cf-col-truncate" title="${esc(title)}">${esc(title || '—')}</td>
+        <td class="cf-col-installment cf-col-truncate">${esc(r.label || '—')}</td>
+        <td class="cf-col-nowrap ${overdue ? 'text-danger fw-semibold' : ''}">${esc(r.due_date || '—')}</td>
+        <td class="text-end fw-bold cf-col-nowrap">${fmtMoney(r.amount_eur)}</td>
+        <td class="cf-col-nowrap">${paymentStatusBadge(r.is_paid)}</td>
     </tr>`;
+}
+
+function expenseRowHtml(r) {
+    return `<tr>
+        <td class="cf-col-nowrap">${expenseCategoryBadge(r.category)}</td>
+        <td class="cf-col-title cf-col-truncate" title="${esc(r.description)}">${esc(r.description || '—')}</td>
+        <td class="cf-col-nowrap">${recurrenceBadge(r.recurrence)}</td>
+        <td class="text-end fw-bold cf-col-nowrap">${fmtMoney(r.amount_eur)}</td>
+    </tr>`;
+}
+
+function loanRowHtml(r) {
+    const overdue = isOutflowOverdue(r);
+    const rowCls = paidRowClass(r, overdue);
+    const seq = r.sequence != null ? `#${r.sequence}` : '—';
+    return `<tr class="${rowCls}">
+        <td class="cf-col-title cf-col-truncate" title="${esc(r.loan_name)}">${esc(r.loan_name || '—')}</td>
+        <td class="cf-col-nowrap">${esc(seq)}</td>
+        <td class="cf-col-nowrap ${overdue ? 'text-danger fw-semibold' : ''}">${esc(r.due_date || '—')}</td>
+        <td class="text-end fw-bold cf-col-nowrap">${fmtMoney(r.amount_eur)}</td>
+        <td class="cf-col-nowrap">${paymentStatusBadge(r.is_paid)}</td>
+    </tr>`;
+}
+
+function taxRowHtml(r) {
+    const overdue = isOutflowOverdue(r);
+    const rowCls = paidRowClass(r, overdue);
+    return `<tr class="${rowCls}">
+        <td class="cf-col-nowrap">${taxTypeBadge(r.tax_type)}</td>
+        <td class="cf-col-title cf-col-truncate" title="${esc(r.period_label)}">${esc(r.period_label || '—')}</td>
+        <td class="cf-col-nowrap ${overdue ? 'text-danger fw-semibold' : ''}">${esc(r.due_date || '—')}</td>
+        <td class="text-end fw-bold cf-col-nowrap">${fmtMoney(r.amount_eur)}</td>
+        <td class="cf-col-nowrap">${paymentStatusBadge(r.is_paid)}</td>
+    </tr>`;
+}
+
+function adhocRowHtml(r) {
+    const job = r.job_no
+        ? `<a href="${JOB_TRACKING_BASE}${encodeURIComponent(r.job_no)}" target="_blank" rel="noopener">${esc(r.job_no)}</a>`
+        : '<span class="text-muted">—</span>';
+    return `<tr>
+        <td class="cf-col-truncate">${job}</td>
+        <td class="cf-col-title cf-col-truncate" title="${esc(r.description)}">${esc(r.description || '—')}</td>
+        <td class="cf-col-nowrap">${adhocCategoryBadge(r.category)}</td>
+        <td class="cf-col-nowrap">${esc(r.cost_date || '—')}</td>
+        <td class="text-end fw-bold cf-col-nowrap">${fmtMoney(r.amount_eur)}</td>
+    </tr>`;
+}
+
+function paidRowClass(r, overdue) {
+    const parts = [];
+    if (r.is_paid) parts.push('cf-drill-row-paid');
+    if (overdue) parts.push('cf-drill-row-overdue');
+    return parts.join(' ');
+}
+
+function paymentStatusBadge(isPaid) {
+    return isPaid
+        ? '<span class="badge bg-success">Ödendi</span>'
+        : '<span class="badge bg-warning text-dark">Bekliyor</span>';
+}
+
+function taxTypeBadge(taxType) {
+    const label = TAX_TYPE_LABELS[taxType] || taxType || '—';
+    return `<span class="badge bg-light text-dark border">${esc(label)}</span>`;
+}
+
+function expenseCategoryBadge(category) {
+    const label = EXPENSE_CATEGORY_LABELS[category] || category || '—';
+    return `<span class="badge bg-secondary-subtle text-secondary-emphasis border">${esc(label)}</span>`;
+}
+
+function recurrenceBadge(recurrence) {
+    const label = EXPENSE_RECURRENCE_LABELS[recurrence] || recurrence || '—';
+    return `<span class="badge bg-light text-muted border" title="Bu ay görünme nedeni">${esc(label)}</span>`;
+}
+
+function adhocCategoryBadge(category) {
+    const label = ADHOC_CATEGORY_LABELS[category] || category || '—';
+    return `<span class="badge bg-light text-dark border">${esc(label)}</span>`;
 }
 
 function isInflowOverdue(r) {
@@ -238,13 +565,6 @@ function startOfToday() {
     const d = new Date();
     d.setHours(0, 0, 0, 0);
     return d;
-}
-
-function dateClass(iso, inflow) {
-    const overdue = inflow
-        ? (iso && new Date(iso) < startOfToday())
-        : (iso && new Date(iso) < startOfToday());
-    return overdue ? 'text-danger fw-semibold' : '';
 }
 
 function jobStatusBadge(status) {
