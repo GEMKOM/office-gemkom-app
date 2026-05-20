@@ -301,19 +301,7 @@ async function initializeComponents() {
             console.warn('Could not fetch users:', error);
         }
 
-        // Get current user to determine default filter
-        let defaultAssignedUserId = null;
-        try {
-            const currentUser = await getUser();
-            // Filter by current user if not superuser and occupation is not manager
-            if (!currentUser.is_superuser && currentUser.occupation !== 'manager') {
-                defaultAssignedUserId = currentUser.id ? currentUser.id.toString() : null;
-            }
-        } catch (error) {
-            console.warn('Could not fetch current user:', error);
-        }
-
-        initializeFiltersComponent(defaultAssignedUserId);
+        initializeFiltersComponent(null);
         initializeViewLayout();
         initializeTableComponent();
         initializeGanttComponent();
@@ -4994,6 +4982,15 @@ async function renderConsultationTab(task) {
     let html = `<h5 class="mb-4"><i class="fas fa-handshake me-2"></i>Teklif Danışma</h5>`;
 
     // Offer summary
+    const logisticsOfferExtras = task.department === 'logistics'
+        ? `
+                <div class="row mt-2">
+                    <div class="col-md-6"><strong>Incoterms:</strong> ${summary.incoterms ? escapeHtml(summary.incoterms) : '-'}</div>
+                    <div class="col-md-6"><strong>Teslim Yeri:</strong> ${summary.delivery_place ? escapeHtml(summary.delivery_place) : '-'}</div>
+                </div>
+            `
+        : '';
+
     html += `
         <div class="card mb-3">
             <div class="card-header bg-light"><i class="fas fa-file-invoice-dollar me-2"></i>Teklif Bilgisi</div>
@@ -5002,6 +4999,7 @@ async function renderConsultationTab(task) {
                     <div class="col-md-6"><strong>Teklif No:</strong> ${summary.offer_no || '-'}</div>
                     <div class="col-md-6"><strong>Termin:</strong> ${summary.delivery_date_requested ? new Date(summary.delivery_date_requested).toLocaleDateString('tr-TR') : '-'}</div>
                 </div>
+                ${logisticsOfferExtras}
                 <div class="mt-2"><strong>Başlık:</strong> ${summary.title || '-'}</div>
                 ${summary.description ? `<div class="mt-1"><strong>Açıklama:</strong> ${summary.description}</div>` : ''}
             </div>

@@ -142,6 +142,27 @@ export const NAVIGATION_STRUCTURE = {
             }
         }
     },
+    '/quality-control': {
+        label: 'Kalite Kontrol',
+        icon: 'fas fa-clipboard-check',
+        children: {
+            '/quality-control/qc-reviews': {
+                label: 'KK İncelemeleri',
+                icon: 'fas fa-search',
+                children: {}
+            },
+            '/quality-control/ncrs': {
+                label: 'Uygunsuzluk Raporları',
+                icon: 'fas fa-exclamation-triangle',
+                children: {}
+            },
+            '/quality-control/cost-lines': {
+                label: 'Maliyet Satırları',
+                icon: 'fas fa-euro-sign',
+                children: {}
+            }
+        }
+    },
     '/manufacturing': {
         label: 'İmalat',
         icon: 'fas fa-industry',
@@ -688,27 +709,6 @@ export const NAVIGATION_STRUCTURE = {
             '/management/analytics': {
                 label: 'Analitik',
                 icon: 'fas fa-chart-pie',
-                children: {}
-            }
-        }
-    },
-    '/quality-control': {
-        label: 'Kalite Kontrol',
-        icon: 'fas fa-clipboard-check',
-        children: {
-            '/quality-control/qc-reviews': {
-                label: 'KK İncelemeleri',
-                icon: 'fas fa-search',
-                children: {}
-            },
-            '/quality-control/ncrs': {
-                label: 'Uygunsuzluk Raporları',
-                icon: 'fas fa-exclamation-triangle',
-                children: {}
-            },
-            '/quality-control/cost-lines': {
-                label: 'Maliyet Satırları',
-                icon: 'fas fa-euro-sign',
                 children: {}
             }
         }

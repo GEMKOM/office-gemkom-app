@@ -97,7 +97,7 @@ function findNavigationItem(path, structure = NAVIGATION_STRUCTURE) {
 
 
 // Maximum number of top-level nav items shown in the bar; rest go into "Daha Fazla" dropdown
-const MAX_VISIBLE_NAV_ITEMS = 6;
+const MAX_VISIBLE_NAV_ITEMS = 7;
 
 // Helper: split filtered nav into visible + more, return HTML for both (more as one dropdown)
 function renderNavigationWithMore(items, currentPath) {

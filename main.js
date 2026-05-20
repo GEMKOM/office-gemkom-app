@@ -125,6 +125,33 @@ async function handleLandingPage() {
                     ]
                 },
                 {
+                    title: 'Kalite Kontrol',
+                    description: 'KK incelemeleri, uygunsuzluk raporları (NCR) ve kalite maliyet satırlarını yönetin.',
+                    icon: 'fas fa-clipboard-check',
+                    iconColor: 'success',
+                    link: '/quality-control',
+                    features: [
+                        {
+                            label: 'KK İncelemeleri',
+                            icon: 'fas fa-search',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/quality-control/qc-reviews'
+                        },
+                        {
+                            label: 'Uygunsuzluk Raporları',
+                            icon: 'fas fa-exclamation-triangle',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/quality-control/ncrs'
+                        },
+                        {
+                            label: 'Maliyet Satırları',
+                            icon: 'fas fa-euro-sign',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/quality-control/cost-lines'
+                        }
+                    ]
+                },
+                {
                     title: 'İmalat',
                     description: 'Üretim süreçlerini yönetin, üretim planlarını takip edin ve kalite standartlarını izleyin.',
                     icon: 'fas fa-industry',
