@@ -164,14 +164,26 @@ function isDraftNCR(ncr) {
     return (ncr?.status || '').toLowerCase() === 'draft';
 }
 
-/** Draft NCRs may be submitted only by members of the NCR's assigned team (or superuser). */
+function isRejectedNCR(ncr) {
+    return (ncr?.status || '').toLowerCase() === 'rejected';
+}
+
+function isEditableNCR(ncr) {
+    return isDraftNCR(ncr) || isRejectedNCR(ncr);
+}
+
+/** Draft/rejected NCRs may be submitted only by members of the NCR's assigned team (or superuser). */
 function canUserSubmitNCR(user, ncr) {
-    return isDraftNCR(ncr) && isUserInAssignedTeam(user, ncr);
+    return isEditableNCR(ncr) && isUserInAssignedTeam(user, ncr);
 }
 
 function isClosableNCR(ncr) {
     const status = (ncr?.status || '').toLowerCase();
     return status === 'approved' || status === 'rejected';
+}
+
+function canUserCloseNCR(user, ncr) {
+    return isClosableNCR(ncr) && (canCurrentUserDecideNCRs() || isUserInAssignedTeam(user, ncr));
 }
 
 // Component instances
@@ -677,7 +689,7 @@ function initializeTableComponent(canDecideNCRs) {
             label: 'Düzenle',
             icon: 'fas fa-edit',
             class: 'btn-outline-primary',
-            visible: () => canDecideNCRs,
+            visible: (row) => canDecideNCRs && isEditableNCR(row),
             onClick: (row) => showEditNCRModal(row)
         },
         {
@@ -718,7 +730,7 @@ function initializeTableComponent(canDecideNCRs) {
         label: 'Kapat',
         icon: 'fas fa-lock',
         class: 'btn-outline-secondary',
-        visible: (row) => isClosableNCR(row),
+        visible: (row) => canUserCloseNCR(currentUser, row),
         onClick: (row) => handleCloseNCR(row)
     });
 
@@ -1466,6 +1478,11 @@ async function showEditNCRModal(ncr) {
         }
         const fullNCR = await getNCR(ncr.id);
 
+        if (!isEditableNCR(fullNCR)) {
+            showNotification('Sadece "Taslak" veya "Reddedildi" durumundaki NCR kayıtları düzenlenebilir.', 'warning');
+            return;
+        }
+
         // Ensure groups are loaded for assigned-group dropdown
         if (!Array.isArray(ncrAssignableGroups) || ncrAssignableGroups.length === 0) {
             await loadNcrAssignableGroups();
@@ -1583,13 +1600,8 @@ async function handleSubmitNCR(ncr) {
     try {
         const fullNCR = await getNCR(ncr.id);
 
-        if (!isDraftNCR(fullNCR)) {
-            showNotification('Sadece "Taslak" durumundaki NCR kayıtları gönderilebilir.', 'warning');
-            return;
-        }
-
-        if (!isUserInAssignedTeam(currentUser, fullNCR)) {
-            showNotification('Bu NCR\'ı göndermek için atanan takıma üye olmanız gerekir.', 'warning');
+        if (!canUserSubmitNCR(currentUser, fullNCR)) {
+            showNotification('Sadece atanan takım üyeleri "Taslak" veya "Reddedildi" durumundaki NCR kayıtlarını gönderebilir.', 'warning');
             return;
         }
         
@@ -1716,8 +1728,8 @@ function showNCRDecisionModal(ncr, approve) {
 }
 
 async function handleCloseNCR(ncr) {
-    if (!isClosableNCR(ncr)) {
-        showNotification('Sadece "Onaylandı" veya "Reddedildi" durumundaki NCR kayıtları kapatılabilir.', 'warning');
+    if (!canUserCloseNCR(currentUser, ncr)) {
+        showNotification('Bu NCR\'ı kapatmak için kalite-kontrol yetkisi veya atanan takım üyeliği gerekir.', 'warning');
         return;
     }
     confirmationModal.show({

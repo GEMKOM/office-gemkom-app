@@ -16,7 +16,14 @@ function getPendingSession(row) {
     const sessions = row.sessions || [];
     return sessions.find((s) =>
         s.status === 'pending_override' || s.status === 'pending_checkout_override'
-    ) || sessions[0] || null;
+    ) || null;
+}
+
+function datetimeLocalToIso(raw) {
+    const value = String(raw || '').trim();
+    if (!value) return null;
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date.toISOString();
 }
 
 function fmtDateTime(value) {
@@ -128,7 +135,9 @@ class PendingOverridesPage {
                     label: 'Onayla',
                     icon: 'fas fa-check',
                     class: 'btn-outline-success',
-                    visible: (row) => row.status === 'pending_override' || row.status === 'pending_checkout_override',
+                    visible: (row) =>
+                        (row.status === 'pending_override' || row.status === 'pending_checkout_override') &&
+                        !!getPendingSession(row),
                     onClick: (row) => this.confirmApprove(row)
                 },
                 {
@@ -136,7 +145,9 @@ class PendingOverridesPage {
                     label: 'Reddet',
                     icon: 'fas fa-times',
                     class: 'btn-outline-danger',
-                    visible: (row) => row.status === 'pending_override' || row.status === 'pending_checkout_override',
+                    visible: (row) =>
+                        (row.status === 'pending_override' || row.status === 'pending_checkout_override') &&
+                        !!getPendingSession(row),
                     onClick: (row) => this.confirmReject(row)
                 }
             ],
@@ -187,7 +198,10 @@ class PendingOverridesPage {
 
     confirmApprove(row) {
         const s = getPendingSession(row);
-        if (!s) return;
+        if (!s) {
+            showNotification('Onaylanacak bekleyen oturum bulunamadı.', 'error');
+            return;
+        }
         const isCheckIn = s.status === 'pending_override';
         const isCheckOut = s.status === 'pending_checkout_override';
 
@@ -217,8 +231,12 @@ class PendingOverridesPage {
 
                     const payload = {};
                     if (raw) {
-                        if (isCheckIn) payload.check_in_time = raw;
-                        if (isCheckOut) payload.check_out_time = raw;
+                        const isoValue = datetimeLocalToIso(raw);
+                        if (!isoValue) {
+                            throw new Error('Geçersiz tarih/saat değeri');
+                        }
+                        if (isCheckIn) payload.check_in_time = isoValue;
+                        if (isCheckOut) payload.check_out_time = isoValue;
                     }
 
                     await approveAttendanceSessionOverride(s.id, payload);
@@ -234,7 +252,10 @@ class PendingOverridesPage {
 
     confirmReject(row) {
         const s = getPendingSession(row);
-        if (!s) return;
+        if (!s) {
+            showNotification('Reddedilecek bekleyen oturum bulunamadı.', 'error');
+            return;
+        }
         const textareaId = `reject-notes-${s.id}`;
         this.confirmModal.show({
             title: 'Reddet',
