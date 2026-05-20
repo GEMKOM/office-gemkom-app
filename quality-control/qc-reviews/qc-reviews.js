@@ -47,6 +47,28 @@ const STATUS_BADGE_MAP = {
     'rejected': { class: 'status-red', label: 'Reddedildi' }
 };
 
+function isPendingReview(review) {
+    return (review?.status || '').toLowerCase() === 'pending';
+}
+
+function isSuperuserUser(user) {
+    return user?.is_superuser === true;
+}
+
+function isQcGroupUser(user) {
+    const groupNames = Array.isArray(user?.user_groups) ? user.user_groups : [];
+    const groupIds = Array.isArray(user?.user_group_ids) ? user.user_group_ids : [];
+
+    const hasName = groupNames.some((g) => String(g || '').toLowerCase() === 'kalite-kontrol');
+    const hasId = groupIds.some((id) => Number(id) === 5);
+
+    return hasName || hasId;
+}
+
+function canUserDecideReviews(user) {
+    return isSuperuserUser(user) || isQcGroupUser(user);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) {
         return;
@@ -97,7 +119,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function initializeComponents() {
     try {
         currentUser = await getUser();
-        canDecideReviews = currentUser && (currentUser.team === 'qualitycontrol' || currentUser.is_superuser);
+        canDecideReviews = canUserDecideReviews(currentUser);
 
         // Initialize header
         new HeaderComponent({
@@ -211,7 +233,7 @@ async function initializeTableComponent() {
     if (!currentUser) {
         try {
             currentUser = await getUser();
-            canDecideReviews = currentUser && (currentUser.team === 'qualitycontrol' || currentUser.is_superuser);
+            canDecideReviews = canUserDecideReviews(currentUser);
         } catch (error) {
             console.error('Error getting user:', error);
             currentUser = null;
@@ -348,27 +370,25 @@ async function initializeTableComponent() {
         }
     ];
 
-    // Add approve/reject actions for QC team or superusers
-    if (canDecideReviews) {
-        actions.push(
-            {
-                key: 'approve',
-                label: 'Onayla',
-                icon: 'fas fa-check',
-                class: 'btn-outline-success',
-                visible: (row) => row.status === 'pending',
-                onClick: (row) => showReviewDecisionModal(row, true)
-            },
-            {
-                key: 'reject',
-                label: 'Reddet',
-                icon: 'fas fa-times',
-                class: 'btn-outline-danger',
-                visible: (row) => row.status === 'pending',
-                onClick: (row) => showReviewDecisionModal(row, false)
-            }
-        );
-    }
+    // Approve/reject actions should only be available for pending items
+    actions.push(
+        {
+            key: 'approve',
+            label: 'Onayla',
+            icon: 'fas fa-check',
+            class: 'btn-outline-success',
+            visible: (row) => canDecideReviews && isPendingReview(row),
+            onClick: (row) => showReviewDecisionModal(row, true)
+        },
+        {
+            key: 'reject',
+            label: 'Reddet',
+            icon: 'fas fa-times',
+            class: 'btn-outline-danger',
+            visible: (row) => canDecideReviews && isPendingReview(row),
+            onClick: (row) => showReviewDecisionModal(row, false)
+        }
+    );
 
     reviewsTable = new TableComponent('reviews-table-container', {
         title: 'KK İncelemeleri',
@@ -685,22 +705,27 @@ async function showReviewDetails(review) {
 
         setupQcReviewDiscussionListeners(fullReview.id);
 
-        // Add action buttons for QC team or superusers if status is pending
-        // Use the global canDecideReviews variable
+        // Only show approve/reject buttons for pending items and QC group users
         const modalFooter = reviewDetailsModal.container.querySelector('.modal-footer');
         
-        if (modalFooter && canDecideReviews && fullReview.status === 'pending') {
-            modalFooter.innerHTML = `
-                <div class="d-flex justify-content-end gap-2">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                        <i class="fas fa-times me-1"></i>Kapat
-                    </button>
+        if (modalFooter) {
+            const decisionButtonsHtml = (canDecideReviews && isPendingReview(fullReview))
+                ? `
                     <button type="button" class="btn btn-sm btn-danger" id="reject-review-btn">
                         <i class="fas fa-times me-1"></i>Reddet
                     </button>
                     <button type="button" class="btn btn-sm btn-success" id="approve-review-btn">
                         <i class="fas fa-check me-1"></i>Onayla
                     </button>
+                `
+                : '';
+
+            modalFooter.innerHTML = `
+                <div class="d-flex justify-content-end gap-2">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                        <i class="fas fa-times me-1"></i>Kapat
+                    </button>
+                    ${decisionButtonsHtml}
                 </div>
             `;
 
@@ -736,6 +761,14 @@ async function showReviewDetails(review) {
 }
 
 async function showReviewDecisionModal(review, approve) {
+    if (!canDecideReviews) {
+        showNotification('Bu işlem için yetkiniz yok. Sadece "kalite-kontrol" grubu veya superuser karar verebilir.', 'warning');
+        return;
+    }
+    if (!isPendingReview(review)) {
+        showNotification('Sadece "İnceleme Bekliyor" durumundaki kayıtlar için karar verilebilir.', 'warning');
+        return;
+    }
     reviewDecisionModal.clearAll();
 
     // Fetch full review to get task title and part data

@@ -21,6 +21,8 @@ export class EditModal {
         this.sections = [];
         this.fields = new Map();
         this.dropdowns = new Map();
+        /** Monotonic ids for fields without `id` (avoids Date.now() collisions in the same tick). */
+        this._fieldIdSeq = 0;
         this.isLoading = false;
         this.onSave = null;
         this.onCancel = null;
@@ -190,7 +192,7 @@ export class EditModal {
     
     createFieldElement(fieldConfig) {
         const field = {
-            id: fieldConfig.id || `field-${Date.now()}`,
+            id: fieldConfig.id || `field-${++this._fieldIdSeq}`,
             name: fieldConfig.name || fieldConfig.id,
             label: fieldConfig.label || 'Alan',
             type: fieldConfig.type || 'text',
@@ -855,6 +857,7 @@ export class EditModal {
         
         // Clear fields
         this.fields.clear();
+        this._fieldIdSeq = 0;
         
         // Clear sections
         this.sections = [];

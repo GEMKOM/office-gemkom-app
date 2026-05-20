@@ -144,9 +144,34 @@ function isUserInAssignedTeam(user, row) {
 }
 
 function canCurrentUserDecideNCRs() {
-    const isQCTeam = isUserInGroup(currentUser, 'qualitycontrol_team');
-    const isSuperuser = currentUser && (currentUser.is_superuser || currentUser.is_admin);
-    return isQCTeam || isSuperuser;
+    const user = currentUser || null;
+    if (!user) return false;
+    if (user.is_superuser === true || user.is_admin === true) return true;
+
+    const groupNames = Array.isArray(user.user_groups) ? user.user_groups : [];
+    const groupIds = Array.isArray(user.user_group_ids) ? user.user_group_ids : [];
+
+    const hasName = groupNames.some((g) => String(g || '').toLowerCase() === 'kalite-kontrol');
+    const hasId = groupIds.some((id) => Number(id) === 5);
+    return hasName || hasId;
+}
+
+function isSubmittedNCR(ncr) {
+    return (ncr?.status || '').toLowerCase() === 'submitted';
+}
+
+function isDraftNCR(ncr) {
+    return (ncr?.status || '').toLowerCase() === 'draft';
+}
+
+/** Draft NCRs may be submitted only by members of the NCR's assigned team (or superuser). */
+function canUserSubmitNCR(user, ncr) {
+    return isDraftNCR(ncr) && isUserInAssignedTeam(user, ncr);
+}
+
+function isClosableNCR(ncr) {
+    const status = (ncr?.status || '').toLowerCase();
+    return status === 'approved' || status === 'rejected';
 }
 
 // Component instances
@@ -652,10 +677,7 @@ function initializeTableComponent(canDecideNCRs) {
             label: 'Düzenle',
             icon: 'fas fa-edit',
             class: 'btn-outline-primary',
-            visible: (row) => {
-                const isQCTeam = isUserInGroup(currentUser, 'qualitycontrol_team');
-                return isQCTeam && (row.status === 'draft' || row.status === 'rejected');
-            },
+            visible: () => canDecideNCRs,
             onClick: (row) => showEditNCRModal(row)
         },
         {
@@ -663,12 +685,7 @@ function initializeTableComponent(canDecideNCRs) {
             label: 'Gönder',
             icon: 'fas fa-paper-plane',
             class: 'btn-outline-success',
-            // Only users from the assigned group/team can submit
-            visible: (row) => {
-                if (!rowHasAssignedTeam(row)) return false;
-                if (!(row.status === 'draft' || row.status === 'rejected')) return false;
-                return isUserInAssignedTeam(currentUser, row);
-            },
+            visible: (row) => canUserSubmitNCR(currentUser, row),
             onClick: (row) => handleSubmitNCR(row)
         }
     ];
@@ -681,7 +698,7 @@ function initializeTableComponent(canDecideNCRs) {
                 label: 'Onayla',
                 icon: 'fas fa-check',
                 class: 'btn-outline-success',
-                visible: (row) => row.status === 'submitted',
+                visible: (row) => isSubmittedNCR(row),
                 onClick: (row) => showNCRDecisionModal(row, true)
             },
             {
@@ -689,7 +706,7 @@ function initializeTableComponent(canDecideNCRs) {
                 label: 'Reddet',
                 icon: 'fas fa-times',
                 class: 'btn-outline-danger',
-                visible: (row) => row.status === 'submitted',
+                visible: (row) => isSubmittedNCR(row),
                 onClick: (row) => showNCRDecisionModal(row, false)
             }
         );
@@ -701,14 +718,7 @@ function initializeTableComponent(canDecideNCRs) {
         label: 'Kapat',
         icon: 'fas fa-lock',
         class: 'btn-outline-secondary',
-        visible: (row) => {
-            if (row.status !== 'approved') return false;
-            // QC team or superuser can always close
-            if (canDecideNCRs) return true;
-            // Assigned group/team can close if NCR is assigned to one of user's groups
-            if (!rowHasAssignedTeam(row)) return false;
-            return isUserInAssignedTeam(currentUser, row);
-        },
+        visible: (row) => isClosableNCR(row),
         onClick: (row) => handleCloseNCR(row)
     });
 
@@ -1227,8 +1237,7 @@ async function showNCRDetails(ncr) {
             `
         });
 
-        const canDecideNCRs = canCurrentUserDecideNCRs();
-        const canShowDecisionButtons = canDecideNCRs && fullNCR.status === 'submitted';
+        const canShowDecisionButtons = canCurrentUserDecideNCRs() && isSubmittedNCR(fullNCR);
         ncrDetailsModal.setFooterContent(`
             <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
                 <i class="fas fa-times me-1"></i>Kapat
@@ -1451,6 +1460,10 @@ async function showCreateNCRModal() {
 
 async function showEditNCRModal(ncr) {
     try {
+        if (!canCurrentUserDecideNCRs()) {
+            showNotification('Bu işlem için yetkiniz yok. Sadece "kalite-kontrol" grubu veya superuser düzenleyebilir.', 'warning');
+            return;
+        }
         const fullNCR = await getNCR(ncr.id);
 
         // Ensure groups are loaded for assigned-group dropdown
@@ -1569,6 +1582,16 @@ async function showEditNCRModal(ncr) {
 async function handleSubmitNCR(ncr) {
     try {
         const fullNCR = await getNCR(ncr.id);
+
+        if (!isDraftNCR(fullNCR)) {
+            showNotification('Sadece "Taslak" durumundaki NCR kayıtları gönderilebilir.', 'warning');
+            return;
+        }
+
+        if (!isUserInAssignedTeam(currentUser, fullNCR)) {
+            showNotification('Bu NCR\'ı göndermek için atanan takıma üye olmanız gerekir.', 'warning');
+            return;
+        }
         
         ncrSubmitModal.clearAll();
         
@@ -1642,6 +1665,14 @@ async function handleSubmitNCR(ncr) {
 }
 
 function showNCRDecisionModal(ncr, approve) {
+    if (!canCurrentUserDecideNCRs()) {
+        showNotification('Bu işlem için yetkiniz yok. Sadece "kalite-kontrol" grubu veya superuser karar verebilir.', 'warning');
+        return;
+    }
+    if (!isSubmittedNCR(ncr)) {
+        showNotification('Sadece "Gönderildi" durumundaki NCR kayıtları için onay/red verilebilir.', 'warning');
+        return;
+    }
     ncrDecisionModal.clearAll();
 
     ncrDecisionModal
@@ -1685,6 +1716,10 @@ function showNCRDecisionModal(ncr, approve) {
 }
 
 async function handleCloseNCR(ncr) {
+    if (!isClosableNCR(ncr)) {
+        showNotification('Sadece "Onaylandı" veya "Reddedildi" durumundaki NCR kayıtları kapatılabilir.', 'warning');
+        return;
+    }
     confirmationModal.show({
         title: 'NCR Kapat',
         message: `"${ncr.ncr_number || ncr.title}" NCR'sını kapatmak istediğinizden emin misiniz?`,

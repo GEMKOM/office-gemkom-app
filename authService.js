@@ -42,33 +42,46 @@ let isRedirecting = false;
 // This flag is set to true only when a user successfully logs in
 // and is reset to false after the first department-based navigation
 let isFreshLogin = false;
+let inFlightUserPromise = null;
 
 export async function getUser() {
-    // Try to get user data from localStorage first
-    const cachedUser = localStorage.getItem('user');
-    if (cachedUser) {
-        try {
-            const userData = JSON.parse(cachedUser);
-            return userData;
-        } catch (error) {
-            console.warn('Failed to parse cached user data, falling back to API');
-            localStorage.removeItem('user'); // Remove corrupted data
+    if (inFlightUserPromise) return inFlightUserPromise;
+
+    // During impersonation we prefer a fresh /users/me/ read, because the cached user
+    // may reflect the impersonator identity until a full page reload completes.
+    if (!isImpersonating()) {
+        // Try to get user data from localStorage first
+        const cachedUser = localStorage.getItem('user');
+        if (cachedUser) {
+            try {
+                const userData = JSON.parse(cachedUser);
+                return userData;
+            } catch (error) {
+                console.warn('Failed to parse cached user data, falling back to API');
+                localStorage.removeItem('user'); // Remove corrupted data
+            }
         }
     }
     
-    // If not in localStorage, fetch from API
-    try {
-        const user_data = await authedFetch(`${backendBase}/users/me/`);
-        const userData = await user_data.json();
-        
-        // Store in localStorage for future use
-        localStorage.setItem('user', JSON.stringify(userData));
-        
-        return userData;
-    } catch (error) {
-        console.error('Failed to fetch user data from API:', error);
-        throw error;
-    }
+    // If not in localStorage, fetch from API (dedupe concurrent calls)
+    inFlightUserPromise = (async () => {
+        try {
+            const user_data = await authedFetch(`${backendBase}/users/me/`);
+            const userData = await user_data.json();
+
+            // Store in localStorage for future use
+            localStorage.setItem('user', JSON.stringify(userData));
+
+            return userData;
+        } catch (error) {
+            console.error('Failed to fetch user data from API:', error);
+            throw error;
+        } finally {
+            inFlightUserPromise = null;
+        }
+    })();
+
+    return inFlightUserPromise;
 }
 
 // --- Permissions helpers ----------------------------------------------------
@@ -192,6 +205,7 @@ export function clearCachedUser() {
     localStorage.removeItem('permissions');
     cachedPermissions = null;
     cachedGrantedPageRoutes = null;
+    inFlightUserPromise = null;
     localStorage.removeItem('purchaseRequestDraft');
     console.log('Cached user data cleared');
 }
@@ -311,6 +325,16 @@ export function isAdmin() {
     }
 }
 
+export function isSuperuser() {
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        return user?.is_superuser === true;
+    } catch (error) {
+        console.warn('Failed to parse user data for isSuperuser check:', error);
+        return false;
+    }
+}
+
 export function isLead() {
     try {
         const user = JSON.parse(localStorage.getItem('user') || '{}');
@@ -319,6 +343,89 @@ export function isLead() {
         console.warn('Failed to parse user data for isLead check:', error);
         return false;
     }
+}
+
+export function isImpersonating() {
+    return !!localStorage.getItem('impersonatorRefreshToken');
+}
+
+function storeImpersonatorContextIfMissing() {
+    if (localStorage.getItem('impersonatorRefreshToken')) return;
+    const currentAccess = localStorage.getItem('accessToken') || '';
+    const currentRefresh = localStorage.getItem('refreshToken') || '';
+    const currentUserJson = localStorage.getItem('user') || '';
+    localStorage.setItem('impersonatorAccessToken', currentAccess);
+    localStorage.setItem('impersonatorRefreshToken', currentRefresh);
+    if (currentUserJson) {
+        localStorage.setItem('impersonatorUser', currentUserJson);
+    }
+}
+
+function clearImpersonatorContext() {
+    localStorage.removeItem('impersonatorAccessToken');
+    localStorage.removeItem('impersonatorRefreshToken');
+    localStorage.removeItem('impersonatorUser');
+}
+
+async function bootstrapSessionLikeLogin() {
+    // This should behave like a fresh login: clear caches and fetch user/perms once.
+    clearCachedUser();
+    const [userData] = await Promise.all([getUser(), fetchAndStorePermissions()]);
+    if (userData) {
+        localStorage.setItem('user', JSON.stringify(userData));
+    }
+    isFreshLogin = true;
+}
+
+export async function impersonateUser(userId) {
+    if (!userId && userId !== 0) {
+        throw new Error('Missing user_id');
+    }
+
+    storeImpersonatorContextIfMissing();
+
+    const resp = await authedFetch(`${backendBase}/users/impersonate/`, {
+        method: 'POST',
+        body: JSON.stringify({ user_id: userId })
+    });
+
+    if (resp.status === 403) {
+        throw new Error('FORBIDDEN');
+    }
+    if (!resp.ok) {
+        let msg = 'Impersonation failed';
+        try {
+            const data = await resp.json();
+            msg = data?.detail || data?.error || msg;
+        } catch {}
+        throw new Error(msg);
+    }
+
+    const data = await resp.json();
+    if (!data?.access || !data?.refresh) {
+        throw new Error('Invalid impersonation response');
+    }
+
+    // Swap tokens, then bootstrap session once (like login).
+    setTokens(data.access, data.refresh);
+    await bootstrapSessionLikeLogin();
+
+    // Hard navigation ensures all modules pick up the new identity.
+    navigateTo(ROUTES.HOME);
+}
+
+export async function stopImpersonation() {
+    const access = localStorage.getItem('impersonatorAccessToken');
+    const refresh = localStorage.getItem('impersonatorRefreshToken');
+    if (!refresh) {
+        clearImpersonatorContext();
+        return;
+    }
+
+    setTokens(access || '', refresh);
+    clearImpersonatorContext();
+    await bootstrapSessionLikeLogin();
+    navigateTo(ROUTES.HOME);
 }
 
 // Enhanced navigation with optional soft reload

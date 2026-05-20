@@ -34,6 +34,7 @@ import {
 } from '../../apis/human_resources/attendance.js';
 import { fetchVacationRequests, fetchUserLeaveSetup, patchUserLeaveSetup } from '../../apis/vacationRequests.js';
 import { fetchPositions as fetchOrganizationPositions, assignUserToPosition } from '../../apis/human_resources/organization.js';
+import { impersonateUser as impersonateUserAPI, isSuperuser } from '../../authService.js';
 
 /** Çalışan oluşturma / düzenleme formları: kullanıcı adı ve ad-soyad kuralları (Türkçe). */
 const HR_USER_FIELD_HELP_TR = {
@@ -2038,6 +2039,21 @@ function initializeFiltersComponent() {
 }
 
 function initializeTableComponent() {
+    const rowActions = [
+        { key: 'edit', label: 'Düzenle', icon: 'fas fa-edit', class: 'btn-outline-primary', onClick: (row) => window.editUser(row.id) },
+        { key: 'delete', label: 'Sil', icon: 'fas fa-trash', class: 'btn-outline-danger', onClick: (row) => window.deleteUser(row.id, row.username) }
+    ];
+
+    if (isSuperuser()) {
+        rowActions.unshift({
+            key: 'impersonate',
+            label: 'Impersonate',
+            icon: 'fas fa-user-secret',
+            class: 'btn-outline-warning',
+            onClick: (row) => window.impersonateUser(row.id, row.username)
+        });
+    }
+
     usersTable = new TableComponent('users-table-container', {
         title: 'Çalışan Listesi',
         columns: [
@@ -2055,10 +2071,7 @@ function initializeTableComponent() {
                 formatter: (v) => v ? '<span class="status-badge status-green">Aktif</span>' : '<span class="status-badge status-red">Pasif</span>'
             }
         ],
-        actions: [
-            { key: 'edit', label: 'Düzenle', icon: 'fas fa-edit', class: 'btn-outline-primary', onClick: (row) => window.editUser(row.id) },
-            { key: 'delete', label: 'Sil', icon: 'fas fa-trash', class: 'btn-outline-danger', onClick: (row) => window.deleteUser(row.id, row.username) }
-        ],
+        actions: rowActions,
         pagination: true,
         itemsPerPage: 20,
         currentPage,
@@ -2512,6 +2525,23 @@ async function updateUser(formData) {
     } catch (e) {
         console.error('Error updating user:', e);
         showNotification(e.message || 'Çalışan güncellenirken hata oluştu', 'error');
+    }
+}
+
+window.impersonateUser = async function(userId, username) {
+    const label = username ? `@${username}` : `ID ${userId}`;
+    const ok = confirm(`${label} kullanıcısı olarak impersonate yapmak istiyor musunuz?\n\nBu işlem mevcut oturum tokenlarını değiştirir.`);
+    if (!ok) return;
+
+    try {
+        showNotification('Impersonation başlatılıyor…', 'info');
+        await impersonateUserAPI(userId);
+    } catch (e) {
+        if (e?.message === 'FORBIDDEN') {
+            showNotification('Bu işlem için superuser olmanız gerekir (403).', 'error');
+            return;
+        }
+        showNotification(e?.message || 'Impersonation başlatılamadı', 'error');
     }
 }
 

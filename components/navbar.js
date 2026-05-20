@@ -1,4 +1,4 @@
-import { logout, isAdmin, isLoggedIn, getUser, navigateTo, ROUTES, fetchAndStorePermissions } from '../authService.js';
+import { logout, isAdmin, isLoggedIn, getUser, navigateTo, ROUTES, isImpersonating, stopImpersonation } from '../authService.js';
 import { backendBase } from '../base.js';
 import { authedFetch } from '../authService.js';
 import { filterNavigationByAccess, hasRouteAccess } from '../apis/accessControl.js';
@@ -281,12 +281,6 @@ export function initNavbar() {
     }
 
     async function renderNavbar() {
-      // Refresh permission cache so newly granted routes are reflected
-      // without requiring users to log out and back in.
-      if (isLoggedIn()) {
-        await fetchAndStorePermissions();
-      }
-
       let user = null;
       try {
         const cached = localStorage.getItem('user');
@@ -304,6 +298,29 @@ export function initNavbar() {
       const username = user.username || user.email || 'Kullanıcı';
       const userDisplayName = user.first_name && user.last_name ? 
         `${user.first_name} ${user.last_name}` : username;
+
+      let impersonationBanner = '';
+      let stopImpersonationItem = '';
+      if (isImpersonating()) {
+          let adminLabel = 'admin';
+          try {
+              const impUser = JSON.parse(localStorage.getItem('impersonatorUser') || '{}');
+              adminLabel = impUser?.username || impUser?.email || adminLabel;
+          } catch {}
+          impersonationBanner = `
+              <li class="nav-item me-2">
+                  <span class="badge text-bg-warning text-dark">
+                      Impersonating as <strong>${username}</strong> (admin: ${adminLabel})
+                  </span>
+              </li>
+          `;
+          stopImpersonationItem = `
+              <li><a class="dropdown-item text-warning" href="#" id="stop-impersonation-btn">
+                  <i class="fas fa-user-slash me-2"></i>Impersonation'ı Bitir
+              </a></li>
+              <li><hr class="dropdown-divider"></li>
+          `;
+      }
       
       const currentPath = window.location.pathname;
       
@@ -330,6 +347,7 @@ export function initNavbar() {
                     </ul>
                     
                     <ul class="navbar-nav ms-auto align-items-center">
+                        ${impersonationBanner}
                         <li class="nav-item dropdown attendance-nav">
                             <a class="nav-link dropdown-toggle d-flex align-items-center" href="#" role="button"
                                data-bs-toggle="dropdown" aria-expanded="false" id="attendanceDropdownToggle">
@@ -399,6 +417,7 @@ export function initNavbar() {
                                 </a></li>
                                 <li><h6 class="dropdown-item">Departman: ${user?.position?.department_code || user?.department_code || 'Atanmamış'}</h6></li>
                                 <li><hr class="dropdown-divider"></li>
+                                ${stopImpersonationItem}
                                 <li><a class="dropdown-item text-danger" href="#" id="logout-button">
                                     <i class="fas fa-sign-out-alt me-2"></i>Çıkış Yap
                                 </a></li>
@@ -836,6 +855,19 @@ export function initNavbar() {
           logoutButton.addEventListener('click', (e) => {
               e.preventDefault();
               logout();
+          });
+      }
+
+      const stopImpersonationBtn = document.getElementById('stop-impersonation-btn');
+      if (stopImpersonationBtn) {
+          stopImpersonationBtn.addEventListener('click', async (e) => {
+              e.preventDefault();
+              try {
+                  await stopImpersonation();
+              } catch (err) {
+                  console.error('Failed to stop impersonation:', err);
+                  alert('Impersonation sonlandırılamadı.');
+              }
           });
       }
       
