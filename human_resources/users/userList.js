@@ -2039,6 +2039,15 @@ function initializeFiltersComponent() {
 }
 
 function initializeTableComponent() {
+    const formatBirthDateForTable = (value) => {
+        const raw = value == null ? '' : String(value).trim();
+        if (!raw) return '-';
+        const dt = new Date(raw);
+        if (Number.isNaN(dt.getTime())) return raw;
+        // Example: 15 Mayıs 1986
+        return new Intl.DateTimeFormat('tr-TR', { day: '2-digit', month: 'long', year: 'numeric' }).format(dt);
+    };
+
     const rowActions = [
         { key: 'edit', label: 'Düzenle', icon: 'fas fa-edit', class: 'btn-outline-primary', onClick: (row) => window.editUser(row.id) },
         { key: 'delete', label: 'Sil', icon: 'fas fa-trash', class: 'btn-outline-danger', onClick: (row) => window.deleteUser(row.id, row.username) }
@@ -2059,9 +2068,10 @@ function initializeTableComponent() {
         columns: [
             { field: 'id', label: 'ID', sortable: true, formatter: (v) => v || '-' },
             { field: 'username', label: 'Kullanıcı Adı', sortable: true, formatter: (v) => `<strong>${v || '-'}</strong>` },
+            { field: 'personel_kodu', label: 'Personel Kodu', sortable: true, formatter: (v) => v || '-' },
             { field: 'first_name', label: 'Ad', sortable: true, formatter: (v) => v || '-' },
             { field: 'last_name', label: 'Soyad', sortable: true, formatter: (v) => v || '-' },
-            { field: 'birth_date', label: 'Doğum Tarihi', sortable: true, formatter: (v) => v || '-' },
+            { field: 'birth_date', label: 'Doğum Tarihi', sortable: true, formatter: formatBirthDateForTable },
             { field: 'email', label: 'E-posta', sortable: true, formatter: (v) => v || '-' },
             { field: 'position_title', label: 'Pozisyon', sortable: true, formatter: (v) => v || '-' },
             {
@@ -2429,6 +2439,43 @@ window.editUser = function(userId) {
         icon: 'fas fa-id-card',
         help: HR_USER_FIELD_HELP_TR.last_name
     });
+    editUserModal.addField({
+        id: 'tc_kimlik_no',
+        name: 'tc_kimlik_no',
+        label: 'TC Kimlik No',
+        type: 'text',
+        value: user.tc_kimlik_no || '',
+        colSize: 6,
+        icon: 'fas fa-id-badge'
+    });
+    editUserModal.addField({
+        id: 'gender',
+        name: 'gender',
+        label: 'Cinsiyet',
+        type: 'dropdown',
+        value: user.gender ? String(user.gender) : '',
+        options: [
+            { value: '', label: '-' },
+            { value: 'M', label: 'Erkek' },
+            { value: 'F', label: 'Kadın' }
+        ],
+        colSize: 3,
+        icon: 'fas fa-venus-mars'
+    });
+    editUserModal.addField({
+        id: 'sigorta_yuzde_grubu',
+        name: 'sigorta_yuzde_grubu',
+        label: 'Sigorta Yüzde Grubu',
+        type: 'dropdown',
+        value: user.sigorta_yuzde_grubu ? String(user.sigorta_yuzde_grubu) : '',
+        options: [
+            { value: '', label: '-' },
+            { value: 'normal', label: 'Normal' },
+            { value: 'emekli', label: 'Emekli' }
+        ],
+        colSize: 3,
+        icon: 'fas fa-percent'
+    });
     editUserModal.addField({ id: 'birth_date', name: 'birth_date', label: 'Doğum Tarihi', type: 'date', value: user.birth_date || '', colSize: 6, icon: 'fas fa-birthday-cake' });
 
     editUserModal.addSection({ title: 'İş Bilgileri', icon: 'fas fa-briefcase', iconColor: 'text-success' });
@@ -2504,6 +2551,16 @@ async function updateUser(formData) {
         delete userPatch.position_id;
         const birthDate = String(userPatch?.birth_date ?? '').trim();
         userPatch.birth_date = birthDate || null;
+
+        const tc = String(userPatch?.tc_kimlik_no ?? '').trim();
+        userPatch.tc_kimlik_no = tc || null;
+
+        const genderRaw = String(userPatch?.gender ?? '').trim();
+        userPatch.gender = (genderRaw === 'M' || genderRaw === 'F') ? genderRaw : null;
+
+        const sigortaRaw = String(userPatch?.sigorta_yuzde_grubu ?? '').trim();
+        userPatch.sigorta_yuzde_grubu = (sigortaRaw === 'normal' || sigortaRaw === 'emekli') ? sigortaRaw : null;
+
         const resp = await updateUserAPI(userId, userPatch);
         if (resp.ok) {
             if (shift_rule_id !== undefined) {
