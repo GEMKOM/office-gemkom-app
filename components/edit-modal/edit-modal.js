@@ -649,10 +649,22 @@ export class EditModal {
         });
     }
     
+    isFieldVisible(fieldElement) {
+        let node = fieldElement;
+        while (node && node !== this.container) {
+            if (node.style?.display === 'none') return false;
+            const computed = window.getComputedStyle(node);
+            if (computed.display === 'none' || computed.visibility === 'hidden') return false;
+            node = node.parentElement;
+        }
+        return true;
+    }
+
     // Validate field
     validateField(input) {
         const fieldGroup = input.closest('.field-group');
         if (!fieldGroup) return true;
+        if (!this.isFieldVisible(fieldGroup)) return true;
         
         const fieldId = fieldGroup.dataset.fieldId;
         const field = this.fields.get(fieldId);
@@ -702,7 +714,7 @@ export class EditModal {
         
         this.fields.forEach((field, fieldId) => {
             const fieldElement = this.container.querySelector(`[data-field-id="${fieldId}"]`);
-            if (!fieldElement) return;
+            if (!fieldElement || !this.isFieldVisible(fieldElement)) return;
 
             if (field.type === 'select' || field.type === 'dropdown') {
                 const value = this.getFieldValue(fieldId);

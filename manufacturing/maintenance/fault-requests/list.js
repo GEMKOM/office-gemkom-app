@@ -44,6 +44,7 @@ function initializeComponents() {
         backUrl: '/manufacturing/maintenance',
         onCreateClick: () => {
             createFaultModal.show();
+            setTimeout(resetCreateFaultFormState, 150);
         }
     });
 
@@ -366,7 +367,7 @@ function initializeCreateFaultModal() {
                     placeholder: 'Tür seçin...',
                     required: true,
                     icon: 'fas fa-tools',
-                    colSize: 6,
+                    colSize: 12,
                     searchable: false,
                     options: [
                         { value: 'fault', label: 'Arıza' },
@@ -374,19 +375,13 @@ function initializeCreateFaultModal() {
                     ]
                 },
                 {
-                    id: 'status',
-                    name: 'status',
-                    label: 'Durum',
-                    type: 'dropdown',
-                    placeholder: 'Durum seçin...',
-                    required: true,
-                    icon: 'fas fa-exclamation-triangle',
-                    colSize: 6,
-                    searchable: false,
-                    options: [
-                        { value: 'false', label: 'Çalışıyor' },
-                        { value: 'true', label: 'Durdu' }
-                    ]
+                    id: 'is_breaking',
+                    name: 'is_breaking',
+                    label: 'Makine durdu',
+                    type: 'checkbox',
+                    required: false,
+                    colSize: 12,
+                    helpText: 'Ekipman arıza nedeniyle çalışmıyorsa işaretleyin'
                 }
             ]
         })
@@ -400,9 +395,12 @@ function initializeCreateFaultModal() {
     // Load machines for dropdown
     loadMachinesForModal();
 
-    // Set up type/status dropdown interaction
-    setupTypeStatusInteraction();
-    
+    setupTypeBreakingInteraction();
+
+    createFaultModal.modal.addEventListener('shown.bs.modal', () => {
+        resetCreateFaultFormState();
+    });
+
     // Set up equipment type checkbox interaction
     setupEquipmentTypeInteraction();
 }
@@ -460,11 +458,6 @@ async function handleCreateFaultSubmit(formData) {
             return;
         }
         
-        if (!formData.status) {
-            showAlert('Durum seçimi zorunludur', 'warning');
-            return;
-        }
-
         // Validate equipment selection
         const useCustomEquipment = formData.use_custom_equipment === 'on' || formData.use_custom_equipment === true;
         
@@ -490,7 +483,7 @@ async function handleCreateFaultSubmit(formData) {
         const submitData = {
             description: formData.description.trim(),
             is_maintenance: formData.type === 'maintenance',
-            is_breaking: formData.status === 'true'
+            is_breaking: formData.type !== 'maintenance' && !!formData.is_breaking
         };
 
         // Add equipment data based on selection
@@ -512,10 +505,7 @@ async function handleCreateFaultSubmit(formData) {
         // Hide modal
         createFaultModal.hide();
         
-        // Reset field visibility to default state
-        setTimeout(() => {
-            toggleCustomEquipmentFields(false);
-        }, 100);
+        resetCreateFaultFormState();
         
         // Reload the fault requests list
         await loadFaultRequests();
@@ -527,54 +517,67 @@ async function handleCreateFaultSubmit(formData) {
 }
 
 function handleCreateFaultCancel() {
-    // Clear form when modal is cancelled
     createFaultModal.clearForm();
-    
-    // Reset field visibility to default state
-    setTimeout(() => {
-        toggleCustomEquipmentFields(false);
-    }, 100);
+    setTimeout(resetCreateFaultFormState, 100);
 }
 
-function setupTypeStatusInteraction() {
-    // Wait for dropdowns to be initialized
+function setCreateFaultFieldRequired(fieldId, required) {
+    const field = createFaultModal.fields.get(fieldId);
+    if (field) {
+        field.required = required;
+        createFaultModal.fields.set(fieldId, field);
+    }
+}
+
+function syncCreateFaultFieldRequirements() {
+    const container = createFaultModal.container;
+    const useCustom = container.querySelector('input[name="use_custom_equipment"]')?.checked;
+    const typeValue = createFaultModal.getFieldValue('type');
+
+    setCreateFaultFieldRequired('machine', !useCustom);
+    setCreateFaultFieldRequired('asset_name', !!useCustom);
+    setCreateFaultFieldRequired('location', !!useCustom);
+
+    toggleBreakingCheckbox(typeValue !== 'maintenance');
+}
+
+function resetCreateFaultFormState() {
+    const customCheckbox = createFaultModal.container.querySelector('input[name="use_custom_equipment"]');
+    if (customCheckbox) {
+        customCheckbox.checked = false;
+    }
+    toggleCustomEquipmentFields(false);
+    syncCreateFaultFieldRequirements();
+}
+
+function setupTypeBreakingInteraction() {
     setTimeout(() => {
-        const typeDropdown = createFaultModal.dropdowns.get('type');
-        const statusDropdown = createFaultModal.dropdowns.get('status');
-        
-        if (typeDropdown && statusDropdown) {
-            // Listen for type changes
-            const typeContainer = document.querySelector('#dropdown-type');
-            if (typeContainer) {
-                typeContainer.addEventListener('dropdown:select', (e) => {
-                    const selectedType = e.detail.value;
-                    updateStatusDropdown(selectedType, statusDropdown);
-                });
-            }
+        const typeContainer = createFaultModal.container.querySelector('#dropdown-type');
+        if (typeContainer) {
+            typeContainer.addEventListener('dropdown:select', (e) => {
+                toggleBreakingCheckbox(e.detail.value !== 'maintenance');
+            });
         }
+        syncCreateFaultFieldRequirements();
     }, 500);
 }
 
-function updateStatusDropdown(selectedType, statusDropdown) {
-    if (selectedType === 'maintenance') {
-        // If maintenance is selected, machine cannot be breaking
-        statusDropdown.setItems([
-            { value: 'false', label: 'Çalışıyor' }
-        ]);
-        statusDropdown.setValue('false');
-    } else {
-        // If fault is selected, machine can be either working or stopped
-        statusDropdown.setItems([
-            { value: 'false', label: 'Çalışıyor' },
-            { value: 'true', label: 'Durdu' }
-        ]);
+function toggleBreakingCheckbox(show) {
+    const container = createFaultModal.container;
+    const breakingField = container.querySelector('[data-field-id="is_breaking"]');
+    const breakingCheckbox = container.querySelector('input[name="is_breaking"]');
+    if (breakingField) {
+        breakingField.style.display = show ? '' : 'none';
+    }
+    if (!show && breakingCheckbox) {
+        breakingCheckbox.checked = false;
     }
 }
 
 function setupEquipmentTypeInteraction() {
     // Wait for the modal to be fully rendered
     setTimeout(() => {
-        const customEquipmentCheckbox = document.querySelector('input[name="use_custom_equipment"]');
+        const customEquipmentCheckbox = createFaultModal.container.querySelector('input[name="use_custom_equipment"]');
         
         if (customEquipmentCheckbox) {
             // Remove any existing event listeners to prevent duplicates
@@ -595,9 +598,10 @@ function handleCheckboxChange(e) {
 }
 
 function toggleCustomEquipmentFields(showCustomFields) {
-    const machineField = document.querySelector('[data-field-id="machine"]');
-    const assetNameField = document.querySelector('[data-field-id="asset_name"]');
-    const locationField = document.querySelector('[data-field-id="location"]');
+    const container = createFaultModal.container;
+    const machineField = container.querySelector('[data-field-id="machine"]');
+    const assetNameField = container.querySelector('[data-field-id="asset_name"]');
+    const locationField = container.querySelector('[data-field-id="location"]');
     
     if (showCustomFields) {
         // Show custom fields, hide machine dropdown
@@ -643,6 +647,8 @@ function toggleCustomEquipmentFields(showCustomFields) {
             }
         }
     }
+
+    syncCreateFaultFieldRequirements();
 }
 
 async function loadFaultRequests() {
