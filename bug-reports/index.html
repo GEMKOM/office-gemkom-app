@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Hata Raporları</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../style.css">
+    <link rel="stylesheet" href="../components/navbar.css">
+    <link rel="icon" type="image/png" href="../images/gemkom.png">
+    <style>
+        .bug-list { max-width: 860px; margin: 0 auto; }
+        .bug-card { cursor: pointer; transition: box-shadow .15s; }
+        .bug-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.12); }
+        .chat-box { height: 400px; overflow-y: auto; background: #f8f9fa; border-radius: 8px; padding: 16px; }
+        .msg-agent { background: #e9ecef; border-radius: 12px 12px 12px 0; padding: 10px 14px; margin-bottom: 10px; max-width: 80%; }
+        .msg-user  { background: #0d6efd; color: #fff; border-radius: 12px 12px 0 12px; padding: 10px 14px; margin-bottom: 10px; max-width: 80%; margin-left: auto; }
+        .msg-label { font-size: .75rem; opacity: .7; margin-bottom: 2px; }
+        pre { white-space: pre-wrap; word-break: break-word; margin: 0; font-family: inherit; }
+    </style>
+</head>
+<body>
+    <div id="navbar-container"></div>
+
+    <section class="modules-section py-5">
+        <div class="container">
+
+            <!-- Header -->
+            <div class="d-flex align-items-center justify-content-between mb-4">
+                <div>
+                    <h4 class="fw-bold mb-0"><i class="fas fa-bug text-danger me-2"></i>Hata Raporları</h4>
+                    <p class="text-muted mb-0 small">Bir sorun mu var? Bize bildirin, yapay zeka inceleyip düzeltmeye çalışacak.</p>
+                </div>
+                <button class="btn btn-primary" id="btn-new-report">
+                    <i class="fas fa-plus me-1"></i> Yeni Rapor
+                </button>
+            </div>
+
+            <!-- New Report Form (hidden by default) -->
+            <div id="new-report-form" class="card shadow-sm mb-4 d-none">
+                <div class="card-body">
+                    <h6 class="fw-bold mb-3">Yeni Hata Raporu</h6>
+                    <div class="mb-3">
+                        <label class="form-label">Başlık <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="report-title" placeholder="Örn: NCR oluştururken hata alıyorum">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Hangi sayfada sorun yaşıyorsunuz?</label>
+                        <select class="form-select" id="report-page">
+                            <option value="">— Sayfa seçin (isteğe bağlı) —</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Açıklama <span class="text-danger">*</span></label>
+                        <textarea class="form-control" id="report-description" rows="4"
+                            placeholder="Ne olmaya çalıştınız? Ne oldu? Hata mesajı var mıydı?"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Yeniden Oluşturma Adımları</label>
+                        <textarea class="form-control" id="report-steps" rows="3"
+                            placeholder="1. Şuraya git&#10;2. Şunu tıkla&#10;3. Hata görünüyor"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Ekran Görüntüsü (isteğe bağlı)</label>
+                        <input type="file" class="form-control" id="report-attachment" accept="image/*,.pdf">
+                    </div>
+                    <div class="d-flex gap-2">
+                        <button class="btn btn-primary" id="btn-submit-report">
+                            <i class="fas fa-paper-plane me-1"></i> Gönder
+                        </button>
+                        <button class="btn btn-outline-secondary" id="btn-cancel-report">İptal</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Bug Report List -->
+            <div id="bug-list-container" class="bug-list">
+                <div class="text-center py-5" id="list-loading">
+                    <div class="spinner-border text-primary"></div>
+                </div>
+            </div>
+
+            <!-- Bug Report Detail (hidden, slides in) -->
+            <div id="bug-detail-container" class="d-none">
+                <button class="btn btn-link ps-0 mb-3" id="btn-back">
+                    <i class="fas fa-arrow-left me-1"></i> Geri
+                </button>
+                <div class="card shadow-sm">
+                    <div class="card-header d-flex align-items-center justify-content-between">
+                        <div>
+                            <span id="detail-title" class="fw-bold fs-6"></span>
+                            <span id="detail-badge" class="badge ms-2"></span>
+                        </div>
+                        <small class="text-muted" id="detail-date"></small>
+                    </div>
+                    <div class="card-body">
+                        <!-- PR links if any -->
+                        <div id="pr-links" class="d-none alert alert-success mb-3">
+                            <i class="fab fa-github me-1"></i>
+                            <strong>PR Oluşturuldu:</strong>
+                            <div id="pr-links-body" class="mt-1"></div>
+                        </div>
+
+                        <!-- Chat messages -->
+                        <div class="chat-box mb-3" id="chat-box"></div>
+
+                        <!-- Reply form -->
+                        <div id="reply-form">
+                            <div class="d-flex gap-2">
+                                <textarea class="form-control" id="reply-content" rows="2"
+                                    placeholder="Ajan sorusunu yanıtlayın veya ek bilgi ekleyin..."></textarea>
+                                <button class="btn btn-primary align-self-end" id="btn-send-reply">
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="bug-reports.js"></script>
+</body>
+</html>
