@@ -609,10 +609,7 @@ export class EditModal {
         if (field.type === 'select' || field.type === 'dropdown') {
             const dropdown = this.dropdowns.get(fieldId);
             if (dropdown) {
-                const fromDropdown = dropdown.getValue();
-                if (fromDropdown !== null && fromDropdown !== undefined && fromDropdown !== '') {
-                    return fromDropdown;
-                }
+                return dropdown.getValue();
             }
             const select = fieldElement.querySelector('select.field-input');
             if (select) return select.value;
