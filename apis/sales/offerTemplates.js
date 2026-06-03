@@ -21,8 +21,12 @@ export async function getOfferTemplate(id) {
     return response.json();
 }
 
-export async function getOfferTemplateNodes(id) {
-    const response = await authedFetch(`${BASE}/${id}/nodes/`);
+export async function getOfferTemplateNodes(id, options = {}) {
+    const params = new URLSearchParams();
+    if (options.page != null) params.append('page', String(options.page));
+    if (options.page_size != null) params.append('page_size', String(options.page_size));
+    const qs = params.toString();
+    const response = await authedFetch(`${BASE}/${id}/nodes/${qs ? `?${qs}` : ''}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();
 }
@@ -33,9 +37,12 @@ export async function getOfferTemplateNodeChildren(templateId, nodeId) {
     return response.json();
 }
 
-export async function searchOfferTemplateNodes(q) {
+export async function searchOfferTemplateNodes(q, options = {}) {
     const qs = new URLSearchParams();
     if (q) qs.append('q', q);
+    if (options.template != null && options.template !== '') {
+        qs.append('template', String(options.template));
+    }
     const response = await authedFetch(`${BASE}/nodes/search/${qs.toString() ? `?${qs.toString()}` : ''}`);
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     return response.json();

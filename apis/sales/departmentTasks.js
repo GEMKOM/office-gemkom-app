@@ -59,6 +59,19 @@ export async function completeTask(id, notes = '') {
     return response.json();
 }
 
+export async function uncompleteTask(id) {
+    const response = await authedFetch(`${BASE}/${id}/uncomplete/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || JSON.stringify(err));
+    }
+    return response.json();
+}
+
 export async function uploadTaskFile(taskId, file, name = '') {
     const formData = new FormData();
     formData.append('file', file);

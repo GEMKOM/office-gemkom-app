@@ -1,0 +1,225 @@
+/* Catalog Tree Picker — side panel (offcanvas) */
+.ctp-panel {
+    width: 440px;
+    max-width: 92vw;
+}
+
+.ctp-panel .offcanvas-header {
+    border-bottom: 1px solid #eef0f3;
+    padding-bottom: 0.75rem;
+}
+
+.ctp-controls {
+    padding: 0.75rem 1rem 0.5rem;
+    border-bottom: 1px solid #eef0f3;
+    background: #fafbfc;
+}
+
+.ctp-panel .offcanvas-body {
+    padding-top: 0.5rem;
+}
+
+/* Table trigger button badge */
+.ctp-trigger-badge {
+    display: inline-block;
+    min-width: 18px;
+    padding: 0 5px;
+    margin-left: 5px;
+    font-size: 0.7rem;
+    line-height: 16px;
+    text-align: center;
+    background: #0d6efd;
+    color: #fff;
+    border-radius: 999px;
+}
+
+/* Search */
+.ctp-search-icon {
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #adb5bd;
+    pointer-events: none;
+    font-size: 0.8rem;
+}
+
+/* Selected chips */
+.ctp-selected-bar {
+    margin-top: 0.5rem;
+}
+
+.ctp-selected-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.ctp-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    max-height: 110px;
+    overflow-y: auto;
+}
+
+.ctp-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    padding: 2px 4px 2px 10px;
+    background: #e7f1ff;
+    border: 1px solid #b6d4fe;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    color: #0a58ca;
+}
+
+.ctp-chip-text {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ctp-chip-remove {
+    border: none;
+    background: transparent;
+    color: #0a58ca;
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0 4px;
+    border-radius: 50%;
+}
+
+.ctp-chip-remove:hover {
+    background: rgba(10, 88, 202, 0.15);
+}
+
+/* Tree */
+.ctp-node-list {
+    display: flex;
+    flex-direction: column;
+}
+
+.ctp-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 6px;
+    border-radius: 6px;
+    transition: background 0.12s ease;
+}
+
+.ctp-row:hover {
+    background: #eef2f7;
+}
+
+.ctp-row.selected {
+    background: #e7f1ff;
+}
+
+.ctp-chevron {
+    border: none;
+    background: transparent;
+    color: #6c757d;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    border-radius: 4px;
+    font-size: 0.72rem;
+}
+
+.ctp-chevron:hover {
+    background: rgba(0, 0, 0, 0.06);
+    color: #0d6efd;
+}
+
+.ctp-chevron-loading {
+    color: #0d6efd;
+    pointer-events: none;
+}
+
+.ctp-chevron-spacer {
+    width: 20px;
+    flex: 0 0 20px;
+}
+
+.ctp-check {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    margin: 0;
+    cursor: pointer;
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ctp-check input[type="checkbox"] {
+    margin-top: 2px;
+    flex: 0 0 auto;
+    cursor: pointer;
+}
+
+.ctp-node-title {
+    font-size: 0.85rem;
+    color: #212529;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ctp-node-desc {
+    font-size: 0.74rem;
+    color: #8a9099;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.ctp-count-badge {
+    flex: 0 0 auto;
+    background: #eef0f3;
+    color: #6c757d;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    padding: 1px 8px;
+    min-width: 26px;
+    text-align: center;
+}
+
+.ctp-children {
+    margin-left: 16px;
+    padding-left: 6px;
+    border-left: 1px dashed #d4dae1;
+}
+
+.ctp-loading-row {
+    pointer-events: none;
+    color: #6c757d;
+}
+
+.ctp-loading-row .ctp-loading-text {
+    font-size: 0.85rem;
+    line-height: 20px;
+}
+
+.ctp-empty {
+    color: #6c757d;
+    font-size: 0.85rem;
+    padding: 20px 16px;
+    text-align: center;
+}
+
+.ctp-empty.sm {
+    padding: 8px 6px;
+    text-align: left;
+    font-size: 0.8rem;
+}

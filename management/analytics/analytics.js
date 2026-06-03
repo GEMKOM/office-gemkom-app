@@ -12,12 +12,14 @@ import { getMachiningJobEntries } from '../../apis/machining/reports.js';
 import { getWeldingJobCostDetail } from '../../apis/welding/reports.js';
 import { fetchSubcontractorCostBreakdown } from '../../apis/subcontracting/subcontractors.js';
 import { listCustomers } from '../../apis/projects/customers.js';
+import { CatalogTreePicker } from '../../components/catalog-tree-picker/catalog-tree-picker.js';
 
 /* ── state ─────────────────────────────────────────────────────────── */
 let chart = null;
 let costTable = null;
 let summaryCards = null;
 let filtersComponent = null;
+let catalogPicker = null;
 let currentPage = 1;
 let pageSize = 20;
 let currentOrdering = '-date';
@@ -310,6 +312,27 @@ function buildFooter({ displayedData, columns, hasActions }) {
     return `<tr class="cost-table-summary-row">${tds.join('')}</tr>`;
 }
 
+/* ── page loading placeholders ───────────────────────────────────── */
+
+function showAnalyticsLoading() {
+    summaryCards?.showSkeletonLoading(4);
+    setChartLoading(true);
+}
+
+function setChartLoading(loading) {
+    const wrap = document.querySelector('.analytics-chart-wrap');
+    if (!wrap) return;
+    wrap.querySelector('.analytics-chart-skeleton')?.remove();
+    if (!loading) return;
+    const heights = [45, 72, 58, 88, 52, 68, 40, 76, 55, 82, 48, 65];
+    const bars = heights.map((h) => `<div class="analytics-chart-skeleton-bar" style="height:${h}%"></div>`).join('');
+    const sk = document.createElement('div');
+    sk.className = 'analytics-chart-skeleton';
+    sk.setAttribute('aria-hidden', 'true');
+    sk.innerHTML = bars;
+    wrap.appendChild(sk);
+}
+
 /* ── chart helpers ─────────────────────────────────────────────────── */
 
 function destroyChart() {
@@ -468,13 +491,20 @@ document.addEventListener('DOMContentLoaded', async () => {
             ]
         });
 
+    catalogPicker = new CatalogTreePicker({
+        label: 'Katalog Kalemi Filtresi',
+        onChange: () => { currentPage = 1; loadData(); }
+    });
+
     summaryCards = new StatisticsCards('summary-placeholder', { compact: true, responsive: true, cards: [] });
+    summaryCards.showSkeletonLoading(4);
 
     document.getElementById('chart-placeholder').innerHTML = `
         <div class="dashboard-card compact">
             <div class="card-header"><h6 class="card-title mb-0"><i class="fas fa-layer-group text-info me-2"></i>Top 15 Maliyet (Stacked)</h6></div>
             <div class="card-body"><div class="analytics-chart-wrap"><canvas id="cost-stack-chart"></canvas></div></div>
         </div>`;
+    setChartLoading(true);
 
     costTable = new TableComponent('table-placeholder', {
         title: 'Maliyet Tablosu',
@@ -548,6 +578,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 function setDefaults() {
     currentOrdering = '-date';
     filtersComponent.setFilterValues({ status: [], search: '', ordering: '-date', facility: '' });
+    if (catalogPicker) catalogPicker.clear();
 }
 
 /* ── cost breakdown toggle (hide/show detail columns) ──────────────── */
@@ -597,8 +628,27 @@ function injectCostToggleIcon() {
     th.appendChild(icon);
 }
 
+function injectCatalogFilterButton() {
+    const actions = costTable?.container?.querySelector('.card-actions');
+    if (!actions) return;
+
+    const count = catalogPicker ? catalogPicker.getSelectedCount() : 0;
+    let btn = actions.querySelector('#catalog-filter-trigger');
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'catalog-filter-trigger';
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-outline-primary';
+        actions.insertBefore(btn, actions.firstChild);
+        btn.addEventListener('click', () => catalogPicker && catalogPicker.open());
+    }
+    btn.innerHTML = `<i class="fas fa-sitemap me-1"></i>Katalog Kalemi${count ? `<span class="ctp-trigger-badge">${count}</span>` : ''}`;
+    btn.classList.toggle('active', count > 0);
+}
+
 function afterTableRender() {
     injectCostToggleIcon();
+    injectCatalogFilterButton();
     applyCostBreakdownVisibility();
 }
 
@@ -611,8 +661,10 @@ async function loadData() {
     const facilityRaw = filters.facility;
     const facility = (facilityRaw === 'rolling_mill' || facilityRaw === 'meltshop') ? facilityRaw : undefined;
     const ordering = currentOrdering;
+    const selectedNodeIds = catalogPicker ? catalogPicker.getSelectedIds() : [];
+    const template_node = selectedNodeIds.length ? selectedNodeIds.join(',') : undefined;
 
-    summaryCards.showLoading();
+    showAnalyticsLoading();
     costTable.setLoading(true);
     destroyChart();
 
@@ -621,6 +673,7 @@ async function loadData() {
             status__in: statusIn || undefined,
             search: search || undefined,
             customer: customer ? parseInt(customer, 10) : undefined,
+            template_node,
             ordering,
             facility,
             page: currentPage,
@@ -638,11 +691,13 @@ async function loadData() {
         costTable.options.itemsPerPage = pageSize;
         setTimeout(() => { setupExpandListeners(); afterTableRender(); }, 50);
 
+        setChartLoading(false);
         updateSummary(results);
         updateChart(results);
     } catch (err) {
         console.error('Analytics load error:', err);
         showNotification(`Analitik yüklenirken hata: ${err.message}`, 'error');
+        setChartLoading(false);
         summaryCards.showEmpty('Veri yüklenemedi');
         costTable.updateData([], 0, 1);
         destroyChart();

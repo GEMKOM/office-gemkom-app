@@ -3270,7 +3270,7 @@ async function viewTaskDetails(taskId) {
 function getAvailableActions(task) {
     const actions = [];
     
-    // Special handling for sales_consult tasks - only show consultation tab
+    // Special handling for sales_consult tasks - consultation tab (+ uncomplete when completed)
     if (task.task_type === 'sales_consult') {
         actions.push({
             key: 'consultation',
@@ -3278,6 +3278,14 @@ function getAvailableActions(task) {
             icon: 'fas fa-handshake',
             handler: 'consultation'
         });
+        if (task.status === 'completed') {
+            actions.push({
+                key: 'uncomplete',
+                label: 'Tamamlanmayı Geri Al',
+                icon: 'fas fa-undo',
+                handler: 'uncomplete'
+            });
+        }
         return actions;
     }
     
@@ -5094,6 +5102,15 @@ async function renderConsultationTab(task) {
             </div>
         `;
     }
+    if (task.status === 'completed') {
+        html += `
+            <div class="mt-3">
+                <button class="btn btn-warning" id="consultation-uncomplete-btn" data-task-id="${task.id}">
+                    <i class="fas fa-undo me-1"></i>Tamamlanmayı Geri Al
+                </button>
+            </div>
+        `;
+    }
 
     // Discussion topic comments linked to this consultation
     html += `
@@ -5220,6 +5237,32 @@ function setupConsultationTabListeners(task) {
         } catch (e) {
             showNotification(e.message || 'Tamamlama hatası', 'error');
         }
+    });
+
+    contentContainer.querySelector('#consultation-uncomplete-btn')?.addEventListener('click', () => {
+        confirmationModal.show({
+            message: 'Bu görevin tamamlanma durumunu geri almak istediğinize emin misiniz?',
+            confirmText: 'Evet, Geri Al',
+            onConfirm: async () => {
+                try {
+                    const response = await uncompleteDepartmentTask(task.id);
+                    showNotification('Görev tamamlanma durumu geri alındı', 'success');
+                    confirmationModal.hide();
+                    if (response?.task) {
+                        updateTaskInLocalData(task.id, response.task);
+                        updateTableDataOnly();
+                    }
+                    contentContainer.dataset.loaded = 'false';
+                    const updatedTask = await getDepartmentTaskById(task.id);
+                    contentContainer.innerHTML = await renderConsultationTab(updatedTask);
+                    contentContainer.dataset.loaded = 'true';
+                    setupConsultationTabListeners(updatedTask);
+                } catch (e) {
+                    console.error('Error uncompleting consultation task:', e);
+                    showNotification(e.message || 'Tamamlanma geri alma hatası', 'error');
+                }
+            }
+        });
     });
 
     contentContainer.querySelector('#consultation-comment-add-btn')?.addEventListener('click', async () => {

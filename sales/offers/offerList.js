@@ -1835,14 +1835,11 @@ function buildItemsTab() {
         </div>
 
         <div class="kalemler-panel kalemler-offer">
-          <div class="kalemler-panel-header d-flex align-items-center justify-content-between">
+          <div class="kalemler-panel-header">
             <div class="fw-semibold d-flex align-items-center gap-2">
               <i class="fas fa-list me-1 text-primary"></i>Teklif Kalemleri
               <span id="staged-count-badge" class="badge bg-warning text-dark border" style="display:none;"></span>
             </div>
-            <button type="button" class="btn btn-sm btn-outline-primary" id="add-custom-root-item-btn">
-              <i class="fas fa-plus me-1"></i>Özel Kalem Ekle
-            </button>
           </div>
           <div id="offer-panel" class="kalemler-panel-body">
             <div class="text-muted py-3 text-center"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>
@@ -2150,16 +2147,6 @@ function initKalemlerTab() {
     kalemlerState.refCounter = 0;
     kalemlerState.pendingEdits = {};
     kalemlerState.pendingDeletes = new Set();
-
-    const editable = !CLOSED_STATUSES.includes(offer?.status || '');
-    const addCustomBtn = document.getElementById('add-custom-root-item-btn');
-    if (addCustomBtn) {
-        addCustomBtn.disabled = !editable;
-        addCustomBtn.onclick = async () => {
-            if (!editable) return;
-            addCustomStaged({ parentRef: null, parentId: null });
-        };
-    }
 
     setupCatalogSearch();
     void loadTemplatesIntoCatalog();

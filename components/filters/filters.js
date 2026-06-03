@@ -462,12 +462,17 @@ export class FiltersComponent {
                     }
                     
                     this.dropdowns.set(filter.id, dropdown);
-                    
-                    dropdown.onChange = (value) => {
+
+                    const notifyFilterChange = (value) => {
                         if (this.options.onFilterChange) {
                             this.options.onFilterChange(filter.id, value);
                         }
                     };
+
+                    dropdown.onChange = notifyFilterChange;
+                    container.addEventListener('dropdown:select', (e) => {
+                        notifyFilterChange(e.detail?.value);
+                    });
                 }
             }
         });

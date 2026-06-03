@@ -205,7 +205,7 @@ export class StatisticsCards {
     }
 
     /**
-     * Show loading state
+     * Show loading state (centered spinner — prefer showSkeletonLoading for dashboard layouts)
      */
     showLoading() {
         this.container.innerHTML = `
@@ -219,6 +219,28 @@ export class StatisticsCards {
                 </div>
             </div>
         `;
+    }
+
+    /**
+     * Skeleton placeholders matching the stat-card grid (same footprint as real cards).
+     * @param {number} count
+     */
+    showSkeletonLoading(count = 4) {
+        const responsiveClass = this.options.responsive ? 'col-lg-3 col-md-6' : 'col';
+        const cards = Array.from({ length: count }, (_, i) => `
+            <div class="${responsiveClass}">
+                <div class="stat-card compact stat-card-skeleton" aria-hidden="true">
+                    <div class="stat-card-body">
+                        <div class="stat-skeleton-icon"></div>
+                        <div class="stat-skeleton-content">
+                            <div class="stat-skeleton-value"></div>
+                            <div class="stat-skeleton-label"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+        this.container.innerHTML = `<div class="row g-3 mb-3">${cards}</div>`;
     }
 
     /**

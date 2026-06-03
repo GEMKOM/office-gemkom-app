@@ -164,14 +164,21 @@ function isDraftNCR(ncr) {
     return (ncr?.status || '').toLowerCase() === 'draft';
 }
 
-/** Draft NCRs may be submitted only by members of the NCR's assigned team (or superuser). */
+function isRejectedNCR(ncr) {
+    return (ncr?.status || '').toLowerCase() === 'rejected';
+}
+
+function isSubmittableNCR(ncr) {
+    return isDraftNCR(ncr) || isRejectedNCR(ncr);
+}
+
+/** Draft or rejected NCRs may be submitted by members of the NCR's assigned team (or superuser). */
 function canUserSubmitNCR(user, ncr) {
-    return isDraftNCR(ncr) && isUserInAssignedTeam(user, ncr);
+    return isSubmittableNCR(ncr) && isUserInAssignedTeam(user, ncr);
 }
 
 function isClosableNCR(ncr) {
-    const status = (ncr?.status || '').toLowerCase();
-    return status === 'approved' || status === 'rejected';
+    return (ncr?.status || '').toLowerCase() === 'approved';
 }
 
 // Component instances
@@ -1616,8 +1623,8 @@ async function handleSubmitNCR(ncr) {
     try {
         const fullNCR = await getNCR(ncr.id);
 
-        if (!isDraftNCR(fullNCR)) {
-            showNotification('Sadece "Taslak" durumundaki NCR kayıtları gönderilebilir.', 'warning');
+        if (!isSubmittableNCR(fullNCR)) {
+            showNotification('Sadece "Taslak" veya "Reddedildi" durumundaki NCR kayıtları gönderilebilir.', 'warning');
             return;
         }
 
@@ -1750,7 +1757,7 @@ function showNCRDecisionModal(ncr, approve) {
 
 async function handleCloseNCR(ncr) {
     if (!isClosableNCR(ncr)) {
-        showNotification('Sadece "Onaylandı" veya "Reddedildi" durumundaki NCR kayıtları kapatılabilir.', 'warning');
+        showNotification('Sadece "Onaylandı" durumundaki NCR kayıtları kapatılabilir.', 'warning');
         return;
     }
     confirmationModal.show({

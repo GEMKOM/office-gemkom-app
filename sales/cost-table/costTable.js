@@ -10,6 +10,7 @@ import { getCombinedJobCosts } from '../../apis/planning/reports.js';
 import { getMachiningJobEntries } from '../../apis/machining/reports.js';
 import { getWeldingJobCostDetail } from '../../apis/welding/reports.js';
 import { fetchAssignments } from '../../apis/subcontracting/assignments.js';
+import { CatalogTreePicker } from '../../components/catalog-tree-picker/catalog-tree-picker.js';
 
 const STATUS_OPTIONS = [
     { value: '', label: 'Tümü' },
@@ -25,6 +26,7 @@ let pageSize = 20;
 let currentOrdering = 'job_no';
 let costTable = null;
 let filtersComponent = null;
+let catalogPicker = null;
 let expandedRows = new Set(); // Track expanded rows by job_no for hierarchy
 let costTableRoots = []; // Current page root rows (no children in response)
 let childrenCache = new Map(); // job_no -> array of direct children (from getCostChildren)
@@ -317,6 +319,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             loadData();
         },
         onClear: () => {
+            if (catalogPicker) catalogPicker.clear();
             currentPage = 1;
             loadData();
         }
@@ -564,11 +567,38 @@ document.addEventListener('DOMContentLoaded', async () => {
         stickyHeader: true
     });
 
+    catalogPicker = new CatalogTreePicker({
+        label: 'Katalog Kalemi Filtresi',
+        onChange: () => { currentPage = 1; loadData(); }
+    });
+
     await loadData();
 
     // Attach inline selling price handler once table is ready
     attachSellingPriceInputHandler();
 });
+
+function injectCatalogFilterButton() {
+    const actions = costTable?.container?.querySelector('.card-actions');
+    if (!actions) return;
+
+    const count = catalogPicker ? catalogPicker.getSelectedCount() : 0;
+    let btn = actions.querySelector('#catalog-filter-trigger');
+    if (!btn) {
+        btn = document.createElement('button');
+        btn.id = 'catalog-filter-trigger';
+        btn.type = 'button';
+        btn.className = 'btn btn-sm btn-outline-primary';
+        actions.insertBefore(btn, actions.firstChild);
+        btn.addEventListener('click', () => catalogPicker && catalogPicker.open());
+    }
+    btn.innerHTML = `<i class="fas fa-sitemap me-1"></i>Katalog Kalemi${count ? `<span class="ctp-trigger-badge">${count}</span>` : ''}`;
+    btn.classList.toggle('active', count > 0);
+}
+
+function afterTableRender() {
+    injectCatalogFilterButton();
+}
 
 async function loadData() {
     const filters = filtersComponent ? filtersComponent.getFilterValues() : {};
@@ -576,6 +606,8 @@ async function loadData() {
     const status__in = filters.status__in || '';
     const search = filters.search || '';
     const customer = filters.customer || '';
+    const selectedNodeIds = catalogPicker ? catalogPicker.getSelectedIds() : [];
+    const template_node = selectedNodeIds.length ? selectedNodeIds.join(',') : undefined;
 
     costTable.setLoading(true);
     try {
@@ -584,6 +616,7 @@ async function loadData() {
             status__in: status__in || undefined,
             search: search || undefined,
             customer: customer ? parseInt(customer, 10) : undefined,
+            template_node,
             ordering: currentOrdering,
             page: currentPage,
             page_size: pageSize
@@ -598,15 +631,16 @@ async function loadData() {
         const displayList = mergeExpandedChildren(costTableRoots);
         costTable.updateData(displayList, count, currentPage);
         costTable.options.itemsPerPage = pageSize;
-        setTimeout(() => {
-            setupExpandButtonListeners();
-            attachSellingPriceInputHandler();
-        }, 50);
     } catch (err) {
         console.error('Cost table load error:', err);
         costTable.updateData([], 0, 1);
     } finally {
         costTable.setLoading(false);
+        setTimeout(() => {
+            setupExpandButtonListeners();
+            attachSellingPriceInputHandler();
+            afterTableRender();
+        }, 50);
     }
 }
 

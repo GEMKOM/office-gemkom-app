@@ -5,7 +5,7 @@ import { ConfirmationModal } from '../../components/confirmation-modal/confirmat
 import { showNotification } from '../../components/notification/notification.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import {
-    listOfferTemplates, getOfferTemplate,
+    listOfferTemplates, getOfferTemplate, getOfferTemplateNodeChildren,
     createOfferTemplate, patchOfferTemplate,
     createTemplateNode, patchTemplateNode, deleteTemplateNode
 } from '../../apis/sales/offerTemplates.js';
@@ -14,6 +14,24 @@ let templates = [];
 let selectedTemplateId = null;
 let selectedTemplate = null;
 let actionConfirmModal = null;
+/** @type {Map<number, Array>} */
+const childrenCache = new Map();
+const expandedNodes = new Set();
+const loadingNodes = new Set();
+
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function extractNodeList(data) {
+    if (Array.isArray(data)) return data;
+    if (!data || typeof data !== 'object') return [];
+    return data.results || data.data || data.children || [];
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) return;
@@ -80,6 +98,9 @@ function renderTemplatesList() {
 
 async function selectTemplate(id) {
     selectedTemplateId = id;
+    childrenCache.clear();
+    expandedNodes.clear();
+    loadingNodes.clear();
     renderTemplatesList();
 
     const panel = document.getElementById('tree-panel');
@@ -149,24 +170,90 @@ function renderTree() {
             });
         });
     });
+
+    panel.querySelectorAll('.tree-expand-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const nodeId = parseInt(btn.dataset.nodeId, 10);
+            if (!Number.isNaN(nodeId)) await toggleNodeExpand(nodeId);
+        });
+    });
+}
+
+async function toggleNodeExpand(nodeId) {
+    if (expandedNodes.has(nodeId)) {
+        expandedNodes.delete(nodeId);
+        renderTree();
+        return;
+    }
+
+    expandedNodes.add(nodeId);
+
+    if (!childrenCache.has(nodeId)) {
+        loadingNodes.add(nodeId);
+        renderTree();
+        try {
+            const res = await getOfferTemplateNodeChildren(selectedTemplateId, nodeId);
+            childrenCache.set(nodeId, extractNodeList(res));
+        } catch (err) {
+            console.error('Error loading child nodes:', err);
+            childrenCache.set(nodeId, []);
+            showNotification('Alt ekipmanlar yüklenemedi', 'error');
+        } finally {
+            loadingNodes.delete(nodeId);
+        }
+    }
+
+    renderTree();
 }
 
 function renderNodes(nodes) {
     return nodes.map(node => {
-        const children = node.children && node.children.length > 0
-            ? `<div class="tree-children">${renderNodes(node.children)}</div>` : '';
+        const childCount = node.children_count ?? (node.children?.length ?? 0);
+        const hasChildren = childCount > 0;
+        const isExpanded = expandedNodes.has(node.id);
+        const isLoading = loadingNodes.has(node.id);
+        const cachedChildren = childrenCache.get(node.id) || node.children || [];
+
+        let childrenBlock = '';
+        if (hasChildren && isExpanded) {
+            if (isLoading) {
+                childrenBlock = `
+                    <div class="tree-children">
+                        <div class="text-muted small py-2"><i class="fas fa-spinner fa-spin me-1"></i>Yükleniyor...</div>
+                    </div>`;
+            } else if (cachedChildren.length) {
+                childrenBlock = `<div class="tree-children">${renderNodes(cachedChildren)}</div>`;
+            } else {
+                childrenBlock = `<div class="tree-children"><div class="text-muted small py-2">Alt ekipman yok.</div></div>`;
+            }
+        }
+
+        const toggleBtn = hasChildren
+            ? `<button type="button" class="btn btn-sm btn-link p-0 tree-expand-btn text-secondary" data-node-id="${node.id}" title="${isExpanded ? 'Daralt' : 'Genişlet'}"><i class="fas fa-chevron-${isExpanded ? 'down' : 'right'}"></i></button>`
+            : '<span class="tree-expand-spacer" style="width:1.25rem;display:inline-block;"></span>';
+
+        const descriptionHtml = node.description
+            ? `<small class="text-muted ms-1">${escapeHtml(node.description)}</small>`
+            : '';
+        const countBadge = hasChildren
+            ? `<span class="badge bg-light text-dark border ms-1" title="Alt ekipman sayısı">${childCount}</span>`
+            : '';
+
         return `
-            <div class="tree-node-item">
-                <i class="fas fa-${node.children && node.children.length > 0 ? 'folder text-warning' : 'file text-primary'}"></i>
-                <span class="flex-grow-1">${node.title}</span>
-                <span class="badge bg-light text-dark">#${node.sequence || ''}</span>
+            <div class="tree-node-item" data-node-id="${node.id}">
+                ${toggleBtn}
+                <i class="fas fa-${hasChildren ? 'folder text-warning' : 'file text-primary'}"></i>
+                <span class="flex-grow-1">${escapeHtml(node.title)}${descriptionHtml}${countBadge}</span>
+                <span class="badge bg-light text-dark">#${node.sequence ?? ''}</span>
                 <div class="node-actions">
                     <button class="btn btn-sm btn-outline-primary add-child-btn" data-parent-id="${node.id}" title="Alt ekipman ekle"><i class="fas fa-plus"></i></button>
                     <button class="btn btn-sm btn-outline-secondary edit-node-btn" data-node-id="${node.id}" title="Düzenle"><i class="fas fa-edit"></i></button>
                     <button class="btn btn-sm btn-outline-danger delete-node-btn" data-node-id="${node.id}" title="Sil"><i class="fas fa-trash"></i></button>
                 </div>
             </div>
-            ${children}
+            ${childrenBlock}
         `;
     }).join('');
 }
@@ -271,8 +358,9 @@ function showEditNodeModal(nodeId) {
 function findNode(nodes, id) {
     for (const node of nodes) {
         if (node.id === id) return node;
-        if (node.children) {
-            const found = findNode(node.children, id);
+        const children = childrenCache.get(node.id) || node.children || [];
+        if (children.length) {
+            const found = findNode(children, id);
             if (found) return found;
         }
     }
