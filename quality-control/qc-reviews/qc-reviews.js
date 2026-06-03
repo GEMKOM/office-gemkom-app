@@ -38,6 +38,7 @@ let reviewsTable = null;
 let confirmationModal = null;
 let reviewDetailsModal = null;
 let reviewDecisionModal = null;
+let reviewPartDataTable = null;
 let currentReview = null;
 
 // Status badge mapping
@@ -67,6 +68,132 @@ function isQcGroupUser(user) {
 
 function canUserDecideReviews(user) {
     return isSuperuserUser(user) || isQcGroupUser(user);
+}
+
+function formatNcrNumberLink(ncrNumber) {
+    if (!ncrNumber) return '-';
+    const ncrUrl = `/quality-control/ncrs/?ncr=${encodeURIComponent(ncrNumber)}`;
+    return `<a href="${ncrUrl}" target="_blank" class="text-decoration-none">
+        <span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 0.9rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); white-space: nowrap; display: inline-block;">
+            <i class="fas fa-exclamation-triangle me-1"></i>${ncrNumber}
+        </span>
+    </a>`;
+}
+
+function formatOpenNcrCount(count) {
+    const n = parseInt(count, 10) || 0;
+    if (n <= 0) return '-';
+    const badgeClass = n > 5 ? 'status-red' : (n >= 3 ? 'status-yellow' : 'status-grey');
+    return `<span class="status-badge ${badgeClass}">${n}</span>`;
+}
+
+const PART_DATA_TABLE_COLUMNS = [
+    {
+        field: '_rowNo',
+        label: '#',
+        sortable: false,
+        width: '48px',
+        formatter: (value) => (value != null ? String(value) : '-')
+    },
+    {
+        field: 'position_no',
+        label: 'Pozisyon No',
+        sortable: false,
+        width: '90px',
+        formatter: (value) => value ?? '-'
+    },
+    {
+        field: 'drawing_no',
+        label: 'Çizim No',
+        sortable: false,
+        width: '180px',
+        formatter: (value) => value ?? '-'
+    },
+    {
+        field: 'location',
+        label: 'Konum',
+        sortable: false,
+        width: '140px',
+        formatter: (value) => value ?? '-'
+    },
+    {
+        field: 'quantity_inspected',
+        label: 'İncelenen Miktar',
+        sortable: false,
+        width: '110px',
+        formatter: (value) => (value != null && value !== '' ? value : '-')
+    },
+    {
+        field: 'notes',
+        label: 'Notlar',
+        sortable: false,
+        formatter: (value) => value ?? '-'
+    }
+];
+
+function normalizePartDataRows(partData) {
+    if (partData == null) return [];
+    if (Array.isArray(partData)) {
+        return partData.filter((row) => row && typeof row === 'object');
+    }
+    if (typeof partData === 'object') {
+        if (Array.isArray(partData.parts)) {
+            return partData.parts.filter((row) => row && typeof row === 'object');
+        }
+        const keys = Object.keys(partData);
+        if (keys.length === 0) return [];
+        if (keys.every((k) => /^\d+$/.test(k))) {
+            return keys
+                .sort((a, b) => Number(a) - Number(b))
+                .map((k) => partData[k])
+                .filter((row) => row && typeof row === 'object');
+        }
+        return [partData];
+    }
+    return [];
+}
+
+function buildPartDataTableRows(partData) {
+    return normalizePartDataRows(partData).map((row, index) => ({
+        ...row,
+        _rowNo: index + 1
+    }));
+}
+
+function renderReviewPartDataTable(partData) {
+    if (reviewPartDataTable) {
+        try {
+            reviewPartDataTable.destroy();
+        } catch (e) {
+            console.warn('Error destroying part data table:', e);
+        }
+        reviewPartDataTable = null;
+    }
+
+    const container = reviewDetailsModal?.container?.querySelector('#qc-review-part-data-table-container');
+    if (!container) return;
+
+    const rows = buildPartDataTableRows(partData);
+    const columns = rows.length > 1
+        ? PART_DATA_TABLE_COLUMNS
+        : PART_DATA_TABLE_COLUMNS.filter((col) => col.field !== '_rowNo');
+
+    reviewPartDataTable = new TableComponent('qc-review-part-data-table-container', {
+        title: 'Parça Bilgileri',
+        icon: 'fas fa-cog',
+        iconColor: 'text-primary',
+        columns,
+        data: rows,
+        sortable: false,
+        pagination: false,
+        exportable: false,
+        refreshable: false,
+        striped: true,
+        bordered: true,
+        small: true,
+        emptyMessage: 'Parça bilgisi bulunamadı',
+        emptyIcon: 'fas fa-cog'
+    });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -327,6 +454,20 @@ async function initializeTableComponent() {
                 const status = STATUS_BADGE_MAP[value] || { class: 'status-grey', label: value };
                 return `<span class="status-badge ${status.class}">${status.label}</span>`;
             }
+        },
+        {
+            field: 'ncr_number',
+            label: 'NCR No',
+            sortable: false,
+            width: '160px',
+            formatter: (value) => formatNcrNumberLink(value)
+        },
+        {
+            field: 'open_ncr_count',
+            label: 'Açık NCR',
+            sortable: false,
+            width: '100px',
+            formatter: (value) => formatOpenNcrCount(value)
         },
         {
             field: 'reviewed_by_name',
@@ -628,59 +769,25 @@ async function showReviewDetails(review) {
                     label: 'Görev', 
                     value: fullReview.task_title || '-',
                     colSize: 6
+                },
+                {
+                    label: 'NCR No',
+                    value: fullReview.ncr_number || null,
+                    colSize: 6,
+                    format: (value) => (value ? formatNcrNumberLink(value) : '-')
+                },
+                {
+                    label: 'Açık NCR',
+                    value: fullReview.open_ncr_count ?? null,
+                    colSize: 6,
+                    format: (value) => formatOpenNcrCount(value)
                 }
             ]
         });
 
-        // Add part data section (2 per row)
-        if (fullReview.part_data && Object.keys(fullReview.part_data).length > 0) {
-            // Turkish label mapping for part data fields
-            const partDataLabelMap = {
-                'location': 'Konum',
-                'quantity_inspected': 'İncelenen Miktar',
-                'position_no': 'Pozisyon No',
-                'drawing_no': 'Çizim No',
-                'notes': 'Notlar',
-                'quantity': 'Miktar',
-                'measurements': 'Ölçümler',
-                'dimensions': 'Boyutlar',
-                'weight': 'Ağırlık',
-                'material': 'Malzeme',
-                'serial_number': 'Seri No',
-                'batch_number': 'Parti No',
-                'inspection_date': 'İnceleme Tarihi',
-                'inspector': 'İnceleyen',
-                'test_results': 'Test Sonuçları',
-                'certificate': 'Sertifika',
-                'photo': 'Fotoğraf',
-                'document': 'Doküman'
-            };
-
-            const partDataFields = Object.entries(fullReview.part_data).map(([key, value]) => ({
-                label: partDataLabelMap[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-                value: value || '-',
-                colSize: 6
-            }));
-
-            reviewDetailsModal.addSection({
-                title: 'Parça Bilgileri',
-                icon: 'fas fa-cog',
-                fields: partDataFields
-            });
-        } else {
-            // Show empty part data section if no data
-            reviewDetailsModal.addSection({
-                title: 'Parça Bilgileri',
-                icon: 'fas fa-cog',
-                fields: [
-                    {
-                        label: 'Parça Bilgisi',
-                        value: '-',
-                        colSize: 6
-                    }
-                ]
-            });
-        }
+        reviewDetailsModal.addCustomSection({
+            customContent: '<div id="qc-review-part-data-table-container"></div>'
+        });
 
         // Add comment section at the bottom
         reviewDetailsModal.addSection({
@@ -702,6 +809,7 @@ async function showReviewDetails(review) {
 
         // Render the modal
         reviewDetailsModal.render();
+        renderReviewPartDataTable(fullReview.part_data);
 
         setupQcReviewDiscussionListeners(fullReview.id);
 
@@ -835,7 +943,7 @@ async function showReviewDecisionModal(review, approve) {
                         label: 'Etkilenen Miktar',
                         type: 'number',
                         required: false,
-                        value: fullReview.part_data?.quantity_inspected || 1,
+                        value: normalizePartDataRows(fullReview.part_data)[0]?.quantity_inspected || 1,
                         placeholder: '1'
                     },
                     {

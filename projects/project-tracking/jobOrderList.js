@@ -79,8 +79,118 @@ let jobOrdersTable = null; // Table component instance
 let customers = []; // Store customers for dropdowns
 let statusOptions = STATUS_OPTIONS; // Status options
 let expandedRows = new Set(); // Track expanded rows by job_no
+let expandedDepartmentTasksRows = new Set(); // Track rows with expanded department tasks
 let IS_COMPACT_13_INCH = false; // Visual compactness flag used by cell formatters
 let childrenCache = new Map(); // Cache children data by parent job_no
+let departmentTasksCache = new Map(); // Cache department tasks by parent job_no
+let expandedDepartmentTaskRows = new Set(); // Track expanded department task rows by task id
+let departmentTaskSubtasksCache = new Map(); // Cache subtasks by parent task id
+
+const DEPARTMENT_TASK_URL_MAP = {
+    manufacturing: '/manufacturing/projects/',
+    design: '/design/projects/',
+    planning: '/planning/projects/',
+    procurement: '/procurement/projects/',
+    logistics: '/logistics/projects/',
+    painting: '/painting/projects/'
+};
+
+function isDepartmentTaskRow(row) {
+    return !!(row && row._isDepartmentTask);
+}
+
+function getDepartmentTaskStatusBadgeClass(status) {
+    switch (status) {
+        case 'completed': return 'status-green';
+        case 'in_progress': return 'status-blue';
+        case 'pending': return 'status-yellow';
+        case 'blocked': return 'status-red';
+        case 'skipped': return 'status-grey';
+        default: return 'status-grey';
+    }
+}
+
+function buildDepartmentTaskTableRow(task, parentJobNo, hierarchyLevel) {
+    return {
+        ...task,
+        key: `dept-task-${task.id}`,
+        _isDepartmentTask: true,
+        _parentJobNo: parentJobNo,
+        hierarchy_level: hierarchyLevel
+    };
+}
+
+function setDepartmentTaskSubtasksCache(taskId, subtasks) {
+    departmentTaskSubtasksCache.set(taskId, subtasks);
+    if (typeof taskId === 'number') {
+        departmentTaskSubtasksCache.set(String(taskId), subtasks);
+    } else if (typeof taskId === 'string' && !isNaN(taskId)) {
+        departmentTaskSubtasksCache.set(parseInt(taskId, 10), subtasks);
+    }
+}
+
+function getDepartmentTaskSubtasksFromCache(taskId) {
+    if (departmentTaskSubtasksCache.has(taskId)) {
+        return departmentTaskSubtasksCache.get(taskId);
+    }
+    if (typeof taskId === 'number' && departmentTaskSubtasksCache.has(String(taskId))) {
+        return departmentTaskSubtasksCache.get(String(taskId));
+    }
+    if (typeof taskId === 'string' && !isNaN(taskId) && departmentTaskSubtasksCache.has(parseInt(taskId, 10))) {
+        return departmentTaskSubtasksCache.get(parseInt(taskId, 10));
+    }
+    return null;
+}
+
+function isDepartmentTaskExpanded(taskId) {
+    return expandedDepartmentTaskRows.has(taskId)
+        || (typeof taskId === 'number' && expandedDepartmentTaskRows.has(String(taskId)))
+        || (typeof taskId === 'string' && !isNaN(taskId) && expandedDepartmentTaskRows.has(parseInt(taskId, 10)));
+}
+
+function addDepartmentTaskExpanded(taskId) {
+    expandedDepartmentTaskRows.add(taskId);
+    if (typeof taskId === 'number') {
+        expandedDepartmentTaskRows.add(String(taskId));
+    } else if (typeof taskId === 'string' && !isNaN(taskId)) {
+        expandedDepartmentTaskRows.add(parseInt(taskId, 10));
+    }
+}
+
+function removeDepartmentTaskExpanded(taskId) {
+    expandedDepartmentTaskRows.delete(taskId);
+    if (typeof taskId === 'number') {
+        expandedDepartmentTaskRows.delete(String(taskId));
+    } else if (typeof taskId === 'string' && !isNaN(taskId)) {
+        expandedDepartmentTaskRows.delete(parseInt(taskId, 10));
+    }
+}
+
+function mergeDepartmentTaskRows(tasks, parentJobNo, level) {
+    const merged = [];
+    (tasks || []).forEach(task => {
+        merged.push(buildDepartmentTaskTableRow(task, parentJobNo, level));
+        if (isDepartmentTaskExpanded(task.id)) {
+            const subtasks = getDepartmentTaskSubtasksFromCache(task.id) || [];
+            merged.push(...mergeDepartmentTaskRows(subtasks, parentJobNo, level + 1));
+        }
+    });
+    return merged;
+}
+
+function formatDepartmentTaskDepartmentCell(row) {
+    const value = row.department_display || row.department || '-';
+    if (!value || value === '-') return '-';
+    const department = row.department || '';
+    const taskId = row.id;
+    const departmentUrl = DEPARTMENT_TASK_URL_MAP[department];
+    if (departmentUrl && taskId) {
+        const url = `${departmentUrl}?task=${encodeURIComponent(taskId)}`;
+        const escapedUrl = url.replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+        return `<span class="department-link" data-href="${escapedUrl}" style="font-weight: 700; color: #198754; text-decoration: none; cursor: pointer; user-select: none;" onmouseover="this.style.textDecoration='underline';" onmouseout="this.style.textDecoration='none';">${value}</span>`;
+    }
+    return `<span style="font-weight: 600; color: #198754;">${value}</span>`;
+}
 let compactModeCheckTimeout = null;
 let lastAppliedFitSignature = '';
 let currentFitLevel = 0; // 0 = normal widths, 1 = minimum widths
@@ -457,9 +567,11 @@ function initializeTableComponent() {
         rowAttributes: (row, rowIndex) => {
             const attributes = {};
             
-            // Handle department tasks row
-            if (row._isDepartmentTasksRow) {
-                attributes.class = 'department-tasks-row';
+            // Handle department task child rows
+            if (isDepartmentTaskRow(row)) {
+                attributes.class = row.parent
+                    ? 'department-task-row department-subtask-row'
+                    : 'department-task-row';
                 attributes['data-parent-job-no'] = row._parentJobNo;
                 return attributes;
             }
@@ -492,11 +604,8 @@ function initializeTableComponent() {
                 field: '_expand',
                 label: '',
                 sortable: false,
-                width: IS_COMPACT_13_INCH ? '30px' : '80px',
+                width: IS_COMPACT_13_INCH ? '44px' : '96px',
                 formatter: (value, row) => {
-                    const hasChildren = row.children_count && row.children_count > 0;
-                    const isExpanded = expandedRows.has(row.job_no);
-                    
                     // Calculate hierarchy level (0 = root, 1 = child, 2 = grandchild, etc.)
                     const hierarchyLevel = row.hierarchy_level || 0;
                     
@@ -558,27 +667,83 @@ function initializeTableComponent() {
                         }
                     }
                     
-                    // Expand/collapse button for rows with children
-                    let expandButton = '';
-                    if (hasChildren) {
-                        const expandIcon = isExpanded ? 'fa-minus' : 'fa-plus';
+                    if (isDepartmentTaskRow(row)) {
+                        const hasSubtasks = row.subtasks_count && row.subtasks_count > 0;
+                        const isSubtasksExpanded = isDepartmentTaskExpanded(row.id);
+                        let subtaskExpandButton = '';
+                        if (hasSubtasks) {
+                            const expandIcon = isSubtasksExpanded ? 'fa-minus' : 'fa-plus';
+                            const buttonClass = isSubtasksExpanded ? 'expanded' : 'collapsed';
+                            subtaskExpandButton = `
+                                <button type="button"
+                                        class="btn btn-sm expand-dept-subtasks-btn ${buttonClass}"
+                                        data-task-id="${row.id}"
+                                        style="
+                                            position: absolute;
+                                            left: ${buttonLeftPosition}px;
+                                            top: 50%;
+                                            transform: translateY(-50%);
+                                            width: ${BUTTON_SIZE}px;
+                                            height: ${BUTTON_SIZE}px;
+                                            padding: 0;
+                                            border-radius: ${IS_COMPACT_13_INCH ? 2 : 4}px;
+                                            border: ${IS_COMPACT_13_INCH ? 1.2 : 1.5}px solid #0d6efd;
+                                            background: ${isSubtasksExpanded ? '#0d6efd' : '#ffffff'};
+                                            color: ${isSubtasksExpanded ? '#ffffff' : '#0d6efd'};
+                                            display: inline-flex;
+                                            align-items: center;
+                                            justify-content: center;
+                                            transition: all 0.2s ease;
+                                            cursor: pointer;
+                                            z-index: 1;
+                                        "
+                                        title="${isSubtasksExpanded ? 'Alt görevleri gizle' : 'Alt görevleri göster'}">
+                                    <i class="fas ${expandIcon}" style="font-size: ${IS_COMPACT_13_INCH ? '7px' : '10px'};"></i>
+                                </button>
+                            `;
+                        }
+                        return `
+                            <div style="
+                                position: relative;
+                                width: 100%;
+                                height: ${ROW_HEIGHT}px;
+                                min-height: ${ROW_HEIGHT}px;
+                            ">
+                                ${treeLinesHtml}
+                                ${subtaskExpandButton}
+                            </div>
+                        `;
+                    }
+
+                    const hasChildren = row.children_count && row.children_count > 0;
+                    const hasDepartmentTasks = row.department_task_count && row.department_task_count > 0;
+                    const isChildrenExpanded = expandedRows.has(row.job_no);
+                    const isDeptTasksExpanded = expandedDepartmentTasksRows.has(row.job_no);
+                    const GAP = IS_COMPACT_13_INCH ? 2 : 4;
+                    let buttonOffset = 0;
+                    let expandButtons = '';
+
+                    const buildExpandButton = (btnClass, isExpanded, borderColor, iconClass, titleExpand, titleCollapse, iconExpanded, iconCollapsed) => {
+                        const expandIcon = isExpanded ? iconExpanded : iconCollapsed;
                         const buttonClass = isExpanded ? 'expanded' : 'collapsed';
-                        expandButton = `
-                            <button type="button" 
-                                    class="btn btn-sm expand-toggle-btn ${buttonClass}" 
+                        const left = buttonLeftPosition + buttonOffset;
+                        buttonOffset += BUTTON_SIZE + GAP;
+                        return `
+                            <button type="button"
+                                    class="btn btn-sm ${btnClass} ${buttonClass}"
                                     data-job-no="${row.job_no}"
                                     style="
                                         position: absolute;
-                                        left: ${buttonLeftPosition}px;
+                                        left: ${left}px;
                                         top: 50%;
                                         transform: translateY(-50%);
                                         width: ${BUTTON_SIZE}px;
                                         height: ${BUTTON_SIZE}px;
                                         padding: 0;
                                         border-radius: ${IS_COMPACT_13_INCH ? 2 : 4}px;
-                                        border: ${IS_COMPACT_13_INCH ? 1.2 : 1.5}px solid #0d6efd;
-                                        background: ${isExpanded ? '#0d6efd' : '#ffffff'};
-                                        color: ${isExpanded ? '#ffffff' : '#0d6efd'};
+                                        border: ${IS_COMPACT_13_INCH ? 1.2 : 1.5}px solid ${borderColor};
+                                        background: ${isExpanded ? borderColor : '#ffffff'};
+                                        color: ${isExpanded ? '#ffffff' : borderColor};
                                         display: inline-flex;
                                         align-items: center;
                                         justify-content: center;
@@ -586,12 +751,35 @@ function initializeTableComponent() {
                                         cursor: pointer;
                                         z-index: 1;
                                     "
-                                    onmouseover="this.style.transform='translateY(-50%) scale(${IS_COMPACT_13_INCH ? '1.05' : '1.1'})'; this.style.boxShadow='0 2px 4px rgba(13,110,253,0.3)';"
-                                    onmouseout="this.style.transform='translateY(-50%) scale(1)'; this.style.boxShadow='none';"
-                                    title="${isExpanded ? 'Daralt' : 'Genişlet'}">
+                                    title="${isExpanded ? titleCollapse : titleExpand}">
                                 <i class="fas ${expandIcon}" style="font-size: ${IS_COMPACT_13_INCH ? '7px' : '10px'};"></i>
                             </button>
                         `;
+                    };
+
+                    if (hasChildren) {
+                        expandButtons += buildExpandButton(
+                            'expand-toggle-btn',
+                            isChildrenExpanded,
+                            '#0d6efd',
+                            '',
+                            'Alt işleri göster',
+                            'Alt işleri gizle',
+                            'fa-minus',
+                            'fa-plus'
+                        );
+                    }
+                    if (hasDepartmentTasks) {
+                        expandButtons += buildExpandButton(
+                            'expand-dept-tasks-btn',
+                            isDeptTasksExpanded,
+                            '#198754',
+                            '',
+                            'Departman görevlerini göster',
+                            'Departman görevlerini gizle',
+                            'fa-minus',
+                            'fa-tasks'
+                        );
                     }
                     
                     return `
@@ -602,7 +790,7 @@ function initializeTableComponent() {
                             min-height: ${ROW_HEIGHT}px;
                         ">
                             ${treeLinesHtml}
-                            ${expandButton}
+                            ${expandButtons}
                         </div>
                     `;
                 }
@@ -613,7 +801,12 @@ function initializeTableComponent() {
                 sortable: true,
                 width: IS_COMPACT_13_INCH ? '92px' : '160px',
                 formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
+                    if (isDepartmentTaskRow(row)) {
+                        if (row.parent) {
+                            return `<span style="font-weight: 600; color: #6c757d; font-size: ${IS_COMPACT_13_INCH ? '0.72rem' : '0.85rem'};"><i class="fas fa-level-down-alt me-1"></i>Alt Görev</span>`;
+                        }
+                        return `<span style="font-weight: 600; color: #198754; font-size: ${IS_COMPACT_13_INCH ? '0.72rem' : '0.85rem'};"><i class="fas fa-tasks me-1"></i>Görev</span>`;
+                    }
                     
                     const isChild = !!row.parent;
                     const hierarchyLevel = row.hierarchy_level || (isChild ? 1 : 0);
@@ -636,7 +829,18 @@ function initializeTableComponent() {
                 sortable: true,
                 width: IS_COMPACT_13_INCH ? '138px' : undefined,
                 formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
+                    if (isDepartmentTaskRow(row)) {
+                        if (row.parent) {
+                            const taskTitle = row.title || row.description || '-';
+                            return `<div style="color:#495057; font-weight:500; font-size:${IS_COMPACT_13_INCH ? '0.82rem' : '0.9rem'}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${taskTitle}</div>`;
+                        }
+                        const deptLabel = formatDepartmentTaskDepartmentCell(row);
+                        const taskTitle = row.title || row.description || '';
+                        const titleHtml = taskTitle
+                            ? `<div style="color:#6c757d; font-size:${IS_COMPACT_13_INCH ? '0.74rem' : '0.82rem'}; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${taskTitle}</div>`
+                            : '';
+                        return `<div style="line-height:1.3;">${deptLabel}${titleHtml}</div>`;
+                    }
                     if (!value) return '-';
                     
                     const hierarchyLevel = row.hierarchy_level || 0;
@@ -675,7 +879,7 @@ function initializeTableComponent() {
                 sortable: false,
                 width: IS_COMPACT_13_INCH ? '92px' : '220px',
                 formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
+                    if (isDepartmentTaskRow(row)) return '-';
                     
                     const customerDisplayName = row.customer_short_name || row.customer_name || value;
                     
@@ -708,7 +912,11 @@ function initializeTableComponent() {
                 sortable: true,
                 width: IS_COMPACT_13_INCH ? '54px' : undefined,
                 formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
+                    if (isDepartmentTaskRow(row)) {
+                        const weight = row.weight;
+                        if (weight === null || weight === undefined || weight === '') return '-';
+                        return `<span style="display:inline-block; min-width:${IS_COMPACT_13_INCH ? '28px' : '36px'}; text-align:center; font-weight:600; font-size:${IS_COMPACT_13_INCH ? '0.76rem' : '0.86rem'};">${parseFloat(weight).toFixed(2)}</span>`;
+                    }
                     if (!(value || value === 0)) return '-';
                     return `<span style="display:inline-block; min-width:${IS_COMPACT_13_INCH ? '28px' : '36px'}; text-align:center; font-weight:600; font-size:${IS_COMPACT_13_INCH ? '0.76rem' : '0.86rem'};">${value}</span>`;
                 }
@@ -719,13 +927,17 @@ function initializeTableComponent() {
                 sortable: true,
                 width: IS_COMPACT_13_INCH ? '72px' : undefined,
                 formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
-                    const status = row.status;
                     const tight = isTightLayout();
                     const ultra = isUltraTightLayout();
                     const compactBadgeStyle = tight
                         ? `style="font-size:${ultra ? '0.58rem' : '0.64rem'}; padding:${ultra ? '0.1rem 0.24rem' : '0.14rem 0.34rem'}; letter-spacing:0; max-width:100%; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"`
                         : 'style="max-width:100%; display:inline-block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"';
+                    if (isDepartmentTaskRow(row)) {
+                        const status = row.status;
+                        const badgeClass = getDepartmentTaskStatusBadgeClass(status);
+                        return `<span class="status-badge ${badgeClass}" ${compactBadgeStyle}>${value || '-'}</span>`;
+                    }
+                    const status = row.status;
                     if (status === 'active') {
                         return `<span class="status-badge status-blue" ${compactBadgeStyle}>Aktif</span>`;
                     } else if (status === 'draft') {
@@ -747,11 +959,18 @@ function initializeTableComponent() {
                 type: 'date',
                 width: IS_COMPACT_13_INCH ? '94px' : undefined,
                 formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
                     if (!value) return '-';
                     const tight = isTightLayout();
                     const ultra = isUltraTightLayout();
                     const date = new Date(value);
+                    if (isDepartmentTaskRow(row)) {
+                        const formattedDate = date.toLocaleDateString('tr-TR', {
+                            year: tight ? '2-digit' : 'numeric',
+                            month: tight ? '2-digit' : 'short',
+                            day: tight ? '2-digit' : 'numeric'
+                        });
+                        return `<span class="text-dark" style="font-size: ${ultra ? '0.72rem' : (tight ? '0.78rem' : '0.875rem')}; font-weight: 500;">${formattedDate}</span>`;
+                    }
                     const today = new Date();
                     today.setHours(0, 0, 0, 0);
                     const completionDate = new Date(date);
@@ -925,7 +1144,7 @@ function initializeTableComponent() {
                 sortable: true,
                 width: IS_COMPACT_13_INCH ? '96px' : '170px',
                 formatter: (value, row) => {
-                    if (row?._isDepartmentTasksRow) return '';
+                    if (isDepartmentTaskRow(row)) return '-';
                     if (row?.status === 'completed') return '-';
                     if (value === null || value === undefined || value === '') return '-';
 
@@ -989,7 +1208,7 @@ function initializeTableComponent() {
                 sortable: true,
                 width: IS_COMPACT_13_INCH ? '96px' : '170px',
                 formatter: (value, row) => {
-                    if (row?._isDepartmentTasksRow) return '';
+                    if (isDepartmentTaskRow(row)) return '-';
                     if (value === null || value === undefined || value === '') return '-';
 
                     const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
@@ -1054,7 +1273,7 @@ function initializeTableComponent() {
                 sortable: false,
                 width: IS_COMPACT_13_INCH ? '46px' : '90px',
                 formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
+                    if (isDepartmentTaskRow(row)) return '-';
                     const count = parseInt(value) || 0;
                     if (count <= 0) return '-';
                     const badgeClass = count > 5 ? 'status-red' : (count >= 3 ? 'status-yellow' : 'status-grey');
@@ -1076,7 +1295,7 @@ function initializeTableComponent() {
                 sortable: false,
                 width: IS_COMPACT_13_INCH ? '50px' : '110px',
                 formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
+                    if (isDepartmentTaskRow(row)) return '-';
                     const count = parseInt(value) || 0;
                     if (count <= 0) return '-';
                     const badgeClass = count > 5 ? 'status-red' : (count >= 3 ? 'status-yellow' : 'status-grey');
@@ -1098,7 +1317,7 @@ function initializeTableComponent() {
                 type: 'date',
                 width: IS_COMPACT_13_INCH ? '82px' : undefined,
                 formatter: (value, row) => {
-                    if (row._isDepartmentTasksRow) return '';
+                    if (isDepartmentTaskRow(row)) return '-';
                     if (!value) return '-';
                     const date = new Date(value);
                     const formattedDate = date.toLocaleDateString('tr-TR', {
@@ -1155,7 +1374,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     startJobOrder(row.job_no);
                 },
-                visible: (row) => !HIDE_ACTION_BUTTONS && row.status === 'draft'
+                visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && row.status === 'draft'
             },
             {
                 key: 'hold',
@@ -1165,7 +1384,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     holdJobOrder(row.job_no);
                 },
-                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status === 'active'
+                visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status === 'active'
             },
             {
                 key: 'cancel',
@@ -1175,7 +1394,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     cancelJobOrder(row.job_no);
                 },
-                visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
             },
             {
                 key: 'view',
@@ -1185,7 +1404,7 @@ function initializeTableComponent() {
                 onClick: (row) => {
                     viewJobOrder(row.job_no);
                 },
-                visible: () => true // Always show detail button
+                visible: (row) => !isDepartmentTaskRow(row)
             },
             // Dropdown for secondary actions
             {
@@ -1202,7 +1421,7 @@ function initializeTableComponent() {
                         onClick: (row) => {
                             editJobOrder(row.job_no);
                         },
-                        visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
                     },
                     {
                         key: 'revise-target-date',
@@ -1211,7 +1430,7 @@ function initializeTableComponent() {
                         onClick: (row) => {
                             showTargetDateRevisionModal(row.job_no, row.target_completion_date);
                         },
-                        visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && !row._isDepartmentTasksRow
+                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders()
                     },
                     {
                         key: 'create-child',
@@ -1220,7 +1439,7 @@ function initializeTableComponent() {
                         onClick: (row) => {
                             showCreateChildJobOrderModal(row.job_no);
                         },
-                        visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
                     },
                     {
                         key: 'add-department-task',
@@ -1229,7 +1448,7 @@ function initializeTableComponent() {
                         onClick: (row) => {
                             showAddDepartmentTaskModal(row.job_no);
                         },
-                        visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
+                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'completed' && row.status !== 'cancelled'
                     },
                     {
                         key: 'resume',
@@ -1238,7 +1457,7 @@ function initializeTableComponent() {
                         onClick: (row) => {
                             resumeJobOrder(row.job_no);
                         },
-                        visible: (row) => !HIDE_ACTION_BUTTONS && row.status === 'on_hold'
+                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && row.status === 'on_hold'
                     },
                     {
                         key: 'recalculate-progress',
@@ -1247,10 +1466,10 @@ function initializeTableComponent() {
                         onClick: (row) => {
                             recalculateProgress(row.job_no);
                         },
-                        visible: (row) => !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'cancelled'
+                        visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS && canEditJobOrders() && row.status !== 'cancelled'
                     }
                 ],
-                visible: () => !HIDE_ACTION_BUTTONS // Visibility of sub-actions is handled in renderActions
+                visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS
             }
         ],
         emptyMessage: 'İş emri bulunamadı',
@@ -1707,6 +1926,10 @@ async function loadJobOrders() {
         // Clear caches so we always show fresh data (multi-user safe)
         childrenCache.clear();
         expandedRows.clear();
+        departmentTasksCache.clear();
+        expandedDepartmentTasksRows.clear();
+        expandedDepartmentTaskRows.clear();
+        departmentTaskSubtasksCache.clear();
         
         // Call API
         const response = await listJobOrders(options);
@@ -1773,6 +1996,11 @@ function mergeExpandedChildren(rootOrders, level = 0) {
             // Recursively merge children (for grandchildren, etc.)
             const childRows = mergeExpandedChildren(children, level + 1);
             merged.push(...childRows);
+        }
+
+        if (expandedDepartmentTasksRows.has(rootOrder.job_no)) {
+            const tasks = departmentTasksCache.get(rootOrder.job_no) || [];
+            merged.push(...mergeDepartmentTaskRows(tasks, rootOrder.job_no, level + 1));
         }
     });
     
@@ -1890,50 +2118,93 @@ function setupExpandButtonListeners() {
     
     // Create the handler function
     expandButtonHandler = async (e) => {
-        // Check if the clicked element is an expand button or inside one
-        // This handles clicks on both the button and the icon inside it
+        const deptSubtasksButton = e.target.closest('.expand-dept-subtasks-btn');
+        const deptTasksButton = e.target.closest('.expand-dept-tasks-btn');
         const expandButton = e.target.closest('.expand-toggle-btn');
-        if (!expandButton) return;
-        
+
+        if (deptSubtasksButton) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            const taskIdAttr = deptSubtasksButton.getAttribute('data-task-id');
+            if (!taskIdAttr) return;
+
+            const taskId = parseInt(taskIdAttr, 10);
+            if (Number.isNaN(taskId)) return;
+
+            if (isDepartmentTaskExpanded(taskId)) {
+                removeDepartmentTaskExpanded(taskId);
+                preserveScrollDuringUpdate(deptSubtasksButton, () => updateTableDataOnly());
+            } else {
+                try {
+                    const icon = deptSubtasksButton.querySelector('i');
+                    if (icon) icon.className = 'fas fa-spinner fa-spin text-primary';
+                    await fetchDepartmentTaskSubtasks(taskId);
+                    addDepartmentTaskExpanded(taskId);
+                    preserveScrollDuringUpdate(deptSubtasksButton, () => updateTableDataOnly());
+                } catch (error) {
+                    console.error(`Error fetching subtasks for task ${taskId}:`, error);
+                    showNotification('Alt görevler yüklenirken hata oluştu', 'error');
+                    const icon = deptSubtasksButton.querySelector('i');
+                    if (icon) icon.className = 'fas fa-plus';
+                }
+            }
+            return;
+        }
+
+        const clickedButton = deptTasksButton || expandButton;
+        if (!clickedButton) return;
+
         e.preventDefault();
         e.stopPropagation();
-        
-        const jobNo = expandButton.getAttribute('data-job-no');
+
+        const jobNo = clickedButton.getAttribute('data-job-no');
         if (!jobNo) {
             console.warn('Expand button missing data-job-no attribute');
             return;
         }
-        
+
+        if (deptTasksButton) {
+            const isExpanded = expandedDepartmentTasksRows.has(jobNo);
+            if (isExpanded) {
+                expandedDepartmentTasksRows.delete(jobNo);
+                preserveScrollDuringUpdate(deptTasksButton, () => updateTableDataOnly());
+            } else {
+                try {
+                    const icon = deptTasksButton.querySelector('i');
+                    if (icon) icon.className = 'fas fa-spinner fa-spin';
+                    await fetchDepartmentTasksForJobOrder(jobNo);
+                    expandedDepartmentTasksRows.add(jobNo);
+                    preserveScrollDuringUpdate(deptTasksButton, () => updateTableDataOnly());
+                } catch (error) {
+                    console.error(`Error fetching department tasks for ${jobNo}:`, error);
+                    showNotification('Departman görevleri yüklenirken hata oluştu', 'error');
+                    const icon = deptTasksButton.querySelector('i');
+                    if (icon) icon.className = 'fas fa-tasks';
+                }
+            }
+            return;
+        }
+
         const isExpanded = expandedRows.has(jobNo);
-        
+
         if (isExpanded) {
-            // Collapse: remove from expanded set
             expandedRows.delete(jobNo);
-            // Update table without loading state
             preserveScrollDuringUpdate(expandButton, () => updateTableDataOnly());
         } else {
-            // Expand: always fetch children to get latest updates
             try {
-                // Show loading state on button
                 const icon = expandButton.querySelector('i');
-                if (icon) {
-                    icon.className = 'fas fa-spinner fa-spin text-primary';
-                }
-                
+                if (icon) icon.className = 'fas fa-spinner fa-spin text-primary';
+
                 await fetchJobOrderChildren(jobNo);
-                
+
                 expandedRows.add(jobNo);
-                // Update table without loading state
                 preserveScrollDuringUpdate(expandButton, () => updateTableDataOnly());
             } catch (error) {
                 console.error(`Error fetching children for ${jobNo}:`, error);
                 showNotification('Alt işler yüklenirken hata oluştu', 'error');
-                // Restore icon on error
                 const icon = expandButton.querySelector('i');
-                if (icon) {
-                    icon.className = 'fas fa-chevron-right text-primary';
-                }
-                return;
+                if (icon) icon.className = 'fas fa-plus';
             }
         }
     };
@@ -2024,6 +2295,48 @@ function setupExpandButtonListeners() {
         showTargetDateRevisionModal(jobNo, currentDate);
     };
     jobOrdersTable.container.addEventListener('click', targetDateReviseRowClickHandler);
+
+    // Department task links in inline child rows
+    jobOrdersTable.container.addEventListener('click', (e) => {
+        const departmentLink = e.target.closest('.department-link');
+        if (!departmentLink || !jobOrdersTable.container.contains(departmentLink)) return;
+        e.preventDefault();
+        e.stopPropagation();
+        const url = departmentLink.getAttribute('data-href');
+        if (url) window.location.href = url;
+    });
+}
+
+// Fetch department tasks for a specific job order (main tasks only; subtasks expand separately)
+async function fetchDepartmentTasksForJobOrder(jobNo) {
+    try {
+        const response = await getJobOrderDepartmentTasks(jobNo, {
+            main_only: true,
+            ordering: 'sequence'
+        });
+        const tasks = extractResultsFromResponse(response);
+        departmentTasksCache.set(jobNo, tasks);
+    } catch (error) {
+        console.error(`Error fetching department tasks for job order ${jobNo}:`, error);
+        departmentTasksCache.set(jobNo, []);
+        throw error;
+    }
+}
+
+// Fetch subtasks for a department task
+async function fetchDepartmentTaskSubtasks(taskId) {
+    try {
+        const response = await listDepartmentTasks({
+            parent: taskId,
+            ordering: 'sequence'
+        });
+        const subtasks = extractResultsFromResponse(response);
+        setDepartmentTaskSubtasksCache(taskId, subtasks);
+    } catch (error) {
+        console.error(`Error fetching subtasks for department task ${taskId}:`, error);
+        setDepartmentTaskSubtasksCache(taskId, []);
+        throw error;
+    }
 }
 
 // Fetch children for a specific job order

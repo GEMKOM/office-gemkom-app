@@ -200,10 +200,15 @@
             border-bottom-color: rgba(0, 0, 0, 0.15);
         }
         
-        /* Department tasks row separation */
-        #job-orders-table-container .table tbody tr.department-tasks-row {
-            border-top: 1px solid #d0d0d0;
-            border-bottom: 1px solid #d0d0d0;
+        /* Department task child rows in the main table */
+        #job-orders-table-container .table tbody tr.department-task-row {
+            background-color: rgba(25, 135, 84, 0.04);
+        }
+        #job-orders-table-container .table tbody tr.department-task-row td {
+            border-top: 1px solid rgba(25, 135, 84, 0.12);
+        }
+        #job-orders-table-container .table tbody tr.department-subtask-row {
+            background-color: rgba(13, 110, 253, 0.03);
         }
 
         /* Compact layout (enabled dynamically when table overflows) */

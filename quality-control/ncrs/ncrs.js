@@ -282,6 +282,26 @@ const SEVERITY_BADGE_MAP = {
     'critical': { class: 'status-red', label: 'Kritik' }
 };
 
+function resolveQcReviewId(qcReview) {
+    if (qcReview == null || qcReview === '') return null;
+    if (typeof qcReview === 'object') {
+        const id = qcReview.id ?? qcReview.pk ?? qcReview.review_id;
+        return id != null && id !== '' ? id : null;
+    }
+    return qcReview;
+}
+
+function formatQcReviewLink(qcReview) {
+    const reviewId = resolveQcReviewId(qcReview);
+    if (!reviewId) return '-';
+    const reviewUrl = `/quality-control/qc-reviews/?review=${reviewId}`;
+    return `<a href="${reviewUrl}" target="_blank" class="text-decoration-none">
+        <span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 0.9rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2); white-space: nowrap; display: inline-block;">
+            <i class="fas fa-search me-1"></i>#${reviewId}
+        </span>
+    </a>`;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) {
         return;
@@ -587,6 +607,13 @@ function initializeTableComponent(canDecideNCRs) {
                 // Badge-style styling for job order
                 return `<span style="font-weight: 600; color: #6c757d; font-family: 'Courier New', monospace; font-size: 0.9rem; background: rgba(108, 117, 125, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(108, 117, 125, 0.2);">${value}</span>`;
             }
+        },
+        {
+            field: 'qc_review',
+            label: 'KK İnceleme',
+            sortable: false,
+            width: '120px',
+            formatter: (value) => formatQcReviewLink(value)
         },
         {
             field: 'severity',
@@ -1144,6 +1171,12 @@ async function showNCRDetails(ncr) {
                     label: 'İş Emri',
                     value: fullNCR.job_order || '-',
                     colSize: 6
+                },
+                {
+                    label: 'KK İnceleme',
+                    value: resolveQcReviewId(fullNCR.qc_review) || null,
+                    colSize: 6,
+                    format: (value) => (value ? formatQcReviewLink(value) : '-')
                 },
                 {
                     label: 'Durum',
