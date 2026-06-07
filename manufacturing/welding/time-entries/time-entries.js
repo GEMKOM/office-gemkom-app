@@ -99,26 +99,90 @@ function matchEmployeeFromPaste(employeeText, userList) {
     const normalizedInput = normalizePersonName(cleaned);
     if (!normalizedInput) return null;
 
-    let bestMatch = null;
-    let bestScore = 0;
+    const matches = [];
+    const matchedUserIds = new Set();
 
     for (const user of userList) {
         const variants = collectUserNameVariants(user);
         for (const variant of variants) {
             if (variant === normalizedInput) {
-                return user;
-            }
-            if (variant.includes(normalizedInput) || normalizedInput.includes(variant)) {
-                const score = Math.min(variant.length, normalizedInput.length);
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMatch = user;
+                const userKey = user.id != null ? String(user.id) : getUserOptionLabel(user);
+                if (!matchedUserIds.has(userKey)) {
+                    matchedUserIds.add(userKey);
+                    matches.push(user);
                 }
+                break;
             }
         }
     }
 
-    return bestMatch;
+    return matches.length === 1 ? matches[0] : null;
+}
+
+function formatDateParts(year, month, day) {
+    const numericYear = Number(year);
+    const numericMonth = Number(month);
+    const numericDay = Number(day);
+    if (!numericYear || !numericMonth || !numericDay) return '';
+
+    const date = new Date(numericYear, numericMonth - 1, numericDay);
+    if (
+        date.getFullYear() !== numericYear ||
+        date.getMonth() + 1 !== numericMonth ||
+        date.getDate() !== numericDay
+    ) {
+        return '';
+    }
+
+    return [
+        String(numericYear).padStart(4, '0'),
+        String(numericMonth).padStart(2, '0'),
+        String(numericDay).padStart(2, '0')
+    ].join('-');
+}
+
+function parsePastedDate(dateText) {
+    const trimmed = String(dateText ?? '').trim();
+    if (!trimmed) return '';
+
+    const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})(?:[T\s]|$)/);
+    if (isoMatch) {
+        return formatDateParts(isoMatch[1], isoMatch[2], isoMatch[3]);
+    }
+
+    const localDateMatch = trimmed.match(/^(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})$/);
+    if (localDateMatch) {
+        return formatDateParts(localDateMatch[3], localDateMatch[2], localDateMatch[1]);
+    }
+
+    const englishMonthNames = {
+        jan: 1,
+        feb: 2,
+        mar: 3,
+        apr: 4,
+        may: 5,
+        jun: 6,
+        jul: 7,
+        aug: 8,
+        sep: 9,
+        oct: 10,
+        nov: 11,
+        dec: 12
+    };
+    const dateStringMatch = trimmed.match(/^(?:[A-Za-z]{3}\s+)?([A-Za-z]{3})\s+(\d{1,2})\s+(\d{4})(?:\s|$)/);
+    if (dateStringMatch) {
+        const month = englishMonthNames[dateStringMatch[1].toLowerCase()];
+        if (month) {
+            return formatDateParts(dateStringMatch[3], month, dateStringMatch[2]);
+        }
+    }
+
+    const parsedDate = new Date(trimmed);
+    if (!isNaN(parsedDate.getTime())) {
+        return formatDateParts(parsedDate.getFullYear(), parsedDate.getMonth() + 1, parsedDate.getDate());
+    }
+
+    return trimmed;
 }
 
 // Initialize the page
@@ -1035,35 +1099,15 @@ function setupBulkCreateForm(bulkCreateModal) {
                 // Map cells to fields — match employee by name (handles Turkish chars and name order)
                 let employeeId = '';
                 const employeeText = (cells[0] || '').replace(/^\uFEFF/, '').trim();
-                const matchedUser = matchEmployeeFromPaste(employeeText, users)
-                    || matchEmployeeFromPaste(employeeText, allUsersForMatching);
+                const matchedUser = matchEmployeeFromPaste(employeeText, users);
 
                 if (matchedUser && matchedUser.id) {
                     employeeId = matchedUser.id.toString();
                 }
                 
                 // Parse date - try multiple formats
-                let dateValue = '';
                 const dateText = cells[2] || '';
-                if (dateText) {
-                    // Try to parse date
-                    const date = new Date(dateText);
-                    if (!isNaN(date.getTime())) {
-                        // Format as YYYY-MM-DD
-                        dateValue = date.toISOString().split('T')[0];
-                    } else {
-                        // Try DD.MM.YYYY or DD/MM/YYYY
-                        const dateMatch = dateText.match(/(\d{1,2})[.\/](\d{1,2})[.\/](\d{4})/);
-                        if (dateMatch) {
-                            const day = dateMatch[1].padStart(2, '0');
-                            const month = dateMatch[2].padStart(2, '0');
-                            const year = dateMatch[3];
-                            dateValue = `${year}-${month}-${day}`;
-                        } else {
-                            dateValue = dateText; // Use as-is
-                        }
-                    }
-                }
+                const dateValue = parsePastedDate(dateText);
                 
                 // Parse hours
                 let hoursValue = '';
@@ -1103,7 +1147,7 @@ function setupBulkCreateForm(bulkCreateModal) {
                     });
                 } else {
                     const reasons = [];
-                    if (!employeeId) reasons.push('Çalışan bulunamadı');
+                    if (!employeeId) reasons.push('Çalışan bulunamadı veya eşleşme belirsiz');
                     if (!jobNoRaw) reasons.push('İş no boş');
                     if (jobNoRaw && !hasValidJobNo) reasons.push('İş no listede yok');
                     if (!dateValue) reasons.push('Tarih geçersiz');
