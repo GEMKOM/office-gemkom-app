@@ -52,6 +52,7 @@ import {
 } from '../../apis/finance/adhoc-job-costs.js';
 import { listJobOrders } from '../../apis/projects/jobOrders.js';
 import { isAdmin } from '../../authService.js';
+import { initRouteProtection } from '../../apis/routeProtection.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { TableComponent } from '../../components/table/table.js';
@@ -164,6 +165,10 @@ const EXPENSE_RECURRENCE_LABELS = Object.fromEntries(EXPENSE_RECURRENCE_OPTIONS.
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async function() {
+    if (!initRouteProtection('/finance/purchase-orders')) {
+        return;
+    }
+
     actionConfirmModal = new ConfirmationModal('action-confirm-modal-container', {
         title: 'Onay',
         icon: 'fas fa-exclamation-triangle',
