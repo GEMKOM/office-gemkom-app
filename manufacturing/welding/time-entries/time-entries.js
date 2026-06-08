@@ -25,7 +25,6 @@ let isLoading = false;
 let timeEntriesFilters = null;
 let timeEntriesTable = null;
 let users = [];
-let allUsersForMatching = [];
 let editTimeEntryModal = null;
 let deleteTimeEntryModal = null;
 let actionConfirmModal = null;
@@ -99,26 +98,24 @@ function matchEmployeeFromPaste(employeeText, userList) {
     const normalizedInput = normalizePersonName(cleaned);
     if (!normalizedInput) return null;
 
-    let bestMatch = null;
-    let bestScore = 0;
+    const matches = [];
+    const matchedIds = new Set();
 
     for (const user of userList) {
         const variants = collectUserNameVariants(user);
         for (const variant of variants) {
             if (variant === normalizedInput) {
-                return user;
-            }
-            if (variant.includes(normalizedInput) || normalizedInput.includes(variant)) {
-                const score = Math.min(variant.length, normalizedInput.length);
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMatch = user;
+                const userId = user.id != null ? String(user.id) : getUserOptionLabel(user);
+                if (!matchedIds.has(userId)) {
+                    matchedIds.add(userId);
+                    matches.push(user);
                 }
+                break;
             }
         }
     }
 
-    return bestMatch;
+    return matches.length === 1 ? matches[0] : null;
 }
 
 // Initialize the page
@@ -162,29 +159,10 @@ async function loadUsers() {
             ordering: 'full_name'
         });
         users = response.results || [];
-
-        const allResponse = await authFetchUsers(1, 10000, {
-            ordering: 'full_name',
-            is_active: 'true'
-        });
-        allUsersForMatching = allResponse.results || [];
     } catch (error) {
         console.error('Error loading users:', error);
         users = [];
-        allUsersForMatching = [];
     }
-}
-
-function getBulkCreateUsersForRow(row) {
-    const rowEmployeeId = row?.employee != null && row.employee !== '' ? String(row.employee) : '';
-    if (!rowEmployeeId) return users;
-
-    if (users.some((user) => user.id != null && String(user.id) === rowEmployeeId)) {
-        return users;
-    }
-
-    const matchedFromAll = allUsersForMatching.find((user) => user.id != null && String(user.id) === rowEmployeeId);
-    return matchedFromAll ? [...users, matchedFromAll] : users;
 }
 
 // Load job order dropdown options
@@ -642,18 +620,12 @@ function setupBulkCreateForm(bulkCreateModal) {
                         // Render employee dropdown
                         html += `<option value="">Çalışan seçin...</option>`;
                         const rowEmployeeId = row[col.key] != null && row[col.key] !== '' ? String(row[col.key]) : '';
-                        let employeeSelected = false;
-                        getBulkCreateUsersForRow(row).forEach(user => {
+                        users.forEach(user => {
                             const userId = user.id ? user.id.toString() : '';
                             const userLabel = getUserOptionLabel(user);
                             const selected = rowEmployeeId && rowEmployeeId === userId ? 'selected' : '';
-                            if (selected) employeeSelected = true;
                             html += `<option value="${userId}" ${selected}>${userLabel}</option>`;
                         });
-                        if (rowEmployeeId && !employeeSelected) {
-                            const fallbackLabel = row.employee_label || `Kullanıcı #${rowEmployeeId}`;
-                            html += `<option value="${rowEmployeeId}" selected>${fallbackLabel}</option>`;
-                        }
                     } else if (col.options) {
                         // Render other select fields with options
                         html += `<option value="">Seçin...</option>`;
@@ -1032,11 +1004,10 @@ function setupBulkCreateForm(bulkCreateModal) {
                     }
                 }
                 
-                // Map cells to fields — match employee by name (handles Turkish chars and name order)
+                // Map cells to fields — require a unique exact welding-team match.
                 let employeeId = '';
                 const employeeText = (cells[0] || '').replace(/^\uFEFF/, '').trim();
-                const matchedUser = matchEmployeeFromPaste(employeeText, users)
-                    || matchEmployeeFromPaste(employeeText, allUsersForMatching);
+                const matchedUser = matchEmployeeFromPaste(employeeText, users);
 
                 if (matchedUser && matchedUser.id) {
                     employeeId = matchedUser.id.toString();
@@ -1302,7 +1273,18 @@ async function handleBulkCreateSave(rows, columns, showModalNotification) {
     }
     
     const validationErrors = [];
+    const validEmployeeIds = new Set(
+        users
+            .map(user => user.id != null ? String(user.id) : '')
+            .filter(Boolean)
+    );
+
     rows.forEach((row, index) => {
+        const employeeId = row.employee != null ? String(row.employee) : '';
+        if (employeeId && !validEmployeeIds.has(employeeId)) {
+            validationErrors.push(`Satır ${index + 1}: Çalışan kaynak ekibinde bulunamadı`);
+        }
+
         if (row.hours) {
             const hours = parseFloat(row.hours);
             if (hours <= 0) {
