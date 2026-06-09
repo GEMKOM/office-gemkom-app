@@ -57,6 +57,16 @@ function approvalKindBadge(kind) {
     return '<span class="status-badge status-yellow">Onay Süreci</span>';
 }
 
+function pendingApprovalStatusBadge(row) {
+    if (row?.kind === 'cancellation_request') {
+        return approvalKindBadge(row.kind);
+    }
+    if (row?.kind === 'workflow_approval' && row?.status === 'submitted') {
+        return approvalKindBadge(row.kind);
+    }
+    return statusBadge(row?.status, row?.status_label);
+}
+
 function formatDate(value) {
     if (!value) return '-';
     const d = new Date(value);
@@ -565,7 +575,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         iconColor: 'text-warning',
         columns: [
             { field: 'id', label: 'Talep No', sortable: true, formatter: v => `<strong>#${v || '-'}</strong>` },
-            { field: 'kind', label: 'Tip', sortable: true, formatter: v => approvalKindBadge(v) },
             { field: 'requester_username', label: 'Talep Eden', sortable: true, formatter: v => v || '-' },
             {
                 field: 'leave_type',
@@ -582,7 +591,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 sortable: false,
                 formatter: (v, row) => row.kind === 'cancellation_request' ? (v || '-') : '-'
             },
-            { field: 'status', label: 'Durum', sortable: true, formatter: (v, row) => statusBadge(v, row.status_label) }
+            { field: 'status', label: 'Durum', sortable: true, formatter: (_v, row) => pendingApprovalStatusBadge(row) }
         ],
         actions: [
             { key: 'detail', label: 'Detay', icon: 'fas fa-eye', class: 'btn-outline-primary', onClick: row => showDetail(row) },
