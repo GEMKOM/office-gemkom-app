@@ -88,15 +88,16 @@ export const COST_SUMMARY_CURRENCIES = ['EUR', 'USD', 'GBP', 'TRY'];
  * @param {string} jobNo - Job order number (e.g. "254-01")
  * @returns {Promise<{
  *   job_order: string,
- *   labor_cost: string,
- *   material_cost: string,
- *   subcontractor_cost: string,
- *   paint_cost: string,
- *   qc_cost: string,
- *   shipping_cost: string,
- *   actual_total_cost: string,
+ *   total_weight_kg: string|null,
+ *   completion_pct: string,
+ *   currency: string,
  *   selling_price: string,
  *   selling_price_currency: string,
+ *   selling_price_eur: string,
+ *   selling_price_effective: Object,
+ *   actual: { currency: string, total_cost: string, components: Object },
+ *   estimated: { currency: string, total_cost: string, components: Object, assumptions: Object, material_lines: Array, children: Array },
+ *   editable: Object,
  *   last_updated: string
  * }>}
  */
@@ -105,6 +106,46 @@ export async function getJobCostSummary(jobNo) {
     const response = await authedFetch(url);
     if (!response.ok) {
         throw new Error(`Cost summary request failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
+ * Estimated material cost line breakdown for a job order (includes child jobs).
+ * GET /projects/job-orders/{job_no}/estimated_material_breakdown/
+ * @param {string} jobNo - Job order number (e.g. "100-99")
+ * @returns {Promise<{
+ *   job_order: string,
+ *   currency: string,
+ *   items_count: number,
+ *   lines_total: string,
+ *   estimated_material_cost: string,
+ *   actual_material_cost: string,
+ *   floor_adjustment_eur: string,
+ *   material_cost_floored_to_actual: boolean,
+ *   items: Array<{
+ *     job_order: string,
+ *     planning_request_item: number|null,
+ *     procurement_line_id: number|null,
+ *     item: number|null,
+ *     item_code: string|null,
+ *     item_name: string|null,
+ *     item_unit: string|null,
+ *     quantity: string,
+ *     unit_price_eur: string,
+ *     original_unit_price: string,
+ *     original_currency: string|null,
+ *     amount_eur: string,
+ *     price_source: string,
+ *     price_date: string|null
+ *   }>
+ * }>}
+ */
+export async function getEstimatedMaterialBreakdown(jobNo) {
+    const url = `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/estimated_material_breakdown/`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`Estimated material breakdown request failed: ${response.status}`);
     }
     return response.json();
 }

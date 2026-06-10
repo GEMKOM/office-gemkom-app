@@ -241,6 +241,7 @@ function initHasEntriesTable() {
         },
         actions: [
             { key: 'open-lines', label: 'Satırları Aç', icon: 'fas fa-list', class: 'btn-outline-primary', onClick: (row) => openLinesModal(row.job_no) },
+            { key: 'preview-lines', label: 'Önizle', title: 'Malzeme Maliyeti Önizlemesi', icon: 'fas fa-eye', class: 'btn-outline-secondary', onClick: (row) => openLinesModal(row.job_no, { usePreview: true }) },
             { key: 'mark-cost-na', label: 'Maliyet Uygulanamaz', title: 'Maliyet Uygulanamaz Olarak İşaretle', icon: 'fas fa-ban', class: 'btn-outline-danger', onClick: (row) => confirmMarkCostNotApplicable(row.job_no) }
         ],
         emptyMessage: 'Listeyi yüklemek için Filtrele veya Yenile butonuna tıklayın.',
@@ -411,11 +412,56 @@ function removeJobOrderFromLocalLists(jobNo) {
     }
 }
 
+function emptyProcurementLine(order = 0) {
+    return {
+        item: null,
+        item_code: '',
+        item_name: '',
+        item_unit: '',
+        item_description: '',
+        quantity: '0',
+        unit_price: '0',
+        amount_eur: '0',
+        planning_request_item: null,
+        order,
+        price_source: null,
+        price_date: null
+    };
+}
+
+async function loadPreviewProcurementLines(jobNo) {
+    const preview = await getProcurementLinesPreview(jobNo);
+    if (!preview || preview.length === 0) {
+        return [emptyProcurementLine()];
+    }
+    const lines = preview.map((p, idx) => ({
+        item: p.item ?? null,
+        item_code: p.item_code ?? '',
+        item_name: p.item_name ?? '',
+        item_unit: p.item_unit ?? '',
+        item_description: p.item_description ?? '',
+        quantity: p.quantity ?? '0',
+        unit_price: p.unit_price_eur != null && p.unit_price_eur !== '' ? String(p.unit_price_eur) : '0',
+        amount_eur: '0',
+        planning_request_item: p.planning_request_item ?? null,
+        order: p.order ?? idx,
+        price_source: p.price_source ?? null,
+        price_date: p.price_date ?? null
+    }));
+    lines.forEach((line) => {
+        const q = parseFloat(line.quantity) || 0;
+        const u = parseFloat(line.unit_price) || 0;
+        line.amount_eur = (q * u).toFixed(2);
+    });
+    return lines;
+}
+
 /**
  * Open the lines modal for a job order. Load saved lines or preview.
  * @param {string} jobNo
+ * @param {{ usePreview?: boolean }} [options]
  */
-async function openLinesModal(jobNo) {
+async function openLinesModal(jobNo, { usePreview = false } = {}) {
     currentJobOrderForLines = jobNo;
     const titleEl = document.getElementById('procurement-lines-modal-title');
     if (titleEl) titleEl.textContent = `Malzeme Maliyeti Satırları — ${jobNo}`;
@@ -427,33 +473,14 @@ async function openLinesModal(jobNo) {
     linesModalBootstrap.show();
 
     try {
-        const saved = await getProcurementLines(jobNo);
-        if (saved && saved.length > 0) {
-            editingLines = mapSavedProcurementLines(saved);
+        if (usePreview) {
+            editingLines = await loadPreviewProcurementLines(jobNo);
         } else {
-            const preview = await getProcurementLinesPreview(jobNo);
-            if (preview && preview.length > 0) {
-                editingLines = preview.map((p, idx) => ({
-                    item: p.item ?? null,
-                    item_code: p.item_code ?? '',
-                    item_name: p.item_name ?? '',
-                    item_unit: p.item_unit ?? '',
-                    item_description: p.item_description ?? '',
-                    quantity: p.quantity ?? '0',
-                    unit_price: p.unit_price_eur != null && p.unit_price_eur !== '' ? String(p.unit_price_eur) : '0',
-                    amount_eur: '0',
-                    planning_request_item: p.planning_request_item ?? null,
-                    order: p.order ?? idx,
-                    price_source: p.price_source ?? null,
-                    price_date: p.price_date ?? null
-                }));
-                editingLines.forEach((line, i) => {
-                    const q = parseFloat(line.quantity) || 0;
-                    const u = parseFloat(line.unit_price) || 0;
-                    line.amount_eur = (q * u).toFixed(2);
-                });
+            const saved = await getProcurementLines(jobNo);
+            if (saved && saved.length > 0) {
+                editingLines = mapSavedProcurementLines(saved);
             } else {
-                editingLines = [{ item: null, item_code: '', item_name: '', item_unit: '', item_description: '', quantity: '0', unit_price: '0', amount_eur: '0', planning_request_item: null, order: 0, price_source: null, price_date: null }];
+                editingLines = await loadPreviewProcurementLines(jobNo);
             }
         }
     } catch (err) {

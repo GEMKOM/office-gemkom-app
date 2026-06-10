@@ -49,7 +49,7 @@ import { ConfirmationModal } from '../../components/confirmation-modal/confirmat
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { backendBase } from '../../base.js';
-import { isAdmin } from '../../authService.js';
+import { isAdmin, hasPerm } from '../../authService.js';
 import { listDrawingReleases, getCurrentRelease, requestRevision } from '../../apis/projects/design.js';
 import { fetchAllUsers, fetchTeams } from '../../apis/users.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
@@ -60,7 +60,7 @@ import {
     deletePriceTier 
 } from '../../apis/subcontracting/priceTiers.js';
 import { listNCRs } from '../../apis/qualityControl.js';
-import { getJobCostSummary } from '../../apis/projects/cost.js';
+import { getJobCostSummary, getEstimatedMaterialBreakdown } from '../../apis/projects/cost.js';
 
 // State management
 // Read initial page and page_size from URL
@@ -356,6 +356,10 @@ function canEditJobOrders() {
         console.warn('Failed to parse user data for permission check:', error);
         return false;
     }
+}
+
+function canViewJobCosts() {
+    return isAdmin() || hasPerm('view_job_costs');
 }
 
 // Helper function to check if user has planning or management access
@@ -2982,14 +2986,16 @@ window.viewJobOrder = async function(jobNo) {
             customContent: '<div id="progress-history-container" style="padding: 20px;"></div>'
         });
         
-        // Add Maliyet (Cost) tab
-        viewJobOrderModal.addTab({
-            id: 'maliyet',
-            label: 'Maliyet',
-            icon: 'fas fa-calculator',
-            iconColor: 'text-primary',
-            customContent: '<div id="cost-summary-container" style="padding: 20px;"></div>'
-        });
+        // Add Maliyet (Cost) tab — requires view_job_costs (matches backend IsCostAuthorized)
+        if (canViewJobCosts()) {
+            viewJobOrderModal.addTab({
+                id: 'maliyet',
+                label: 'Maliyet',
+                icon: 'fas fa-calculator',
+                iconColor: 'text-primary',
+                customContent: '<div id="cost-summary-container" style="padding: 20px;"></div>'
+            });
+        }
         
         // Render the modal
         viewJobOrderModal.render();
@@ -4508,64 +4514,520 @@ async function loadProgressHistoryTab(jobNo) {
 window.loadProgressHistoryTab = loadProgressHistoryTab;
 
 // Render Cost Summary Tab
+const COST_COMPONENT_ORDER = [
+    'subcontractor_cost',
+    'labor_cost',
+    'material_cost',
+    'paint_cost',
+    'paint_material_cost',
+    'employee_overhead_cost',
+    'qc_cost',
+    'shipping_cost',
+    'general_expenses_cost',
+    'other_cost',
+];
+
+const COST_COMPONENT_LABELS = {
+    subcontractor_cost: 'Taşeron',
+    labor_cost: 'İşçilik',
+    material_cost: 'Malzeme',
+    paint_cost: 'Boya',
+    paint_material_cost: 'Boya Malzemesi',
+    employee_overhead_cost: 'Personel Genel Giderleri',
+    qc_cost: 'Kalite Kontrol',
+    shipping_cost: 'Sevkiyat',
+    general_expenses_cost: 'Genel Giderler',
+    other_cost: 'Diğer',
+};
+
+const COST_PRICE_SOURCE_LABELS = {
+    po_line: 'PO satırı',
+    recommended_offer: 'Önerilen teklif',
+    any_offer: 'Tedarikçi teklifi',
+    historical_po: 'Geçmiş PO',
+    procurement_line: 'Kayıtlı malzeme satırı',
+    none: 'Fiyat yok',
+};
+
+const SELLING_PRICE_SOURCE_LABELS = {
+    sales_offer_current_price: 'Satış teklifi güncel fiyatı',
+    cost_summary: 'Manuel maliyet özeti',
+    none: 'Tanımsız',
+};
+
+const PAINT_COST_SOURCE_LABELS = {
+    completed_job_orders_avg_eur_per_kg: 'Tamamlanan iş emirleri ortalaması (€/kg)',
+    paint_assignment_at_100: 'Boya ataması (%100)',
+    none: 'Tanımsız',
+};
+
+function ensureCostModalContainer(containerId) {
+    let container = document.getElementById(containerId);
+    if (!container) {
+        container = document.createElement('div');
+        container.id = containerId;
+        document.body.appendChild(container);
+    }
+    return container;
+}
+
+async function showEstimatedMaterialBreakdownModal(jobNo, formatCurrency) {
+    if (!jobNo) {
+        showNotification('İş emri numarası bulunamadı', 'error');
+        return;
+    }
+
+    ensureCostModalContainer('estimated-material-breakdown-modal-container');
+
+    const loadingModal = new DisplayModal('estimated-material-breakdown-modal-container', {
+        title: `${jobNo} - Tahmini Malzeme Detayı`,
+        icon: 'fas fa-boxes',
+        size: 'xl',
+        showEditButton: false,
+    });
+    loadingModal.addCustomSection({
+        title: null,
+        customContent: '<div class="text-center py-5"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-3 text-muted">Yükleniyor...</p></div>',
+    });
+    loadingModal.render().show();
+
+    try {
+        const data = await getEstimatedMaterialBreakdown(jobNo);
+        const items = Array.isArray(data?.items) ? data.items : [];
+        const hasChildJobs = items.some((line) => line.job_order && line.job_order !== jobNo);
+        const fmtMoney = (v) => formatCurrency(v ?? '0', data.currency || 'EUR');
+
+        const fmtQty = (v) => {
+            const n = parseFloat(v);
+            if (Number.isNaN(n)) return '–';
+            return n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        };
+
+        const fmtDateShort = (v) => {
+            if (v == null || v === '') return '–';
+            try {
+                const d = new Date(v);
+                if (Number.isNaN(d.getTime())) return String(v);
+                return d.toLocaleDateString('tr-TR');
+            } catch {
+                return String(v);
+            }
+        };
+
+        const fmtOriginalPrice = (line) => {
+            if (line.original_currency && line.original_currency !== 'EUR' && line.original_unit_price != null) {
+                return `${formatCurrency(line.original_unit_price, line.original_currency)}`;
+            }
+            return '–';
+        };
+
+        const floorNote = data.material_cost_floored_to_actual && parseFloat(data.floor_adjustment_eur) > 0
+            ? `<div class="alert alert-info py-2 mb-3" style="font-size:0.88rem;">
+                <i class="fas fa-info-circle me-2"></i>
+                Satır toplamı (${fmtMoney(data.lines_total)}) mevcut maliyetin altında kaldığı için
+                tahmin ${fmtMoney(data.floor_adjustment_eur)} ile ${fmtMoney(data.estimated_material_cost)} seviyesine yükseltildi.
+               </div>`
+            : '';
+
+        const tableHtml = items.length ? `
+            <div class="table-responsive" style="max-height:480px; overflow-y:auto;">
+                <table class="table table-sm table-bordered table-hover mb-0" style="font-size:0.85rem;">
+                    <thead class="table-light" style="position:sticky; top:0; z-index:1;">
+                        <tr>
+                            ${hasChildJobs ? '<th>İş Emri</th>' : ''}
+                            <th>Kod</th>
+                            <th>Malzeme</th>
+                            <th>Birim</th>
+                            <th class="text-end">Miktar</th>
+                            <th class="text-end">Birim Fiyat (€)</th>
+                            <th class="text-end">Orijinal Fiyat</th>
+                            <th class="text-end">Tutar (€)</th>
+                            <th>Fiyat Kaynağı</th>
+                            <th>Tarih</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${items.map((line) => `
+                            <tr>
+                                ${hasChildJobs ? `<td class="text-nowrap small fw-semibold">${escapeHtml(line.job_order || '–')}</td>` : ''}
+                                <td class="text-nowrap"><code style="font-size:0.78rem;">${escapeHtml(line.item_code || '–')}</code></td>
+                                <td>${escapeHtml(line.item_name || '–')}</td>
+                                <td class="text-muted small">${escapeHtml(line.item_unit || '–')}</td>
+                                <td class="text-end">${fmtQty(line.quantity)}</td>
+                                <td class="text-end">${fmtMoney(line.unit_price_eur)}</td>
+                                <td class="text-end text-muted small">${fmtOriginalPrice(line)}</td>
+                                <td class="text-end fw-semibold">${fmtMoney(line.amount_eur)}</td>
+                                <td class="text-muted small">${escapeHtml(COST_PRICE_SOURCE_LABELS[line.price_source] || line.price_source || '–')}</td>
+                                <td class="text-muted small">${fmtDateShort(line.price_date)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <td colspan="${hasChildJobs ? 7 : 6}" class="text-end"><strong>Satır Toplamı</strong></td>
+                            <td class="text-end"><strong>${fmtMoney(data.lines_total)}</strong></td>
+                            <td colspan="2"></td>
+                        </tr>
+                        ${data.material_cost_floored_to_actual ? `
+                        <tr>
+                            <td colspan="${hasChildJobs ? 7 : 6}" class="text-end text-muted">Tahmin Düzeltmesi</td>
+                            <td class="text-end text-muted">+${fmtMoney(data.floor_adjustment_eur)}</td>
+                            <td colspan="2"></td>
+                        </tr>
+                        <tr>
+                            <td colspan="${hasChildJobs ? 7 : 6}" class="text-end"><strong>Tahmini Malzeme</strong></td>
+                            <td class="text-end"><strong>${fmtMoney(data.estimated_material_cost)}</strong></td>
+                            <td colspan="2"></td>
+                        </tr>
+                        ` : ''}
+                    </tfoot>
+                </table>
+            </div>
+        ` : '<div class="text-center text-muted py-4"><i class="fas fa-info-circle me-2"></i>Malzeme satırı bulunamadı.</div>';
+
+        const modal = new DisplayModal('estimated-material-breakdown-modal-container', {
+            title: `${jobNo} - Tahmini Malzeme Detayı`,
+            icon: 'fas fa-boxes',
+            size: 'xl',
+            showEditButton: false,
+        });
+
+        modal.addSection({
+            title: 'Özet',
+            icon: 'fas fa-chart-pie',
+            iconColor: 'text-primary',
+            fields: [
+                {
+                    id: 'items_count',
+                    label: 'Satır Sayısı',
+                    value: data.items_count ?? items.length,
+                    type: 'number',
+                    icon: 'fas fa-list',
+                    colSize: 3,
+                },
+                {
+                    id: 'lines_total',
+                    label: 'Satır Toplamı',
+                    value: data.lines_total,
+                    type: 'text',
+                    icon: 'fas fa-calculator',
+                    format: () => fmtMoney(data.lines_total),
+                    colSize: 3,
+                },
+                {
+                    id: 'estimated_material_cost',
+                    label: 'Tahmini Malzeme',
+                    value: data.estimated_material_cost,
+                    type: 'text',
+                    icon: 'fas fa-chart-line',
+                    format: () => fmtMoney(data.estimated_material_cost),
+                    colSize: 3,
+                },
+                {
+                    id: 'actual_material_cost',
+                    label: 'Mevcut Malzeme',
+                    value: data.actual_material_cost,
+                    type: 'text',
+                    icon: 'fas fa-money-bill-wave',
+                    format: () => fmtMoney(data.actual_material_cost),
+                    colSize: 3,
+                },
+            ],
+        });
+
+        modal.addCustomSection({
+            title: 'Kalemler',
+            icon: 'fas fa-table',
+            iconColor: 'text-primary',
+            customContent: `${floorNote}${tableHtml}`,
+        });
+
+        modal.render().show();
+    } catch (error) {
+        console.error('Error loading estimated material breakdown:', error);
+        const errorModal = new DisplayModal('estimated-material-breakdown-modal-container', {
+            title: `${jobNo} - Tahmini Malzeme Detayı`,
+            icon: 'fas fa-boxes',
+            size: 'md',
+            showEditButton: false,
+        });
+        errorModal.addCustomSection({
+            title: null,
+            customContent: '<div class="alert alert-danger mb-0"><i class="fas fa-exclamation-triangle me-2"></i>Tahmini malzeme detayı yüklenirken hata oluştu.</div>',
+        });
+        errorModal.render().show();
+    }
+}
+
 function renderCostSummaryTab(data, jobNo, formatCurrency) {
     const container = viewJobOrderModal.content.querySelector('#cost-summary-container');
     if (!container) return;
 
+    const currency = data.currency || 'EUR';
+    const actual = data.actual || {};
+    const estimated = data.estimated || {};
+    const editable = data.editable || {};
+    const assumptions = estimated.assumptions || {};
+    const actualComponents = actual.components || {};
+    const estimatedComponents = estimated.components || {};
+
+    const toNum = (v) => {
+        const n = parseFloat(v);
+        return Number.isNaN(n) ? 0 : n;
+    };
+
+    const fmt = (v, emptyDash = false) => {
+        if (v == null || v === '') return emptyDash ? '<span class="text-muted">–</span>' : formatCurrency('0', currency);
+        return formatCurrency(v, currency);
+    };
+
+    const fmtPct = (v) => {
+        if (v == null || v === '') return '<span class="text-muted">–</span>';
+        const n = parseFloat(v);
+        if (Number.isNaN(n)) return '<span class="text-muted">–</span>';
+        return `${n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+    };
+
+    const fmtWeight = (v) => {
+        if (v == null || v === '') return '<span class="text-muted">–</span>';
+        const n = parseFloat(v);
+        if (Number.isNaN(n)) return '<span class="text-muted">–</span>';
+        return `${n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} kg`;
+    };
+
+    const fmtDate = (v) => {
+        if (v == null || v === '') return '–';
+        try {
+            const d = new Date(v);
+            if (Number.isNaN(d.getTime())) return String(v);
+            return d.toLocaleDateString('tr-TR');
+        } catch {
+            return String(v);
+        }
+    };
+
+    const fmtDateTime = (v) => {
+        if (v == null || v === '') return '–';
+        try {
+            const d = new Date(v);
+            if (Number.isNaN(d.getTime())) return String(v);
+            return d.toLocaleString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+        } catch {
+            return String(v);
+        }
+    };
+
     const rateSuffix = (rate) => {
-        if (rate == null || rate === '' || rate === undefined) return '';
+        if (rate == null || rate === '') return '';
         const n = parseFloat(rate);
         if (Number.isNaN(n)) return '';
-        return ` (${n})`;
-    };
-    const paintMaterialRateSuffix = (rate) => {
-        if (rate == null || rate === '' || rate === undefined) return '';
-        const n = parseFloat(rate);
-        if (Number.isNaN(n)) return '';
-        return ` (${formatCurrency(String(n), 'TRY')})`;
+        return ` <span class="text-muted" style="font-size:0.82rem;">(${n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })})</span>`;
     };
 
-    // Rows that have an at_100 estimate from API; others use actual cost in the estimate column
-    const costRows = [
-        { label: 'İşçilik', value: data.labor_cost, valueAt100: null },
-        { label: 'Malzeme', value: data.material_cost, valueAt100: null },
-        { label: 'Taşeron', value: data.subcontractor_cost, valueAt100: data.subcontractor_cost_at_100 },
-        { label: 'Boya', value: data.paint_cost, valueAt100: data.paint_cost_at_100 },
-        { label: `Boya Malzemesi${paintMaterialRateSuffix(data.paint_material_rate)}`, value: data.paint_material_cost, valueAt100: data.paint_material_cost_at_100 },
-        { label: 'Kalite Kontrol', value: data.qc_cost, valueAt100: null },
-        { label: 'Sevkiyat', value: data.shipping_cost, valueAt100: null },
-        { label: `Genel Giderler${rateSuffix(data.general_expenses_rate)}`, value: data.general_expenses_cost, valueAt100: null },
-        { label: `Personel Genel Giderleri${rateSuffix(data.employee_overhead_rate)}`, value: data.employee_overhead_cost, valueAt100: null }
-    ];
+    const paintMaterialRate = editable.paint_material_rate ?? data.paint_material_rate;
+    const employeeOverheadRate = editable.employee_overhead_rate ?? assumptions.employee_overhead_rate ?? data.employee_overhead_rate;
 
-    const fmt = (v) => (v != null && v !== '') ? formatCurrency(v, 'EUR') : formatCurrency('0', 'EUR');
-    const estimateValue = (r) => (r.valueAt100 != null && r.valueAt100 !== '') ? parseFloat(r.valueAt100) : (parseFloat(r.value) || 0);
-    const displayEstimate = (r) => (r.valueAt100 != null && r.valueAt100 !== '') ? r.valueAt100 : (r.value ?? '0');
-    const at100Sum = costRows.reduce((acc, r) => acc + estimateValue(r), 0);
-    const at100SumStr = at100Sum.toFixed(2);
+    const componentLabel = (key) => {
+        let label = COST_COMPONENT_LABELS[key] || key;
+        if (key === 'paint_material_cost') label += rateSuffix(paintMaterialRate);
+        if (key === 'employee_overhead_cost') label += rateSuffix(employeeOverheadRate);
+        return label;
+    };
+
+    const sellingPriceEur = toNum(data.selling_price_eur ?? data.selling_price);
+    const actualTotal = toNum(actual.total_cost ?? data.actual_total_cost);
+    const estimatedTotal = toNum(estimated.total_cost);
+    const actualMargin = sellingPriceEur - actualTotal;
+    const estimatedMargin = sellingPriceEur - estimatedTotal;
+    const actualMarginPct = sellingPriceEur > 0 ? (actualMargin / sellingPriceEur) * 100 : null;
+    const estimatedMarginPct = sellingPriceEur > 0 ? (estimatedMargin / sellingPriceEur) * 100 : null;
+
+    const marginColor = (margin) => {
+        if (margin > 0) return '#059669';
+        if (margin < 0) return '#dc2626';
+        return '#6b7280';
+    };
+
+    const sellingEffective = data.selling_price_effective || {};
+    const sellingSource = SELLING_PRICE_SOURCE_LABELS[sellingEffective.source] || sellingEffective.source || '';
+    const sellingOriginalNote = (sellingEffective.original_currency && sellingEffective.original_currency !== 'EUR')
+        ? ` <small class="text-muted">(${formatCurrency(sellingEffective.original_amount, sellingEffective.original_currency)})</small>`
+        : '';
+
+    const summaryCard = (label, value, sub = '') => `
+        <div style="flex:1; min-width:200px; border:1px solid rgba(148,163,184,0.35); border-radius:12px; padding:14px 16px; background: linear-gradient(180deg, rgba(99,102,241,0.04) 0%, rgba(99,102,241,0.01) 100%);">
+            <div class="text-muted" style="font-size:0.8rem;">${label}</div>
+            <div style="font-size:1.25rem; font-weight:800; color:#111827; margin-top:4px;">${value}</div>
+            ${sub ? `<div class="text-muted" style="font-size:0.78rem; margin-top:4px;">${sub}</div>` : ''}
+        </div>
+    `;
+
+    const costRows = COST_COMPONENT_ORDER.map((key) => {
+        const actualVal = actualComponents[key];
+        const estimatedVal = estimatedComponents[key];
+        const hasActual = actualVal != null && actualVal !== '';
+        const hasEstimated = estimatedVal != null && estimatedVal !== '';
+        if (!hasActual && !hasEstimated) return null;
+        return {
+            key,
+            label: componentLabel(key),
+            actual: hasActual ? actualVal : null,
+            estimated: hasEstimated ? estimatedVal : null,
+        };
+    }).filter(Boolean);
+
+    const childEstimates = Array.isArray(estimated.children) ? estimated.children : [];
+
+    const assumptionsItems = [];
+    if (assumptions.labor_projected_from_completion_pct != null) {
+        assumptionsItems.push(`İşçilik tahmini, mevcut ilerleme (%${parseFloat(assumptions.labor_projected_from_completion_pct).toFixed(2)}) üzerinden %100'e ölçeklenmiştir.`);
+    }
+    if (employeeOverheadRate != null) {
+        assumptionsItems.push(`Personel genel gider oranı: ${parseFloat(employeeOverheadRate).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`);
+    }
+    if (assumptions.paint_cost_source) {
+        const paintLabel = PAINT_COST_SOURCE_LABELS[assumptions.paint_cost_source] || assumptions.paint_cost_source;
+        let paintNote = `Boya maliyeti kaynağı: ${paintLabel}`;
+        if (assumptions.historical_paint_rate_eur_per_kg != null) {
+            paintNote += ` (${formatCurrency(assumptions.historical_paint_rate_eur_per_kg, 'EUR')}/kg)`;
+        }
+        assumptionsItems.push(paintNote);
+    }
+    if (paintMaterialRate != null) {
+        assumptionsItems.push(`Boya malzemesi oranı: ${formatCurrency(paintMaterialRate, 'TRY')}/kg`);
+    }
+    if (assumptions.material_cost_floored_to_actual === true) {
+        assumptionsItems.push('Malzeme tahmini, mevcut kayıtlı maliyetin altına düşmeyecek şekilde ayarlandı.');
+    }
 
     container.innerHTML = `
+        ${editable.cost_not_applicable ? `
+        <div class="alert alert-warning mb-4">
+            <i class="fas fa-info-circle me-2"></i>Bu iş emri için maliyet takibi uygulanmıyor olarak işaretlenmiş.
+        </div>
+        ` : ''}
+
+        <div class="mb-4" style="display:flex; gap:12px; flex-wrap:wrap;">
+            ${summaryCard('Tamamlanma', fmtPct(data.completion_pct))}
+            ${summaryCard('Toplam Ağırlık', fmtWeight(data.total_weight_kg))}
+            ${summaryCard(
+                'Satış Fiyatı',
+                sellingPriceEur > 0 ? fmt(data.selling_price_eur ?? data.selling_price) : '<span class="text-muted">–</span>',
+                sellingSource ? escapeHtml(sellingSource) + sellingOriginalNote : ''
+            )}
+            ${summaryCard('Mevcut Maliyet', fmt(actual.total_cost ?? data.actual_total_cost))}
+            ${summaryCard('Tahmini Maliyet', estimated.total_cost ? fmt(estimated.total_cost) : '<span class="text-muted">–</span>')}
+            ${summaryCard(
+                'Marj (Mevcut)',
+                sellingPriceEur > 0
+                    ? `<span style="color:${marginColor(actualMargin)}">${fmt(String(actualMargin.toFixed(2)))}</span>`
+                    : '<span class="text-muted">–</span>',
+                actualMarginPct != null ? `%${actualMarginPct.toFixed(2)}` : ''
+            )}
+            ${summaryCard(
+                'Marj (Tahmini)',
+                sellingPriceEur > 0 && estimated.total_cost
+                    ? `<span style="color:${marginColor(estimatedMargin)}">${fmt(String(estimatedMargin.toFixed(2)))}</span>`
+                    : '<span class="text-muted">–</span>',
+                estimatedMarginPct != null ? `%${estimatedMarginPct.toFixed(2)}` : ''
+            )}
+        </div>
+
         <div class="card mb-4">
             <div class="card-header"><h6 class="mb-0"><i class="fas fa-list me-2"></i>Maliyet Dağılımı</h6></div>
-            <div class="card-body">
+            <div class="card-body p-0">
                 <div class="table-responsive">
-                    <table class="table table-sm table-bordered">
-                        <thead>
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light">
                             <tr>
                                 <th class="text-muted">Kalem</th>
-                                <th class="text-end">Mevcut</th>
-                                <th class="text-end">Tahmini (%100)</th>
+                                <th class="text-end" style="width:140px;">Mevcut</th>
+                                <th class="text-end" style="width:140px;">Tahmini</th>
                             </tr>
                         </thead>
                         <tbody>
-                            ${costRows.map(r => `<tr><td class="text-muted">${r.label}</td><td class="text-end">${fmt(r.value)}</td><td class="text-end">${fmt(displayEstimate(r))}</td></tr>`).join('')}
-                            <tr class="table-light"><td><strong>Toplam Maliyet</strong></td><td class="text-end"><strong>${formatCurrency(data.actual_total_cost, 'EUR')}</strong></td><td class="text-end"><strong>${formatCurrency(at100SumStr, 'EUR')}</strong></td></tr>
+                            ${costRows.map((r) => `
+                                <tr>
+                                    <td class="text-muted">
+                                        ${r.label}
+                                        ${r.key === 'material_cost' ? `
+                                            <button type="button"
+                                                class="btn btn-link btn-sm p-0 ms-1 align-baseline estimated-material-info-btn"
+                                                title="Tahmini malzeme kalemleri"
+                                                aria-label="Tahmini malzeme kalemleri">
+                                                <i class="fas fa-info-circle text-primary"></i>
+                                            </button>
+                                        ` : ''}
+                                    </td>
+                                    <td class="text-end">${r.actual != null ? fmt(r.actual) : '<span class="text-muted">–</span>'}</td>
+                                    <td class="text-end">${r.estimated != null ? fmt(r.estimated) : '<span class="text-muted">–</span>'}</td>
+                                </tr>
+                            `).join('')}
+                            <tr class="table-light">
+                                <td><strong>Toplam Maliyet</strong></td>
+                                <td class="text-end"><strong>${fmt(actual.total_cost ?? data.actual_total_cost)}</strong></td>
+                                <td class="text-end"><strong>${estimated.total_cost ? fmt(estimated.total_cost) : '<span class="text-muted">–</span>'}</strong></td>
+                            </tr>
                         </tbody>
                     </table>
                 </div>
             </div>
         </div>
+
+        ${assumptionsItems.length ? `
+        <div class="card mb-4">
+            <div class="card-header"><h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Tahmin Varsayımları</h6></div>
+            <div class="card-body py-3">
+                <ul class="mb-0 ps-3" style="font-size:0.9rem;">
+                    ${assumptionsItems.map((item) => `<li class="text-muted">${item}</li>`).join('')}
+                </ul>
+            </div>
+        </div>
+        ` : ''}
+
+        ${childEstimates.length ? `
+        <div class="card mb-4">
+            <div class="card-header"><h6 class="mb-0"><i class="fas fa-sitemap me-2"></i>Alt İş Emirleri</h6></div>
+            <div class="card-body p-0">
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>İş Emri</th>
+                                <th class="text-end">Mevcut Maliyet</th>
+                                <th class="text-end">Tahmini Maliyet</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${childEstimates.map((c) => `
+                                <tr>
+                                    <td><span class="fw-semibold">${escapeHtml(c.job_order || '–')}</span></td>
+                                    <td class="text-end">${fmt(c.actual_total_cost)}</td>
+                                    <td class="text-end">${fmt(c.estimated_total_cost)}</td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        ` : ''}
+
+        ${data.last_updated ? `
+        <div class="text-muted text-end" style="font-size:0.8rem;">
+            <i class="fas fa-clock me-1"></i>Son güncelleme: ${fmtDateTime(data.last_updated)}
+        </div>
+        ` : ''}
     `;
+
+    const materialInfoBtn = container.querySelector('.estimated-material-info-btn');
+    if (materialInfoBtn) {
+        materialInfoBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            showEstimatedMaterialBreakdownModal(jobNo, formatCurrency);
+        });
+    }
 }
 
 function renderProgressHistoryTab(data, jobNo) {
