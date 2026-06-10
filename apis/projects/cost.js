@@ -151,6 +151,38 @@ export async function getEstimatedMaterialBreakdown(jobNo) {
 }
 
 /**
+ * Estimated total cost calculation breakdown for a job order tree.
+ * GET /projects/job-orders/{job_no}/estimated_cost_breakdown/
+ * @param {string} jobNo
+ * @returns {Promise<{
+ *   job_order: string,
+ *   currency: string,
+ *   total_cost: string,
+ *   completion_pct: string|null,
+ *   total_weight_kg: string|null,
+ *   components: Array<{
+ *     key: string,
+ *     label: string,
+ *     amount_eur: string,
+ *     description: string,
+ *     inputs: Object
+ *   }>,
+ *   assumptions: string[],
+ *   children: Array<{ job_order: string, estimated_total_cost: string, actual_total_cost: string }>,
+ *   material_breakdown: Object,
+ *   last_updated: string|null
+ * }>}
+ */
+export async function getEstimatedCostBreakdown(jobNo) {
+    const url = `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/estimated_cost_breakdown/`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`Estimated cost breakdown request failed: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
  * Update cost summary (supported write fields: selling_price, selling_price_currency, cost_not_applicable)
  * PATCH /projects/job-orders/{job_no}/cost_summary/
  * @param {string} jobNo - Job order number

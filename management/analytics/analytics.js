@@ -6,7 +6,7 @@ import { StatisticsCards } from '../../components/statistics-cards/statistics-ca
 import { TableComponent } from '../../components/table/table.js';
 import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { showNotification } from '../../components/notification/notification.js';
-import { getCostTable, getCostChildren, getProcurementLines } from '../../apis/projects/cost.js';
+import { getCostTable, getCostChildren, getProcurementLines, getEstimatedCostBreakdown } from '../../apis/projects/cost.js';
 import { getCombinedJobCosts } from '../../apis/planning/reports.js';
 import { getMachiningJobEntries } from '../../apis/machining/reports.js';
 import { getWeldingJobCostDetail } from '../../apis/welding/reports.js';
@@ -247,6 +247,14 @@ function generalExpensesCellFormatter(v, row) {
     return cost;
 }
 
+function estimatedCostCellFormatter(v, row) {
+    const jobNo = (row.job_no || '').replace(/"/g, '&quot;');
+    const btn = jobNo
+        ? ` <button type="button" class="btn btn-sm btn-link p-0 ms-1" onclick="window.showEstimatedCostDetails&&window.showEstimatedCostDetails('${jobNo}')" title="Tahmini maliyet hesabı" style="text-decoration:none;white-space:nowrap;"><i class="fas fa-info-circle text-primary"></i></button>`
+        : '';
+    return `<span class="fw-bold" style="white-space:nowrap;">${formatMoney(v)}${btn}</span>`;
+}
+
 /* ── summary footer builder ────────────────────────────────────────── */
 
 function buildFooter({ displayedData, columns, hasActions }) {
@@ -254,7 +262,7 @@ function buildFooter({ displayedData, columns, hasActions }) {
     const s = {
         laborWithTax: 0, material: 0, subcontractor: 0, paintWithMaterial: 0,
         qc: 0, shipping: 0, generalExpenses: 0, weightKg: 0,
-        actualTotalCost: 0, sellingPrice: 0, marginEur: 0
+        actualTotalCost: 0, estimatedTotalCost: 0, sellingPrice: 0, marginEur: 0
     };
     let grSum = 0, grCount = 0;
 
@@ -268,6 +276,7 @@ function buildFooter({ displayedData, columns, hasActions }) {
         s.generalExpenses += toNumber(r.general_expenses_cost);
         s.weightKg += toNumber(r.total_weight_kg);
         s.actualTotalCost += toNumber(r.actual_total_cost);
+        s.estimatedTotalCost += toNumber(r.estimated_total_cost);
         s.sellingPrice += toNumber(r.selling_price);
         s.marginEur += toNumber(r.margin_eur);
         const rate = r.general_expenses_rate;
@@ -298,6 +307,7 @@ function buildFooter({ displayedData, columns, hasActions }) {
     vm.set('total_weight_kg', `<span class="fw-bold">${formatNumber(s.weightKg, 2)}</span>`);
     vm.set('price_per_kg', ppkg != null ? `<span class="fw-bold text-primary">€${formatNumber(ppkg, 2)}</span>` : '<span class="text-muted">-</span>');
     vm.set('actual_total_cost', `<span class="fw-bold">${formatMoney(s.actualTotalCost)}</span>`);
+    vm.set('estimated_total_cost', `<span class="fw-bold">${formatMoney(s.estimatedTotalCost)}</span>`);
     vm.set('selling_price', `<span class="fw-bold">${formatMoney(s.sellingPrice)}</span>`);
     vm.set('margin_eur', `<span class="fw-bold">${formatMoney(s.marginEur)}</span>`);
     vm.set('margin_pct', mpct != null ? `<span class="fw-bold">${formatPct(mpct)}</span>` : '<span class="text-muted">-</span>');
@@ -533,6 +543,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'general_expenses_cost', label: 'Genel Giderler', sortable: false, formatter: generalExpensesCellFormatter },
             /* end detail columns */
             { field: 'actual_total_cost', label: 'Toplam Maliyet', sortable: true, formatter: v => `<span class="fw-bold">${formatMoney(v)}</span>` },
+            { field: 'estimated_total_cost', label: 'Tahmini Maliyet', sortable: false, formatter: estimatedCostCellFormatter },
             { field: 'price_per_kg', label: 'Kg Fiyatı', sortable: true, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-primary">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
             {
                 field: 'selling_price', label: 'Satış Fiyatı', sortable: true,
@@ -1034,9 +1045,229 @@ async function showSubcontractorDetails(jobNo) {
     } catch (err) { console.error(err); showError('Taşeron detayları yüklenirken hata.'); }
 }
 
+const ESTIMATED_MATERIAL_PRICE_SOURCE_LABELS = {
+    po_line: 'PO satırı',
+    recommended_offer: 'Önerilen teklif',
+    any_offer: 'Tedarikçi teklifi',
+    historical_po: 'Geçmiş PO',
+    procurement_line: 'Kayıtlı malzeme satırı',
+    none: 'Fiyat yok',
+};
+
+function escapeHtml(s) {
+    if (s == null) return '';
+    const div = document.createElement('div');
+    div.textContent = String(s);
+    return div.innerHTML;
+}
+
+async function showEstimatedCostBreakdownModal(jobNo) {
+    if (!jobNo) {
+        showError('İş numarası bulunamadı.');
+        return;
+    }
+
+    const containerId = 'estimated-cost-breakdown-modal-container';
+    ensureModalContainer(containerId);
+
+    const loadingModal = new DisplayModal(containerId, {
+        title: `${jobNo} - Tahmini Maliyet Hesabı`,
+        icon: 'fas fa-chart-line',
+        size: 'xl',
+        showEditButton: false,
+    });
+    loadingModal.addCustomSection({
+        title: null,
+        customContent: '<div class="text-center py-5"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-3 text-muted">Yükleniyor...</p></div>',
+    });
+    loadingModal.render().show();
+
+    try {
+        const data = await getEstimatedCostBreakdown(jobNo);
+        const components = Array.isArray(data.components) ? data.components : [];
+        const assumptions = Array.isArray(data.assumptions) ? data.assumptions : [];
+        const children = Array.isArray(data.children) ? data.children : [];
+        const material = data.material_breakdown || {};
+        const materialItems = Array.isArray(material.items) ? material.items : [];
+        const hasChildJobs = materialItems.some((line) => line.job_order && line.job_order !== jobNo);
+
+        const fmtQty = (v) => {
+            const n = parseFloat(v);
+            if (!Number.isFinite(n)) return '–';
+            return n.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        };
+
+        const fmtDateShort = (v) => {
+            if (v == null || v === '') return '–';
+            try {
+                const d = new Date(v);
+                if (Number.isNaN(d.getTime())) return String(v);
+                return d.toLocaleDateString('tr-TR');
+            } catch {
+                return String(v);
+            }
+        };
+
+        const summaryHtml = summaryRow([
+            { icon: 'chart-line', cls: 'text-danger', value: formatMoney(data.total_cost), label: 'Tahmini Toplam', colSize: 3 },
+            { icon: 'tasks', cls: 'text-primary', value: data.completion_pct != null ? pctStr(data.completion_pct, 1) : '–', label: 'Tamamlanma', colSize: 3 },
+            { icon: 'weight-hanging', cls: 'text-info', value: data.total_weight_kg != null ? formatNumber(data.total_weight_kg, 2) : '–', label: 'Ağırlık (kg)', colSize: 3 },
+            { icon: 'list', cls: 'text-secondary', value: String(components.length), label: 'Maliyet Kalemi', colSize: 3 },
+        ]);
+
+        const componentsHtml = `
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered mb-0" style="font-size:0.88rem;">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Kalem</th>
+                            <th class="text-end" style="width:130px;">Tutar (EUR)</th>
+                            <th>Hesaplama</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${components.map((c) => `
+                            <tr>
+                                <td class="fw-semibold">${escapeHtml(c.label || c.key || '–')}</td>
+                                <td class="text-end fw-semibold">${formatMoney(c.amount_eur)}</td>
+                                <td class="text-muted small">${escapeHtml(c.description || '–')}</td>
+                            </tr>
+                        `).join('')}
+                        <tr class="table-light">
+                            <td><strong>Toplam</strong></td>
+                            <td class="text-end"><strong>${formatMoney(data.total_cost)}</strong></td>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        `;
+
+        const assumptionsHtml = assumptions.length
+            ? `<ul class="mb-0 ps-3 small text-muted">${assumptions.map((a) => `<li>${escapeHtml(a)}</li>`).join('')}</ul>`
+            : '<div class="text-muted small">Ek varsayım notu yok.</div>';
+
+        const childrenHtml = children.length ? `
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th>İş Emri</th>
+                            <th class="text-end">Mevcut Maliyet</th>
+                            <th class="text-end">Tahmini Maliyet</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${children.map((c) => `
+                            <tr>
+                                <td class="fw-semibold">${escapeHtml(c.job_order || '–')}</td>
+                                <td class="text-end">${formatMoney(c.actual_total_cost)}</td>
+                                <td class="text-end">${formatMoney(c.estimated_total_cost)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
+        ` : '';
+
+        const floorNote = material.material_cost_floored_to_actual && toNumber(material.floor_adjustment_eur) > 0
+            ? `<div class="alert alert-info py-2 mb-3 small">
+                Satır toplamı (${formatMoney(material.lines_total)}) mevcut maliyetin altında kaldığı için
+                tahmin ${formatMoney(material.floor_adjustment_eur)} ile ${formatMoney(material.estimated_material_cost)} seviyesine yükseltildi.
+               </div>`
+            : '';
+
+        const materialHtml = materialItems.length ? `
+            ${floorNote}
+            <div class="table-responsive" style="max-height:360px; overflow-y:auto;">
+                <table class="table table-sm table-bordered table-hover mb-0" style="font-size:0.85rem;">
+                    <thead class="table-light" style="position:sticky; top:0; z-index:1;">
+                        <tr>
+                            ${hasChildJobs ? '<th>İş Emri</th>' : ''}
+                            <th>Kod</th>
+                            <th>Malzeme</th>
+                            <th>Birim</th>
+                            <th class="text-end">Miktar</th>
+                            <th class="text-end">Birim Fiyat (€)</th>
+                            <th class="text-end">Tutar (€)</th>
+                            <th>Fiyat Kaynağı</th>
+                            <th>Tarih</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${materialItems.map((line) => `
+                            <tr>
+                                ${hasChildJobs ? `<td class="text-nowrap small fw-semibold">${escapeHtml(line.job_order || '–')}</td>` : ''}
+                                <td class="text-nowrap"><code style="font-size:0.78rem;">${escapeHtml(line.item_code || '–')}</code></td>
+                                <td>${escapeHtml(line.item_name || '–')}</td>
+                                <td class="text-muted small">${escapeHtml(line.item_unit || '–')}</td>
+                                <td class="text-end">${fmtQty(line.quantity)}</td>
+                                <td class="text-end">${formatMoney(line.unit_price_eur)}</td>
+                                <td class="text-end fw-semibold">${formatMoney(line.amount_eur)}</td>
+                                <td class="text-muted small">${escapeHtml(ESTIMATED_MATERIAL_PRICE_SOURCE_LABELS[line.price_source] || line.price_source || '–')}</td>
+                                <td class="text-muted small">${fmtDateShort(line.price_date)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot class="table-light">
+                        <tr>
+                            <td colspan="${hasChildJobs ? 6 : 5}" class="text-end"><strong>Satır Toplamı</strong></td>
+                            <td class="text-end"><strong>${formatMoney(material.lines_total)}</strong></td>
+                            <td colspan="2"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        ` : '<div class="text-center text-muted py-3 small">Malzeme satırı bulunamadı.</div>';
+
+        const modal = new DisplayModal(containerId, {
+            title: `${jobNo} - Tahmini Maliyet Hesabı`,
+            icon: 'fas fa-chart-line',
+            size: 'xl',
+            showEditButton: false,
+        });
+
+        modal.addCustomSection({ title: 'Özet', icon: 'fas fa-chart-pie', iconColor: 'text-primary', customContent: summaryHtml });
+        modal.addCustomSection({ title: 'Maliyet Kalemleri', icon: 'fas fa-list', iconColor: 'text-primary', customContent: componentsHtml });
+        modal.addCustomSection({ title: 'Tahmin Varsayımları', icon: 'fas fa-info-circle', iconColor: 'text-secondary', customContent: assumptionsHtml });
+        if (children.length) {
+            modal.addCustomSection({ title: 'Alt İş Emirleri', icon: 'fas fa-sitemap', iconColor: 'text-primary', customContent: childrenHtml });
+        }
+        modal.addCustomSection({
+            title: `Malzeme Satırları (${material.items_count ?? materialItems.length})`,
+            icon: 'fas fa-boxes',
+            iconColor: 'text-primary',
+            customContent: materialHtml,
+        });
+
+        if (data.last_updated) {
+            modal.addCustomSection({
+                title: null,
+                customContent: `<div class="text-muted text-end small"><i class="fas fa-clock me-1"></i>Son güncelleme: ${escapeHtml(new Date(data.last_updated).toLocaleString('tr-TR'))}</div>`,
+            });
+        }
+
+        modal.render().show();
+    } catch (err) {
+        console.error(err);
+        const errorModal = new DisplayModal(containerId, {
+            title: `${jobNo} - Tahmini Maliyet Hesabı`,
+            icon: 'fas fa-chart-line',
+            size: 'md',
+            showEditButton: false,
+        });
+        errorModal.addCustomSection({
+            title: null,
+            customContent: `<div class="alert alert-danger mb-0"><i class="fas fa-exclamation-triangle me-2"></i>${escapeHtml(err.message || 'Tahmini maliyet hesabı yüklenemedi')}</div>`,
+        });
+        errorModal.render().show();
+    }
+}
+
 /* ── global exports for inline onclick ─────────────────────────────── */
 window.showJobDetails = showJobDetails;
 window.showMachiningDetails = showMachiningDetails;
 window.showWeldingDetails = showWeldingDetails;
 window.showMaterialDetails = showMaterialDetails;
 window.showSubcontractorDetails = showSubcontractorDetails;
+window.showEstimatedCostDetails = showEstimatedCostBreakdownModal;
