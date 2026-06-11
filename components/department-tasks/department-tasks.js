@@ -143,6 +143,35 @@ export async function initDepartmentTasksPage(config) {
     let completeRevisionModal = null;
     let releaseApprovalRejectModal = null;
     let submitQCModal = null;
+    let isCreatingRelease = false;
+
+    function getDesignReleaseReviewBadge(row) {
+        if (department !== 'design') return '';
+        if (row.pending_approval_release_id) {
+            const state = row.pending_release_approval_state;
+            const progress = state
+                ? ` (${state.approval_count}/${state.required_count})`
+                : '';
+            return `<span class="status-badge status-blue ms-1"><i class="fas fa-search me-1"></i>İncelemede${progress}</span>`;
+        }
+        if (row.rejected_release_id && !row.parent) {
+            return '<span class="status-badge status-red ms-1"><i class="fas fa-times-circle me-1"></i>İnceleme Reddedildi</span>';
+        }
+        return '';
+    }
+
+    function canSubmitNewDesignRelease(task) {
+        if (department !== 'design') return true;
+        if (task.pending_approval_release_id) return false;
+        if (task.rejected_release_id) return false;
+        return true;
+    }
+
+    function shouldHideDesignCompleteButton(row) {
+        if (department !== 'design') return false;
+        if (row.pending_approval_release_id && !row.parent) return true;
+        return false;
+    }
 
     function isPotentiallyDeletableDepartmentTask(task) {
         // We only show the delete button when the task *could* be deletable.
@@ -721,8 +750,10 @@ function initializeTableComponent() {
                         const qcStatus = qcStatusMap[row.qc_status] || { class: 'status-grey', label: 'KK', icon: 'fas fa-clipboard-check' };
                         qcBadge = `<span class="status-badge ${qcStatus.class} ms-1"><i class="${qcStatus.icon} me-1"></i>${qcStatus.label}</span>`;
                     }
+
+                    const reviewBadge = getDesignReleaseReviewBadge(row);
                     
-                    return `<div class="d-flex align-items-center flex-wrap">${statusBadge}${revisionBadge}${qcBadge}</div>`;
+                    return `<div class="d-flex align-items-center flex-wrap">${statusBadge}${revisionBadge}${reviewBadge}${qcBadge}</div>`;
                 }
             },
             {
@@ -1016,6 +1047,9 @@ function initializeTableComponent() {
                     if (row.qc_required === true && row.has_qc_approval !== true) {
                         return false;
                     }
+                    if (shouldHideDesignCompleteButton(row)) {
+                        return false;
+                    }
                     return true;
                 }
             },
@@ -1032,6 +1066,7 @@ function initializeTableComponent() {
                     if (!row.current_release_id) return false;
                     // Must not be under revision
                     if (row.is_under_revision) return false;
+                    if (row.pending_approval_release_id) return false;
                     // Exclude certain task types
                     if (row.type === 'machining_part' || row.type === 'cnc_part' || row.task_type === 'procurement_item') return false;
                     return true;
@@ -1610,7 +1645,7 @@ function initializeReleaseModal() {
 
     createReleaseModal.onSaveCallback(async (formData) => {
         const taskId = window.pendingReleaseTaskId;
-        if (!taskId) return;
+        if (!taskId || isCreatingRelease) return;
 
         try {
             // Get task to get job_order and check if it's a subtask
@@ -1620,6 +1655,18 @@ function initializeReleaseModal() {
                 showNotification('İş emri bulunamadı', 'error');
                 return;
             }
+
+            if (!window.pendingResubmitReleaseId && !canSubmitNewDesignRelease(task)) {
+                showNotification(
+                    task.pending_approval_release_id
+                        ? 'Bu iş emri için zaten inceleme bekleyen bir yayın var.'
+                        : 'Reddedilmiş yayın var. Lütfen yeniden gönderin.',
+                    'warning'
+                );
+                return;
+            }
+
+            isCreatingRelease = true;
 
             // Check if this is a subtask
             const isSubtask = !!task.parent;
@@ -1695,6 +1742,8 @@ function initializeReleaseModal() {
                 // If parsing fails, use default message
             }
             showNotification(errorMessage, 'error');
+        } finally {
+            isCreatingRelease = false;
         }
     });
 
@@ -3492,7 +3541,7 @@ function getAvailableActions(task) {
     }
     
     // Self-start revision action - only for design department tasks with a current release that is not under revision
-    if (department === 'design' && task.current_release_id && !task.is_under_revision && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
+    if (department === 'design' && task.current_release_id && !task.is_under_revision && !task.pending_approval_release_id && task.type !== 'machining_part' && task.type !== 'cnc_part' && task.task_type !== 'procurement_item') {
         actions.push({
             key: 'self-start-revision',
             label: 'Revizyonu Kendi Başlat',
@@ -6801,7 +6850,20 @@ async function showSubtaskCompleteModal(taskId) {
             return;
         }
 
+        if (task.pending_approval_release_id) {
+            const state = task.pending_release_approval_state;
+            const progress = state
+                ? `${state.approval_count}/${state.required_count}`
+                : '';
+            showNotification(
+                `Bu iş emri için inceleme bekleyen bir yayın var (${progress}). Yeni yayın oluşturulamaz.`,
+                'warning'
+            );
+            return;
+        }
+
         window.pendingReleaseTaskId = taskId;
+        const releaseBlockedOnJob = !canSubmitNewDesignRelease(task);
         
         createReleaseModal.clearAll();
 
@@ -6812,15 +6874,31 @@ async function showSubtaskCompleteModal(taskId) {
             iconColor: 'text-success'
         });
 
+        if (releaseBlockedOnJob) {
+            createReleaseModal.addField({
+                id: 'release-blocked-note',
+                name: 'release_blocked_note',
+                label: 'Bilgi',
+                type: 'text',
+                value: 'Bu iş emrinde reddedilmiş bir yayın var. Alt görev tamamlanabilir ancak yeni yayın oluşturulamaz.',
+                readonly: true,
+                icon: 'fas fa-info-circle',
+                colSize: 12
+            });
+        }
+
         createReleaseModal.addField({
             id: 'has-release',
             name: 'has_release',
             label: 'Yayın var mı?',
             type: 'checkbox',
             value: false,
+            readonly: releaseBlockedOnJob,
             icon: 'fas fa-file-export',
             colSize: 12,
-            helpText: 'İşaretlendiğinde yayın bilgileri girilebilir'
+            helpText: releaseBlockedOnJob
+                ? 'Yayın oluşturma bu iş emri için kapalı'
+                : 'İşaretlendiğinde yayın bilgileri girilebilir'
         });
 
         // Store field IDs that should be conditionally shown
@@ -6959,7 +7037,7 @@ async function showSubtaskCompleteModal(taskId) {
         // Override save callback for subtask completion
         createReleaseModal.onSaveCallback(async (formData) => {
             const taskId = window.pendingReleaseTaskId;
-            if (!taskId) return;
+            if (!taskId || isCreatingRelease) return;
 
             try {
                 const hasRelease = formData.has_release === true || formData.has_release === 'true';
@@ -6972,6 +7050,18 @@ async function showSubtaskCompleteModal(taskId) {
                         showNotification('İş emri bulunamadı', 'error');
                         return;
                     }
+
+                    if (!canSubmitNewDesignRelease(task)) {
+                        showNotification(
+                            task.pending_approval_release_id
+                                ? 'Bu iş emri için zaten inceleme bekleyen bir yayın var.'
+                                : 'Reddedilmiş yayın var. Ana görevden yeniden gönderin.',
+                            'warning'
+                        );
+                        return;
+                    }
+
+                    isCreatingRelease = true;
 
                     // Prepare release data
                     const releaseData = {
@@ -7041,6 +7131,8 @@ async function showSubtaskCompleteModal(taskId) {
                     // If parsing fails, use default message
                 }
                 showNotification(errorMessage, 'error');
+            } finally {
+                isCreatingRelease = false;
             }
         });
 

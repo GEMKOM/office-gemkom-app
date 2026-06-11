@@ -22,6 +22,102 @@ let rejectModal;
 let pendingReleases = [];
 let currentRelease = null;
 let discussionPanel = null;
+let folderPathCopyListenerAttached = false;
+
+function escapeHtml(text) {
+    if (!text) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function copyTextToClipboard(text) {
+    if (!text) {
+        showNotification('Kopyalanacak klasör yolu yok', 'error');
+        return;
+    }
+
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text)
+            .then(() => showNotification('Klasör yolu kopyalandı', 'success'))
+            .catch(() => copyTextToClipboardFallback(text));
+        return;
+    }
+
+    copyTextToClipboardFallback(text);
+}
+
+function copyTextToClipboardFallback(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '0';
+    textarea.style.left = '0';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, text.length);
+
+    let copied = false;
+    try {
+        copied = document.execCommand('copy');
+    } catch (err) {
+        console.error('Copy failed:', err);
+    }
+
+    document.body.removeChild(textarea);
+
+    if (copied) {
+        showNotification('Klasör yolu kopyalandı', 'success');
+    } else {
+        showNotification('Klasör yolu kopyalanamadı', 'error');
+    }
+}
+
+function formatFolderPathCell(value, row) {
+    if (!value) return '-';
+    const escaped = escapeHtml(value);
+    const display = value.length > 80 ? `${escapeHtml(value.substring(0, 80))}...` : escaped;
+    return `
+        <div class="d-flex align-items-center gap-1 folder-path-cell">
+            <span class="folder-path-text text-truncate flex-grow-1" style="min-width: 0;" title="${escaped}">${display}</span>
+            <button type="button"
+                class="btn btn-sm btn-outline-secondary py-0 px-1 copy-folder-path-btn flex-shrink-0"
+                title="Klasör yolunu kopyala"
+                data-folder-path="${encodeURIComponent(value)}"
+                aria-label="Klasör yolunu kopyala">
+                <i class="fas fa-copy"></i>
+            </button>
+        </div>
+    `;
+}
+
+function setupFolderPathCopyHandler() {
+    if (folderPathCopyListenerAttached) return;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.copy-folder-path-btn');
+        if (!btn || !btn.closest('#release-approvals-table-container')) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const encodedPath = btn.getAttribute('data-folder-path');
+        if (!encodedPath) return;
+
+        try {
+            copyTextToClipboard(decodeURIComponent(encodedPath));
+        } catch (err) {
+            console.error('Failed to decode folder path:', err);
+            showNotification('Klasör yolu kopyalanamadı', 'error');
+        }
+    });
+    folderPathCopyListenerAttached = true;
+}
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) {
@@ -139,10 +235,7 @@ function initializeTable() {
             label: 'Klasör Yolu',
             sortable: false,
             width: '22%',
-            formatter: (value) => {
-                if (!value) return '-';
-                return value.length > 80 ? `${value.substring(0, 80)}...` : value;
-            }
+            formatter: (value, row) => formatFolderPathCell(value, row)
         },
         {
             field: 'changelog',
@@ -211,6 +304,8 @@ function initializeTable() {
         bordered: true,
         responsive: true
     });
+
+    setupFolderPathCopyHandler();
 }
 
 async function loadPendingReleases() {
