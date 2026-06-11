@@ -158,12 +158,14 @@ export async function getEstimatedMaterialBreakdown(jobNo) {
  *   job_order: string,
  *   currency: string,
  *   total_cost: string,
+ *   actual_total_cost: string,
  *   completion_pct: string|null,
  *   total_weight_kg: string|null,
  *   components: Array<{
  *     key: string,
  *     label: string,
  *     amount_eur: string,
+ *     actual_amount_eur: string,
  *     description: string,
  *     inputs: Object
  *   }>,

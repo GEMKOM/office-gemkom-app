@@ -1,6 +1,7 @@
 import { initNavbar } from '../../../components/navbar.js';
 import { initRouteProtection } from '../../../apis/routeProtection.js';
 import { HeaderComponent } from '../../../components/header/header.js';
+import { FiltersComponent } from '../../../components/filters/filters.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
@@ -8,14 +9,41 @@ import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { mountTopicDiscussion } from '../../../components/topic-discussion/topic-discussion.js';
 import {
     listPendingApprovalReleases,
+    listCompletedReviewReleases,
     approveRelease,
     rejectRelease,
     getDrawingRelease
 } from '../../../apis/projects/design.js';
+import { fetchAllUsers } from '../../../apis/users.js';
 import { showNotification } from '../../../components/notification/notification.js';
+
+const COMPLETED_REVIEW_STATUS_CHOICES = [
+    { value: 'released', label: 'Yayınlandı' },
+    { value: 'rejected', label: 'İnceleme Reddedildi' },
+    { value: 'superseded', label: 'Güncelliğini Kaybetti' },
+];
+
+const urlParams = new URLSearchParams(window.location.search);
+let activeTab = urlParams.get('tab') === 'completed' ? 'completed' : 'pending';
+let completedPage = parseInt(urlParams.get('page'), 10) || 1;
+let completedPageSize = parseInt(urlParams.get('page_size'), 10) || 20;
+let completedOrdering = urlParams.get('ordering') || '-review_completed_at';
+let completedFilters = {};
+if (urlParams.get('status__in')) {
+    completedFilters.status__in = urlParams.get('status__in');
+} else {
+    completedFilters.status__in = 'released,rejected';
+}
+let completedSearch = urlParams.get('search') || '';
+let completedReleases = [];
+let totalCompletedReleases = 0;
+let completedLoading = false;
+let allUsers = [];
 
 let headerComponent;
 let approvalsTable;
+let completedTable;
+let completedFiltersComponent;
 let detailsModal;
 let approveModal;
 let rejectModal;
@@ -101,7 +129,7 @@ function setupFolderPathCopyHandler() {
 
     document.addEventListener('click', (e) => {
         const btn = e.target.closest('.copy-folder-path-btn');
-        if (!btn || !btn.closest('#release-approvals-table-container')) return;
+        if (!btn || !btn.closest('#release-approvals-table-container, #completed-reviews-table-container')) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -127,10 +155,19 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
     initHeaderComponent();
     initializeModalComponents();
-    initializeTable();
-    await loadPendingReleases();
+    initializePendingTable();
+    initializeCompletedTable();
+    setupTabHandlers();
+    allUsers = await fetchAllUsers({ is_active: true });
+    initializeCompletedFilters();
 
-    const urlParams = new URLSearchParams(window.location.search);
+    if (activeTab === 'completed') {
+        activateTab('completed', false);
+        await loadCompletedReviews();
+    } else {
+        await loadPendingReleases();
+    }
+
     const releaseId = urlParams.get('release_id');
     if (releaseId) {
         try {
@@ -145,15 +182,71 @@ document.addEventListener('DOMContentLoaded', async () => {
 function initHeaderComponent() {
     headerComponent = new HeaderComponent({
         title: 'Çizim İncelemesi',
-        subtitle: 'Tasarım ekibinin incelemesini bekleyen teknik çizim yayınlarını görüntüleyin ve değerlendirin',
+        subtitle: 'Bekleyen incelemeleri değerlendirin ve tamamlanan inceleme geçmişini görüntüleyin',
         icon: 'search',
         showBackButton: 'block',
         showRefreshButton: 'block',
         backUrl: '/design/',
         onRefreshClick: async () => {
-            await loadPendingReleases();
+            if (activeTab === 'completed') {
+                await loadCompletedReviews();
+            } else {
+                await loadPendingReleases();
+            }
         }
     });
+}
+
+function updateUrlParams(updates = {}) {
+    const url = new URL(window.location);
+    Object.entries(updates).forEach(([key, value]) => {
+        if (value === null || value === undefined || value === '') {
+            url.searchParams.delete(key);
+        } else {
+            url.searchParams.set(key, value);
+        }
+    });
+    window.history.replaceState({}, '', url);
+}
+
+function setupTabHandlers() {
+    const pendingTab = document.getElementById('pending-tab');
+    const completedTab = document.getElementById('completed-tab');
+
+    pendingTab?.addEventListener('shown.bs.tab', async () => {
+        activeTab = 'pending';
+        updateUrlParams({ tab: null, page: null, page_size: null, ordering: null, search: null, status__in: null });
+        await loadPendingReleases();
+    });
+
+    completedTab?.addEventListener('shown.bs.tab', async () => {
+        activeTab = 'completed';
+        updateUrlParams({
+            tab: 'completed',
+            page: completedPage > 1 ? completedPage : null,
+            page_size: completedPageSize !== 20 ? completedPageSize : null,
+            ordering: completedOrdering !== '-review_completed_at' ? completedOrdering : null,
+            search: completedSearch || null,
+            status__in: completedFilters.status__in !== 'released,rejected' ? completedFilters.status__in : null,
+        });
+        await loadCompletedReviews();
+    });
+}
+
+function activateTab(tab, triggerBootstrap = true) {
+    const pendingTab = document.getElementById('pending-tab');
+    const completedTab = document.getElementById('completed-tab');
+    if (tab === 'completed' && completedTab) {
+        if (triggerBootstrap && window.bootstrap?.Tab) {
+            window.bootstrap.Tab.getOrCreateInstance(completedTab).show();
+        } else {
+            pendingTab?.classList.remove('active');
+            completedTab.classList.add('active');
+            document.getElementById('pending-panel')?.classList.remove('show', 'active');
+            document.getElementById('completed-panel')?.classList.add('show', 'active');
+        }
+        activeTab = 'completed';
+    }
 }
 
 function initializeModalComponents() {
@@ -209,7 +302,274 @@ function initializeModalComponents() {
     });
 }
 
-function initializeTable() {
+function formatStatusBadge(value, row) {
+    const label = row.status_display || value || '-';
+    let badgeClass = 'bg-secondary';
+    if (row.status === 'released') badgeClass = 'bg-success';
+    else if (row.status === 'rejected') badgeClass = 'bg-danger';
+    else if (row.status === 'superseded') badgeClass = 'bg-warning text-dark';
+    return `<span class="badge ${badgeClass}">${escapeHtml(label)}</span>`;
+}
+
+function initializeCompletedFilters() {
+    const defaultStatusFilter = ['released', 'rejected'];
+    const userOptions = [
+        { value: '', label: 'Tümü' },
+        ...allUsers.map((user) => ({
+            value: String(user.id),
+            label: user.full_name || user.username || `Kullanıcı #${user.id}`,
+        })),
+    ];
+
+    completedFiltersComponent = new FiltersComponent('completed-reviews-filters', {
+        title: 'Tamamlanan İnceleme Filtreleri',
+        onApply: async (values) => {
+            completedFilters = {};
+            completedSearch = '';
+
+            if (values['status-filter']) {
+                const statusValues = Array.isArray(values['status-filter'])
+                    ? values['status-filter']
+                    : [values['status-filter']];
+                const valid = statusValues.filter((v) => v && v !== '');
+                if (valid.length > 0) {
+                    completedFilters.status__in = valid.join(',');
+                }
+            } else {
+                completedFilters.status__in = COMPLETED_REVIEW_STATUS_CHOICES.map((s) => s.value).join(',');
+            }
+            if (values['job-order-filter']) {
+                completedFilters.job_order = values['job-order-filter'];
+            }
+            if (values['released-by-filter']) {
+                completedFilters.released_by = values['released-by-filter'];
+            }
+            if (values['reviewer-filter']) {
+                completedFilters.reviewer = values['reviewer-filter'];
+            }
+            if (values['completed-from-filter']) {
+                completedFilters.completed_at_after = values['completed-from-filter'];
+            }
+            if (values['completed-to-filter']) {
+                completedFilters.completed_at_before = values['completed-to-filter'];
+            }
+            if (values['search-filter']) {
+                completedSearch = values['search-filter'];
+            }
+
+            completedPage = 1;
+            updateUrlParams({
+                tab: 'completed',
+                page: null,
+                search: completedSearch || null,
+                status__in: completedFilters.status__in || null,
+            });
+            await loadCompletedReviews();
+        },
+        onClear: async () => {
+            completedFilters = { status__in: defaultStatusFilter.join(',') };
+            completedSearch = '';
+            completedPage = 1;
+            updateUrlParams({ tab: 'completed', page: null, search: null, status__in: defaultStatusFilter.join(',') });
+            await loadCompletedReviews();
+        },
+    });
+
+    const initialStatusValue = urlParams.get('status__in')
+        ? urlParams.get('status__in').split(',').filter((v) => v)
+        : defaultStatusFilter;
+
+    completedFiltersComponent.addDropdownFilter({
+        id: 'status-filter',
+        label: 'Sonuç',
+        multiple: true,
+        options: COMPLETED_REVIEW_STATUS_CHOICES.map((s) => ({ value: s.value, label: s.label })),
+        placeholder: 'Sonuç seçin',
+        value: initialStatusValue,
+        colSize: 2,
+    });
+
+    completedFiltersComponent.addTextFilter({
+        id: 'job-order-filter',
+        label: 'İş Emri',
+        placeholder: 'İş emri no',
+        value: urlParams.get('job_order') || '',
+        colSize: 2,
+    });
+
+    completedFiltersComponent.addDropdownFilter({
+        id: 'released-by-filter',
+        label: 'Oluşturan',
+        options: userOptions,
+        placeholder: 'Oluşturan seçin',
+        value: urlParams.get('released_by') || '',
+        colSize: 2,
+    });
+
+    completedFiltersComponent.addDropdownFilter({
+        id: 'reviewer-filter',
+        label: 'İnceleyen',
+        options: userOptions,
+        placeholder: 'İnceleyen seçin',
+        value: urlParams.get('reviewer') || '',
+        colSize: 2,
+    });
+
+    completedFiltersComponent.addTextFilter({
+        id: 'completed-from-filter',
+        label: 'Tamamlanma (Başlangıç)',
+        type: 'date',
+        value: urlParams.get('completed_at_after') || '',
+        colSize: 2,
+    });
+
+    completedFiltersComponent.addTextFilter({
+        id: 'completed-to-filter',
+        label: 'Tamamlanma (Bitiş)',
+        type: 'date',
+        value: urlParams.get('completed_at_before') || '',
+        colSize: 2,
+    });
+
+    completedFiltersComponent.addTextFilter({
+        id: 'search-filter',
+        label: 'Ara',
+        placeholder: 'İş emri, başlık, değişiklik...',
+        value: completedSearch,
+        colSize: 2,
+    });
+}
+
+function initializeCompletedTable() {
+    const columns = [
+        {
+            field: 'job_order_no',
+            label: 'İş Emri',
+            sortable: true,
+            width: '10%',
+        },
+        {
+            field: 'revision_code',
+            label: 'Revizyon',
+            sortable: false,
+            width: '8%',
+            formatter: (value, row) => value || `Rev.${row.revision_number}`,
+        },
+        {
+            field: 'released_by_name',
+            label: 'Oluşturan',
+            sortable: false,
+            width: '10%',
+        },
+        {
+            field: 'status_display',
+            label: 'Sonuç',
+            sortable: false,
+            width: '10%',
+            formatter: (value, row) => formatStatusBadge(value, row),
+        },
+        {
+            field: 'reviewers_summary',
+            label: 'İnceleyenler',
+            sortable: false,
+            width: '16%',
+            formatter: (value) => {
+                if (!value) return '-';
+                return value.length > 80 ? `${escapeHtml(value.substring(0, 80))}...` : escapeHtml(value);
+            },
+        },
+        {
+            field: 'folder_path',
+            label: 'Klasör Yolu',
+            sortable: false,
+            width: '18%',
+            formatter: (value, row) => formatFolderPathCell(value, row),
+        },
+        {
+            field: 'review_completed_at',
+            label: 'Tamamlanma',
+            sortable: true,
+            width: '10%',
+            formatter: (value) => formatDateTime(value),
+        },
+    ];
+
+    completedTable = new TableComponent('completed-reviews-table-container', {
+        title: 'Tamamlanan İncelemeler',
+        columns,
+        data: [],
+        loading: false,
+        skeleton: true,
+        skeletonRows: 5,
+        pagination: true,
+        serverSidePagination: true,
+        itemsPerPage: completedPageSize,
+        currentPage: completedPage,
+        totalItems: 0,
+        sortable: true,
+        onSort: async (field, direction) => {
+            let sortField = field;
+            if (field === 'job_order_no') sortField = 'job_order__job_no';
+            completedOrdering = direction === 'asc' ? sortField : `-${sortField}`;
+            completedPage = 1;
+            updateUrlParams({ tab: 'completed', page: null, ordering: completedOrdering });
+            await loadCompletedReviews();
+        },
+        onPageChange: async (page) => {
+            completedPage = page;
+            updateUrlParams({ tab: 'completed', page: page > 1 ? page : null });
+            await loadCompletedReviews();
+        },
+        onPageSizeChange: async (newPageSize) => {
+            completedPageSize = newPageSize;
+            completedPage = 1;
+            updateUrlParams({ tab: 'completed', page: null, page_size: newPageSize !== 20 ? newPageSize : null });
+            await loadCompletedReviews();
+        },
+        refreshable: true,
+        onRefresh: loadCompletedReviews,
+        actions: [
+            {
+                key: 'view',
+                label: 'Görüntüle',
+                icon: 'fas fa-eye',
+                class: 'btn-outline-info',
+                onClick: (row) => showReleaseDetails(row),
+            },
+        ],
+        striped: true,
+        bordered: true,
+        responsive: true,
+    });
+}
+
+async function loadCompletedReviews() {
+    if (completedLoading) return;
+    completedLoading = true;
+
+    try {
+        completedTable?.setLoading(true);
+        const response = await listCompletedReviewReleases(
+            completedFilters,
+            completedSearch,
+            completedOrdering,
+            completedPage,
+            completedPageSize
+        );
+        completedReleases = response.results;
+        totalCompletedReleases = response.count;
+        completedTable?.updateData(completedReleases, totalCompletedReleases, completedPage);
+        completedTable?.setLoading(false);
+    } catch (error) {
+        console.error('Error loading completed reviews:', error);
+        showNotification('Tamamlanan incelemeler yüklenirken hata oluştu', 'error');
+        completedTable?.setLoading(false);
+    } finally {
+        completedLoading = false;
+    }
+}
+
+function initializePendingTable() {
     const columns = [
         {
             field: 'job_order_no',
@@ -372,21 +732,29 @@ async function showReleaseDetails(release) {
     const state = currentRelease.approval_state || {};
     const progress = `${state.approval_count || 0}/${state.required_count || 2}`;
     const rev = currentRelease.revision_code || currentRelease.revision_number;
+    const isPending = currentRelease.status === 'pending_approval';
+    const approvals = Array.isArray(currentRelease.approvals) ? currentRelease.approvals : [];
+    const reviewersHtml = approvals.length
+        ? `<ul class="mb-0 ps-3">${approvals.map((a) =>
+            `<li>${escapeHtml(a.approver_name || '-')} — ${escapeHtml(a.decision_display || a.decision || '')} (${formatDateTime(a.created_at)})</li>`
+        ).join('')}</ul>`
+        : '<span class="text-muted">Kayıt yok</span>';
 
     detailsModal.setTitle(`${currentRelease.job_order_no || ''} — Rev.${rev}`);
     detailsModal.setIcon('fas fa-search');
 
     const infoHtml = `
         <div class="row g-2">
-            <div class="col-md-4"><strong>İş Emri:</strong> ${currentRelease.job_order_no || '-'}</div>
-            <div class="col-md-8"><strong>Başlık:</strong> ${currentRelease.job_order_title || '-'}</div>
-            <div class="col-md-4"><strong>Oluşturan:</strong> ${currentRelease.released_by_name || '-'}</div>
-            <div class="col-md-4"><strong>İnceleme:</strong> ${progress}</div>
-            <div class="col-md-4"><strong>Tarih:</strong> ${formatDateTime(currentRelease.released_at)}</div>
-            <div class="col-md-12"><strong>Klasör Yolu:</strong><br>${currentRelease.folder_path || '-'}</div>
+            <div class="col-md-4"><strong>İş Emri:</strong> ${escapeHtml(currentRelease.job_order_no || '-')}</div>
+            <div class="col-md-8"><strong>Başlık:</strong> ${escapeHtml(currentRelease.job_order_title || '-')}</div>
+            <div class="col-md-4"><strong>Oluşturan:</strong> ${escapeHtml(currentRelease.released_by_name || '-')}</div>
+            <div class="col-md-4"><strong>Durum:</strong> ${formatStatusBadge(currentRelease.status_display, currentRelease)}</div>
+            <div class="col-md-4"><strong>${isPending ? 'İnceleme' : 'Gönderim'}:</strong> ${isPending ? progress : formatDateTime(currentRelease.released_at)}</div>
+            <div class="col-md-12"><strong>Klasör Yolu:</strong><br>${escapeHtml(currentRelease.folder_path || '-')}</div>
             <div class="col-md-12"><strong>Değişiklikler:</strong>
-                <pre class="bg-light p-2 rounded mt-1 mb-0" style="white-space: pre-wrap;">${currentRelease.changelog || '-'}</pre>
+                <pre class="bg-light p-2 rounded mt-1 mb-0" style="white-space: pre-wrap;">${escapeHtml(currentRelease.changelog || '-')}</pre>
             </div>
+            ${!isPending ? `<div class="col-md-12"><strong>İnceleyenler:</strong><div class="mt-1">${reviewersHtml}</div></div>` : ''}
         </div>
     `;
 

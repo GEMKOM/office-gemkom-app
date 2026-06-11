@@ -272,6 +272,53 @@ export async function listPendingApprovalReleases() {
 }
 
 /**
+ * List completed peer-review releases with optional filters and pagination.
+ * @param {Object} [filters] - Query filters
+ * @param {string} [search] - Search term
+ * @param {string} [ordering] - Sort field (default: -review_completed_at)
+ * @param {number} [page=1] - Page number
+ * @param {number} [pageSize=20] - Page size
+ * @returns {Promise<{results: Array, count: number}>}
+ */
+export async function listCompletedReviewReleases(
+    filters = {},
+    search = '',
+    ordering = '-review_completed_at',
+    page = 1,
+    pageSize = 20
+) {
+    try {
+        const params = new URLSearchParams();
+        params.set('page', String(page));
+        params.set('page_size', String(pageSize));
+        if (ordering) params.set('ordering', ordering);
+        if (search) params.set('search', search);
+
+        Object.entries(filters).forEach(([key, value]) => {
+            if (value !== undefined && value !== null && value !== '') {
+                params.set(key, String(value));
+            }
+        });
+
+        const url = `${backendBase}/projects/drawing-releases/completed_reviews/?${params.toString()}`;
+        const response = await authedFetch(url);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (data.results !== undefined) {
+            return { results: data.results, count: data.count };
+        }
+        return { results: data, count: data.length };
+    } catch (error) {
+        console.error('Error listing completed review releases:', error);
+        throw error;
+    }
+}
+
+/**
  * Approve a pending drawing release
  * @param {number} releaseId - Release ID
  * @param {Object} [approvalData] - Optional approval data

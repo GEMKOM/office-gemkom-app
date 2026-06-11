@@ -19,6 +19,8 @@
     <link rel="stylesheet" href="../../../components/file-attachments/file-attachments.css">
     <link rel="stylesheet" href="../../../components/file-viewer/file-viewer.css">
     <link rel="stylesheet" href="../../../components/topic-discussion/topic-discussion.css">
+    <link rel="stylesheet" href="../../../components/filters/filters.css">
+    <link rel="stylesheet" href="release-approvals.css">
 </head>
 <body>
     <div id="navbar-container"></div>
@@ -26,9 +28,37 @@
     <section class="modules-section py-5">
         <div class="container-fluid">
             <div id="header-placeholder"></div>
-            <div class="row">
-                <div class="col-12">
-                    <div id="release-approvals-table-container"></div>
+
+            <div class="dashboard-card compact review-tabs-shell">
+                <div class="card-body">
+                    <ul class="nav nav-tabs" id="review-tabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="pending-tab" data-bs-toggle="tab"
+                                data-bs-target="#pending-panel" type="button" role="tab"
+                                aria-controls="pending-panel" aria-selected="true">
+                                <i class="fas fa-hourglass-half me-1"></i>Bekleyen
+                            </button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="completed-tab" data-bs-toggle="tab"
+                                data-bs-target="#completed-panel" type="button" role="tab"
+                                aria-controls="completed-panel" aria-selected="false">
+                                <i class="fas fa-check-double me-1"></i>Tamamlanan
+                            </button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content" id="review-tab-content">
+                        <div class="tab-pane fade show active" id="pending-panel" role="tabpanel"
+                            aria-labelledby="pending-tab">
+                            <div id="release-approvals-table-container"></div>
+                        </div>
+                        <div class="tab-pane fade" id="completed-panel" role="tabpanel"
+                            aria-labelledby="completed-tab">
+                            <div id="completed-reviews-filters"></div>
+                            <div id="completed-reviews-table-container"></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -46,6 +76,7 @@
     <script type="module" src="../../../components/display-modal/display-modal.js"></script>
     <script type="module" src="../../../components/file-attachments/file-attachments.js"></script>
     <script type="module" src="../../../components/file-viewer/file-viewer.js"></script>
+    <script type="module" src="../../../components/filters/filters.js"></script>
     <script type="module" src="release-approvals.js"></script>
 </body>
 </html>

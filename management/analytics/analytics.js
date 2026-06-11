@@ -119,6 +119,18 @@ function completionBar(v) {
 
 /* ── tree hierarchy ────────────────────────────────────────────────── */
 
+function findCostTableRowByJobNo(jobNo) {
+    if (!jobNo) return null;
+    const match = (list) => (Array.isArray(list) ? list : []).find((r) => r.job_no === jobNo) || null;
+    let row = match(costTableRoots);
+    if (row) return row;
+    for (const children of childrenCache.values()) {
+        row = match(children);
+        if (row) return row;
+    }
+    return null;
+}
+
 function mergeExpandedChildren(roots, level = 0) {
     const merged = [];
     if (!Array.isArray(roots)) return merged;
@@ -765,30 +777,43 @@ async function showJobDetails(jobNo) {
         ]);
         const results = data.results || [];
         if (results.length === 0) { showError('Maliyet verisi bulunamadı.'); return; }
-        const jobData = results[0];
+        const jobData = results.find((r) => r.job_no === jobNo) || results[0];
         const machining = jobData.machining || null;
         const welding = jobData.welding || null;
         const machBase = toNumber(machining?.total_cost);
         const weldBase = toNumber(welding?.total_cost);
-        const laborNetFromTable = costRow ? toNumber(costRow.labor_cost) : 0;
-        const overheadTotal = costRow ? toNumber(costRow.employee_overhead_cost) : 0;
-        const laborNet = laborNetFromTable > 0 ? laborNetFromTable : (machBase + weldBase);
+        const ownLabor = machBase + weldBase;
+        const treeLabor = costRow ? toNumber(costRow.labor_cost) : ownLabor;
+        const treeOverhead = costRow ? toNumber(costRow.employee_overhead_cost) : 0;
+        const childLabor = Math.max(0, treeLabor - ownLabor);
+        const laborNet = treeLabor > 0 ? treeLabor : ownLabor;
+        const overheadTotal = treeOverhead;
         const laborWithTax = laborNet + overheadTotal;
-        const { mach: machTax, weld: weldTax } = splitEmployeeOverheadByLaborCost(overheadTotal, machBase, weldBase);
+        const ownOverhead = treeLabor > 0 ? treeOverhead * (ownLabor / treeLabor) : treeOverhead;
+        const { mach: machTax, weld: weldTax } = splitEmployeeOverheadByLaborCost(ownOverhead, machBase, weldBase);
         const machWithTax = machBase + machTax;
         const weldWithTax = weldBase + weldTax;
 
         const combinedTotalHours = jobData.combined_total_hours || 0;
         const costPerHourWithTax = combinedTotalHours > 0 ? laborWithTax / combinedTotalHours : 0;
 
+        const childLaborNote = childLabor > 0.005
+            ? `<div class="alert alert-light border py-2 mb-3 small text-muted">
+                <i class="fas fa-sitemap me-1"></i>
+                Bu iş emrinin kendi kayıtları: <strong>€${ownLabor.toFixed(2)}</strong> işçilik
+                + alt iş emirleri: <strong>€${childLabor.toFixed(2)}</strong> işçilik
+                = tablodaki toplam <strong>€${laborNet.toFixed(2)}</strong>.
+               </div>`
+            : '';
+
         const modal = new DisplayModal('job-details-modal-container', { title: `${jobNo} - İş Maliyeti Detayları`, icon: 'fas fa-calculator', size: 'xl', showEditButton: false });
 
-        modal.addCustomSection({ title: 'Özet', icon: 'fas fa-chart-pie', iconColor: 'text-primary', customContent: summaryRow([
-            { icon: 'money-bill-wave', cls: 'text-primary', value: `€${laborNet.toFixed(2)}`, label: 'İşçilik (vergi hariç)', colSize: 4 },
+        modal.addCustomSection({ title: 'Özet', icon: 'fas fa-chart-pie', iconColor: 'text-primary', customContent: childLaborNote + summaryRow([
+            { icon: 'money-bill-wave', cls: 'text-primary', value: `€${laborNet.toFixed(2)}`, label: 'İşçilik (vergi hariç, ağaç toplamı)', colSize: 4 },
             { icon: 'percent', cls: 'text-primary', value: `€${overheadTotal.toFixed(2)}`, label: 'Vergi / genel gider', colSize: 4 },
             { icon: 'euro-sign', cls: 'text-primary', value: `€${laborWithTax.toFixed(2)}`, label: 'İşçilik + Vergi', colSize: 4 }
         ]) + summaryRow([
-            { icon: 'clock', cls: 'text-primary', value: combinedTotalHours.toFixed(1), label: 'Toplam Saat', colSize: 6 },
+            { icon: 'clock', cls: 'text-primary', value: combinedTotalHours.toFixed(1), label: 'Toplam Saat (bu iş emri)', colSize: 6 },
             { icon: 'calculator', cls: 'text-primary', value: `€${costPerHourWithTax.toFixed(2)}`, label: 'Saat Başı (işçilik + vergi)', colSize: 6 }
         ]) });
 
@@ -1061,6 +1086,17 @@ function escapeHtml(s) {
     return div.innerHTML;
 }
 
+function formatCostDiff(estimated, actual) {
+    const est = toNumber(estimated);
+    const act = toNumber(actual);
+    const diff = act - est;
+    if (!Number.isFinite(diff)) return '<span class="text-muted">-</span>';
+    const cls = diff > 0 ? 'text-danger' : diff < 0 ? 'text-success' : 'text-muted';
+    const formatted = diff.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const sign = diff > 0 ? '+' : '';
+    return `<span class="${cls} fw-semibold">${sign}€${formatted}</span>`;
+}
+
 async function showEstimatedCostBreakdownModal(jobNo) {
     if (!jobNo) {
         showError('İş numarası bulunamadı.');
@@ -1083,6 +1119,7 @@ async function showEstimatedCostBreakdownModal(jobNo) {
     loadingModal.render().show();
 
     try {
+        const costRow = findCostTableRowByJobNo(jobNo);
         const data = await getEstimatedCostBreakdown(jobNo);
         const components = Array.isArray(data.components) ? data.components : [];
         const assumptions = Array.isArray(data.assumptions) ? data.assumptions : [];
@@ -1108,11 +1145,18 @@ async function showEstimatedCostBreakdownModal(jobNo) {
             }
         };
 
+        const actualTotalCost = data.actual_total_cost ?? costRow?.actual_total_cost;
+
+        const getComponentActual = (c) => c.actual_amount_eur ?? (c.key && costRow ? costRow[c.key] : null);
+
         const summaryHtml = summaryRow([
-            { icon: 'chart-line', cls: 'text-danger', value: formatMoney(data.total_cost), label: 'Tahmini Toplam', colSize: 3 },
+            { icon: 'chart-line', cls: 'text-primary', value: formatMoney(data.total_cost), label: 'Tahmini Toplam', colSize: 3 },
+            { icon: 'receipt', cls: 'text-danger', value: formatMoney(actualTotalCost), label: 'Gerçek Toplam', colSize: 3 },
+            { icon: 'balance-scale', cls: 'text-secondary', value: formatCostDiff(data.total_cost, actualTotalCost), label: 'Fark (Gerçek − Tahmini)', colSize: 3 },
             { icon: 'tasks', cls: 'text-primary', value: data.completion_pct != null ? pctStr(data.completion_pct, 1) : '–', label: 'Tamamlanma', colSize: 3 },
-            { icon: 'weight-hanging', cls: 'text-info', value: data.total_weight_kg != null ? formatNumber(data.total_weight_kg, 2) : '–', label: 'Ağırlık (kg)', colSize: 3 },
-            { icon: 'list', cls: 'text-secondary', value: String(components.length), label: 'Maliyet Kalemi', colSize: 3 },
+        ]) + summaryRow([
+            { icon: 'weight-hanging', cls: 'text-info', value: data.total_weight_kg != null ? formatNumber(data.total_weight_kg, 2) : '–', label: 'Ağırlık (kg)', colSize: 4 },
+            { icon: 'list', cls: 'text-secondary', value: String(components.length), label: 'Maliyet Kalemi', colSize: 4 },
         ]);
 
         const componentsHtml = `
@@ -1121,21 +1165,30 @@ async function showEstimatedCostBreakdownModal(jobNo) {
                     <thead class="table-light">
                         <tr>
                             <th>Kalem</th>
-                            <th class="text-end" style="width:130px;">Tutar (EUR)</th>
+                            <th class="text-end" style="width:120px;">Tahmini (EUR)</th>
+                            <th class="text-end" style="width:120px;">Gerçek (EUR)</th>
+                            <th class="text-end" style="width:120px;">Fark (EUR)</th>
                             <th>Hesaplama</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${components.map((c) => `
+                        ${components.map((c) => {
+                            const actualAmt = getComponentActual(c);
+                            return `
                             <tr>
                                 <td class="fw-semibold">${escapeHtml(c.label || c.key || '–')}</td>
                                 <td class="text-end fw-semibold">${formatMoney(c.amount_eur)}</td>
+                                <td class="text-end">${formatMoney(actualAmt)}</td>
+                                <td class="text-end">${formatCostDiff(c.amount_eur, actualAmt)}</td>
                                 <td class="text-muted small">${escapeHtml(c.description || '–')}</td>
                             </tr>
-                        `).join('')}
+                        `;
+                        }).join('')}
                         <tr class="table-light">
                             <td><strong>Toplam</strong></td>
                             <td class="text-end"><strong>${formatMoney(data.total_cost)}</strong></td>
+                            <td class="text-end"><strong>${formatMoney(actualTotalCost)}</strong></td>
+                            <td class="text-end"><strong>${formatCostDiff(data.total_cost, actualTotalCost)}</strong></td>
                             <td></td>
                         </tr>
                     </tbody>
