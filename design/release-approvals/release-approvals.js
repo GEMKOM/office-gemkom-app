@@ -119,26 +119,36 @@ function initializeTable() {
             field: 'job_order_no',
             label: 'İş Emri',
             sortable: true,
-            width: '12%'
+            width: '10%'
         },
         {
             field: 'revision_code',
             label: 'Revizyon',
             sortable: false,
-            width: '10%',
+            width: '8%',
             formatter: (value, row) => value || `Rev.${row.revision_number}`
         },
         {
             field: 'released_by_name',
             label: 'Oluşturan',
             sortable: false,
-            width: '14%'
+            width: '12%'
+        },
+        {
+            field: 'folder_path',
+            label: 'Klasör Yolu',
+            sortable: false,
+            width: '22%',
+            formatter: (value) => {
+                if (!value) return '-';
+                return value.length > 80 ? `${value.substring(0, 80)}...` : value;
+            }
         },
         {
             field: 'changelog',
             label: 'Değişiklikler',
             sortable: false,
-            width: '30%',
+            width: '22%',
             formatter: (value) => {
                 if (!value) return '-';
                 return value.length > 120 ? `${value.substring(0, 120)}...` : value;
@@ -148,7 +158,7 @@ function initializeTable() {
             field: 'approval_state',
             label: 'Değerlendirme',
             sortable: false,
-            width: '10%',
+            width: '8%',
             formatter: (value) => {
                 if (!value) return '0/2';
                 return `${value.approval_count || 0}/${value.required_count || 2}`;
@@ -158,7 +168,7 @@ function initializeTable() {
             field: 'released_at',
             label: 'Tarih',
             sortable: true,
-            width: '14%',
+            width: '10%',
             formatter: (value) => formatDateTime(value)
         }
     ];
