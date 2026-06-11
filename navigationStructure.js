@@ -92,6 +92,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Revizyon Talepleri',
                 icon: 'fas fa-edit',
                 children: {}
+            },
+            '/design/release-approvals': {
+                label: 'Akran İncelemesi',
+                icon: 'fas fa-people-arrows',
+                children: {}
             }
         }
     },

@@ -88,6 +88,12 @@ async function handleLandingPage() {
                             icon: 'fas fa-edit',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/design/revision-requests'
+                        },
+                        {
+                            label: 'Akran İncelemesi',
+                            icon: 'fas fa-people-arrows',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/design/release-approvals'
                         }
                     ]
                 },

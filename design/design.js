@@ -33,6 +33,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-edit',
                 iconColor: 'warning',
                 link: '/design/revision-requests'
+            },
+            {
+                title: 'Akran İncelemesi',
+                description: 'Tasarım ekibinin incelemesini bekleyen teknik çizim yayınlarını görüntüleyin ve değerlendirin.',
+                icon: 'fas fa-people-arrows',
+                iconColor: 'success',
+                link: '/design/release-approvals'
             }
         ]
     });

@@ -27,7 +27,15 @@ import {
     DEPARTMENT_OPTIONS
 } from '../../apis/projects/departmentTasks.js';
 import { authFetchUsers } from '../../apis/users.js';
-import { createRelease, completeRevision, selfStartRevision } from '../../apis/projects/design.js';
+import {
+    createRelease,
+    completeRevision,
+    selfStartRevision,
+    resubmitRelease,
+    approveRelease,
+    rejectRelease,
+    getDrawingRelease
+} from '../../apis/projects/design.js';
 import { markPlanningRequestItemDelivered } from '../../apis/planning/planningRequestItems.js';
 import { getCncParts } from '../../apis/cnc_cutting/parts.js';
 import { getParts as getMachiningParts } from '../../apis/machining/parts.js';
@@ -133,6 +141,7 @@ export async function initDepartmentTasksPage(config) {
     let bulkSubtaskModal = null;
     let createReleaseModal = null;
     let completeRevisionModal = null;
+    let releaseApprovalRejectModal = null;
     let submitQCModal = null;
 
     function isPotentiallyDeletableDepartmentTask(task) {
@@ -1564,6 +1573,41 @@ function initializeReleaseModal() {
         saveButtonText: 'Tamamla'
     });
 
+    releaseApprovalRejectModal = new EditModal('release-approval-reject-modal-container', {
+        title: 'Yayını Reddet',
+        icon: 'fas fa-times-circle',
+        size: 'md',
+        showEditButton: false,
+        saveButtonText: 'Reddet'
+    });
+
+    releaseApprovalRejectModal.onSaveCallback(async (formData) => {
+        const releaseId = window.pendingReleaseApprovalRejectId;
+        if (!releaseId) return;
+        if (!formData.reason || !formData.reason.trim()) {
+            showNotification('Reddetme nedeni gereklidir', 'error');
+            return;
+        }
+        try {
+            await rejectRelease(releaseId, { reason: formData.reason.trim() });
+            showNotification('Yayın reddedildi', 'success');
+            releaseApprovalRejectModal.hide();
+            window.pendingReleaseApprovalRejectId = null;
+            if (window.pendingReleaseApprovalTaskId) {
+                const updatedTask = await getDepartmentTaskById(window.pendingReleaseApprovalTaskId);
+                updateTaskInLocalData(window.pendingReleaseApprovalTaskId, updatedTask);
+                window.pendingReleaseApprovalTaskId = null;
+                updateTableDataOnly();
+            }
+            if (taskDetailsModal) {
+                taskDetailsModal.hide();
+            }
+        } catch (error) {
+            console.error('Error rejecting release:', error);
+            showNotification('Yayın reddedilirken hata oluştu', 'error');
+        }
+    });
+
     createReleaseModal.onSaveCallback(async (formData) => {
         const taskId = window.pendingReleaseTaskId;
         if (!taskId) return;
@@ -1608,24 +1652,31 @@ function initializeReleaseModal() {
                 return;
             }
 
-            // Create release
-            await createRelease(releaseData);
-            
-            // For subtasks, complete them separately via the completion endpoint
-            if (isSubtask) {
-                const completeResponse = await completeDepartmentTask(taskId);
-                
-                // Update the task in local data
-                if (completeResponse && completeResponse.task) {
-                    updateTaskInLocalData(taskId, completeResponse.task);
+            if (window.pendingResubmitReleaseId) {
+                await resubmitRelease(window.pendingResubmitReleaseId, releaseData);
+                showNotification('Yayın düzenlendi ve yeniden incelemeye gönderildi', 'success');
+                window.pendingResubmitReleaseId = null;
+            } else {
+                await createRelease(releaseData);
+
+                if (isSubtask) {
+                    const completeResponse = await completeDepartmentTask(taskId);
+                    if (completeResponse && completeResponse.task) {
+                        updateTaskInLocalData(taskId, completeResponse.task);
+                    }
                 }
+
+                showNotification(
+                    'Teknik çizim yayını akran incelemesine gönderildi. Görev, 2 değerlendirme sonrası tamamlanacaktır.',
+                    'success'
+                );
             }
-            
-            showNotification('Teknik çizim yayını oluşturuldu', 'success');
+
             createReleaseModal.hide();
             window.pendingReleaseTaskId = null;
-            
-            // Update the table without full reload
+
+            const updatedTask = await getDepartmentTaskById(taskId);
+            updateTaskInLocalData(taskId, updatedTask);
             updateTableDataOnly();
         } catch (error) {
             console.error('Error creating release:', error);
@@ -1692,9 +1743,16 @@ function initializeReleaseModal() {
 
             await completeRevision(releaseId, completionData);
 
-            showNotification('Revizyon tamamlandı', 'success');
+            showNotification(
+                'Revizyon tamamlandı ve yeni yayın akran incelemesine gönderildi. İş emri inceleme tamamlandıktan sonra devam edecektir.',
+                'success'
+            );
             completeRevisionModal.hide();
             window.pendingRevisionCompletionTaskId = null;
+
+            const updatedTask = await getDepartmentTaskById(taskId);
+            updateTaskInLocalData(taskId, updatedTask);
+            updateTableDataOnly();
         } catch (error) {
             console.error('Error completing revision:', error);
             let errorMessage = 'Revizyon tamamlanırken hata oluştu';
@@ -3443,6 +3501,15 @@ function getAvailableActions(task) {
         });
     }
 
+    if (department === 'design' && task.pending_approval_release_id && !task.parent) {
+        actions.unshift({
+            key: 'release-approval',
+            label: 'Akran İncelemesi',
+            icon: 'fas fa-people-arrows',
+            handler: 'release-approval'
+        });
+    }
+
     // Consultation tab - show for tasks linked to a sales offer (but not sales_consult, which is handled above)
     if (task.is_consultation && task.task_type !== 'sales_consult') {
         actions.unshift({
@@ -3519,6 +3586,9 @@ async function loadActionContent(task, action) {
                 break;
             case 'self-start-revision':
                 content = await renderSelfStartRevisionActionForm(task);
+                break;
+            case 'release-approval':
+                content = await renderReleaseApprovalTab(task);
                 break;
             case 'consultation':
                 content = await renderConsultationTab(task);
@@ -6529,12 +6599,21 @@ async function handleCompleteTask(taskId, taskRow = null) {
         
         if (isSubtask) {
             await showSubtaskCompleteModal(taskId);
+        } else if (task.pending_approval_release_id) {
+            const state = task.pending_release_approval_state;
+            const progress = state
+                ? `${state.approval_count}/${state.required_count}`
+                : '';
+            showNotification(
+                `Yayın akran incelemesi bekliyor (${progress}). Tasarım ekibi değerlendirmesini tamamlayana kadar görev tamamlanamaz.`,
+                'warning'
+            );
+        } else if (task.rejected_release_id) {
+            await showResubmitReleaseModal(taskId, task);
+        } else if (task.is_under_revision) {
+            await showCompleteRevisionModal(taskId);
         } else {
-            if (task.is_under_revision) {
-                await showCompleteRevisionModal(taskId);
-            } else {
-                await showCreateReleaseModal(taskId);
-            }
+            await showCreateReleaseModal(taskId);
         }
     } else {
         // For other departments, use the standard completion flow
@@ -6972,7 +7051,28 @@ async function showSubtaskCompleteModal(taskId) {
     }
 }
 
-async function showCreateReleaseModal(taskId) {
+async function showResubmitReleaseModal(taskId, taskRow) {
+    try {
+        const task = taskRow || await getDepartmentTaskById(taskId);
+        if (!task.rejected_release_id) {
+            showNotification('Reddedilmiş yayın bulunamadı', 'error');
+            return;
+        }
+        const release = await getDrawingRelease(task.rejected_release_id);
+        await showCreateReleaseModal(taskId, {
+            resubmitReleaseId: task.rejected_release_id,
+            releaseData: release,
+            isResubmit: true
+        });
+    } catch (error) {
+        console.error('Error opening resubmit modal:', error);
+        showNotification('Yeniden gönderme formu açılırken hata oluştu', 'error');
+    }
+}
+
+async function showCreateReleaseModal(taskId, options = {}) {
+    const { resubmitReleaseId = null, releaseData = null, isResubmit = false } = options;
+
     try {
         if (!createReleaseModal) {
             showNotification('Yayın modalı başlatılamadı', 'error');
@@ -6986,15 +7086,38 @@ async function showCreateReleaseModal(taskId) {
             return;
         }
 
+        if (!isResubmit && task.pending_approval_release_id) {
+            const state = task.pending_release_approval_state;
+            const progress = state
+                ? `${state.approval_count}/${state.required_count}`
+                : '';
+            showNotification(`Zaten inceleme bekleyen bir yayın var (${progress})`, 'warning');
+            return;
+        }
+
         window.pendingReleaseTaskId = taskId;
+        window.pendingResubmitReleaseId = resubmitReleaseId;
         
         createReleaseModal.clearAll();
 
         createReleaseModal.addSection({
-            title: 'Yayın Bilgileri',
+            title: isResubmit ? 'Yayını Düzenle ve Yeniden Gönder' : 'Yayın Bilgileri',
             icon: 'fas fa-info-circle',
             iconColor: 'text-primary'
         });
+
+        if (!isResubmit) {
+            createReleaseModal.addField({
+                id: 'release-info-note',
+                name: 'info_note',
+                label: 'Bilgi',
+                type: 'text',
+                value: 'Yayın oluşturulduktan sonra tasarım ekibinden 2 akran değerlendirmesi gerekir. İnceleme tamamlandıktan sonra görev tamamlanır.',
+                readonly: true,
+                icon: 'fas fa-info-circle',
+                colSize: 12
+            });
+        }
 
         createReleaseModal.addField({
             id: 'release-job-order',
@@ -7013,7 +7136,7 @@ async function showCreateReleaseModal(taskId) {
             name: 'folder_path',
             label: 'Klasör Yolu',
             type: 'text',
-            value: '',
+            value: releaseData?.folder_path || '',
             required: true,
             placeholder: 'C:\\CVSPDM\\CVS\\009_KAPTAN\\EAF\\009_34_EBT_PANEL\\PDF',
             icon: 'fas fa-folder',
@@ -7026,7 +7149,7 @@ async function showCreateReleaseModal(taskId) {
             name: 'revision_code',
             label: 'Revizyon Kodu',
             type: 'text',
-            value: '',
+            value: releaseData?.revision_code || '',
             placeholder: 'A1, B2, vb.',
             icon: 'fas fa-code-branch',
             colSize: 6,
@@ -7038,7 +7161,7 @@ async function showCreateReleaseModal(taskId) {
             name: 'hardcopy_count',
             label: 'Hardcopy Sayısı',
             type: 'number',
-            value: '',
+            value: releaseData?.hardcopy_count ?? '',
             min: 0,
             placeholder: '0',
             icon: 'fas fa-print',
@@ -7056,7 +7179,7 @@ async function showCreateReleaseModal(taskId) {
         const isSubtask = !!task.parent;
         
         // For subtasks, pre-populate changelog with the subtask title
-        const defaultChangelog = isSubtask && task.title ? task.title : '';
+        const defaultChangelog = releaseData?.changelog || (isSubtask && task.title ? task.title : '');
         
         createReleaseModal.addField({
             id: 'release-changelog',
@@ -7082,7 +7205,7 @@ async function showCreateReleaseModal(taskId) {
             value: defaultAutoComplete,
             icon: 'fas fa-check-circle',
             colSize: 12,
-            helpText: 'İşaretlendiğinde görev otomatik olarak tamamlanır'
+            helpText: 'İşaretlendiğinde görev, akran incelemesi tamamlandıktan sonra otomatik tamamlanır'
         });
 
         createReleaseModal.render();
@@ -7091,6 +7214,120 @@ async function showCreateReleaseModal(taskId) {
         console.error('Error loading task for release creation:', error);
         showNotification('Görev bilgileri yüklenirken hata oluştu', 'error');
     }
+}
+
+async function renderReleaseApprovalTab(task) {
+    if (!task.pending_approval_release_id) {
+        return '<p class="text-muted">İnceleme bekleyen yayın bulunamadı.</p>';
+    }
+
+    const release = await getDrawingRelease(task.pending_approval_release_id);
+    const state = release.approval_state || task.pending_release_approval_state || {};
+    const progress = `${state.approval_count || 0}/${state.required_count || 2}`;
+    const leadStatus = state.has_lead_approval
+        ? '<span class="badge bg-success">Alındı</span>'
+        : '<span class="badge bg-warning text-dark">Bekleniyor</span>';
+
+    const approvalsHtml = (release.approvals || [])
+        .filter((a) => a.decision === 'approved')
+        .map((a) => `<li>${a.approver_name} — ${new Date(a.created_at).toLocaleString('tr-TR')}</li>`)
+        .join('') || '<li class="text-muted">Henüz olumlu değerlendirme yok</li>';
+
+    const topicLink = release.release_topic_id
+        ? `<a href="/projects/project-tracking/?job_no=${encodeURIComponent(task.job_order)}&topic_id=${release.release_topic_id}" target="_blank" class="btn btn-outline-primary btn-sm mt-2">
+            <i class="fas fa-comments me-1"></i>Konuya Git (Yorum Yap)
+           </a>`
+        : '';
+
+    const actionButtons = release.can_approve
+        ? `<div class="d-flex gap-2 mt-3">
+            <button type="button" class="btn btn-success" id="release-approve-btn" data-release-id="${release.id}" data-task-id="${task.id}">
+                <i class="fas fa-check me-1"></i>Olumlu
+            </button>
+            <button type="button" class="btn btn-danger" id="release-reject-btn" data-release-id="${release.id}" data-task-id="${task.id}">
+                <i class="fas fa-times me-1"></i>Reddet
+            </button>
+           </div>`
+        : '<p class="text-muted mt-3 mb-0">Bu yayını değerlendirme yetkiniz yok veya zaten oy kullandınız.</p>';
+
+    setTimeout(() => {
+        const approveBtn = taskDetailsModal?.container?.querySelector('#release-approve-btn');
+        const rejectBtn = taskDetailsModal?.container?.querySelector('#release-reject-btn');
+        if (approveBtn) {
+            approveBtn.addEventListener('click', () => {
+                handleApproveReleaseFromTask(approveBtn.dataset.releaseId, approveBtn.dataset.taskId);
+            });
+        }
+        if (rejectBtn) {
+            rejectBtn.addEventListener('click', () => {
+                handleRejectReleaseFromTask(rejectBtn.dataset.releaseId, rejectBtn.dataset.taskId);
+            });
+        }
+    }, 0);
+
+    return `
+        <h5 class="mb-3"><i class="fas fa-people-arrows me-2"></i>Akran İncelemesi</h5>
+        <div class="alert alert-info">
+            <strong>İnceleme İlerlemesi:</strong> ${progress}
+            <br><strong>Kıdemli üye değerlendirmesi:</strong> ${leadStatus}
+        </div>
+        <p><strong>Revizyon:</strong> ${release.revision_code || release.revision_number}</p>
+        <p><strong>Klasör:</strong> ${release.folder_path || '-'}</p>
+        <p><strong>Değişiklikler:</strong></p>
+        <pre class="bg-light p-2 rounded" style="white-space: pre-wrap;">${release.changelog || '-'}</pre>
+        <p><strong>Olumlu değerlendirenler:</strong></p>
+        <ul>${approvalsHtml}</ul>
+        ${topicLink}
+        ${actionButtons}
+    `;
+}
+
+async function handleApproveReleaseFromTask(releaseId, taskId) {
+    confirmationModal.show({
+        message: 'Bu teknik çizim yayınını olumlu değerlendirmek istediğinize emin misiniz?',
+        confirmText: 'Evet, Olumlu',
+        onConfirm: async () => {
+            try {
+                const response = await approveRelease(releaseId, {});
+                showNotification(response.message || 'Değerlendirmeniz kaydedildi', 'success');
+                confirmationModal.hide();
+                const updatedTask = await getDepartmentTaskById(taskId);
+                updateTaskInLocalData(taskId, updatedTask);
+                updateTableDataOnly();
+                if (taskDetailsModal) {
+                    taskDetailsModal.hide();
+                }
+            } catch (error) {
+                console.error('Error approving release:', error);
+                showNotification('Değerlendirme kaydedilirken hata oluştu', 'error');
+            }
+        }
+    });
+}
+
+function handleRejectReleaseFromTask(releaseId, taskId) {
+    window.pendingReleaseApprovalRejectId = releaseId;
+    window.pendingReleaseApprovalTaskId = taskId;
+    if (!releaseApprovalRejectModal) return;
+    releaseApprovalRejectModal.clearAll();
+    releaseApprovalRejectModal.addSection({
+        title: 'Reddetme Nedeni',
+        icon: 'fas fa-times-circle',
+        iconColor: 'text-danger'
+    });
+    releaseApprovalRejectModal.addField({
+        id: 'release-reject-reason',
+        name: 'reason',
+        label: 'Reddetme Nedeni',
+        type: 'textarea',
+        value: '',
+        required: true,
+        placeholder: 'Reddetme nedenini açıklayın...',
+        icon: 'fas fa-comment',
+        colSize: 12
+    });
+    releaseApprovalRejectModal.render();
+    releaseApprovalRejectModal.show();
 }
 
 async function handleUncompleteTask(taskId) {

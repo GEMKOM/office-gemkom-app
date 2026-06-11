@@ -250,6 +250,107 @@ export async function selfStartRevision(releaseId, reason) {
  * @param {string} [completionData.topic_content] - Topic content with @mentions for stakeholders (optional)
  * @returns {Promise<Object>} Response with status, message, and new release object
  */
+/**
+ * List releases awaiting peer review approval
+ * @returns {Promise<Array|Object>} Paginated or array of pending releases
+ */
+export async function listPendingApprovalReleases() {
+    try {
+        const url = `${backendBase}/projects/drawing-releases/pending_approvals/`;
+        const response = await authedFetch(url);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data.results !== undefined ? data.results : data;
+    } catch (error) {
+        console.error('Error listing pending approval releases:', error);
+        throw error;
+    }
+}
+
+/**
+ * Approve a pending drawing release
+ * @param {number} releaseId - Release ID
+ * @param {Object} [approvalData] - Optional approval data
+ * @param {string} [approvalData.comment] - Optional comment
+ * @returns {Promise<Object>} Response with updated release
+ */
+export async function approveRelease(releaseId, approvalData = {}) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/drawing-releases/${releaseId}/approve/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(approvalData),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error approving release ${releaseId}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Reject a pending drawing release
+ * @param {number} releaseId - Release ID
+ * @param {Object} rejectionData - Rejection data
+ * @param {string} rejectionData.reason - Reason for rejection (required)
+ * @returns {Promise<Object>} Response with updated release
+ */
+export async function rejectRelease(releaseId, rejectionData) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/drawing-releases/${releaseId}/reject/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(rejectionData),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error rejecting release ${releaseId}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Resubmit a rejected drawing release for approval
+ * @param {number} releaseId - Release ID
+ * @param {Object} resubmitData - Updated release fields
+ * @returns {Promise<Object>} Response with updated release
+ */
+export async function resubmitRelease(releaseId, resubmitData) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/drawing-releases/${releaseId}/resubmit/`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(resubmitData),
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error resubmitting release ${releaseId}:`, error);
+        throw error;
+    }
+}
+
 export async function completeRevision(releaseId, completionData) {
     try {
         const response = await authedFetch(`${backendBase}/projects/drawing-releases/${releaseId}/complete_revision/`, {
