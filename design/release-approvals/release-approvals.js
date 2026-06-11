@@ -5,6 +5,7 @@ import { TableComponent } from '../../../components/table/table.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
+import { mountTopicDiscussion } from '../../../components/topic-discussion/topic-discussion.js';
 import {
     listPendingApprovalReleases,
     approveRelease,
@@ -20,6 +21,7 @@ let approveModal;
 let rejectModal;
 let pendingReleases = [];
 let currentRelease = null;
+let discussionPanel = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) {
@@ -46,9 +48,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 function initHeaderComponent() {
     headerComponent = new HeaderComponent({
-        title: 'Akran İncelemesi',
+        title: 'Çizim İncelemesi',
         subtitle: 'Tasarım ekibinin incelemesini bekleyen teknik çizim yayınlarını görüntüleyin ve değerlendirin',
-        icon: 'people-arrows',
+        icon: 'search',
         showBackButton: 'block',
         showRefreshButton: 'block',
         backUrl: '/design/',
@@ -62,8 +64,17 @@ function initializeModalComponents() {
     detailsModal = new DisplayModal('release-details-modal-container', {
         title: 'Yayın Detayları',
         icon: 'fas fa-file-export',
-        size: 'lg',
+        size: 'xl',
+        fullscreen: true,
         showEditButton: false
+    });
+
+    detailsModal.onCloseCallback(() => {
+        discussionPanel?.destroy();
+        discussionPanel = null;
+        const url = new URL(window.location);
+        url.searchParams.delete('release_id');
+        window.history.replaceState({}, '', url);
     });
 
     approveModal = new ConfirmationModal('confirmation-modal-container', {
@@ -164,7 +175,7 @@ function initializeTable() {
         actions: [
             {
                 key: 'view',
-                label: 'Detaylar',
+                label: 'İncele',
                 icon: 'fas fa-eye',
                 class: 'btn-outline-info',
                 onClick: (row) => showReleaseDetails(row)
@@ -205,53 +216,127 @@ async function loadPendingReleases() {
     }
 }
 
+function setReleaseUrl(releaseId) {
+    const url = new URL(window.location);
+    url.searchParams.set('release_id', releaseId);
+    window.history.pushState({}, '', url);
+}
+
+function renderApprovalFooter(release) {
+    if (release.can_approve) {
+        detailsModal.setFooterContent(`
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                <i class="fas fa-times me-1"></i>Kapat
+            </button>
+            <button type="button" class="btn btn-sm btn-danger" id="reject-from-details-btn">
+                <i class="fas fa-times me-1"></i>Reddet
+            </button>
+            <button type="button" class="btn btn-sm btn-success" id="approve-from-details-btn">
+                <i class="fas fa-check me-1"></i>Olumlu
+            </button>
+        `);
+    } else {
+        detailsModal.setFooterContent(`
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
+                <i class="fas fa-times me-1"></i>Kapat
+            </button>
+        `);
+    }
+}
+
+function bindApprovalFooterActions(release) {
+    if (!release.can_approve) return;
+    const footer = detailsModal.modal?.querySelector('.modal-footer');
+    footer?.querySelector('#approve-from-details-btn')
+        ?.addEventListener('click', () => showApproveModal(release));
+    footer?.querySelector('#reject-from-details-btn')
+        ?.addEventListener('click', () => showRejectModal(release));
+}
+
 async function showReleaseDetails(release) {
     if (!detailsModal) return;
 
-    currentRelease = release.id ? release : await getDrawingRelease(release);
-    detailsModal.clearAll();
+    const releaseId = release?.id || release;
+    currentRelease = await getDrawingRelease(releaseId);
+    setReleaseUrl(currentRelease.id);
+
+    discussionPanel?.destroy();
+    discussionPanel = null;
+    detailsModal.clearData();
 
     const state = currentRelease.approval_state || {};
     const progress = `${state.approval_count || 0}/${state.required_count || 2}`;
-    const topicLink = currentRelease.release_topic_id
-        ? `/projects/project-tracking/?job_no=${encodeURIComponent(currentRelease.job_order_no)}&topic_id=${currentRelease.release_topic_id}`
-        : null;
+    const rev = currentRelease.revision_code || currentRelease.revision_number;
 
-    detailsModal.addSection({
-        title: 'Yayın Bilgileri',
-        icon: 'fas fa-info-circle',
-        iconColor: 'text-primary'
-    });
+    detailsModal.setTitle(`${currentRelease.job_order_no || ''} — Rev.${rev}`);
+    detailsModal.setIcon('fas fa-search');
 
     const infoHtml = `
         <div class="row g-2">
-            <div class="col-md-6"><strong>İş Emri:</strong> ${currentRelease.job_order_no || '-'}</div>
-            <div class="col-md-6"><strong>Başlık:</strong> ${currentRelease.job_order_title || '-'}</div>
-            <div class="col-md-6"><strong>Revizyon:</strong> ${currentRelease.revision_code || currentRelease.revision_number}</div>
-            <div class="col-md-6"><strong>Oluşturan:</strong> ${currentRelease.released_by_name || '-'}</div>
-            <div class="col-md-6"><strong>İnceleme İlerlemesi:</strong> ${progress}</div>
+            <div class="col-md-4"><strong>İş Emri:</strong> ${currentRelease.job_order_no || '-'}</div>
+            <div class="col-md-8"><strong>Başlık:</strong> ${currentRelease.job_order_title || '-'}</div>
+            <div class="col-md-4"><strong>Oluşturan:</strong> ${currentRelease.released_by_name || '-'}</div>
+            <div class="col-md-4"><strong>İnceleme:</strong> ${progress}</div>
+            <div class="col-md-4"><strong>Tarih:</strong> ${formatDateTime(currentRelease.released_at)}</div>
             <div class="col-md-12"><strong>Klasör Yolu:</strong><br>${currentRelease.folder_path || '-'}</div>
-            <div class="col-md-12"><strong>Değişiklikler:</strong><pre class="bg-light p-2 rounded mt-1" style="white-space: pre-wrap;">${currentRelease.changelog || '-'}</pre></div>
-            ${topicLink ? `<div class="col-md-12"><a href="${topicLink}" target="_blank" class="btn btn-outline-primary btn-sm"><i class="fas fa-comments me-1"></i>Konuya Git (Yorum Yap)</a></div>` : ''}
+            <div class="col-md-12"><strong>Değişiklikler:</strong>
+                <pre class="bg-light p-2 rounded mt-1 mb-0" style="white-space: pre-wrap;">${currentRelease.changelog || '-'}</pre>
+            </div>
         </div>
     `;
-    detailsModal.addCustomContent(infoHtml);
 
-    if (currentRelease.can_approve) {
-        const footer = detailsModal.container.querySelector('.modal-footer');
-        if (footer) {
-            footer.innerHTML = `
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Kapat</button>
-                <button type="button" class="btn btn-danger" id="reject-from-details-btn">Reddet</button>
-                <button type="button" class="btn btn-success" id="approve-from-details-btn">Olumlu</button>
-            `;
-            footer.querySelector('#approve-from-details-btn')?.addEventListener('click', () => showApproveModal(currentRelease));
-            footer.querySelector('#reject-from-details-btn')?.addEventListener('click', () => showRejectModal(currentRelease));
-        }
+    detailsModal.addCustomSection({
+        title: 'Yayın Bilgileri',
+        icon: 'fas fa-info-circle',
+        iconColor: 'text-primary',
+        customContent: infoHtml
+    });
+
+    if (currentRelease.release_topic_id) {
+        detailsModal.addCustomSection({
+            title: 'Tartışma',
+            icon: 'fas fa-comments',
+            iconColor: 'text-primary',
+            customContent: `<div id="release-discussion-root"></div>`
+        });
+    } else {
+        detailsModal.addCustomSection({
+            title: 'Tartışma',
+            icon: 'fas fa-comments',
+            iconColor: 'text-muted',
+            customContent: '<p class="text-muted mb-0">Bu yayın için tartışma konusu bulunamadı.</p>'
+        });
     }
 
+    renderApprovalFooter(currentRelease);
     detailsModal.render();
     detailsModal.show();
+    bindApprovalFooterActions(currentRelease);
+
+    if (currentRelease.release_topic_id) {
+        const root = document.getElementById('release-discussion-root');
+        if (root) {
+            try {
+                discussionPanel = await mountTopicDiscussion(root, currentRelease.release_topic_id, {
+                    prefix: `release-${currentRelease.id}`,
+                    showTopicBody: true
+                });
+            } catch (error) {
+                console.error('Error loading discussion:', error);
+                root.innerHTML = '<p class="text-danger">Tartışma yüklenirken hata oluştu.</p>';
+            }
+        }
+    }
+}
+
+async function refreshReleaseDetails(releaseId) {
+    await loadPendingReleases();
+    const updated = await getDrawingRelease(releaseId);
+    if (updated.status !== 'pending_approval') {
+        detailsModal.hide();
+        return;
+    }
+    await showReleaseDetails(updated);
 }
 
 function showApproveModal(release) {
@@ -264,8 +349,13 @@ function showApproveModal(release) {
                 const response = await approveRelease(release.id, {});
                 showNotification(response.message || 'Değerlendirmeniz kaydedildi', 'success');
                 approveModal.hide();
-                detailsModal.hide();
-                await loadPendingReleases();
+
+                if (response.published) {
+                    detailsModal.hide();
+                    await loadPendingReleases();
+                } else {
+                    await refreshReleaseDetails(release.id);
+                }
             } catch (error) {
                 console.error('Error approving release:', error);
                 showNotification('Değerlendirme kaydedilirken hata oluştu', 'error');

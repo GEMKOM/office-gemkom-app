@@ -1667,7 +1667,7 @@ function initializeReleaseModal() {
                 }
 
                 showNotification(
-                    'Teknik çizim yayını akran incelemesine gönderildi. Görev, 2 değerlendirme sonrası tamamlanacaktır.',
+                    'Teknik çizim yayını incelemeye gönderildi. Görev, 2 değerlendirme sonrası tamamlanacaktır.',
                     'success'
                 );
             }
@@ -1744,7 +1744,7 @@ function initializeReleaseModal() {
             await completeRevision(releaseId, completionData);
 
             showNotification(
-                'Revizyon tamamlandı ve yeni yayın akran incelemesine gönderildi. İş emri inceleme tamamlandıktan sonra devam edecektir.',
+                'Revizyon tamamlandı ve yeni yayın incelemeye gönderildi. İş emri inceleme tamamlandıktan sonra devam edecektir.',
                 'success'
             );
             completeRevisionModal.hide();
@@ -3504,8 +3504,8 @@ function getAvailableActions(task) {
     if (department === 'design' && task.pending_approval_release_id && !task.parent) {
         actions.unshift({
             key: 'release-approval',
-            label: 'Akran İncelemesi',
-            icon: 'fas fa-people-arrows',
+            label: 'Çizim İncelemesi',
+            icon: 'fas fa-search',
             handler: 'release-approval'
         });
     }
@@ -6605,7 +6605,7 @@ async function handleCompleteTask(taskId, taskRow = null) {
                 ? `${state.approval_count}/${state.required_count}`
                 : '';
             showNotification(
-                `Yayın akran incelemesi bekliyor (${progress}). Tasarım ekibi değerlendirmesini tamamlayana kadar görev tamamlanamaz.`,
+                `Yayın inceleme bekliyor (${progress}). Tasarım ekibi değerlendirmesini tamamlayana kadar görev tamamlanamaz.`,
                 'warning'
             );
         } else if (task.rejected_release_id) {
@@ -7112,7 +7112,7 @@ async function showCreateReleaseModal(taskId, options = {}) {
                 name: 'info_note',
                 label: 'Bilgi',
                 type: 'text',
-                value: 'Yayın oluşturulduktan sonra tasarım ekibinden 2 akran değerlendirmesi gerekir. İnceleme tamamlandıktan sonra görev tamamlanır.',
+                value: 'Yayın oluşturulduktan sonra tasarım ekibinden 2 değerlendirme gerekir. İnceleme tamamlandıktan sonra görev tamamlanır.',
                 readonly: true,
                 icon: 'fas fa-info-circle',
                 colSize: 12
@@ -7205,7 +7205,7 @@ async function showCreateReleaseModal(taskId, options = {}) {
             value: defaultAutoComplete,
             icon: 'fas fa-check-circle',
             colSize: 12,
-            helpText: 'İşaretlendiğinde görev, akran incelemesi tamamlandıktan sonra otomatik tamamlanır'
+            helpText: 'İşaretlendiğinde görev, çizim incelemesi tamamlandıktan sonra otomatik tamamlanır'
         });
 
         createReleaseModal.render();
@@ -7234,8 +7234,8 @@ async function renderReleaseApprovalTab(task) {
         .join('') || '<li class="text-muted">Henüz olumlu değerlendirme yok</li>';
 
     const topicLink = release.release_topic_id
-        ? `<a href="/projects/project-tracking/?job_no=${encodeURIComponent(task.job_order)}&topic_id=${release.release_topic_id}" target="_blank" class="btn btn-outline-primary btn-sm mt-2">
-            <i class="fas fa-comments me-1"></i>Konuya Git (Yorum Yap)
+        ? `<a href="/design/release-approvals/?release_id=${release.id}" target="_blank" class="btn btn-outline-primary btn-sm mt-2">
+            <i class="fas fa-comments me-1"></i>İncelemeyi Aç
            </a>`
         : '';
 
@@ -7266,7 +7266,7 @@ async function renderReleaseApprovalTab(task) {
     }, 0);
 
     return `
-        <h5 class="mb-3"><i class="fas fa-people-arrows me-2"></i>Akran İncelemesi</h5>
+        <h5 class="mb-3"><i class="fas fa-search me-2"></i>Çizim İncelemesi</h5>
         <div class="alert alert-info">
             <strong>İnceleme İlerlemesi:</strong> ${progress}
             <br><strong>Kıdemli üye değerlendirmesi:</strong> ${leadStatus}

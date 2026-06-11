@@ -1,0 +1,45 @@
+.topic-discussion .comment-item {
+    transition: background-color 0.2s;
+}
+
+.topic-discussion .comment-item:hover {
+    background-color: #f4f5f7;
+    border-radius: 4px;
+    padding: 8px !important;
+    margin: -8px -8px 8px -8px !important;
+}
+
+.topic-discussion .comment-content {
+    word-wrap: break-word;
+}
+
+.topic-discussion .mention-badge {
+    display: inline-block;
+    background-color: #e3fcef;
+    color: #006644;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-weight: 500;
+    font-size: 13px;
+    margin: 0 2px;
+}
+
+.topic-discussion .mention-suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #dfe1e6;
+    border-radius: 4px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    z-index: 1055;
+    max-height: 300px;
+    overflow-y: auto;
+    margin-top: 4px;
+}
+
+.topic-discussion .mention-suggestion-item:hover,
+.topic-discussion .mention-suggestion-item.selected {
+    background-color: #e3fcef !important;
+}

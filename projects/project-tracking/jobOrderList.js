@@ -452,6 +452,10 @@ async function initializeJobOrders() {
             if (topicIdParam) {
                 const topicId = parseInt(topicIdParam, 10);
                 if (!Number.isNaN(topicId)) {
+                    const topic = await getTopic(topicId);
+                    if (redirectToReleaseReview(topic)) {
+                        return;
+                    }
                     setTimeout(() => {
                         viewTopicDetail(topicId, jobNo);
                     }, 200);
@@ -466,6 +470,9 @@ async function initializeJobOrders() {
             if (!Number.isNaN(topicId)) {
                 try {
                     const topic = await getTopic(topicId);
+                    if (redirectToReleaseReview(topic)) {
+                        return;
+                    }
                     const inferredJobNo = topic.job_order || topic.job_order_no || null;
 
                     if (inferredJobNo) {
@@ -5793,6 +5800,14 @@ function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
     }
 }
 
+function redirectToReleaseReview(topic) {
+    if (topic?.topic_type === 'release_review' && topic?.linked_release_id) {
+        window.location.href = `/design/release-approvals/?release_id=${topic.linked_release_id}`;
+        return true;
+    }
+    return false;
+}
+
 // View Topic Detail
 async function viewTopicDetail(topicId, jobNo) {
     try {
@@ -5800,6 +5815,10 @@ async function viewTopicDetail(topicId, jobNo) {
             getTopic(topicId),
             getTopicComments(topicId)
         ]);
+
+        if (redirectToReleaseReview(topic)) {
+            return;
+        }
 
         // Keep URL in sync so topic detail can be shared via email
         const resolvedJobNo = jobNo || topic.job_order || topic.job_order_no || null;

@@ -35,9 +35,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 link: '/design/revision-requests'
             },
             {
-                title: 'Akran İncelemesi',
+                title: 'Çizim İncelemesi',
                 description: 'Tasarım ekibinin incelemesini bekleyen teknik çizim yayınlarını görüntüleyin ve değerlendirin.',
-                icon: 'fas fa-people-arrows',
+                icon: 'fas fa-search',
                 iconColor: 'success',
                 link: '/design/release-approvals'
             }

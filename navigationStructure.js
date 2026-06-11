@@ -94,8 +94,8 @@ export const NAVIGATION_STRUCTURE = {
                 children: {}
             },
             '/design/release-approvals': {
-                label: 'Akran İncelemesi',
-                icon: 'fas fa-people-arrows',
+                label: 'Çizim İncelemesi',
+                icon: 'fas fa-search',
                 children: {}
             }
         }

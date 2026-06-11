@@ -90,8 +90,8 @@ async function handleLandingPage() {
                             link: '/design/revision-requests'
                         },
                         {
-                            label: 'Akran İncelemesi',
-                            icon: 'fas fa-people-arrows',
+                            label: 'Çizim İncelemesi',
+                            icon: 'fas fa-search',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/design/release-approvals'
                         }
