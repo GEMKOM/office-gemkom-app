@@ -1,4 +1,4 @@
-import { guardRoute } from '../../authService.js';
+import { initRouteProtection } from '../../apis/routeProtection.js';
 import { initNavbar } from '../../components/navbar.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
@@ -417,7 +417,7 @@ function updateSummary(results) {
 /* ── DOMContentLoaded ──────────────────────────────────────────────── */
 
 document.addEventListener('DOMContentLoaded', async () => {
-    if (!guardRoute()) return;
+    if (!initRouteProtection('/management/analytics')) return;
     await initNavbar();
 
     new HeaderComponent({

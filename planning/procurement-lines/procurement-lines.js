@@ -37,6 +37,7 @@ let currentJobOrderForLines = null;
 /** @type {Array<{ id?: number, item?: number|null, item_code?: string|null, item_name?: string|null, item_description?: string, quantity: string, unit_price: string, amount_eur?: string, planning_request_item?: number|null, order: number, price_source?: string }>} */
 let editingLines = [];
 let linesTableContainerId = 'procurement-lines-table-body';
+let linesModalMode = 'edit';
 
 function mapSavedProcurementLines(lines) {
     if (!Array.isArray(lines)) return [];
@@ -463,8 +464,14 @@ async function loadPreviewProcurementLines(jobNo) {
  */
 async function openLinesModal(jobNo, { usePreview = false } = {}) {
     currentJobOrderForLines = jobNo;
+    linesModalMode = usePreview ? 'preview' : 'edit';
     const titleEl = document.getElementById('procurement-lines-modal-title');
-    if (titleEl) titleEl.textContent = `Malzeme Maliyeti Satırları — ${jobNo}`;
+    if (titleEl) titleEl.textContent = `${usePreview ? 'Malzeme Maliyeti Önizlemesi' : 'Malzeme Maliyeti Satırları'} — ${jobNo}`;
+
+    const addRowBtn = document.getElementById('procurement-lines-add-row');
+    const saveBtn = document.getElementById('procurement-lines-save');
+    if (addRowBtn) addRowBtn.style.display = usePreview ? 'none' : '';
+    if (saveBtn) saveBtn.style.display = usePreview ? 'none' : '';
 
     editingLines = [];
     const tbody = document.getElementById(linesTableContainerId);
@@ -493,6 +500,7 @@ async function openLinesModal(jobNo, { usePreview = false } = {}) {
 }
 
 function addLineRow() {
+    if (linesModalMode === 'preview') return;
     const order = editingLines.length;
     editingLines.push({
         item: null,
@@ -512,6 +520,7 @@ function addLineRow() {
 }
 
 function removeLineRow(index) {
+    if (linesModalMode === 'preview') return;
     editingLines.splice(index, 1);
     editingLines.forEach((line, i) => { line.order = i; });
     renderLinesTable();
@@ -521,6 +530,8 @@ function renderLinesTable() {
     const tbody = document.getElementById(linesTableContainerId);
     if (!tbody) return;
 
+    const isPreview = linesModalMode === 'preview';
+    const disabledAttr = isPreview ? ' disabled' : '';
     tbody.innerHTML = editingLines.map((line, index) => {
         const amount = (parseFloat(line.quantity) || 0) * (parseFloat(line.unit_price) || 0);
         const amountStr = amount.toFixed(2);
@@ -528,14 +539,14 @@ function renderLinesTable() {
             <tr data-index="${index}">
                 <td class="text-muted">${escapeHtml(line.item_code || '–')}</td>
                 <td class="text-muted">${escapeHtml(line.item_name || '–')}</td>
-                <td><input type="text" class="form-control form-control-sm" data-field="item_description" data-index="${index}" value="${escapeHtml(line.item_description || '')}" placeholder="Açıklama"></td>
-                <td><input type="text" class="form-control form-control-sm d-inline-block" data-field="quantity" data-index="${index}" value="${escapeHtml(line.quantity)}" placeholder="0" style="width:5rem"> <span class="text-muted small ms-1">${escapeHtml(line.item_unit || '–')}</span></td>
-                <td><input type="text" class="form-control form-control-sm" data-field="unit_price" data-index="${index}" value="${escapeHtml(line.unit_price)}" placeholder="0"></td>
+                <td><input type="text" class="form-control form-control-sm" data-field="item_description" data-index="${index}" value="${escapeHtml(line.item_description || '')}" placeholder="Açıklama"${disabledAttr}></td>
+                <td><input type="text" class="form-control form-control-sm d-inline-block" data-field="quantity" data-index="${index}" value="${escapeHtml(line.quantity)}" placeholder="0" style="width:5rem"${disabledAttr}> <span class="text-muted small ms-1">${escapeHtml(line.item_unit || '–')}</span></td>
+                <td><input type="text" class="form-control form-control-sm" data-field="unit_price" data-index="${index}" value="${escapeHtml(line.unit_price)}" placeholder="0"${disabledAttr}></td>
                 <td class="align-middle">${amountStr}</td>
                 <td class="text-muted small">${escapeHtml(formatPriceSource(line.price_source))}</td>
                 <td class="text-muted small">${escapeHtml(formatPriceDate(line.price_date))}</td>
                 <td>
-                    <button type="button" class="btn btn-outline-danger btn-sm" data-remove-index="${index}" title="Satırı sil">
+                    <button type="button" class="btn btn-outline-danger btn-sm" data-remove-index="${index}" title="Satırı sil"${disabledAttr}>
                         <i class="fas fa-trash"></i>
                     </button>
                 </td>
@@ -548,9 +559,14 @@ function renderLinesTable() {
         return sum + (parseFloat(line.quantity) || 0) * (parseFloat(line.unit_price) || 0);
     }, 0);
     const summaryEl = document.getElementById('procurement-lines-summary');
-    if (summaryEl) summaryEl.textContent = `Toplam: ${editingLines.length} satır, Toplam tutar: ${total.toFixed(2)} EUR`;
+    if (summaryEl) {
+        summaryEl.textContent = isPreview
+            ? `Önizleme: ${editingLines.length} satır, Toplam tutar: ${total.toFixed(2)} EUR`
+            : `Toplam: ${editingLines.length} satır, Toplam tutar: ${total.toFixed(2)} EUR`;
+    }
 
     // Bind input and delete
+    if (isPreview) return;
     tbody.querySelectorAll('input').forEach(input => {
         input.addEventListener('change', (e) => {
             const index = parseInt(e.target.dataset.index, 10);
@@ -624,6 +640,10 @@ function syncLinesFromDom() {
 
 async function saveLines() {
     if (!currentJobOrderForLines) return;
+    if (linesModalMode === 'preview') {
+        showNotification('Önizleme satırları kaydedilemez. Düzenlemek için "Satırları Aç" seçeneğini kullanın.', 'warning');
+        return;
+    }
     syncLinesFromDom();
 
     const saveBtn = document.getElementById('procurement-lines-save');

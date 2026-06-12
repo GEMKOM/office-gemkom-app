@@ -1590,6 +1590,110 @@ function initializeModalComponents() {
     }
 }
 
+async function handleCreateReleaseSave(formData) {
+    const taskId = window.pendingReleaseTaskId;
+    if (!taskId || isCreatingRelease) return;
+
+    try {
+        // Get task to get job_order and check if it's a subtask
+        const task = await getDepartmentTaskById(taskId);
+        
+        if (!task.job_order) {
+            showNotification('İş emri bulunamadı', 'error');
+            return;
+        }
+
+        if (!window.pendingResubmitReleaseId && !canSubmitNewDesignRelease(task)) {
+            showNotification(
+                task.pending_approval_release_id
+                    ? 'Bu iş emri için zaten inceleme bekleyen bir yayın var.'
+                    : 'Reddedilmiş yayın var. Lütfen yeniden gönderin.',
+                'warning'
+            );
+            return;
+        }
+
+        isCreatingRelease = true;
+
+        // Check if this is a subtask
+        const isSubtask = !!task.parent;
+
+        // Prepare release data
+        const releaseData = {
+            job_order: task.job_order,
+            folder_path: formData.folder_path || '',
+            changelog: formData.changelog ? formData.changelog.trim() : '',
+            revision_code: formData.revision_code || '',
+        };
+
+        // auto_complete_design_task is only for parent tasks
+        // For subtasks, we'll complete them separately after creating the release
+        if (!isSubtask) {
+            releaseData.auto_complete_design_task = formData.auto_complete_design_task !== false;
+        }
+
+        // Optional fields
+        if (formData.hardcopy_count !== undefined && formData.hardcopy_count !== null && formData.hardcopy_count !== '') {
+            const hardcopyCount = parseInt(formData.hardcopy_count);
+            if (!isNaN(hardcopyCount)) {
+                releaseData.hardcopy_count = hardcopyCount;
+            }
+        }
+
+        // Validate required fields
+        if (!releaseData.folder_path.trim()) {
+            showNotification('Klasör yolu gereklidir', 'error');
+            return;
+        }
+
+        if (window.pendingResubmitReleaseId) {
+            await resubmitRelease(window.pendingResubmitReleaseId, releaseData);
+            showNotification('Yayın düzenlendi ve yeniden incelemeye gönderildi', 'success');
+            window.pendingResubmitReleaseId = null;
+        } else {
+            await createRelease(releaseData);
+
+            if (isSubtask) {
+                const completeResponse = await completeDepartmentTask(taskId);
+                if (completeResponse && completeResponse.task) {
+                    updateTaskInLocalData(taskId, completeResponse.task);
+                }
+            }
+
+            showNotification(
+                'Teknik çizim yayını incelemeye gönderildi. Görev, 2 değerlendirme sonrası tamamlanacaktır.',
+                'success'
+            );
+        }
+
+        createReleaseModal.hide();
+        window.pendingReleaseTaskId = null;
+
+        const updatedTask = await getDepartmentTaskById(taskId);
+        updateTaskInLocalData(taskId, updatedTask);
+        updateTableDataOnly();
+    } catch (error) {
+        console.error('Error creating release:', error);
+        let errorMessage = 'Yayın oluşturulurken hata oluştu';
+        try {
+            if (error.message) {
+                const errorData = JSON.parse(error.message);
+                if (typeof errorData === 'object') {
+                    const errors = Object.values(errorData).flat();
+                    errorMessage = errors.join(', ') || errorMessage;
+                } else {
+                    errorMessage = error.message;
+                }
+            }
+        } catch (e) {
+            // If parsing fails, use default message
+        }
+        showNotification(errorMessage, 'error');
+    } finally {
+        isCreatingRelease = false;
+    }
+}
+
 function initializeReleaseModal() {
     // Create release modal
     createReleaseModal = new EditModal('create-release-modal-container', {
@@ -1643,109 +1747,7 @@ function initializeReleaseModal() {
         }
     });
 
-    createReleaseModal.onSaveCallback(async (formData) => {
-        const taskId = window.pendingReleaseTaskId;
-        if (!taskId || isCreatingRelease) return;
-
-        try {
-            // Get task to get job_order and check if it's a subtask
-            const task = await getDepartmentTaskById(taskId);
-            
-            if (!task.job_order) {
-                showNotification('İş emri bulunamadı', 'error');
-                return;
-            }
-
-            if (!window.pendingResubmitReleaseId && !canSubmitNewDesignRelease(task)) {
-                showNotification(
-                    task.pending_approval_release_id
-                        ? 'Bu iş emri için zaten inceleme bekleyen bir yayın var.'
-                        : 'Reddedilmiş yayın var. Lütfen yeniden gönderin.',
-                    'warning'
-                );
-                return;
-            }
-
-            isCreatingRelease = true;
-
-            // Check if this is a subtask
-            const isSubtask = !!task.parent;
-
-            // Prepare release data
-            const releaseData = {
-                job_order: task.job_order,
-                folder_path: formData.folder_path || '',
-                changelog: formData.changelog ? formData.changelog.trim() : '',
-                revision_code: formData.revision_code || '',
-            };
-
-            // auto_complete_design_task is only for parent tasks
-            // For subtasks, we'll complete them separately after creating the release
-            if (!isSubtask) {
-                releaseData.auto_complete_design_task = formData.auto_complete_design_task !== false;
-            }
-
-            // Optional fields
-            if (formData.hardcopy_count !== undefined && formData.hardcopy_count !== null && formData.hardcopy_count !== '') {
-                const hardcopyCount = parseInt(formData.hardcopy_count);
-                if (!isNaN(hardcopyCount)) {
-                    releaseData.hardcopy_count = hardcopyCount;
-                }
-            }
-
-            // Validate required fields
-            if (!releaseData.folder_path.trim()) {
-                showNotification('Klasör yolu gereklidir', 'error');
-                return;
-            }
-
-            if (window.pendingResubmitReleaseId) {
-                await resubmitRelease(window.pendingResubmitReleaseId, releaseData);
-                showNotification('Yayın düzenlendi ve yeniden incelemeye gönderildi', 'success');
-                window.pendingResubmitReleaseId = null;
-            } else {
-                await createRelease(releaseData);
-
-                if (isSubtask) {
-                    const completeResponse = await completeDepartmentTask(taskId);
-                    if (completeResponse && completeResponse.task) {
-                        updateTaskInLocalData(taskId, completeResponse.task);
-                    }
-                }
-
-                showNotification(
-                    'Teknik çizim yayını incelemeye gönderildi. Görev, 2 değerlendirme sonrası tamamlanacaktır.',
-                    'success'
-                );
-            }
-
-            createReleaseModal.hide();
-            window.pendingReleaseTaskId = null;
-
-            const updatedTask = await getDepartmentTaskById(taskId);
-            updateTaskInLocalData(taskId, updatedTask);
-            updateTableDataOnly();
-        } catch (error) {
-            console.error('Error creating release:', error);
-            let errorMessage = 'Yayın oluşturulurken hata oluştu';
-            try {
-                if (error.message) {
-                    const errorData = JSON.parse(error.message);
-                    if (typeof errorData === 'object') {
-                        const errors = Object.values(errorData).flat();
-                        errorMessage = errors.join(', ') || errorMessage;
-                    } else {
-                        errorMessage = error.message;
-                    }
-                }
-            } catch (e) {
-                // If parsing fails, use default message
-            }
-            showNotification(errorMessage, 'error');
-        } finally {
-            isCreatingRelease = false;
-        }
-    });
+    createReleaseModal.onSaveCallback(handleCreateReleaseSave);
 
     completeRevisionModal.onSaveCallback(async (formData) => {
         const taskId = window.pendingRevisionCompletionTaskId;
@@ -7191,6 +7193,7 @@ async function showCreateReleaseModal(taskId, options = {}) {
         window.pendingResubmitReleaseId = resubmitReleaseId;
         
         createReleaseModal.clearAll();
+        createReleaseModal.onSaveCallback(handleCreateReleaseSave);
 
         createReleaseModal.addSection({
             title: isResubmit ? 'Yayını Düzenle ve Yeniden Gönder' : 'Yayın Bilgileri',

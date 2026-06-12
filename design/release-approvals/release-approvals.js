@@ -447,19 +447,21 @@ function initializeCompletedTable() {
             label: 'İş Emri',
             sortable: true,
             width: '10%',
+            formatter: (value) => escapeHtml(value || '-'),
         },
         {
             field: 'revision_code',
             label: 'Revizyon',
             sortable: false,
             width: '8%',
-            formatter: (value, row) => value || `Rev.${row.revision_number}`,
+            formatter: (value, row) => escapeHtml(value || `Rev.${row.revision_number}`),
         },
         {
             field: 'released_by_name',
             label: 'Oluşturan',
             sortable: false,
             width: '10%',
+            formatter: (value) => escapeHtml(value || '-'),
         },
         {
             field: 'status_display',
@@ -575,20 +577,22 @@ function initializePendingTable() {
             field: 'job_order_no',
             label: 'İş Emri',
             sortable: true,
-            width: '10%'
+            width: '10%',
+            formatter: (value) => escapeHtml(value || '-')
         },
         {
             field: 'revision_code',
             label: 'Revizyon',
             sortable: false,
             width: '8%',
-            formatter: (value, row) => value || `Rev.${row.revision_number}`
+            formatter: (value, row) => escapeHtml(value || `Rev.${row.revision_number}`)
         },
         {
             field: 'released_by_name',
             label: 'Oluşturan',
             sortable: false,
-            width: '12%'
+            width: '12%',
+            formatter: (value) => escapeHtml(value || '-')
         },
         {
             field: 'folder_path',
@@ -604,7 +608,7 @@ function initializePendingTable() {
             width: '22%',
             formatter: (value) => {
                 if (!value) return '-';
-                return value.length > 120 ? `${value.substring(0, 120)}...` : value;
+                return value.length > 120 ? `${escapeHtml(value.substring(0, 120))}...` : escapeHtml(value);
             }
         },
         {
