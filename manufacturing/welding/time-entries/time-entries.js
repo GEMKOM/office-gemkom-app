@@ -73,8 +73,6 @@ function collectUserNameVariants(user) {
 
     add(user.username);
     add(user.full_name);
-    if (user.first_name) add(user.first_name);
-    if (user.last_name) add(user.last_name);
     if (user.first_name && user.last_name) {
         add(`${user.first_name} ${user.last_name}`);
         add(`${user.last_name} ${user.first_name}`);
@@ -90,35 +88,48 @@ function collectUserNameVariants(user) {
     return variants;
 }
 
-function matchEmployeeFromPaste(employeeText, userList) {
-    const cleaned = String(employeeText ?? '')
+function collectPasteNameVariants(employeeText) {
+    const raw = String(employeeText ?? '')
         .replace(/^\uFEFF/, '')
-        .replace(/\([^)]*\)/g, ' ')
         .replace(/\s+/g, ' ')
         .trim();
-    const normalizedInput = normalizePersonName(cleaned);
-    if (!normalizedInput) return null;
+    const variants = new Set();
+    const add = (value) => {
+        const normalized = normalizePersonName(value);
+        if (normalized) variants.add(normalized);
+    };
 
-    let bestMatch = null;
-    let bestScore = 0;
+    add(raw);
+    add(raw.replace(/\([^)]*\)/g, ' '));
 
+    for (const match of raw.matchAll(/\(([^)]*)\)/g)) {
+        add(match[1]);
+    }
+
+    return variants;
+}
+
+function matchEmployeeFromPaste(employeeText, userList) {
+    const normalizedInputs = collectPasteNameVariants(employeeText);
+    if (normalizedInputs.size === 0) return null;
+
+    const matches = [];
+    const matchedIds = new Set();
     for (const user of userList) {
         const variants = collectUserNameVariants(user);
         for (const variant of variants) {
-            if (variant === normalizedInput) {
-                return user;
-            }
-            if (variant.includes(normalizedInput) || normalizedInput.includes(variant)) {
-                const score = Math.min(variant.length, normalizedInput.length);
-                if (score > bestScore) {
-                    bestScore = score;
-                    bestMatch = user;
+            if (normalizedInputs.has(variant)) {
+                const matchKey = user.id ?? user.username ?? getUserOptionLabel(user);
+                if (!matchedIds.has(matchKey)) {
+                    matches.push(user);
+                    matchedIds.add(matchKey);
                 }
+                break;
             }
         }
     }
 
-    return bestMatch;
+    return matches.length === 1 ? matches[0] : null;
 }
 
 // Initialize the page
