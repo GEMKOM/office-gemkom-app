@@ -361,6 +361,26 @@ export async function uploadCommentAttachment(commentId, file) {
 }
 
 /**
+ * Delete a discussion attachment (uploader only)
+ * @param {number} attachmentId - Attachment ID
+ * @returns {Promise<void>}
+ */
+export async function deleteAttachment(attachmentId) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/discussion-attachments/${attachmentId}/`, {
+            method: 'DELETE'
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+    } catch (error) {
+        console.error(`Error deleting attachment ${attachmentId}:`, error);
+        throw error;
+    }
+}
+
+/**
  * Discussion Notifications API Service
  * Base URL: /projects/discussion-notifications/
  */

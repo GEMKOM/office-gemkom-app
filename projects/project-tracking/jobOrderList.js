@@ -37,7 +37,8 @@ import {
     createComment,
     updateComment,
     deleteComment,
-    uploadCommentAttachment
+    uploadCommentAttachment,
+    deleteAttachment,
 } from '../../apis/projects/topics.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
@@ -49,7 +50,7 @@ import { ConfirmationModal } from '../../components/confirmation-modal/confirmat
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { backendBase } from '../../base.js';
-import { isAdmin, hasPerm } from '../../authService.js';
+import { isAdmin, hasPerm, getUser } from '../../authService.js';
 import { listDrawingReleases, getCurrentRelease, requestRevision } from '../../apis/projects/design.js';
 import { fetchAllUsers, fetchTeams } from '../../apis/users.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
@@ -5811,10 +5812,16 @@ function redirectToReleaseReview(topic) {
 // View Topic Detail
 async function viewTopicDetail(topicId, jobNo) {
     try {
-        const [topic, comments] = await Promise.all([
+        let [topic, comments] = await Promise.all([
             getTopic(topicId),
             getTopicComments(topicId)
         ]);
+
+        let currentUsername = null;
+        try {
+            const user = await getUser();
+            currentUsername = user?.username || null;
+        } catch { /* proceed without edit buttons */ }
 
         if (redirectToReleaseReview(topic)) {
             return;
@@ -5896,8 +5903,103 @@ async function viewTopicDetail(topicId, jobNo) {
             
             return formatted;
         };
-        
-        
+
+        const buildCommentHtml = (comment) => {
+            const initials = getUserInitials(comment.created_by_name);
+            const avatarColor = getAvatarColor(comment.created_by_name);
+            const isAuthor = currentUsername && comment.created_by_username === currentUsername;
+            return `
+            <div class="comment-item mb-3 pb-3 border-bottom" data-comment-id="${comment.id}">
+                <div class="d-flex gap-3">
+                    <div class="comment-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0;">
+                        ${initials}
+                    </div>
+                    <div class="flex-grow-1">
+                        <div class="d-flex align-items-center gap-2 mb-1">
+                            <span class="fw-medium" style="color: #172b4d;">${comment.created_by_name}</span>
+                            <span class="text-muted small">${formatDateTime(comment.created_at)}</span>
+                            ${comment.is_edited ? '<span class="text-muted small"><i class="fas fa-edit me-1"></i>Düzenlendi</span>' : ''}
+                            ${isAuthor ? `<button class="btn btn-link btn-sm p-0 ms-auto text-muted" data-action="edit-comment" data-comment-id="${comment.id}" title="Düzenle" style="line-height:1;"><i class="fas fa-pencil-alt" style="font-size:11px;"></i></button>` : ''}
+                        </div>
+                        <div class="comment-content" style="color: #172b4d; line-height: 1.6; margin-bottom: 8px;">
+                            ${formatContent(comment.content, comment.mentioned_users_data || [])}
+                        </div>
+                        ${comment.attachments_data && comment.attachments_data.length > 0 ? `
+                            <div class="mt-2" id="comment-attachments-${comment.id}"></div>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+            `;
+        };
+
+        const mountCommentAttachments = (commentList) => {
+            commentList.forEach(comment => {
+                if (!comment.attachments_data?.length) return;
+                const container = document.getElementById(`comment-attachments-${comment.id}`);
+                if (!container) return;
+                (async () => {
+                    const { FileAttachments } = await import('../../components/file-attachments/file-attachments.js');
+                    const mappedFiles = comment.attachments_data.map(att => ({
+                        file_url: att.file_url || att.file || '',
+                        file_name: att.name || 'Dosya',
+                        uploaded_at: att.uploaded_at,
+                        uploaded_by_username: att.uploaded_by || 'Bilinmeyen'
+                    }));
+                    const fa = new FileAttachments(`comment-attachments-${comment.id}`, {
+                        showTitle: false,
+                        layout: 'list',
+                        maxThumbnailSize: 50,
+                        onFileClick: async (file) => {
+                            const fileName = file.file_name || 'Dosya';
+                            const fileExtension = file.file_extension || (fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '');
+                            const fileUrl = file.file_url;
+                            if (!fileUrl) return;
+                            let viewer = window.fileViewer;
+                            if (!viewer) {
+                                const { FileViewer } = await import('../../components/file-viewer/file-viewer.js');
+                                viewer = new FileViewer();
+                                viewer.setDownloadCallback(async () => { await viewer.downloadFile(fileUrl, fileName); });
+                                window.fileViewer = viewer;
+                            }
+                            viewer.openFile(fileUrl, fileName, fileExtension);
+                        },
+                        onDownloadClick: async (fileUrl, fileName) => {
+                            try {
+                                const resp = await fetch(fileUrl);
+                                const blob = await resp.blob();
+                                const url = window.URL.createObjectURL(blob);
+                                const a = document.createElement('a');
+                                a.href = url; a.download = fileName;
+                                document.body.appendChild(a); a.click();
+                                document.body.removeChild(a);
+                                window.URL.revokeObjectURL(url);
+                            } catch {
+                                const a = document.createElement('a');
+                                a.href = fileUrl; a.download = fileName; a.target = '_blank';
+                                document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                            }
+                        }
+                    });
+                    fa.setFiles(mappedFiles);
+                })();
+            });
+        };
+
+        const refreshCommentsList = async () => {
+            const [, updatedComments] = await Promise.all([getTopic(topicId), getTopicComments(topicId)]);
+            comments = updatedComments;
+            const listEl = document.getElementById('comments-list');
+            if (listEl) {
+                listEl.innerHTML = comments.length
+                    ? comments.map(buildCommentHtml).join('')
+                    : '<p class="text-muted text-center py-4">Henüz yorum yok.</p>';
+                setTimeout(() => mountCommentAttachments(comments), 50);
+            }
+            const header = detailModal.content?.querySelector('h6');
+            if (header) header.innerHTML = `<i class="fas fa-comments me-2"></i>Yorumlar (${comments.length})`;
+        };
+
         detailModal.addSection({
             title: 'Tartışma Detayı',
             icon: 'fas fa-info-circle',
@@ -5968,32 +6070,9 @@ async function viewTopicDetail(topicId, jobNo) {
                         <i class="fas fa-comments me-2"></i>Yorumlar (${comments.length})
                     </h6>
                     <div id="comments-list" class="mb-4">
-                        ${comments.length === 0 ? '<p class="text-muted text-center py-4">Henüz yorum yok.</p>' : comments.map(comment => {
-                            const initials = getUserInitials(comment.created_by_name);
-                            const avatarColor = getAvatarColor(comment.created_by_name);
-                            return `
-                            <div class="comment-item mb-3 pb-3 border-bottom">
-                                <div class="d-flex gap-3">
-                                    <div class="comment-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0;">
-                                        ${initials}
-                                    </div>
-                                    <div class="flex-grow-1">
-                                        <div class="d-flex align-items-center gap-2 mb-1">
-                                            <span class="fw-medium" style="color: #172b4d;">${comment.created_by_name}</span>
-                                            <span class="text-muted small">${formatDateTime(comment.created_at)}</span>
-                                            ${comment.is_edited ? '<span class="text-muted small"><i class="fas fa-edit me-1"></i>Düzenlendi</span>' : ''}
-                                        </div>
-                                        <div class="comment-content" style="color: #172b4d; line-height: 1.6; margin-bottom: 8px;">
-                                            ${formatContent(comment.content, comment.mentioned_users_data || [])}
-                                        </div>
-                                        ${comment.attachments_data && comment.attachments_data.length > 0 ? `
-                                            <div class="mt-2" id="comment-attachments-${comment.id}"></div>
-                                        ` : ''}
-                                    </div>
-                                </div>
-                            </div>
-                        `;
-                        }).join('')}
+                        ${comments.length === 0
+                            ? '<p class="text-muted text-center py-4">Henüz yorum yok.</p>'
+                            : comments.map(buildCommentHtml).join('')}
                     </div>
                     <div class="border-top pt-3">
                         <div class="d-flex gap-3">
@@ -6113,98 +6192,7 @@ async function viewTopicDetail(topicId, jobNo) {
                 fileAttachments.setFiles(mappedFiles);
             }
             
-            // Initialize FileAttachments for comment attachments
-            comments.forEach(comment => {
-                if (comment.attachments_data && comment.attachments_data.length > 0) {
-                    const commentAttachmentsContainer = document.getElementById(`comment-attachments-${comment.id}`);
-                    if (commentAttachmentsContainer) {
-                        (async () => {
-                            const { FileAttachments } = await import('../../components/file-attachments/file-attachments.js');
-                            
-                            // Map API response to FileAttachments format
-                            const mappedFiles = comment.attachments_data.map(att => {
-                                // Use file_url from API response (already a full URL with signed parameters)
-                                const fileUrl = att.file_url || att.file || '';
-                                return {
-                                    file_url: fileUrl,
-                                    file_name: att.name || 'Dosya',
-                                    uploaded_at: att.uploaded_at,
-                                    uploaded_by_username: att.uploaded_by || 'Bilinmeyen'
-                                };
-                            });
-                            
-                            const fileAttachments = new FileAttachments(`comment-attachments-${comment.id}`, {
-                                title: '',
-                                showTitle: false,
-                                layout: 'list',
-                                maxThumbnailSize: 50,
-                                onFileClick: async (file) => {
-                                    const fileName = file.file_name || 'Dosya';
-                                    // Use file_extension from file object if available (FileAttachments already extracts it)
-                                    const fileExtension = file.file_extension || (fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '');
-                                    const fileUrl = file.file_url;
-                                    
-                                    if (!fileUrl) {
-                                        console.error('File URL is missing');
-                                        return;
-                                    }
-                                    
-                                    // Wait for fileViewer to be available or import it
-                                    let viewer = window.fileViewer;
-                                    if (!viewer) {
-                                        try {
-                                            const { FileViewer } = await import('../../components/file-viewer/file-viewer.js');
-                                            viewer = new FileViewer();
-                                            // Set download callback for authenticated URLs
-                                            viewer.setDownloadCallback(async () => {
-                                                await viewer.downloadFile(fileUrl, fileName);
-                                            });
-                                        } catch (error) {
-                                            console.error('Error loading FileViewer:', error);
-                                            showNotification('Dosya görüntüleyici yüklenemedi', 'error');
-                                            return;
-                                        }
-                                    }
-                                    
-                                    if (viewer) {
-                                        viewer.openFile(fileUrl, fileName, fileExtension);
-                                    }
-                                },
-                                onDownloadClick: async (fileUrl, fileName) => {
-                                    try {
-                                        // For signed URLs, fetch as blob and download
-                                        const response = await fetch(fileUrl);
-                                        if (!response.ok) {
-                                            throw new Error(`HTTP error! status: ${response.status}`);
-                                        }
-                                        const blob = await response.blob();
-                                        const url = window.URL.createObjectURL(blob);
-                                        const link = document.createElement('a');
-                                        link.href = url;
-                                        link.download = fileName;
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        document.body.removeChild(link);
-                                        window.URL.revokeObjectURL(url);
-                                    } catch (error) {
-                                        console.error('Error downloading file:', error);
-                                        // Fallback to direct link
-                                        const link = document.createElement('a');
-                                        link.href = fileUrl;
-                                        link.download = fileName;
-                                        link.target = '_blank';
-                                        document.body.appendChild(link);
-                                        link.click();
-                                        document.body.removeChild(link);
-                                    }
-                                }
-                            });
-                            
-                            fileAttachments.setFiles(mappedFiles);
-                        })();
-                    }
-                }
-            });
+            mountCommentAttachments(comments);
         }, 100);
         
         // Initialize @mention functionality for comments
@@ -6305,161 +6293,156 @@ async function viewTopicDetail(topicId, jobNo) {
                         }
                     }
                     
-                    // Refresh comments in the modal
-                    try {
-                        const [updatedTopic, updatedComments] = await Promise.all([
-                            getTopic(topicId),
-                            getTopicComments(topicId)
-                        ]);
-                        
-                        // Update comments list
-                        const commentsList = document.getElementById('comments-list');
-                        if (commentsList) {
-                            if (updatedComments.length === 0) {
-                                commentsList.innerHTML = '<p class="text-muted text-center py-4">Henüz yorum yok.</p>';
-                            } else {
-                                commentsList.innerHTML = updatedComments.map(comment => {
-                                    const initials = getUserInitials(comment.created_by_name);
-                                    const avatarColor = getAvatarColor(comment.created_by_name);
-                                    return `
-                                    <div class="comment-item mb-3 pb-3 border-bottom">
-                                        <div class="d-flex gap-3">
-                                            <div class="comment-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0;">
-                                                ${initials}
-                                            </div>
-                                            <div class="flex-grow-1">
-                                                <div class="d-flex align-items-center gap-2 mb-1">
-                                                    <span class="fw-medium" style="color: #172b4d;">${comment.created_by_name}</span>
-                                                    <span class="text-muted small">${formatDateTime(comment.created_at)}</span>
-                                                    ${comment.is_edited ? '<span class="text-muted small"><i class="fas fa-edit me-1"></i>Düzenlendi</span>' : ''}
-                                                </div>
-                                                <div class="comment-content" style="color: #172b4d; line-height: 1.6; margin-bottom: 8px;">
-                                                    ${formatContent(comment.content, comment.mentioned_users_data || [])}
-                                                </div>
-                                                ${comment.attachments_data && comment.attachments_data.length > 0 ? `
-                                                    <div class="mt-2" id="comment-attachments-${comment.id}"></div>
-                                                ` : ''}
-                                            </div>
-                                        </div>
-                                    </div>
-                                `;
-                                }).join('');
-                                
-                                // Re-initialize FileAttachments for comment attachments
-                                setTimeout(async () => {
-                                    updatedComments.forEach(comment => {
-                                        if (comment.attachments_data && comment.attachments_data.length > 0) {
-                                            const commentAttachmentsContainer = document.getElementById(`comment-attachments-${comment.id}`);
-                                            if (commentAttachmentsContainer) {
-                                                (async () => {
-                                                    const { FileAttachments } = await import('../../components/file-attachments/file-attachments.js');
-                                                    
-                                                    const mappedFiles = comment.attachments_data.map(att => {
-                                                        let fileUrl = att.file;
-                                                        if (fileUrl && !fileUrl.startsWith('http')) {
-                                                            fileUrl = fileUrl.startsWith('/') ? `${backendBase}${fileUrl}` : `${backendBase}/${fileUrl}`;
-                                                        }
-                                                        return {
-                                                            file_url: fileUrl || '',
-                                                            file_name: att.name || 'Dosya',
-                                                            uploaded_at: att.uploaded_at,
-                                                            uploaded_by_username: att.uploaded_by || 'Bilinmeyen'
-                                                        };
-                                                    });
-                                                    
-                                                    const fileAttachments = new FileAttachments(`comment-attachments-${comment.id}`, {
-                                                        title: '',
-                                                        showTitle: false,
-                                                        layout: 'list',
-                                                        maxThumbnailSize: 50,
-                                                        onFileClick: async (file) => {
-                                                            const fileName = file.file_name || 'Dosya';
-                                                            // Use file_extension from file object if available (FileAttachments already extracts it)
-                                                            const fileExtension = file.file_extension || (fileName.includes('.') ? fileName.split('.').pop().toLowerCase() : '');
-                                                            const fileUrl = file.file_url;
-                                                            
-                                                            if (!fileUrl) {
-                                                                console.error('File URL is missing');
-                                                                return;
-                                                            }
-                                                            
-                                                            // Wait for fileViewer to be available or import it
-                                                            let viewer = window.fileViewer;
-                                                            if (!viewer) {
-                                                                try {
-                                                                    const { FileViewer } = await import('../../components/file-viewer/file-viewer.js');
-                                                                    viewer = new FileViewer();
-                                                                    // Set download callback for authenticated URLs
-                                                                    viewer.setDownloadCallback(async () => {
-                                                                        await viewer.downloadFile(fileUrl, fileName);
-                                                                    });
-                                                                } catch (error) {
-                                                                    console.error('Error loading FileViewer:', error);
-                                                                    showNotification('Dosya görüntüleyici yüklenemedi', 'error');
-                                                                    return;
-                                                                }
-                                                            }
-                                                            
-                                                            if (viewer) {
-                                                                viewer.openFile(fileUrl, fileName, fileExtension);
-                                                            }
-                                                        },
-                                                        onDownloadClick: async (fileUrl, fileName) => {
-                                                            try {
-                                                                // For signed URLs, fetch as blob and download
-                                                                const response = await fetch(fileUrl);
-                                                                if (!response.ok) {
-                                                                    throw new Error(`HTTP error! status: ${response.status}`);
-                                                                }
-                                                                const blob = await response.blob();
-                                                                const url = window.URL.createObjectURL(blob);
-                                                                const link = document.createElement('a');
-                                                                link.href = url;
-                                                                link.download = fileName;
-                                                                document.body.appendChild(link);
-                                                                link.click();
-                                                                document.body.removeChild(link);
-                                                                window.URL.revokeObjectURL(url);
-                                                            } catch (error) {
-                                                                console.error('Error downloading file:', error);
-                                                                // Fallback to direct link
-                                                                const link = document.createElement('a');
-                                                                link.href = fileUrl;
-                                                                link.download = fileName;
-                                                                link.target = '_blank';
-                                                                document.body.appendChild(link);
-                                                                link.click();
-                                                                document.body.removeChild(link);
-                                                            }
-                                                        }
-                                                    });
-                                                    
-                                                    fileAttachments.setFiles(mappedFiles);
-                                                })();
-                                            }
-                                        }
-                                    });
-                                }, 100);
-                            }
-                            
-                            // Update comment count in header
-                            const commentsHeader = detailModal.content.querySelector('h6');
-                            if (commentsHeader) {
-                                commentsHeader.innerHTML = `<i class="fas fa-comments me-2"></i>Yorumlar (${updatedComments.length})`;
-                            }
-                        }
-                    } catch (refreshError) {
-                        console.error('Error refreshing comments:', refreshError);
-                    }
-                    
-                    // Refresh topics list (but keep modal open)
-                    setTimeout(() => {
-                        initializeTopicsTab(jobNo);
-                    }, 100);
+                    await refreshCommentsList();
+                    setTimeout(() => initializeTopicsTab(jobNo), 100);
                 } catch (error) {
                     console.error('Error adding comment:', error);
                     showNotification('Yorum eklenirken hata oluştu', 'error');
                 }
+            });
+        }
+
+        // Comment edit mode functions
+        const enterEditMode = (commentId) => {
+            const comment = comments.find(c => c.id === commentId);
+            if (!comment) return;
+            const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
+            if (!commentEl || commentEl.querySelector('.comment-edit-form')) return;
+
+            commentEl.querySelector('.comment-content').style.display = 'none';
+            const attachmentsEl = document.getElementById(`comment-attachments-${commentId}`);
+            if (attachmentsEl) attachmentsEl.style.display = 'none';
+
+            const existingAtts = comment.attachments_data || [];
+            const formDiv = document.createElement('div');
+            formDiv.className = 'comment-edit-form mt-2';
+            formDiv.innerHTML = `
+                <div class="position-relative mb-2">
+                    <textarea class="form-control form-control-sm edit-comment-textarea" rows="3" style="resize:vertical;">${comment.content || ''}</textarea>
+                    <div class="edit-mention-suggestions mention-suggestions" style="display:none;"></div>
+                </div>
+                ${existingAtts.length ? `
+                <div class="mb-2">
+                    <div class="small text-muted mb-1">Mevcut Ekler</div>
+                    <div class="d-flex flex-wrap gap-2">
+                        ${existingAtts.map(att => `
+                            <span class="badge bg-secondary d-flex align-items-center gap-1" data-attachment-item data-attachment-id="${att.id}">
+                                <i class="fas fa-file me-1"></i>${att.name}
+                                <button type="button" class="btn-close btn-close-white btn-sm" data-action="remove-edit-attachment" style="font-size:0.7rem;" title="Kaldır"></button>
+                            </span>
+                        `).join('')}
+                    </div>
+                </div>` : ''}
+                <div class="mb-2">
+                    <label class="form-label small mb-1"><i class="fas fa-paperclip me-1"></i>Yeni Ekler</label>
+                    <input type="file" class="form-control form-control-sm edit-new-files" multiple>
+                    <div class="edit-new-files-preview mt-1"></div>
+                </div>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-sm btn-primary" data-action="save-edit" data-comment-id="${commentId}">
+                        <i class="fas fa-check me-1"></i>Kaydet
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline-secondary" data-action="cancel-edit" data-comment-id="${commentId}">
+                        İptal
+                    </button>
+                </div>
+            `;
+            commentEl.querySelector('.flex-grow-1').appendChild(formDiv);
+
+            const textarea = formDiv.querySelector('.edit-comment-textarea');
+            initializeMentionFunctionality(textarea, formDiv.querySelector('.edit-mention-suggestions'));
+
+            const fileInput = formDiv.querySelector('.edit-new-files');
+            const filePreview = formDiv.querySelector('.edit-new-files-preview');
+            const updateFilePreview = () => {
+                const files = Array.from(fileInput.files);
+                filePreview.innerHTML = files.length ? `
+                    <div class="d-flex flex-wrap gap-2">
+                        ${files.map((f, i) => `
+                            <span class="badge bg-secondary d-flex align-items-center gap-1">
+                                <i class="fas fa-file me-1"></i>${f.name}
+                                <button type="button" class="btn-close btn-close-white btn-sm" data-file-index="${i}" style="font-size:0.7rem;"></button>
+                            </span>
+                        `).join('')}
+                    </div>` : '';
+                filePreview.querySelectorAll('.btn-close').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const idx = parseInt(btn.dataset.fileIndex, 10);
+                        const dt = new DataTransfer();
+                        Array.from(fileInput.files).forEach((f, i) => { if (i !== idx) dt.items.add(f); });
+                        fileInput.files = dt.files;
+                        updateFilePreview();
+                    });
+                });
+            };
+            fileInput.addEventListener('change', updateFilePreview);
+            textarea.focus();
+        };
+
+        const exitEditMode = (commentId) => {
+            const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
+            if (!commentEl) return;
+            commentEl.querySelector('.comment-content').style.display = '';
+            const attachmentsEl = document.getElementById(`comment-attachments-${commentId}`);
+            if (attachmentsEl) attachmentsEl.style.display = '';
+            commentEl.querySelector('.comment-edit-form')?.remove();
+        };
+
+        const saveEditComment = async (commentId, saveBtn) => {
+            const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
+            const editForm = commentEl?.querySelector('.comment-edit-form');
+            if (!editForm) return;
+
+            const newContent = editForm.querySelector('.edit-comment-textarea')?.value?.trim();
+            if (!newContent) {
+                showNotification('Yorum metni boş olamaz', 'error');
+                return;
+            }
+
+            const comment = comments.find(c => c.id === commentId);
+            const originalIds = new Set((comment?.attachments_data || []).map(a => a.id));
+            const remainingIds = new Set(
+                [...editForm.querySelectorAll('[data-attachment-item]')]
+                    .map(el => parseInt(el.dataset.attachmentId, 10))
+                    .filter(id => !isNaN(id))
+            );
+            const idsToDelete = [...originalIds].filter(id => !remainingIds.has(id));
+            const newFiles = Array.from(editForm.querySelector('.edit-new-files')?.files || []);
+
+            const cancelBtn = editForm.querySelector('[data-action="cancel-edit"]');
+            saveBtn.disabled = true;
+            if (cancelBtn) cancelBtn.disabled = true;
+
+            try {
+                await updateComment(commentId, { content: newContent });
+                for (const attId of idsToDelete) {
+                    await deleteAttachment(attId);
+                }
+                for (const file of newFiles) {
+                    await uploadCommentAttachment(commentId, file);
+                }
+                showNotification('Yorum güncellendi', 'success');
+                await refreshCommentsList();
+            } catch (error) {
+                console.error('Error saving comment edit:', error);
+                showNotification('Yorum güncellenirken hata oluştu', 'error');
+                saveBtn.disabled = false;
+                if (cancelBtn) cancelBtn.disabled = false;
+            }
+        };
+
+        // Event delegation for comment editing
+        const commentsList = document.getElementById('comments-list');
+        if (commentsList) {
+            commentsList.addEventListener('click', async (e) => {
+                const editBtn = e.target.closest('[data-action="edit-comment"]');
+                if (editBtn) { enterEditMode(parseInt(editBtn.dataset.commentId, 10)); return; }
+                const cancelBtn = e.target.closest('[data-action="cancel-edit"]');
+                if (cancelBtn) { exitEditMode(parseInt(cancelBtn.dataset.commentId, 10)); return; }
+                const saveBtn = e.target.closest('[data-action="save-edit"]');
+                if (saveBtn && !saveBtn.disabled) { await saveEditComment(parseInt(saveBtn.dataset.commentId, 10), saveBtn); return; }
+                const removeAttBtn = e.target.closest('[data-action="remove-edit-attachment"]');
+                if (removeAttBtn) { removeAttBtn.closest('[data-attachment-item]').remove(); }
             });
         }
     } catch (error) {

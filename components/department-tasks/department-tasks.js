@@ -57,7 +57,7 @@ import {
     deleteInternalTeamAssignmentWithSubtask
 } from '../../apis/welding/internalTeamAssignments.js';
 import { submitQCReview, bulkSubmitQCReviews, listQCReviews, listNCRs, getNCR } from '../../apis/qualityControl.js';
-import { createComment } from '../../apis/projects/topics.js';
+import { createComment, updateComment, uploadCommentAttachment, deleteAttachment } from '../../apis/projects/topics.js';
 
 function escapeHtml(value) {
     const str = value === null || value === undefined ? '' : String(value);
@@ -5094,6 +5094,12 @@ async function renderConsultationTab(task) {
     const discussionTopic = task.discussion_topic || null;
     const discussionComments = Array.isArray(discussionTopic?.comments) ? discussionTopic.comments : [];
 
+    let currentUsername = null;
+    try {
+        const user = await getUser();
+        currentUsername = user?.username || null;
+    } catch { /* proceed without edit buttons */ }
+
     const escapeHtml = (value) => String(value || '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
@@ -5242,15 +5248,20 @@ async function renderConsultationTab(task) {
                     <div class="mb-3" id="consultation-comments-list">
                         ${discussionComments.length === 0
                             ? '<p class="text-muted mb-0">Henüz yorum yok.</p>'
-                            : discussionComments.map(comment => `
-                                <div class="border-bottom pb-2 mb-2">
+                            : discussionComments.map(comment => {
+                                const isAuthor = currentUsername && comment.created_by_username === currentUsername;
+                                return `
+                                <div class="border-bottom pb-2 mb-2" data-comment-id="${comment.id}">
                                     <div class="d-flex align-items-center gap-2 mb-1">
                                         <strong>${escapeHtml(comment.created_by_name || comment.created_by_username || 'Kullanıcı')}</strong>
                                         <small class="text-muted">${formatCommentDate(comment.created_at)}</small>
+                                        ${comment.is_edited ? '<small class="text-muted"><i class="fas fa-edit me-1"></i>Düzenlendi</small>' : ''}
+                                        ${isAuthor ? `<button class="btn btn-link btn-sm p-0 ms-auto text-muted" data-action="edit-comment" data-comment-id="${comment.id}" title="Düzenle" style="line-height:1;"><i class="fas fa-pencil-alt" style="font-size:11px;"></i></button>` : ''}
                                     </div>
-                                    <div style="white-space: pre-wrap;">${escapeHtml(comment.content)}</div>
+                                    <div class="consultation-comment-content" style="white-space: pre-wrap;">${escapeHtml(comment.content)}</div>
                                 </div>
-                            `).join('')}
+                                `;
+                            }).join('')}
                     </div>
                     <div class="mt-3">
                         <label class="form-label"><i class="fas fa-pen me-1"></i>Yeni Yorum</label>
@@ -5416,6 +5427,79 @@ function setupConsultationTabListeners(task) {
             showNotification('Yorum ekleme hatası', 'error');
         }
     });
+
+    // Comment edit delegation
+    const commentsList = contentContainer.querySelector('#consultation-comments-list');
+    if (commentsList) {
+        commentsList.addEventListener('click', async (e) => {
+            const editBtn = e.target.closest('[data-action="edit-comment"]');
+            if (editBtn) {
+                const commentId = parseInt(editBtn.dataset.commentId, 10);
+                const commentEl = commentsList.querySelector(`[data-comment-id="${commentId}"]`);
+                if (!commentEl || commentEl.querySelector('.consultation-edit-form')) return;
+                const contentDiv = commentEl.querySelector('.consultation-comment-content');
+                const comment = (task.discussion_topic?.comments || []).find(c => c.id === commentId);
+                if (contentDiv) contentDiv.style.display = 'none';
+                const formDiv = document.createElement('div');
+                formDiv.className = 'consultation-edit-form mt-1';
+                formDiv.innerHTML = `
+                    <textarea class="form-control form-control-sm mb-2 consultation-edit-textarea" rows="3" style="resize:vertical;"></textarea>
+                    <div class="d-flex gap-2">
+                        <button type="button" class="btn btn-sm btn-primary" data-action="save-consultation-edit" data-comment-id="${commentId}">
+                            <i class="fas fa-check me-1"></i>Kaydet
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" data-action="cancel-consultation-edit" data-comment-id="${commentId}">
+                            İptal
+                        </button>
+                    </div>
+                `;
+                commentEl.appendChild(formDiv);
+                formDiv.querySelector('.consultation-edit-textarea').value = comment?.content || '';
+                formDiv.querySelector('.consultation-edit-textarea').focus();
+                return;
+            }
+
+            const cancelBtn = e.target.closest('[data-action="cancel-consultation-edit"]');
+            if (cancelBtn) {
+                const commentId = parseInt(cancelBtn.dataset.commentId, 10);
+                const commentEl = commentsList.querySelector(`[data-comment-id="${commentId}"]`);
+                if (!commentEl) return;
+                commentEl.querySelector('.consultation-comment-content').style.display = '';
+                commentEl.querySelector('.consultation-edit-form')?.remove();
+                return;
+            }
+
+            const saveBtn = e.target.closest('[data-action="save-consultation-edit"]');
+            if (saveBtn && !saveBtn.disabled) {
+                const commentId = parseInt(saveBtn.dataset.commentId, 10);
+                const commentEl = commentsList.querySelector(`[data-comment-id="${commentId}"]`);
+                const editForm = commentEl?.querySelector('.consultation-edit-form');
+                if (!editForm) return;
+                const newContent = editForm.querySelector('.consultation-edit-textarea')?.value?.trim();
+                if (!newContent) {
+                    showNotification('Yorum metni boş olamaz', 'error');
+                    return;
+                }
+                const cancelBtnRef = editForm.querySelector('[data-action="cancel-consultation-edit"]');
+                saveBtn.disabled = true;
+                if (cancelBtnRef) cancelBtnRef.disabled = true;
+                try {
+                    await updateComment(commentId, { content: newContent });
+                    showNotification('Yorum güncellendi', 'success');
+                    contentContainer.dataset.loaded = 'false';
+                    const updatedTask = await getDepartmentTaskById(task.id);
+                    contentContainer.innerHTML = await renderConsultationTab(updatedTask);
+                    contentContainer.dataset.loaded = 'true';
+                    setupConsultationTabListeners(updatedTask);
+                } catch (err) {
+                    console.error('Error saving comment edit:', err);
+                    showNotification('Yorum güncellenirken hata oluştu', 'error');
+                    saveBtn.disabled = false;
+                    if (cancelBtnRef) cancelBtnRef.disabled = false;
+                }
+            }
+        });
+    }
 }
 
 function attachActionFormListeners(task, action) {

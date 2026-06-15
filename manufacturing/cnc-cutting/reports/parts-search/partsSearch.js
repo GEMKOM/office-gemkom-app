@@ -58,6 +58,12 @@ function parseWeightToNumber(weight) {
     return Number.isFinite(n) ? n : 0;
 }
 
+function parseQuantityToNumber(quantity) {
+    if (quantity === null || quantity === undefined || quantity === '') return 1;
+    const n = typeof quantity === 'number' ? quantity : parseInt(quantity, 10);
+    return Number.isFinite(n) && n > 0 ? n : 1;
+}
+
 /**
  * Initialize filters component
  */
@@ -167,7 +173,10 @@ function initTable() {
         bordered: true,
         responsive: true,
         footer: ({ displayedData, columns, hasActions }) => {
-            const totalWeight = displayedData.reduce((sum, row) => sum + parseWeightToNumber(row.weight_kg), 0);
+            const totalWeight = displayedData.reduce(
+                (sum, row) => sum + parseWeightToNumber(row.weight_kg) * parseQuantityToNumber(row.quantity),
+                0
+            );
             const weightColIndex = columns.findIndex(c => c.field === 'weight_kg');
             const totalColumns = columns.length + (hasActions ? 1 : 0);
             

@@ -2,10 +2,13 @@ import {
     getTopic,
     getTopicComments,
     createComment,
+    updateComment,
     uploadCommentAttachment,
-    uploadTopicAttachment
+    uploadTopicAttachment,
+    deleteAttachment,
 } from '../../apis/projects/topics.js';
 import { fetchAllUsers, fetchTeams } from '../../apis/users.js';
+import { getUser } from '../../authService.js';
 import { showNotification } from '../notification/notification.js';
 
 function getUserInitials(name) {
@@ -128,12 +131,13 @@ async function mountFileAttachments(containerId, files, options = {}) {
     fileAttachments.setFiles(mappedFiles);
 }
 
-function renderCommentHtml(comment) {
+function renderCommentHtml(comment, currentUsername) {
     const initials = getUserInitials(comment.created_by_name);
     const avatarColor = getAvatarColor(comment.created_by_name);
     const attachmentId = `comment-attachments-${comment.id}`;
+    const isAuthor = currentUsername && comment.created_by_username === currentUsername;
     return `
-        <div class="comment-item mb-3 pb-3 border-bottom">
+        <div class="comment-item mb-3 pb-3 border-bottom" data-comment-id="${comment.id}">
             <div class="d-flex gap-3">
                 <div class="comment-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0;">
                     ${initials}
@@ -143,6 +147,7 @@ function renderCommentHtml(comment) {
                         <span class="fw-medium" style="color: #172b4d;">${comment.created_by_name}</span>
                         <span class="text-muted small">${formatDateTime(comment.created_at)}</span>
                         ${comment.is_edited ? '<span class="text-muted small"><i class="fas fa-edit me-1"></i>Düzenlendi</span>' : ''}
+                        ${isAuthor ? `<button class="btn btn-link btn-sm p-0 ms-auto text-muted" data-action="edit-comment" data-comment-id="${comment.id}" title="Düzenle" style="line-height:1;"><i class="fas fa-pencil-alt" style="font-size:11px;"></i></button>` : ''}
                     </div>
                     <div class="comment-content" style="color: #172b4d; line-height: 1.6; margin-bottom: 8px;">
                         ${formatContent(comment.content, comment.mentioned_users_data || [])}
@@ -336,6 +341,7 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
     let destroyed = false;
     let topic = null;
     let comments = [];
+    let currentUsername = null;
 
     const ids = {
         topicAttachments: `${prefix}-topic-attachments`,
@@ -381,7 +387,7 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
         const countEl = document.getElementById(ids.commentsCount);
         if (!listEl) return;
         listEl.innerHTML = comments.length
-            ? comments.map(renderCommentHtml).join('')
+            ? comments.map((c) => renderCommentHtml(c, currentUsername)).join('')
             : '<p class="text-muted text-center py-4">Henüz yorum yok.</p>';
         if (countEl) countEl.textContent = String(comments.length);
     }
@@ -393,6 +399,110 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
         if (topicAttachmentsEl) topicAttachmentsEl.innerHTML = '';
         await initAttachments();
         options.onRefresh?.(topic, comments);
+    }
+
+    function enterEditMode(commentId) {
+        const comment = comments.find((c) => c.id === commentId);
+        if (!comment) return;
+        const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
+        if (!commentEl || commentEl.querySelector('.comment-edit-form')) return;
+
+        commentEl.querySelector('.comment-content').style.display = 'none';
+        const attachmentsEl = document.getElementById(`comment-attachments-${commentId}`);
+        if (attachmentsEl) attachmentsEl.style.display = 'none';
+
+        const existingAtts = comment.attachments_data || [];
+        const formDiv = document.createElement('div');
+        formDiv.className = 'comment-edit-form mt-2';
+        formDiv.innerHTML = `
+            <div class="position-relative mb-2">
+                <textarea class="form-control form-control-sm edit-comment-textarea" rows="3" style="resize:vertical;">${comment.content || ''}</textarea>
+                <div class="edit-mention-suggestions mention-suggestions" style="display:none;"></div>
+            </div>
+            ${existingAtts.length ? `
+            <div class="mb-2">
+                <div class="small text-muted mb-1">Mevcut Ekler</div>
+                <div class="d-flex flex-wrap gap-2">
+                    ${existingAtts.map((att) => `
+                        <span class="badge bg-secondary d-flex align-items-center gap-1" data-attachment-item data-attachment-id="${att.id}">
+                            <i class="fas fa-file me-1"></i>${att.name}
+                            <button type="button" class="btn-close btn-close-white btn-sm" data-action="remove-edit-attachment" style="font-size:0.7rem;" title="Kaldır"></button>
+                        </span>
+                    `).join('')}
+                </div>
+            </div>` : ''}
+            <div class="mb-2">
+                <label class="form-label small mb-1"><i class="fas fa-paperclip me-1"></i>Yeni Ekler</label>
+                <input type="file" class="form-control form-control-sm edit-new-files" multiple>
+                <div class="edit-new-files-preview mt-1"></div>
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-primary" data-action="save-edit" data-comment-id="${commentId}">
+                    <i class="fas fa-check me-1"></i>Kaydet
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" data-action="cancel-edit" data-comment-id="${commentId}">
+                    İptal
+                </button>
+            </div>
+        `;
+        commentEl.querySelector('.flex-grow-1').appendChild(formDiv);
+
+        const textarea = formDiv.querySelector('.edit-comment-textarea');
+        initializeMentionFunctionality(textarea, formDiv.querySelector('.edit-mention-suggestions'));
+        setupFilePreview(formDiv.querySelector('.edit-new-files'), formDiv.querySelector('.edit-new-files-preview'));
+        textarea.focus();
+    }
+
+    function exitEditMode(commentId) {
+        const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
+        if (!commentEl) return;
+        commentEl.querySelector('.comment-content').style.display = '';
+        const attachmentsEl = document.getElementById(`comment-attachments-${commentId}`);
+        if (attachmentsEl) attachmentsEl.style.display = '';
+        commentEl.querySelector('.comment-edit-form')?.remove();
+    }
+
+    async function saveEditComment(commentId, saveBtn) {
+        const commentEl = document.querySelector(`[data-comment-id="${commentId}"]`);
+        const editForm = commentEl?.querySelector('.comment-edit-form');
+        if (!editForm) return;
+
+        const newContent = editForm.querySelector('.edit-comment-textarea')?.value?.trim();
+        if (!newContent) {
+            showNotification('Yorum metni boş olamaz', 'error');
+            return;
+        }
+
+        const comment = comments.find((c) => c.id === commentId);
+        const originalIds = new Set((comment?.attachments_data || []).map((a) => a.id));
+        const remainingIds = new Set(
+            [...editForm.querySelectorAll('[data-attachment-item]')]
+                .map((el) => parseInt(el.dataset.attachmentId, 10))
+                .filter((id) => !isNaN(id))
+        );
+        const idsToDelete = [...originalIds].filter((id) => !remainingIds.has(id));
+        const newFiles = Array.from(editForm.querySelector('.edit-new-files')?.files || []);
+
+        const cancelBtn = editForm.querySelector('[data-action="cancel-edit"]');
+        saveBtn.disabled = true;
+        if (cancelBtn) cancelBtn.disabled = true;
+
+        try {
+            await updateComment(commentId, { content: newContent });
+            for (const attId of idsToDelete) {
+                await deleteAttachment(attId);
+            }
+            for (const file of newFiles) {
+                await uploadCommentAttachment(commentId, file);
+            }
+            showNotification('Yorum güncellendi', 'success');
+            await refresh();
+        } catch (error) {
+            console.error('Error saving comment edit:', error);
+            showNotification('Yorum güncellenirken hata oluştu', 'error');
+            saveBtn.disabled = false;
+            if (cancelBtn) cancelBtn.disabled = false;
+        }
     }
 
     function bindEvents() {
@@ -438,6 +548,28 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
             }
         });
 
+        document.getElementById(ids.commentsList)?.addEventListener('click', async (e) => {
+            const editBtn = e.target.closest('[data-action="edit-comment"]');
+            if (editBtn) {
+                enterEditMode(parseInt(editBtn.dataset.commentId, 10));
+                return;
+            }
+            const cancelBtn = e.target.closest('[data-action="cancel-edit"]');
+            if (cancelBtn) {
+                exitEditMode(parseInt(cancelBtn.dataset.commentId, 10));
+                return;
+            }
+            const saveBtn = e.target.closest('[data-action="save-edit"]');
+            if (saveBtn && !saveBtn.disabled) {
+                await saveEditComment(parseInt(saveBtn.dataset.commentId, 10), saveBtn);
+                return;
+            }
+            const removeAttBtn = e.target.closest('[data-action="remove-edit-attachment"]');
+            if (removeAttBtn) {
+                removeAttBtn.closest('[data-attachment-item]').remove();
+            }
+        });
+
         document.getElementById(ids.addCommentBtn)?.addEventListener('click', async () => {
             const commentText = commentTextarea?.value?.trim();
             if (!commentText) {
@@ -476,6 +608,12 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
     }
 
     await loadData();
+    try {
+        const user = await getUser();
+        currentUsername = user?.username || null;
+    } catch {
+        // proceed without edit buttons if user can't be fetched
+    }
     if (destroyed) return { refresh: async () => {}, destroy: () => {} };
 
     rootElement.innerHTML = `
@@ -506,7 +644,7 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
                 </h6>
                 <div id="${ids.commentsList}" class="mb-4" style="max-height: 320px; overflow-y: auto;">
                     ${comments.length
-                        ? comments.map(renderCommentHtml).join('')
+                        ? comments.map((c) => renderCommentHtml(c, currentUsername)).join('')
                         : '<p class="text-muted text-center py-4">Henüz yorum yok.</p>'}
                 </div>
                 <div class="border-top pt-3">
