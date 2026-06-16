@@ -45,17 +45,27 @@ function formatDateTime(dateString) {
     });
 }
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
 function formatContent(content, mentionedUsers = []) {
     if (!content) return '';
     const userMap = {};
     (mentionedUsers || []).forEach((user) => {
         if (user.username) userMap[user.username] = user;
     });
-    return content
+    return escapeHtml(content)
         .replace(/@(\w+)/g, (match, username) => {
             const user = userMap[username];
             const displayName = user ? (user.full_name || user.username) : username;
-            return `<span class="mention-badge">@${displayName}</span>`;
+            return `<span class="mention-badge">@${escapeHtml(displayName)}</span>`;
         })
         .replace(/\n/g, '<br>');
 }
@@ -140,12 +150,12 @@ function renderCommentHtml(comment, currentUsername) {
         <div class="comment-item mb-3 pb-3 border-bottom" data-comment-id="${comment.id}">
             <div class="d-flex gap-3">
                 <div class="comment-avatar" style="width: 32px; height: 32px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 600; flex-shrink: 0;">
-                    ${initials}
+                    ${escapeHtml(initials)}
                 </div>
                 <div class="flex-grow-1">
                     <div class="d-flex align-items-center gap-2 mb-1">
-                        <span class="fw-medium" style="color: #172b4d;">${comment.created_by_name}</span>
-                        <span class="text-muted small">${formatDateTime(comment.created_at)}</span>
+                        <span class="fw-medium" style="color: #172b4d;">${escapeHtml(comment.created_by_name || '')}</span>
+                        <span class="text-muted small">${escapeHtml(formatDateTime(comment.created_at))}</span>
                         ${comment.is_edited ? '<span class="text-muted small"><i class="fas fa-edit me-1"></i>Düzenlendi</span>' : ''}
                         ${isAuthor ? `<button class="btn btn-link btn-sm p-0 ms-auto text-muted" data-action="edit-comment" data-comment-id="${comment.id}" title="Düzenle" style="line-height:1;"><i class="fas fa-pencil-alt" style="font-size:11px;"></i></button>` : ''}
                     </div>
@@ -201,14 +211,14 @@ function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
                 : '';
             return `
                 <div class="mention-suggestion-item ${index === 0 ? 'selected' : ''}"
-                     data-token="${token}"
+                     data-token="${escapeHtml(token)}"
                      style="cursor: pointer; padding: 8px 12px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #e1e5e9;">
                     <div style="width: 24px; height: 24px; border-radius: 50%; background: ${avatarColor}; color: white; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 600;">
-                        ${initials}
+                        ${escapeHtml(initials)}
                     </div>
                     <div>
-                        <div style="font-weight: 500; color: #172b4d; font-size: 14px;">${fullName}${badge}</div>
-                        <div style="font-size: 12px; color: #6c757d;">@${token}</div>
+                        <div style="font-weight: 500; color: #172b4d; font-size: 14px;">${escapeHtml(fullName)}${badge}</div>
+                        <div style="font-size: 12px; color: #6c757d;">@${escapeHtml(token)}</div>
                     </div>
                 </div>
             `;
@@ -309,7 +319,7 @@ function setupFilePreview(input, previewEl) {
             <div class="d-flex flex-wrap gap-2">
                 ${files.map((file, index) => `
                     <span class="badge bg-secondary d-flex align-items-center gap-1">
-                        <i class="fas fa-file me-1"></i>${file.name}
+                        <i class="fas fa-file me-1"></i>${escapeHtml(file.name)}
                         <button type="button" class="btn-close btn-close-white btn-sm" data-file-index="${index}" style="font-size: 0.7rem;"></button>
                     </span>
                 `).join('')}
@@ -416,7 +426,7 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
         formDiv.className = 'comment-edit-form mt-2';
         formDiv.innerHTML = `
             <div class="position-relative mb-2">
-                <textarea class="form-control form-control-sm edit-comment-textarea" rows="3" style="resize:vertical;">${comment.content || ''}</textarea>
+                <textarea class="form-control form-control-sm edit-comment-textarea" rows="3" style="resize:vertical;">${escapeHtml(comment.content || '')}</textarea>
                 <div class="edit-mention-suggestions mention-suggestions" style="display:none;"></div>
             </div>
             ${existingAtts.length ? `
@@ -425,7 +435,7 @@ export async function mountTopicDiscussion(rootElement, topicId, options = {}) {
                 <div class="d-flex flex-wrap gap-2">
                     ${existingAtts.map((att) => `
                         <span class="badge bg-secondary d-flex align-items-center gap-1" data-attachment-item data-attachment-id="${att.id}">
-                            <i class="fas fa-file me-1"></i>${att.name}
+                            <i class="fas fa-file me-1"></i>${escapeHtml(att.name || 'Dosya')}
                             <button type="button" class="btn-close btn-close-white btn-sm" data-action="remove-edit-attachment" style="font-size:0.7rem;" title="Kaldır"></button>
                         </span>
                     `).join('')}
