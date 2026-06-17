@@ -5179,6 +5179,34 @@ async function renderConsultationTab(task) {
         `;
     }
 
+    // Sibling consultation tasks from other departments
+    const siblingTasks = Array.isArray(task.sibling_consult_tasks) ? task.sibling_consult_tasks : [];
+    if (siblingTasks.length > 0) {
+        const statusBadgeClass = (status) => {
+            if (status === 'completed') return 'bg-success';
+            if (status === 'in_progress') return 'bg-primary';
+            if (status === 'skipped') return 'bg-secondary';
+            return 'bg-warning text-dark';
+        };
+        html += `
+            <div class="card mb-3">
+                <div class="card-header bg-light"><i class="fas fa-layer-group me-2"></i>Diğer Departman Danışmaları (${siblingTasks.length})</div>
+                <div class="card-body p-0">
+                    <ul class="list-group list-group-flush">
+                        ${siblingTasks.map(s => `
+                            <li class="list-group-item list-group-item-action d-flex align-items-center justify-content-between sibling-consult-task-row"
+                                style="cursor:pointer;"
+                                data-sibling-task="${escapeHtml(JSON.stringify(s))}">
+                                <span><i class="fas fa-building me-2 text-muted"></i>${escapeHtml(s.department_display)}</span>
+                                <span class="badge ${statusBadgeClass(s.status)}">${escapeHtml(s.status_display)}</span>
+                            </li>
+                        `).join('')}
+                    </ul>
+                </div>
+            </div>
+        `;
+    }
+
     // Completion files uploaded by this department
     html += `
         <div class="card mb-3">
@@ -5214,14 +5242,16 @@ async function renderConsultationTab(task) {
     // Task actions (start, complete)
     if (task.status === 'pending') {
         html += `
-            <button class="btn btn-primary me-2" id="consultation-start-btn" data-task-id="${task.id}">
-                <i class="fas fa-play me-1"></i>Göreve Başla
-            </button>
+            <div class="mb-3">
+                <button class="btn btn-primary" id="consultation-start-btn" data-task-id="${task.id}">
+                    <i class="fas fa-play me-1"></i>Göreve Başla
+                </button>
+            </div>
         `;
     }
     if (task.status === 'in_progress') {
         html += `
-            <div class="mt-3">
+            <div class="mb-3">
                 <label class="form-label"><i class="fas fa-sticky-note me-1"></i>Yanıt Notu</label>
                 <textarea class="form-control mb-2" id="consultation-notes" rows="3" placeholder="Değerlendirme notlarınızı yazın...">${task.notes || ''}</textarea>
                 <button class="btn btn-success" id="consultation-complete-btn" data-task-id="${task.id}">
@@ -5232,50 +5262,10 @@ async function renderConsultationTab(task) {
     }
     if (task.status === 'completed') {
         html += `
-            <div class="mt-3">
+            <div class="mb-3">
                 <button class="btn btn-warning" id="consultation-uncomplete-btn" data-task-id="${task.id}">
                     <i class="fas fa-undo me-1"></i>Tamamlanmayı Geri Al
                 </button>
-            </div>
-        `;
-    }
-
-    // Sibling consultation tasks from other departments
-    const siblingTasks = Array.isArray(task.sibling_consult_tasks) ? task.sibling_consult_tasks : [];
-    if (siblingTasks.length > 0) {
-        const statusBadgeClass = (status) => {
-            if (status === 'completed') return 'bg-success';
-            if (status === 'in_progress') return 'bg-primary';
-            if (status === 'skipped') return 'bg-secondary';
-            return 'bg-warning text-dark';
-        };
-        html += `
-            <div class="card mb-3">
-                <div class="card-header bg-light"><i class="fas fa-layer-group me-2"></i>Diğer Departman Danışmaları (${siblingTasks.length})</div>
-                <div class="card-body p-0">
-                    <ul class="list-group list-group-flush">
-                        ${siblingTasks.map(s => `
-                            <li class="list-group-item list-group-item-action d-flex align-items-center justify-content-between sibling-consult-task-row"
-                                style="cursor:pointer;"
-                                data-sibling-task="${escapeHtml(JSON.stringify(s))}">
-                                <span><i class="fas fa-building me-2 text-muted"></i>${escapeHtml(s.department_display)}</span>
-                                <span class="badge ${statusBadgeClass(s.status)}">${escapeHtml(s.status_display)}</span>
-                            </li>
-                        `).join('')}
-                    </ul>
-                </div>
-            </div>
-            <!-- Sibling task detail modal -->
-            <div class="modal fade" id="sibling-task-detail-modal" tabindex="-1" aria-hidden="true">
-                <div class="modal-dialog modal-lg modal-dialog-scrollable">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title"><i class="fas fa-handshake me-2"></i><span id="sibling-modal-title">Departman Danışması</span></h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body" id="sibling-modal-body"></div>
-                    </div>
-                </div>
             </div>
         `;
     }
@@ -5328,23 +5318,16 @@ function setupConsultationTabListeners(task) {
     const contentContainer = taskDetailsModal.container.querySelector('#action-content-consultation');
     if (!contentContainer) return;
 
-    // Sibling task detail click
+    // Sibling task detail click — build a modal in document.body to avoid nesting issues
     contentContainer.querySelectorAll('.sibling-consult-task-row').forEach(row => {
         row.addEventListener('click', () => {
             let sibling;
             try { sibling = JSON.parse(row.dataset.siblingTask); } catch { return; }
             const formatDate = (v) => v ? new Date(v).toLocaleString('tr-TR') : '-';
             const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const statusBadge = (status, display) => {
-                const cls = status === 'completed' ? 'bg-success' : status === 'in_progress' ? 'bg-primary' : status === 'skipped' ? 'bg-secondary' : 'bg-warning text-dark';
-                return `<span class="badge ${cls}">${esc(display)}</span>`;
-            };
-            let body = `
-                <div class="mb-3 d-flex align-items-center gap-2">
-                    <strong>${esc(sibling.department_display)}</strong>
-                    ${statusBadge(sibling.status, sibling.status_display)}
-                </div>
-            `;
+            const statusBadgeCls = (s) => s === 'completed' ? 'bg-success' : s === 'in_progress' ? 'bg-primary' : s === 'skipped' ? 'bg-secondary' : 'bg-warning text-dark';
+
+            let body = '';
             if (sibling.notes) {
                 body += `
                     <div class="card mb-3">
@@ -5357,40 +5340,55 @@ function setupConsultationTabListeners(task) {
             }
             if (sibling.completed_by_name || sibling.completed_at) {
                 body += `
-                    <div class="mb-3 text-muted small">
+                    <p class="text-muted small mb-3">
                         <i class="fas fa-check-circle me-1 text-success"></i>
                         ${sibling.completed_by_name ? `<strong>${esc(sibling.completed_by_name)}</strong> tarafından tamamlandı` : ''}
                         ${sibling.completed_at ? ` — ${formatDate(sibling.completed_at)}` : ''}
-                    </div>
+                    </p>
                 `;
             }
             const files = Array.isArray(sibling.completion_files) ? sibling.completion_files : [];
-            if (files.length > 0) {
-                body += `
-                    <div class="card mb-3">
-                        <div class="card-header bg-light"><i class="fas fa-upload me-2"></i>Yanıt Dosyaları</div>
-                        <div class="card-body">
-                            ${files.map(f => `
-                                <div class="d-flex align-items-center gap-2 mb-2">
-                                    <i class="fas fa-file-alt text-success"></i>
-                                    <a href="${f.file_url}" target="_blank">${esc(f.filename || f.name || 'Dosya')}</a>
-                                    <span class="badge bg-light text-dark">${esc(f.file_type_display || f.file_type || '-')}</span>
-                                    ${f.file_size ? `<small class="text-muted">${(f.file_size / 1024).toFixed(0)} KB</small>` : ''}
-                                </div>
-                            `).join('')}
-                        </div>
+            body += `
+                <div class="card mb-3">
+                    <div class="card-header bg-light"><i class="fas fa-upload me-2"></i>Yanıt Dosyaları</div>
+                    <div class="card-body">
+                        ${files.length > 0 ? files.map(f => `
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <i class="fas fa-file-alt text-success"></i>
+                                <a href="${f.file_url}" target="_blank">${esc(f.filename || f.name || 'Dosya')}</a>
+                                <span class="badge bg-light text-dark">${esc(f.file_type_display || f.file_type || '-')}</span>
+                                ${f.file_size ? `<small class="text-muted">${(f.file_size / 1024).toFixed(0)} KB</small>` : ''}
+                            </div>
+                        `).join('') : '<p class="text-muted mb-0">Yanıt dosyası yüklenmemiş.</p>'}
                     </div>
-                `;
-            } else {
-                body += `<p class="text-muted">Yanıt dosyası yüklenmemiş.</p>`;
-            }
+                </div>
+            `;
 
-            const modalEl = contentContainer.querySelector('#sibling-task-detail-modal');
-            if (!modalEl) return;
-            modalEl.querySelector('#sibling-modal-title').textContent = sibling.department_display;
-            modalEl.querySelector('#sibling-modal-body').innerHTML = body;
-            const bsModal = new bootstrap.Modal(modalEl, { backdrop: false });
-            bsModal.show();
+            // Remove any stale sibling modal from a prior click
+            document.getElementById('sibling-task-detail-modal')?.remove();
+
+            const modalEl = document.createElement('div');
+            modalEl.id = 'sibling-task-detail-modal';
+            modalEl.className = 'modal fade';
+            modalEl.tabIndex = -1;
+            modalEl.innerHTML = `
+                <div class="modal-dialog modal-lg modal-dialog-scrollable">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-handshake me-2"></i>
+                                ${esc(sibling.department_display)}
+                                <span class="badge ${statusBadgeCls(sibling.status)} ms-2 fs-6">${esc(sibling.status_display)}</span>
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">${body}</div>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(modalEl);
+            modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove());
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
         });
     });
 
