@@ -34,6 +34,7 @@ let confirmationModal = null;
 let linesModal = null;
 let linesModalBootstrap = null;
 let currentJobOrderForLines = null;
+let isLinesPreviewMode = false;
 /** @type {Array<{ id?: number, item?: number|null, item_code?: string|null, item_name?: string|null, item_description?: string, quantity: string, unit_price: string, amount_eur?: string, planning_request_item?: number|null, order: number, price_source?: string }>} */
 let editingLines = [];
 let linesTableContainerId = 'procurement-lines-table-body';
@@ -293,6 +294,10 @@ function initLinesModal() {
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
                     </div>
                     <div class="modal-body">
+                        <div class="alert alert-info py-2 d-none" id="procurement-lines-preview-warning">
+                            <i class="fas fa-eye me-1"></i>
+                            Bu ekran sadece önizlemedir. Kaydedilmiş malzeme maliyeti satırları değiştirilemez.
+                        </div>
                         <div class="mb-3 d-flex justify-content-between align-items-center">
                             <button type="button" class="btn btn-sm btn-primary" id="procurement-lines-add-row">
                                 <i class="fas fa-plus me-1"></i>Satır Ekle
@@ -335,6 +340,21 @@ function initLinesModal() {
     document.getElementById('procurement-lines-save').addEventListener('click', saveLines);
 
     linesModal.addEventListener('shown.bs.modal', () => renderLinesTable());
+}
+
+function updateLinesModalMode() {
+    const addBtn = document.getElementById('procurement-lines-add-row');
+    const saveBtn = document.getElementById('procurement-lines-save');
+    const previewWarning = document.getElementById('procurement-lines-preview-warning');
+
+    if (addBtn) addBtn.disabled = isLinesPreviewMode;
+    if (saveBtn) {
+        saveBtn.disabled = isLinesPreviewMode;
+        saveBtn.classList.toggle('d-none', isLinesPreviewMode);
+    }
+    if (previewWarning) {
+        previewWarning.classList.toggle('d-none', !isLinesPreviewMode);
+    }
 }
 
 function confirmMarkCostNotApplicable(jobNo) {
@@ -463,8 +483,14 @@ async function loadPreviewProcurementLines(jobNo) {
  */
 async function openLinesModal(jobNo, { usePreview = false } = {}) {
     currentJobOrderForLines = jobNo;
+    isLinesPreviewMode = usePreview;
     const titleEl = document.getElementById('procurement-lines-modal-title');
-    if (titleEl) titleEl.textContent = `Malzeme Maliyeti Satırları — ${jobNo}`;
+    if (titleEl) {
+        titleEl.textContent = usePreview
+            ? `Malzeme Maliyeti Önizlemesi — ${jobNo}`
+            : `Malzeme Maliyeti Satırları — ${jobNo}`;
+    }
+    updateLinesModalMode();
 
     editingLines = [];
     const tbody = document.getElementById(linesTableContainerId);
@@ -493,6 +519,7 @@ async function openLinesModal(jobNo, { usePreview = false } = {}) {
 }
 
 function addLineRow() {
+    if (isLinesPreviewMode) return;
     const order = editingLines.length;
     editingLines.push({
         item: null,
@@ -512,6 +539,7 @@ function addLineRow() {
 }
 
 function removeLineRow(index) {
+    if (isLinesPreviewMode) return;
     editingLines.splice(index, 1);
     editingLines.forEach((line, i) => { line.order = i; });
     renderLinesTable();
@@ -521,6 +549,7 @@ function renderLinesTable() {
     const tbody = document.getElementById(linesTableContainerId);
     if (!tbody) return;
 
+    const readOnlyAttr = isLinesPreviewMode ? 'disabled' : '';
     tbody.innerHTML = editingLines.map((line, index) => {
         const amount = (parseFloat(line.quantity) || 0) * (parseFloat(line.unit_price) || 0);
         const amountStr = amount.toFixed(2);
@@ -528,14 +557,14 @@ function renderLinesTable() {
             <tr data-index="${index}">
                 <td class="text-muted">${escapeHtml(line.item_code || '–')}</td>
                 <td class="text-muted">${escapeHtml(line.item_name || '–')}</td>
-                <td><input type="text" class="form-control form-control-sm" data-field="item_description" data-index="${index}" value="${escapeHtml(line.item_description || '')}" placeholder="Açıklama"></td>
-                <td><input type="text" class="form-control form-control-sm d-inline-block" data-field="quantity" data-index="${index}" value="${escapeHtml(line.quantity)}" placeholder="0" style="width:5rem"> <span class="text-muted small ms-1">${escapeHtml(line.item_unit || '–')}</span></td>
-                <td><input type="text" class="form-control form-control-sm" data-field="unit_price" data-index="${index}" value="${escapeHtml(line.unit_price)}" placeholder="0"></td>
+                <td><input type="text" class="form-control form-control-sm" data-field="item_description" data-index="${index}" value="${escapeHtml(line.item_description || '')}" placeholder="Açıklama" ${readOnlyAttr}></td>
+                <td><input type="text" class="form-control form-control-sm d-inline-block" data-field="quantity" data-index="${index}" value="${escapeHtml(line.quantity)}" placeholder="0" style="width:5rem" ${readOnlyAttr}> <span class="text-muted small ms-1">${escapeHtml(line.item_unit || '–')}</span></td>
+                <td><input type="text" class="form-control form-control-sm" data-field="unit_price" data-index="${index}" value="${escapeHtml(line.unit_price)}" placeholder="0" ${readOnlyAttr}></td>
                 <td class="align-middle">${amountStr}</td>
                 <td class="text-muted small">${escapeHtml(formatPriceSource(line.price_source))}</td>
                 <td class="text-muted small">${escapeHtml(formatPriceDate(line.price_date))}</td>
                 <td>
-                    <button type="button" class="btn btn-outline-danger btn-sm" data-remove-index="${index}" title="Satırı sil">
+                    <button type="button" class="btn btn-outline-danger btn-sm ${isLinesPreviewMode ? 'd-none' : ''}" data-remove-index="${index}" title="Satırı sil" ${readOnlyAttr}>
                         <i class="fas fa-trash"></i>
                     </button>
                 </td>
@@ -549,6 +578,7 @@ function renderLinesTable() {
     }, 0);
     const summaryEl = document.getElementById('procurement-lines-summary');
     if (summaryEl) summaryEl.textContent = `Toplam: ${editingLines.length} satır, Toplam tutar: ${total.toFixed(2)} EUR`;
+    updateLinesModalMode();
 
     // Bind input and delete
     tbody.querySelectorAll('input').forEach(input => {
@@ -624,6 +654,10 @@ function syncLinesFromDom() {
 
 async function saveLines() {
     if (!currentJobOrderForLines) return;
+    if (isLinesPreviewMode) {
+        showNotification('Önizleme satırları kaydedilemez. Düzenlemek için Satırları Aç seçeneğini kullanın.', 'warning');
+        return;
+    }
     syncLinesFromDom();
 
     const saveBtn = document.getElementById('procurement-lines-save');
