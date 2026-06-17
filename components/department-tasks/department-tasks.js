@@ -5318,7 +5318,7 @@ function setupConsultationTabListeners(task) {
     const contentContainer = taskDetailsModal.container.querySelector('#action-content-consultation');
     if (!contentContainer) return;
 
-    // Sibling task detail click — build a modal in document.body to avoid nesting issues
+    // Sibling task detail click — custom overlay appended to body (avoids Bootstrap stacked-modal conflict)
     contentContainer.querySelectorAll('.sibling-consult-task-row').forEach(row => {
         row.addEventListener('click', () => {
             let sibling;
@@ -5364,31 +5364,28 @@ function setupConsultationTabListeners(task) {
                 </div>
             `;
 
-            // Remove any stale sibling modal from a prior click
-            document.getElementById('sibling-task-detail-modal')?.remove();
+            document.getElementById('sibling-task-overlay')?.remove();
 
-            const modalEl = document.createElement('div');
-            modalEl.id = 'sibling-task-detail-modal';
-            modalEl.className = 'modal fade';
-            modalEl.tabIndex = -1;
-            modalEl.innerHTML = `
-                <div class="modal-dialog modal-lg modal-dialog-scrollable">
-                    <div class="modal-content">
-                        <div class="modal-header">
-                            <h5 class="modal-title">
-                                <i class="fas fa-handshake me-2"></i>
-                                ${esc(sibling.department_display)}
-                                <span class="badge ${statusBadgeCls(sibling.status)} ms-2 fs-6">${esc(sibling.status_display)}</span>
-                            </h5>
-                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                        </div>
-                        <div class="modal-body">${body}</div>
+            const overlay = document.createElement('div');
+            overlay.id = 'sibling-task-overlay';
+            overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:1rem;';
+            overlay.innerHTML = `
+                <div style="background:#fff;border-radius:0.5rem;max-width:800px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 0.5rem 1rem rgba(0,0,0,.3);">
+                    <div style="padding:1rem 1.25rem;border-bottom:1px solid #dee2e6;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+                        <h5 class="mb-0">
+                            <i class="fas fa-handshake me-2"></i>${esc(sibling.department_display)}
+                            <span class="badge ${statusBadgeCls(sibling.status)} ms-2">${esc(sibling.status_display)}</span>
+                        </h5>
+                        <button type="button" class="btn-close" id="sibling-overlay-close"></button>
                     </div>
+                    <div style="padding:1.25rem;overflow-y:auto;flex:1;">${body}</div>
                 </div>
             `;
-            document.body.appendChild(modalEl);
-            modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove());
-            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            document.body.appendChild(overlay);
+
+            const close = () => overlay.remove();
+            overlay.querySelector('#sibling-overlay-close').addEventListener('click', close);
+            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
         });
     });
 
