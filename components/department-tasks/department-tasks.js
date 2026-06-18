@@ -5196,7 +5196,7 @@ async function renderConsultationTab(task) {
                         ${siblingTasks.map(s => `
                             <li class="list-group-item list-group-item-action d-flex align-items-center justify-content-between sibling-consult-task-row"
                                 style="cursor:pointer;"
-                                data-sibling-task="${escapeHtml(JSON.stringify(s))}">
+                                data-sibling-task-id="${s.id}">
                                 <span><i class="fas fa-building me-2 text-muted"></i>${escapeHtml(s.department_display)}</span>
                                 <span class="badge ${statusBadgeClass(s.status)}">${escapeHtml(s.status_display)}</span>
                             </li>
@@ -5313,79 +5313,132 @@ async function renderConsultationTab(task) {
     return html;
 }
 
+function getSiblingConsultationStatusBadgeClass(status) {
+    if (status === 'completed') return 'bg-success';
+    if (status === 'in_progress') return 'bg-primary';
+    if (status === 'skipped') return 'bg-secondary';
+    return 'bg-warning text-dark';
+}
+
+function buildSiblingConsultationOverlayBody(sibling) {
+    const formatDate = (value) => {
+        if (!value) return '-';
+        const date = new Date(value);
+        return Number.isNaN(date.getTime()) ? '-' : date.toLocaleString('tr-TR');
+    };
+
+    const departmentLabel = sibling.department_display
+        || departmentOptions.find((option) => option.value === sibling.department)?.label
+        || sibling.department
+        || '-';
+    const statusLabel = sibling.status_display
+        || statusOptions.find((option) => option.value === sibling.status)?.label
+        || sibling.status
+        || '-';
+    const files = Array.isArray(sibling.completion_files) ? sibling.completion_files : [];
+
+    let body = '';
+    if (sibling.notes) {
+        body += `
+            <div class="card mb-3">
+                <div class="card-header bg-light"><i class="fas fa-sticky-note me-2"></i>Danışma Notu</div>
+                <div class="card-body">
+                    <pre style="white-space:pre-wrap;font-family:inherit;margin:0;">${escapeHtml(sibling.notes)}</pre>
+                </div>
+            </div>
+        `;
+    }
+    if (sibling.completed_by_name || sibling.completed_at) {
+        body += `
+            <p class="text-muted small mb-3">
+                <i class="fas fa-check-circle me-1 text-success"></i>
+                ${sibling.completed_by_name ? `<strong>${escapeHtml(sibling.completed_by_name)}</strong> tarafından tamamlandı` : ''}
+                ${sibling.completed_at ? ` — ${formatDate(sibling.completed_at)}` : ''}
+            </p>
+        `;
+    }
+    body += `
+        <div class="card mb-3">
+            <div class="card-header bg-light"><i class="fas fa-upload me-2"></i>Yanıt Dosyaları</div>
+            <div class="card-body">
+                ${files.length > 0 ? files.map((file) => `
+                    <div class="d-flex align-items-center gap-2 mb-2">
+                        <i class="fas fa-file-alt text-success"></i>
+                        <a href="${file.file_url}" target="_blank" rel="noopener noreferrer">${escapeHtml(file.filename || file.name || 'Dosya')}</a>
+                        <span class="badge bg-light text-dark">${escapeHtml(file.file_type_display || file.file_type || '-')}</span>
+                        ${file.file_size ? `<small class="text-muted">${(file.file_size / 1024).toFixed(0)} KB</small>` : ''}
+                    </div>
+                `).join('') : '<p class="text-muted mb-0">Yanıt dosyası yüklenmemiş.</p>'}
+            </div>
+        </div>
+    `;
+
+    return {
+        departmentLabel,
+        statusLabel,
+        statusBadgeClass: getSiblingConsultationStatusBadgeClass(sibling.status),
+        body
+    };
+}
+
+async function showSiblingConsultationDetail(taskId) {
+    document.getElementById('sibling-task-overlay')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'sibling-task-overlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:1rem;';
+    overlay.innerHTML = `
+        <div style="background:#fff;border-radius:0.5rem;max-width:800px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 0.5rem 1rem rgba(0,0,0,.3);">
+            <div style="padding:1rem 1.25rem;border-bottom:1px solid #dee2e6;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
+                <h5 class="mb-0"><i class="fas fa-handshake me-2"></i>Danışma Detayı</h5>
+                <button type="button" class="btn-close" id="sibling-overlay-close" aria-label="Kapat"></button>
+            </div>
+            <div id="sibling-overlay-body" style="padding:1.25rem;overflow-y:auto;flex:1;">
+                <div class="text-center py-4">
+                    <div class="spinner-border" role="status"></div>
+                </div>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    const close = () => overlay.remove();
+    overlay.querySelector('#sibling-overlay-close')?.addEventListener('click', close);
+    overlay.addEventListener('click', (event) => {
+        if (event.target === overlay) close();
+    });
+
+    try {
+        const sibling = await getDepartmentTaskById(taskId);
+        const overlayContent = buildSiblingConsultationOverlayBody(sibling);
+        const header = overlay.querySelector('h5.mb-0');
+        if (header) {
+            header.innerHTML = `
+                <i class="fas fa-handshake me-2"></i>${escapeHtml(overlayContent.departmentLabel)}
+                <span class="badge ${overlayContent.statusBadgeClass} ms-2">${escapeHtml(overlayContent.statusLabel)}</span>
+            `;
+        }
+        const bodyEl = overlay.querySelector('#sibling-overlay-body');
+        if (bodyEl) {
+            bodyEl.innerHTML = overlayContent.body;
+        }
+    } catch (error) {
+        console.error('Error loading sibling consultation task:', error);
+        close();
+        showNotification('Danışma görevi yüklenemedi', 'error');
+    }
+}
+
 // Setup consultation tab event listeners after content is loaded
 function setupConsultationTabListeners(task) {
     const contentContainer = taskDetailsModal.container.querySelector('#action-content-consultation');
     if (!contentContainer) return;
 
-    // Sibling task detail click — custom overlay appended to body (avoids Bootstrap stacked-modal conflict)
-    contentContainer.querySelectorAll('.sibling-consult-task-row').forEach(row => {
-        row.addEventListener('click', () => {
-            let sibling;
-            try { sibling = JSON.parse(row.dataset.siblingTask); } catch { return; }
-            const formatDate = (v) => v ? new Date(v).toLocaleString('tr-TR') : '-';
-            const esc = (v) => String(v || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-            const statusBadgeCls = (s) => s === 'completed' ? 'bg-success' : s === 'in_progress' ? 'bg-primary' : s === 'skipped' ? 'bg-secondary' : 'bg-warning text-dark';
-
-            let body = '';
-            if (sibling.notes) {
-                body += `
-                    <div class="card mb-3">
-                        <div class="card-header bg-light"><i class="fas fa-sticky-note me-2"></i>Danışma Notu</div>
-                        <div class="card-body">
-                            <pre style="white-space:pre-wrap;font-family:inherit;margin:0;">${esc(sibling.notes)}</pre>
-                        </div>
-                    </div>
-                `;
-            }
-            if (sibling.completed_by_name || sibling.completed_at) {
-                body += `
-                    <p class="text-muted small mb-3">
-                        <i class="fas fa-check-circle me-1 text-success"></i>
-                        ${sibling.completed_by_name ? `<strong>${esc(sibling.completed_by_name)}</strong> tarafından tamamlandı` : ''}
-                        ${sibling.completed_at ? ` — ${formatDate(sibling.completed_at)}` : ''}
-                    </p>
-                `;
-            }
-            const files = Array.isArray(sibling.completion_files) ? sibling.completion_files : [];
-            body += `
-                <div class="card mb-3">
-                    <div class="card-header bg-light"><i class="fas fa-upload me-2"></i>Yanıt Dosyaları</div>
-                    <div class="card-body">
-                        ${files.length > 0 ? files.map(f => `
-                            <div class="d-flex align-items-center gap-2 mb-2">
-                                <i class="fas fa-file-alt text-success"></i>
-                                <a href="${f.file_url}" target="_blank">${esc(f.filename || f.name || 'Dosya')}</a>
-                                <span class="badge bg-light text-dark">${esc(f.file_type_display || f.file_type || '-')}</span>
-                                ${f.file_size ? `<small class="text-muted">${(f.file_size / 1024).toFixed(0)} KB</small>` : ''}
-                            </div>
-                        `).join('') : '<p class="text-muted mb-0">Yanıt dosyası yüklenmemiş.</p>'}
-                    </div>
-                </div>
-            `;
-
-            document.getElementById('sibling-task-overlay')?.remove();
-
-            const overlay = document.createElement('div');
-            overlay.id = 'sibling-task-overlay';
-            overlay.style.cssText = 'position:fixed;inset:0;z-index:2000;background:rgba(0,0,0,0.5);display:flex;align-items:center;justify-content:center;padding:1rem;';
-            overlay.innerHTML = `
-                <div style="background:#fff;border-radius:0.5rem;max-width:800px;width:100%;max-height:90vh;display:flex;flex-direction:column;box-shadow:0 0.5rem 1rem rgba(0,0,0,.3);">
-                    <div style="padding:1rem 1.25rem;border-bottom:1px solid #dee2e6;display:flex;align-items:center;justify-content:space-between;flex-shrink:0;">
-                        <h5 class="mb-0">
-                            <i class="fas fa-handshake me-2"></i>${esc(sibling.department_display)}
-                            <span class="badge ${statusBadgeCls(sibling.status)} ms-2">${esc(sibling.status_display)}</span>
-                        </h5>
-                        <button type="button" class="btn-close" id="sibling-overlay-close"></button>
-                    </div>
-                    <div style="padding:1.25rem;overflow-y:auto;flex:1;">${body}</div>
-                </div>
-            `;
-            document.body.appendChild(overlay);
-
-            const close = () => overlay.remove();
-            overlay.querySelector('#sibling-overlay-close').addEventListener('click', close);
-            overlay.addEventListener('click', (e) => { if (e.target === overlay) close(); });
+    contentContainer.querySelectorAll('.sibling-consult-task-row').forEach((row) => {
+        row.addEventListener('click', async () => {
+            const siblingTaskId = parseInt(row.dataset.siblingTaskId, 10);
+            if (!siblingTaskId) return;
+            await showSiblingConsultationDetail(siblingTaskId);
         });
     });
 
