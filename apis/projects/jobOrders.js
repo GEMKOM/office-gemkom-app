@@ -117,7 +117,7 @@ export async function getJobOrderByJobNo(jobNo) {
  */
 export async function getJobOrderProgressHistory(jobNo) {
     try {
-        const response = await authedFetch(`${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/progress-history/`);
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${jobNo}/progress-history/`);
 
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
@@ -740,15 +740,94 @@ export async function getJobOrderDropdown(includeAll = false) {
     try {
         const query = includeAll ? '?all=true' : '';
         const response = await authedFetch(`${backendBase}/projects/job-orders/dropdown/${query}`);
-        
+
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
         return data;
     } catch (error) {
         console.error('Error fetching job order dropdown:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get the production phases (phase mirror children) of an engineering job order.
+ * Endpoint: GET /projects/job-orders/{job_no}/phases/
+ * @param {string} jobNo - Engineering job order number (e.g. "270-01")
+ * @returns {Promise<Array>} Array of phase job orders (270-01/P1, ...)
+ */
+export async function getJobOrderPhases(jobNo) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${jobNo}/phases/`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching phases for job order ${jobNo}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Split an engineering job order into production phases.
+ * Endpoint: POST /projects/job-orders/{job_no}/create-phases/
+ * Each phase becomes a child job order "{job_no}/P{n}" in draft state.
+ * @param {string} jobNo - Engineering job order number
+ * @param {Array<Object>} phases - Phase specs, e.g.
+ *   [{ phase_number: 1, title: 'Faz 1', target_completion_date: '2026-07-01' }]
+ * @returns {Promise<Object>} Response with status, message, and created phases
+ */
+export async function createJobOrderPhases(jobNo, phases) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${jobNo}/create-phases/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ phases })
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData?.message || JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error creating phases for job order ${jobNo}:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Activate a production phase (draft → active), cascading to its tasks.
+ * Endpoint: POST /projects/job-orders/{phase_job_no}/activate-phase/
+ * @param {string} phaseJobNo - Phase job order number (e.g. "270-01/P1")
+ * @returns {Promise<Object>} Response with status, message, and job_order
+ */
+export async function activateJobOrderPhase(phaseJobNo) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${phaseJobNo}/activate-phase/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData?.message || JSON.stringify(errorData) || `HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error activating phase ${phaseJobNo}:`, error);
         throw error;
     }
 }

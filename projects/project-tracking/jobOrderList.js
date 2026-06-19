@@ -19,6 +19,9 @@ import {
     getJobOrderChildren,
     getJobOrderFiles,
     uploadJobOrderFile,
+    getJobOrderPhases,
+    createJobOrderPhases,
+    activateJobOrderPhase,
     JOB_ORDER_FILE_TYPE_OPTIONS,
     STATUS_OPTIONS
 } from '../../apis/projects/jobOrders.js';
@@ -83,6 +86,7 @@ let expandedRows = new Set(); // Track expanded rows by job_no
 let expandedDepartmentTasksRows = new Set(); // Track rows with expanded department tasks
 let IS_COMPACT_13_INCH = false; // Visual compactness flag used by cell formatters
 let childrenCache = new Map(); // Cache children data by parent job_no
+let hidePhases = false; // When true, production phase jobs (e.g. 270-01/P1) are hidden from the list
 let departmentTasksCache = new Map(); // Cache department tasks by parent job_no
 let expandedDepartmentTaskRows = new Set(); // Track expanded department task rows by task id
 let departmentTaskSubtasksCache = new Map(); // Cache subtasks by parent task id
@@ -1602,6 +1606,14 @@ function initializeFiltersComponent() {
         colSize: 2,
         helpText: 'İşaretlenirse ana ve alt işler birlikte gösterilir'
     });
+
+    jobOrderFilters.addCheckboxFilter({
+        id: 'hide-phases-filter',
+        label: 'Fazları Gizle',
+        checked: false,
+        colSize: 2,
+        helpText: 'İşaretlenirse üretim fazları (örn. 270-01/P1) listeden gizlenir'
+    });
 }
 
 // Initialize modal components
@@ -1926,6 +1938,9 @@ async function loadJobOrders() {
         // Checkbox label: "Tüm İşler (Ana + Alt)" - when checked, show all orders
         // Note: checkbox returns true when checked, false/undefined when unchecked
         const showAllOrders = filterValues['root-only-filter'] === true || filterValues['root-only-filter'] === 'true';
+
+        // Phase visibility toggle (client-side filter applied during merge/display)
+        hidePhases = filterValues['hide-phases-filter'] === true || filterValues['hide-phases-filter'] === 'true';
         
         if (showAllOrders) {
             // User checked the filter to show all orders (root + children)
@@ -1955,7 +1970,7 @@ async function loadJobOrders() {
         if (!showAllOrders) {
             jobOrders = mergeExpandedChildren(rootOrders);
         } else {
-            jobOrders = rootOrders;
+            jobOrders = hidePhases ? rootOrders.filter(j => !isPhaseJobRow(j)) : rootOrders;
         }
         
         // Update table data with pagination info
@@ -1994,10 +2009,19 @@ async function loadJobOrders() {
 }
 
 // Merge expanded children into the job orders array (recursive for nested children)
+// A row is a production phase mirror (e.g. 270-01/P1) when source_job_order is set.
+function isPhaseJobRow(row) {
+    return !!(row && (row.is_phase_job || row.source_job_order));
+}
+
 function mergeExpandedChildren(rootOrders, level = 0) {
     const merged = [];
-    
+
     rootOrders.forEach(rootOrder => {
+        // Skip production phases when the "Fazları Gizle" toggle is on
+        if (hidePhases && isPhaseJobRow(rootOrder)) {
+            return;
+        }
         // Set hierarchy level
         rootOrder.hierarchy_level = level;
         merged.push(rootOrder);
@@ -2087,10 +2111,13 @@ function updateTableDataOnly() {
     const filterValues = jobOrderFilters ? jobOrderFilters.getFilterValues() : {};
     const showAllOrders = filterValues['root-only-filter'] === true || filterValues['root-only-filter'] === 'true';
     
+    // Keep the phase-visibility flag in sync with the checkbox for live re-renders
+    hidePhases = filterValues['hide-phases-filter'] === true || filterValues['hide-phases-filter'] === 'true';
+
     let dataToDisplay;
     if (showAllOrders) {
-        // If showing all orders, use current jobOrders as-is
-        dataToDisplay = jobOrders;
+        // If showing all orders, use current jobOrders as-is (minus phases when hidden)
+        dataToDisplay = hidePhases ? jobOrders.filter(j => !isPhaseJobRow(j)) : jobOrders;
     } else {
         // Derive root orders from current jobOrders and merge expanded children
         const rootOrders = jobOrders.filter(j => !j.parent);
@@ -2590,7 +2617,8 @@ let jobOrderTabCache = {
     drawingReleasesJobNo: null,
     ncrs: null,
     costSummary: null,
-    progressHistory: null
+    progressHistory: null,
+    phases: null
 };
 
 window.viewJobOrder = async function(jobNo) {
@@ -2608,7 +2636,8 @@ window.viewJobOrder = async function(jobNo) {
             drawingReleasesJobNo: null,
             ncrs: null,
             costSummary: null,
-            progressHistory: null
+            progressHistory: null,
+            phases: null
         };
         
         // Fetch only basic job order data
@@ -2707,8 +2736,25 @@ window.viewJobOrder = async function(jobNo) {
         };
         
         // Build Temel Bilgiler tab content
+        // Phase banner: shown when the job is itself a phase, or has been split into phases.
+        const phaseBannerHtml = jobOrder.is_phase_job
+            ? `<div class="alert alert-info d-flex align-items-center mb-4" role="alert">
+                    <i class="fas fa-layer-group me-2"></i>
+                    <div>
+                        Bu bir <strong>üretim fazıdır</strong>${jobOrder.phase_number ? ` (Faz ${jobOrder.phase_number})` : ''}.
+                        ${jobOrder.source_job_order ? `Kaynak mühendislik iş emri: <a href="#" class="phase-source-link" data-job-no="${jobOrder.source_job_order}"><strong>${jobOrder.source_job_order}</strong></a>` : ''}
+                    </div>
+               </div>`
+            : (jobOrder.has_phases
+                ? `<div class="alert alert-secondary d-flex align-items-center mb-4" role="alert">
+                        <i class="fas fa-layer-group me-2"></i>
+                        <div>Bu iş emri <strong>üretim fazlarına</strong> bölünmüştür. Fazları "Fazlar" sekmesinden görüntüleyebilirsiniz.</div>
+                   </div>`
+                : '');
+
         const temelBilgilerHtml = `
             <div style="padding: 20px;">
+                ${phaseBannerHtml}
                 <!-- Genel Bilgiler Section -->
                 <div class="mb-4">
                     <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
@@ -2937,6 +2983,17 @@ window.viewJobOrder = async function(jobNo) {
                 customContent: '<div id="children-table-container"></div>'
             });
         }
+
+        // Add Fazlar (production phases) tab for engineering jobs (not for phase mirrors themselves)
+        if (!jobOrder.is_phase_job) {
+            viewJobOrderModal.addTab({
+                id: 'fazlar',
+                label: 'Fazlar',
+                icon: 'fas fa-layer-group',
+                iconColor: 'text-primary',
+                customContent: '<div id="phases-container" style="padding: 20px;"></div>'
+            });
+        }
         
         // Add Files tab
         viewJobOrderModal.addTab({
@@ -3020,6 +3077,21 @@ window.viewJobOrder = async function(jobNo) {
                     showTargetDateRevisionModal(jn, currentDate);
                 });
             } catch (e) {}
+
+            // Wire up the "source engineering job" link in the phase banner
+            try {
+                const srcLink = viewJobOrderModal?.content?.querySelector?.('.phase-source-link');
+                if (srcLink) {
+                    srcLink.addEventListener('click', (e) => {
+                        e.preventDefault();
+                        const sourceJobNo = e.currentTarget.getAttribute('data-job-no');
+                        if (sourceJobNo) {
+                            viewJobOrderModal.hide();
+                            viewJobOrder(sourceJobNo);
+                        }
+                    });
+                }
+            } catch (e) {}
         }, 50);
         
         // Set up tab click handlers for lazy loading
@@ -3070,6 +3142,9 @@ function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate, formatCur
                     break;
                 case 'alt-gorevler':
                     await loadChildrenTab(jobNo, getStatusBadgeClass);
+                    break;
+                case 'fazlar':
+                    await loadPhasesTab(jobNo, getStatusBadgeClass);
                     break;
                 case 'dosyalar':
                     await loadFilesTab(jobNo);
@@ -3536,6 +3611,302 @@ function renderChildrenTable(children, getStatusBadgeClass) {
             }
         ]
     });
+}
+
+// =========================================================================
+// Production Phases tab
+// =========================================================================
+
+// Load Phases Tab
+async function loadPhasesTab(jobNo, getStatusBadgeClass) {
+    if (jobOrderTabCache.phases !== null) {
+        renderPhasesTab(jobOrderTabCache.phases, jobNo, getStatusBadgeClass);
+        return;
+    }
+
+    const container = viewJobOrderModal.content.querySelector('#phases-container');
+    if (!container) return;
+
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
+
+    try {
+        const phases = await getJobOrderPhases(jobNo);
+        jobOrderTabCache.phases = Array.isArray(phases) ? phases : extractResultsFromResponse(phases);
+        renderPhasesTab(jobOrderTabCache.phases, jobNo, getStatusBadgeClass);
+    } catch (error) {
+        console.error('Error loading phases:', error);
+        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Fazlar yüklenirken hata oluştu.</div>';
+    }
+}
+
+// Render Phases Tab (toolbar + table)
+function renderPhasesTab(phases, jobNo, getStatusBadgeClass) {
+    const container = viewJobOrderModal.content.querySelector('#phases-container');
+    if (!container) return;
+
+    const canEdit = canEditJobOrders();
+    const createBtnHtml = canEdit
+        ? `<button class="btn btn-sm btn-primary" id="create-phases-btn">
+                <i class="fas fa-plus me-1"></i>Faz Oluştur
+           </button>`
+        : '';
+
+    container.innerHTML = `
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h6 class="mb-0"><i class="fas fa-layer-group me-2 text-primary"></i>Üretim Fazları</h6>
+            ${createBtnHtml}
+        </div>
+        <div id="phases-form-container"></div>
+        <div id="phases-table-container"></div>
+    `;
+
+    renderPhasesTable(phases, jobNo, getStatusBadgeClass);
+
+    if (canEdit) {
+        const btn = container.querySelector('#create-phases-btn');
+        if (btn) btn.addEventListener('click', () => showCreatePhasesForm(jobNo, phases));
+    }
+}
+
+function renderPhasesTable(phases, jobNo, getStatusBadgeClass) {
+    const tableContainer = viewJobOrderModal.content.querySelector('#phases-table-container');
+    if (!tableContainer) return;
+
+    if (!phases || phases.length === 0) {
+        tableContainer.innerHTML = '<p class="text-muted text-center py-3">Bu iş emri için henüz üretim fazı oluşturulmamış.</p>';
+        return;
+    }
+
+    const canEdit = canEditJobOrders();
+
+    new TableComponent('phases-table-container', {
+        title: 'Üretim Fazları',
+        icon: 'fas fa-layer-group',
+        iconColor: 'text-primary',
+        columns: [
+            {
+                field: 'phase_number',
+                label: 'Faz',
+                sortable: true,
+                formatter: (value) => value != null ? `<strong>P${value}</strong>` : '-'
+            },
+            {
+                field: 'job_no',
+                label: 'İş Emri No',
+                sortable: true,
+                formatter: (value) => `<strong>${value || '-'}</strong>`
+            },
+            {
+                field: 'title',
+                label: 'Başlık',
+                sortable: true,
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'status_display',
+                label: 'Durum',
+                sortable: true,
+                formatter: (value, row) => {
+                    if (!value || value === '-') return '-';
+                    return `<span class="status-badge ${getStatusBadgeClass(row.status)}">${value}</span>`;
+                }
+            },
+            {
+                field: 'completion_percentage',
+                label: 'Tamamlanma',
+                sortable: true,
+                formatter: (value) => value ? `${parseFloat(value)}%` : '0%'
+            }
+        ],
+        data: phases,
+        sortable: true,
+        pagination: false,
+        exportable: false,
+        refreshable: false,
+        small: true,
+        striped: true,
+        emptyMessage: 'Üretim fazı bulunamadı',
+        emptyIcon: 'fas fa-layer-group',
+        actions: [
+            {
+                key: 'activate',
+                label: 'Etkinleştir',
+                icon: 'fas fa-play',
+                class: 'btn-outline-success',
+                visible: (row) => canEdit && row.status === 'draft',
+                onClick: (row) => activatePhase(row.job_no, jobNo)
+            },
+            {
+                key: 'view',
+                label: 'Detay',
+                icon: 'fas fa-eye',
+                class: 'btn-outline-info',
+                onClick: (row) => {
+                    viewJobOrderModal.hide();
+                    viewJobOrder(row.job_no);
+                }
+            }
+        ]
+    });
+}
+
+// Inline form to define and create one or more production phases
+function showCreatePhasesForm(jobNo, existingPhases) {
+    const formContainer = viewJobOrderModal.content.querySelector('#phases-form-container');
+    if (!formContainer) return;
+
+    // Next phase number continues after the highest existing one
+    const existingNumbers = (existingPhases || [])
+        .map(p => parseInt(p.phase_number, 10))
+        .filter(n => !isNaN(n));
+    let nextNumber = existingNumbers.length ? Math.max(...existingNumbers) + 1 : 1;
+
+    const buildRow = (phaseNumber) => `
+        <div class="row g-2 align-items-end mb-2 phase-form-row" data-phase-number="${phaseNumber}">
+            <div class="col-2">
+                <label class="form-label small text-muted mb-1">Faz No</label>
+                <input type="number" class="form-control form-control-sm phase-number-input" value="${phaseNumber}" min="1">
+            </div>
+            <div class="col-5">
+                <label class="form-label small text-muted mb-1">Başlık</label>
+                <input type="text" class="form-control form-control-sm phase-title-input" placeholder="Faz ${phaseNumber}">
+            </div>
+            <div class="col-3">
+                <label class="form-label small text-muted mb-1">Hedef Tarih</label>
+                <input type="date" class="form-control form-control-sm phase-date-input">
+            </div>
+            <div class="col-2">
+                <button type="button" class="btn btn-sm btn-outline-danger remove-phase-row-btn w-100" title="Satırı kaldır">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </div>
+    `;
+
+    formContainer.innerHTML = `
+        <div class="card mb-3">
+            <div class="card-body">
+                <h6 class="card-title mb-3"><i class="fas fa-plus-circle me-2 text-primary"></i>Yeni Üretim Fazları</h6>
+                <div class="alert alert-light small mb-3">
+                    Her faz, bu iş emrinin altında <strong>${jobNo}/P{n}</strong> şeklinde bir alt iş emri olarak oluşturulur.
+                    Mühendislik dışı departman görevleri her faza kopyalanır.
+                </div>
+                <div id="phase-form-rows">
+                    ${buildRow(nextNumber)}
+                </div>
+                <div class="d-flex justify-content-between mt-3">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" id="add-phase-row-btn">
+                        <i class="fas fa-plus me-1"></i>Satır Ekle
+                    </button>
+                    <div>
+                        <button type="button" class="btn btn-sm btn-light" id="cancel-phases-btn">İptal</button>
+                        <button type="button" class="btn btn-sm btn-primary" id="submit-phases-btn">
+                            <i class="fas fa-check me-1"></i>Oluştur
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    `;
+
+    const rowsContainer = formContainer.querySelector('#phase-form-rows');
+
+    const wireRemoveButtons = () => {
+        rowsContainer.querySelectorAll('.remove-phase-row-btn').forEach(btn => {
+            btn.onclick = () => {
+                if (rowsContainer.querySelectorAll('.phase-form-row').length > 1) {
+                    btn.closest('.phase-form-row').remove();
+                }
+            };
+        });
+    };
+    wireRemoveButtons();
+
+    formContainer.querySelector('#add-phase-row-btn').onclick = () => {
+        nextNumber += 1;
+        rowsContainer.insertAdjacentHTML('beforeend', buildRow(nextNumber));
+        wireRemoveButtons();
+    };
+
+    formContainer.querySelector('#cancel-phases-btn').onclick = () => {
+        formContainer.innerHTML = '';
+    };
+
+    formContainer.querySelector('#submit-phases-btn').onclick = async () => {
+        const rows = Array.from(rowsContainer.querySelectorAll('.phase-form-row'));
+        const phases = [];
+        for (const row of rows) {
+            const numberVal = parseInt(row.querySelector('.phase-number-input').value, 10);
+            const titleVal = row.querySelector('.phase-title-input').value.trim();
+            const dateVal = row.querySelector('.phase-date-input').value;
+            if (isNaN(numberVal) || numberVal < 1) {
+                showNotification('Geçerli bir faz numarası girin.', 'error');
+                return;
+            }
+            const spec = { phase_number: numberVal };
+            if (titleVal) spec.title = titleVal;
+            if (dateVal) spec.target_completion_date = dateVal;
+            phases.push(spec);
+        }
+        if (phases.length === 0) {
+            showNotification('En az bir faz tanımlayın.', 'error');
+            return;
+        }
+
+        const submitBtn = formContainer.querySelector('#submit-phases-btn');
+        submitBtn.disabled = true;
+        submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Oluşturuluyor...';
+        try {
+            const result = await createJobOrderPhases(jobNo, phases);
+            showNotification(result?.message || 'Üretim fazları oluşturuldu.', 'success');
+            // Invalidate caches and refresh the tab + underlying list
+            jobOrderTabCache.phases = null;
+            jobOrderTabCache.children = null;
+            childrenCache.delete(jobNo);
+            const getStatusBadgeClass = (status) => {
+                switch (status) {
+                    case 'active': return 'status-blue';
+                    case 'draft': return 'status-grey';
+                    case 'on_hold': return 'status-yellow';
+                    case 'completed': return 'status-green';
+                    case 'cancelled': return 'status-red';
+                    default: return 'status-grey';
+                }
+            };
+            await loadPhasesTab(jobNo, getStatusBadgeClass);
+            loadJobOrders();
+        } catch (error) {
+            console.error('Error creating phases:', error);
+            showNotification(error.message || 'Fazlar oluşturulurken hata oluştu.', 'error');
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '<i class="fas fa-check me-1"></i>Oluştur';
+        }
+    };
+}
+
+// Activate a single production phase (draft -> active)
+async function activatePhase(phaseJobNo, parentJobNo) {
+    if (!confirm(`${phaseJobNo} fazı etkinleştirilecek. Devam edilsin mi?`)) return;
+    try {
+        const result = await activateJobOrderPhase(phaseJobNo);
+        showNotification(result?.message || 'Üretim fazı etkinleştirildi.', 'success');
+        jobOrderTabCache.phases = null;
+        const getStatusBadgeClass = (status) => {
+            switch (status) {
+                case 'active': return 'status-blue';
+                case 'draft': return 'status-grey';
+                case 'on_hold': return 'status-yellow';
+                case 'completed': return 'status-green';
+                case 'cancelled': return 'status-red';
+                default: return 'status-grey';
+            }
+        };
+        await loadPhasesTab(parentJobNo, getStatusBadgeClass);
+        loadJobOrders();
+    } catch (error) {
+        console.error('Error activating phase:', error);
+        showNotification(error.message || 'Faz etkinleştirilirken hata oluştu.', 'error');
+    }
 }
 
 // Load Files Tab
