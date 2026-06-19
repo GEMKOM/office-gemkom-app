@@ -775,22 +775,25 @@ export async function getJobOrderPhases(jobNo) {
 }
 
 /**
- * Split an engineering job order into production phases.
+ * Split an engineering job order into delivery phases with per-product quantities.
  * Endpoint: POST /projects/job-orders/{job_no}/create-phases/
- * Each phase becomes a child job order "{job_no}/P{n}" in draft state.
+ * Creates a phase node "{job_no}/P{n}" per phase and an allocation
+ * "{product}/P{n}" per product/phase quantity, all in draft state.
  * @param {string} jobNo - Engineering job order number
  * @param {Array<Object>} phases - Phase specs, e.g.
  *   [{ phase_number: 1, title: 'Faz 1', target_completion_date: '2026-07-01' }]
+ * @param {Array<Object>} allocations - Per-product quantities, e.g.
+ *   [{ product_job_no: '270-01-01', quantities: { 1: 1, 2: 1 } }]
  * @returns {Promise<Object>} Response with status, message, and created phases
  */
-export async function createJobOrderPhases(jobNo, phases) {
+export async function createJobOrderPhases(jobNo, phases, allocations) {
     try {
         const response = await authedFetch(`${backendBase}/projects/job-orders/${jobNo}/create-phases/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
-            body: JSON.stringify({ phases })
+            body: JSON.stringify({ phases, allocations })
         });
 
         if (!response.ok) {

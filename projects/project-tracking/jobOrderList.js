@@ -3645,7 +3645,8 @@ function renderPhasesTab(phases, jobNo, getStatusBadgeClass) {
     if (!container) return;
 
     const canEdit = canEditJobOrders();
-    const createBtnHtml = canEdit
+    // Phases are defined once; only offer creation when none exist yet.
+    const createBtnHtml = (canEdit && (!phases || phases.length === 0))
         ? `<button class="btn btn-sm btn-primary" id="create-phases-btn">
                 <i class="fas fa-plus me-1"></i>Faz Oluştur
            </button>`
@@ -3662,10 +3663,8 @@ function renderPhasesTab(phases, jobNo, getStatusBadgeClass) {
 
     renderPhasesTable(phases, jobNo, getStatusBadgeClass);
 
-    if (canEdit) {
-        const btn = container.querySelector('#create-phases-btn');
-        if (btn) btn.addEventListener('click', () => showCreatePhasesForm(jobNo, phases));
-    }
+    const btn = container.querySelector('#create-phases-btn');
+    if (btn) btn.addEventListener('click', () => showCreatePhasesForm(jobNo));
 }
 
 function renderPhasesTable(phases, jobNo, getStatusBadgeClass) {
@@ -3750,130 +3749,187 @@ function renderPhasesTable(phases, jobNo, getStatusBadgeClass) {
     });
 }
 
-// Inline form to define and create one or more production phases
-function showCreatePhasesForm(jobNo, existingPhases) {
+const PHASE_STATUS_BADGE = (status) => ({
+    active: 'status-blue', draft: 'status-grey', on_hold: 'status-yellow',
+    completed: 'status-green', cancelled: 'status-red'
+}[status] || 'status-grey');
+
+// Inline matrix form: define phases (columns) and allocate each product's
+// quantity across them (rows). Each product's row must sum to its quantity.
+function showCreatePhasesForm(jobNo) {
     const formContainer = viewJobOrderModal.content.querySelector('#phases-form-container');
     if (!formContainer) return;
 
-    // Next phase number continues after the highest existing one
-    const existingNumbers = (existingPhases || [])
-        .map(p => parseInt(p.phase_number, 10))
-        .filter(n => !isNaN(n));
-    let nextNumber = existingNumbers.length ? Math.max(...existingNumbers) + 1 : 1;
+    const jobOrder = jobOrderTabCache.jobOrder || {};
+    // Product masters = direct children that are not themselves phase mirrors.
+    const masters = (jobOrder.children || []).filter(c => !c.is_phase_job && !c.source_job_order);
+    if (masters.length === 0) {
+        showNotification('Bu iş emrinin fazlanacak ürün alt işi bulunamadı.', 'error');
+        return;
+    }
 
-    const buildRow = (phaseNumber) => `
-        <div class="row g-2 align-items-end mb-2 phase-form-row" data-phase-number="${phaseNumber}">
-            <div class="col-2">
-                <label class="form-label small text-muted mb-1">Faz No</label>
-                <input type="number" class="form-control form-control-sm phase-number-input" value="${phaseNumber}" min="1">
-            </div>
-            <div class="col-5">
-                <label class="form-label small text-muted mb-1">Başlık</label>
-                <input type="text" class="form-control form-control-sm phase-title-input" placeholder="Faz ${phaseNumber}">
-            </div>
-            <div class="col-3">
-                <label class="form-label small text-muted mb-1">Hedef Tarih</label>
-                <input type="date" class="form-control form-control-sm phase-date-input">
-            </div>
-            <div class="col-2">
-                <button type="button" class="btn btn-sm btn-outline-danger remove-phase-row-btn w-100" title="Satırı kaldır">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        </div>
-    `;
+    // State: phases (columns) and per-master allocation arrays aligned to phases.
+    let phases = [{ title: '', date: '' }, { title: '', date: '' }];
+    const alloc = {};
+    masters.forEach(m => { alloc[m.job_no] = phases.map(() => 0); });
 
-    formContainer.innerHTML = `
-        <div class="card mb-3">
-            <div class="card-body">
-                <h6 class="card-title mb-3"><i class="fas fa-plus-circle me-2 text-primary"></i>Yeni Üretim Fazları</h6>
-                <div class="alert alert-light small mb-3">
-                    Her faz, bu iş emrinin altında <strong>${jobNo}/P{n}</strong> şeklinde bir alt iş emri olarak oluşturulur.
-                    Mühendislik dışı departman görevleri her faza kopyalanır.
-                </div>
-                <div id="phase-form-rows">
-                    ${buildRow(nextNumber)}
-                </div>
-                <div class="d-flex justify-content-between mt-3">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" id="add-phase-row-btn">
-                        <i class="fas fa-plus me-1"></i>Satır Ekle
-                    </button>
-                    <div>
-                        <button type="button" class="btn btn-sm btn-light" id="cancel-phases-btn">İptal</button>
-                        <button type="button" class="btn btn-sm btn-primary" id="submit-phases-btn">
-                            <i class="fas fa-check me-1"></i>Oluştur
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    `;
+    function syncWidths() {
+        masters.forEach(m => {
+            const arr = alloc[m.job_no];
+            while (arr.length < phases.length) arr.push(0);
+            while (arr.length > phases.length) arr.pop();
+        });
+    }
 
-    const rowsContainer = formContainer.querySelector('#phase-form-rows');
+    // Pull current DOM values back into state (used before re-rendering columns).
+    function readInputs() {
+        formContainer.querySelectorAll('.phase-def').forEach((el, i) => {
+            if (!phases[i]) return;
+            phases[i].title = el.querySelector('.phase-title-input').value;
+            phases[i].date = el.querySelector('.phase-date-input').value;
+        });
+        formContainer.querySelectorAll('.alloc-input').forEach(inp => {
+            const mj = inp.getAttribute('data-master');
+            const pi = parseInt(inp.getAttribute('data-phase'), 10);
+            const v = parseInt(inp.value, 10);
+            if (alloc[mj]) alloc[mj][pi] = isNaN(v) ? 0 : v;
+        });
+    }
 
-    const wireRemoveButtons = () => {
-        rowsContainer.querySelectorAll('.remove-phase-row-btn').forEach(btn => {
-            btn.onclick = () => {
-                if (rowsContainer.querySelectorAll('.phase-form-row').length > 1) {
-                    btn.closest('.phase-form-row').remove();
-                }
+    function updateRemaining() {
+        formContainer.querySelectorAll('tbody tr').forEach(tr => {
+            const mj = tr.getAttribute('data-master');
+            const qty = parseInt(tr.getAttribute('data-qty'), 10);
+            const sum = (alloc[mj] || []).reduce((a, b) => a + (b || 0), 0);
+            const remaining = qty - sum;
+            const cell = tr.querySelector('.remaining-cell');
+            if (!cell) return;
+            cell.textContent = remaining;
+            cell.className = 'text-center remaining-cell ' + (remaining === 0 ? 'text-success' : 'text-danger fw-bold');
+        });
+    }
+
+    function attachHandlers() {
+        formContainer.querySelectorAll('.alloc-input').forEach(inp => {
+            inp.addEventListener('input', () => {
+                const mj = inp.getAttribute('data-master');
+                const pi = parseInt(inp.getAttribute('data-phase'), 10);
+                const v = parseInt(inp.value, 10);
+                if (alloc[mj]) alloc[mj][pi] = isNaN(v) ? 0 : v;
+                updateRemaining();
+            });
+        });
+        const addBtn = formContainer.querySelector('#add-phase-col-btn');
+        if (addBtn) addBtn.onclick = () => { readInputs(); phases.push({ title: '', date: '' }); render(); };
+        formContainer.querySelectorAll('.remove-phase-btn').forEach(b => {
+            b.onclick = () => {
+                readInputs();
+                const idx = parseInt(b.getAttribute('data-idx'), 10);
+                phases.splice(idx, 1);
+                masters.forEach(m => alloc[m.job_no].splice(idx, 1));
+                render();
             };
         });
-    };
-    wireRemoveButtons();
+        formContainer.querySelector('#cancel-phases-btn').onclick = () => { formContainer.innerHTML = ''; };
+        formContainer.querySelector('#submit-phases-btn').onclick = onSubmit;
+    }
 
-    formContainer.querySelector('#add-phase-row-btn').onclick = () => {
-        nextNumber += 1;
-        rowsContainer.insertAdjacentHTML('beforeend', buildRow(nextNumber));
-        wireRemoveButtons();
-    };
+    function render() {
+        syncWidths();
 
-    formContainer.querySelector('#cancel-phases-btn').onclick = () => {
-        formContainer.innerHTML = '';
-    };
+        const phaseDefsHtml = phases.map((p, i) => `
+            <div class="phase-def card p-2 me-2 mb-2" style="min-width:190px;">
+                <div class="fw-bold small mb-1">Faz P${i + 1}
+                    ${phases.length > 1 ? `<button type="button" class="btn btn-sm btn-link text-danger p-0 float-end remove-phase-btn" data-idx="${i}" title="Fazı kaldır"><i class="fas fa-times"></i></button>` : ''}
+                </div>
+                <input type="text" class="form-control form-control-sm mb-1 phase-title-input" placeholder="Başlık (örn. Faz 1 - Acil)" value="${(p.title || '').replace(/"/g, '&quot;')}">
+                <input type="date" class="form-control form-control-sm phase-date-input" value="${p.date || ''}">
+            </div>
+        `).join('');
 
-    formContainer.querySelector('#submit-phases-btn').onclick = async () => {
-        const rows = Array.from(rowsContainer.querySelectorAll('.phase-form-row'));
-        const phases = [];
-        for (const row of rows) {
-            const numberVal = parseInt(row.querySelector('.phase-number-input').value, 10);
-            const titleVal = row.querySelector('.phase-title-input').value.trim();
-            const dateVal = row.querySelector('.phase-date-input').value;
-            if (isNaN(numberVal) || numberVal < 1) {
-                showNotification('Geçerli bir faz numarası girin.', 'error');
-                return;
-            }
-            const spec = { phase_number: numberVal };
-            if (titleVal) spec.title = titleVal;
-            if (dateVal) spec.target_completion_date = dateVal;
-            phases.push(spec);
-        }
-        if (phases.length === 0) {
-            showNotification('En az bir faz tanımlayın.', 'error');
+        const headCols = phases.map((p, i) => `<th class="text-center">P${i + 1}</th>`).join('');
+        const rowsHtml = masters.map(m => {
+            const cells = phases.map((p, i) => `
+                <td class="text-center">
+                    <input type="number" min="0" class="form-control form-control-sm alloc-input" style="width:72px;display:inline-block"
+                           data-master="${m.job_no}" data-phase="${i}" value="${alloc[m.job_no][i] || 0}">
+                </td>`).join('');
+            return `<tr data-master="${m.job_no}" data-qty="${m.quantity}">
+                <td><strong>${m.job_no}</strong><br><span class="small text-muted">${m.title || ''}</span></td>
+                <td class="text-center fw-bold">${m.quantity}</td>
+                ${cells}
+                <td class="text-center remaining-cell"></td>
+            </tr>`;
+        }).join('');
+
+        formContainer.innerHTML = `
+          <div class="card mb-3"><div class="card-body">
+            <h6 class="card-title mb-3"><i class="fas fa-plus-circle me-2 text-primary"></i>Üretim Fazları Oluştur</h6>
+            <div class="alert alert-light small mb-3">
+                Her faz <strong>${jobNo}/P{n}</strong> teslimat düğümü olarak; her ürün miktarı da
+                <strong>${jobNo}-XX/P{n}</strong> alt işi olarak oluşturulur. Her ürünün faz miktarları
+                toplamı, ürün miktarına eşit olmalıdır (<strong>Kalan = 0</strong>).
+            </div>
+            <div class="d-flex flex-wrap align-items-stretch mb-2">
+                ${phaseDefsHtml}
+                <button type="button" class="btn btn-sm btn-outline-secondary mb-2" id="add-phase-col-btn" style="align-self:flex-start;">
+                    <i class="fas fa-plus me-1"></i>Faz Ekle
+                </button>
+            </div>
+            <div class="table-responsive" style="max-height:360px;overflow:auto;">
+              <table class="table table-sm table-bordered align-middle mb-0">
+                <thead class="table-light" style="position:sticky;top:0;z-index:1;">
+                    <tr><th>Ürün</th><th class="text-center">Miktar</th>${headCols}<th class="text-center">Kalan</th></tr>
+                </thead>
+                <tbody>${rowsHtml}</tbody>
+              </table>
+            </div>
+            <div class="d-flex justify-content-end mt-3 gap-2">
+              <button type="button" class="btn btn-sm btn-light" id="cancel-phases-btn">İptal</button>
+              <button type="button" class="btn btn-sm btn-primary" id="submit-phases-btn"><i class="fas fa-check me-1"></i>Oluştur</button>
+            </div>
+          </div></div>
+        `;
+        attachHandlers();
+        updateRemaining();
+    }
+
+    async function onSubmit() {
+        readInputs();
+
+        // Validate: every product's phase quantities must sum exactly to its quantity.
+        const errors = [];
+        masters.forEach(m => {
+            const sum = alloc[m.job_no].reduce((a, b) => a + (b || 0), 0);
+            if (sum !== m.quantity) errors.push(`${m.job_no} (${sum}/${m.quantity})`);
+        });
+        if (errors.length) {
+            showNotification('Şu ürünlerin faz miktarları toplamı hatalı: ' + errors.join(', '), 'error');
             return;
         }
+
+        const phasesPayload = phases.map((p, i) => {
+            const spec = { phase_number: i + 1 };
+            if (p.title && p.title.trim()) spec.title = p.title.trim();
+            if (p.date) spec.target_completion_date = p.date;
+            return spec;
+        });
+        const allocPayload = masters.map(m => {
+            const quantities = {};
+            alloc[m.job_no].forEach((v, i) => { if (v > 0) quantities[i + 1] = v; });
+            return { product_job_no: m.job_no, quantities };
+        }).filter(a => Object.keys(a.quantities).length > 0);
 
         const submitBtn = formContainer.querySelector('#submit-phases-btn');
         submitBtn.disabled = true;
         submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Oluşturuluyor...';
         try {
-            const result = await createJobOrderPhases(jobNo, phases);
+            const result = await createJobOrderPhases(jobNo, phasesPayload, allocPayload);
             showNotification(result?.message || 'Üretim fazları oluşturuldu.', 'success');
-            // Invalidate caches and refresh the tab + underlying list
             jobOrderTabCache.phases = null;
             jobOrderTabCache.children = null;
             childrenCache.delete(jobNo);
-            const getStatusBadgeClass = (status) => {
-                switch (status) {
-                    case 'active': return 'status-blue';
-                    case 'draft': return 'status-grey';
-                    case 'on_hold': return 'status-yellow';
-                    case 'completed': return 'status-green';
-                    case 'cancelled': return 'status-red';
-                    default: return 'status-grey';
-                }
-            };
-            await loadPhasesTab(jobNo, getStatusBadgeClass);
+            await loadPhasesTab(jobNo, PHASE_STATUS_BADGE);
             loadJobOrders();
         } catch (error) {
             console.error('Error creating phases:', error);
@@ -3881,7 +3937,9 @@ function showCreatePhasesForm(jobNo, existingPhases) {
             submitBtn.disabled = false;
             submitBtn.innerHTML = '<i class="fas fa-check me-1"></i>Oluştur';
         }
-    };
+    }
+
+    render();
 }
 
 // Activate a single production phase (draft -> active)
@@ -3891,17 +3949,7 @@ async function activatePhase(phaseJobNo, parentJobNo) {
         const result = await activateJobOrderPhase(phaseJobNo);
         showNotification(result?.message || 'Üretim fazı etkinleştirildi.', 'success');
         jobOrderTabCache.phases = null;
-        const getStatusBadgeClass = (status) => {
-            switch (status) {
-                case 'active': return 'status-blue';
-                case 'draft': return 'status-grey';
-                case 'on_hold': return 'status-yellow';
-                case 'completed': return 'status-green';
-                case 'cancelled': return 'status-red';
-                default: return 'status-grey';
-            }
-        };
-        await loadPhasesTab(parentJobNo, getStatusBadgeClass);
+        await loadPhasesTab(parentJobNo, PHASE_STATUS_BADGE);
         loadJobOrders();
     } catch (error) {
         console.error('Error activating phase:', error);
