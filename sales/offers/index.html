@@ -59,6 +59,11 @@
         .kalemler-offer-actions { display: inline-flex; gap: 6px; justify-content: flex-end; }
         .kalemler-offer-actions .btn { min-width: 44px; }
         .kalemler-offer-actions .kalemler-paste-children { min-width: 36px; padding-left: 8px; padding-right: 8px; }
+        .paste-column-map { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+        .paste-column-card { border: 1px solid #e9ecef; border-radius: 8px; padding: 8px 10px; background: #fafbfc; }
+        .paste-column-card .paste-column-sample { color: #6c757d; font-size: .78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
+        .paste-preview-table { max-height: 260px; overflow: auto; border: 1px solid #e9ecef; border-radius: 8px; }
+        .paste-preview-table table { margin-bottom: 0; font-size: .875rem; }
         .kalemler-offer-children { margin-top: 8px; margin-left: 10px; padding-left: 10px; border-left: 2px solid #eef1f5; display: flex; flex-direction: column; gap: 10px; }
         .kalemler-drag-over { outline: 2px solid rgba(13,110,253,.35); background: rgba(13,110,253,.04); }
         /* Unsaved-new rows: amber left accent */
@@ -212,6 +217,7 @@
     <div id="submit-customer-confirm-modal-container"></div>
     <div id="action-confirm-modal-container"></div>
     <div id="convert-modal-container"></div>
+    <div id="paste-items-modal-container"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>

@@ -13,6 +13,7 @@ export class DisplayModal {
             editButtonText: 'Düzenle',
             size: 'lg', // sm, lg, xl
             fullscreen: false, // Enable fullscreen mode
+            backdropStatic: false, // true = do not close when clicking outside
             ...options
         };
         
@@ -36,8 +37,9 @@ export class DisplayModal {
     createModal() {
         // Create modal HTML
         const modalSizeClass = this.options.fullscreen ? 'modal-fullscreen' : `modal-${this.options.size}`;
+        const backdropAttr = this.options.backdropStatic ? ' data-bs-backdrop="static"' : '';
         const modalHtml = `
-            <div class="modal fade display-modal-container" id="displayModal" tabindex="-1">
+            <div class="modal fade display-modal-container" id="displayModal" tabindex="-1"${backdropAttr}>
                 <div class="modal-dialog ${modalSizeClass}">
                     <div class="modal-content compact">
                         <div class="modal-header compact">
@@ -582,7 +584,8 @@ export class DisplayModal {
     
     // Show modal
     show() {
-        const modalInstance = bootstrap.Modal.getOrCreateInstance(this.modal);
+        const modalOptions = this.options.backdropStatic ? { backdrop: 'static' } : {};
+        const modalInstance = bootstrap.Modal.getOrCreateInstance(this.modal, modalOptions);
         // Remove inert when showing the modal
         this.modal.removeAttribute('inert');
         modalInstance.show();

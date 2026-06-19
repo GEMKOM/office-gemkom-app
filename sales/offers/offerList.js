@@ -103,8 +103,6 @@ let customerOptions = [];
 let paymentTermsOptions = [];
 let offer = null;
 let offerId = null;
-/** Per-tab loaded state: only one request per tab while modal is open */
-let offerTabLoaded = { items: false, files: false, consultations: false, pricing: false, approval: false };
 let templates = [];
 let offerFilesComponent = null;
 const refreshList = async () => { await loadOffers(); };
@@ -614,8 +612,11 @@ function initModals() {
         title: 'Teklif Detayı',
         icon: 'fas fa-file-invoice-dollar',
         size: 'xl',
-        showEditButton: false
+        showEditButton: false,
+        backdropStatic: true
     });
+
+    setupOfferModalTabHandler();
 
     approvalConfirmModal = new ConfirmationModal('approval-confirm-modal-container', {
         title: 'Onaya Gönder',
@@ -716,7 +717,6 @@ window.viewOffer = async function (id, options = {}) {
     try {
         offer = await getOffer(id);
         offerId = offer.id;
-        offerTabLoaded = { items: false, files: false, consultations: false, pricing: false, approval: false };
         viewOfferModal.clearData();
         viewOfferModal.setTitle(`${offer.offer_no} — ${offer.title || 'Teklif'}`);
 
@@ -774,7 +774,6 @@ window.viewOffer = async function (id, options = {}) {
 
         viewOfferModal.render();
         attachOfferModalListeners();
-        setupApprovalTabHandler();
 
         // Reset files component so it binds to the current modal instance
         offerFilesComponent = null;
@@ -808,17 +807,30 @@ window.viewOffer = async function (id, options = {}) {
     }
 };
 
-async function loadTabDataIfNeeded(tabId) {
+async function loadTabData(tabId) {
     if (!offerId || !offer) return;
     const pane = viewOfferModal?.container?.querySelector(`#tab-${tabId}-pane`);
     if (!pane) return;
 
-    if (tabId === 'genel') return;
-
-    if (tabId === 'kalemler' && !offerTabLoaded.items) {
+    if (tabId === 'genel') {
+        pane.innerHTML = TAB_LOADING_HTML;
         try {
-            offerTabLoaded.items = true;
-            pane.innerHTML = `<div class="offer-tab-content">${buildItemsTab()}</div>`;
+            offer = await getOffer(offerId);
+            offerId = offer.id;
+            const statusLabel = OFFER_STATUS_MAP[offer.status] || offer.status;
+            const statusColor = OFFER_STATUS_COLORS[offer.status] || 'secondary';
+            viewOfferModal.setTitle(`${offer.offer_no} — ${offer.title || 'Teklif'}`);
+            pane.innerHTML = `<div class="offer-tab-content">${buildGenelTab(statusLabel, statusColor)}</div>`;
+            updateOfferModalFooter('genel');
+        } catch (e) {
+            pane.innerHTML = `<div class="offer-tab-content"><div class="text-danger text-center py-4">Teklif bilgileri yüklenemedi.</div></div>`;
+        }
+        return;
+    }
+
+    if (tabId === 'kalemler') {
+        pane.innerHTML = `<div class="offer-tab-content">${buildItemsTab()}</div>`;
+        try {
             initKalemlerTab();
         } catch (e) {
             pane.innerHTML = `<div class="offer-tab-content"><div class="text-danger text-center py-4">Kalemler yüklenemedi.</div></div>`;
@@ -826,24 +838,25 @@ async function loadTabDataIfNeeded(tabId) {
         return;
     }
 
-    if (tabId === 'dosyalar' && !offerTabLoaded.files) {
+    if (tabId === 'dosyalar') {
+        pane.innerHTML = TAB_LOADING_HTML;
         try {
             const data = await listOfferFiles(offerId);
             offer.files = Array.isArray(data) ? data : (data.results || []);
-            offerTabLoaded.files = true;
+            offerFilesComponent = null;
             pane.innerHTML = `<div class="offer-tab-content">${buildFilesTab()}</div>`;
-            renderOfferFilesTab();
+            await renderOfferFilesTab();
         } catch (e) {
             pane.innerHTML = `<div class="offer-tab-content"><div class="text-danger text-center py-4">Dosyalar yüklenemedi.</div></div>`;
         }
         return;
     }
 
-    if (tabId === 'consultations' && !offerTabLoaded.consultations) {
+    if (tabId === 'consultations') {
+        pane.innerHTML = TAB_LOADING_HTML;
         try {
             const data = await getConsultations(offerId);
             offer.consultations = Array.isArray(data) ? data : (data.results || data);
-            offerTabLoaded.consultations = true;
             pane.innerHTML = `<div class="offer-tab-content">${buildConsultationsTab()}</div>`;
             renderConsultationsTable();
         } catch (e) {
@@ -852,7 +865,8 @@ async function loadTabDataIfNeeded(tabId) {
         return;
     }
 
-    if (tabId === 'pricing' && !offerTabLoaded.pricing) {
+    if (tabId === 'pricing') {
+        pane.innerHTML = TAB_LOADING_HTML;
         try {
             const [freshOffer, itemsData] = await Promise.all([
                 getOffer(offerId),
@@ -866,7 +880,6 @@ async function loadTabDataIfNeeded(tabId) {
             return;
         }
 
-        // Price history is optional for the table; if it fails we still show items
         try {
             const priceHistoryData = await getPriceHistory(offerId);
             offer.price_revisions = Array.isArray(priceHistoryData) ? priceHistoryData : (priceHistoryData.results || []);
@@ -875,43 +888,41 @@ async function loadTabDataIfNeeded(tabId) {
             offer.price_revisions = [];
         }
 
-        offerTabLoaded.pricing = true;
         pane.innerHTML = `<div class="offer-tab-content">${buildPricingTab()}</div>`;
         attachPricingTabListeners();
         return;
     }
 
-    if (tabId === 'approval' && !offerTabLoaded.approval) {
-        offerTabLoaded.approval = true;
-        if (offer.approval_round > 0) loadApprovalStatus();
+    if (tabId === 'approval') {
+        pane.innerHTML = `<div class="offer-tab-content">${buildApprovalTab()}</div>`;
+        await loadApprovalStatus();
     }
 }
 
-function setupApprovalTabHandler() {
-    const modal = viewOfferModal.modal;
-    if (!modal) return;
-    const tabButtons = modal.querySelectorAll('[data-bs-toggle="tab"]');
-    tabButtons.forEach(btn => {
-        btn.addEventListener('shown.bs.tab', (e) => {
-            const target = e.target.getAttribute('data-bs-target');
-            if (!target) return;
-            const match = target.match(/#tab-(.+)-pane/);
-            const tabId = match ? match[1] : 'genel';
-            updateOfferModalFooter(tabId);
-            loadTabDataIfNeeded(tabId);
+function setupOfferModalTabHandler() {
+    const modal = viewOfferModal?.modal;
+    if (!modal || setupOfferModalTabHandler._bound) return;
+    setupOfferModalTabHandler._bound = true;
 
-            // Keep URL in sync with active tab for sharable links
-            try {
-                const url = new URL(window.location.href);
-                if (offer?.offer_no) {
-                    url.searchParams.set('offer_no', String(offer.offer_no));
-                }
-                url.searchParams.set('tab', tabId);
-                window.history.replaceState({}, '', url);
-            } catch (err) {
-                console.error('Failed to sync URL with active offer tab:', err);
+    modal.addEventListener('shown.bs.tab', (e) => {
+        const tabTrigger = e.target.closest('[data-bs-target]');
+        const target = tabTrigger?.getAttribute('data-bs-target');
+        if (!target) return;
+        const match = target.match(/#tab-(.+)-pane/);
+        const tabId = match ? match[1] : 'genel';
+        updateOfferModalFooter(tabId);
+        void loadTabData(tabId);
+
+        try {
+            const url = new URL(window.location.href);
+            if (offer?.offer_no) {
+                url.searchParams.set('offer_no', String(offer.offer_no));
             }
-        });
+            url.searchParams.set('tab', tabId);
+            window.history.replaceState({}, '', url);
+        } catch (err) {
+            console.error('Failed to sync URL with active offer tab:', err);
+        }
     });
 }
 
@@ -1829,7 +1840,12 @@ function buildItemsTab() {
       <div class="kalemler-layout">
         <div class="kalemler-panel kalemler-catalog">
           <div class="kalemler-panel-header">
-            <div class="fw-semibold"><i class="fas fa-sitemap me-2 text-primary"></i>Katalog</div>
+            <div class="d-flex align-items-center justify-content-between gap-2 mb-0">
+              <div class="fw-semibold"><i class="fas fa-sitemap me-2 text-primary"></i>Katalog</div>
+              <a href="../catalog/" target="_blank" rel="noopener noreferrer" class="btn btn-sm btn-outline-primary flex-shrink-0" title="Ürün kataloğunu yeni sekmede aç">
+                <i class="fas fa-external-link-alt me-1"></i>Katalogu Aç
+              </a>
+            </div>
             <div class="kalemler-search mt-2">
               <input id="catalog-search" class="form-control form-control-sm" placeholder="Ara (en az 2 karakter)..." />
             </div>
@@ -1841,9 +1857,14 @@ function buildItemsTab() {
 
         <div class="kalemler-panel kalemler-offer">
           <div class="kalemler-panel-header">
-            <div class="fw-semibold d-flex align-items-center gap-2">
-              <i class="fas fa-list me-1 text-primary"></i>Teklif Kalemleri
-              <span id="staged-count-badge" class="badge bg-warning text-dark border" style="display:none;"></span>
+            <div class="d-flex align-items-center justify-content-between gap-2">
+              <div class="fw-semibold d-flex align-items-center gap-2">
+                <i class="fas fa-list me-1 text-primary"></i>Teklif Kalemleri
+                <span id="staged-count-badge" class="badge bg-warning text-dark border" style="display:none;"></span>
+              </div>
+              <button type="button" id="kalemler-paste-root-btn" class="btn btn-sm btn-outline-primary flex-shrink-0" title="Excel/tablodan kalem yapıştır">
+                <i class="fas fa-paste me-1"></i>Yapıştır
+              </button>
             </div>
           </div>
           <div id="offer-panel" class="kalemler-panel-body">
@@ -1948,23 +1969,93 @@ function addCustomStaged({ parentRef = null, parentId = null } = {}) {
     setTimeout(() => focusStagedTitleInput(ref), 50);
 }
 
-function parseSubItemPasteText(text) {
-    if (!text || !String(text).trim()) return [];
-    return String(text)
+function parsePasteTable(text) {
+    if (!text || !String(text).trim()) return { rows: [], columnCount: 0 };
+    const rows = String(text)
         .split(/\r?\n/)
-        .map((line) => (line.split('\t')[0] || '').trim())
-        .filter(Boolean);
+        .map((line) => line.split('\t').map((cell) => cell.trim()))
+        .filter((row) => row.some((cell) => cell !== ''));
+    const columnCount = rows.length ? Math.max(...rows.map((r) => r.length)) : 0;
+    for (const row of rows) {
+        while (row.length < columnCount) row.push('');
+    }
+    return { rows, columnCount };
 }
 
-function addCustomStagedBulk(titles, { parentRef = null, parentId = null } = {}) {
-    if (!titles?.length) return 0;
-    for (const title of titles) {
+function getPasteColumnSample(rows, colIndex) {
+    for (const row of rows) {
+        const value = (row[colIndex] || '').trim();
+        if (value) return value.length > 42 ? `${value.slice(0, 39)}…` : value;
+    }
+    return '(boş)';
+}
+
+function guessDefaultColumnRoles(rows, columnCount) {
+    const roles = Array(columnCount).fill('ignore');
+    if (!columnCount) return roles;
+
+    let qtyCol = -1;
+    for (let c = columnCount - 1; c >= 0; c--) {
+        const values = rows.map((r) => (r[c] || '').trim()).filter(Boolean);
+        if (!values.length) continue;
+        const numericCount = values.filter((v) => /^\d+([.,]\d+)?$/.test(v.replace(',', '.'))).length;
+        if (numericCount / values.length >= 0.75) {
+            qtyCol = c;
+            break;
+        }
+    }
+    if (qtyCol >= 0) roles[qtyCol] = 'quantity';
+
+    for (let c = 0; c < columnCount; c++) {
+        if (c === qtyCol) continue;
+        if (rows.some((r) => (r[c] || '').trim())) {
+            roles[c] = 'title';
+            break;
+        }
+    }
+    return roles;
+}
+
+function buildPasteItemsFromMapping(rows, roles, mergeSeparator = ' - ') {
+    const titleCols = roles.map((role, index) => (role === 'title' ? index : -1)).filter((i) => i >= 0);
+    const qtyCol = roles.findIndex((role) => role === 'quantity');
+    const separator = mergeSeparator ?? ' - ';
+    const items = [];
+
+    for (const row of rows) {
+        if (!row.some((cell) => cell.trim())) continue;
+        const titleParts = titleCols.map((col) => (row[col] || '').trim()).filter(Boolean);
+        const title = titleParts.join(separator).trim();
+        if (!title) continue;
+
+        let quantity = 1;
+        if (qtyCol >= 0) {
+            const raw = (row[qtyCol] || '').trim().replace(',', '.');
+            const parsed = parseFloat(raw);
+            if (Number.isFinite(parsed) && parsed > 0) {
+                quantity = Math.max(1, Math.round(parsed));
+            }
+        }
+        items.push({ title, quantity });
+    }
+    return items;
+}
+
+function addCustomStagedBulk(items, { parentRef = null, parentId = null } = {}) {
+    if (!items?.length) return 0;
+    let count = 0;
+    for (const entry of items) {
+        const title = (typeof entry === 'string' ? entry : entry?.title || '').trim();
+        if (!title) continue;
+        const quantity = typeof entry === 'string'
+            ? 1
+            : Math.max(1, parseInt(entry.quantity, 10) || 1);
         const ref = nextKalemlerRef();
         const item = {
             _ref: ref,
             template_node: null,
             title_override: title,
-            quantity: 1,
+            quantity,
             parent_ref: parentRef,
             parent: parentId,
             _label: title,
@@ -1977,67 +2068,228 @@ function addCustomStagedBulk(titles, { parentRef = null, parentId = null } = {})
             kalemlerState.staged.push(item);
         }
         kalemlerState.stagedRefs[ref] = item;
+        count += 1;
     }
-    renderOfferItemsTree();
-    updateKalemlerFooterStagedState();
-    return titles.length;
+    if (count > 0) {
+        renderOfferItemsTree();
+        updateKalemlerFooterStagedState();
+    }
+    return count;
+}
+
+function bindKalemlerPanelActions() {
+    const editable = !CLOSED_STATUSES.includes(offer?.status || '');
+    const pasteBtn = document.getElementById('kalemler-paste-root-btn');
+    if (pasteBtn) {
+        pasteBtn.disabled = !editable;
+        pasteBtn.onclick = () => {
+            if (!editable) return;
+            showPasteSubItemsModal({});
+        };
+    }
 }
 
 function showPasteSubItemsModal({ parentRef = null, parentId = null, parentTitle = '' } = {}) {
-    const modalId = 'paste-sub-items-modal';
-    document.getElementById(modalId)?.remove();
+    const isSubItem = Boolean(parentRef || parentId);
+    const modalTitle = isSubItem ? 'Alt Kalemleri Yapıştır' : 'Kalemleri Yapıştır';
 
-    const modalEl = document.createElement('div');
-    modalEl.id = modalId;
-    modalEl.className = 'modal fade';
-    modalEl.tabIndex = -1;
-    modalEl.innerHTML = `
-      <div class="modal-dialog modal-dialog-centered">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Alt Kalemleri Yapıştır</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            ${parentTitle ? `<p class="text-muted small mb-2">Üst kalem: <strong>${escapeHtml(parentTitle)}</strong></p>` : ''}
-            <p class="text-muted small mb-2">Her satır bir alt kalem olarak eklenecek.</p>
-            <textarea id="paste-sub-items-textarea" class="form-control" rows="8" placeholder="Satır satır alt kalem adlarını yapıştırın..."></textarea>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
-            <button type="button" class="btn btn-primary" id="paste-sub-items-submit">Ekle</button>
-          </div>
-        </div>
-      </div>
-    `;
-    document.body.appendChild(modalEl);
+    let parsedRows = [];
+    let columnCount = 0;
+    let columnRoles = [];
+    let mergeSeparator = ' - ';
 
-    const bsModal = new bootstrap.Modal(modalEl);
-    const textarea = modalEl.querySelector('#paste-sub-items-textarea');
-    const submitBtn = modalEl.querySelector('#paste-sub-items-submit');
+    const modal = new EditModal('paste-items-modal-container', {
+        title: modalTitle,
+        icon: 'fas fa-paste',
+        size: 'xl',
+        showEditButton: false,
+        saveButtonText: 'Ekle'
+    });
+    modal.clearAll();
+    modal.addSection({ title: 'Tablo Verisi', icon: 'fas fa-table', iconColor: 'text-primary' });
+    modal.addField({
+        id: 'paste_data',
+        name: 'paste_data',
+        label: 'Yapıştır',
+        type: 'textarea',
+        required: false,
+        rows: 6,
+        placeholder: 'Tablo verisini buraya yapıştırın (sütunlar tab ile ayrılır)...',
+        help: 'Excel veya tablodan kopyalayıp yapıştırın. Sütunları eşleştirin ve önizlemeyi kontrol edin.',
+        colSize: 12
+    });
 
-    const submit = () => {
-        const titles = parseSubItemPasteText(textarea.value);
-        if (!titles.length) {
+    modal.onSaveCallback(async () => {
+        const items = buildPasteItemsFromMapping(parsedRows, columnRoles, mergeSeparator);
+        if (!items.length) {
             showNotification('Geçerli satır bulunamadı', 'warning');
             return;
         }
-        const count = addCustomStagedBulk(titles, { parentRef, parentId });
-        showNotification(`${count} alt kalem eklendi`, 'success');
-        bsModal.hide();
+        const count = addCustomStagedBulk(items, { parentRef, parentId });
+        showNotification(`${count} ${isSubItem ? 'alt kalem' : 'kalem'} eklendi`, 'success');
+        modal.hide();
+    });
+
+    modal.render();
+
+    const form = modal.container.querySelector('#edit-modal-form');
+    const saveBtn = modal.container.querySelector('#save-edit-btn');
+    if (saveBtn) saveBtn.disabled = true;
+
+    if (parentTitle && form) {
+        const firstSection = form.querySelector('.form-section');
+        if (firstSection) {
+            const info = document.createElement('p');
+            info.className = 'text-muted small mb-2';
+            info.innerHTML = `Üst kalem: <strong>${escapeHtml(parentTitle)}</strong>`;
+            firstSection.insertBefore(info, firstSection.firstChild);
+        }
+    }
+
+    const mappingSection = document.createElement('div');
+    mappingSection.id = 'paste-mapping-section';
+    mappingSection.className = 'form-section compact mb-3';
+    mappingSection.style.display = 'none';
+    mappingSection.innerHTML = `
+      <h6 class="section-subtitle compact text-primary"><i class="fas fa-columns me-2"></i>Sütun Eşleştirme</h6>
+      <div id="paste-column-map" class="paste-column-map mb-3"></div>
+      <div id="paste-merge-row" class="row g-2 mb-3" style="display:none;">
+        <div class="col-md-4">
+          <label class="form-label small mb-1">Başlık birleştirme ayırıcısı</label>
+          <input type="text" id="paste-merge-separator" class="form-control form-control-sm" value=" - " placeholder="Örn: - veya /" />
+        </div>
+      </div>
+      <h6 class="section-subtitle compact text-success d-flex align-items-center justify-content-between">
+        <span><i class="fas fa-eye me-2"></i>Önizleme</span>
+        <span id="paste-preview-count" class="badge bg-secondary"></span>
+      </h6>
+      <div id="paste-preview-wrap" class="paste-preview-table"></div>
+    `;
+    if (form) form.appendChild(mappingSection);
+
+    const textarea = modal.container.querySelector('[data-field-id="paste_data"] .field-input');
+    const columnMapEl = mappingSection.querySelector('#paste-column-map');
+    const mergeRow = mappingSection.querySelector('#paste-merge-row');
+    const mergeInput = mappingSection.querySelector('#paste-merge-separator');
+    const previewWrap = mappingSection.querySelector('#paste-preview-wrap');
+    const previewCount = mappingSection.querySelector('#paste-preview-count');
+
+    const getTitleColumnCount = () => columnRoles.filter((role) => role === 'title').length;
+
+    const setSaveEnabled = (enabled) => {
+        if (saveBtn) saveBtn.disabled = !enabled;
     };
 
-    submitBtn.addEventListener('click', submit);
-    textarea.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-            e.preventDefault();
-            submit();
+    const renderColumnMapping = () => {
+        columnMapEl.innerHTML = '';
+        for (let col = 0; col < columnCount; col++) {
+            const card = document.createElement('div');
+            card.className = 'paste-column-card';
+            card.innerHTML = `
+              <div class="fw-semibold small">Sütun ${col + 1}</div>
+              <div class="paste-column-sample" title="${escapeHtml(getPasteColumnSample(parsedRows, col))}">${escapeHtml(getPasteColumnSample(parsedRows, col))}</div>
+              <select class="form-select form-select-sm mt-2 paste-col-role" data-col="${col}">
+                <option value="ignore">Yok say</option>
+                <option value="title">Başlık</option>
+                <option value="quantity">Adet</option>
+              </select>
+            `;
+            const select = card.querySelector('.paste-col-role');
+            select.value = columnRoles[col] || 'ignore';
+            select.addEventListener('change', (e) => {
+                const index = parseInt(e.target.dataset.col, 10);
+                const newRole = e.target.value;
+                if (newRole === 'quantity') {
+                    columnRoles = columnRoles.map((role, i) => (i === index ? 'quantity' : (role === 'quantity' ? 'ignore' : role)));
+                } else {
+                    columnRoles[index] = newRole;
+                }
+                renderColumnMapping();
+                renderPreview();
+            });
+            columnMapEl.appendChild(card);
         }
-    });
-    modalEl.addEventListener('shown.bs.modal', () => textarea.focus());
-    modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove());
+        mergeRow.style.display = getTitleColumnCount() > 1 ? '' : 'none';
+    };
 
-    bsModal.show();
+    const renderPreview = () => {
+        const items = buildPasteItemsFromMapping(parsedRows, columnRoles, mergeSeparator);
+        const hasTitleCol = getTitleColumnCount() > 0;
+
+        previewCount.textContent = `${items.length} kalem`;
+        setSaveEnabled(hasTitleCol && items.length > 0);
+
+        if (!hasTitleCol) {
+            previewWrap.innerHTML = '<div class="text-warning small p-3">En az bir sütun "Başlık" olarak seçilmelidir.</div>';
+            return;
+        }
+        if (!items.length) {
+            previewWrap.innerHTML = '<div class="text-muted small p-3">Geçerli satır bulunamadı.</div>';
+            return;
+        }
+
+        const previewLimit = 100;
+        const previewItems = items.slice(0, previewLimit);
+        const extra = items.length > previewLimit
+            ? `<tr><td colspan="3" class="text-muted small text-center">… ve ${items.length - previewLimit} satır daha</td></tr>`
+            : '';
+
+        previewWrap.innerHTML = `
+          <table class="table table-sm table-striped mb-0">
+            <thead class="table-light sticky-top">
+              <tr><th style="width:48px;">#</th><th>Başlık</th><th style="width:72px;">Adet</th></tr>
+            </thead>
+            <tbody>
+              ${previewItems.map((item, i) => `
+                <tr>
+                  <td class="text-muted">${i + 1}</td>
+                  <td>${escapeHtml(item.title)}</td>
+                  <td>${item.quantity}</td>
+                </tr>
+              `).join('')}
+              ${extra}
+            </tbody>
+          </table>
+        `;
+    };
+
+    const parseAndRefresh = () => {
+        const parsed = parsePasteTable(textarea?.value || '');
+        parsedRows = parsed.rows;
+        columnCount = parsed.columnCount;
+
+        if (!columnCount) {
+            mappingSection.style.display = 'none';
+            setSaveEnabled(false);
+            return;
+        }
+
+        columnRoles = guessDefaultColumnRoles(parsedRows, columnCount);
+        mergeSeparator = mergeInput.value || ' - ';
+        mappingSection.style.display = '';
+        renderColumnMapping();
+        renderPreview();
+    };
+
+    mergeInput.addEventListener('input', (e) => {
+        mergeSeparator = e.target.value;
+        renderPreview();
+    });
+
+    if (textarea) {
+        textarea.classList.add('font-monospace');
+        textarea.addEventListener('input', parseAndRefresh);
+        textarea.addEventListener('paste', () => setTimeout(parseAndRefresh, 0));
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                e.preventDefault();
+                if (saveBtn && !saveBtn.disabled) saveBtn.click();
+            }
+        });
+    }
+
+    modal.modal.addEventListener('shown.bs.modal', () => textarea?.focus(), { once: true });
+    modal.show();
 }
 
 function focusStagedTitleInput(ref) {
@@ -2250,6 +2502,7 @@ function initKalemlerTab() {
     kalemlerState.pendingDeletes = new Set();
 
     setupCatalogSearch();
+    bindKalemlerPanelActions();
     void loadTemplatesIntoCatalog();
     void reloadOfferItems();
     updateKalemlerFooterStagedState();
@@ -2536,7 +2789,23 @@ function renderOfferItemsTree() {
 
     const combinedRoots = buildKalemlerCombinedTree();
     if (!combinedRoots.length) {
-        panel.innerHTML = `<div class="text-muted text-center py-3"><i class="fas fa-inbox me-2"></i>Henüz kalem eklenmemiş.</div>`;
+        panel.innerHTML = editable
+            ? `<div class="text-center py-4">
+                <div class="text-muted mb-3"><i class="fas fa-inbox me-2"></i>Henüz kalem eklenmemiş.</div>
+                <div class="d-flex flex-wrap justify-content-center gap-2">
+                  <button type="button" class="btn btn-sm btn-outline-primary" id="kalemler-paste-root-empty-btn">
+                    <i class="fas fa-paste me-1"></i>Excel'den Yapıştır
+                  </button>
+                  <button type="button" class="btn btn-sm btn-outline-secondary" id="kalemler-add-custom-empty-btn">
+                    <i class="fas fa-plus me-1"></i>Özel Kalem Ekle
+                  </button>
+                </div>
+                <p class="text-muted small mt-3 mb-0">Katalogdan sürükleyerek de ekleyebilirsiniz.</p>
+              </div>`
+            : `<div class="text-muted text-center py-3"><i class="fas fa-inbox me-2"></i>Henüz kalem eklenmemiş.</div>`;
+        panel.querySelector('#kalemler-paste-root-empty-btn')?.addEventListener('click', () => showPasteSubItemsModal({}));
+        panel.querySelector('#kalemler-add-custom-empty-btn')?.addEventListener('click', () => addCustomStaged({}));
+        bindKalemlerPanelActions();
         return;
     }
 
@@ -2546,6 +2815,7 @@ function renderOfferItemsTree() {
         root.appendChild(renderKalemlerUnifiedRow(node, 0, editable));
     }
     panel.appendChild(root);
+    bindKalemlerPanelActions();
 }
 
 function buildKalemlerCombinedTree() {
