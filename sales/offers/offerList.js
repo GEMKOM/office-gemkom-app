@@ -2368,8 +2368,8 @@ function flattenStaged(items) {
         const row = { _ref: item._ref, quantity: item.quantity };
         if (item.template_node) row.template_node = item.template_node;
         if (item.title_override) row.title_override = item.title_override;
-        if (item.parent_ref) row.parent_ref = item.parent_ref;
-        if (item.parent) row.parent = item.parent;
+        if (item.parent_ref) row.parent_ref = item.parent_ref;     // child of a staged item
+        else if (item.parent) row.parent = item.parent;            // child of an existing item
         result.push(row);
         for (const child of (item._children || [])) walk(child);
     };
@@ -2388,43 +2388,47 @@ async function submitStagedItems() {
     try {
         if (!kalemlerHasChanges()) return;
 
-        // 1) Add new staged items
+        // 1) Add new staged items. Clear them from local state the moment the
+        //    request succeeds, so a failure in a later step (or a user retry)
+        //    can never re-POST and create duplicate items server-side.
         if (Object.keys(kalemlerState.stagedRefs || {}).length > 0) {
             await addOfferItems(kalemlerState.offerId, flattenStaged(kalemlerState.staged));
+            kalemlerState.staged = [];
+            kalemlerState.stagedRefs = {};
         }
 
-        // 2) Bulk update existing items
+        // 2) Bulk update existing items.
         const editsPayload = Object.entries(kalemlerState.pendingEdits || {})
             .filter(([id]) => !kalemlerState.pendingDeletes.has(parseInt(id, 10)))
             .map(([id, edits]) => ({ id: parseInt(id, 10), ...edits }));
         if (editsPayload.length > 0) {
             await bulkUpdateOfferItems(kalemlerState.offerId, editsPayload);
         }
+        kalemlerState.pendingEdits = {};
 
-        // 3) Bulk delete
+        // 3) Bulk delete.
         if ((kalemlerState.pendingDeletes?.size || 0) > 0) {
             await bulkDeleteOfferItems(kalemlerState.offerId, [...kalemlerState.pendingDeletes]);
         }
-
-        kalemlerState.staged = [];
-        kalemlerState.stagedRefs = {};
-        kalemlerState.pendingEdits = {};
         kalemlerState.pendingDeletes = new Set();
 
-        // add-items returns only created rows; always reload the full tree from the server
-        const data = await getOfferItems(kalemlerState.offerId);
-        kalemlerState.offerItems = sortOfferItemApiTree(
-            Array.isArray(data) ? data : (data.results || data.items || [])
-        );
-        kalemlerState.offerItemsFlat = {};
-        buildOfferItemsFlatMap(kalemlerState.offerItems);
-
-        renderOfferItemsTree();
-        updateKalemlerFooterStagedState();
         showNotification('Değişiklikler kaydedildi', 'success');
     } catch (e) {
         showNotification(parseError(e, 'Değişiklikler kaydedilemedi'), 'error');
     } finally {
+        // Always resync with the server's truth: any partially-applied changes
+        // are reflected, and stale local state can never drive a duplicate
+        // re-save. add-items returns only created rows, so reload the full tree.
+        try {
+            const data = await getOfferItems(kalemlerState.offerId);
+            kalemlerState.offerItems = sortOfferItemApiTree(
+                Array.isArray(data) ? data : (data.results || data.items || [])
+            );
+            kalemlerState.offerItemsFlat = {};
+            buildOfferItemsFlatMap(kalemlerState.offerItems);
+            renderOfferItemsTree();
+            updateKalemlerFooterStagedState();
+        } catch (_) { /* keep current view if the reload fails */ }
         if (btn) {
             btn.disabled = false;
             btn.innerHTML = oldHtml || '<i class="fas fa-check me-1"></i>Teklife Ekle';
@@ -3029,9 +3033,37 @@ function markDeleteExistingItem(id) {
     updateKalemlerFooterStagedState();
 }
 
+// Effective parent of an existing item, honouring any pending reparent edit.
+function getEffectiveParentId(id) {
+    const edit = kalemlerState.pendingEdits?.[id];
+    if (edit && edit.parent !== undefined) return edit.parent;
+    const it = kalemlerState.offerItemsFlat?.[id];
+    return it ? (it.parent ?? null) : null;
+}
+
+// An item may not be reparented under itself or any of its own descendants —
+// doing so creates a parent↔child cycle that hides the subtree and breaks
+// conversion to job orders.
+function wouldCreateParentCycle(itemId, newParentId) {
+    let cur = newParentId;
+    const seen = new Set();
+    while (cur != null) {
+        if (cur === itemId) return true;
+        if (seen.has(cur)) break; // guard against pre-existing loops
+        seen.add(cur);
+        cur = getEffectiveParentId(cur);
+    }
+    return false;
+}
+
 function reassignExistingParent(itemId, newParentId) {
+    if (newParentId != null && wouldCreateParentCycle(itemId, newParentId)) {
+        showNotification('Bir kalem kendi alt kaleminin altına taşınamaz.', 'error');
+        return;
+    }
     if (!kalemlerState.pendingEdits[itemId]) kalemlerState.pendingEdits[itemId] = {};
     kalemlerState.pendingEdits[itemId].parent = newParentId; // null => root
+    renderOfferItemsTree();
     updateKalemlerFooterStagedState();
 }
 
