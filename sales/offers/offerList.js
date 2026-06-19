@@ -901,10 +901,60 @@ async function loadTabData(tabId) {
     }
 }
 
+function getOfferTabIdFromTrigger(trigger) {
+    const target = trigger?.getAttribute?.('data-bs-target') || '';
+    const match = target.match(/#tab-(.+)-pane/);
+    return match ? match[1] : null;
+}
+
+function getActiveOfferTabId() {
+    const activeBtn = viewOfferModal?.container?.querySelector('.nav-link.active[data-bs-target]');
+    return getOfferTabIdFromTrigger(activeBtn) || 'genel';
+}
+
+function getDiscardChangesMessage(tabId) {
+    if (tabId === 'kalemler' && kalemlerHasChanges()) {
+        return 'Kaydedilmemiş kalem değişiklikleri var. Bu değişiklikleri kaybederek devam etmek istiyor musunuz?';
+    }
+    if (tabId === 'pricing' && pricingV3State?.hasUnsavedChanges) {
+        return 'Kaydedilmemiş fiyat değişiklikleri var. Bu değişiklikleri kaybederek devam etmek istiyor musunuz?';
+    }
+    return '';
+}
+
+function discardOfferTabChanges(tabId) {
+    if (tabId === 'kalemler') {
+        kalemlerState.staged = [];
+        kalemlerState.stagedRefs = {};
+        kalemlerState.pendingEdits = {};
+        kalemlerState.pendingDeletes = new Set();
+        updateKalemlerFooterStagedState();
+        return;
+    }
+    if (tabId === 'pricing') {
+        markPricingV3Unsaved(false);
+    }
+}
+
+function confirmDiscardOfferTabChanges(tabId) {
+    const message = getDiscardChangesMessage(tabId);
+    if (!message) return true;
+    const confirmed = window.confirm(message);
+    if (confirmed) discardOfferTabChanges(tabId);
+    return confirmed;
+}
+
 function setupOfferModalTabHandler() {
     const modal = viewOfferModal?.modal;
     if (!modal || setupOfferModalTabHandler._bound) return;
     setupOfferModalTabHandler._bound = true;
+
+    modal.addEventListener('show.bs.tab', (e) => {
+        const currentTabId = getOfferTabIdFromTrigger(e.relatedTarget) || getActiveOfferTabId();
+        if (!confirmDiscardOfferTabChanges(currentTabId)) {
+            e.preventDefault();
+        }
+    });
 
     modal.addEventListener('shown.bs.tab', (e) => {
         const tabTrigger = e.target.closest('[data-bs-target]');
@@ -924,6 +974,12 @@ function setupOfferModalTabHandler() {
             window.history.replaceState({}, '', url);
         } catch (err) {
             console.error('Failed to sync URL with active offer tab:', err);
+        }
+    });
+
+    modal.addEventListener('hide.bs.modal', (e) => {
+        if (!confirmDiscardOfferTabChanges(getActiveOfferTabId())) {
+            e.preventDefault();
         }
     });
 }
