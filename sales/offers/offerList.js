@@ -874,7 +874,9 @@ async function loadTabData(tabId) {
             ]);
             offer = freshOffer;
             offerId = offer.id;
-            offer.items = Array.isArray(itemsData) ? itemsData : (itemsData.results || []);
+            offer.items = sortOfferItemApiTree(
+                Array.isArray(itemsData) ? itemsData : (itemsData.results || [])
+            );
         } catch (e) {
             pane.innerHTML = `<div class="offer-tab-content"><div class="text-danger text-center py-4">Fiyatlandırma verileri yüklenemedi.</div></div>`;
             return;
@@ -1908,6 +1910,32 @@ function nextKalemlerRef() {
     return `item-${kalemlerState.refCounter}`;
 }
 
+function compareOfferItemSiblings(a, b) {
+    const seqA = Number(a?.sequence) || 0;
+    const seqB = Number(b?.sequence) || 0;
+    if (seqA !== seqB) return seqA - seqB;
+    return (Number(a?.id) || 0) - (Number(b?.id) || 0);
+}
+
+function sortOfferItemApiTree(items) {
+    return (items || [])
+        .slice()
+        .sort(compareOfferItemSiblings)
+        .map((item) => ({
+            ...item,
+            children: sortOfferItemApiTree(item.children || [])
+        }));
+}
+
+function sortKalemlerDisplayNodes(nodes) {
+    return (nodes || []).slice().sort((a, b) => {
+        if (a._kind === 'staged' && b._kind === 'staged') return 0;
+        if (a._kind === 'staged') return 1;
+        if (b._kind === 'staged') return -1;
+        return compareOfferItemSiblings(a.original, b.original);
+    });
+}
+
 function ensureStagedParent(parentRef) {
     const p = kalemlerState.stagedRefs[parentRef];
     if (!p) throw new Error('Parent staged ref not found');
@@ -2385,7 +2413,9 @@ async function submitStagedItems() {
 
         // add-items returns only created rows; always reload the full tree from the server
         const data = await getOfferItems(kalemlerState.offerId);
-        kalemlerState.offerItems = Array.isArray(data) ? data : (data.results || data.items || []);
+        kalemlerState.offerItems = sortOfferItemApiTree(
+            Array.isArray(data) ? data : (data.results || data.items || [])
+        );
         kalemlerState.offerItemsFlat = {};
         buildOfferItemsFlatMap(kalemlerState.offerItems);
 
@@ -2760,7 +2790,9 @@ async function reloadOfferItems() {
     if (panel) panel.innerHTML = `<div class="text-muted py-3 text-center"><i class="fas fa-spinner fa-spin me-2"></i>Yükleniyor...</div>`;
     try {
         const data = await getOfferItems(kalemlerState.offerId);
-        kalemlerState.offerItems = Array.isArray(data) ? data : (data.results || []);
+        kalemlerState.offerItems = sortOfferItemApiTree(
+            Array.isArray(data) ? data : (data.results || [])
+        );
         kalemlerState.offerItemsFlat = {};
         buildOfferItemsFlatMap(kalemlerState.offerItems);
         // when server truth refreshes, clear pending edits/deletes (they were for the old tree)
@@ -2838,10 +2870,10 @@ function buildKalemlerCombinedTree() {
         childrenByParent.get(p).push(node);
     }
     for (const node of Object.values(existingById)) {
-        node.children = childrenByParent.get(node.id) || [];
+        node.children = sortKalemlerDisplayNodes(childrenByParent.get(node.id) || []);
     }
 
-    const roots = (childrenByParent.get(null) || []).slice();
+    const roots = sortKalemlerDisplayNodes(childrenByParent.get(null) || []);
 
     // attach staged roots (only those truly root-level)
     for (const staged of (kalemlerState.staged || [])) {
@@ -3715,7 +3747,7 @@ function initPricingV3Tab() {
     if (!offerId || !offer) return;
 
     pricingV3State.offer = offer;
-    pricingV3State.items = Array.isArray(offer.items) ? offer.items : [];
+    pricingV3State.items = sortOfferItemApiTree(Array.isArray(offer.items) ? offer.items : []);
     pricingV3State.itemsFlat = {};
     pricingV3State.localEdits = {};
     pricingV3State.pricingMode = offer.pricing_mode || 'flat';
