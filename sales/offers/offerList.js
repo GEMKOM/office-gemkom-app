@@ -284,6 +284,11 @@ function normalizeOfferFormData(formData) {
     if (payload.payment_terms === '') {
         payload.payment_terms = null;
     }
+    for (const field of ['delivery_date_requested', 'offer_expiry_date']) {
+        if (payload[field] === '' || payload[field] == null) {
+            payload[field] = null;
+        }
+    }
     return payload;
 }
 
@@ -1943,6 +1948,98 @@ function addCustomStaged({ parentRef = null, parentId = null } = {}) {
     setTimeout(() => focusStagedTitleInput(ref), 50);
 }
 
+function parseSubItemPasteText(text) {
+    if (!text || !String(text).trim()) return [];
+    return String(text)
+        .split(/\r?\n/)
+        .map((line) => (line.split('\t')[0] || '').trim())
+        .filter(Boolean);
+}
+
+function addCustomStagedBulk(titles, { parentRef = null, parentId = null } = {}) {
+    if (!titles?.length) return 0;
+    for (const title of titles) {
+        const ref = nextKalemlerRef();
+        const item = {
+            _ref: ref,
+            template_node: null,
+            title_override: title,
+            quantity: 1,
+            parent_ref: parentRef,
+            parent: parentId,
+            _label: title,
+            _isCustom: true,
+            _children: []
+        };
+        if (parentRef) {
+            ensureStagedParent(parentRef)._children.push(item);
+        } else {
+            kalemlerState.staged.push(item);
+        }
+        kalemlerState.stagedRefs[ref] = item;
+    }
+    renderOfferItemsTree();
+    updateKalemlerFooterStagedState();
+    return titles.length;
+}
+
+function showPasteSubItemsModal({ parentRef = null, parentId = null, parentTitle = '' } = {}) {
+    const modalId = 'paste-sub-items-modal';
+    document.getElementById(modalId)?.remove();
+
+    const modalEl = document.createElement('div');
+    modalEl.id = modalId;
+    modalEl.className = 'modal fade';
+    modalEl.tabIndex = -1;
+    modalEl.innerHTML = `
+      <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Alt Kalemleri Yapıştır</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            ${parentTitle ? `<p class="text-muted small mb-2">Üst kalem: <strong>${escapeHtml(parentTitle)}</strong></p>` : ''}
+            <p class="text-muted small mb-2">Her satır bir alt kalem olarak eklenecek.</p>
+            <textarea id="paste-sub-items-textarea" class="form-control" rows="8" placeholder="Satır satır alt kalem adlarını yapıştırın..."></textarea>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+            <button type="button" class="btn btn-primary" id="paste-sub-items-submit">Ekle</button>
+          </div>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(modalEl);
+
+    const bsModal = new bootstrap.Modal(modalEl);
+    const textarea = modalEl.querySelector('#paste-sub-items-textarea');
+    const submitBtn = modalEl.querySelector('#paste-sub-items-submit');
+
+    const submit = () => {
+        const titles = parseSubItemPasteText(textarea.value);
+        if (!titles.length) {
+            showNotification('Geçerli satır bulunamadı', 'warning');
+            return;
+        }
+        const count = addCustomStagedBulk(titles, { parentRef, parentId });
+        showNotification(`${count} alt kalem eklendi`, 'success');
+        bsModal.hide();
+    };
+
+    submitBtn.addEventListener('click', submit);
+    textarea.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+            e.preventDefault();
+            submit();
+        }
+    });
+    modalEl.addEventListener('shown.bs.modal', () => textarea.focus());
+    modalEl.addEventListener('hidden.bs.modal', () => modalEl.remove());
+
+    bsModal.show();
+}
+
 function focusStagedTitleInput(ref) {
     const input = document.querySelector(`.staged-item[data-ref="${ref}"] .staged-title-input`);
     if (input) {
@@ -2011,11 +2108,9 @@ async function submitStagedItems() {
     try {
         if (!kalemlerHasChanges()) return;
 
-        let freshItems = kalemlerState.offerItems;
-
         // 1) Add new staged items
-        if (kalemlerState.staged.length > 0) {
-            freshItems = await addOfferItems(kalemlerState.offerId, flattenStaged(kalemlerState.staged));
+        if (Object.keys(kalemlerState.stagedRefs || {}).length > 0) {
+            await addOfferItems(kalemlerState.offerId, flattenStaged(kalemlerState.staged));
         }
 
         // 2) Bulk update existing items
@@ -2023,22 +2118,24 @@ async function submitStagedItems() {
             .filter(([id]) => !kalemlerState.pendingDeletes.has(parseInt(id, 10)))
             .map(([id, edits]) => ({ id: parseInt(id, 10), ...edits }));
         if (editsPayload.length > 0) {
-            freshItems = await bulkUpdateOfferItems(kalemlerState.offerId, editsPayload);
+            await bulkUpdateOfferItems(kalemlerState.offerId, editsPayload);
         }
 
         // 3) Bulk delete
         if ((kalemlerState.pendingDeletes?.size || 0) > 0) {
-            freshItems = await bulkDeleteOfferItems(kalemlerState.offerId, [...kalemlerState.pendingDeletes]);
+            await bulkDeleteOfferItems(kalemlerState.offerId, [...kalemlerState.pendingDeletes]);
         }
 
-        // Reset state with fresh server data (endpoints return fresh tree)
-        kalemlerState.offerItems = Array.isArray(freshItems) ? freshItems : (freshItems.results || freshItems.items || []);
-        kalemlerState.offerItemsFlat = {};
-        buildOfferItemsFlatMap(kalemlerState.offerItems);
         kalemlerState.staged = [];
         kalemlerState.stagedRefs = {};
         kalemlerState.pendingEdits = {};
         kalemlerState.pendingDeletes = new Set();
+
+        // add-items returns only created rows; always reload the full tree from the server
+        const data = await getOfferItems(kalemlerState.offerId);
+        kalemlerState.offerItems = Array.isArray(data) ? data : (data.results || data.items || []);
+        kalemlerState.offerItemsFlat = {};
+        buildOfferItemsFlatMap(kalemlerState.offerItems);
 
         renderOfferItemsTree();
         updateKalemlerFooterStagedState();
@@ -2102,6 +2199,7 @@ function renderStagedItem(item, depth) {
         <input type="number" class="staged-qty-input" value="${escapeHtml(String(item.quantity || 1))}" min="1" />
         <div class="kalemler-offer-actions">
           <button type="button" class="btn btn-sm btn-outline-secondary staged-add-sub" title="Alt kalem ekle">+ alt</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary kalemler-paste-children" title="Alt kalemleri yapıştır"><i class="fas fa-paste"></i></button>
           <button type="button" class="btn btn-sm btn-outline-danger staged-remove" title="Kaldır">✕</button>
           ${item._isCustom ? '<span class="badge bg-light text-dark border">custom</span>' : ''}
         </div>
@@ -2111,6 +2209,9 @@ function renderStagedItem(item, depth) {
     el.querySelector('.staged-title-input')?.addEventListener('input', (e) => onStagedTitleChange(item._ref, e.target.value));
     el.querySelector('.staged-qty-input')?.addEventListener('input', (e) => onStagedQtyChange(item._ref, e.target.value));
     el.querySelector('.staged-add-sub')?.addEventListener('click', () => addCustomStaged({ parentRef: item._ref }));
+    el.querySelector('.kalemler-paste-children')?.addEventListener('click', () => {
+        showPasteSubItemsModal({ parentRef: item._ref, parentTitle: titleVal });
+    });
     el.querySelector('.staged-remove')?.addEventListener('click', () => removeStaged(item._ref));
 
     el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('drag-over'); });
@@ -2663,6 +2764,7 @@ function renderKalemlerUnifiedRow(node, level, editable) {
             <input type="number" class="staged-qty-input" value="${escapeHtml(String(currentQty))}" min="1" ${editable ? '' : 'disabled'} />
             <div class="kalemler-offer-actions">
               <button type="button" class="btn btn-sm btn-outline-secondary kalemler-add-child" ${editable ? '' : 'disabled'}>+ alt</button>
+              <button type="button" class="btn btn-sm btn-outline-secondary kalemler-paste-children" title="Alt kalemleri yapıştır" ${editable ? '' : 'disabled'}><i class="fas fa-paste"></i></button>
               <button type="button" class="btn btn-sm btn-outline-danger kalemler-delete-item" ${editable ? '' : 'disabled'}>✕</button>
             </div>
           </div>
@@ -2687,6 +2789,10 @@ function renderKalemlerUnifiedRow(node, level, editable) {
         el.querySelector('.kalemler-add-child')?.addEventListener('click', () => {
             if (!editable) return;
             addCustomStaged({ parentRef: null, parentId: item.id });
+        });
+        el.querySelector('.kalemler-paste-children')?.addEventListener('click', () => {
+            if (!editable) return;
+            showPasteSubItemsModal({ parentId: item.id, parentTitle: currentTitle });
         });
         el.querySelector('.kalemler-delete-item')?.addEventListener('click', () => {
             if (!editable) return;
@@ -2741,6 +2847,7 @@ function renderKalemlerUnifiedRow(node, level, editable) {
         <input type="number" class="staged-qty-input" value="${escapeHtml(String(item.quantity || 1))}" min="1" />
         <div class="kalemler-offer-actions">
           <button type="button" class="btn btn-sm btn-outline-secondary staged-add-sub" title="Alt kalem ekle">+ alt</button>
+          <button type="button" class="btn btn-sm btn-outline-secondary kalemler-paste-children" title="Alt kalemleri yapıştır"><i class="fas fa-paste"></i></button>
           <button type="button" class="btn btn-sm btn-outline-danger staged-remove" title="Kaldır">✕</button>
           ${item._isCustom ? '<span class="badge bg-light text-dark border">custom</span>' : ''}
         </div>
@@ -2750,6 +2857,9 @@ function renderKalemlerUnifiedRow(node, level, editable) {
     el.querySelector('.staged-title-input')?.addEventListener('input', (e) => onStagedTitleChange(item._ref, e.target.value));
     el.querySelector('.staged-qty-input')?.addEventListener('input', (e) => onStagedQtyChange(item._ref, e.target.value));
     el.querySelector('.staged-add-sub')?.addEventListener('click', () => addCustomStaged({ parentRef: item._ref }));
+    el.querySelector('.kalemler-paste-children')?.addEventListener('click', () => {
+        showPasteSubItemsModal({ parentRef: item._ref, parentTitle: currentTitle });
+    });
     el.querySelector('.staged-remove')?.addEventListener('click', () => removeStaged(item._ref));
 
     // staged drop zone for catalog nodes
@@ -4017,7 +4127,17 @@ function showEditModal(onSuccess) {
         icon: 'fas fa-credit-card',
         colSize: 6
     });
-    modal.addField({ id: 'delivery_date_requested', name: 'delivery_date_requested', label: 'İstenen Termin Tarihi', type: 'date', value: offer.delivery_date_requested || '', icon: 'fas fa-calendar-alt', colSize: 6 });
+    modal.addField({
+        id: 'delivery_date_requested',
+        name: 'delivery_date_requested',
+        label: 'İstenen Termin Tarihi',
+        type: 'date',
+        value: offer.delivery_date_requested || '',
+        required: false,
+        help: 'İsteğe bağlı — iş emrine dönüşümde zorunludur.',
+        icon: 'fas fa-calendar-alt',
+        colSize: 6
+    });
     modal.addField({ id: 'offer_expiry_date', name: 'offer_expiry_date', label: 'Teklif Sunumu için Son Tarih', type: 'date', value: offer.offer_expiry_date || '', icon: 'fas fa-calendar-check', colSize: 6 });
     modal.onSaveCallback(async (formData) => {
         try {
@@ -5541,24 +5661,37 @@ function showActionConfirm(options) {
 }
 
 async function showConvertModal(onSuccess) {
+    let offerData = null;
+    try {
+        offerData = await getOffer(offerId);
+    } catch (e) {
+        showNotification(parseError(e, 'Teklif bilgileri yüklenemedi'), 'error');
+        return;
+    }
+
     const modal = new EditModal('convert-modal-container', { title: 'İş Emrine Dönüştür', icon: 'fas fa-exchange-alt', size: 'lg', showEditButton: false });
     modal.clearAll();
     modal.addSection({ title: 'Dönüşüm Bilgileri', icon: 'fas fa-info-circle', iconColor: 'text-primary' });
-    const infoField = document.createElement('div');
-    infoField.className = 'mb-3';
-    infoField.innerHTML = '<p class="text-muted mb-0">Teklifi iş emrine dönüştürmek istediğinize emin misiniz? İş emrine aktarılacak dosyaları seçebilirsiniz.</p>';
-    const form = modal.container.querySelector('#edit-modal-form');
-    if (form) {
-        const firstSection = form.querySelector('.form-section');
-        if (firstSection) {
-            firstSection.appendChild(infoField);
-        }
-    }
+    modal.addField({
+        id: 'delivery_date_requested',
+        name: 'delivery_date_requested',
+        label: 'İstenen Termin Tarihi',
+        type: 'date',
+        value: offerData.delivery_date_requested || '',
+        required: true,
+        help: 'İş emrine dönüştürmek için termin tarihi zorunludur.',
+        icon: 'fas fa-calendar-alt',
+        colSize: 6
+    });
     modal.onSaveCallback(async (formData) => {
         const container = document.getElementById('convert-modal-container');
         const checked = container.querySelectorAll('.convert-file-cb:checked');
         const file_ids = Array.from(checked).map(el => parseInt(el.value, 10)).filter(id => !isNaN(id));
+        const deliveryDate = formData.delivery_date_requested;
         try {
+            if (!offerData.delivery_date_requested || offerData.delivery_date_requested !== deliveryDate) {
+                await patchOffer(offerId, normalizeOfferFormData({ delivery_date_requested: deliveryDate }));
+            }
             const result = await convertToJobOrder(offerId, file_ids.length > 0 ? file_ids : null);
             modal.hide();
             showNotification(`İş emrine dönüştürüldü: ${result.job_no}`, 'success');
@@ -5569,6 +5702,16 @@ async function showConvertModal(onSuccess) {
         }
     });
     modal.render();
+    const infoField = document.createElement('div');
+    infoField.className = 'mb-3';
+    infoField.innerHTML = '<p class="text-muted mb-0">Teklifi iş emrine dönüştürmek istediğinize emin misiniz? İş emrine aktarılacak dosyaları seçebilirsiniz.</p>';
+    const form = modal.container.querySelector('#edit-modal-form');
+    if (form) {
+        const firstSection = form.querySelector('.form-section');
+        if (firstSection) {
+            firstSection.insertBefore(infoField, firstSection.firstChild);
+        }
+    }
     const container = document.getElementById('convert-modal-container');
     const formEl = container.querySelector('#edit-modal-form');
     if (!formEl) {
@@ -5809,7 +5952,16 @@ function showCreateOfferModal() {
         icon: 'fas fa-credit-card',
         colSize: 6
     });
-    createOfferModal.addField({ id: 'delivery_date_requested', name: 'delivery_date_requested', label: 'İstenen Termin Tarihi', type: 'date', icon: 'fas fa-calendar-alt', colSize: 6 });
+    createOfferModal.addField({
+        id: 'delivery_date_requested',
+        name: 'delivery_date_requested',
+        label: 'İstenen Termin Tarihi',
+        type: 'date',
+        required: false,
+        help: 'İsteğe bağlı — iş emrine dönüşümde zorunludur.',
+        icon: 'fas fa-calendar-alt',
+        colSize: 6
+    });
     createOfferModal.addField({ id: 'offer_expiry_date', name: 'offer_expiry_date', label: 'Teklif Sunumu için Son Tarih', type: 'date', icon: 'fas fa-calendar-check', colSize: 6 });
     createOfferModal.render();
     createOfferModal.show();
