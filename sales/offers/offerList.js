@@ -3695,6 +3695,11 @@ function buildPricingTab() {
             <span id="pricing-unsaved-indicator" class="badge bg-warning text-dark border" style="display:none;">
               <i class="fas fa-exclamation-triangle me-1"></i>Kaydedilmedi
             </span>
+            ${!CLOSED_STATUSES.includes(offer?.status || '') && (offer?.items || []).length > 0 ? `
+              <button type="button" id="pricing-paste-btn" class="btn btn-sm btn-outline-primary" title="Excel'den fiyat yapıştır">
+                <i class="fas fa-paste me-1"></i>Fiyat Yapıştır
+              </button>
+            ` : ''}
           </div>
         </div>
 
@@ -3821,6 +3826,11 @@ function initPricingV3Tab() {
             renderPricingV3Totals();
             markPricingV3Unsaved(true);
         });
+    }
+
+    const pastePricesBtn = document.getElementById('pricing-paste-btn');
+    if (pastePricesBtn) {
+        pastePricesBtn.addEventListener('click', () => showPastePricesModal());
     }
 
     // generic notes are captured on "submit approval" modal, not here
@@ -4126,6 +4136,310 @@ async function showPricingNodeHistoryModal(item) {
         console.error('Error loading node history in pricing tab:', err);
         sectionContainer.innerHTML = '<div class="text-danger text-center py-4">Geçmiş yüklenirken hata oluştu.</div>';
     }
+}
+
+function getEditableItemsInOrder() {
+    const result = [];
+    function walk(items) {
+        for (const item of items || []) {
+            if (isPricingV3Editable(item)) result.push(item);
+            if (item.children?.length) walk(item.children);
+        }
+    }
+    walk(pricingV3State.items);
+    return result;
+}
+
+function guessPriceColumnRoles(rows, columnCount) {
+    const roles = Array(columnCount).fill('ignore');
+    if (!columnCount) return roles;
+
+    const columnStats = [];
+    for (let c = 0; c < columnCount; c++) {
+        const values = rows.map((r) => (r[c] || '').trim()).filter(Boolean);
+        const numericValues = values.filter((v) => /^[\d.,\s]+$/.test(v));
+        const numericParsed = numericValues.map((v) => parseFloat(v.replace(',', '.')));
+        const avgVal = numericParsed.length ? numericParsed.reduce((a, b) => a + b, 0) / numericParsed.length : 0;
+        columnStats.push({
+            numericRatio: values.length ? numericValues.length / values.length : 0,
+            avgVal,
+            hasText: values.some((v) => /[a-zA-ZğüşıöçĞÜŞİÖÇ]/.test(v)),
+            values
+        });
+    }
+
+    let priceAssigned = false;
+    let weightAssigned = false;
+    const numericCols = columnStats
+        .map((s, i) => ({ ...s, i }))
+        .filter((s) => s.numericRatio >= 0.6)
+        .sort((a, b) => b.avgVal - a.avgVal);
+
+    for (const col of numericCols) {
+        if (!priceAssigned) { roles[col.i] = 'unit_price'; priceAssigned = true; }
+        else if (!weightAssigned) { roles[col.i] = 'weight_kg'; weightAssigned = true; }
+    }
+
+    let periodAssigned = false;
+    let notesAssigned = false;
+    for (let c = 0; c < columnCount; c++) {
+        if (roles[c] !== 'ignore') continue;
+        const stat = columnStats[c];
+        if (!stat.hasText || !stat.values.length) continue;
+        const avgLen = stat.values.reduce((s, v) => s + v.length, 0) / stat.values.length;
+        if (!periodAssigned && avgLen < 20) { roles[c] = 'delivery_period'; periodAssigned = true; }
+        else if (!notesAssigned) { roles[c] = 'notes'; notesAssigned = true; }
+    }
+
+    return roles;
+}
+
+function buildPastePricesFromMapping(rows, roles) {
+    const priceCol = roles.findIndex((r) => r === 'unit_price');
+    const weightCol = roles.findIndex((r) => r === 'weight_kg');
+    const periodCol = roles.findIndex((r) => r === 'delivery_period');
+    const notesCol = roles.findIndex((r) => r === 'notes');
+
+    const parseNum = (v) => {
+        if (v == null || v === '') return null;
+        const parsed = parseFloat(String(v).trim().replace(',', '.'));
+        if (!Number.isFinite(parsed) || parsed < 0) return null;
+        return Math.round(parsed * 100) / 100;
+    };
+
+    const result = [];
+    for (const row of rows) {
+        if (!row.some((cell) => cell.trim())) continue;
+        const priceRaw = priceCol >= 0 ? (row[priceCol] || '').trim() : '';
+        const weightRaw = weightCol >= 0 ? (row[weightCol] || '').trim() : '';
+        // Skip rows where a numeric column has a non-empty but non-numeric value
+        if (priceCol >= 0 && priceRaw && parseNum(priceRaw) === null) continue;
+        if (weightCol >= 0 && weightRaw && parseNum(weightRaw) === null) continue;
+        result.push({
+            unit_price: priceCol >= 0 ? parseNum(priceRaw) : null,
+            weight_kg: weightCol >= 0 ? parseNum(weightRaw) : null,
+            delivery_period: periodCol >= 0 ? ((row[periodCol] || '').trim() || null) : null,
+            notes: notesCol >= 0 ? ((row[notesCol] || '').trim() || null) : null
+        });
+    }
+    return result;
+}
+
+function showPastePricesModal() {
+    const editableItems = getEditableItemsInOrder();
+    if (!editableItems.length) {
+        showNotification('Fiyat girilebilecek kalem bulunamadı. Önce modu kontrol edin.', 'warning');
+        return;
+    }
+
+    let parsedRows = [];
+    let columnCount = 0;
+    let columnRoles = [];
+
+    let container = document.getElementById('paste-prices-modal-container');
+    if (!container) {
+        container = document.createElement('div');
+        container.id = 'paste-prices-modal-container';
+        document.body.appendChild(container);
+    }
+
+    const modal = new EditModal('paste-prices-modal-container', {
+        title: 'Fiyatları Yapıştır',
+        icon: 'fas fa-paste',
+        size: 'xl',
+        showEditButton: false,
+        saveButtonText: 'Uygula'
+    });
+    modal.clearAll();
+    modal.addSection({ title: 'Fiyat Verisi', icon: 'fas fa-table', iconColor: 'text-primary' });
+    modal.addField({
+        id: 'paste_price_data',
+        name: 'paste_price_data',
+        label: 'Yapıştır',
+        type: 'textarea',
+        required: false,
+        rows: 6,
+        placeholder: 'Fiyat verisini buraya yapıştırın (sütunlar tab ile ayrılır)...',
+        help: `${editableItems.length} fiyatlanabilir kalem mevcut. Her satır sırayla bir kaleme uygulanır.`,
+        colSize: 12
+    });
+
+    modal.onSaveCallback(async () => {
+        const priceData = buildPastePricesFromMapping(parsedRows, columnRoles);
+        const applyCount = Math.min(priceData.length, editableItems.length);
+        if (!applyCount) { showNotification('Geçerli satır bulunamadı', 'warning'); return; }
+
+        for (let i = 0; i < applyCount; i++) {
+            const edits = pricingV3State.localEdits[editableItems[i].id];
+            if (!edits) continue;
+            const d = priceData[i];
+            if (d.unit_price !== null) edits.unit_price = d.unit_price;
+            if (d.weight_kg !== null) edits.weight_kg = d.weight_kg;
+            if (d.delivery_period !== null) edits.delivery_period = d.delivery_period;
+            if (d.notes !== null) edits.notes = d.notes;
+        }
+
+        renderPricingV3Table();
+        renderPricingV3Totals();
+        markPricingV3Unsaved(true);
+        showNotification(`${applyCount} kaleme fiyat uygulandı`, 'success');
+        modal.hide();
+    });
+
+    modal.render();
+
+    const form = modal.container.querySelector('#edit-modal-form');
+    const saveBtn = modal.container.querySelector('#save-edit-btn');
+    if (saveBtn) saveBtn.disabled = true;
+
+    if (form) {
+        const firstSection = form.querySelector('.form-section');
+        if (firstSection) {
+            const info = document.createElement('div');
+            info.className = 'alert alert-info small py-2 mb-2';
+            info.innerHTML = `<i class="fas fa-info-circle me-1"></i><strong>${editableItems.length}</strong> kalem fiyatlanabilir. Veriler yukarıdan aşağıya sırayla eşleştirilir.`;
+            firstSection.insertBefore(info, firstSection.firstChild);
+        }
+    }
+
+    const PRICE_ROLE_OPTIONS = [
+        { value: 'ignore', label: 'Yok say' },
+        { value: 'unit_price', label: 'Birim Fiyat' },
+        { value: 'weight_kg', label: 'Birim Ağırlık (kg)' },
+        { value: 'delivery_period', label: 'Termin' },
+        { value: 'notes', label: 'Not' }
+    ];
+
+    const mappingSection = document.createElement('div');
+    mappingSection.id = 'paste-prices-mapping-section';
+    mappingSection.className = 'form-section compact mb-3';
+    mappingSection.style.display = 'none';
+    mappingSection.innerHTML = `
+      <h6 class="section-subtitle compact text-primary"><i class="fas fa-columns me-2"></i>Sütun Eşleştirme</h6>
+      <div id="paste-prices-column-map" class="paste-column-map mb-3"></div>
+      <h6 class="section-subtitle compact text-success d-flex align-items-center justify-content-between">
+        <span><i class="fas fa-eye me-2"></i>Önizleme</span>
+        <span id="paste-prices-preview-count" class="badge bg-secondary"></span>
+      </h6>
+      <div id="paste-prices-preview-wrap" class="paste-preview-table"></div>
+    `;
+    if (form) form.appendChild(mappingSection);
+
+    const textarea = modal.container.querySelector('[data-field-id="paste_price_data"] .field-input');
+    const columnMapEl = mappingSection.querySelector('#paste-prices-column-map');
+    const previewWrap = mappingSection.querySelector('#paste-prices-preview-wrap');
+    const previewCount = mappingSection.querySelector('#paste-prices-preview-count');
+
+    const setSaveEnabled = (enabled) => { if (saveBtn) saveBtn.disabled = !enabled; };
+
+    const renderColumnMapping = () => {
+        columnMapEl.innerHTML = '';
+        for (let col = 0; col < columnCount; col++) {
+            const sample = getPasteColumnSample(parsedRows, col);
+            const card = document.createElement('div');
+            card.className = 'paste-column-card';
+            card.innerHTML = `
+              <div class="fw-semibold small">Sütun ${col + 1}</div>
+              <div class="paste-column-sample" title="${escapeHtml(sample)}">${escapeHtml(sample)}</div>
+              <select class="form-select form-select-sm mt-2 paste-prices-col-role" data-col="${col}">
+                ${PRICE_ROLE_OPTIONS.map((r) => `<option value="${r.value}"${columnRoles[col] === r.value ? ' selected' : ''}>${r.label}</option>`).join('')}
+              </select>
+            `;
+            card.querySelector('.paste-prices-col-role').addEventListener('change', (e) => {
+                const idx = parseInt(e.target.dataset.col, 10);
+                const newRole = e.target.value;
+                const exclusive = ['unit_price', 'weight_kg', 'delivery_period', 'notes'];
+                if (exclusive.includes(newRole)) {
+                    columnRoles = columnRoles.map((r, i) => (i === idx ? newRole : (r === newRole ? 'ignore' : r)));
+                } else {
+                    columnRoles[idx] = newRole;
+                }
+                renderColumnMapping();
+                renderPreview();
+            });
+            columnMapEl.appendChild(card);
+        }
+    };
+
+    const renderPreview = () => {
+        const priceData = buildPastePricesFromMapping(parsedRows, columnRoles);
+        const hasRole = columnRoles.some((r) => r !== 'ignore');
+        const matchCount = Math.min(priceData.length, editableItems.length);
+
+        previewCount.textContent = `${matchCount} / ${editableItems.length} kalem`;
+        setSaveEnabled(hasRole && matchCount > 0);
+
+        if (!hasRole) {
+            previewWrap.innerHTML = '<div class="text-warning small p-3">En az bir sütun eşleştirilmelidir.</div>';
+            return;
+        }
+
+        const showPrice = columnRoles.includes('unit_price');
+        const showWeight = columnRoles.includes('weight_kg');
+        const showPeriod = columnRoles.includes('delivery_period');
+        const showNotes = columnRoles.includes('notes');
+
+        const headerCols = [
+            '<th style="width:32px;">#</th>',
+            '<th>Kalem</th>',
+            ...(showPrice ? ['<th style="width:130px;" class="text-end">Birim Fiyat</th>'] : []),
+            ...(showWeight ? ['<th style="width:110px;" class="text-end">Ağırlık (kg)</th>'] : []),
+            ...(showPeriod ? ['<th style="width:100px;">Termin</th>'] : []),
+            ...(showNotes ? ['<th>Not</th>'] : [])
+        ].join('');
+
+        const previewRows = [];
+        for (let i = 0; i < Math.min(priceData.length, editableItems.length); i++) {
+            const item = editableItems[i];
+            const d = priceData[i];
+            const title = item.resolved_title || item.title_override || item.title || item.template_node_detail?.title || `#${item.id}`;
+            previewRows.push(`
+              <tr>
+                <td class="text-muted">${i + 1}</td>
+                <td>${escapeHtml(String(title))}</td>
+                ${showPrice ? `<td class="text-end">${d.unit_price != null ? d.unit_price.toLocaleString('tr-TR') : '—'}</td>` : ''}
+                ${showWeight ? `<td class="text-end">${d.weight_kg != null ? d.weight_kg.toLocaleString('tr-TR') : '—'}</td>` : ''}
+                ${showPeriod ? `<td>${escapeHtml(String(d.delivery_period || '—'))}</td>` : ''}
+                ${showNotes ? `<td>${escapeHtml(String(d.notes || ''))}</td>` : ''}
+              </tr>
+            `);
+        }
+
+        const extras = [];
+        if (priceData.length < editableItems.length) {
+            extras.push(`<tr><td colspan="10" class="text-warning small text-center"><i class="fas fa-exclamation-triangle me-1"></i>${editableItems.length - priceData.length} kalem için veri yok — bu kalemler değişmez</td></tr>`);
+        }
+
+        previewWrap.innerHTML = `
+          <table class="table table-sm table-striped mb-0">
+            <thead class="table-light sticky-top"><tr>${headerCols}</tr></thead>
+            <tbody>${previewRows.join('')}${extras.join('')}</tbody>
+          </table>
+        `;
+    };
+
+    const parseAndRefresh = () => {
+        const parsed = parsePasteTable(textarea?.value || '');
+        parsedRows = parsed.rows;
+        columnCount = parsed.columnCount;
+        if (!columnCount) { mappingSection.style.display = 'none'; setSaveEnabled(false); return; }
+        columnRoles = guessPriceColumnRoles(parsedRows, columnCount);
+        mappingSection.style.display = '';
+        renderColumnMapping();
+        renderPreview();
+    };
+
+    if (textarea) {
+        textarea.classList.add('font-monospace');
+        textarea.addEventListener('input', parseAndRefresh);
+        textarea.addEventListener('paste', () => setTimeout(parseAndRefresh, 0));
+        textarea.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (saveBtn && !saveBtn.disabled) saveBtn.click(); }
+        });
+    }
+
+    modal.modal.addEventListener('shown.bs.modal', () => textarea?.focus(), { once: true });
+    modal.show();
 }
 
 function setPricingV3Edit(itemId, field, value) {
