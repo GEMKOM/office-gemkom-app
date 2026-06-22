@@ -8169,6 +8169,108 @@ async function exportJobOrders(format) {
     }
 }
 
+function getSelectedDepartmentTaskJobOrders() {
+    const container = document.getElementById('dept-task-job-targets-container');
+    if (!container) {
+        return window.currentJobNoForTask ? [window.currentJobNoForTask] : [];
+    }
+    return Array.from(
+        container.querySelectorAll('.dept-task-job-target-checkbox:checked')
+    ).map((cb) => cb.value);
+}
+
+function renderDepartmentTaskJobTargets(parentJob, childJobOrders) {
+    const section = addDepartmentTaskModal.form?.querySelector('[data-section-id="job-targets-section"]');
+    if (!section || !parentJob) return;
+
+    const fieldsContainer = section.querySelector('.row');
+    if (!fieldsContainer) return;
+
+    const parentJobNo = parentJob.job_no;
+    const parentTitle = escapeHtml(parentJob.title || '–');
+    const childRows = (childJobOrders || []).map((child) => {
+        const childNo = escapeHtml(child.job_no || '');
+        const childTitle = escapeHtml(child.title || '–');
+        const statusLabel = escapeHtml(child.status_display || child.status || '');
+        return `
+            <label class="list-group-item list-group-item-action d-flex align-items-start gap-2 py-2">
+                <input
+                    type="checkbox"
+                    class="form-check-input mt-1 flex-shrink-0 dept-task-job-target-checkbox"
+                    value="${childNo}"
+                >
+                <span>
+                    <strong>${childNo}</strong>
+                    <span class="text-muted"> — ${childTitle}</span>
+                    ${statusLabel ? `<span class="badge bg-light text-dark border ms-1">${statusLabel}</span>` : ''}
+                </span>
+            </label>
+        `;
+    }).join('');
+
+    fieldsContainer.innerHTML = `
+        <div class="col-12" id="dept-task-job-targets-container">
+            <p class="small text-muted mb-2">
+                Şablonu hangi iş emirlerine uygulayacağınızı seçin. Ana iş seçilmezse yalnızca seçili alt işlere uygulanır.
+            </p>
+            <div class="d-flex flex-wrap gap-2 mb-2">
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="dept-task-select-all-jobs">
+                    Tümünü Seç
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="dept-task-select-children-only">
+                    Yalnızca Alt İşler
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-secondary" id="dept-task-select-parent-only">
+                    Yalnızca Ana İş
+                </button>
+            </div>
+            <div class="list-group">
+                <label class="list-group-item list-group-item-action d-flex align-items-start gap-2 py-2">
+                    <input
+                        type="checkbox"
+                        class="form-check-input mt-1 flex-shrink-0 dept-task-job-target-checkbox"
+                        value="${escapeHtml(parentJobNo)}"
+                        checked
+                    >
+                    <span>
+                        <strong>${escapeHtml(parentJobNo)}</strong>
+                        <span class="text-muted"> — ${parentTitle}</span>
+                        <span class="badge bg-primary ms-1">Ana İş</span>
+                    </span>
+                </label>
+                ${childRows}
+            </div>
+        </div>
+    `;
+
+    const container = document.getElementById('dept-task-job-targets-container');
+    if (!container) return;
+
+    const setChecked = (predicate) => {
+        container.querySelectorAll('.dept-task-job-target-checkbox').forEach((cb) => {
+            cb.checked = predicate(cb);
+        });
+    };
+
+    container.querySelector('#dept-task-select-all-jobs')?.addEventListener('click', () => {
+        setChecked(() => true);
+    });
+    container.querySelector('#dept-task-select-children-only')?.addEventListener('click', () => {
+        setChecked((cb) => cb.value !== parentJobNo);
+    });
+    container.querySelector('#dept-task-select-parent-only')?.addEventListener('click', () => {
+        setChecked((cb) => cb.value === parentJobNo);
+    });
+}
+
+function resolveDepartmentTaskTitleForPayload(task, targetJobOrders) {
+    const fallback = (task.title || (task.isChildTask ? 'Alt görev' : 'Yeni Görev')).toString();
+    if (targetJobOrders.length > 1 && task.isMainTask && task.fromTemplate) {
+        return task.originalTemplateTitle || '';
+    }
+    return fallback;
+}
+
 
 // Show modal to add department tasks with optional template
 window.showAddDepartmentTaskModal = async function(jobNo) {
@@ -8177,6 +8279,8 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
         let departmentChoices = [];
         let templates = [];
         let existingTasks = [];
+        let parentJobOrder = null;
+        let childJobOrders = [];
         
         try {
             departmentChoices = await getDepartmentTaskChoices();
@@ -8203,12 +8307,35 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
         } catch (error) {
             console.error('Error loading existing tasks:', error);
         }
+
+        try {
+            parentJobOrder = await getJobOrderByJobNo(jobNo);
+        } catch (error) {
+            console.error('Error loading job order:', error);
+        }
+
+        try {
+            const childResponse = await getChildJobOrders(jobNo, { page_size: 500 });
+            childJobOrders = childResponse.results || [];
+        } catch (error) {
+            console.error('Error loading child job orders:', error);
+        }
         
         // Clear and configure the modal
         addDepartmentTaskModal.clearAll();
         
         // Store existing tasks for use in dropdowns
         window.existingTasksForJobOrder = existingTasks;
+        window.deptTaskParentJobTitle = parentJobOrder?.title || '';
+
+        if (childJobOrders.length > 0) {
+            addDepartmentTaskModal.addSection({
+                id: 'job-targets-section',
+                title: 'Hedef İş Emirleri',
+                icon: 'fas fa-sitemap',
+                iconColor: 'text-warning'
+            });
+        }
         
         // Add template selection section
         addDepartmentTaskModal.addSection({
@@ -8257,6 +8384,12 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                 showNotification('En az bir görev eklemelisiniz', 'error');
                 return;
             }
+
+            const targetJobOrders = getSelectedDepartmentTaskJobOrders();
+            if (targetJobOrders.length === 0) {
+                showNotification('En az bir iş emri seçmelisiniz', 'error');
+                return;
+            }
             
             // Sync current table input values into tasksList (in case user saved without blurring)
             const container = document.getElementById('tasks-table-container');
@@ -8294,7 +8427,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                     const payloadTask = {
                         temp_id,
                         department: task.department,
-                        title: (task.title || (task.isChildTask ? 'Alt görev' : 'Yeni Görev')).toString(),
+                        title: resolveDepartmentTaskTitleForPayload(task, targetJobOrders),
                         sequence: task.sequence ? parseInt(task.sequence) : null,
                         weight: task.weight ? parseFloat(task.weight) : 10,
                     };
@@ -8337,7 +8470,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                 });
 
                 const payload = {
-                    job_orders: [jobNo],
+                    job_orders: targetJobOrders,
                     tasks,
                     dependencies
                 };
@@ -8345,7 +8478,10 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                 const response = await applyDepartmentTasksTemplate(payload);
 
                 addDepartmentTaskModal.hide();
-                showNotification(response?.message || 'Görevler başarıyla oluşturuldu', 'success');
+                const defaultMessage = targetJobOrders.length > 1
+                    ? `${targetJobOrders.length} iş emrine görevler başarıyla oluşturuldu`
+                    : 'Görevler başarıyla oluşturuldu';
+                showNotification(response?.message || defaultMessage, 'success');
             } catch (error) {
                 console.error('Error bulk creating tasks:', error);
                 let errorMessage = 'Görevler oluşturulurken hata oluştu';
@@ -8366,6 +8502,10 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
         
         // Render modal
         addDepartmentTaskModal.render();
+
+        if (childJobOrders.length > 0) {
+            renderDepartmentTaskJobTargets(parentJobOrder || { job_no: jobNo, title: '' }, childJobOrders);
+        }
         
         // Add button to template section - similar to Görev Ekle button
         const templateSection = addDepartmentTaskModal.form.querySelector('[data-section-id="template-section"]');
@@ -8458,6 +8598,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                                 department: item.department,
                                 department_display: item.department_display,
                                 title: jobOrderTitle || item.title || '',
+                                originalTemplateTitle: item.title || '',
                                 sequence: item.sequence || (window.tasksList.length + itemIndex + 1),
                                 description: item.description || '',
                                 depends_on: item.depends_on || [],
