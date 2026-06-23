@@ -90,6 +90,30 @@ function collectUserNameVariants(user) {
     return variants;
 }
 
+function uniqueUsersForMatching(...userLists) {
+    const usersByKey = new Map();
+    userLists.flat().forEach((user) => {
+        if (!user) return;
+        const key = user.id != null ? `id:${user.id}` : `name:${getUserOptionLabel(user)}`;
+        if (!usersByKey.has(key)) {
+            usersByKey.set(key, user);
+        }
+    });
+    return Array.from(usersByKey.values());
+}
+
+function uniqueMatchedUser(candidates) {
+    const usersByKey = new Map();
+    candidates.forEach((user) => {
+        const key = user.id != null ? `id:${user.id}` : `name:${getUserOptionLabel(user)}`;
+        if (!usersByKey.has(key)) {
+            usersByKey.set(key, user);
+        }
+    });
+
+    return usersByKey.size === 1 ? usersByKey.values().next().value : null;
+}
+
 function matchEmployeeFromPaste(employeeText, userList) {
     const cleaned = String(employeeText ?? '')
         .replace(/^\uFEFF/, '')
@@ -99,26 +123,40 @@ function matchEmployeeFromPaste(employeeText, userList) {
     const normalizedInput = normalizePersonName(cleaned);
     if (!normalizedInput) return null;
 
-    let bestMatch = null;
+    const exactMatches = [];
+    const partialMatches = new Map();
     let bestScore = 0;
 
     for (const user of userList) {
         const variants = collectUserNameVariants(user);
         for (const variant of variants) {
             if (variant === normalizedInput) {
-                return user;
+                exactMatches.push(user);
+                continue;
             }
             if (variant.includes(normalizedInput) || normalizedInput.includes(variant)) {
                 const score = Math.min(variant.length, normalizedInput.length);
-                if (score > bestScore) {
+                if (score >= bestScore) {
                     bestScore = score;
-                    bestMatch = user;
+                    const key = user.id != null ? `id:${user.id}` : `name:${getUserOptionLabel(user)}`;
+                    const existing = partialMatches.get(key);
+                    if (!existing || score > existing.score) {
+                        partialMatches.set(key, { user, score });
+                    }
                 }
             }
         }
     }
 
-    return bestMatch;
+    const exactMatch = uniqueMatchedUser(exactMatches);
+    if (exactMatch) return exactMatch;
+    if (exactMatches.length > 0 || bestScore === 0) return null;
+
+    return uniqueMatchedUser(
+        Array.from(partialMatches.values())
+            .filter(match => match.score === bestScore)
+            .map(match => match.user)
+    );
 }
 
 // Initialize the page
@@ -1035,8 +1073,10 @@ function setupBulkCreateForm(bulkCreateModal) {
                 // Map cells to fields — match employee by name (handles Turkish chars and name order)
                 let employeeId = '';
                 const employeeText = (cells[0] || '').replace(/^\uFEFF/, '').trim();
-                const matchedUser = matchEmployeeFromPaste(employeeText, users)
-                    || matchEmployeeFromPaste(employeeText, allUsersForMatching);
+                const matchedUser = matchEmployeeFromPaste(
+                    employeeText,
+                    uniqueUsersForMatching(users, allUsersForMatching)
+                );
 
                 if (matchedUser && matchedUser.id) {
                     employeeId = matchedUser.id.toString();
