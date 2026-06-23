@@ -37,6 +37,7 @@ let currentJobOrderForLines = null;
 /** @type {Array<{ id?: number, item?: number|null, item_code?: string|null, item_name?: string|null, item_description?: string, quantity: string, unit_price: string, amount_eur?: string, planning_request_item?: number|null, order: number, price_source?: string }>} */
 let editingLines = [];
 let linesTableContainerId = 'procurement-lines-table-body';
+let linesLoading = false;
 
 function mapSavedProcurementLines(lines) {
     if (!Array.isArray(lines)) return [];
@@ -463,36 +464,50 @@ async function loadPreviewProcurementLines(jobNo) {
  */
 async function openLinesModal(jobNo, { usePreview = false } = {}) {
     currentJobOrderForLines = jobNo;
+    const requestedJobNo = jobNo;
     const titleEl = document.getElementById('procurement-lines-modal-title');
     if (titleEl) titleEl.textContent = `Malzeme Maliyeti Satırları — ${jobNo}`;
 
     editingLines = [];
+    linesLoading = true;
+    setLinesModalControlsDisabled(true);
     const tbody = document.getElementById(linesTableContainerId);
     if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Yükleniyor...</td></tr>';
 
     linesModalBootstrap.show();
 
     try {
+        let loadedLines;
         if (usePreview) {
-            editingLines = await loadPreviewProcurementLines(jobNo);
+            loadedLines = await loadPreviewProcurementLines(jobNo);
         } else {
             const saved = await getProcurementLines(jobNo);
             if (saved && saved.length > 0) {
-                editingLines = mapSavedProcurementLines(saved);
+                loadedLines = mapSavedProcurementLines(saved);
             } else {
-                editingLines = await loadPreviewProcurementLines(jobNo);
+                loadedLines = await loadPreviewProcurementLines(jobNo);
             }
+        }
+        if (currentJobOrderForLines === requestedJobNo) {
+            editingLines = loadedLines;
         }
     } catch (err) {
         console.error(err);
-        showNotification(err.message || 'Satırlar yüklenemedi', 'error');
-        editingLines = [];
+        if (currentJobOrderForLines === requestedJobNo) {
+            showNotification(err.message || 'Satırlar yüklenemedi', 'error');
+            editingLines = [];
+        }
+    } finally {
+        if (currentJobOrderForLines === requestedJobNo) {
+            linesLoading = false;
+            renderLinesTable();
+            setLinesModalControlsDisabled(false);
+        }
     }
-
-    renderLinesTable();
 }
 
 function addLineRow() {
+    if (linesLoading) return;
     const order = editingLines.length;
     editingLines.push({
         item: null,
@@ -512,6 +527,7 @@ function addLineRow() {
 }
 
 function removeLineRow(index) {
+    if (linesLoading) return;
     editingLines.splice(index, 1);
     editingLines.forEach((line, i) => { line.order = i; });
     renderLinesTable();
@@ -520,6 +536,13 @@ function removeLineRow(index) {
 function renderLinesTable() {
     const tbody = document.getElementById(linesTableContainerId);
     if (!tbody) return;
+
+    if (linesLoading) {
+        tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Yükleniyor...</td></tr>';
+        const summaryEl = document.getElementById('procurement-lines-summary');
+        if (summaryEl) summaryEl.textContent = 'Satırlar yükleniyor...';
+        return;
+    }
 
     tbody.innerHTML = editingLines.map((line, index) => {
         const amount = (parseFloat(line.quantity) || 0) * (parseFloat(line.unit_price) || 0);
@@ -605,6 +628,13 @@ function formatPriceDate(value) {
     }
 }
 
+function setLinesModalControlsDisabled(disabled) {
+    const addBtn = document.getElementById('procurement-lines-add-row');
+    const saveBtn = document.getElementById('procurement-lines-save');
+    if (addBtn) addBtn.disabled = disabled;
+    if (saveBtn) saveBtn.disabled = disabled;
+}
+
 function syncLinesFromDom() {
     const tbody = document.getElementById(linesTableContainerId);
     if (!tbody) return;
@@ -624,13 +654,19 @@ function syncLinesFromDom() {
 
 async function saveLines() {
     if (!currentJobOrderForLines) return;
+    if (linesLoading) {
+        showNotification('Satırlar yüklenirken kaydedilemez.', 'warning');
+        return;
+    }
     syncLinesFromDom();
 
-    const saveBtn = document.getElementById('procurement-lines-save');
-    const prevSaveHtml = saveBtn ? saveBtn.innerHTML : null;
-    if (saveBtn) {
-        saveBtn.disabled = true;
-        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Kaydediliyor...';
+    const invalidLine = editingLines.find((line) => {
+        const itemDesc = (line.item_description || '').trim();
+        return !line.item && !itemDesc;
+    });
+    if (invalidLine) {
+        showNotification('Her satırda malzeme veya açıklama girilmelidir.', 'error');
+        return;
     }
 
     const payload = editingLines.map((line, idx) => {
@@ -640,9 +676,6 @@ async function saveLines() {
         const order = typeof line.order === 'number' ? line.order : parseInt(line.order, 10) || idx;
         const item = line.item ?? null;
         const planningRequestItem = line.planning_request_item ?? null;
-        if (!item && !itemDesc) {
-            return null; // skip invalid line; we'll filter
-        }
         return {
             item: item || undefined,
             item_description: itemDesc || undefined,
@@ -651,23 +684,46 @@ async function saveLines() {
             planning_request_item: planningRequestItem || undefined,
             order
         };
-    }).filter(Boolean);
+    });
 
-    // Validate: at least one line must have item or item_description
-    const valid = payload.every(p => p.item != null || (p.item_description != null && p.item_description !== ''));
-    if (payload.length > 0 && !valid) {
-        showNotification('Her satırda malzeme veya açıklama girilmelidir.', 'error');
+    const jobNo = currentJobOrderForLines;
+    if (payload.length === 0) {
+        if (!confirmationModal) {
+            showNotification('Tüm satırları silmek için onay gerekli.', 'error');
+            return;
+        }
+        confirmationModal.show({
+            title: 'Tüm Satırları Sil',
+            message: `${jobNo} için tüm malzeme satırları silinsin mi?`,
+            description: 'Bu işlem iş emrinin malzeme maliyetini 0 yapar.',
+            confirmText: 'Evet, tümünü sil',
+            confirmButtonClass: 'btn-danger',
+            onConfirm: () => submitLinesPayload(jobNo, payload)
+        });
         return;
     }
 
+    await submitLinesPayload(jobNo, payload);
+}
+
+async function submitLinesPayload(jobNo, payload) {
+    const saveBtn = document.getElementById('procurement-lines-save');
+    const prevSaveHtml = saveBtn ? saveBtn.innerHTML : null;
+    if (saveBtn) {
+        saveBtn.disabled = true;
+        saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Kaydediliyor...';
+    }
+
     try {
-        await submitProcurementLines(currentJobOrderForLines, payload);
+        await submitProcurementLines(jobNo, payload);
         showNotification('Satırlar kaydedildi.', 'success');
 
         // After successful submit, re-fetch the persisted lines (NOT preview)
-        const refreshed = await getProcurementLines(currentJobOrderForLines);
-        editingLines = mapSavedProcurementLines(refreshed);
-        renderLinesTable();
+        const refreshed = await getProcurementLines(jobNo);
+        if (currentJobOrderForLines === jobNo) {
+            editingLines = mapSavedProcurementLines(refreshed);
+            renderLinesTable();
+        }
 
         // Refresh both lists (job may move from pending -> has entries)
         await loadPendingJobOrders();

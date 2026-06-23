@@ -144,6 +144,7 @@ export async function initDepartmentTasksPage(config) {
     let releaseApprovalRejectModal = null;
     let submitQCModal = null;
     let isCreatingRelease = false;
+    let createReleaseSaveHandler = null;
 
     function getDesignReleaseReviewBadge(row) {
         if (department !== 'design') return '';
@@ -1643,7 +1644,7 @@ function initializeReleaseModal() {
         }
     });
 
-    createReleaseModal.onSaveCallback(async (formData) => {
+    createReleaseSaveHandler = async (formData) => {
         const taskId = window.pendingReleaseTaskId;
         if (!taskId || isCreatingRelease) return;
 
@@ -1745,7 +1746,8 @@ function initializeReleaseModal() {
         } finally {
             isCreatingRelease = false;
         }
-    });
+    };
+    createReleaseModal.onSaveCallback(createReleaseSaveHandler);
 
     completeRevisionModal.onSaveCallback(async (formData) => {
         const taskId = window.pendingRevisionCompletionTaskId;
@@ -7410,6 +7412,10 @@ async function showCreateReleaseModal(taskId, options = {}) {
         if (!createReleaseModal) {
             showNotification('Yayın modalı başlatılamadı', 'error');
             return;
+        }
+
+        if (createReleaseSaveHandler) {
+            createReleaseModal.onSaveCallback(createReleaseSaveHandler);
         }
 
         const task = await getDepartmentTaskById(taskId);
