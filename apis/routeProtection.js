@@ -1,10 +1,16 @@
 import { hasRouteAccess } from './accessControl.js';
-import { isLoggedIn, navigateTo, ROUTES, isAdmin, hasPerm } from '../authService.js';
+import { isLoggedIn, navigateTo, ROUTES, isAdmin, hasPerm, mustResetPassword } from '../authService.js';
 
 /**
  * Route protection middleware
  * Protects pages from unauthorized access based on permissions
  */
+
+function isResetPasswordRoute(route) {
+    const normalized = String(route || '').replace(/\/+$/, '') || '/';
+    const resetRoute = ROUTES.RESET_PASSWORD.replace(/\/+$/, '');
+    return normalized === resetRoute;
+}
 
 /**
  * Check if current user has access to the current route
@@ -21,6 +27,10 @@ export function checkRouteAccess(route = null) {
     
     // Check if user is logged in
     if (!isLoggedIn()) {
+        return false;
+    }
+
+    if (mustResetPassword() && !isResetPasswordRoute(currentRoute)) {
         return false;
     }
     
@@ -46,6 +56,11 @@ export function protectRoute(route = null, redirectRoute = null) {
     if (!isLoggedIn()) {
         const redirect = redirectRoute || ROUTES.LOGIN;
         navigateTo(redirect);
+        return false;
+    }
+
+    if (mustResetPassword() && !isResetPasswordRoute(currentRoute)) {
+        navigateTo(ROUTES.RESET_PASSWORD);
         return false;
     }
     
