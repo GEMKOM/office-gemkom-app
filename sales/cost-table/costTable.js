@@ -46,6 +46,42 @@ function formatPct(value) {
     return `${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
 }
 
+function parseMoneyInput(value) {
+    const cleaned = String(value || '')
+        .trim()
+        .replace(/\s+/g, '')
+        .replace(/[\u20ac$\u00a3\u20ba]/g, '');
+    if (!cleaned) return NaN;
+    if (!/^\d+(?:[.,]\d+)*$/.test(cleaned)) return NaN;
+
+    const lastComma = cleaned.lastIndexOf(',');
+    const lastDot = cleaned.lastIndexOf('.');
+
+    if (lastComma !== -1 && lastDot !== -1) {
+        const decimalSeparator = lastComma > lastDot ? ',' : '.';
+        const groupingSeparator = decimalSeparator === ',' ? '.' : ',';
+        return Number(cleaned
+            .replace(new RegExp(`\\${groupingSeparator}`, 'g'), '')
+            .replace(decimalSeparator, '.'));
+    }
+
+    const separator = lastComma !== -1 ? ',' : (lastDot !== -1 ? '.' : null);
+    if (!separator) return Number(cleaned);
+
+    const parts = cleaned.split(separator);
+    if (parts.length > 2) {
+        return Number(parts.join(''));
+    }
+
+    const [whole, fractionOrGroup] = parts;
+    const looksLikeGrouping = whole.length >= 1 && whole.length <= 3 && fractionOrGroup.length === 3;
+    if (looksLikeGrouping) {
+        return Number(parts.join(''));
+    }
+
+    return Number(`${whole}.${fractionOrGroup}`);
+}
+
 function formatDate(value) {
     if (value == null || value === '') return '<span class="text-muted">-</span>';
     try {
@@ -214,12 +250,7 @@ async function handleSellingPriceCommit(inputEl) {
         return;
     }
 
-    // Replace local decimal comma with dot, remove thousand separators
-    const normalized = rawValue
-        .replace(/\./g, '')    // remove thousand dots
-        .replace(',', '.');    // convert decimal comma to dot
-
-    const numeric = Number(normalized);
+    const numeric = parseMoneyInput(rawValue);
     if (!Number.isFinite(numeric) || numeric < 0) {
         alert('Geçerli bir satış fiyatı girin.');
         return;
@@ -228,11 +259,7 @@ async function handleSellingPriceCommit(inputEl) {
     // Get original value and compare
     const originalValue = inputEl.getAttribute('data-original-value') || '';
     if (originalValue) {
-        // Normalize original value for comparison
-        const normalizedOriginal = originalValue
-            .replace(/\./g, '')
-            .replace(',', '.');
-        const originalNumeric = Number(normalizedOriginal);
+        const originalNumeric = parseMoneyInput(originalValue);
         
         // Compare with 2 decimal precision
         if (Number.isFinite(originalNumeric) && Math.abs(numeric - originalNumeric) < 0.01) {
@@ -241,10 +268,14 @@ async function handleSellingPriceCommit(inputEl) {
         }
     }
 
+    const existingRow = [...costTableRoots, ...Array.from(childrenCache.values()).flat()]
+        .find(r => r.job_no === jobNo);
+    const sellingPriceCurrency = existingRow?.selling_price_currency || inputEl.getAttribute('data-selling-price-currency') || 'EUR';
+
     const payload = {
         // Backend expects string like "90000.00"
         selling_price: numeric.toFixed(2),
-        selling_price_currency: 'EUR'
+        selling_price_currency: sellingPriceCurrency
     };
 
     try {
@@ -261,7 +292,7 @@ async function handleSellingPriceCommit(inputEl) {
             for (const row of arr) {
                 if (row.job_no === jobNo) {
                     row.selling_price = newPrice;
-                    row.selling_price_currency = 'EUR';
+                    row.selling_price_currency = sellingPriceCurrency;
                 }
             }
         }
@@ -524,6 +555,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                                 style="max-width: 120px;"
                                 data-selling-price-input="true"
                                 data-job-no="${jobNo}"
+                                data-selling-price-currency="${currency}"
                                 data-original-value="${displayValue}"
                                 value="${displayValue}"
                                 placeholder="Fiyat"

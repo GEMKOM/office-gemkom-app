@@ -1,4 +1,21 @@
 // File Attachments Component
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+    }[char]));
+}
+
+function escapeCssString(value) {
+    return String(value ?? '')
+        .replace(/\\/g, '\\\\')
+        .replace(/'/g, "\\'")
+        .replace(/[\r\n\f]/g, '');
+}
+
 export class FileAttachments {
     constructor(containerId, options = {}) {
         this.container = document.getElementById(containerId);
@@ -74,7 +91,7 @@ export class FileAttachments {
         
         const titleHtml = this.options.showTitle ? `
             <h6 class="mb-3">
-                <i class="${this.options.titleIcon} me-2 ${this.options.titleIconColor}"></i>${this.options.title} (${this.files.length})
+                <i class="${escapeHtml(this.options.titleIcon)} me-2 ${escapeHtml(this.options.titleIconColor)}"></i>${escapeHtml(this.options.title)} (${this.files.length})
             </h6>
         ` : '';
         
@@ -158,10 +175,11 @@ export class FileAttachments {
         const thumbnailSize = this.options.maxThumbnailSize;
         
         if (isImage) {
+            const fileUrl = escapeHtml(escapeCssString(file.file_url || ''));
             return `
                 <div class="file-thumbnail-image" 
                      style="width: ${thumbnailSize}px; height: ${thumbnailSize}px; 
-                            background-image: url('${file.file_url}'); 
+                            background-image: url('${fileUrl}');
                             background-size: cover; background-position: center; 
                             border-radius: 6px; cursor: pointer; 
                             border: 1px solid #e1e5e9;" 
@@ -205,12 +223,12 @@ export class FileAttachments {
         const displayName = file.display_name || file.name || '-';
         
         return `
-            <div class="file-name fw-medium mb-1" style="color: #172b4d; font-size: 14px;">${fileName}</div>
+            <div class="file-name fw-medium mb-1" style="color: #172b4d; font-size: 14px;">${escapeHtml(fileName)}</div>
             <div class="file-meta text-muted" style="font-size: 12px;">
-                Tür: ${fileType} • İsim: ${displayName}
+                Tür: ${escapeHtml(fileType)} • İsim: ${escapeHtml(displayName)}
             </div>
             <div class="file-meta text-muted" style="font-size: 12px;">
-                ${uploader} • ${formattedDate}, ${formattedTime}
+                ${escapeHtml(uploader)} • ${escapeHtml(formattedDate)}, ${escapeHtml(formattedTime)}
             </div>
         `;
     }
@@ -221,7 +239,7 @@ export class FileAttachments {
     createActionsHtml(file, fileName, fileExtension) {
         const deleteButtonHtml = this.options.showDeleteButton ? `
                 <button class="btn btn-sm btn-outline-danger delete-btn" 
-                        data-file-name="${fileName}" 
+                        data-file-name="${escapeHtml(fileName)}"
                         style="font-size: 12px;">
                     <i class="fas fa-trash me-1"></i>Sil
                 </button>
@@ -230,15 +248,15 @@ export class FileAttachments {
         return `
             <div class="file-actions mt-2">
                 <button class="btn btn-sm btn-outline-primary me-2 preview-btn" 
-                        data-file-url="${file.file_url}" 
-                        data-file-name="${fileName}" 
-                        data-file-extension="${fileExtension}" 
+                        data-file-url="${escapeHtml(file.file_url || '')}"
+                        data-file-name="${escapeHtml(fileName)}"
+                        data-file-extension="${escapeHtml(fileExtension)}"
                         style="font-size: 12px;">
                     <i class="fas fa-eye me-1"></i>Önizle
                 </button>
                 <button class="btn btn-sm btn-outline-secondary download-btn" 
-                        data-file-url="${file.file_url}" 
-                        data-file-name="${fileName}" 
+                        data-file-url="${escapeHtml(file.file_url || '')}"
+                        data-file-name="${escapeHtml(fileName)}"
                         style="font-size: 12px;">
                     <i class="fas fa-download me-1"></i>İndir
                 </button>
