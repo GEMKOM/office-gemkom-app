@@ -1,6 +1,7 @@
 import { guardRoute, getUser, isAdmin } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { fetchMachineFaults, createMaintenanceRequest, deleteMaintenanceRequest } from '../../../apis/maintenance.js';
+import { fetchStaffActivityReport } from '../../../apis/maintenance/reports.js';
 import { fetchMachinesDropdown } from '../../../apis/machines.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
@@ -19,21 +20,15 @@ let totalItems = 0;
 let currentFilters = {};
 
 document.addEventListener('DOMContentLoaded', async () => {
-    if (!guardRoute()) {
-        return;
-    }
-
+    if (!guardRoute()) return;
     await initNavbar();
-    
-    // Initialize components
     initializeComponents();
-    
-    // Load initial data
+    // Load machines and resolvers in parallel for filter dropdowns
+    await Promise.all([loadMachinesForFilter(), loadResolversForFilter()]);
     await loadFaultRequests();
 });
 
 function initializeComponents() {
-    // Initialize Header Component
     headerComponent = new HeaderComponent({
         title: 'Arıza Talepleri',
         subtitle: 'Tüm arıza taleplerini görüntüleyin ve yönetin',
@@ -48,197 +43,170 @@ function initializeComponents() {
         }
     });
 
-    // Initialize Statistics Cards Component
     statisticsCards = new StatisticsCards('statistics-container', {
         cards: [
-            {
-                title: 'Toplam Arıza',
-                value: 0,
-                icon: 'exclamation-triangle',
-                color: 'primary',
-                trend: null
-            },
-            {
-                title: 'Bekleyen',
-                value: 0,
-                icon: 'clock',
-                color: 'warning',
-                trend: null
-            },
-            {
-                title: 'İşlemde',
-                value: 0,
-                icon: 'tools',
-                color: 'info',
-                trend: null
-            },
-            {
-                title: 'Çözüldü',
-                value: 0,
-                icon: 'check-circle',
-                color: 'success',
-                trend: null
-            }
+            { title: 'Toplam',        value: 0, icon: 'exclamation-triangle', color: 'primary', trend: null },
+            { title: 'Bekleyen',      value: 0, icon: 'clock',               color: 'warning', trend: null },
+            { title: 'Makine Duruşu', value: 0, icon: 'stop-circle',         color: 'danger',  trend: null },
+            { title: 'Çözüldü',       value: 0, icon: 'check-circle',        color: 'success', trend: null }
         ]
     });
 
-    // Initialize Filters Component
     filtersComponent = new FiltersComponent('filters-container', {
         title: 'Filtreler',
         onApply: applyFilters,
         onClear: clearFilters
     });
 
-    // Add filter fields
+    // Status
     filtersComponent.addSelectFilter({
         id: 'statusFilter',
         label: 'Durum',
         options: [
+            { value: '',      label: 'Tümü' },
             { value: 'false', label: 'Çözülmemiş' },
-            { value: 'true', label: 'Çözüldü' }
+            { value: 'true',  label: 'Çözüldü' }
         ],
         value: 'false',
-        colSize: 3
+        colSize: 2
     });
 
+    // Type (breaking / maintenance / all)
     filtersComponent.addSelectFilter({
-        id: 'priorityFilter',
-        label: 'Öncelik',
+        id: 'typeFilter',
+        label: 'Tür',
         options: [
-            { value: '', label: 'Tümü' },
-            { value: 'low', label: 'Düşük' },
-            { value: 'medium', label: 'Orta' },
-            { value: 'high', label: 'Yüksek' },
-            { value: 'critical', label: 'Kritik' }
+            { value: '',            label: 'Tümü' },
+            { value: 'breaking',    label: 'Makine Duruşu' },
+            { value: 'maintenance', label: 'Bakım' },
+            { value: 'fault',       label: 'Arıza (Duruşsuz)' }
         ],
-        colSize: 3
+        colSize: 2
     });
 
+    // Machine (populated async)
     filtersComponent.addSelectFilter({
         id: 'machineFilter',
         label: 'Ekipman',
         options: [{ value: '', label: 'Tümü' }],
-        colSize: 3
+        colSize: 2
     });
 
+    // Resolved by (populated async)
     filtersComponent.addSelectFilter({
-        id: 'dateFilter',
-        label: 'Tarih Aralığı',
-        options: [
-            { value: '', label: 'Tümü' },
-            { value: 'today', label: 'Bugün' },
-            { value: 'week', label: 'Bu Hafta' },
-            { value: 'month', label: 'Bu Ay' },
-            { value: 'custom', label: 'Özel' }
-        ],
-        colSize: 3
+        id: 'resolvedByFilter',
+        label: 'Çözen Kişi',
+        options: [{ value: '', label: 'Tümü' }],
+        colSize: 2
     });
 
-    // Apply default: unresolved = true on initial load
+    // Date from
+    filtersComponent.addTextFilter({
+        id: 'dateFrom',
+        label: 'Başlangıç Tarihi',
+        type: 'date',
+        placeholder: '',
+        colSize: 2
+    });
+
+    // Date to
+    filtersComponent.addTextFilter({
+        id: 'dateTo',
+        label: 'Bitiş Tarihi',
+        type: 'date',
+        placeholder: '',
+        colSize: 2
+    });
+
+    // Default filter: unresolved
     currentFilters = { unresolved: true };
 
-    // Initialize Table Component
     tableComponent = new TableComponent('table-container', {
         title: 'Arıza Talepleri',
         columns: [
-            { 
-                field: 'id', 
-                label: 'ID', 
+            {
+                field: 'id',
+                label: 'ID',
                 sortable: true,
-                formatter: (value) => `<span style="font-weight: 700; color: #0d6efd; font-family: 'Courier New', monospace; font-size: 1rem; background: rgba(13, 110, 253, 0.1); padding: 0.25rem 0.5rem; border-radius: 4px; border: 1px solid rgba(13, 110, 253, 0.2);">${value || '-'}</span>`
+                formatter: (v) => `<span style="font-weight:700;color:#0d6efd;font-family:'Courier New',monospace;font-size:.95rem;
+                    background:rgba(13,110,253,.1);padding:.2rem .5rem;border-radius:4px;border:1px solid rgba(13,110,253,.2);">${v || '-'}</span>`
             },
-            { 
-                field: 'machine_name', 
-                label: 'Ekipman', 
+            {
+                field: 'machine_name',
+                label: 'Ekipman',
                 sortable: true,
-                formatter: (value, row) => {
-                    // If machine_name exists, show it
-                    if (value && value.trim() !== '') {
-                        return `<span style="font-weight: 500; color: #495057;">${value}</span>`;
-                    }
-                    
-                    // If no machine_name, show asset_name - location
-                    if (row.asset_name && row.location) {
-                        return `<span style="font-weight: 500; color: #495057;">${row.asset_name} - ${row.location}</span>`;
-                    }
-                    
-                    // If only asset_name exists, show just asset_name
-                    if (row.asset_name) {
-                        return `<span style="font-weight: 500; color: #495057;">${row.asset_name}</span>`;
-                    }
-                    
-                    // Fallback
-                    return `<span style="font-weight: 500; color: #495057;">-</span>`;
+                formatter: (v, row) => {
+                    const name = v?.trim() || (row.asset_name
+                        ? (row.location ? `${row.asset_name} — ${row.location}` : row.asset_name)
+                        : '-');
+                    return `<span style="font-weight:500;color:#495057;">${name}</span>`;
                 }
             },
-            { 
-                field: 'description', 
-                label: 'Açıklama', 
+            {
+                field: 'description',
+                label: 'Açıklama',
                 sortable: false,
-                formatter: (value) => {
-                    if (!value || value.trim() === '') return '-';
-                    const truncated = value.length > 100 ? value.substring(0, 100) + '...' : value;
-                    return `<span title="${value.replace(/"/g, '&quot;')}">${truncated}</span>`;
+                formatter: (v) => {
+                    if (!v?.trim()) return '-';
+                    const t = v.length > 80 ? v.substring(0, 80) + '…' : v;
+                    return `<span title="${v.replace(/"/g,'&quot;')}">${t}</span>`;
                 }
             },
-            { 
-                field: 'priority', 
-                label: 'Öncelik', 
+            {
+                field: 'status',
+                label: 'Durum',
                 sortable: true,
-                formatter: (value, row) => getPriorityBadge(row)
+                formatter: (v, row) => getStatusBadge(row)
             },
-            { 
-                field: 'status', 
-                label: 'Durum', 
+            {
+                field: 'is_breaking',
+                label: 'Tür',
                 sortable: true,
-                formatter: (value, row) => getStatusBadge(row)
+                formatter: (v, row) => getTypeBadge(row)
             },
-            { 
-                field: 'reported_by_username', 
-                label: 'Bildiren', 
+            {
+                field: 'reported_by_full_name',
+                label: 'Bildiren',
                 sortable: true,
-                formatter: (value) => `
-                    <div style="font-weight: 500; color: #495057;">
-                        <i class="fas fa-user-circle me-2 text-muted"></i>
-                        ${value || 'Bilinmiyor'}
-                    </div>
-                `
+                formatter: (v, row) => `
+                    <div style="font-weight:500;color:#495057;">
+                        <i class="fas fa-user-circle me-1 text-muted"></i>
+                        ${v || row.reported_by_username || 'Bilinmiyor'}
+                    </div>`
             },
-            { 
-                field: 'reported_at', 
-                label: 'Bildirilme Tarihi', 
+            {
+                field: 'reported_at',
+                label: 'Bildirilme',
                 sortable: true,
                 type: 'date'
             },
-            { 
-                field: 'resolved_by_username', 
-                label: 'Çözen', 
+            {
+                field: 'open_duration_seconds',
+                label: 'Açık Süre',
                 sortable: true,
-                formatter: (value) => value || '-'
+                formatter: (v, row) => formatOpenDuration(row)
             },
-            { 
-                field: 'resolved_at', 
-                label: 'Çözüm Tarihi', 
+            {
+                field: 'resolved_by_full_name',
+                label: 'Çözen',
+                sortable: true,
+                formatter: (v, row) => {
+                    const name = v || row.resolved_by_username;
+                    if (!name) return '<span class="text-muted">—</span>';
+                    return `<span style="font-weight:500;"><i class="fas fa-user-check me-1 text-success"></i>${name}</span>`;
+                }
+            },
+            {
+                field: 'resolved_at',
+                label: 'Çözüm Tarihi',
                 sortable: true,
                 type: 'date'
             },
-            { 
-                field: 'resolution_description', 
-                label: 'Çözüm Açıklaması', 
+            {
+                field: 'actions',
+                label: 'İşlemler',
                 sortable: false,
-                formatter: (value) => {
-                    if (!value || value.trim() === '') return '-';
-                    const truncated = value.length > 80 ? value.substring(0, 80) + '...' : value;
-                    return `<span title="${value.replace(/"/g, '&quot;')}">${truncated}</span>`;
-                }
-            },
-            { 
-                field: 'actions', 
-                label: 'İşlemler', 
-                sortable: false,
-                formatter: (value, row) => {
-                    return getActionButtons(row);
-                }
+                formatter: (v, row) => getActionButtons(row)
             }
         ],
         pagination: true,
@@ -249,23 +217,12 @@ function initializeComponents() {
         refreshable: true,
         exportable: true,
         onRefresh: loadFaultRequests,
-        onPageChange: (page) => {
-            currentPage = page;
-            loadFaultRequests();
-        },
-        onPageSizeChange: (newPageSize) => {
-            // Update local variable to keep in sync
-            itemsPerPage = newPageSize;
-            // Ensure table component also has the correct value (should already be set, but ensure sync)
-            if (tableComponent) {
-                tableComponent.options.itemsPerPage = newPageSize;
-            }
-            // Reset to page 1 and load with new page size
+        onPageChange: (page) => { currentPage = page; loadFaultRequests(); },
+        onPageSizeChange: (size) => {
+            itemsPerPage = size;
+            if (tableComponent) tableComponent.options.itemsPerPage = size;
             currentPage = 1;
             loadFaultRequests();
-        },
-        onRowClick: (row) => {
-            // Handle row click if needed
         },
         emptyMessage: 'Arıza talebi bulunamadı',
         emptyIcon: 'fas fa-exclamation-triangle',
@@ -273,15 +230,199 @@ function initializeComponents() {
         loading: true
     });
 
-    // Initialize Create Fault Request Modal
     initializeCreateFaultModal();
-    
-    // Initialize Delete Fault Request Modal
     initializeDeleteFaultModal();
-
-    // Initialize View Fault Details Modal
     initializeViewFaultModal();
 }
+
+// ── Filter data loaders ───────────────────────────────────────────────────────
+
+async function loadMachinesForFilter() {
+    try {
+        const machines = await fetchMachinesDropdown();
+        const opts = [{ value: '', label: 'Tümü' }, ...machines.map(m => ({ value: String(m.id), label: m.name }))];
+        filtersComponent.updateFilterOptions('machineFilter', opts);
+    } catch (e) {
+        console.error('Machine filter load error:', e);
+    }
+}
+
+async function loadResolversForFilter() {
+    try {
+        const staff = await fetchStaffActivityReport();
+        // Only show staff who actually resolved at least one fault
+        const resolvers = staff.filter(s => s.faults_resolved_count > 0);
+        const opts = [
+            { value: '', label: 'Tümü' },
+            ...resolvers.map(s => ({ value: String(s.user_id), label: s.full_name || s.username }))
+        ];
+        filtersComponent.updateFilterOptions('resolvedByFilter', opts);
+    } catch (e) {
+        console.error('Resolver filter load error:', e);
+    }
+}
+
+// ── Data loading ──────────────────────────────────────────────────────────────
+
+async function loadFaultRequests() {
+    try {
+        tableComponent.setLoading(true);
+        const pageSize = tableComponent ? tableComponent.options.itemsPerPage : itemsPerPage;
+        const apiFilters = { page: currentPage, page_size: pageSize, ...currentFilters };
+        const response = await fetchMachineFaults(apiFilters);
+
+        if (response.results) {
+            allFaults = response.results;
+            totalItems = response.count || response.results.length;
+        } else if (Array.isArray(response)) {
+            allFaults = response;
+            totalItems = response.length;
+        } else {
+            allFaults = [];
+            totalItems = 0;
+        }
+
+        filteredFaults = [...allFaults];
+        updateStatistics();
+        updateTableData();
+    } catch (error) {
+        console.error('Error loading fault requests:', error);
+        showAlert('Arıza talepleri yüklenirken hata oluştu.', 'danger');
+        allFaults = [];
+        totalItems = 0;
+        updateTableData();
+    } finally {
+        tableComponent.setLoading(false);
+    }
+}
+
+function updateStatistics() {
+    const total      = allFaults.length;
+    const pending    = allFaults.filter(f => !f.resolved_at && !f.is_breaking).length;
+    const breaking   = allFaults.filter(f => f.is_breaking && !f.resolved_at).length;
+    const resolved   = allFaults.filter(f => f.resolved_at).length;
+    statisticsCards.updateValues({ 0: total, 1: pending, 2: breaking, 3: resolved });
+}
+
+function updateTableData() {
+    tableComponent.updateData(filteredFaults, totalItems, currentPage);
+}
+
+// ── Filters ───────────────────────────────────────────────────────────────────
+
+function applyFilters() {
+    const v = filtersComponent.getFilterValues();
+    currentFilters = {};
+
+    // Status
+    if (v.statusFilter === 'true' || v.statusFilter === 'false') {
+        currentFilters.unresolved = v.statusFilter === 'false';
+    }
+
+    // Type
+    if (v.typeFilter === 'breaking') {
+        currentFilters.is_breaking = true;
+    } else if (v.typeFilter === 'maintenance') {
+        currentFilters.is_maintenance = true;
+    } else if (v.typeFilter === 'fault') {
+        currentFilters.is_breaking = false;
+        currentFilters.is_maintenance = false;
+    }
+
+    // Machine (numeric id)
+    if (v.machineFilter) {
+        currentFilters.machine_id = v.machineFilter;
+    }
+
+    // Resolved by (user id)
+    if (v.resolvedByFilter) {
+        currentFilters.resolved_by = v.resolvedByFilter;
+    }
+
+    // Date range
+    if (v.dateFrom) currentFilters.reported_after = v.dateFrom;
+    if (v.dateTo)   currentFilters.reported_before = v.dateTo;
+
+    currentPage = 1;
+    loadFaultRequests();
+}
+
+function clearFilters() {
+    filtersComponent.clearFilters();
+    currentFilters = {};
+    currentPage = 1;
+    loadFaultRequests();
+}
+
+// ── Badge / formatter helpers ─────────────────────────────────────────────────
+
+function getStatusBadge(fault) {
+    if (fault.resolved_at)  return '<span class="status-badge status-green">Çözüldü</span>';
+    if (fault.is_breaking)  return '<span class="status-badge status-red">Makine Duruşta</span>';
+    return '<span class="status-badge status-yellow">Bekleyen</span>';
+}
+
+function getTypeBadge(fault) {
+    if (fault.is_breaking)   return '<span class="badge bg-danger">Duruş</span>';
+    if (fault.is_maintenance) return '<span class="badge bg-warning text-dark">Bakım</span>';
+    return '<span class="badge bg-secondary">Arıza</span>';
+}
+
+function formatOpenDuration(fault) {
+    if (!fault.reported_at) return '-';
+
+    const startMs = new Date(fault.reported_at).getTime();
+    const endMs   = fault.resolved_at ? new Date(fault.resolved_at).getTime() : Date.now();
+    const totalSec = Math.floor((endMs - startMs) / 1000);
+
+    const d = Math.floor(totalSec / 86400);
+    const h = Math.floor((totalSec % 86400) / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+
+    const parts = [];
+    if (d) parts.push(`${d}g`);
+    if (h) parts.push(`${h}s`);
+    if (m || parts.length === 0) parts.push(`${m}d`);
+    const duration = parts.join(' ');
+
+    if (fault.resolved_at) {
+        return `<span class="text-muted" title="Açıkken geçen süre">${duration}</span>`;
+    }
+    // Still open — colour-code by urgency
+    const hours = totalSec / 3600;
+    const color  = hours > 24 ? '#dc3545' : hours > 8 ? '#fd7e14' : '#198754';
+    return `<span style="color:${color};font-weight:600;" title="Hâlâ açık">${duration} <i class="fas fa-circle" style="font-size:.45rem;vertical-align:middle;"></i></span>`;
+}
+
+// ── Action buttons ────────────────────────────────────────────────────────────
+
+function getActionButtons(row) {
+    const btns = [];
+    btns.push(`
+        <button class="btn btn-outline-primary btn-sm" onclick="showFaultDetails(${row.id})" title="Detayları görüntüle">
+            <i class="fas fa-eye"></i>
+        </button>`);
+    if (canDeleteRequest(row)) {
+        btns.push(`
+            <button class="btn btn-outline-danger btn-sm" onclick="showDeleteFaultModal(${row.id})" title="Arıza talebini sil">
+                <i class="fas fa-trash"></i>
+            </button>`);
+    }
+    if (!btns.length) return '-';
+    return `<div class="d-inline-flex align-items-center gap-1">${btns.join('')}</div>`;
+}
+
+function canDeleteRequest(row) {
+    try {
+        const user = JSON.parse(localStorage.getItem('user') || '{}');
+        if (user.is_superuser || user.is_admin) return true;
+        return row.reported_by === user.id && !row.resolved_at;
+    } catch {
+        return false;
+    }
+}
+
+// ── Create fault modal ────────────────────────────────────────────────────────
 
 function initializeCreateFaultModal() {
     createFaultModal = new EditModal('create-fault-modal-container', {
@@ -291,7 +432,6 @@ function initializeCreateFaultModal() {
         size: 'lg'
     });
 
-    // Add form sections and fields
     createFaultModal
         .addSection({
             title: 'Ekipman Seçimi',
@@ -299,47 +439,24 @@ function initializeCreateFaultModal() {
             iconColor: 'text-primary',
             fields: [
                 {
-                    id: 'use_custom_equipment',
-                    name: 'use_custom_equipment',
-                    label: 'Özel Ekipman Bilgisi Gir',
-                    type: 'checkbox',
-                    required: false,
-                    colSize: 12,
+                    id: 'use_custom_equipment', name: 'use_custom_equipment',
+                    label: 'Özel Ekipman Bilgisi Gir', type: 'checkbox', required: false, colSize: 12,
                     helpText: 'Kayıtlı olmayan ekipman için özel bilgi girmek istiyorsanız işaretleyin'
                 },
                 {
-                    id: 'machine',
-                    name: 'machine',
-                    label: 'Kayıtlı Ekipman',
-                    type: 'dropdown',
-                    placeholder: 'Ekipman seçin...',
-                    required: true,
-                    icon: 'fas fa-cog',
-                    colSize: 12,
-                    searchable: true,
-                    options: []
+                    id: 'machine', name: 'machine', label: 'Kayıtlı Ekipman', type: 'dropdown',
+                    placeholder: 'Ekipman seçin...', required: true, icon: 'fas fa-cog', colSize: 12,
+                    searchable: true, options: []
                 },
                 {
-                    id: 'asset_name',
-                    name: 'asset_name',
-                    label: 'Ekipman Adı',
-                    type: 'text',
-                    placeholder: 'Ekipman adını girin...',
-                    required: false,
-                    icon: 'fas fa-tag',
-                    colSize: 6,
+                    id: 'asset_name', name: 'asset_name', label: 'Ekipman Adı', type: 'text',
+                    placeholder: 'Ekipman adını girin...', required: false, icon: 'fas fa-tag', colSize: 6,
                     style: 'display: none;'
                 },
                 {
-                    id: 'location',
-                    name: 'location',
-                    label: 'Konum',
-                    type: 'text',
-                    placeholder: 'Ekipman konumunu girin...',
-                    required: false,
-                    icon: 'fas fa-map-marker-alt',
-                    colSize: 6,
-                    style: 'display: none;'
+                    id: 'location', name: 'location', label: 'Konum', type: 'text',
+                    placeholder: 'Ekipman konumunu girin...', required: false, icon: 'fas fa-map-marker-alt',
+                    colSize: 6, style: 'display: none;'
                 }
             ]
         })
@@ -349,25 +466,13 @@ function initializeCreateFaultModal() {
             iconColor: 'text-primary',
             fields: [
                 {
-                    id: 'description',
-                    name: 'description',
-                    label: 'Açıklama',
-                    type: 'textarea',
-                    placeholder: 'Arıza veya bakım detaylarını açıklayın',
-                    required: true,
-                    icon: 'fas fa-align-left',
-                    colSize: 12,
-                    rows: 4
+                    id: 'description', name: 'description', label: 'Açıklama', type: 'textarea',
+                    placeholder: 'Arıza veya bakım detaylarını açıklayın', required: true,
+                    icon: 'fas fa-align-left', colSize: 12, rows: 4
                 },
                 {
-                    id: 'type',
-                    name: 'type',
-                    label: 'Tür',
-                    type: 'dropdown',
-                    placeholder: 'Tür seçin...',
-                    required: true,
-                    icon: 'fas fa-tools',
-                    colSize: 12,
+                    id: 'type', name: 'type', label: 'Tür', type: 'dropdown',
+                    placeholder: 'Tür seçin...', required: true, icon: 'fas fa-tools', colSize: 12,
                     searchable: false,
                     options: [
                         { value: 'fault', label: 'Arıza' },
@@ -375,33 +480,20 @@ function initializeCreateFaultModal() {
                     ]
                 },
                 {
-                    id: 'is_breaking',
-                    name: 'is_breaking',
-                    label: 'Makine durdu',
-                    type: 'checkbox',
-                    required: false,
-                    colSize: 12,
-                    helpText: 'Ekipman arıza nedeniyle çalışmıyorsa işaretleyin'
+                    id: 'is_breaking', name: 'is_breaking', label: 'Makine durdu', type: 'checkbox',
+                    required: false, colSize: 12, helpText: 'Ekipman arıza nedeniyle çalışmıyorsa işaretleyin'
                 }
             ]
         })
         .render();
 
-    // Set up event handlers
     createFaultModal
         .onSaveCallback(handleCreateFaultSubmit)
         .onCancelCallback(handleCreateFaultCancel);
 
-    // Load machines for dropdown
     loadMachinesForModal();
-
     setupTypeBreakingInteraction();
-
-    createFaultModal.modal.addEventListener('shown.bs.modal', () => {
-        resetCreateFaultFormState();
-    });
-
-    // Set up equipment type checkbox interaction
+    createFaultModal.modal.addEventListener('shown.bs.modal', () => resetCreateFaultFormState());
     setupEquipmentTypeInteraction();
 }
 
@@ -426,92 +518,47 @@ function initializeViewFaultModal() {
 async function loadMachinesForModal() {
     try {
         const machines = await fetchMachinesDropdown();
-        
-        const machineOptions = machines.map(machine => ({
-            value: machine.id.toString(),
-            text: machine.name
-        }));
-        
-        // Wait a bit for dropdowns to be fully initialized
+        const opts = machines.map(m => ({ value: m.id.toString(), text: m.name }));
         setTimeout(() => {
-            const machineDropdown = createFaultModal.dropdowns.get('machine');
-            if (machineDropdown) {
-                machineDropdown.setItems(machineOptions);
-            }
+            const dd = createFaultModal.dropdowns.get('machine');
+            if (dd) dd.setItems(opts);
         }, 300);
-    } catch (error) {
-        console.error('Error loading machines for modal:', error);
-        showAlert('Ekipman listesi yüklenirken hata oluştu', 'danger');
+    } catch (e) {
+        console.error('Error loading machines for modal:', e);
     }
 }
 
 async function handleCreateFaultSubmit(formData) {
     try {
-        // Validate required fields
-        if (!formData.description || formData.description.trim() === '') {
-            showAlert('Açıklama zorunludur', 'warning');
-            return;
-        }
-        
-        if (!formData.type) {
-            showAlert('Tür seçimi zorunludur', 'warning');
-            return;
-        }
-        
-        // Validate equipment selection
-        const useCustomEquipment = formData.use_custom_equipment === 'on' || formData.use_custom_equipment === true;
-        
-        if (!useCustomEquipment) {
-            // Default behavior: machine selection is required
-            if (!formData.machine) {
-                showAlert('Kayıtlı ekipman seçimi zorunludur', 'warning');
-                return;
-            }
+        if (!formData.description?.trim()) { showAlert('Açıklama zorunludur', 'warning'); return; }
+        if (!formData.type)                { showAlert('Tür seçimi zorunludur', 'warning'); return; }
+
+        const useCustom = formData.use_custom_equipment === 'on' || formData.use_custom_equipment === true;
+        if (!useCustom) {
+            if (!formData.machine) { showAlert('Kayıtlı ekipman seçimi zorunludur', 'warning'); return; }
         } else {
-            // Custom equipment is checked: custom fields are required
-            if (!formData.asset_name || formData.asset_name.trim() === '') {
-                showAlert('Ekipman adı zorunludur', 'warning');
-                return;
-            }
-            if (!formData.location || formData.location.trim() === '') {
-                showAlert('Konum bilgisi zorunludur', 'warning');
-                return;
-            }
+            if (!formData.asset_name?.trim()) { showAlert('Ekipman adı zorunludur', 'warning'); return; }
+            if (!formData.location?.trim())   { showAlert('Konum bilgisi zorunludur', 'warning'); return; }
         }
 
-        // Prepare submission data
         const submitData = {
             description: formData.description.trim(),
             is_maintenance: formData.type === 'maintenance',
             is_breaking: formData.type !== 'maintenance' && !!formData.is_breaking
         };
-
-        // Add equipment data based on selection
-        if (useCustomEquipment) {
-            // Use custom equipment data
+        if (useCustom) {
             submitData.asset_name = formData.asset_name.trim();
-            submitData.location = formData.location.trim();
+            submitData.location   = formData.location.trim();
         } else {
-            // Use registered machine
             submitData.machine = parseInt(formData.machine);
         }
 
-        // Submit the fault request
         await createMaintenanceRequest(submitData);
-        
-        // Show success message
         showAlert('Arıza talebi başarıyla oluşturuldu!', 'success');
-        
-        // Hide modal
         createFaultModal.hide();
-        
         resetCreateFaultFormState();
-        
-        // Reload the fault requests list
         await loadFaultRequests();
-        
     } catch (error) {
-        console.error('Error creating fault request:', error);
         showAlert('Arıza talebi oluşturulurken hata oluştu: ' + error.message, 'danger');
     }
 }
@@ -522,41 +569,32 @@ function handleCreateFaultCancel() {
 }
 
 function setCreateFaultFieldRequired(fieldId, required) {
-    const field = createFaultModal.fields.get(fieldId);
-    if (field) {
-        field.required = required;
-        createFaultModal.fields.set(fieldId, field);
-    }
+    const f = createFaultModal.fields.get(fieldId);
+    if (f) { f.required = required; createFaultModal.fields.set(fieldId, f); }
 }
 
 function syncCreateFaultFieldRequirements() {
     const container = createFaultModal.container;
     const useCustom = container.querySelector('input[name="use_custom_equipment"]')?.checked;
     const typeValue = createFaultModal.getFieldValue('type');
-
-    setCreateFaultFieldRequired('machine', !useCustom);
-    setCreateFaultFieldRequired('asset_name', !!useCustom);
-    setCreateFaultFieldRequired('location', !!useCustom);
-
+    setCreateFaultFieldRequired('machine',    !useCustom);
+    setCreateFaultFieldRequired('asset_name',  !!useCustom);
+    setCreateFaultFieldRequired('location',    !!useCustom);
     toggleBreakingCheckbox(typeValue !== 'maintenance');
 }
 
 function resetCreateFaultFormState() {
-    const customCheckbox = createFaultModal.container.querySelector('input[name="use_custom_equipment"]');
-    if (customCheckbox) {
-        customCheckbox.checked = false;
-    }
+    const cb = createFaultModal.container.querySelector('input[name="use_custom_equipment"]');
+    if (cb) cb.checked = false;
     toggleCustomEquipmentFields(false);
     syncCreateFaultFieldRequirements();
 }
 
 function setupTypeBreakingInteraction() {
     setTimeout(() => {
-        const typeContainer = createFaultModal.container.querySelector('#dropdown-type');
-        if (typeContainer) {
-            typeContainer.addEventListener('dropdown:select', (e) => {
-                toggleBreakingCheckbox(e.detail.value !== 'maintenance');
-            });
+        const tc = createFaultModal.container.querySelector('#dropdown-type');
+        if (tc) {
+            tc.addEventListener('dropdown:select', (e) => toggleBreakingCheckbox(e.detail.value !== 'maintenance'));
         }
         syncCreateFaultFieldRequirements();
     }, 500);
@@ -564,507 +602,152 @@ function setupTypeBreakingInteraction() {
 
 function toggleBreakingCheckbox(show) {
     const container = createFaultModal.container;
-    const breakingField = container.querySelector('[data-field-id="is_breaking"]');
-    const breakingCheckbox = container.querySelector('input[name="is_breaking"]');
-    if (breakingField) {
-        breakingField.style.display = show ? '' : 'none';
-    }
-    if (!show && breakingCheckbox) {
-        breakingCheckbox.checked = false;
-    }
+    const field = container.querySelector('[data-field-id="is_breaking"]');
+    const cb    = container.querySelector('input[name="is_breaking"]');
+    if (field) field.style.display = show ? '' : 'none';
+    if (!show && cb) cb.checked = false;
 }
 
 function setupEquipmentTypeInteraction() {
-    // Wait for the modal to be fully rendered
     setTimeout(() => {
-        const customEquipmentCheckbox = createFaultModal.container.querySelector('input[name="use_custom_equipment"]');
-        
-        if (customEquipmentCheckbox) {
-            // Remove any existing event listeners to prevent duplicates
-            customEquipmentCheckbox.removeEventListener('change', handleCheckboxChange);
-            
-            // Add event listener
-            customEquipmentCheckbox.addEventListener('change', handleCheckboxChange);
-            
-            // Set initial state based on checkbox current state
-            toggleCustomEquipmentFields(customEquipmentCheckbox.checked);
+        const cb = createFaultModal.container.querySelector('input[name="use_custom_equipment"]');
+        if (cb) {
+            cb.removeEventListener('change', handleCheckboxChange);
+            cb.addEventListener('change', handleCheckboxChange);
+            toggleCustomEquipmentFields(cb.checked);
         }
-    }, 1000); // Increased timeout to ensure modal is fully rendered
+    }, 1000);
 }
 
-function handleCheckboxChange(e) {
-    const isChecked = e.target.checked;
-    toggleCustomEquipmentFields(isChecked);
-}
+function handleCheckboxChange(e) { toggleCustomEquipmentFields(e.target.checked); }
 
-function toggleCustomEquipmentFields(showCustomFields) {
-    const container = createFaultModal.container;
-    const machineField = container.querySelector('[data-field-id="machine"]');
-    const assetNameField = container.querySelector('[data-field-id="asset_name"]');
-    const locationField = container.querySelector('[data-field-id="location"]');
-    
-    if (showCustomFields) {
-        // Show custom fields, hide machine dropdown
-        if (machineField) {
-            machineField.style.display = 'none';
-            const machineInput = machineField.querySelector('input, select');
-            if (machineInput) {
-                machineInput.required = false;
-                machineInput.value = ''; // Clear the value when hiding
-            }
-        }
-        if (assetNameField) {
-            assetNameField.style.display = 'block';
-            const assetInput = assetNameField.querySelector('input');
-            if (assetInput) assetInput.required = true;
-        }
-        if (locationField) {
-            locationField.style.display = 'block';
-            const locationInput = locationField.querySelector('input');
-            if (locationInput) locationInput.required = true;
-        }
+function toggleCustomEquipmentFields(showCustom) {
+    const c = createFaultModal.container;
+    const machineField    = c.querySelector('[data-field-id="machine"]');
+    const assetNameField  = c.querySelector('[data-field-id="asset_name"]');
+    const locationField   = c.querySelector('[data-field-id="location"]');
+
+    if (showCustom) {
+        if (machineField)   { machineField.style.display = 'none'; const inp = machineField.querySelector('input,select'); if (inp) { inp.required = false; inp.value = ''; } }
+        if (assetNameField) { assetNameField.style.display = 'block'; const inp = assetNameField.querySelector('input'); if (inp) inp.required = true; }
+        if (locationField)  { locationField.style.display = 'block';  const inp = locationField.querySelector('input');  if (inp) inp.required = true; }
     } else {
-        // Hide custom fields, show machine dropdown
-        if (machineField) {
-            machineField.style.display = 'block';
-            const machineInput = machineField.querySelector('input, select');
-            if (machineInput) machineInput.required = true;
-        }
-        if (assetNameField) {
-            assetNameField.style.display = 'none';
-            const assetInput = assetNameField.querySelector('input');
-            if (assetInput) {
-                assetInput.required = false;
-                assetInput.value = ''; // Clear the value when hiding
-            }
-        }
-        if (locationField) {
-            locationField.style.display = 'none';
-            const locationInput = locationField.querySelector('input');
-            if (locationInput) {
-                locationInput.required = false;
-                locationInput.value = ''; // Clear the value when hiding
-            }
-        }
+        if (machineField)   { machineField.style.display = 'block';  const inp = machineField.querySelector('input,select'); if (inp) inp.required = true; }
+        if (assetNameField) { assetNameField.style.display = 'none'; const inp = assetNameField.querySelector('input'); if (inp) { inp.required = false; inp.value = ''; } }
+        if (locationField)  { locationField.style.display = 'none';  const inp = locationField.querySelector('input');  if (inp) { inp.required = false; inp.value = ''; } }
     }
-
     syncCreateFaultFieldRequirements();
 }
 
-async function loadFaultRequests() {
-    try {
-        tableComponent.setLoading(true);
-        
-        // Prepare API filters with pagination
-        // Get page size from table component if available, otherwise use local variable
-        // This ensures we always use the most up-to-date page size
-        const pageSize = tableComponent ? tableComponent.options.itemsPerPage : itemsPerPage;
-        const apiFilters = {
-            page: currentPage,
-            page_size: pageSize,
-            ...currentFilters
-        };
-        
-        // Fetch fault requests from API with pagination
-        const response = await fetchMachineFaults(apiFilters);
-        
-        // Handle paginated response
-        if (response.results) {
-            allFaults = response.results;
-            totalItems = response.count || response.results.length;
-        } else if (Array.isArray(response)) {
-            allFaults = response;
-            totalItems = response.length;
-        } else {
-            allFaults = [];
-            totalItems = 0;
-        }
-        
-        filteredFaults = [...allFaults];
-        
-        // Update statistics
-        updateStatistics();
-        
-        // Update table data with pagination info
-        updateTableData();
-        
-        // Load machines for filter (only on first load)
-        if (currentPage === 1) {
-            loadMachinesForFilter();
-        }
-        
-    } catch (error) {
-        console.error('Error loading fault requests:', error);
-        showAlert('Arıza talepleri yüklenirken hata oluştu.', 'danger');
-        allFaults = [];
-        totalItems = 0;
-        updateTableData();
-    } finally {
-        tableComponent.setLoading(false);
-    }
-}
+// ── View fault details modal ──────────────────────────────────────────────────
 
-function updateStatistics() {
-    const total = allFaults.length;
-    const pending = allFaults.filter(fault => getStatus(fault) === 'pending').length;
-    const inProgress = allFaults.filter(fault => getStatus(fault) === 'in_progress').length;
-    const resolved = allFaults.filter(fault => getStatus(fault) === 'resolved' || getStatus(fault) === 'closed').length;
-    
-    statisticsCards.updateValues({
-        0: total,
-        1: pending,
-        2: inProgress,
-        3: resolved
-    });
-}
-
-function updateTableData() {
-    // The table component will now handle formatting through column formatters
-    // We just need to pass the raw data
-    const tableData = filteredFaults;
-    
-    // Update table with pagination info
-    tableComponent.updateData(tableData, totalItems, currentPage);
-}
-
-function getStatus(fault) {
-    if (fault.resolved_at) {
-        return 'resolved';
-    }
-    if (fault.is_breaking) {
-        return 'in_progress';
-    }
-    return 'pending';
-}
-
-// Removed getPriorityBadge and getStatusBadge functions - now handled by table component formatters
-
-// Action buttons are now handled by the table component's actions configuration
-
-// Removed formatDate function - now handled by table component date formatting
-
-function loadMachinesForFilter() {
-    const machines = [...new Set(allFaults.map(fault => fault.machine_name).filter(Boolean))];
-    const machineOptions = [{ value: '', label: 'Tümü' }];
-    
-    machines.forEach(machine => {
-        machineOptions.push({ value: machine, label: machine });
-    });
-    
-    filtersComponent.updateFilterOptions('machineFilter', machineOptions);
-}
-
-function applyFilters() {
-    const filterValues = filtersComponent.getFilterValues();
-    
-    // Build server-side filters
-    currentFilters = {};
-    
-    // Status filter (unresolved true/false)
-    if (filterValues.statusFilter === 'true' || filterValues.statusFilter === 'false') {
-        // 'Çözülmemiş' (value 'false') => unresolved=true
-        // 'Çözüldü' (value 'true') => unresolved=false
-        currentFilters.unresolved = filterValues.statusFilter === 'false';
-    }
-    
-    // Priority filter
-    if (filterValues.priorityFilter) {
-        currentFilters.priority = filterValues.priorityFilter;
-    }
-    
-    // Machine filter
-    if (filterValues.machineFilter) {
-        currentFilters.machine_name = filterValues.machineFilter;
-    }
-    
-    // Date filter
-    if (filterValues.dateFilter) {
-        const today = new Date();
-        switch (filterValues.dateFilter) {
-            case 'today':
-                currentFilters.reported_at__date = today.toISOString().split('T')[0];
-                break;
-            case 'week':
-                const weekAgo = new Date(today.getTime() - 7 * 24 * 60 * 60 * 1000);
-                currentFilters.reported_at__gte = weekAgo.toISOString().split('T')[0];
-                break;
-            case 'month':
-                const monthAgo = new Date(today.getFullYear(), today.getMonth() - 1, today.getDate());
-                currentFilters.reported_at__gte = monthAgo.toISOString().split('T')[0];
-                break;
-        }
-    }
-    
-    // Reset to first page when applying filters
-    currentPage = 1;
-    
-    // Reload data with new filters
-    loadFaultRequests();
-}
-
-function clearFilters() {
-    filtersComponent.clearFilters();
-    currentFilters = {};
-    currentPage = 1;
-    loadFaultRequests();
-}
-
-
-
-
-function showAlert(message, type = 'info') {
-    // Create and show alert
-    const alertDiv = document.createElement('div');
-    alertDiv.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
-    alertDiv.style.cssText = 'top: 20px; right: 20px; z-index: 9999; min-width: 300px;';
-    alertDiv.innerHTML = `
-        ${message}
-        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
-    `;
-    
-    document.body.appendChild(alertDiv);
-    
-    // Auto remove after 5 seconds
-    setTimeout(() => {
-        if (alertDiv.parentNode) {
-            alertDiv.remove();
-        }
-    }, 5000);
-}
-
-// Badge utility functions (similar to pending requests)
-function getStatusBadge(fault) {
-    if (fault.resolved_at) {
-        return '<span class="status-badge status-green">Çözüldü</span>';
-    }
-    if (fault.is_breaking) {
-        return '<span class="status-badge status-red">Makine Duruşta</span>';
-    }
-    return '<span class="status-badge status-yellow">Bekleyen</span>';
-}
-
-function getPriorityBadge(fault) {
-    if (fault.is_breaking) {
-        return '<span class="status-badge status-red">Kritik</span>';
-    }
-    if (fault.is_maintenance) {
-        return '<span class="status-badge status-yellow">Orta</span>';
-    }
-    return '<span class="status-badge status-grey">Düşük</span>';
-}
-
-// Show fault details in modal
 function showFaultDetails(faultId) {
     const fault = allFaults.find(f => f.id === faultId);
-    if (!fault) {
-        showAlert('Kayıt bulunamadı', 'danger');
-        return;
-    }
+    if (!fault) { showAlert('Kayıt bulunamadı', 'danger'); return; }
 
-    const machineDisplay = fault.machine_name || (fault.asset_name && fault.location ? `${fault.asset_name} - ${fault.location}` : fault.asset_name) || '-';
-    const statusText = fault.resolved_at ? 'Çözüldü' : (fault.is_breaking ? 'Makine Duruşta' : 'Bekleyen');
-    const priorityText = fault.is_breaking ? 'Kritik' : (fault.is_maintenance ? 'Orta' : 'Düşük');
+    const machineDisplay = fault.machine_name
+        || (fault.asset_name && fault.location ? `${fault.asset_name} - ${fault.location}` : fault.asset_name)
+        || '-';
+
+    // Compute open duration
+    const openDurationHtml = buildOpenDurationText(fault);
 
     viewFaultModal.clearData();
     viewFaultModal.setTitle(`Arıza Talebi #${fault.id}`);
-    
+
     viewFaultModal.addSection({ title: 'Genel Bilgiler', icon: 'fas fa-info-circle', iconColor: 'text-primary' });
-    viewFaultModal.addField({ id: 'vf-id', label: 'ID', type: 'text', value: fault.id, icon: 'fas fa-hashtag', colSize: 3, layout: 'horizontal' });
-    viewFaultModal.addField({ id: 'vf-status', label: 'Durum', type: 'text', value: statusText, icon: 'fas fa-flag', colSize: 4, layout: 'horizontal' });
-    viewFaultModal.addField({ id: 'vf-priority', label: 'Öncelik', type: 'text', value: priorityText, icon: 'fas fa-exclamation', colSize: 5, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-id',       label: 'ID',          type: 'text', value: fault.id,   icon: 'fas fa-hashtag',    colSize: 3, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-status',   label: 'Durum',       type: 'text', value: fault.resolved_at ? 'Çözüldü' : (fault.is_breaking ? 'Makine Duruşta' : 'Bekleyen'), icon: 'fas fa-flag', colSize: 4, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-type',     label: 'Tür',         type: 'text', value: fault.is_breaking ? 'Duruş' : (fault.is_maintenance ? 'Bakım' : 'Arıza'), icon: 'fas fa-tools', colSize: 5, layout: 'horizontal' });
 
     viewFaultModal.addSection({ title: 'Ekipman', icon: 'fas fa-cogs', iconColor: 'text-primary' });
-    viewFaultModal.addField({ id: 'vf-machine', label: 'Ekipman', type: 'text', value: machineDisplay, icon: 'fas fa-cog', colSize: 12 });
+    viewFaultModal.addField({ id: 'vf-machine',  label: 'Ekipman',     type: 'text', value: machineDisplay, icon: 'fas fa-cog', colSize: 12 });
 
     viewFaultModal.addSection({ title: 'Açıklamalar', icon: 'fas fa-align-left', iconColor: 'text-primary' });
-    viewFaultModal.addField({ id: 'vf-description', label: 'Açıklama', type: 'text', value: fault.description || '-', icon: 'fas fa-file-alt', colSize: 12 });
+    viewFaultModal.addField({ id: 'vf-desc',     label: 'Açıklama',    type: 'text', value: fault.description || '-', icon: 'fas fa-file-alt', colSize: 12 });
     if (fault.resolution_description) {
-        viewFaultModal.addField({ id: 'vf-resolution', label: 'Çözüm Açıklaması', type: 'text', value: fault.resolution_description, icon: 'fas fa-check-circle', colSize: 12 });
+        viewFaultModal.addField({ id: 'vf-res', label: 'Çözüm Açıklaması', type: 'text', value: fault.resolution_description, icon: 'fas fa-check-circle', colSize: 12 });
     }
 
-    viewFaultModal.addSection({ title: 'Zaman ve Kullanıcı', icon: 'fas fa-user-clock', iconColor: 'text-primary' });
-    viewFaultModal.addField({ id: 'vf-reported-by', label: 'Bildiren', type: 'text', value: fault.reported_by_username || '-', icon: 'fas fa-user', colSize: 6, layout: 'horizontal' });
-    viewFaultModal.addField({ id: 'vf-reported-at', label: 'Bildirilme Tarihi', type: 'datetime', value: fault.reported_at || '-', icon: 'fas fa-calendar-plus', colSize: 6, layout: 'horizontal' });
-    viewFaultModal.addField({ id: 'vf-resolved-by', label: 'Çözen', type: 'text', value: fault.resolved_by_username || '-', icon: 'fas fa-user-check', colSize: 6, layout: 'horizontal' });
-    viewFaultModal.addField({ id: 'vf-resolved-at', label: 'Çözüm Tarihi', type: 'datetime', value: fault.resolved_at || '-', icon: 'fas fa-calendar-check', colSize: 6, layout: 'horizontal' });
-
-    viewFaultModal.addSection({ title: 'Diğer', icon: 'fas fa-list', iconColor: 'text-primary' });
-    viewFaultModal.addField({ id: 'vf-type', label: 'Tür', type: 'text', value: fault.is_maintenance ? 'Bakım' : 'Arıza', icon: 'fas fa-tools', colSize: 6, layout: 'horizontal' });
-    viewFaultModal.addField({ id: 'vf-breaking', label: 'Makine Duruşta', type: 'boolean', value: !!fault.is_breaking, icon: 'fas fa-stop-circle', colSize: 6, layout: 'horizontal' });
+    viewFaultModal.addSection({ title: 'Zaman & Kullanıcı', icon: 'fas fa-user-clock', iconColor: 'text-primary' });
+    viewFaultModal.addField({ id: 'vf-rep-by', label: 'Bildiren',          type: 'text',     value: fault.reported_by_full_name || fault.reported_by_username || '-',  icon: 'fas fa-user',       colSize: 6, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-rep-at', label: 'Bildirilme Tarihi', type: 'datetime', value: fault.reported_at || '-',                                           icon: 'fas fa-calendar-plus', colSize: 6, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-res-by', label: 'Çözen',             type: 'text',     value: fault.resolved_by_full_name || fault.resolved_by_username || '-',  icon: 'fas fa-user-check', colSize: 6, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-res-at', label: 'Çözüm Tarihi',     type: 'datetime', value: fault.resolved_at || '-',                                           icon: 'fas fa-calendar-check', colSize: 6, layout: 'horizontal' });
+    viewFaultModal.addField({ id: 'vf-dur',    label: 'Açık Süre',         type: 'text',     value: openDurationHtml,                                                   icon: 'fas fa-hourglass-half', colSize: 12, layout: 'horizontal' });
 
     viewFaultModal.render();
     viewFaultModal.show();
 }
 
-// Action buttons function
-function getActionButtons(row) {
-    const btns = [];
-
-    // View details button
-    btns.push(`
-        <button class="btn btn-outline-primary btn-sm" 
-                onclick=\"showFaultDetails(${row.id})\" 
-                title=\"Detayları görüntüle\"> 
-            <i class=\"fas fa-eye\"></i>
-        </button>
-    `);
-
-    // Delete button (if permitted)
-    if (canDeleteRequest(row)) {
-        btns.push(`
-            <button class="btn btn-outline-danger btn-sm" 
-                    onclick="showDeleteFaultModal(${row.id})" 
-                    title="Arıza talebini sil">
-                <i class="fas fa-trash"></i>
-            </button>
-        `);
-    }
-
-    if (btns.length === 0) return '-';
-
-    return `
-        <div class="d-inline-flex align-items-center gap-1">
-            ${btns.join('')}
-        </div>
-    `;
+function buildOpenDurationText(fault) {
+    if (!fault.reported_at) return '-';
+    const startMs   = new Date(fault.reported_at).getTime();
+    const endMs     = fault.resolved_at ? new Date(fault.resolved_at).getTime() : Date.now();
+    const totalSec  = Math.floor((endMs - startMs) / 1000);
+    const d = Math.floor(totalSec / 86400);
+    const h = Math.floor((totalSec % 86400) / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const parts = [];
+    if (d) parts.push(`${d} gün`);
+    if (h) parts.push(`${h} saat`);
+    if (m || parts.length === 0) parts.push(`${m} dakika`);
+    const label = parts.join(' ');
+    return fault.resolved_at ? label : `${label} (hâlâ açık)`;
 }
 
-// Check if current user can delete the request
-function canDeleteRequest(row) {
-    try {
-        const user = JSON.parse(localStorage.getItem('user') || '{}');
-        const currentUserId = user.id;
-        const isSuperuser = user.is_superuser || user.is_admin;
-        
-        // Superuser can delete all requests
-        if (isSuperuser) {
-            return true;
-        }
-        
-        // Regular users can only delete their own requests that are not completed
-        const isOwnRequest = row.reported_by === currentUserId;
-        const isNotCompleted = !row.resolved_at; // Not resolved means not completed
-        
-        return isOwnRequest && isNotCompleted;
-    } catch (error) {
-        console.warn('Error checking delete permissions:', error);
-        return false;
-    }
-}
+// ── Delete modal ──────────────────────────────────────────────────────────────
 
-// Show delete fault request confirmation modal
 function showDeleteFaultModal(requestId) {
     const request = allFaults.find(f => f.id === requestId);
-    if (!request) {
-        showAlert('Arıza talebi bulunamadı', 'danger');
-        return;
-    }
-    
-    // Store the request ID for deletion
+    if (!request) { showAlert('Arıza talebi bulunamadı', 'danger'); return; }
     window.pendingDeleteRequestId = requestId;
 
-    // Clear and configure the delete modal
     deleteFaultModal.clearData();
-    
-    // Add warning section
-    deleteFaultModal.addSection({
-        title: 'Silme Onayı',
-        icon: 'fas fa-exclamation-triangle',
-        iconColor: 'text-danger'
-    });
-
-    // Add warning message
-    deleteFaultModal.addField({
-        id: 'delete-warning',
-        name: 'warning',
-        label: 'Uyarı',
-        type: 'text',
-        value: 'Bu arıza talebini silmek istediğinize emin misiniz?',
-        icon: 'fas fa-exclamation-triangle',
-        colSize: 12
-    });
-
-    // Add equipment name
-    const machineName = request.machine_name || request.asset_name || 'Bilinmeyen Ekipman';
-    deleteFaultModal.addField({
-        id: 'delete-equipment-name',
-        name: 'equipment_name',
-        label: 'Ekipman',
-        type: 'text',
-        value: machineName,
-        icon: 'fas fa-cogs',
-        colSize: 12
-    });
-
-    // Add request description
+    deleteFaultModal.addSection({ title: 'Silme Onayı', icon: 'fas fa-exclamation-triangle', iconColor: 'text-danger' });
+    deleteFaultModal.addField({ id: 'del-warn', name: 'warning', label: 'Uyarı', type: 'text', value: 'Bu arıza talebini silmek istediğinize emin misiniz?', icon: 'fas fa-exclamation-triangle', colSize: 12 });
+    deleteFaultModal.addField({ id: 'del-eq',   name: 'eq',      label: 'Ekipman', type: 'text', value: request.machine_name || request.asset_name || 'Bilinmeyen Ekipman', icon: 'fas fa-cogs', colSize: 12 });
     if (request.description) {
-        deleteFaultModal.addField({
-            id: 'delete-description',
-            name: 'description',
-            label: 'Açıklama',
-            type: 'text',
-            value: request.description.length > 100 ? request.description.substring(0, 100) + '...' : request.description,
-            icon: 'fas fa-align-left',
-            colSize: 12
-        });
+        deleteFaultModal.addField({ id: 'del-desc', name: 'desc', label: 'Açıklama', type: 'text', value: request.description.length > 100 ? request.description.substring(0, 100) + '...' : request.description, icon: 'fas fa-align-left', colSize: 12 });
     }
+    deleteFaultModal.addField({ id: 'del-perm', name: 'perm', label: 'Dikkat', type: 'text', value: 'Bu işlem geri alınamaz.', icon: 'fas fa-trash', colSize: 12 });
 
-    // Add warning about permanent deletion
-    deleteFaultModal.addField({
-        id: 'delete-warning-permanent',
-        name: 'permanent_warning',
-        label: 'Dikkat',
-        type: 'text',
-        value: 'Bu işlem geri alınamaz ve arıza talebi kalıcı olarak silinecektir.',
-        icon: 'fas fa-trash',
-        colSize: 12
-    });
-
-    // Render the modal first
     deleteFaultModal.render();
-    
-    // Add custom buttons after rendering
-    const modalFooter = deleteFaultModal.container.querySelector('.modal-footer');
-    if (modalFooter) {
-        modalFooter.innerHTML = `
-            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal">
-                <i class="fas fa-times me-1"></i>İptal
-            </button>
-            <button type="button" class="btn btn-sm btn-danger" id="confirm-delete-fault-btn">
-                <i class="fas fa-trash me-1"></i>Evet, Sil
-            </button>
+
+    const footer = deleteFaultModal.container.querySelector('.modal-footer');
+    if (footer) {
+        footer.innerHTML = `
+            <button type="button" class="btn btn-sm btn-outline-secondary" data-bs-dismiss="modal"><i class="fas fa-times me-1"></i>İptal</button>
+            <button type="button" class="btn btn-sm btn-danger" id="confirm-delete-fault-btn"><i class="fas fa-trash me-1"></i>Evet, Sil</button>
         `;
-        
-        // Add event listener to confirm delete button
-        const confirmDeleteBtn = modalFooter.querySelector('#confirm-delete-fault-btn');
-        if (confirmDeleteBtn) {
-            confirmDeleteBtn.addEventListener('click', async () => {
-                await deleteRequest(requestId);
-            });
-        }
+        footer.querySelector('#confirm-delete-fault-btn').addEventListener('click', () => deleteRequest(requestId));
     }
-    
-    // Show the modal
+
     deleteFaultModal.show();
 }
 
-// Delete request function
 async function deleteRequest(requestId) {
     try {
         await deleteMaintenanceRequest(requestId);
         showAlert('Arıza talebi başarıyla silindi!', 'success');
-        
-        // Hide the modal
         deleteFaultModal.hide();
-        
-        // Reload the fault requests list
         await loadFaultRequests();
     } catch (error) {
-        console.error('Error deleting fault request:', error);
         showAlert('Arıza talebi silinirken hata oluştu: ' + error.message, 'danger');
     }
 }
 
-// Make functions globally available for onclick handlers
-window.showFaultDetails = showFaultDetails;
+// ── Alert helper ──────────────────────────────────────────────────────────────
+
+function showAlert(message, type = 'info') {
+    const div = document.createElement('div');
+    div.className = `alert alert-${type} alert-dismissible fade show position-fixed`;
+    div.style.cssText = 'top:20px;right:20px;z-index:9999;min-width:300px;';
+    div.innerHTML = `${message}<button type="button" class="btn-close" data-bs-dismiss="alert"></button>`;
+    document.body.appendChild(div);
+    setTimeout(() => { if (div.parentNode) div.remove(); }, 5000);
+}
+
+// ── Global onclick handlers ───────────────────────────────────────────────────
+window.showFaultDetails    = showFaultDetails;
 window.showDeleteFaultModal = showDeleteFaultModal;

@@ -34,6 +34,50 @@ export async function fetchMachineFaultsSummaryReport(filters = {}) {
     return response.json();
 }
 
+// Fetch Staff Activity Report (summary)
+// GET /machines/reports/staff/?year=2025&month=6
+export async function fetchStaffActivityReport({ year, month } = {}) {
+    const params = new URLSearchParams();
+    if (year)  params.append('year',  year);
+    if (month) params.append('month', month);
+    const qs  = params.toString();
+    const url = `${backendBase}/machines/reports/staff/${qs ? `?${qs}` : ''}`;
+    const response = await authedFetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    if (!response.ok) throw new Error('Failed to fetch staff activity report');
+    return response.json();
+}
+
+// Fetch Staff Activity Detail (single user)
+// GET /machines/reports/staff/<user_id>/?year=2025&month=6
+export async function fetchStaffActivityDetail(userId, { year, month } = {}) {
+    const params = new URLSearchParams();
+    if (year)  params.append('year',  year);
+    if (month) params.append('month', month);
+    const qs  = params.toString();
+    const url = `${backendBase}/machines/reports/staff/${userId}/${qs ? `?${qs}` : ''}`;
+    const response = await authedFetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    if (!response.ok) throw new Error('Failed to fetch staff activity detail');
+    return response.json();
+}
+
+// Fetch Monthly Metrics Report
+// GET /machines/reports/monthly-metrics/
+export async function fetchMonthlyMetricsReport() {
+    const url = `${backendBase}/machines/reports/monthly-metrics/`;
+    const response = await authedFetch(url, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+    });
+    if (!response.ok) throw new Error('Failed to fetch monthly metrics report');
+    return response.json();
+}
+
 // Fetch User Resolution Report
 // GET /machines/reports/user-resolution/
 // Accepts optional filters (including page, page_size)

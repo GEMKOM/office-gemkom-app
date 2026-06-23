@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Personel Faaliyet Raporu</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../../style.css">
+    <link rel="stylesheet" href="../../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../../components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="../../../../components/table/table.css">
+    <link rel="stylesheet" href="../../../../components/display-modal/display-modal.css">
+    <link rel="icon" type="image/png" href="../../../../images/gemkom.png">
+    <style>
+        .stat-pill {
+            display: inline-flex; align-items: center; gap: 6px;
+            padding: 3px 10px; border-radius: 20px; font-size: 0.8rem; font-weight: 600;
+        }
+        .stat-pill-blue  { background: rgba(13,110,253,.1); color: #0d6efd; }
+        .stat-pill-green { background: rgba(25,135,84,.1);  color: #198754; }
+        .stat-pill-orange{ background: rgba(253,126,20,.1); color: #fd7e14; }
+        .stat-pill-red   { background: rgba(220,53,69,.1);  color: #dc3545; }
+        .timer-row-active td { background: rgba(25,135,84,.05) !important; }
+
+        /* Month navigator */
+        .month-navigator {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: #fff;
+            border: 1px solid #dee2e6;
+            border-radius: 10px;
+            padding: 6px 10px;
+            box-shadow: 0 1px 4px rgba(0,0,0,.07);
+            margin-bottom: 1rem;
+        }
+        .month-nav-btn {
+            background: none;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            width: 32px; height: 32px;
+            display: flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            color: #495057;
+            transition: background .15s, color .15s;
+            flex-shrink: 0;
+        }
+        .month-nav-btn:hover {
+            background: #8B0000;
+            border-color: #8B0000;
+            color: #fff;
+        }
+        .month-nav-all {
+            color: #6c757d;
+            font-size: .75rem;
+        }
+        .month-nav-input {
+            border: none;
+            outline: none;
+            font-size: .95rem;
+            font-weight: 600;
+            color: #2c3e50;
+            background: transparent;
+            cursor: pointer;
+            min-width: 140px;
+            text-align: center;
+        }
+        .month-nav-input::-webkit-calendar-picker-indicator { cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="navbar-container"></div>
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+
+    <div class="container-fluid py-4">
+        <div id="header-placeholder"></div>
+        <div id="statistics-container"></div>
+        <div id="filters-container"></div>
+        <div id="table-container"></div>
+    </div>
+
+    <!-- Staff detail modal (owned by DisplayModal component) -->
+    <div id="staff-detail-modal-container"></div>
+
+    <footer class="footer-section mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6"><h5>GEMKOM</h5></div>
+                <div class="col-md-6 text-md-end">
+                    <p class="text-light mb-0">&copy; 2024 GEMKOM. Tüm hakları saklıdır.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="staffReport.js"></script>
+</body>
+</html>

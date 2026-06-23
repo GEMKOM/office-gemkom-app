@@ -99,15 +99,14 @@ export class FiltersComponent {
      * @param {number} config.colSize - Bootstrap column size (default: 2)
      */
     addTextFilter(config) {
+        const inputType = config.type || 'text';
         const filter = {
+            placeholder: '',
+            value: '',
+            colSize: 2,
+            ...config,
             type: 'text',
-            id: config.id,
-            label: config.label,
-            placeholder: config.placeholder || '',
-            inputType: config.type || 'text',
-            value: config.value || '',
-            colSize: config.colSize || 2,
-            ...config
+            inputType,
         };
 
         this.filters.push(filter);

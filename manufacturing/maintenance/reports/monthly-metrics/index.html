@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GEMKOM - Aylık Metrikler</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="../../../../style.css">
+    <link rel="stylesheet" href="../../../../components/navbar.css">
+    <link rel="stylesheet" href="../../../../components/header/header.css">
+    <link rel="stylesheet" href="../../../../components/statistics-cards/statistics-cards.css">
+    <link rel="stylesheet" href="../../../../components/table/table.css">
+    <link rel="icon" type="image/png" href="../../../../images/gemkom.png">
+    <style>
+        .metric-card {
+            background: #fff;
+            border: 1px solid rgba(0,0,0,.08);
+            border-radius: 12px;
+            padding: 1.25rem 1.5rem;
+            transition: box-shadow .15s;
+        }
+        .metric-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,.08); }
+        .metric-card .metric-value {
+            font-size: 2rem; font-weight: 700; line-height: 1.1;
+        }
+        .metric-card .metric-label {
+            font-size: .78rem; color: #6c757d; font-weight: 500; margin-top: .25rem;
+        }
+        .trend-up   { color: #dc3545; }
+        .trend-down { color: #198754; }
+        .month-badge {
+            display: inline-block; padding: 2px 8px; border-radius: 8px;
+            font-size: .75rem; font-weight: 600;
+            background: rgba(13,110,253,.1); color: #0d6efd;
+        }
+        .bar-cell { min-width: 120px; }
+        .mini-bar {
+            height: 6px; border-radius: 3px; background: #e9ecef;
+            overflow: hidden; display: inline-block; width: 100%;
+        }
+        .mini-bar-fill { height: 100%; border-radius: 3px; }
+    </style>
+</head>
+<body>
+    <div id="navbar-container"></div>
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+    <div class="floating-element"></div>
+
+    <div class="container-fluid py-4">
+        <div id="header-placeholder"></div>
+        <!-- Overall summary cards -->
+        <div id="statistics-container"></div>
+        <!-- Highlight cards row -->
+        <div id="highlights-container" class="mb-4"></div>
+        <!-- Monthly table -->
+        <div id="table-container"></div>
+    </div>
+
+    <footer class="footer-section mt-5">
+        <div class="container">
+            <div class="row">
+                <div class="col-md-6"><h5>GEMKOM</h5></div>
+                <div class="col-md-6 text-md-end">
+                    <p class="text-light mb-0">&copy; 2024 GEMKOM. Tüm hakları saklıdır.</p>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script type="module" src="monthlyMetrics.js"></script>
+</body>
+</html>

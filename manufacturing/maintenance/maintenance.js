@@ -46,6 +46,18 @@ document.addEventListener('DOMContentLoaded', async () => {
                         icon: 'fas fa-user-check',
                         iconColor: 'rgba(25, 135, 84, 1)',
                         link: '/manufacturing/maintenance/reports/user-resolution'
+                    },
+                    {
+                        label: 'Personel Faaliyet Raporu',
+                        icon: 'fas fa-user-clock',
+                        iconColor: 'rgba(13, 110, 253, 1)',
+                        link: '/manufacturing/maintenance/reports/staff-report'
+                    },
+                    {
+                        label: 'Aylık Metrikler',
+                        icon: 'fas fa-chart-line',
+                        iconColor: 'rgba(13, 202, 240, 1)',
+                        link: '/manufacturing/maintenance/reports/monthly-metrics'
                     }
                 ]
             }

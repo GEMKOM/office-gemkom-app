@@ -25,7 +25,7 @@ import {
     JOB_ORDER_FILE_TYPE_OPTIONS,
     STATUS_OPTIONS
 } from '../../apis/projects/jobOrders.js';
-import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, applyDepartmentTasksTemplate, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks } from '../../apis/projects/departmentTasks.js';
+import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, applyDepartmentTasksTemplate, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks, deleteDepartmentTask } from '../../apis/projects/departmentTasks.js';
 import { listTaskTemplates, getTaskTemplateById } from '../../apis/projects/taskTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
 import { CURRENCY_OPTIONS } from '../../apis/projects/customers.js';
@@ -1486,6 +1486,14 @@ function initializeTableComponent() {
                     }
                 ],
                 visible: (row) => !isDepartmentTaskRow(row) && !HIDE_ACTION_BUTTONS
+            },
+            {
+                key: 'delete-dept-task',
+                label: 'Sil',
+                icon: 'fas fa-trash',
+                class: 'btn-outline-danger',
+                onClick: (row) => handleDeleteDepartmentTaskFromTracking(row),
+                visible: (row) => isDepartmentTaskRow(row) && (row.subtasks_count || 0) === 0
             }
         ],
         emptyMessage: 'İş emri bulunamadı',
@@ -2347,6 +2355,49 @@ function setupExpandButtonListeners() {
 }
 
 // Fetch department tasks for a specific job order (main tasks only; subtasks expand separately)
+async function handleDeleteDepartmentTaskFromTracking(task) {
+    if ((task.subtasks_count || 0) > 0) {
+        showNotification('Alt görevi olan görev silinemez. Önce alt görevleri silin.', 'warning');
+        return;
+    }
+    confirmationModal.show({
+        title: 'Görevi Sil',
+        message: `"${task.title || ('#' + task.id)}" görevini silmek istediğinizden emin misiniz?`,
+        confirmText: 'Evet, Sil',
+        cancelText: 'İptal',
+        onConfirm: async () => {
+            try {
+                await deleteDepartmentTask(task.id);
+                showNotification('Görev silindi', 'success');
+
+                // Remove task from in-memory caches without reloading
+                const jobNo = task._parentJobNo;
+                if (task.parent) {
+                    // Subtask: remove from parent's subtasks cache
+                    const siblings = departmentTaskSubtasksCache.get(task.parent);
+                    if (siblings) {
+                        const filtered = siblings.filter(t => t.id !== task.id);
+                        setDepartmentTaskSubtasksCache(task.parent, filtered);
+                    }
+                } else {
+                    // Main task: remove from job order's tasks cache
+                    if (jobNo && departmentTasksCache.has(jobNo)) {
+                        const siblings = departmentTasksCache.get(jobNo);
+                        departmentTasksCache.set(jobNo, siblings.filter(t => t.id !== task.id));
+                    }
+                }
+                removeDepartmentTaskExpanded(task.id);
+                departmentTaskSubtasksCache.delete(task.id);
+
+                updateTableDataOnly();
+            } catch (error) {
+                console.error('Error deleting department task:', error);
+                showNotification(error.message || 'Görev silinirken hata oluştu', 'error');
+            }
+        }
+    });
+}
+
 async function fetchDepartmentTasksForJobOrder(jobNo) {
     try {
         const response = await getJobOrderDepartmentTasks(jobNo, {

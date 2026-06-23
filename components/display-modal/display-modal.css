@@ -366,6 +366,19 @@
     opacity: 1;
 }
 
+/* Override global navbar.css .nav-link rules inside any modal tab */
+.display-modal-container .nav-tabs .nav-link {
+    color: #6c757d !important;
+}
+.display-modal-container .nav-tabs .nav-link:hover {
+    color: #495057 !important;
+    background: #f8f9fa !important;
+}
+.display-modal-container .nav-tabs .nav-link.active {
+    color: #0d6efd !important;
+    background: transparent !important;
+}
+
 /* Tabs Styling */
 .display-modal-container .display-modal-tabs-container {
     width: 100%;
