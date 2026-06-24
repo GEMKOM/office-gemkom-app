@@ -34,7 +34,7 @@ const roles = guessPriceColumnRoles([
     ['1.500,50', '2,5'],
     ['2.000,00', '3,0']
 ], 2);
-assert.deepEqual(roles.slice(0, 2), ['unit_price', 'weight_kg']);
+assert.deepEqual(Array.from(roles.slice(0, 2)), ['unit_price', 'weight_kg']);
 
 const mapped = buildPastePricesFromMapping([
     ['10'],
