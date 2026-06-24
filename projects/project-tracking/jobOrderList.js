@@ -3807,14 +3807,33 @@ const PHASE_STATUS_BADGE = (status) => ({
 
 // Inline matrix form: define phases (columns) and allocate each product's
 // quantity across them (rows). Each product's row must sum to its quantity.
-function showCreatePhasesForm(jobNo) {
+async function showCreatePhasesForm(jobNo) {
     const formContainer = viewJobOrderModal.content.querySelector('#phases-form-container');
     if (!formContainer) return;
 
     const jobOrder = jobOrderTabCache.jobOrder || {};
+    let children = jobOrderTabCache.children;
+    if (children === null) {
+        formContainer.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin me-2"></i>Alt işler yükleniyor...</div>';
+        try {
+            const response = await getJobOrderChildren(jobNo);
+            children = Array.isArray(response) ? response : extractResultsFromResponse(response);
+            jobOrderTabCache.children = children;
+        } catch (error) {
+            console.error('Error loading children for phase creation:', error);
+            formContainer.innerHTML = '';
+            showNotification(error.message || 'Fazlanacak ürün alt işleri yüklenirken hata oluştu.', 'error');
+            return;
+        }
+    } else if (!Array.isArray(children)) {
+        children = extractResultsFromResponse(children);
+    }
+
+    const sourceChildren = children.length ? children : (jobOrder.children || []);
     // Product masters = direct children that are not themselves phase mirrors.
-    const masters = (jobOrder.children || []).filter(c => !c.is_phase_job && !c.source_job_order);
+    const masters = sourceChildren.filter(c => !c.is_phase_job && !c.source_job_order);
     if (masters.length === 0) {
+        formContainer.innerHTML = '';
         showNotification('Bu iş emrinin fazlanacak ürün alt işi bulunamadı.', 'error');
         return;
     }
@@ -3952,7 +3971,8 @@ function showCreatePhasesForm(jobNo) {
         const errors = [];
         masters.forEach(m => {
             const sum = alloc[m.job_no].reduce((a, b) => a + (b || 0), 0);
-            if (sum !== m.quantity) errors.push(`${m.job_no} (${sum}/${m.quantity})`);
+            const targetQty = Number(m.quantity);
+            if (!Number.isFinite(targetQty) || sum !== targetQty) errors.push(`${m.job_no} (${sum}/${m.quantity})`);
         });
         if (errors.length) {
             showNotification('Şu ürünlerin faz miktarları toplamı hatalı: ' + errors.join(', '), 'error');

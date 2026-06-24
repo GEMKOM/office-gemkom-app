@@ -4150,6 +4150,38 @@ function getEditableItemsInOrder() {
     return result;
 }
 
+function parsePasteNumber(value) {
+    const raw = value == null ? '' : String(value).trim();
+    if (!raw) return null;
+
+    const compact = raw.replace(/[\s\u00a0]/g, '');
+    if (!/^\d[\d.,]*$/.test(compact)) return null;
+
+    const commaCount = (compact.match(/,/g) || []).length;
+    const dotCount = (compact.match(/\./g) || []).length;
+    const lastComma = compact.lastIndexOf(',');
+    const lastDot = compact.lastIndexOf('.');
+    let normalized = compact;
+
+    if (commaCount && dotCount) {
+        normalized = lastComma > lastDot
+            ? compact.replace(/\./g, '').replace(',', '.')
+            : compact.replace(/,/g, '');
+    } else if (commaCount) {
+        normalized = /^\d{1,3}(,\d{3})+$/.test(compact)
+            ? compact.replace(/,/g, '')
+            : compact.replace(',', '.');
+    } else if (dotCount && /^\d{1,3}(\.\d{3})+$/.test(compact)) {
+        normalized = compact.replace(/\./g, '');
+    }
+
+    if (!/^\d+(\.\d+)?$/.test(normalized)) return null;
+
+    const parsed = Number(normalized);
+    if (!Number.isFinite(parsed) || parsed < 0) return null;
+    return Math.round(parsed * 100) / 100;
+}
+
 function guessPriceColumnRoles(rows, columnCount) {
     const roles = Array(columnCount).fill('ignore');
     if (!columnCount) return roles;
@@ -4157,9 +4189,10 @@ function guessPriceColumnRoles(rows, columnCount) {
     const columnStats = [];
     for (let c = 0; c < columnCount; c++) {
         const values = rows.map((r) => (r[c] || '').trim()).filter(Boolean);
-        const numericValues = values.filter((v) => /^[\d.,\s]+$/.test(v));
-        const numericParsed = numericValues.map((v) => parseFloat(v.replace(',', '.')));
-        const avgVal = numericParsed.length ? numericParsed.reduce((a, b) => a + b, 0) / numericParsed.length : 0;
+        const numericValues = values
+            .map((v) => parsePasteNumber(v))
+            .filter((v) => v !== null);
+        const avgVal = numericValues.length ? numericValues.reduce((a, b) => a + b, 0) / numericValues.length : 0;
         columnStats.push({
             numericRatio: values.length ? numericValues.length / values.length : 0,
             avgVal,
@@ -4200,29 +4233,34 @@ function buildPastePricesFromMapping(rows, roles) {
     const periodCol = roles.findIndex((r) => r === 'delivery_period');
     const notesCol = roles.findIndex((r) => r === 'notes');
 
-    const parseNum = (v) => {
-        if (v == null || v === '') return null;
-        const parsed = parseFloat(String(v).trim().replace(',', '.'));
-        if (!Number.isFinite(parsed) || parsed < 0) return null;
-        return Math.round(parsed * 100) / 100;
+    const result = [];
+    const errors = [];
+    const parseMappedNumber = (raw, rowNumber, field) => {
+        if (!raw) return null;
+        const parsed = parsePasteNumber(raw);
+        if (parsed === null) errors.push({ row: rowNumber, field, value: raw });
+        return parsed;
     };
 
-    const result = [];
-    for (const row of rows) {
+    for (let rowIndex = 0; rowIndex < rows.length; rowIndex++) {
+        const row = rows[rowIndex];
         if (!row.some((cell) => cell.trim())) continue;
         const priceRaw = priceCol >= 0 ? (row[priceCol] || '').trim() : '';
         const weightRaw = weightCol >= 0 ? (row[weightCol] || '').trim() : '';
-        // Skip rows where a numeric column has a non-empty but non-numeric value
-        if (priceCol >= 0 && priceRaw && parseNum(priceRaw) === null) continue;
-        if (weightCol >= 0 && weightRaw && parseNum(weightRaw) === null) continue;
         result.push({
-            unit_price: priceCol >= 0 ? parseNum(priceRaw) : null,
-            weight_kg: weightCol >= 0 ? parseNum(weightRaw) : null,
+            unit_price: priceCol >= 0 ? parseMappedNumber(priceRaw, rowIndex + 1, 'Birim Fiyat') : null,
+            weight_kg: weightCol >= 0 ? parseMappedNumber(weightRaw, rowIndex + 1, 'Birim Ağırlık') : null,
             delivery_period: periodCol >= 0 ? ((row[periodCol] || '').trim() || null) : null,
             notes: notesCol >= 0 ? ((row[notesCol] || '').trim() || null) : null
         });
     }
-    return result;
+    return { rows: result, errors };
+}
+
+function formatPastePriceErrors(errors) {
+    const shown = errors.slice(0, 5).map((err) => `${err.row}. satır ${err.field}: "${err.value}"`);
+    const extra = errors.length > shown.length ? ` (+${errors.length - shown.length} daha)` : '';
+    return `Geçersiz sayısal değer: ${shown.join(', ')}${extra}. Lütfen değeri düzeltin veya ilgili sütunu yok sayın.`;
 }
 
 function showPastePricesModal() {
@@ -4265,7 +4303,12 @@ function showPastePricesModal() {
     });
 
     modal.onSaveCallback(async () => {
-        const priceData = buildPastePricesFromMapping(parsedRows, columnRoles);
+        const mappedPrices = buildPastePricesFromMapping(parsedRows, columnRoles);
+        const priceData = mappedPrices.rows;
+        if (mappedPrices.errors.length) {
+            showNotification(formatPastePriceErrors(mappedPrices.errors), 'error');
+            return;
+        }
         const applyCount = Math.min(priceData.length, editableItems.length);
         if (!applyCount) { showNotification('Geçerli satır bulunamadı', 'warning'); return; }
 
@@ -4362,12 +4405,14 @@ function showPastePricesModal() {
     };
 
     const renderPreview = () => {
-        const priceData = buildPastePricesFromMapping(parsedRows, columnRoles);
+        const mappedPrices = buildPastePricesFromMapping(parsedRows, columnRoles);
+        const priceData = mappedPrices.rows;
+        const errors = mappedPrices.errors;
         const hasRole = columnRoles.some((r) => r !== 'ignore');
         const matchCount = Math.min(priceData.length, editableItems.length);
 
         previewCount.textContent = `${matchCount} / ${editableItems.length} kalem`;
-        setSaveEnabled(hasRole && matchCount > 0);
+        setSaveEnabled(hasRole && matchCount > 0 && errors.length === 0);
 
         if (!hasRole) {
             previewWrap.innerHTML = '<div class="text-warning small p-3">En az bir sütun eşleştirilmelidir.</div>';
@@ -4410,7 +4455,12 @@ function showPastePricesModal() {
             extras.push(`<tr><td colspan="10" class="text-warning small text-center"><i class="fas fa-exclamation-triangle me-1"></i>${editableItems.length - priceData.length} kalem için veri yok — bu kalemler değişmez</td></tr>`);
         }
 
+        const errorBanner = errors.length
+            ? `<div class="alert alert-danger small mb-2"><i class="fas fa-exclamation-triangle me-1"></i>${escapeHtml(formatPastePriceErrors(errors))}</div>`
+            : '';
+
         previewWrap.innerHTML = `
+          ${errorBanner}
           <table class="table table-sm table-striped mb-0">
             <thead class="table-light sticky-top"><tr>${headerCols}</tr></thead>
             <tbody>${previewRows.join('')}${extras.join('')}</tbody>
