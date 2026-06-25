@@ -355,6 +355,17 @@ export async function markWon(offerId) {
     return response.json();
 }
 
+export async function revertWon(offerId) {
+    const response = await authedFetch(`${BASE}/${offerId}/revert-won/`, {
+        method: 'POST'
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || JSON.stringify(err));
+    }
+    return response.json();
+}
+
 export async function convertToJobOrder(offerId, fileIds = null) {
     const options = {
         method: 'POST'

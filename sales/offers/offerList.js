@@ -35,6 +35,7 @@ import {
     recordDecision,
     submitToCustomer,
     markWon,
+    revertWon,
     convertToJobOrder,
     markLost,
     cancelOffer,
@@ -48,6 +49,7 @@ import {
 } from '../../apis/sales/offers.js';
 import { listOfferTemplates, getOfferTemplate, getOfferTemplateNodes, getOfferTemplateNodeChildren, searchOfferTemplateNodes } from '../../apis/sales/offerTemplates.js';
 import { listCustomers } from '../../apis/projects/customers.js';
+import { initCustomerEditModal, openCustomerEditModal, getMissingCustomerFieldsForConversion } from '../customers/customerEditModal.js';
 import { getPaymentTerms } from '../../apis/procurement.js';
 import { createComment, getTopicComments } from '../../apis/projects/topics.js';
 import { authFetchUsers } from '../../apis/users.js';
@@ -558,6 +560,20 @@ function initTable() {
                 }
             },
             {
+                key: 'revert_won',
+                label: 'Geri Al',
+                title: 'Kazanıldı işaretini geri al',
+                icon: 'fas fa-undo',
+                class: 'btn-outline-warning',
+                visible: (row) => row.status === 'won',
+                onClick: (row) => {
+                    offerId = row.id;
+                    showRevertWonConfirm(async () => {
+                        await loadOffers();
+                    });
+                }
+            },
+            {
                 key: 'cancel',
                 label: 'İptal',
                 title: 'Teklifi iptal et',
@@ -618,6 +634,25 @@ function initModals() {
 
     setupOfferModalTabHandler();
 
+    initCustomerEditModal('edit-customer-modal-container', {
+        onSuccess: async (updatedCustomer) => {
+            await loadCustomerOptions();
+            await refreshOfferGenelTab(updatedCustomer);
+            await refreshConvertModalCustomerWarning(updatedCustomer);
+        }
+    });
+
+    const offerModalContainer = viewOfferModal.container;
+    if (offerModalContainer && !offerModalContainer.dataset.customerEditBound) {
+        offerModalContainer.dataset.customerEditBound = '1';
+        offerModalContainer.addEventListener('click', (e) => {
+            const editBtn = e.target.closest('#edit-customer-from-offer-btn');
+            if (!editBtn) return;
+            const customerId = editBtn.dataset.customerId;
+            if (customerId) openCustomerEditModal(customerId);
+        });
+    }
+
     approvalConfirmModal = new ConfirmationModal('approval-confirm-modal-container', {
         title: 'Onaya Gönder',
         icon: 'fas fa-gavel',
@@ -662,6 +697,10 @@ function initModals() {
             };
             const refreshOffer = (tabId = getActiveTabId()) => window.viewOffer(offerId, { initialTabId: tabId });
             if (e.target.closest('#edit-offer-btn')) { showEditModal(refreshOffer); return; }
+            if (e.target.closest('#revert-won-btn')) {
+                showRevertWonConfirm(refreshOffer);
+                return;
+            }
             if (e.target.closest('#submit-staged-items-btn')) { await submitStagedItems(); return; }
             if (e.target.closest('#discard-kalemler-changes-btn')) {
                 showActionConfirm({
@@ -1545,6 +1584,91 @@ function renderApprovalWorkflow(approvals) {
 }
 
 // Genel tab: structured data + edit & outcome actions only
+function getOfferCustomerDetail(offerData) {
+    return offerData?.customer_detail || null;
+}
+
+function formatCustomerDisplayValue(value, multiline = false) {
+    if (!value || String(value).trim() === '') return '-';
+    const escaped = escapeHtml(String(value));
+    return multiline ? escaped.replace(/\n/g, '<br>') : escaped;
+}
+
+let convertModalOfferData = null;
+
+async function refreshOfferGenelTab(updatedCustomer) {
+    if (!offerId || !viewOfferModal) return;
+    try {
+        if (updatedCustomer?.id && offer?.customer_detail) {
+            offer.customer_detail = { ...offer.customer_detail, ...updatedCustomer };
+            if (updatedCustomer.name) offer.customer_name = updatedCustomer.name;
+            if (updatedCustomer.code) offer.customer_code = updatedCustomer.code;
+        } else {
+            offer = await getOffer(offerId);
+            offerId = offer.id;
+        }
+        const pane = viewOfferModal.container?.querySelector('#tab-genel-pane');
+        if (!pane) return;
+        const statusLabel = OFFER_STATUS_MAP[offer.status] || offer.status;
+        const statusColor = OFFER_STATUS_COLORS[offer.status] || 'secondary';
+        viewOfferModal.setTitle(`${offer.offer_no} — ${offer.title || 'Teklif'}`);
+        pane.innerHTML = `<div class="offer-tab-content">${buildGenelTab(statusLabel, statusColor)}</div>`;
+    } catch (e) {
+        console.error('Failed to refresh offer Genel tab:', e);
+    }
+}
+
+function renderConvertCustomerWarning(offerData, warningEl) {
+    if (!warningEl) return;
+    const missing = getMissingCustomerFieldsForConversion(offerData?.customer_detail);
+    if (!missing.length) {
+        warningEl.innerHTML = '';
+        warningEl.classList.add('d-none');
+        return;
+    }
+    warningEl.classList.remove('d-none');
+    const missingList = missing.map(label => `<li>${escapeHtml(label)}</li>`).join('');
+    warningEl.innerHTML = `
+        <div class="alert alert-warning mb-3">
+            <div class="d-flex align-items-start gap-2">
+                <i class="fas fa-exclamation-triangle mt-1"></i>
+                <div class="flex-grow-1">
+                    <div class="fw-semibold mb-1">Eksik müşteri bilgileri</div>
+                    <p class="small mb-2">İş emrine dönüştürmeden önce aşağıdaki müşteri bilgilerini tamamlamanız önerilir:</p>
+                    <ul class="small mb-2">${missingList}</ul>
+                    <button type="button" class="btn btn-sm btn-warning" id="convert-edit-customer-btn">
+                        <i class="fas fa-edit me-1"></i>Müşteri Bilgilerini Düzenle
+                    </button>
+                </div>
+            </div>
+        </div>
+    `;
+    warningEl.querySelector('#convert-edit-customer-btn')?.addEventListener('click', () => {
+        if (offerData?.customer) openCustomerEditModal(offerData.customer);
+    });
+}
+
+async function refreshConvertModalCustomerWarning(updatedCustomer) {
+    if (!convertModalOfferData) return;
+    if (updatedCustomer?.id) {
+        convertModalOfferData.customer_detail = {
+            ...(convertModalOfferData.customer_detail || {}),
+            ...updatedCustomer
+        };
+        if (updatedCustomer.name) convertModalOfferData.customer_name = updatedCustomer.name;
+        if (updatedCustomer.code) convertModalOfferData.customer_code = updatedCustomer.code;
+    } else if (offerId) {
+        try {
+            convertModalOfferData = await getOffer(offerId);
+        } catch (e) {
+            console.error('Failed to refresh convert modal offer data:', e);
+            return;
+        }
+    }
+    const warningEl = document.getElementById('convert-customer-warning');
+    renderConvertCustomerWarning(convertModalOfferData, warningEl);
+}
+
 function buildGenelTab(statusLabel, statusColor) {
     const totalPrice = offer.total_price ? parseFloat(offer.total_price) : 0;
     const totalWeight = offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0;
@@ -1552,6 +1676,8 @@ function buildGenelTab(statusLabel, statusColor) {
     const priceText = totalPrice > 0 
         ? `€ ${totalPrice.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`
         : '-';
+
+    const customerDetail = getOfferCustomerDetail(offer);
 
     let html = `
         <div style="padding: 20px;">
@@ -1593,27 +1719,62 @@ function buildGenelTab(statusLabel, statusColor) {
             
             <!-- Müşteri Bilgileri Section -->
             <div class="mb-4">
-                <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
-                    <i class="fas fa-building me-2"></i>
-                    Müşteri Bilgileri
+                <h6 class="mb-3 d-flex align-items-center justify-content-between text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
+                    <span class="d-flex align-items-center">
+                        <i class="fas fa-building me-2"></i>
+                        Müşteri Bilgileri
+                    </span>
+                    ${offer.customer ? `
+                    <button type="button" class="btn btn-sm btn-outline-primary" id="edit-customer-from-offer-btn" data-customer-id="${offer.customer}">
+                        <i class="fas fa-edit me-1"></i>Düzenle
+                    </button>
+                    ` : ''}
                 </h6>
                 <div class="field-list">
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-building me-1"></i>Müşteri
                         </div>
-                        <div class="field-value flex-grow-1">${offer.customer_name || '-'}${offer.customer_code ? ` <span class="text-muted">(${offer.customer_code})</span>` : ''}</div>
+                        <div class="field-value flex-grow-1">${offer.customer_name || '-'}${offer.customer_code ? ` <span class="text-muted">(${escapeHtml(offer.customer_code)})</span>` : ''}</div>
                     </div>
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-hashtag me-1"></i>Müşteri Referansı
                         </div>
-                        <div class="field-value flex-grow-1">${offer.customer_inquiry_ref || '-'}</div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(offer.customer_inquiry_ref)}</div>
+                    </div>
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-user me-1"></i>İletişim Kişisi
+                        </div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(customerDetail?.contact_person)}</div>
+                    </div>
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-phone me-1"></i>Telefon
+                        </div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(customerDetail?.phone)}</div>
+                    </div>
+                    <div class="field-row d-flex align-items-start py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-map-marker-alt me-1"></i>Adres
+                        </div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(customerDetail?.address, true)}</div>
+                    </div>
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-id-card me-1"></i>Vergi Numarası
+                        </div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(customerDetail?.tax_id)}</div>
+                    </div>
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-landmark me-1"></i>Vergi Dairesi
+                        </div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(customerDetail?.tax_office)}</div>
                     </div>
                 </div>
             </div>
-            
-            <!-- Teklif Detayları Section -->
             <div class="mb-4">
                 <h6 class="mb-3 d-flex align-items-center text-primary" style="font-weight: 600; padding-bottom: 8px; border-bottom: 2px solid #e0e0e0;">
                     <i class="fas fa-clipboard-list me-2"></i>
@@ -4647,6 +4808,9 @@ function getOfferModalFooterHtml(tabId) {
     const actionClass = 'btn btn-sm btn-danger';
     if (tabId === 'genel') {
         if (editable) parts.push(`<button type="button" class="${actionClass}" id="edit-offer-btn"><i class="fas fa-edit me-1"></i>Düzenle</button>`);
+        if (s === 'won' && !offer.converted_job_order) {
+            parts.push(`<button type="button" class="btn btn-sm btn-outline-warning" id="revert-won-btn"><i class="fas fa-undo me-1"></i>Kazanıldıyı Geri Al</button>`);
+        }
     } else if (tabId === 'kalemler') {
         if (editable) parts.push(`<button type="button" class="${actionClass}" id="submit-staged-items-btn"><i class="fas fa-save me-1"></i>Değişiklikleri Kaydet</button>`);
         if (editable) parts.push(`<button type="button" class="btn btn-sm btn-outline-secondary" id="discard-kalemler-changes-btn"><i class="fas fa-undo me-1"></i>Vazgeç</button>`);
@@ -6308,6 +6472,22 @@ function showActionConfirm(options) {
     });
 }
 
+function showRevertWonConfirm(onSuccess) {
+    showActionConfirm({
+        title: 'Kazanıldıyı Geri Al',
+        message: 'Teklif kazanıldı işaretinden çıkarılacak ve önceki duruma (müşteriye sunuldu veya onaylandı) dönecek. Devam etmek istiyor musunuz?',
+        onConfirm: async () => {
+            try {
+                await revertWon(offerId);
+                showNotification('Kazanıldı işareti geri alındı', 'success');
+                await onSuccess();
+            } catch (e) {
+                showNotification(parseError(e, 'Geri alma hatası'), 'error');
+            }
+        }
+    });
+}
+
 async function showConvertModal(onSuccess) {
     let offerData = null;
     try {
@@ -6316,6 +6496,7 @@ async function showConvertModal(onSuccess) {
         showNotification(parseError(e, 'Teklif bilgileri yüklenemedi'), 'error');
         return;
     }
+    convertModalOfferData = offerData;
 
     const modal = new EditModal('convert-modal-container', { title: 'İş Emrine Dönüştür', icon: 'fas fa-exchange-alt', size: 'lg', showEditButton: false });
     modal.clearAll();
@@ -6342,6 +6523,7 @@ async function showConvertModal(onSuccess) {
             }
             const result = await convertToJobOrder(offerId, file_ids.length > 0 ? file_ids : null);
             modal.hide();
+            convertModalOfferData = null;
             showNotification(`İş emrine dönüştürüldü: ${result.job_no}`, 'success');
             await onSuccess();
         } catch (e) {
@@ -6353,11 +6535,15 @@ async function showConvertModal(onSuccess) {
     const infoField = document.createElement('div');
     infoField.className = 'mb-3';
     infoField.innerHTML = '<p class="text-muted mb-0">Teklifi iş emrine dönüştürmek istediğinize emin misiniz? İş emrine aktarılacak dosyaları seçebilirsiniz.</p>';
+    const customerWarningField = document.createElement('div');
+    customerWarningField.id = 'convert-customer-warning';
     const form = modal.container.querySelector('#edit-modal-form');
     if (form) {
         const firstSection = form.querySelector('.form-section');
         if (firstSection) {
             firstSection.insertBefore(infoField, firstSection.firstChild);
+            firstSection.insertBefore(customerWarningField, infoField.nextSibling);
+            renderConvertCustomerWarning(offerData, customerWarningField);
         }
     }
     const container = document.getElementById('convert-modal-container');

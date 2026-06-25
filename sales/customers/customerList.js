@@ -2,10 +2,7 @@ import { initNavbar } from '../../components/navbar.js';
 import { ModernDropdown } from '../../components/dropdown/dropdown.js';
 import { 
     listCustomers, 
-    getCustomerById, 
     createCustomer as createCustomerAPI, 
-    updateCustomer as updateCustomerAPI, 
-    patchCustomer as patchCustomerAPI,
     deleteCustomer as deleteCustomerAPI,
     CURRENCY_OPTIONS
 } from '../../apis/projects/customers.js';
@@ -17,6 +14,7 @@ import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { EditModal } from '../../components/edit-modal/edit-modal.js';
 import { showNotification } from '../../components/notification/notification.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
+import { initCustomerEditModal, openCustomerEditModal } from './customerEditModal.js';
 
 // State management
 let currentPage = 1;
@@ -33,7 +31,6 @@ let customersTable = null; // Table component instance
 
 // Modal component instances
 let createCustomerModal = null;
-let editCustomerModal = null;
 let deleteCustomerModal = null;
 
 // Initialize the page
@@ -72,7 +69,20 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     await initializeCustomers();
     setupEventListeners();
+    await tryOpenCustomerFromUrl();
 });
+
+async function tryOpenCustomerFromUrl() {
+    try {
+        const params = new URLSearchParams(window.location.search);
+        const customerId = params.get('customer_id');
+        if (customerId) {
+            await openCustomerEditModal(customerId);
+        }
+    } catch (e) {
+        console.error('Failed to open customer from URL:', e);
+    }
+}
 
 async function initializeCustomers() {
     try {
@@ -296,12 +306,11 @@ function initializeModalComponents() {
         showEditButton: false
     });
 
-    // Edit Customer Modal
-    editCustomerModal = new EditModal('edit-customer-modal-container', {
-        title: 'Müşteri Düzenle',
-        icon: 'fas fa-edit',
-        size: 'lg',
-        showEditButton: false
+    // Edit Customer Modal (shared module)
+    initCustomerEditModal('edit-customer-modal-container', {
+        onSuccess: async () => {
+            await loadCustomers();
+        }
     });
 
     // Delete Customer Modal
@@ -321,11 +330,6 @@ function setupModalCallbacks() {
     // Create customer modal callbacks
     createCustomerModal.onSaveCallback(async (formData) => {
         await createCustomer(formData);
-    });
-
-    // Edit customer modal callbacks
-    editCustomerModal.onSaveCallback(async (formData) => {
-        await updateCustomer(formData);
     });
 
     // Delete customer modal callbacks
@@ -450,203 +454,7 @@ function setupEventListeners() {
 
 // Global functions for actions
 
-window.editCustomer = async function(customerId) {
-    // Check if customerId is valid
-    if (!customerId || customerId === '') {
-        showNotification('Geçersiz müşteri ID', 'error');
-        return;
-    }
-    
-    try {
-        // Fetch customer detail from API
-        const customer = await getCustomerById(customerId);
-        
-        if (!customer) {
-            showNotification('Müşteri bulunamadı', 'error');
-            return;
-        }
-        
-        // Store the customer ID for update
-        window.editingCustomerId = customerId;
-        
-        // Clear and configure the edit modal
-        editCustomerModal.clearAll();
-        
-        // Add Basic Information section
-        editCustomerModal.addSection({
-            title: 'Temel Bilgiler',
-            icon: 'fas fa-info-circle',
-            iconColor: 'text-primary'
-        });
-
-        // Add form fields with customer data
-        editCustomerModal.addField({
-            id: 'code',
-            name: 'code',
-            label: 'Müşteri Kodu',
-            type: 'text',
-            value: customer.code || '',
-            required: true,
-            icon: 'fas fa-barcode',
-            colSize: 6,
-            helpText: 'Benzersiz müşteri kodu'
-        });
-
-        editCustomerModal.addField({
-            id: 'name',
-            name: 'name',
-            label: 'Firma Adı',
-            type: 'text',
-            value: customer.name || '',
-            required: true,
-            icon: 'fas fa-building',
-            colSize: 6,
-            helpText: 'Tam firma adı'
-        });
-
-        editCustomerModal.addField({
-            id: 'short_name',
-            name: 'short_name',
-            label: 'Kısa Ad',
-            type: 'text',
-            value: customer.short_name || '',
-            icon: 'fas fa-tag',
-            colSize: 6,
-            helpText: 'Kısa gösterim adı'
-        });
-
-        editCustomerModal.addField({
-            id: 'default_currency',
-            name: 'default_currency',
-            label: 'Para Birimi',
-            type: 'dropdown',
-            value: customer.default_currency || 'TRY',
-            icon: 'fas fa-coins',
-            colSize: 6,
-            helpText: 'Varsayılan para birimi',
-            options: CURRENCY_OPTIONS.map(c => ({
-                value: c.value,
-                label: c.label
-            }))
-        });
-
-        // Add Contact Information section
-        editCustomerModal.addSection({
-            title: 'İletişim Bilgileri',
-            icon: 'fas fa-address-book',
-            iconColor: 'text-success'
-        });
-
-        editCustomerModal.addField({
-            id: 'contact_person',
-            name: 'contact_person',
-            label: 'İletişim Kişisi',
-            type: 'text',
-            value: customer.contact_person || '',
-            icon: 'fas fa-user',
-            colSize: 6,
-            helpText: 'Ana iletişim kişisi'
-        });
-
-        editCustomerModal.addField({
-            id: 'phone',
-            name: 'phone',
-            label: 'Telefon',
-            type: 'text',
-            value: customer.phone || '',
-            icon: 'fas fa-phone',
-            colSize: 6,
-            helpText: 'Telefon numarası'
-        });
-
-        editCustomerModal.addField({
-            id: 'email',
-            name: 'email',
-            label: 'E-posta',
-            type: 'email',
-            value: customer.email || '',
-            icon: 'fas fa-envelope',
-            colSize: 6,
-            helpText: 'E-posta adresi'
-        });
-
-        editCustomerModal.addField({
-            id: 'address',
-            name: 'address',
-            label: 'Adres',
-            type: 'textarea',
-            value: customer.address || '',
-            icon: 'fas fa-map-marker-alt',
-            colSize: 6,
-            helpText: 'Tam adres'
-        });
-
-        // Add Tax Information section
-        editCustomerModal.addSection({
-            title: 'Vergi Bilgileri',
-            icon: 'fas fa-file-invoice',
-            iconColor: 'text-info'
-        });
-
-        editCustomerModal.addField({
-            id: 'tax_id',
-            name: 'tax_id',
-            label: 'Vergi Numarası',
-            type: 'text',
-            value: customer.tax_id || '',
-            icon: 'fas fa-id-card',
-            colSize: 6,
-            helpText: 'Vergi kimlik numarası'
-        });
-
-        editCustomerModal.addField({
-            id: 'tax_office',
-            name: 'tax_office',
-            label: 'Vergi Dairesi',
-            type: 'text',
-            value: customer.tax_office || '',
-            icon: 'fas fa-landmark',
-            colSize: 6,
-            helpText: 'Bağlı olduğu vergi dairesi'
-        });
-
-        // Add Status section
-        editCustomerModal.addSection({
-            title: 'Durum',
-            icon: 'fas fa-toggle-on',
-            iconColor: 'text-warning'
-        });
-
-        editCustomerModal.addField({
-            id: 'is_active',
-            name: 'is_active',
-            label: 'Aktif',
-            type: 'checkbox',
-            value: customer.is_active !== false,
-            icon: 'fas fa-check-circle',
-            colSize: 12,
-            helpText: 'Müşterinin aktif durumu'
-        });
-
-        editCustomerModal.addField({
-            id: 'notes',
-            name: 'notes',
-            label: 'Notlar',
-            type: 'textarea',
-            value: customer.notes || '',
-            icon: 'fas fa-sticky-note',
-            colSize: 12,
-            helpText: 'İç notlar'
-        });
-
-        // Render and show modal
-        editCustomerModal.render();
-        editCustomerModal.show();
-    } catch (error) {
-        console.error('Error loading customer for edit:', error);
-        showNotification('Müşteri bilgileri yüklenirken hata oluştu', 'error');
-    }
-};
+window.editCustomer = openCustomerEditModal;
 
 window.deleteCustomer = function(customerId, customerName) {
     showDeleteCustomerModal(customerId, customerName);
@@ -918,53 +726,6 @@ async function createCustomer(formData) {
     } catch (error) {
         console.error('Error creating customer:', error);
         let errorMessage = 'Müşteri oluşturulurken hata oluştu';
-        
-        // Try to parse error message
-        try {
-            if (error.message) {
-                const errorData = JSON.parse(error.message);
-                if (typeof errorData === 'object') {
-                    const errors = Object.values(errorData).flat();
-                    errorMessage = errors.join(', ') || errorMessage;
-                } else {
-                    errorMessage = error.message;
-                }
-            }
-        } catch (e) {
-            // If parsing fails, use default message
-        }
-        
-        showNotification(errorMessage, 'error');
-    }
-}
-
-async function updateCustomer(formData) {
-    const customerId = window.editingCustomerId;
-    if (!customerId) {
-        showNotification('Düzenlenecek müşteri bulunamadı', 'error');
-        return;
-    }
-    
-    try {
-        const response = await patchCustomerAPI(customerId, formData);
-        
-        if (response && response.id) {
-            // Hide modal
-            editCustomerModal.hide();
-            
-            // Clear the editing customer ID
-            window.editingCustomerId = null;
-            
-            // Reload customers
-            await loadCustomers();
-            
-            showNotification('Müşteri başarıyla güncellendi', 'success');
-        } else {
-            throw new Error('Müşteri güncellenemedi');
-        }
-    } catch (error) {
-        console.error('Error updating customer:', error);
-        let errorMessage = 'Müşteri güncellenirken hata oluştu';
         
         // Try to parse error message
         try {
