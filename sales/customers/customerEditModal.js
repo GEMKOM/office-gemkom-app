@@ -44,6 +44,7 @@ function bindCustomerEditUrlSync(modal) {
     if (!modal?.modal || urlSyncBound) return;
     urlSyncBound = true;
     modal.modal.addEventListener('hidden.bs.modal', () => {
+        customerEditRequestSeq++;
         clearCustomerEditUrl();
         editingCustomerId = null;
     });
