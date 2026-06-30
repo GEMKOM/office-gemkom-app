@@ -327,7 +327,7 @@ function renderTable() {
         iconColor: 'text-primary',
         groupBy: '_userId',
         groupCollapsible: true,
-        defaultGroupExpanded: true,
+        defaultGroupExpanded: false,
         columns,
         data,
         sortable: true,
