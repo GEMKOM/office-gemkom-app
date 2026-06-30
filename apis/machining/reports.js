@@ -35,6 +35,26 @@ export async function fetchDailyEfficiencyReport(date = null, includeWorked = fa
 }
 
 /**
+ * @param {string} startDate - ISO date (YYYY-MM-DD), required
+ * @param {string} endDate   - ISO date (YYYY-MM-DD), required
+ * @param {number[]|null} userIds - optional array of user IDs to restrict results
+ */
+export async function fetchPerformanceReport(startDate, endDate, userIds = null) {
+    const queryParams = new URLSearchParams();
+    queryParams.append('start_date', startDate);
+    queryParams.append('end_date', endDate);
+    if (userIds && userIds.length > 0) {
+        queryParams.append('user_ids', userIds.join(','));
+    }
+    const url = `${backendBase}/machining/reports/performance/?${queryParams.toString()}`;
+    const response = await authedFetch(url);
+    if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    return response.json();
+}
+
+/**
  * Get machining job entries by job number
  * @param {Object} params - Query parameters
  * @param {string} params.job_no - Required. Job number

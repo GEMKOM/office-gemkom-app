@@ -82,6 +82,12 @@ function initMachiningModule() {
                         icon: 'fas fa-calendar-alt',
                         iconColor: 'rgba(139, 0, 0, 1)',
                         link: '/manufacturing/machining/reports/user-report'
+                    },
+                    {
+                        label: 'Performans Raporu',
+                        icon: 'fas fa-chart-bar',
+                        iconColor: 'rgba(139, 0, 0, 1)',
+                        link: '/manufacturing/machining/reports/performance'
                     }
                 ]
             },
