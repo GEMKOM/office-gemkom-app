@@ -2158,12 +2158,12 @@ function addCustomStaged({ parentRef = null, parentId = null } = {}) {
     setTimeout(() => focusStagedTitleInput(ref), 50);
 }
 
-function parsePasteTable(text) {
+function parsePasteTable(text, preserveBlankRows = false) {
     if (!text || !String(text).trim()) return { rows: [], columnCount: 0 };
     const rows = String(text)
         .split(/\r?\n/)
         .map((line) => line.split('\t').map((cell) => cell.trim()))
-        .filter((row) => row.some((cell) => cell !== ''));
+        .filter((row) => preserveBlankRows || row.some((cell) => cell !== ''));
     const columnCount = rows.length ? Math.max(...rows.map((r) => r.length)) : 0;
     for (const row of rows) {
         while (row.length < columnCount) row.push('');
@@ -2443,7 +2443,7 @@ function showPasteSubItemsModal({ parentRef = null, parentId = null, parentTitle
     };
 
     const parseAndRefresh = () => {
-        const parsed = parsePasteTable(textarea?.value || '');
+        const parsed = parsePasteTable((textarea?.value || '').trimEnd(), true);
         parsedRows = parsed.rows;
         columnCount = parsed.columnCount;
 
@@ -4369,21 +4369,59 @@ function buildPastePricesFromMapping(rows, roles) {
     };
 
     const result = [];
-    for (const row of rows) {
-        if (!row.some((cell) => cell.trim())) continue;
+    for (const [index, row] of rows.entries()) {
+        const rowNumber = index + 1;
+        if (!row.some((cell) => cell.trim())) {
+            result.push({
+                unit_price: null,
+                weight_kg: null,
+                delivery_period: null,
+                notes: null,
+                _empty: true,
+                _invalid: false,
+                _rowNumber: rowNumber
+            });
+            continue;
+        }
         const priceRaw = priceCol >= 0 ? (row[priceCol] || '').trim() : '';
         const weightRaw = weightCol >= 0 ? (row[weightCol] || '').trim() : '';
-        // Skip rows where a numeric column has a non-empty but non-numeric value
-        if (priceCol >= 0 && priceRaw && parseNum(priceRaw) === null) continue;
-        if (weightCol >= 0 && weightRaw && parseNum(weightRaw) === null) continue;
+        const invalidReasons = [];
+        // Preserve row positions: invalid rows must block apply instead of compacting later prices onto earlier items.
+        if (priceCol >= 0 && priceRaw && parseNum(priceRaw) === null) invalidReasons.push('Birim fiyat geçersiz');
+        if (weightCol >= 0 && weightRaw && parseNum(weightRaw) === null) invalidReasons.push('Birim ağırlık geçersiz');
+        if (invalidReasons.length) {
+            result.push({
+                unit_price: null,
+                weight_kg: null,
+                delivery_period: periodCol >= 0 ? ((row[periodCol] || '').trim() || null) : null,
+                notes: notesCol >= 0 ? ((row[notesCol] || '').trim() || null) : null,
+                _empty: false,
+                _invalid: true,
+                _rowNumber: rowNumber,
+                _error: invalidReasons.join(', ')
+            });
+            continue;
+        }
         result.push({
             unit_price: priceCol >= 0 ? parseNum(priceRaw) : null,
             weight_kg: weightCol >= 0 ? parseNum(weightRaw) : null,
             delivery_period: periodCol >= 0 ? ((row[periodCol] || '').trim() || null) : null,
-            notes: notesCol >= 0 ? ((row[notesCol] || '').trim() || null) : null
+            notes: notesCol >= 0 ? ((row[notesCol] || '').trim() || null) : null,
+            _empty: false,
+            _invalid: false,
+            _rowNumber: rowNumber
         });
     }
     return result;
+}
+
+function hasPastePriceValues(row) {
+    return Boolean(row && !row._empty && !row._invalid && (
+        row.unit_price !== null ||
+        row.weight_kg !== null ||
+        row.delivery_period !== null ||
+        row.notes !== null
+    ));
 }
 
 function showPastePricesModal() {
@@ -4427,23 +4465,35 @@ function showPastePricesModal() {
 
     modal.onSaveCallback(async () => {
         const priceData = buildPastePricesFromMapping(parsedRows, columnRoles);
-        const applyCount = Math.min(priceData.length, editableItems.length);
-        if (!applyCount) { showNotification('Geçerli satır bulunamadı', 'warning'); return; }
+        const invalidRows = priceData.filter((row) => row._invalid);
+        if (invalidRows.length) {
+            showNotification(`Geçersiz fiyat satırı var: ${invalidRows.map((row) => row._rowNumber).join(', ')}`, 'warning');
+            return;
+        }
+        if (priceData.length > editableItems.length) {
+            showNotification(`${priceData.length - editableItems.length} fazla satır var. Hiçbir satır sessizce atlanmadı; lütfen veriyi düzeltin.`, 'warning');
+            return;
+        }
+        const applyCount = priceData.length;
+        if (!applyCount || !priceData.some(hasPastePriceValues)) { showNotification('Geçerli satır bulunamadı', 'warning'); return; }
 
+        let changedCount = 0;
         for (let i = 0; i < applyCount; i++) {
+            const d = priceData[i];
+            if (!hasPastePriceValues(d)) continue;
             const edits = pricingV3State.localEdits[editableItems[i].id];
             if (!edits) continue;
-            const d = priceData[i];
             if (d.unit_price !== null) edits.unit_price = d.unit_price;
             if (d.weight_kg !== null) edits.weight_kg = d.weight_kg;
             if (d.delivery_period !== null) edits.delivery_period = d.delivery_period;
             if (d.notes !== null) edits.notes = d.notes;
+            changedCount++;
         }
 
         renderPricingV3Table();
         renderPricingV3Totals();
         markPricingV3Unsaved(true);
-        showNotification(`${applyCount} kaleme fiyat uygulandı`, 'success');
+        showNotification(`${changedCount} kaleme fiyat uygulandı`, 'success');
         modal.hide();
     });
 
@@ -4526,9 +4576,12 @@ function showPastePricesModal() {
         const priceData = buildPastePricesFromMapping(parsedRows, columnRoles);
         const hasRole = columnRoles.some((r) => r !== 'ignore');
         const matchCount = Math.min(priceData.length, editableItems.length);
+        const invalidRows = priceData.filter((row) => row._invalid);
+        const extraCount = Math.max(priceData.length - editableItems.length, 0);
+        const hasApplicableRows = priceData.some(hasPastePriceValues);
 
         previewCount.textContent = `${matchCount} / ${editableItems.length} kalem`;
-        setSaveEnabled(hasRole && matchCount > 0);
+        setSaveEnabled(hasRole && matchCount > 0 && invalidRows.length === 0 && extraCount === 0 && hasApplicableRows);
 
         if (!hasRole) {
             previewWrap.innerHTML = '<div class="text-warning small p-3">En az bir sütun eşleştirilmelidir.</div>';
@@ -4554,19 +4607,26 @@ function showPastePricesModal() {
             const item = editableItems[i];
             const d = priceData[i];
             const title = item.resolved_title || item.title_override || item.title || item.template_node_detail?.title || `#${item.id}`;
+            const rowClass = d._invalid ? 'table-danger' : (d._empty ? 'table-warning' : '');
             previewRows.push(`
-              <tr>
+              <tr class="${rowClass}">
                 <td class="text-muted">${i + 1}</td>
                 <td>${escapeHtml(String(title))}</td>
                 ${showPrice ? `<td class="text-end">${d.unit_price != null ? d.unit_price.toLocaleString('tr-TR') : '—'}</td>` : ''}
                 ${showWeight ? `<td class="text-end">${d.weight_kg != null ? d.weight_kg.toLocaleString('tr-TR') : '—'}</td>` : ''}
                 ${showPeriod ? `<td>${escapeHtml(String(d.delivery_period || '—'))}</td>` : ''}
-                ${showNotes ? `<td>${escapeHtml(String(d.notes || ''))}</td>` : ''}
+                ${showNotes ? `<td>${escapeHtml(String(d._invalid ? d._error : (d.notes || '')))}</td>` : ''}
               </tr>
             `);
         }
 
         const extras = [];
+        if (invalidRows.length) {
+            extras.push(`<tr><td colspan="10" class="text-danger small text-center"><i class="fas fa-exclamation-triangle me-1"></i>Geçersiz satırlar var (${invalidRows.map((row) => row._rowNumber).join(', ')}). Hatalı satırlar düzeltilmeden fiyatlar uygulanmaz.</td></tr>`);
+        }
+        if (extraCount > 0) {
+            extras.push(`<tr><td colspan="10" class="text-danger small text-center"><i class="fas fa-exclamation-triangle me-1"></i>${extraCount} fazla satır var — fazla fiyat satırları sessizce atlanmaz</td></tr>`);
+        }
         if (priceData.length < editableItems.length) {
             extras.push(`<tr><td colspan="10" class="text-warning small text-center"><i class="fas fa-exclamation-triangle me-1"></i>${editableItems.length - priceData.length} kalem için veri yok — bu kalemler değişmez</td></tr>`);
         }
