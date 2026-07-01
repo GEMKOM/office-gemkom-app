@@ -27,7 +27,7 @@ import {
 } from '../../apis/projects/jobOrders.js';
 import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, applyDepartmentTasksTemplate, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks, deleteDepartmentTask } from '../../apis/projects/departmentTasks.js';
 import { listTaskTemplates, getTaskTemplateById } from '../../apis/projects/taskTemplates.js';
-import { listCustomers } from '../../apis/projects/customers.js';
+import { listCustomers, getCustomerById } from '../../apis/projects/customers.js';
 import { CURRENCY_OPTIONS } from '../../apis/projects/customers.js';
 import {
     listTopics,
@@ -80,7 +80,6 @@ let isLoading = false;
 let jobOrdersStats = null; // Statistics Cards component instance
 let jobOrderFilters = null; // Filters component instance
 let jobOrdersTable = null; // Table component instance
-let customers = []; // Store customers for dropdowns
 let statusOptions = STATUS_OPTIONS; // Status options
 let expandedRows = new Set(); // Track expanded rows by job_no
 let expandedDepartmentTasksRows = new Set(); // Track rows with expanded department tasks
@@ -433,9 +432,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function initializeJobOrders() {
     try {
-        // Load choices and customers
         await loadChoices();
-        await loadCustomers();
         
         initializeFiltersComponent();
         initializeTableComponent();
@@ -551,28 +548,6 @@ async function loadChoices() {
         console.error('Error loading choices:', error);
         // Use static fallbacks
         statusOptions = STATUS_OPTIONS;
-    }
-}
-
-async function loadCustomers() {
-    try {
-        const response = await listCustomers({ page_size: 1000 });
-        customers = response.results || [];
-        
-        // Update customer filter options
-        if (jobOrderFilters && customers.length > 0) {
-            const customerOptions = [
-                { value: '', label: 'Tümü' },
-                ...customers.map(c => ({ 
-                    value: c.id.toString(), 
-                    label: `${c.code} - ${c.name}` 
-                }))
-            ];
-            jobOrderFilters.updateFilterOptions('customer-filter', customerOptions);
-        }
-    } catch (error) {
-        console.error('Error loading customers:', error);
-        customers = [];
     }
 }
 
@@ -1592,19 +1567,25 @@ function initializeFiltersComponent() {
     });
 
 
-    // Customer filter - will be updated after customers load
+    // Customer: remote search via /projects/customers/?search=...&is_active=true (same as cost-table / offers)
     jobOrderFilters.addDropdownFilter({
         id: 'customer-filter',
         label: 'Müşteri',
-        options: [
-            { value: '', label: 'Tümü' },
-            ...(customers.length > 0 ? customers.map(c => ({ 
-                value: c.id.toString(), 
-                label: `${c.code} - ${c.name}` 
-            })) : [])
-        ],
-        placeholder: 'Tümü',
-        colSize: 2
+        options: [],
+        placeholder: 'Müşteri ara (en az 3 karakter)',
+        colSize: 3,
+        searchable: true,
+        minSearchLength: 3,
+        remoteSearchPlaceholder: 'En az 3 karakter yazın',
+        remoteSearch: async (term) => {
+            if (!term || term.length < 3) return [];
+            const res = await listCustomers({ search: term.trim(), is_active: true, page_size: 50 });
+            const list = res.results || [];
+            return list.map(c => ({
+                value: String(c.id),
+                text: [c.code, c.name].filter(Boolean).join(' - ') || `#${c.id}`
+            }));
+        }
     });
 
     jobOrderFilters.addCheckboxFilter({
@@ -1939,7 +1920,7 @@ async function loadJobOrders() {
             options.status = statusVal;
         }
         if (filterValues['customer-filter']) {
-            options.customer = parseInt(filterValues['customer-filter']);
+            options.customer = filterValues['customer-filter'];
         }
         
         // Always use root_only=true initially (unless explicitly filtered)
@@ -7106,11 +7087,6 @@ function showCreateTopicModal(jobNo) {
 
 
 window.showCreateChildJobOrderModal = async function(parentJobNo) {
-    if (customers.length === 0) {
-        showNotification('Müşteri verileri yükleniyor, lütfen bekleyin...', 'warning');
-        return;
-    }
-
     // Find parent job order to get customer info
     // First check main jobOrders array
     let parentJob = jobOrders.find(j => j.job_no === parentJobNo);
@@ -7544,11 +7520,6 @@ window.recalculateProgress = async function(jobNo) {
 };
 
 function showCreateJobOrderModal() {
-    if (customers.length === 0) {
-        showNotification('Müşteri verileri yükleniyor, lütfen bekleyin...', 'warning');
-        return;
-    }
-
     // Clear any parent flag
     window.creatingChildForParent = null;
     window.selectedCustomerCode = null; // Store selected customer code
@@ -7924,44 +7895,6 @@ function showCreateJobOrderModal() {
         });
     };
 
-    // Set up customer dropdown change listener (legacy - keeping for compatibility)
-    const setupCustomerListener = () => {
-        // This is now handled by setupAsyncCustomerDropdown
-        // Keeping this function for any other dropdowns that might need it
-        const dropdownContainer = createJobOrderModal.container.querySelector('#dropdown-customer');
-        if (dropdownContainer) {
-            // Listen to dropdown:select event
-            dropdownContainer.addEventListener('dropdown:select', (e) => {
-                const customerId = e.detail.value;
-                if (customerId) {
-                    const customer = customers.find(c => c.id.toString() === customerId);
-                    if (customer && customer.code) {
-                        window.selectedCustomerCode = customer.code;
-                        updateJobNoField(customer.code);
-                    }
-                }
-            });
-        } else {
-            // Fallback: try to find by field ID and search within
-            const customerField = createJobOrderModal.container.querySelector('[data-field-id="customer"]');
-            if (customerField) {
-                const container = customerField.querySelector('.dropdown-field-container');
-                if (container) {
-                    container.addEventListener('dropdown:select', (e) => {
-                        const customerId = e.detail.value;
-                        if (customerId) {
-                            const customer = customers.find(c => c.id.toString() === customerId);
-                            if (customer && customer.code) {
-                                window.selectedCustomerCode = customer.code;
-                                updateJobNoField(customer.code);
-                            }
-                        }
-                    });
-                }
-            }
-        }
-    };
-    
     // Use requestAnimationFrame to ensure DOM is ready
     requestAnimationFrame(() => {
         setupAsyncCustomerDropdown();
@@ -8000,9 +7933,8 @@ async function createJobOrder(formData) {
             
             // If customer code is not set, try to get it from the customer ID
             if (!customerCode && formData.customer) {
-                const customerId = parseInt(formData.customer);
-                const customer = customers.find(c => c.id === customerId);
-                if (customer && customer.code) {
+                const customer = await getCustomerById(formData.customer);
+                if (customer?.code) {
                     customerCode = customer.code;
                 }
             }
@@ -8175,7 +8107,7 @@ async function exportJobOrders(format) {
             options.status = statusVal;
         }
         if (filterValues['customer-filter']) {
-            options.customer = parseInt(filterValues['customer-filter']);
+            options.customer = filterValues['customer-filter'];
         }
         
         let allJobOrders = [];
