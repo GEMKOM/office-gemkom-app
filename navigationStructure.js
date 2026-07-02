@@ -165,6 +165,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Maliyet Satırları',
                 icon: 'fas fa-euro-sign',
                 children: {}
+            },
+            '/quality-control/documents': {
+                label: 'Kalite Evrakları',
+                icon: 'fas fa-file-alt',
+                children: {}
             }
         }
     },

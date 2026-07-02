@@ -154,6 +154,12 @@ async function handleLandingPage() {
                             icon: 'fas fa-euro-sign',
                             iconColor: 'rgba(139, 0, 0, 1)',
                             link: '/quality-control/cost-lines'
+                        },
+                        {
+                            label: 'Kalite Evrakları',
+                            icon: 'fas fa-file-alt',
+                            iconColor: 'rgba(139, 0, 0, 1)',
+                            link: '/quality-control/documents'
                         }
                     ]
                 },

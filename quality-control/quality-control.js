@@ -40,6 +40,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-euro-sign',
                 iconColor: 'primary',
                 link: '/quality-control/cost-lines'
+            },
+            {
+                title: 'Kalite Evrakları',
+                description: 'Kalite evraklarını görüntüleyin ve yönetin.',
+                icon: 'fas fa-file-alt',
+                iconColor: 'primary',
+                link: '/quality-control/documents'
             }
         ]
     });

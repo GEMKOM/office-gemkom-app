@@ -381,6 +381,157 @@ export async function deleteNCRFile(ncrId, fileId) {
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
 }
 
+// ==================== Quality Documents (Kalite Evrakları) ====================
+
+/**
+ * List quality documents
+ * @param {Object} filters - Optional filters: document_type, document_type__in, job_order, is_active
+ * @param {string} search - Search query (title, document_number, description, job order number)
+ * @param {string} ordering - Ordering field (created_at, title, valid_until, document_type)
+ * @param {number} page - Page number
+ * @param {number} pageSize - Page size
+ * @returns {Promise<Object>} Response with results and pagination
+ */
+export async function listQualityDocuments(filters = {}, search = '', ordering = '-created_at', page = 1, pageSize = 20) {
+    const params = new URLSearchParams();
+    params.append('page', page.toString());
+    params.append('page_size', pageSize.toString());
+
+    if (ordering) {
+        params.append('ordering', ordering);
+    }
+
+    if (search) {
+        params.append('search', search);
+    }
+
+    Object.keys(filters).forEach(key => {
+        if (filters[key] !== null && filters[key] !== undefined && filters[key] !== '') {
+            if (Array.isArray(filters[key])) {
+                filters[key].forEach(val => params.append(key, val));
+            } else {
+                params.append(key, filters[key]);
+            }
+        }
+    });
+
+    const url = `${QC_BASE}/documents/?${params.toString()}`;
+    const response = await authedFetch(url);
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch quality documents: ${response.status}`);
+    }
+
+    const data = await response.json();
+    return {
+        results: data.results || [],
+        count: data.count || 0,
+        totalPages: data.total_pages || Math.ceil((data.count || 0) / pageSize)
+    };
+}
+
+/**
+ * Get a quality document by ID
+ * @param {number} documentId - Document ID
+ * @returns {Promise<Object>} Document details
+ */
+export async function getQualityDocument(documentId) {
+    const response = await authedFetch(`${QC_BASE}/documents/${documentId}/`);
+    if (!response.ok) {
+        throw new Error(`Failed to fetch quality document: ${response.status}`);
+    }
+    return await response.json();
+}
+
+/**
+ * Upload/create a quality document (multipart)
+ * @param {File} file - The document file
+ * @param {Object} meta - Metadata: title, document_type, document_number, revision, description, job_order, valid_until, is_active
+ * @returns {Promise<Object>} Created document
+ */
+export async function createQualityDocument(file, meta = {}) {
+    const formData = new FormData();
+    formData.append('file', file);
+    Object.keys(meta).forEach(key => {
+        if (meta[key] !== null && meta[key] !== undefined && meta[key] !== '') {
+            formData.append(key, meta[key]);
+        }
+    });
+
+    const response = await authedFetch(`${QC_BASE}/documents/`, {
+        method: 'POST',
+        body: formData
+    });
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || JSON.stringify(err) || `HTTP ${response.status}`);
+    }
+    return await response.json();
+}
+
+/**
+ * Update a quality document's metadata, optionally replacing the file.
+ * When `file` is provided the request is sent as multipart, otherwise as JSON.
+ * @param {number} documentId - Document ID
+ * @param {Object} updates - Fields to update
+ * @param {File|null} file - Optional replacement file
+ * @returns {Promise<Object>} Updated document
+ */
+export async function updateQualityDocument(documentId, updates = {}, file = null) {
+    let options;
+    if (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        Object.keys(updates).forEach(key => {
+            if (updates[key] !== null && updates[key] !== undefined) {
+                formData.append(key, updates[key]);
+            }
+        });
+        options = { method: 'PATCH', body: formData };
+    } else {
+        options = {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updates)
+        };
+    }
+
+    const response = await authedFetch(`${QC_BASE}/documents/${documentId}/`, options);
+    if (!response.ok) {
+        const err = await response.json().catch(() => ({}));
+        throw new Error(err.detail || JSON.stringify(err) || `HTTP ${response.status}`);
+    }
+    return await response.json();
+}
+
+/**
+ * Delete a quality document (also removes the stored file)
+ * @param {number} documentId - Document ID
+ */
+export async function deleteQualityDocument(documentId) {
+    const response = await authedFetch(`${QC_BASE}/documents/${documentId}/`, {
+        method: 'DELETE'
+    });
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+}
+
+/**
+ * Quality document type choices (mirror of backend QualityDocument.DOCUMENT_TYPE_CHOICES)
+ */
+export const QUALITY_DOCUMENT_TYPE_CHOICES = [
+    { value: 'procedure', label: 'Prosedür' },
+    { value: 'instruction', label: 'Talimat' },
+    { value: 'form', label: 'Form' },
+    { value: 'certificate', label: 'Sertifika' },
+    { value: 'material_cert', label: 'Malzeme Sertifikası' },
+    { value: 'inspection_plan', label: 'Kontrol Planı' },
+    { value: 'inspection_report', label: 'Muayene Raporu' },
+    { value: 'test_report', label: 'Test Raporu' },
+    { value: 'wps', label: 'Kaynak Prosedürü (WPS)' },
+    { value: 'drawing', label: 'Çizim' },
+    { value: 'other', label: 'Diğer' }
+];
+
 // ==================== Choice Values ====================
 
 /**
