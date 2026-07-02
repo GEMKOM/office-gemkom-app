@@ -37,6 +37,63 @@ let currentJobOrderForLines = null;
 /** @type {Array<{ id?: number, item?: number|null, item_code?: string|null, item_name?: string|null, item_description?: string, quantity: string, unit_price: string, amount_eur?: string, planning_request_item?: number|null, order: number, price_source?: string }>} */
 let editingLines = [];
 let linesTableContainerId = 'procurement-lines-table-body';
+/**
+ * Active Excel comparison state (null = no comparison shown).
+ * @type {null | { fileName: string, byCode: Map<string, object>, byName: Map<string, object[]>, rows: object[] }}
+ */
+let excelCompare = null;
+const EXCEL_PRICE_TOLERANCE = 0.01;
+
+/**
+ * Snapshot the as-loaded values on each line so edits (manual or Excel-applied)
+ * can be reverted before saving. Lines added in the modal have no snapshot.
+ */
+function snapshotOriginalLines() {
+    editingLines.forEach(line => {
+        line._orig = {
+            quantity: line.quantity,
+            unit_price: line.unit_price,
+            item_description: line.item_description || ''
+        };
+    });
+}
+
+function isLineChanged(line) {
+    if (!line._orig) return false;
+    const numDiff = (a, b) => Math.abs((parseFloat(a) || 0) - (parseFloat(b) || 0)) > 1e-9;
+    return numDiff(line.quantity, line._orig.quantity)
+        || numDiff(line.unit_price, line._orig.unit_price)
+        || (line.item_description || '') !== (line._orig.item_description || '');
+}
+
+function restoreLineFromSnapshot(line) {
+    if (!line._orig) return false;
+    line.quantity = line._orig.quantity;
+    line.unit_price = line._orig.unit_price;
+    line.item_description = line._orig.item_description;
+    const q = parseFloat(line.quantity) || 0;
+    line.amount_eur = (q * (parseFloat(line.unit_price) || 0)).toFixed(2);
+    return true;
+}
+
+function revertLine(index) {
+    syncLinesFromDom();
+    const line = editingLines[index];
+    if (!line || !restoreLineFromSnapshot(line)) return;
+    renderLinesTable();
+}
+
+function revertAllLines() {
+    syncLinesFromDom();
+    let reverted = 0;
+    for (const line of editingLines) {
+        if (isLineChanged(line) && restoreLineFromSnapshot(line)) reverted++;
+    }
+    renderLinesTable();
+    if (reverted > 0) {
+        showNotification(`${reverted} satır ilk haline döndürüldü.`, 'success');
+    }
+}
 
 function mapSavedProcurementLines(lines) {
     if (!Array.isArray(lines)) return [];
@@ -293,26 +350,34 @@ function initLinesModal() {
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Kapat"></button>
                     </div>
                     <div class="modal-body">
-                        <div class="mb-3 d-flex justify-content-between align-items-center">
-                            <button type="button" class="btn btn-sm btn-primary" id="procurement-lines-add-row">
-                                <i class="fas fa-plus me-1"></i>Satır Ekle
-                            </button>
+                        <div class="mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-sm btn-primary" id="procurement-lines-add-row">
+                                    <i class="fas fa-plus me-1"></i>Satır Ekle
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-warning text-nowrap d-none" id="procurement-lines-revert-all">
+                                    <i class="fas fa-undo me-1"></i>Değişiklikleri Geri Al
+                                </button>
+                            </div>
+                            <div class="d-flex align-items-center gap-2">
+                                <input type="file" class="form-control form-control-sm" id="procurement-lines-excel-input" accept=".xls,.xlsx" style="max-width:280px;">
+                                <button type="button" class="btn btn-sm btn-outline-primary text-nowrap" id="procurement-lines-compare">
+                                    <i class="fas fa-file-excel me-1"></i>Excel ile Karşılaştır
+                                </button>
+                                <button type="button" class="btn btn-sm btn-danger text-nowrap d-none" id="procurement-lines-apply-all">
+                                    <i class="fas fa-check-double me-1"></i>Tümünü Uygula
+                                </button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary text-nowrap d-none" id="procurement-lines-compare-clear">
+                                    <i class="fas fa-times me-1"></i>Karşılaştırmayı Kaldır
+                                </button>
+                            </div>
                             <span class="text-muted small" id="procurement-lines-summary"></span>
                         </div>
+                        <div class="small mb-2" id="procurement-lines-compare-info"></div>
                         <div class="table-responsive">
                             <table class="table table-bordered table-sm">
                                 <thead>
-                                    <tr>
-                                        <th>Malzeme Kodu</th>
-                                        <th>Malzeme Adı</th>
-                                        <th>Açıklama</th>
-                                        <th style="width:100px;">Miktar</th>
-                                        <th style="width:100px;">Birim Fiyat (EUR)</th>
-                                        <th style="width:100px;">Tutar (EUR)</th>
-                                        <th>Fiyat Kaynağı</th>
-                                        <th>Fiyat Tarihi</th>
-                                        <th style="width:60px;"></th>
-                                    </tr>
+                                    <tr id="procurement-lines-head-row"></tr>
                                 </thead>
                                 <tbody id="${linesTableContainerId}"></tbody>
                             </table>
@@ -333,6 +398,10 @@ function initLinesModal() {
 
     document.getElementById('procurement-lines-add-row').addEventListener('click', addLineRow);
     document.getElementById('procurement-lines-save').addEventListener('click', saveLines);
+    document.getElementById('procurement-lines-compare').addEventListener('click', compareWithExcel);
+    document.getElementById('procurement-lines-compare-clear').addEventListener('click', clearExcelCompare);
+    document.getElementById('procurement-lines-apply-all').addEventListener('click', applyExcelPriceAll);
+    document.getElementById('procurement-lines-revert-all').addEventListener('click', revertAllLines);
 
     linesModal.addEventListener('shown.bs.modal', () => renderLinesTable());
 }
@@ -466,6 +535,7 @@ async function openLinesModal(jobNo, { usePreview = false } = {}) {
     const titleEl = document.getElementById('procurement-lines-modal-title');
     if (titleEl) titleEl.textContent = `Malzeme Maliyeti Satırları — ${jobNo}`;
 
+    clearExcelCompare();
     editingLines = [];
     const tbody = document.getElementById(linesTableContainerId);
     if (tbody) tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted">Yükleniyor...</td></tr>';
@@ -489,6 +559,7 @@ async function openLinesModal(jobNo, { usePreview = false } = {}) {
         editingLines = [];
     }
 
+    snapshotOriginalLines();
     renderLinesTable();
 }
 
@@ -517,24 +588,349 @@ function removeLineRow(index) {
     renderLinesTable();
 }
 
+/** Normalize a stock code for matching: strip all whitespace, uppercase. */
+function normalizeStockCode(value) {
+    return String(value ?? '').replace(/\s+/g, '').toLocaleUpperCase('tr-TR');
+}
+
+/** Normalize a stock name for matching: collapse whitespace, uppercase (tr). */
+function normalizeStockName(value) {
+    return String(value ?? '').replace(/\s+/g, ' ').trim().toLocaleUpperCase('tr-TR');
+}
+
+/** Normalize a header cell for column detection: uppercase, ASCII-fold Turkish chars, drop non-alphanumerics. */
+function normalizeHeader(value) {
+    const map = { 'İ': 'I', 'I': 'I', 'Ş': 'S', 'Ğ': 'G', 'Ü': 'U', 'Ö': 'O', 'Ç': 'C', 'ı': 'I' };
+    return String(value ?? '')
+        .toLocaleUpperCase('tr-TR')
+        .replace(/[İIŞĞÜÖÇı]/g, ch => map[ch] || ch)
+        .replace(/[^A-Z0-9]/g, '');
+}
+
+/** Parse a numeric cell that may be a number or a Turkish-formatted string ("1.234,56"). */
+function parseExcelNumber(value) {
+    if (typeof value === 'number') return Number.isFinite(value) ? value : 0;
+    if (value == null || value === '') return 0;
+    let s = String(value).trim();
+    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
+    const n = parseFloat(s);
+    return Number.isFinite(n) ? n : 0;
+}
+
+/**
+ * Parse the uploaded workbook into comparison rows.
+ * Expected columns (matched by header text): STOK KODU, STOK İSMİ,
+ * TALEP MİKTARI, SİPARİŞ MİKTARI, Sip. Tutar EUR (line total).
+ */
+function parseExcelComparisonRows(workbook) {
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+
+    // Locate the header row (first row containing a STOK KODU cell)
+    let headerRowIdx = -1;
+    const colIdx = { code: -1, name: -1, reqQty: -1, orderQty: -1, amountEur: -1 };
+    for (let r = 0; r < Math.min(grid.length, 15); r++) {
+        const headers = grid[r].map(normalizeHeader);
+        const codeIdx = headers.indexOf('STOKKODU');
+        if (codeIdx === -1) continue;
+        headerRowIdx = r;
+        colIdx.code = codeIdx;
+        colIdx.name = headers.indexOf('STOKISMI');
+        colIdx.reqQty = headers.indexOf('TALEPMIKTARI');
+        colIdx.orderQty = headers.indexOf('SIPARISMIKTARI');
+        colIdx.amountEur = headers.findIndex(h => h.includes('SIP') && h.includes('TUTAR') && h.includes('EUR'));
+        break;
+    }
+    if (headerRowIdx === -1) {
+        throw new Error('Excel dosyasında "STOK KODU" başlıklı sütun bulunamadı.');
+    }
+    if (colIdx.amountEur === -1) {
+        throw new Error('Excel dosyasında "Sip. Tutar EUR" sütunu bulunamadı.');
+    }
+
+    const rows = [];
+    for (let r = headerRowIdx + 1; r < grid.length; r++) {
+        const row = grid[r];
+        const code = normalizeStockCode(row[colIdx.code]);
+        if (!code) continue; // skips empty rows and the totals row at the bottom
+        const orderQty = colIdx.orderQty !== -1 ? parseExcelNumber(row[colIdx.orderQty]) : 0;
+        const reqQty = colIdx.reqQty !== -1 ? parseExcelNumber(row[colIdx.reqQty]) : 0;
+        rows.push({
+            code,
+            rawCode: String(row[colIdx.code] ?? '').trim(),
+            name: colIdx.name !== -1 ? String(row[colIdx.name] ?? '').trim() : '',
+            qty: orderQty > 0 ? orderQty : reqQty,
+            amountEur: parseExcelNumber(row[colIdx.amountEur])
+        });
+    }
+    return rows;
+}
+
+/** Build lookup maps; duplicate stock codes are aggregated (qty and amount summed). */
+function buildExcelCompareState(rows, fileName) {
+    const byCode = new Map();
+    for (const row of rows) {
+        const existing = byCode.get(row.code);
+        if (existing) {
+            existing.qty += row.qty;
+            existing.amountEur += row.amountEur;
+        } else {
+            byCode.set(row.code, { ...row });
+        }
+    }
+    const byName = new Map();
+    for (const row of byCode.values()) {
+        row.unitPrice = row.qty > 0 ? row.amountEur / row.qty : null;
+        const nameKey = normalizeStockName(row.name);
+        if (!nameKey) continue;
+        if (!byName.has(nameKey)) byName.set(nameKey, []);
+        byName.get(nameKey).push(row);
+    }
+    return { fileName, byCode, byName, rows: [...byCode.values()] };
+}
+
+/** Find the Excel row for a line: by stock code first, then by stock name (+ quantity when ambiguous). */
+function getExcelMatchForLine(line) {
+    if (!excelCompare) return null;
+    const code = normalizeStockCode(line.item_code);
+    if (code && excelCompare.byCode.has(code)) return excelCompare.byCode.get(code);
+    const nameKey = normalizeStockName(line.item_name);
+    if (nameKey && excelCompare.byName.has(nameKey)) {
+        const candidates = excelCompare.byName.get(nameKey);
+        const q = parseFloat(line.quantity) || 0;
+        return candidates.find(r => Math.abs(r.qty - q) < 1e-9) || candidates[0];
+    }
+    return null;
+}
+
+/**
+ * Compare a line against its Excel match. Mismatch is decided on the LINE TOTAL
+ * (our qty × unit price vs Excel "Sip. Tutar EUR"); qty/unit flags say which
+ * side of the multiplication differs so the culprit can be highlighted/fixed.
+ */
+function getExcelDiff(line, match) {
+    if (!match) return null;
+    const ourQty = parseFloat(line.quantity) || 0;
+    const ourUnit = parseFloat(line.unit_price) || 0;
+    const ourAmount = ourQty * ourUnit;
+    return {
+        amountMismatch: Math.abs(ourAmount - match.amountEur) > EXCEL_PRICE_TOLERANCE,
+        qtyDiffers: Math.abs(ourQty - match.qty) > 1e-9,
+        unitDiffers: match.unitPrice != null && Math.abs(ourUnit - match.unitPrice) > EXCEL_PRICE_TOLERANCE
+    };
+}
+
+/**
+ * Overwrite the differing value(s) of a line with the Excel values so the
+ * line total matches Excel. Returns true if anything changed.
+ */
+function applyExcelToLine(line, match) {
+    const diff = getExcelDiff(line, match);
+    if (!diff || !diff.amountMismatch) return false;
+    if (diff.qtyDiffers) {
+        line.quantity = String(parseFloat(match.qty.toFixed(4)));
+    }
+    if (diff.unitDiffers && match.unitPrice != null) {
+        line.unit_price = String(parseFloat(match.unitPrice.toFixed(4)));
+    }
+    const q = parseFloat(line.quantity) || 0;
+    let u = parseFloat(line.unit_price) || 0;
+    // Residual drift (Excel qty 0, rounding, or a sub-tolerance unit diff over a
+    // large quantity): derive the unit price so the line total matches exactly
+    if (Math.abs(q * u - match.amountEur) > EXCEL_PRICE_TOLERANCE) {
+        if (q <= 0) return false;
+        line.unit_price = String(parseFloat((match.amountEur / q).toFixed(6)));
+        u = parseFloat(line.unit_price) || 0;
+    }
+    line.amount_eur = (q * u).toFixed(2);
+    return true;
+}
+
+function compareWithExcel() {
+    const fileInput = document.getElementById('procurement-lines-excel-input');
+    const file = fileInput?.files?.[0];
+    if (!file) {
+        showNotification('Lütfen önce bir Excel dosyası seçin.', 'warning');
+        return;
+    }
+    syncLinesFromDom();
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        try {
+            const workbook = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            const rows = parseExcelComparisonRows(workbook);
+            if (rows.length === 0) {
+                showNotification('Excel dosyasında karşılaştırılacak satır bulunamadı.', 'warning');
+                return;
+            }
+            excelCompare = buildExcelCompareState(rows, file.name);
+            document.getElementById('procurement-lines-compare-clear')?.classList.remove('d-none');
+            renderLinesTable();
+        } catch (err) {
+            console.error(err);
+            showNotification(err.message || 'Excel dosyası okunamadı.', 'error');
+        }
+    };
+    reader.onerror = () => showNotification('Dosya okunamadı.', 'error');
+    reader.readAsArrayBuffer(file);
+}
+
+function clearExcelCompare() {
+    excelCompare = null;
+    const fileInput = document.getElementById('procurement-lines-excel-input');
+    if (fileInput) fileInput.value = '';
+    document.getElementById('procurement-lines-compare-clear')?.classList.add('d-none');
+    document.getElementById('procurement-lines-apply-all')?.classList.add('d-none');
+    const infoEl = document.getElementById('procurement-lines-compare-info');
+    if (infoEl) infoEl.innerHTML = '';
+    // Modal may not be open yet (called from openLinesModal); renderLinesTable is a no-op then
+    renderLinesTable();
+}
+
+/** Apply the Excel values to one line (frontend only; persisted via the normal save flow). */
+function applyExcelPrice(index) {
+    syncLinesFromDom();
+    const line = editingLines[index];
+    if (!line) return;
+    const match = getExcelMatchForLine(line);
+    if (!match) return;
+    if (!applyExcelToLine(line, match)) {
+        showNotification('Excel değerleri uygulanamadı (miktar 0).', 'warning');
+        return;
+    }
+    renderLinesTable();
+}
+
+/** Apply the Excel values to every mismatched line. */
+function applyExcelPriceAll() {
+    if (!excelCompare) return;
+    syncLinesFromDom();
+    let applied = 0;
+    for (const line of editingLines) {
+        const match = getExcelMatchForLine(line);
+        if (match && applyExcelToLine(line, match)) applied++;
+    }
+    renderLinesTable();
+    if (applied > 0) {
+        showNotification(`${applied} satıra Excel değerleri uygulandı.`, 'success');
+    } else {
+        showNotification('Uygulanacak fark bulunamadı.', 'info');
+    }
+}
+
+function formatCompareNumber(value, digits = 2) {
+    if (value == null || !Number.isFinite(value)) return '–';
+    return value.toFixed(digits);
+}
+
+function renderCompareInfo(stats) {
+    const infoEl = document.getElementById('procurement-lines-compare-info');
+    if (!infoEl) return;
+    const applyAllBtn = document.getElementById('procurement-lines-apply-all');
+    if (applyAllBtn) applyAllBtn.classList.toggle('d-none', !excelCompare || stats.mismatched === 0);
+    if (!excelCompare) {
+        infoEl.innerHTML = '';
+        return;
+    }
+    const parts = [
+        `<span class="me-3"><i class="fas fa-file-excel text-success me-1"></i>${escapeHtml(excelCompare.fileName)}</span>`,
+        `<span class="me-3 text-success">${stats.matched} satır eşleşti</span>`
+    ];
+    if (stats.mismatched > 0) {
+        parts.push(`<span class="me-3 text-danger fw-semibold">${stats.mismatched} satırda tutar farkı</span>`);
+    }
+    if (stats.unmatchedLines > 0) {
+        parts.push(`<span class="me-3 text-warning">${stats.unmatchedLines} satır Excel'de bulunamadı</span>`);
+    }
+    if (stats.unmatchedExcelRows.length > 0) {
+        const codes = stats.unmatchedExcelRows.map(r => escapeHtml(r.rawCode || r.code)).join(', ');
+        parts.push(`<div class="text-muted mt-1">Excel'de olup tabloda eşleşmeyen ${stats.unmatchedExcelRows.length} satır: ${codes}</div>`);
+    }
+    infoEl.innerHTML = parts.join('');
+}
+
 function renderLinesTable() {
     const tbody = document.getElementById(linesTableContainerId);
     if (!tbody) return;
 
+    const headRow = document.getElementById('procurement-lines-head-row');
+    if (headRow) {
+        headRow.innerHTML = `
+            <th>Malzeme Kodu</th>
+            <th>Malzeme Adı</th>
+            <th>Açıklama</th>
+            <th style="width:100px;">Miktar</th>
+            <th style="width:100px;">Birim Fiyat (EUR)</th>
+            <th style="width:100px;">Tutar (EUR)</th>
+            ${excelCompare ? `
+            <th style="width:90px;" class="table-info">Excel Miktar</th>
+            <th style="width:110px;" class="table-info">Excel Birim Fiyat</th>
+            <th style="width:110px;" class="table-info">Excel Tutar (EUR)</th>
+            ` : ''}
+            <th>Fiyat Kaynağı</th>
+            <th>Fiyat Tarihi</th>
+            <th style="width:90px;"></th>
+        `;
+    }
+
+    const stats = { matched: 0, mismatched: 0, unmatchedLines: 0, unmatchedExcelRows: [] };
+    const matchedExcelRows = new Set();
+    let anyChanged = false;
+
     tbody.innerHTML = editingLines.map((line, index) => {
         const amount = (parseFloat(line.quantity) || 0) * (parseFloat(line.unit_price) || 0);
         const amountStr = amount.toFixed(2);
+        const changed = isLineChanged(line);
+        if (changed) anyChanged = true;
+
+        let rowClass = '';
+        let excelCells = '';
+        let qtyInvalid = false;
+        let unitInvalid = false;
+        if (excelCompare) {
+            const match = getExcelMatchForLine(line);
+            if (match) {
+                matchedExcelRows.add(match);
+                const diff = getExcelDiff(line, match);
+                if (diff.amountMismatch) {
+                    rowClass = 'table-danger';
+                    stats.mismatched++;
+                } else {
+                    rowClass = 'table-success';
+                }
+                stats.matched++;
+                // Flag the culprit field(s) in red on both sides
+                qtyInvalid = diff.qtyDiffers;
+                unitInvalid = diff.unitDiffers || (diff.amountMismatch && match.unitPrice == null);
+                excelCells = `
+                    <td class="align-middle ${qtyInvalid ? 'text-danger fw-semibold' : ''}">${formatCompareNumber(match.qty)}</td>
+                    <td class="align-middle ${unitInvalid ? 'text-danger fw-semibold' : ''}">${formatCompareNumber(match.unitPrice, 4)}</td>
+                    <td class="align-middle ${diff.amountMismatch ? 'text-danger fw-semibold' : ''}">
+                        ${formatCompareNumber(match.amountEur)}
+                        ${diff.amountMismatch ? `<button type="button" class="btn btn-outline-danger btn-sm py-0 px-1 ms-1" data-apply-excel="${index}" title="Farklı olan değerleri Excel'den al">Uygula</button>` : ''}
+                    </td>
+                `;
+            } else {
+                stats.unmatchedLines++;
+                excelCells = '<td class="align-middle text-muted" colspan="3"><i class="fas fa-question-circle me-1"></i>Excel\'de bulunamadı</td>';
+            }
+        }
+
         return `
-            <tr data-index="${index}">
+            <tr data-index="${index}" class="${rowClass}">
                 <td class="text-muted">${escapeHtml(line.item_code || '–')}</td>
                 <td class="text-muted">${escapeHtml(line.item_name || '–')}</td>
                 <td><input type="text" class="form-control form-control-sm" data-field="item_description" data-index="${index}" value="${escapeHtml(line.item_description || '')}" placeholder="Açıklama"></td>
-                <td><input type="text" class="form-control form-control-sm d-inline-block" data-field="quantity" data-index="${index}" value="${escapeHtml(line.quantity)}" placeholder="0" style="width:5rem"> <span class="text-muted small ms-1">${escapeHtml(line.item_unit || '–')}</span></td>
-                <td><input type="text" class="form-control form-control-sm" data-field="unit_price" data-index="${index}" value="${escapeHtml(line.unit_price)}" placeholder="0"></td>
+                <td><input type="text" class="form-control form-control-sm d-inline-block ${qtyInvalid ? 'is-invalid' : ''}" data-field="quantity" data-index="${index}" value="${escapeHtml(line.quantity)}" placeholder="0" style="width:5rem"> <span class="text-muted small ms-1">${escapeHtml(line.item_unit || '–')}</span></td>
+                <td><input type="text" class="form-control form-control-sm ${unitInvalid ? 'is-invalid' : ''}" data-field="unit_price" data-index="${index}" value="${escapeHtml(line.unit_price)}" placeholder="0"></td>
                 <td class="align-middle">${amountStr}</td>
+                ${excelCells}
                 <td class="text-muted small">${escapeHtml(formatPriceSource(line.price_source))}</td>
                 <td class="text-muted small">${escapeHtml(formatPriceDate(line.price_date))}</td>
-                <td>
+                <td class="text-nowrap">
+                    ${changed ? `<button type="button" class="btn btn-outline-warning btn-sm me-1" data-revert-index="${index}" title="Satırı ilk haline döndür">
+                        <i class="fas fa-undo"></i>
+                    </button>` : ''}
                     <button type="button" class="btn btn-outline-danger btn-sm" data-remove-index="${index}" title="Satırı sil">
                         <i class="fas fa-trash"></i>
                     </button>
@@ -542,6 +938,14 @@ function renderLinesTable() {
             </tr>
         `;
     }).join('');
+
+    const revertAllBtn = document.getElementById('procurement-lines-revert-all');
+    if (revertAllBtn) revertAllBtn.classList.toggle('d-none', !anyChanged);
+
+    if (excelCompare) {
+        stats.unmatchedExcelRows = excelCompare.rows.filter(r => !matchedExcelRows.has(r));
+    }
+    renderCompareInfo(stats);
 
     // Totals
     const total = editingLines.reduce((sum, line) => {
@@ -569,6 +973,18 @@ function renderLinesTable() {
         btn.addEventListener('click', () => {
             const index = parseInt(btn.dataset.removeIndex, 10);
             removeLineRow(index);
+        });
+    });
+    tbody.querySelectorAll('[data-apply-excel]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const index = parseInt(btn.dataset.applyExcel, 10);
+            applyExcelPrice(index);
+        });
+    });
+    tbody.querySelectorAll('[data-revert-index]').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const index = parseInt(btn.dataset.revertIndex, 10);
+            revertLine(index);
         });
     });
 }
@@ -667,6 +1083,7 @@ async function saveLines() {
         // After successful submit, re-fetch the persisted lines (NOT preview)
         const refreshed = await getProcurementLines(currentJobOrderForLines);
         editingLines = mapSavedProcurementLines(refreshed);
+        snapshotOriginalLines(); // saved values become the new revert baseline
         renderLinesTable();
 
         // Refresh both lists (job may move from pending -> has entries)

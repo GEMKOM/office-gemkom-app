@@ -4104,9 +4104,14 @@ async function renderFilesTab(files, jobNo) {
     const mapFiles = (fileArray, sourceLabel = '') => {
         return fileArray.map(file => ({
             file_url: file.file_url || file.url || file.file || '',
-            file_name: file.name || file.file_name || 'Dosya',
+            // Use the real filename (with extension) for display + download.
+            // `file.name` is only a category label (e.g. "Talep Dokümanları") and has no extension.
+            file_name: file.filename || file.file_name || file.name || 'Dosya',
+            file_type: file.file_type,
+            file_type_display: file.file_type_display,
+            display_name: file.name,
             uploaded_at: file.uploaded_at,
-            uploaded_by_username: file.uploaded_by || 'Bilinmeyen',
+            uploaded_by_username: file.uploaded_by_name || file.uploaded_by || 'Bilinmeyen',
             source_label: sourceLabel
         }));
     };
