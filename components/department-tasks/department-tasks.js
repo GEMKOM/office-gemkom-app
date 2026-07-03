@@ -174,13 +174,19 @@ export async function initDepartmentTasksPage(config) {
     }
 
     function isPotentiallyDeletableDepartmentTask(task) {
-        // Show delete button for any task with no children.
-        // Full eligibility (CNC/Machining/Subcontracting checks) is validated at click-time.
-        return (task?.subtasks_count || 0) === 0;
+        if (!task) return false;
+        const taskType = task.task_type ?? null;
+        return !!task.parent
+            && (task.subtasks_count || 0) === 0
+            && (taskType === null || taskType === 'part');
     }
 
     async function checkDepartmentTaskDeleteEligibility(taskId) {
         const task = await getDepartmentTaskById(taskId);
+
+        if (!isPotentiallyDeletableDepartmentTask(task)) {
+            return { canDelete: false, reason: 'Sadece alt görevi olmayan parça alt görevleri silinebilir.' };
+        }
 
         if ((task.subtasks_count || 0) > 0) {
             return { canDelete: false, reason: 'Alt görevi olan görev silinemez.' };
