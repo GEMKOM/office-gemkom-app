@@ -715,7 +715,9 @@ function getExcelDiff(line, match) {
     const ourAmount = ourQty * ourUnit;
     return {
         amountMismatch: Math.abs(ourAmount - match.amountEur) > EXCEL_PRICE_TOLERANCE,
-        qtyDiffers: Math.abs(ourQty - match.qty) > 1e-9,
+        // 0.005 tolerance: backend stores quantity at 2 decimals, so an Excel qty
+        // with more decimals rounds on apply and must still count as equal
+        qtyDiffers: Math.abs(ourQty - match.qty) > 0.005,
         unitDiffers: match.unitPrice != null && Math.abs(ourUnit - match.unitPrice) > EXCEL_PRICE_TOLERANCE
     };
 }
@@ -727,11 +729,12 @@ function getExcelDiff(line, match) {
 function applyExcelToLine(line, match) {
     const diff = getExcelDiff(line, match);
     if (!diff || !diff.amountMismatch) return false;
+    // Backend precision: quantity 2 decimals, unit_price 6 decimals
     if (diff.qtyDiffers) {
-        line.quantity = String(parseFloat(match.qty.toFixed(4)));
+        line.quantity = String(parseFloat(match.qty.toFixed(2)));
     }
     if (diff.unitDiffers && match.unitPrice != null) {
-        line.unit_price = String(parseFloat(match.unitPrice.toFixed(4)));
+        line.unit_price = String(parseFloat(match.unitPrice.toFixed(6)));
     }
     const q = parseFloat(line.quantity) || 0;
     let u = parseFloat(line.unit_price) || 0;
@@ -1021,6 +1024,19 @@ function formatPriceDate(value) {
     }
 }
 
+/**
+ * Clamp a clean numeric string to the backend's max decimal places
+ * (quantity: 2, unit_price: 6). Non-numeric input is passed through
+ * untouched so DRF can report it instead of us silently mangling it.
+ */
+function clampDecimals(value, places) {
+    const s = String(value ?? '').trim();
+    if (!/^-?\d+(\.\d+)?$/.test(s)) return s;
+    const decimals = (s.split('.')[1] || '').length;
+    if (decimals <= places) return s;
+    return String(parseFloat(parseFloat(s).toFixed(places)));
+}
+
 function syncLinesFromDom() {
     const tbody = document.getElementById(linesTableContainerId);
     if (!tbody) return;
@@ -1051,8 +1067,8 @@ async function saveLines() {
 
     const payload = editingLines.map((line, idx) => {
         const itemDesc = (line.item_description || '').trim();
-        const quantity = (line.quantity != null && line.quantity !== '') ? String(line.quantity) : '0';
-        const unitPrice = (line.unit_price != null && line.unit_price !== '') ? String(line.unit_price) : '0';
+        const quantity = (line.quantity != null && line.quantity !== '') ? clampDecimals(line.quantity, 2) : '0';
+        const unitPrice = (line.unit_price != null && line.unit_price !== '') ? clampDecimals(line.unit_price, 6) : '0';
         const order = typeof line.order === 'number' ? line.order : parseInt(line.order, 10) || idx;
         const item = line.item ?? null;
         const planningRequestItem = line.planning_request_item ?? null;
