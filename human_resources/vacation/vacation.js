@@ -11,9 +11,9 @@ import {
     fetchVacationBalances,
     patchVacationBalance,
     fetchVacationRequest,
+    fetchVacationRequests,
     fetchUserLeaveLedger,
     fetchVacationApprovalsInbox,
-    fetchVacationDecisionsByMe,
     approveVacationRequest,
     rejectVacationRequest,
     approveVacationCancellation,
@@ -22,13 +22,15 @@ import {
 
 let balancesTable = null;
 let pendingTable = null;
-let decisionsTable = null;
+let approvedTable = null;
 let detailModal = null;
 let approveModal = null;
 let leaveLedgerModal = null;
 let currentPending = [];
 let currentRejectRequestId = null;
 let currentRejectKind = null;
+const APPROVED_PAGE_SIZE = 20;
+let approvedCurrentPage = 1;
 
 const leaveTypeLabelMap = new Map(LEAVE_TYPES.map(item => [item.value, item.label]));
 
@@ -405,17 +407,38 @@ async function loadPendingApprovals() {
     }
 }
 
-async function loadDecisions() {
-    decisionsTable?.setLoading(true);
+function getApprovedFilters() {
+    const search = document.getElementById('approved-search')?.value?.trim() || '';
+    const leaveType = document.getElementById('approved-leave-type')?.value || '';
+    const startFrom = document.getElementById('approved-start-from')?.value || '';
+    const startTo = document.getElementById('approved-start-to')?.value || '';
+    const filters = { status: 'approved' };
+    if (search) filters.search = search;
+    if (leaveType) filters.leave_type = leaveType;
+    if (startFrom) filters.start_date_from = startFrom;
+    if (startTo) filters.start_date_to = startTo;
+    return filters;
+}
+
+async function loadApprovedRequests(page = approvedCurrentPage) {
+    approvedCurrentPage = page;
+    approvedTable?.setLoading(true);
     try {
-        const response = await fetchVacationDecisionsByMe();
+        const pageSize = approvedTable?.options?.itemsPerPage || APPROVED_PAGE_SIZE;
+        const filters = {
+            ...getApprovedFilters(),
+            ordering: '-start_date',
+            page,
+            page_size: pageSize
+        };
+        const response = await fetchVacationRequests(filters);
         const parsed = parseListResponse(response);
-        decisionsTable?.updateData(parsed.results, parsed.count, 1);
+        approvedTable?.updateData(parsed.results, parsed.count, page);
     } catch (error) {
-        showNotification(error?.message || 'Karar geçmişi yüklenemedi.', 'error');
-        decisionsTable?.updateData([], 0, 1);
+        showNotification(error?.message || 'Onaylanmış izinler yüklenemedi.', 'error');
+        approvedTable?.updateData([], 0, page);
     } finally {
-        decisionsTable?.setLoading(false);
+        approvedTable?.setLoading(false);
     }
 }
 
@@ -617,7 +640,7 @@ function showApproveModal(requestId) {
                     await approveVacationRequest(request.id, '');
                     showNotification('İzin talebi onaylandı.', 'success');
                 }
-                await Promise.all([loadPendingApprovals(), loadDecisions(), loadBalances()]);
+                await Promise.all([loadPendingApprovals(), loadApprovedRequests(1), loadBalances()]);
             } catch (error) {
                 showNotification(error?.message || 'Onaylama işlemi başarısız.', 'error');
                 throw error;
@@ -661,7 +684,7 @@ function bindRejectModal() {
                 showNotification('İzin talebi reddedildi.', 'success');
             }
             bootstrap.Modal.getOrCreateInstance(document.getElementById('hrRejectVacationModal')).hide();
-            await Promise.all([loadPendingApprovals(), loadDecisions(), loadBalances()]);
+            await Promise.all([loadPendingApprovals(), loadApprovedRequests(1), loadBalances()]);
         } catch (error) {
             showNotification(error?.message || 'Reddetme işlemi başarısız.', 'error');
         } finally {
@@ -675,6 +698,15 @@ function bindRejectModal() {
     });
 }
 
+function populateApprovedLeaveTypeOptions() {
+    const select = document.getElementById('approved-leave-type');
+    if (!select) return;
+    const optionsHtml = LEAVE_TYPES
+        .map(item => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`)
+        .join('');
+    select.insertAdjacentHTML('beforeend', optionsHtml);
+}
+
 function bindFilterButtons() {
     document.getElementById('balance-filter-btn')?.addEventListener('click', () => loadBalances());
     document.getElementById('balance-clear-btn')?.addEventListener('click', () => {
@@ -683,6 +715,19 @@ function bindFilterButtons() {
         if (userInput) userInput.value = '';
         if (yearInput) yearInput.value = String(new Date().getFullYear());
         loadBalances();
+    });
+
+    document.getElementById('approved-filter-btn')?.addEventListener('click', () => loadApprovedRequests(1));
+    document.getElementById('approved-clear-btn')?.addEventListener('click', () => {
+        ['approved-search', 'approved-leave-type', 'approved-start-from', 'approved-start-to']
+            .forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.value = '';
+            });
+        loadApprovedRequests(1);
+    });
+    document.getElementById('approved-search')?.addEventListener('keydown', event => {
+        if (event.key === 'Enter') loadApprovedRequests(1);
     });
 }
 
@@ -847,44 +892,51 @@ document.addEventListener('DOMContentLoaded', async () => {
         emptyIcon: 'fas fa-hourglass-end'
     });
 
-    decisionsTable = new TableComponent('hr-decisions-table-container', {
-        title: 'Karar Geçmişim',
-        icon: 'fas fa-history',
-        iconColor: 'text-info',
+    approvedTable = new TableComponent('approved-requests-table-container', {
+        title: 'Onaylanmış İzinler',
+        icon: 'fas fa-calendar-check',
+        iconColor: 'text-success',
         columns: [
-            { field: 'id', label: 'Talep No', sortable: true, formatter: v => `<strong>#${v || '-'}</strong>` },
-            { field: 'requester_username', label: 'Talep Eden', sortable: true, formatter: v => v || '-' },
+            { field: 'id', label: 'Talep No', sortable: false, formatter: v => `<strong>#${v || '-'}</strong>` },
+            { field: 'requester_full_name', label: 'Çalışan', sortable: false, formatter: (v, row) => v || row.requester_username || '-' },
+            { field: 'team_label', label: 'Takım', sortable: false, formatter: (v, row) => v || row.team || '-' },
             {
                 field: 'leave_type',
                 label: 'İzin Türü',
-                sortable: true,
+                sortable: false,
                 formatter: (v, row) => row.leave_type_label || leaveTypeLabelMap.get(v) || v || '-'
             },
             {
                 field: 'start_date',
                 label: 'Başlangıç',
-                sortable: true,
+                sortable: false,
                 formatter: (v, row) => formatVacationDate(v, row.start_time)
             },
             {
                 field: 'end_date',
                 label: 'Bitiş',
-                sortable: true,
+                sortable: false,
                 formatter: (v, row) => formatVacationDate(v, row.end_time)
             },
-            { field: 'status', label: 'Son Durum', sortable: true, formatter: (v, row) => statusBadge(v, row.status_label) }
+            { field: 'duration_days', label: 'Süre', sortable: false, formatter: v => `${v || 0} gün` },
+            { field: 'status', label: 'Durum', sortable: false, formatter: (v, row) => statusBadge(v, row.status_label) }
         ],
         actions: [
             { key: 'detail', label: 'Detay', icon: 'fas fa-eye', class: 'btn-outline-primary', onClick: row => showDetail(row) }
         ],
         refreshable: true,
-        onRefresh: () => loadDecisions(),
-        pagination: false,
-        emptyMessage: 'Karar geçmişi bulunamadı.',
+        onRefresh: () => loadApprovedRequests(approvedCurrentPage),
+        pagination: true,
+        serverSidePagination: true,
+        itemsPerPage: APPROVED_PAGE_SIZE,
+        currentPage: 1,
+        onPageChange: page => loadApprovedRequests(page),
+        emptyMessage: 'Onaylanmış izin bulunamadı.',
         emptyIcon: 'fas fa-inbox'
     });
 
+    populateApprovedLeaveTypeOptions();
     bindFilterButtons();
     bindRejectModal();
-    await Promise.all([loadBalances(), loadPendingApprovals(), loadDecisions()]);
+    await Promise.all([loadBalances(), loadPendingApprovals(), loadApprovedRequests(1)]);
 });

@@ -54,7 +54,48 @@
 
             <div id="balances-table-container" class="mb-4"></div>
             <div id="pending-hr-approvals-table-container" class="mb-4"></div>
-            <div id="hr-decisions-table-container"></div>
+
+            <div class="row mb-3">
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-body">
+                            <div class="row g-2 align-items-end">
+                                <div class="col-12 col-md-3">
+                                    <label class="form-label small mb-1">Çalışan (ad / kullanıcı adı)</label>
+                                    <input id="approved-search" type="text" class="form-control form-control-sm" placeholder="Örn: Ahmet" />
+                                </div>
+                                <div class="col-12 col-md-3">
+                                    <label class="form-label small mb-1">İzin Türü</label>
+                                    <select id="approved-leave-type" class="form-select form-select-sm">
+                                        <option value="">Tümü</option>
+                                    </select>
+                                </div>
+                                <div class="col-6 col-md-2">
+                                    <label class="form-label small mb-1">Başlangıç (min)</label>
+                                    <input id="approved-start-from" type="date" class="form-control form-control-sm" />
+                                </div>
+                                <div class="col-6 col-md-2">
+                                    <label class="form-label small mb-1">Başlangıç (max)</label>
+                                    <input id="approved-start-to" type="date" class="form-control form-control-sm" />
+                                </div>
+                                <div class="col-6 col-md-1">
+                                    <button id="approved-filter-btn" class="btn btn-sm btn-primary w-100" type="button" title="Filtrele">
+                                        <i class="fas fa-search"></i>
+                                    </button>
+                                </div>
+                                <div class="col-6 col-md-1">
+                                    <button id="approved-clear-btn" class="btn btn-sm btn-outline-secondary w-100" type="button" title="Temizle">
+                                        <i class="fas fa-eraser"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            <div class="small text-muted mt-2">Onaylanmış geçmiş izin taleplerini görüntüleyin ve filtreleyin.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="approved-requests-table-container"></div>
         </div>
     </section>
 
