@@ -176,13 +176,26 @@ export async function initDepartmentTasksPage(config) {
     }
 
     function isPotentiallyDeletableDepartmentTask(task) {
-        // Show delete button for any task with no children.
+        // Only leaf subtasks are deletable; main workflow tasks must be preserved.
         // Full eligibility (CNC/Machining/Subcontracting checks) is validated at click-time.
-        return (task?.subtasks_count || 0) === 0;
+        const isSubtask = !!task?.parent;
+        const hasNoSubtasks = (task?.subtasks_count || 0) === 0;
+        const taskType = task?.task_type ?? null;
+        const taskTypeAllowed = taskType === null || taskType === 'part';
+        return isSubtask && hasNoSubtasks && taskTypeAllowed;
     }
 
     async function checkDepartmentTaskDeleteEligibility(taskId) {
         const task = await getDepartmentTaskById(taskId);
+
+        if (!task.parent) {
+            return { canDelete: false, reason: 'Sadece alt görevler silinebilir.' };
+        }
+
+        const taskType = task.task_type ?? null;
+        if (!(taskType === null || taskType === 'part')) {
+            return { canDelete: false, reason: 'Bu görev tipi silinemez.' };
+        }
 
         if ((task.subtasks_count || 0) > 0) {
             return { canDelete: false, reason: 'Alt görevi olan görev silinemez.' };
