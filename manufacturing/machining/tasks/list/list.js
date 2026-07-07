@@ -1,5 +1,5 @@
 import { initNavbar } from '../../../../components/navbar.js';
-import { getParts, updatePart, deletePart, createPart, updatePartOperations, getPartsStats } from '../../../../apis/machining/parts.js';
+import { getParts, updatePart, deletePart, createPart, updatePartOperations, getPartsStats, uploadPartFiles, deletePartFile, convertPartsToDepartmentRequest } from '../../../../apis/machining/parts.js';
 import { getOperations, markOperationCompleted, unmarkOperationCompleted, createManualTimeEntry } from '../../../../apis/machining/operations.js';
 import { fetchMachinesDropdown } from '../../../../apis/machines.js';
 import { authFetchUsers } from '../../../../apis/users.js';
@@ -8,6 +8,8 @@ import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
 import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
 import { TableComponent } from '../../../../components/table/table.js';
+import { FileAttachments } from '../../../../components/file-attachments/file-attachments.js';
+import { FileViewer } from '../../../../components/file-viewer/file-viewer.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
 
@@ -25,6 +27,8 @@ let partsFilters = null;
 let partsTable = null;
 let machines = [];
 let users = [];
+let selectedPartsForConvert = [];
+let partFileUploadTargetKey = null;
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -439,14 +443,39 @@ function initializeTableComponent() {
                 }
             },
             {
+                field: 'files',
+                label: 'Dosyalar',
+                sortable: false,
+                width: '8%',
+                formatter: (value, row) => {
+                    const count = row.files?.length || 0;
+                    if (row.is_locked) {
+                        return count > 0
+                            ? `<span class="badge bg-secondary" title="Kilitli parça">${count}</span>`
+                            : '-';
+                    }
+                    return `
+                        <button type="button" class="btn btn-sm btn-outline-secondary part-file-upload-btn"
+                                data-part-key="${row.key}" title="Dosya yükle">
+                            <i class="fas fa-paperclip"></i>
+                            ${count > 0 ? `<span class="badge bg-primary ms-1">${count}</span>` : ''}
+                        </button>
+                    `;
+                }
+            },
+            {
                 field: 'status',
                 label: 'Durum',
                 sortable: false,
-                width: '10%',
+                width: '12%',
                 formatter: (value, row) => {
+                    if (row.is_locked) {
+                        const drNum = row.department_request_number || '';
+                        return `<span class="status-badge status-blue">Departman Talebine Dönüştürüldü${drNum ? ` → ${drNum}` : ''}</span>`;
+                    }
                     if (row.completion_date) {
                         return '<span class="status-badge status-green">Tamamlandı</span>';
-                    } else if (row.has_incomplete_operations) {
+                    } else if (row.incomplete_operation_count > 0) {
                         return '<span class="status-badge status-yellow">Devam Ediyor</span>';
                     } else {
                         return '<span class="status-badge status-grey">Bekliyor</span>';
@@ -469,9 +498,17 @@ function initializeTableComponent() {
                 icon: 'fas fa-trash',
                 class: 'btn-outline-danger',
                 title: 'Sil',
+                visible: (row) => !row.is_locked,
                 onClick: (row) => deletePartConfirm(row.key)
             }
         ],
+        selectable: true,
+        isRowSelectable: (row) => !row.is_locked,
+        isRowEditable: (row) => !row.is_locked,
+        onSelectionChange: (selectedRows) => {
+            selectedPartsForConvert = selectedRows;
+            updateBulkActionBar();
+        },
         data: [],
         loading: true,
         sortable: true,
@@ -481,6 +518,7 @@ function initializeTableComponent() {
         totalItems: 0,
         serverSidePagination: true,
         onPageChange: (page) => {
+            partsTable?.clearSelection();
             loadParts(page);
         },
         onPageSizeChange: (newSize) => {
@@ -493,8 +531,11 @@ function initializeTableComponent() {
         onSort: (field, direction) => {
             currentSortField = field;
             currentSortDirection = direction;
+            currentOrdering = direction === 'asc' ? field : `-${field}`;
             loadParts(1);
         },
+        initialSortField: 'created_at',
+        initialSortDirection: 'desc',
         exportable: true,
         refreshable: true,
         onRefresh: () => {
@@ -510,6 +551,10 @@ function initializeTableComponent() {
         editableColumns: ['name', 'description', 'job_no', 'image_no', 'position_no', 'quantity', 'material', 'weight_kg', 'finish_time'],
         onEdit: async (row, field, newValue, oldValue) => {
             try {
+                if (row.is_locked) {
+                    showNotification('Bu parça departman talebine dönüştürüldü, düzenlenemez.', 'warning');
+                    return false;
+                }
                 // Check if value actually changed
                 let normalizedOld = oldValue;
                 let normalizedNew = newValue;
@@ -683,9 +728,8 @@ function buildPartQuery(page = 1) {
     const pageSize = partsTable ? partsTable.options.itemsPerPage : 20;
     filters.page_size = pageSize;
     
-    // Add ordering
-    const orderingParam = currentSortDirection === 'asc' ? currentSortField : `-${currentSortField}`;
-    filters.ordering = orderingParam;
+    // Add ordering — default: newest first
+    filters.ordering = currentOrdering || '-created_at';
     
     return filters;
 }
@@ -876,6 +920,135 @@ function setupEventListeners() {
     document.getElementById('save-manual-time-btn')?.addEventListener('click', () => {
         saveManualTimeEntry();
     });
+
+    document.getElementById('parts-bulk-convert-btn')?.addEventListener('click', () => {
+        showConvertToDepartmentRequestModal();
+    });
+
+    document.getElementById('convert-dr-submit-btn')?.addEventListener('click', () => {
+        submitConvertToDepartmentRequest();
+    });
+
+    const hiddenFileInput = document.getElementById('part-file-upload-input');
+    hiddenFileInput?.addEventListener('change', async (e) => {
+        const files = e.target.files;
+        if (!files?.length || !partFileUploadTargetKey) return;
+        try {
+            await uploadPartFiles(partFileUploadTargetKey, files);
+            showNotification('Dosyalar yüklendi', 'success');
+            await loadParts(currentPage);
+        } catch (error) {
+            console.error('File upload error:', error);
+            showNotification(error.message || 'Dosya yüklenirken hata oluştu', 'error');
+        } finally {
+            e.target.value = '';
+            partFileUploadTargetKey = null;
+        }
+    });
+
+    document.getElementById('parts-table-container')?.addEventListener('click', (e) => {
+        const btn = e.target.closest('.part-file-upload-btn');
+        if (!btn) return;
+        e.preventDefault();
+        e.stopPropagation();
+        partFileUploadTargetKey = btn.dataset.partKey;
+        hiddenFileInput?.click();
+    });
+}
+
+function updateBulkActionBar() {
+    const bar = document.getElementById('parts-bulk-actions');
+    const btn = document.getElementById('parts-bulk-convert-btn');
+    const count = selectedPartsForConvert.length;
+    if (!bar || !btn) return;
+    if (count > 0) {
+        bar.classList.remove('d-none');
+        btn.textContent = `Departman Talebine Dönüştür (${count})`;
+    } else {
+        bar.classList.add('d-none');
+    }
+}
+
+function buildItemDescription(part) {
+    const parts = [part.image_no, part.position_no].filter(Boolean);
+    return parts.join(' / ');
+}
+
+function showConvertToDepartmentRequestModal() {
+    const selected = partsTable?.getSelectedRows() || selectedPartsForConvert;
+    if (!selected.length) {
+        showNotification('Lütfen en az bir parça seçin', 'warning');
+        return;
+    }
+
+    const locked = selected.filter((p) => p.is_locked);
+    if (locked.length) {
+        showNotification('Kilitli parçalar dönüştürme işlemine dahil edilemez', 'warning');
+        return;
+    }
+
+    const previewBody = document.getElementById('convert-dr-preview-body');
+    if (previewBody) {
+        previewBody.innerHTML = selected.map((part) => `
+            <tr>
+                <td>${part.name || '-'}</td>
+                <td>${part.job_no || '-'}</td>
+                <td>${part.quantity ?? '-'}</td>
+                <td>adet</td>
+                <td>${buildItemDescription(part) || '-'}</td>
+                <td>${part.files?.length || 0}</td>
+            </tr>
+        `).join('');
+    }
+
+    document.getElementById('convert-dr-title').value = 'Parça Talebi';
+    document.getElementById('convert-dr-priority').value = 'normal';
+    document.getElementById('convert-dr-needed-date').value = '';
+    document.getElementById('convert-dr-description').value = '';
+
+    const modal = bootstrap.Modal.getOrCreateInstance(document.getElementById('convertDepartmentRequestModal'));
+    modal.show();
+}
+
+async function submitConvertToDepartmentRequest() {
+    const selected = partsTable?.getSelectedRows() || selectedPartsForConvert;
+    const title = document.getElementById('convert-dr-title')?.value?.trim();
+    const priority = document.getElementById('convert-dr-priority')?.value || 'normal';
+    const neededDate = document.getElementById('convert-dr-needed-date')?.value || null;
+    const description = document.getElementById('convert-dr-description')?.value?.trim() || '';
+
+    if (!title) {
+        showNotification('Başlık zorunludur', 'warning');
+        return;
+    }
+
+    const submitBtn = document.getElementById('convert-dr-submit-btn');
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+        const result = await convertPartsToDepartmentRequest(
+            selected.map((p) => p.key),
+            { title, priority, needed_date: neededDate, description }
+        );
+
+        const link = `/general/department-requests/list?request=${result.id}`;
+        showNotification(
+            `Departman talebi oluşturuldu: <a href="${link}" class="alert-link">${result.request_number}</a>`,
+            'success',
+            8000
+        );
+
+        bootstrap.Modal.getInstance(document.getElementById('convertDepartmentRequestModal'))?.hide();
+        partsTable?.clearSelection();
+        selectedPartsForConvert = [];
+        updateBulkActionBar();
+        await loadParts(currentPage);
+    } catch (error) {
+        console.error('Convert error:', error);
+        showNotification(error.message || 'Dönüştürme başarısız', 'error');
+    } finally {
+        if (submitBtn) submitBtn.disabled = false;
+    }
 }
 
 function showCreatePartModal() {
@@ -1040,6 +1213,58 @@ async function savePart() {
     }
 }
 
+function setupPartDetailFilesSection(part, isLocked) {
+    const container = document.getElementById('part-detail-files-container');
+    if (!container) return;
+
+    const fileAttachments = new FileAttachments('part-detail-files-container', {
+        title: '',
+        layout: 'grid',
+        showTitle: false,
+        showDeleteButton: !isLocked,
+        onFileClick: (file) => {
+            const fileName = file.file_name ? file.file_name.split('/').pop() : 'Dosya';
+            const fileExtension = fileName.split('.').pop().toLowerCase();
+            const viewer = new FileViewer();
+            viewer.setDownloadCallback(async () => {
+                await viewer.downloadFile(file.file_url, fileName);
+            });
+            viewer.openFile(file.file_url, fileName, fileExtension);
+        },
+        onDeleteClick: async (file) => {
+            if (isLocked) return;
+            if (!confirm('Bu dosyayı silmek istediğinize emin misiniz?')) return;
+            try {
+                await deletePartFile(file.id);
+                showNotification('Dosya silindi', 'success');
+                await showPartDetails(part.key);
+                await loadParts(currentPage);
+            } catch (error) {
+                showNotification(error.message || 'Dosya silinemedi', 'error');
+            }
+        },
+    });
+    fileAttachments.setFiles(part.files || []);
+
+    const fileInput = document.getElementById('part-detail-file-input');
+    if (fileInput && !isLocked) {
+        fileInput.addEventListener('change', async (e) => {
+            const files = e.target.files;
+            if (!files?.length) return;
+            try {
+                await uploadPartFiles(part.key, files);
+                showNotification('Dosyalar yüklendi', 'success');
+                await showPartDetails(part.key);
+                await loadParts(currentPage);
+            } catch (error) {
+                showNotification(error.message || 'Dosya yüklenirken hata oluştu', 'error');
+            } finally {
+                e.target.value = '';
+            }
+        });
+    }
+}
+
 async function showPartDetails(partKey) {
     try {
         // Fetch operations for this part
@@ -1062,9 +1287,10 @@ async function showPartDetails(partKey) {
 }
 
 function showPartDetailsModal(part, operations = []) {
+    const isLocked = Boolean(part.is_locked || part.department_request_id);
     // Create display modal instance with fullscreen size
     const displayModal = new DisplayModal('display-modal-container', {
-        title: `Operasyonlar - ${part.key} - ${part.name}`,
+        title: `Operasyonlar - ${part.key} - ${part.name}${isLocked ? ' (Kilitli)' : ''}`,
         icon: 'fas fa-cogs text-primary',
         size: 'xl',
         fullscreen: true,
@@ -1077,11 +1303,12 @@ function showPartDetailsModal(part, operations = []) {
     // Create operations management section with editable table
     const operationsHtml = `
         <div class="operations-management">
+            ${isLocked ? '<div class="alert alert-info py-2 mb-3"><i class="fas fa-lock me-2"></i>Bu parça departman talebine dönüştürüldü; operasyonlar düzenlenemez.</div>' : ''}
             <div class="mb-3 d-flex justify-content-between align-items-center">
-                <button type="button" class="btn btn-sm btn-primary" id="add-operation-row-btn">
+                <button type="button" class="btn btn-sm btn-primary" id="add-operation-row-btn" ${isLocked ? 'disabled' : ''}>
                     <i class="fas fa-plus me-1"></i>Satır Ekle
                 </button>
-                <button type="button" class="btn btn-sm btn-success" id="save-operations-btn">
+                <button type="button" class="btn btn-sm btn-success" id="save-operations-btn" ${isLocked ? 'disabled' : ''}>
                     <i class="fas fa-save me-1"></i>Değişiklikleri Kaydet
                 </button>
             </div>
@@ -1114,12 +1341,36 @@ function showPartDetailsModal(part, operations = []) {
         iconColor: 'text-primary',
         customContent: operationsHtml
     });
+
+    const filesSectionHtml = `
+        <div class="row g-2">
+            <div class="col-12">
+                ${!isLocked ? `
+                    <div class="mb-3">
+                        <label class="btn btn-sm btn-outline-primary mb-0">
+                            <i class="fas fa-upload me-1"></i>Dosya Yükle
+                            <input type="file" id="part-detail-file-input" multiple hidden>
+                        </label>
+                    </div>
+                ` : ''}
+                <div id="part-detail-files-container"></div>
+            </div>
+        </div>
+    `;
+
+    displayModal.addCustomSection({
+        title: 'Dosyalar',
+        icon: 'fas fa-paperclip',
+        iconColor: 'text-info',
+        customContent: filesSectionHtml
+    });
     
     // Render and show modal
     displayModal.render().show();
     
     // Setup event listeners after modal is rendered
     setTimeout(() => {
+        setupPartDetailFilesSection(part, isLocked);
         setupOperationsDetailEventListeners(part);
         // Ensure machines are loaded for dropdowns
         if (machines.length === 0) {
@@ -1216,6 +1467,7 @@ function enableEditableFieldsForNonCompletedOperations() {
 
 function createOperationRow(operation, isNew = false) {
     const rowId = operation.key || `new-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+    const isPartLocked = Boolean(window.currentPartDetails?.part?.is_locked);
     const isCompleted = operation.completion_date !== null;
     const hoursSpent = parseFloat(operation.total_hours_spent) || 0;
     
@@ -1226,6 +1478,9 @@ function createOperationRow(operation, isNew = false) {
     // Operations with hours spent but not completed should still be editable
     if (isCompleted) {
         statusHtml = '<span class="status-badge status-green">Tamamlandı</span>';
+        isReadOnly = true;
+    } else if (isPartLocked) {
+        statusHtml = '<span class="status-badge status-blue">Kilitli</span>';
         isReadOnly = true;
     } else if (hoursSpent > 0) {
         statusHtml = '<span class="status-badge status-yellow">Çalışıldı</span>';
@@ -1291,7 +1546,7 @@ function createOperationRow(operation, isNew = false) {
             </td>
             <td class="text-center">
                 ${statusHtml}
-                ${operation.key ? `
+                ${operation.key && !isPartLocked ? `
                     <div class="mt-2">
                         ${isCompleted ? `
                             <button type="button" class="btn btn-sm btn-outline-warning toggle-completion-btn" 
@@ -1312,7 +1567,7 @@ function createOperationRow(operation, isNew = false) {
                 ` : ''}
             </td>
             <td class="text-center">
-                ${operation.key ? `
+                ${operation.key && !isPartLocked ? `
                     <button type="button" class="btn btn-sm btn-outline-info manual-time-btn" 
                             data-operation-key="${operation.key}" 
                             data-operation-machine="${operation.machine_fk || ''}"

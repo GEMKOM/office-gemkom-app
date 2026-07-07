@@ -233,8 +233,8 @@ function applyAdaptiveCompactColumnConfig() {
         status_display: { normal: 90, min: 58 },
         target_completion_date: { normal: 118, min: 82 },
         completion_percentage: { normal: 240, min: 108 },
+        daily_avg_progress: { normal: 150, min: 86 },
         last_week_progress: { normal: 150, min: 86 },
-        weekly_avg_progress: { normal: 150, min: 86 },
         ncr_count: { normal: 76, min: 38 },
         revision_count: { normal: 94, min: 44 },
         created_at: { normal: 100, min: 68 }
@@ -270,8 +270,8 @@ function applyAdaptiveCompactColumnConfig() {
     setCol('status_display', { width: widthFor('status_display') });
     setCol('target_completion_date', { label: isTightLayout() ? 'Hedef' : 'Hedef Tamamlanma', width: widthFor('target_completion_date') });
     setCol('completion_percentage', { label: IS_COMPACT_13_INCH ? 'Tam.' : 'Tamamlanma', width: widthFor('completion_percentage') });
+    setCol('daily_avg_progress', { label: IS_COMPACT_13_INCH ? 'Gnl. Ort.' : 'Günlük Ort.', width: widthFor('daily_avg_progress') });
     setCol('last_week_progress', { label: IS_COMPACT_13_INCH ? 'Son Hf.' : 'Son Hafta', width: widthFor('last_week_progress') });
-    setCol('weekly_avg_progress', { label: IS_COMPACT_13_INCH ? 'Hf. Ort.' : 'Haftalık Ort.', width: widthFor('weekly_avg_progress') });
     setCol('ncr_count', { width: widthFor('ncr_count') });
     setCol('revision_count', { label: IS_COMPACT_13_INCH ? 'Rev.' : 'Revizyon', width: widthFor('revision_count') });
     setCol('created_at', { label: IS_COMPACT_13_INCH ? 'Oluş.' : 'Oluşturulma', width: widthFor('created_at') });
@@ -1130,72 +1130,8 @@ function initializeTableComponent() {
                 }
             },
             {
-                field: 'last_week_progress',
-                label: IS_COMPACT_13_INCH ? 'Son Hf.' : 'Son Hafta',
-                sortable: true,
-                width: IS_COMPACT_13_INCH ? '96px' : '170px',
-                formatter: (value, row) => {
-                    if (isDepartmentTaskRow(row)) return '-';
-                    if (row?.status === 'completed') return '-';
-                    if (value === null || value === undefined || value === '') return '-';
-
-                    const percentage = Math.min(100, Math.max(0, parseFloat(value) || 0));
-                    const etaStr = row?.estimated_completion_by_last_week;
-                    const eta = etaStr ? new Date(etaStr) : null;
-                    const etaDisplay = eta && !Number.isNaN(eta.getTime())
-                        ? eta.toLocaleDateString('tr-TR', {
-                            year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
-                            month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
-                            day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
-                        })
-                        : null;
-                    const targetStr = row?.target_completion_date;
-                    const target = targetStr ? new Date(targetStr) : null;
-                    const isLateVsTarget = !!(eta && target && !Number.isNaN(eta.getTime()) && !Number.isNaN(target.getTime()) && eta > target);
-
-                    // Compact progress bar (same visual language as "Tamamlanma", smaller footprint)
-                    return `
-                        <div style="display:flex; flex-direction:column; gap:4px; align-items:stretch; width:100%;">
-                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
-                                <span style="font-weight:700; font-size:${IS_COMPACT_13_INCH ? '0.74rem' : '0.8rem'}; color:#111827; white-space:nowrap;">
-                                    ${percentage.toFixed(1)}%
-                                </span>
-                                ${IS_COMPACT_13_INCH ? '' : '<span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">ilerleme</span>'}
-                            </div>
-                            <div style="font-size:${IS_COMPACT_13_INCH ? '0.62rem' : '0.72rem'}; ${isLateVsTarget ? 'color:#b91c1c;' : 'color:#6b7280;'} max-width:100%; overflow:hidden; text-overflow:ellipsis; ${IS_COMPACT_13_INCH ? 'white-space:nowrap;' : 'white-space:normal; line-height:1.15;'}">
-                                ${isLateVsTarget ? '<i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>' : ''}
-                                ${IS_COMPACT_13_INCH ? '' : 'Tahmini bitiş: '}
-                                <span style="font-weight:800; color:${isLateVsTarget ? '#b91c1c' : '#111827'};">
-                                    ${etaDisplay || '-'}
-                                </span>
-                                ${!IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:6px; font-weight:700;">(Hedefi aşıyor)</span>' : (IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:4px; font-weight:700;">Geç</span>' : '')}
-                            </div>
-                            <div class="progress" style="height: ${IS_COMPACT_13_INCH ? '8px' : '10px'}; border-radius: 999px; background-color: #e5e7eb;
-                                                         box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); overflow: hidden;">
-                                <div class="progress-bar"
-                                     role="progressbar"
-                                     style="width:${percentage}%;
-                                            background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%);
-                                            border-radius: 999px;
-                                            transition: width 0.6s ease;
-                                            position: relative;
-                                            overflow: hidden;"
-                                     aria-valuenow="${percentage}"
-                                     aria-valuemin="0"
-                                     aria-valuemax="100">
-                                    <div style="position:absolute; inset:0;
-                                                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
-                                                animation: shimmer 3s infinite;
-                                                pointer-events:none;"></div>
-                                </div>
-                            </div>
-                        </div>
-                    `;
-                }
-            },
-            {
-                field: 'weekly_avg_progress',
-                label: IS_COMPACT_13_INCH ? 'Hf. Ort.' : 'Haftalık Ort.',
+                field: 'daily_avg_progress',
+                label: IS_COMPACT_13_INCH ? 'Gnl. Ort.' : 'Günlük Ort.',
                 sortable: true,
                 width: IS_COMPACT_13_INCH ? '96px' : '170px',
                 formatter: (value, row) => {
@@ -1241,6 +1177,72 @@ function initializeTableComponent() {
                                      role="progressbar"
                                      style="width:${percentage}%;
                                             background: linear-gradient(90deg, #a78bfa 0%, #7c3aed 100%);
+                                            border-radius: 999px;
+                                            transition: width 0.6s ease;
+                                            position: relative;
+                                            overflow: hidden;"
+                                     aria-valuenow="${percentage}"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                    <div style="position:absolute; inset:0;
+                                                background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.25) 50%, transparent 100%);
+                                                animation: shimmer 3s infinite;
+                                                pointer-events:none;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+            },
+            {
+                field: 'last_week_progress',
+                label: IS_COMPACT_13_INCH ? 'Son Hf.' : 'Son Hafta',
+                sortable: true,
+                width: IS_COMPACT_13_INCH ? '96px' : '170px',
+                formatter: (value, row) => {
+                    if (isDepartmentTaskRow(row)) return '-';
+                    if (row?.status === 'completed') return '-';
+                    if (value === null || value === undefined || value === '') return '-';
+
+                    // last_week_progress is the total gain over the rolling 7-day window;
+                    // show it as an average per day so it's comparable to "Günlük Ort."
+                    const percentage = Math.min(100, Math.max(0, (parseFloat(value) || 0) / 7));
+                    const etaStr = row?.estimated_completion_by_last_week;
+                    const eta = etaStr ? new Date(etaStr) : null;
+                    const etaDisplay = eta && !Number.isNaN(eta.getTime())
+                        ? eta.toLocaleDateString('tr-TR', {
+                            year: IS_COMPACT_13_INCH ? '2-digit' : 'numeric',
+                            month: IS_COMPACT_13_INCH ? '2-digit' : 'short',
+                            day: IS_COMPACT_13_INCH ? '2-digit' : 'numeric'
+                        })
+                        : null;
+                    const targetStr = row?.target_completion_date;
+                    const target = targetStr ? new Date(targetStr) : null;
+                    const isLateVsTarget = !!(eta && target && !Number.isNaN(eta.getTime()) && !Number.isNaN(target.getTime()) && eta > target);
+
+                    // Compact progress bar (same visual language as "Tamamlanma", smaller footprint)
+                    return `
+                        <div style="display:flex; flex-direction:column; gap:4px; align-items:stretch; width:100%;">
+                            <div style="display:flex; align-items:center; justify-content:space-between; gap:8px;">
+                                <span style="font-weight:700; font-size:${IS_COMPACT_13_INCH ? '0.74rem' : '0.8rem'}; color:#111827; white-space:nowrap;">
+                                    ${percentage.toFixed(1)}%
+                                </span>
+                                ${IS_COMPACT_13_INCH ? '' : '<span style="font-size:0.72rem; color:#6b7280; white-space:nowrap;">ort./gün</span>'}
+                            </div>
+                            <div style="font-size:${IS_COMPACT_13_INCH ? '0.62rem' : '0.72rem'}; ${isLateVsTarget ? 'color:#b91c1c;' : 'color:#6b7280;'} max-width:100%; overflow:hidden; text-overflow:ellipsis; ${IS_COMPACT_13_INCH ? 'white-space:nowrap;' : 'white-space:normal; line-height:1.15;'}">
+                                ${isLateVsTarget ? '<i class="fas fa-triangle-exclamation" style="margin-right:4px;"></i>' : ''}
+                                ${IS_COMPACT_13_INCH ? '' : 'Tahmini bitiş: '}
+                                <span style="font-weight:800; color:${isLateVsTarget ? '#b91c1c' : '#111827'};">
+                                    ${etaDisplay || '-'}
+                                </span>
+                                ${!IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:6px; font-weight:700;">(Hedefi aşıyor)</span>' : (IS_COMPACT_13_INCH && isLateVsTarget ? '<span style="margin-left:4px; font-weight:700;">Geç</span>' : '')}
+                            </div>
+                            <div class="progress" style="height: ${IS_COMPACT_13_INCH ? '8px' : '10px'}; border-radius: 999px; background-color: #e5e7eb;
+                                                         box-shadow: inset 0 1px 2px rgba(0,0,0,0.08); overflow: hidden;">
+                                <div class="progress-bar"
+                                     role="progressbar"
+                                     style="width:${percentage}%;
+                                            background: linear-gradient(90deg, #60a5fa 0%, #2563eb 100%);
                                             border-radius: 999px;
                                             transition: width 0.6s ease;
                                             position: relative;
@@ -5498,9 +5500,9 @@ function renderProgressHistoryTab(data, jobNo) {
     const container = viewJobOrderModal.content.querySelector('#progress-history-container');
     if (!container) return;
 
-    const weeks = Array.isArray(data?.weeks) ? data.weeks : [];
-    const weeklyAvg = (data?.weekly_avg !== null && data?.weekly_avg !== undefined && data?.weekly_avg !== '')
-        ? (parseFloat(data.weekly_avg) || 0)
+    const days = Array.isArray(data?.days) ? data.days : [];
+    const dailyAvg = (data?.daily_avg !== null && data?.daily_avg !== undefined && data?.daily_avg !== '')
+        ? (parseFloat(data.daily_avg) || 0)
         : null;
 
     const formatDate = (dateStr) => {
@@ -5525,9 +5527,9 @@ function renderProgressHistoryTab(data, jobNo) {
         </span>`;
     };
 
-    const renderWeekRow = (w, idx) => {
-        const completion = Math.min(100, Math.max(0, parseFloat(w?.completion_pct) || 0));
-        const delta = parseFloat(w?.delta);
+    const renderDayRow = (d, idx) => {
+        const completion = Math.min(100, Math.max(0, parseFloat(d?.completion_pct) || 0));
+        const delta = parseFloat(d?.delta);
         const deltaAbs = Number.isNaN(delta) ? 0 : Math.min(100, Math.max(0, Math.abs(delta)));
 
         return `
@@ -5535,8 +5537,8 @@ function renderProgressHistoryTab(data, jobNo) {
                 <td style="width:56px;" class="text-muted">${idx + 1}</td>
                 <td>
                     <div style="display:flex; flex-direction:column; line-height:1.2;">
-                        <div class="fw-semibold">${formatDate(w?.week_start)} – ${formatDate(w?.week_end)}</div>
-                        <div class="text-muted" style="font-size:0.78rem;">Hafta</div>
+                        <div class="fw-semibold">${formatDate(d?.date)}</div>
+                        <div class="text-muted" style="font-size:0.78rem;">Gün</div>
                     </div>
                 </td>
                 <td style="width:220px;">
@@ -5554,7 +5556,7 @@ function renderProgressHistoryTab(data, jobNo) {
                 </td>
                 <td style="width:220px;">
                     <div style="display:flex; flex-direction:column; gap:6px; align-items:flex-start;">
-                        ${deltaBadge(w?.delta)}
+                        ${deltaBadge(d?.delta)}
                         <div class="progress" style="height:8px; border-radius:999px; background-color:#f3f4f6; overflow:hidden; width:100%;">
                             <div class="progress-bar" role="progressbar"
                                  style="width:${deltaAbs}%; background:${(Number.isNaN(delta) || delta >= 0) ? 'linear-gradient(90deg, #34d399 0%, #059669 100%)' : 'linear-gradient(90deg, #fb7185 0%, #e11d48 100%)'}; border-radius:999px;"
@@ -5577,17 +5579,17 @@ function renderProgressHistoryTab(data, jobNo) {
     const summaryHtml = `
         <div class="mb-3" style="display:flex; gap:12px; flex-wrap:wrap;">
             <div style="flex:1; min-width:260px; border:1px solid rgba(148,163,184,0.35); border-radius:12px; padding:14px 16px; background: linear-gradient(180deg, rgba(99,102,241,0.06) 0%, rgba(99,102,241,0.02) 100%);">
-                <div class="text-muted" style="font-size:0.8rem;">Haftalık Ortalama İlerleme</div>
+                <div class="text-muted" style="font-size:0.8rem;">Günlük Ortalama İlerleme</div>
                 <div style="display:flex; align-items:baseline; gap:8px; margin-top:4px;">
                     <div style="font-size:1.4rem; font-weight:800; color:#111827;">
-                        ${weeklyAvg === null ? '-' : `${weeklyAvg.toFixed(2)}%`}
+                        ${dailyAvg === null ? '-' : `${dailyAvg.toFixed(2)}%`}
                     </div>
-                    <div class="text-muted" style="font-size:0.85rem;">(son haftalar)</div>
+                    <div class="text-muted" style="font-size:0.85rem;">(tüm günler)</div>
                 </div>
             </div>
             <div style="flex:1; min-width:260px; border:1px solid rgba(148,163,184,0.35); border-radius:12px; padding:14px 16px; background: #fff;">
-                <div class="text-muted" style="font-size:0.8rem;">Kayıtlı Hafta Sayısı</div>
-                <div style="font-size:1.4rem; font-weight:800; color:#111827; margin-top:4px;">${weeks.length}</div>
+                <div class="text-muted" style="font-size:0.8rem;">Kayıtlı Gün Sayısı</div>
+                <div style="font-size:1.4rem; font-weight:800; color:#111827; margin-top:4px;">${days.length}</div>
             </div>
         </div>
     `;
@@ -5598,13 +5600,13 @@ function renderProgressHistoryTab(data, jobNo) {
                 <thead>
                     <tr>
                         <th style="width:56px;">#</th>
-                        <th>Hafta Aralığı</th>
+                        <th>Gün</th>
                         <th style="width:220px;">Tamamlanma</th>
-                        <th style="width:220px;">Haftalık Değişim</th>
+                        <th style="width:220px;">Günlük Değişim</th>
                     </tr>
                 </thead>
                 <tbody>
-                    ${weeks.map(renderWeekRow).join('')}
+                    ${days.slice().reverse().map(renderDayRow).join('')}
                 </tbody>
             </table>
         </div>
@@ -5612,7 +5614,7 @@ function renderProgressHistoryTab(data, jobNo) {
 
     container.innerHTML = `
         ${summaryHtml}
-        ${weeks.length === 0 ? emptyState : tableHtml}
+        ${days.length === 0 ? emptyState : tableHtml}
     `;
 }
 

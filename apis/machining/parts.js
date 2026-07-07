@@ -337,6 +337,68 @@ export async function updatePartOperations(partKey, updateData) {
 }
 
 /**
+ * Upload files to a part
+ * @param {string} partKey
+ * @param {FileList|File[]} files
+ */
+export async function uploadPartFiles(partKey, files) {
+    const formData = new FormData();
+    Array.from(files).forEach((file) => formData.append('files', file));
+
+    const response = await authedFetch(`${MACHINING_2_BASE_URL}/parts/${partKey}/add-file/`, {
+        method: 'POST',
+        body: formData,
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to upload files: ${response.statusText}`);
+    }
+
+    return response.json();
+}
+
+/**
+ * Delete a part file attachment
+ * @param {number|string} fileId
+ */
+export async function deletePartFile(fileId) {
+    const response = await authedFetch(`${backendBase}/tasks/files/${fileId}/`, {
+        method: 'DELETE',
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Failed to delete file: ${response.statusText}`);
+    }
+
+    return true;
+}
+
+/**
+ * Convert selected parts into a department request
+ * @param {string[]} partKeys
+ * @param {Object} requestData
+ */
+export async function convertPartsToDepartmentRequest(partKeys, requestData) {
+    const response = await authedFetch(`${MACHINING_2_BASE_URL}/parts/convert-to-department-request/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            part_keys: partKeys,
+            ...requestData,
+        }),
+    });
+
+    if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || `Conversion failed: ${response.statusText}`);
+    }
+
+    return response.json();
+}
+
+/**
  * Get parts statistics (aggregate statistics for parts and operations)
  * GET /tasks/parts/stats/
  * Returns ultra-efficient single-query endpoint using database-level aggregations

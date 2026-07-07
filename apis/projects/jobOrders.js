@@ -103,13 +103,16 @@ export async function getJobOrderByJobNo(jobNo) {
 }
 
 /**
- * Get job order progress history (weekly)
+ * Get job order progress history (daily)
  * Endpoint: /projects/job-orders/{job_no}/progress-history/
  *
  * Response shape example:
  *  {
- *    weeks: [{ week_start, week_end, completion_pct, delta }],
- *    weekly_avg: number
+ *    days: [{ date, completion_pct, delta }],
+ *    daily_avg: number,
+ *    last_week_progress: number,
+ *    estimated_completion_by_last_week: string|null,
+ *    estimated_completion_by_avg: string|null
  *  }
  *
  * @param {string} jobNo

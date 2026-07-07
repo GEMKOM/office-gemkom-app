@@ -84,13 +84,25 @@ export class TableComponent {
             defaultGroupExpanded: true, // Default state for groups (expanded/collapsed)
             groupSortDirection: 'asc', // 'asc' | 'desc' - sorting for group header keys
             
+            // Row selection (opt-in)
+            selectable: false,
+            isRowSelectable: null, // (row) => boolean
+            isRowEditable: null, // (row) => boolean
+            onSelectionChange: null, // (selectedRows) => void
+
+            // Initial server-side sort (optional)
+            initialSortField: null,
+            initialSortDirection: 'asc', // 'asc' | 'desc'
+            
             ...options
         };
         
-        this.currentSortField = null;
-        this.currentSortDirection = 'asc';
+        this.currentSortField = this.options.initialSortField ?? null;
+        this.currentSortDirection = this.options.initialSortDirection ?? 'asc';
         this.isInlineEditing = false;
         this.groupExpandedState = {}; // Track expanded/collapsed state of groups
+        this.selectedKeys = new Set();
+        this.selectedRowsData = new Map();
         
         this.init();
     }
@@ -175,6 +187,9 @@ export class TableComponent {
 
     renderColGroup() {
         const cols = [];
+        if (this.options.selectable) {
+            cols.push('<col style="width: 40px; min-width: 40px;">');
+        }
         (this.options.columns || []).forEach((col) => {
             const width = col?.width;
             if (width) {
@@ -207,7 +222,15 @@ export class TableComponent {
     }
     
     renderHeader() {
-        const headers = this.options.columns.map(column => {
+        const headers = [];
+        if (this.options.selectable) {
+            headers.push(`
+                <th class="selection-column" style="width: 40px; min-width: 40px;">
+                    <input type="checkbox" class="select-all-checkbox" title="Tümünü seç" aria-label="Tümünü seç">
+                </th>
+            `);
+        }
+        headers.push(...this.options.columns.map(column => {
             const sortable = this.options.sortable && column.sortable !== false;
             const sortClass = sortable ? 'sortable' : '';
             const headerExtraClass = column.headerClass || '';
@@ -241,7 +264,7 @@ export class TableComponent {
                     ${column.label} ${editableIcon} ${sortIcon}
                 </th>
             `;
-        });
+        }));
         
         // Add actions column if actions are defined
         if (this.options.actions.length > 0) {
@@ -421,9 +444,26 @@ export class TableComponent {
     }
     
     renderRow(row, rowIndex) {
-        const cells = this.options.columns.map(column => {
+        const cells = [];
+        const rowKey = row.key != null ? String(row.key) : String(rowIndex);
+        const isSelectable = this.options.selectable && (
+            !this.options.isRowSelectable || this.options.isRowSelectable(row, rowIndex)
+        );
+
+        if (this.options.selectable) {
+            const checked = this.selectedKeys.has(rowKey) ? 'checked' : '';
+            const disabled = isSelectable ? '' : 'disabled';
+            cells.push(`
+                <td class="selection-column" style="width: 40px; min-width: 40px;">
+                    <input type="checkbox" class="row-select-checkbox" data-row-key="${rowKey}" ${checked} ${disabled}>
+                </td>
+            `);
+        }
+
+        cells.push(...this.options.columns.map(column => {
             const value = this.getCellValue(row, column);
-                            const isEditable = this.isColumnEditable(column);
+            const rowEditable = !this.options.isRowEditable || this.options.isRowEditable(row, rowIndex);
+            const isEditable = rowEditable && this.isColumnEditable(column);
             const editableClass = isEditable ? 'editable-cell' : '';
             const cellExtraClass = column.cellClass || '';
             const dataAttributes = isEditable ? 
@@ -435,7 +475,7 @@ export class TableComponent {
                     ${this.formatCellValue(value, column, row)}
                 </td>
             `;
-        });
+        }));
         
         // Add actions cell
         if (this.options.actions.length > 0) {
@@ -910,6 +950,99 @@ export class TableComponent {
                 this.toggleGroup(groupKey);
             });
         }
+
+        // Row selection
+        if (this.options.selectable) {
+            this.setupSelectionListeners();
+        }
+    }
+
+    setupSelectionListeners() {
+        const selectAll = this.container.querySelector('.select-all-checkbox');
+        if (selectAll) {
+            selectAll.addEventListener('change', (e) => {
+                const checked = e.target.checked;
+                const { displayedData } = this.getDisplayedData();
+                displayedData.forEach((row, index) => {
+                    const rowKey = row.key != null ? String(row.key) : String(index);
+                    const isSelectable = !this.options.isRowSelectable || this.options.isRowSelectable(row, index);
+                    if (!isSelectable) return;
+                    if (checked) {
+                        this.selectedKeys.add(rowKey);
+                        this.selectedRowsData.set(rowKey, row);
+                    } else {
+                        this.selectedKeys.delete(rowKey);
+                        this.selectedRowsData.delete(rowKey);
+                    }
+                });
+                this._notifySelectionChange();
+                const tbody = this.container.querySelector(`#${this.containerId}-tbody`);
+                if (tbody) {
+                    tbody.innerHTML = this.renderBody();
+                    this.setupSelectionListeners();
+                    if (this.options.editable) {
+                        this.setupInlineEditing();
+                    }
+                }
+            });
+        }
+
+        const rowCheckboxes = this.container.querySelectorAll('.row-select-checkbox');
+        rowCheckboxes.forEach((checkbox) => {
+            checkbox.addEventListener('change', (e) => {
+                e.stopPropagation();
+                const rowKey = checkbox.dataset.rowKey;
+                const row = this.options.data.find((r) => String(r.key) === rowKey);
+                if (e.target.checked && row) {
+                    this.selectedKeys.add(rowKey);
+                    this.selectedRowsData.set(rowKey, row);
+                } else {
+                    this.selectedKeys.delete(rowKey);
+                    this.selectedRowsData.delete(rowKey);
+                }
+                this._updateSelectAllCheckbox();
+                this._notifySelectionChange();
+            });
+        });
+    }
+
+    _updateSelectAllCheckbox() {
+        const selectAll = this.container.querySelector('.select-all-checkbox');
+        if (!selectAll) return;
+        const { displayedData } = this.getDisplayedData();
+        const selectableRows = displayedData.filter((row, index) =>
+            !this.options.isRowSelectable || this.options.isRowSelectable(row, index)
+        );
+        if (selectableRows.length === 0) {
+            selectAll.checked = false;
+            selectAll.indeterminate = false;
+            return;
+        }
+        const selectedCount = selectableRows.filter((row) =>
+            this.selectedKeys.has(String(row.key))
+        ).length;
+        selectAll.checked = selectedCount === selectableRows.length;
+        selectAll.indeterminate = selectedCount > 0 && selectedCount < selectableRows.length;
+    }
+
+    _notifySelectionChange() {
+        if (this.options.onSelectionChange) {
+            this.options.onSelectionChange(this.getSelectedRows());
+        }
+    }
+
+    getSelectedRows() {
+        return Array.from(this.selectedRowsData.values());
+    }
+
+    getSelectedKeys() {
+        return Array.from(this.selectedKeys);
+    }
+
+    clearSelection() {
+        this.selectedKeys.clear();
+        this.selectedRowsData.clear();
+        this._notifySelectionChange();
     }
     
     toggleGroup(groupKey) {
@@ -1234,6 +1367,15 @@ export class TableComponent {
         }
         if (currentPage !== null) {
             this.options.currentPage = currentPage;
+        }
+
+        // Drop cached row data for keys no longer on this page
+        const pageKeys = new Set(data.map((row) => String(row.key)));
+        for (const key of Array.from(this.selectedRowsData.keys())) {
+            if (!pageKeys.has(key)) {
+                this.selectedRowsData.delete(key);
+                this.selectedKeys.delete(key);
+            }
         }
         
         // Remove pagination loading state

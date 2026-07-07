@@ -20,6 +20,7 @@
     <link rel="stylesheet" href="../../../../components/table/table.css">
     <link rel="stylesheet" href="../../../../components/badges/badges.css">
     <link rel="stylesheet" href="../../../../components/edit-modal/edit-modal.css">
+    <link rel="stylesheet" href="../../../../components/file-attachments/file-attachments.css">
 </head>
 <body>
     <!-- Navigation -->
@@ -37,6 +38,16 @@
             <div id="filters-placeholder"></div>
 
             <!-- Parts Table Section -->
+            <div class="row mb-2">
+                <div class="col-12">
+                    <div id="parts-bulk-actions" class="d-none">
+                        <button type="button" class="btn btn-sm btn-primary" id="parts-bulk-convert-btn">
+                            Departman Talebine Dönüştür
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <input type="file" id="part-file-upload-input" multiple hidden>
             <div class="row">
                 <div class="col-12">
                     <div id="parts-table-container"></div>
@@ -242,6 +253,62 @@
                     <button type="button" class="btn btn-danger" id="confirm-delete-btn">
                         <i class="fas fa-trash me-2"></i>Evet, Sil
                     </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Convert to Department Request Modal -->
+    <div class="modal fade" id="convertDepartmentRequestModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="fas fa-exchange-alt me-2"></i>Departman Talebine Dönüştür
+                    </h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <h6 class="mb-2">Önizleme</h6>
+                    <div class="table-responsive mb-3">
+                        <table class="table table-sm table-bordered">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Ürün Adı</th>
+                                    <th>İş No</th>
+                                    <th>Miktar</th>
+                                    <th>Birim</th>
+                                    <th>Açıklama</th>
+                                    <th>Dosya</th>
+                                </tr>
+                            </thead>
+                            <tbody id="convert-dr-preview-body"></tbody>
+                        </table>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="convert-dr-title">Başlık *</label>
+                        <input type="text" class="form-control" id="convert-dr-title" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="convert-dr-priority">Öncelik</label>
+                        <select class="form-control" id="convert-dr-priority">
+                            <option value="normal">Normal</option>
+                            <option value="urgent">Acil</option>
+                            <option value="critical">Kritik</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="convert-dr-needed-date">İhtiyaç Tarihi</label>
+                        <input type="date" class="form-control" id="convert-dr-needed-date">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label" for="convert-dr-description">Açıklama</label>
+                        <textarea class="form-control" id="convert-dr-description" rows="2"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="button" class="btn btn-primary" id="convert-dr-submit-btn">Oluştur ve Gönder</button>
                 </div>
             </div>
         </div>

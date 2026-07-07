@@ -26,6 +26,8 @@ import {
     STATUS_OPTIONS,
     DEPARTMENT_OPTIONS
 } from '../../apis/projects/departmentTasks.js';
+import { listCustomers } from '../../apis/projects/customers.js';
+import { listJobOrders } from '../../apis/projects/jobOrders.js';
 import { authFetchUsers } from '../../apis/users.js';
 import {
     createRelease,
@@ -452,12 +454,51 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         colSize: 3
     });
 
-    // Job order filter
-    tasksFilters.addTextFilter({
+    // Job order filter (remote search via /projects/job-orders/)
+    tasksFilters.addDropdownFilter({
         id: 'job-order-filter',
         label: 'İş Emri',
-        placeholder: 'İş emri numarası',
-        colSize: 2
+        options: [],
+        placeholder: 'İş emri ara (en az 2 karakter)',
+        colSize: 2,
+        searchable: true,
+        minSearchLength: 2,
+        remoteSearchPlaceholder: 'En az 2 karakter yazın',
+        remoteSearch: async (term) => {
+            if (!term || term.trim().length < 2) return [];
+            const data = await listJobOrders({
+                search: term.trim(),
+                page_size: 30,
+                ordering: '-created_at',
+                status__in: 'active,draft,on_hold'
+            });
+            const list = data.results || [];
+            return list.map((job) => ({
+                value: job.job_no,
+                text: [job.job_no, job.title].filter(Boolean).join(' - ')
+            }));
+        }
+    });
+
+    // Customer filter (remote search via /projects/customers/)
+    tasksFilters.addDropdownFilter({
+        id: 'customer-filter',
+        label: 'Müşteri',
+        options: [],
+        placeholder: 'Müşteri ara (en az 3 karakter)',
+        colSize: 2,
+        searchable: true,
+        minSearchLength: 3,
+        remoteSearchPlaceholder: 'En az 3 karakter yazın',
+        remoteSearch: async (term) => {
+            if (!term || term.length < 3) return [];
+            const res = await listCustomers({ search: term.trim(), is_active: true, page_size: 50 });
+            const list = res.results || [];
+            return list.map((c) => ({
+                value: String(c.id),
+                text: [c.code, c.name].filter(Boolean).join(' - ') || `#${c.id}`
+            }));
+        }
     });
 
     // Assigned user filter
@@ -494,6 +535,59 @@ function initializeFiltersComponent(defaultAssignedUserId = null) {
         if (f.type === 'dropdown') tasksFilters.addDropdownFilter(f);
         else if (f.type === 'text') tasksFilters.addTextFilter(f);
         else if (f.type === 'date') tasksFilters.addDateFilter(f);
+    });
+}
+
+function applyFilterValuesToOptions(filterValues, options) {
+    if (filterValues['status-filter'] && filterValues['status-filter'].trim() !== '') {
+        if (filterValues['status-filter'].includes(',')) {
+            options.status__in = filterValues['status-filter'];
+        } else {
+            options.status = filterValues['status-filter'];
+        }
+    }
+
+    if (filterValues['search-filter']) {
+        options.search = filterValues['search-filter'];
+    }
+
+    if (filterValues['job-order-filter']) {
+        options.job_order = filterValues['job-order-filter'];
+    }
+
+    if (filterValues['customer-filter']) {
+        options.customer = parseInt(filterValues['customer-filter'], 10);
+    }
+
+    if (filterValues['assigned-to-filter']) {
+        if (filterValues['assigned-to-filter'] === '__unassigned__') {
+            options.assigned_to__isnull = true;
+        } else {
+            options.assigned_to = parseInt(filterValues['assigned-to-filter'], 10);
+        }
+    }
+
+    if (filterValues['target-start-date-filter']) {
+        options.target_start_date = filterValues['target-start-date-filter'];
+    }
+
+    if (filterValues['target-completion-date-filter']) {
+        options.target_completion_date = filterValues['target-completion-date-filter'];
+    }
+
+    applyCustomFilterOptions(filterValues, options);
+}
+
+function applyCustomFilterOptions(filterValues, options) {
+    (customFilters || []).forEach((filterDef) => {
+        if (!filterDef.apiParam) return;
+        const value = filterValues[filterDef.id];
+        if (value === undefined || value === null || String(value).trim() === '') return;
+        if (filterDef.apiParam === 'customer') {
+            options.customer = parseInt(value, 10);
+        } else {
+            options[filterDef.apiParam] = value;
+        }
     });
 }
 
@@ -2019,43 +2113,7 @@ async function loadTasks() {
         };
 
         // Status filter
-        // Only apply status filter if a value is selected (not empty string for "Tümü")
-        if (filterValues['status-filter'] && filterValues['status-filter'].trim() !== '') {
-            if (filterValues['status-filter'].includes(',')) {
-                options.status__in = filterValues['status-filter'];
-            } else {
-                options.status = filterValues['status-filter'];
-            }
-        }
-        // If "Tümü" is selected (empty string), don't add any status filter
-
-        // Search filter
-        if (filterValues['search-filter']) {
-            options.search = filterValues['search-filter'];
-        }
-
-        // Job order filter
-        if (filterValues['job-order-filter']) {
-            options.job_order = filterValues['job-order-filter'];
-        }
-
-        // Assigned user filter
-        if (filterValues['assigned-to-filter']) {
-            if (filterValues['assigned-to-filter'] === '__unassigned__') {
-                options.assigned_to__isnull = true;
-            } else {
-                options.assigned_to = parseInt(filterValues['assigned-to-filter']);
-            }
-        }
-
-        // Date filters
-        if (filterValues['target-start-date-filter']) {
-            options.target_start_date = filterValues['target-start-date-filter'];
-        }
-
-        if (filterValues['target-completion-date-filter']) {
-            options.target_completion_date = filterValues['target-completion-date-filter'];
-        }
+        applyFilterValuesToOptions(filterValues, options);
 
         // Gantt view always applies period window filters so the API
         // returns only tasks in the currently visible date range.
@@ -7785,32 +7843,7 @@ async function exportTasks(format) {
             ordering: 'sequence'
         };
 
-        // Apply same filters as current view
-        // Only apply status filter if a value is selected (not empty string for "Tümü")
-        if (filterValues['status-filter'] && filterValues['status-filter'].trim() !== '') {
-            if (filterValues['status-filter'].includes(',')) {
-                options.status__in = filterValues['status-filter'];
-            } else {
-                options.status = filterValues['status-filter'];
-            }
-        }
-        // If "Tümü" is selected (empty string), don't add any status filter
-
-        if (filterValues['search-filter']) {
-            options.search = filterValues['search-filter'];
-        }
-
-        if (filterValues['job-order-filter']) {
-            options.job_order = filterValues['job-order-filter'];
-        }
-
-        if (filterValues['assigned-to-filter']) {
-            if (filterValues['assigned-to-filter'] === '__unassigned__') {
-                options.assigned_to__isnull = true;
-            } else {
-                options.assigned_to = parseInt(filterValues['assigned-to-filter']);
-            }
-        }
+        applyFilterValuesToOptions(filterValues, options);
 
         // Fetch all tasks for export
         let allTasks = [];

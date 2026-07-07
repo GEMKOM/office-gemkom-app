@@ -1,6 +1,5 @@
 import { initNavbar } from '../../../../components/navbar.js';
-import { getParts } from '../../../../apis/machining/parts.js';
-import { bulkCreateParts } from '../../../../apis/machining/parts.js';
+import { getParts, bulkCreateParts, uploadPartFiles } from '../../../../apis/machining/parts.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { TableComponent } from '../../../../components/table/table.js';
@@ -34,12 +33,48 @@ const columns = [
     { key: 'description', label: 'Açıklama', required: false, type: 'textarea' }
 ];
 
-let rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
+let rows = [createEmptyRow()];
 let eventListenersSetup = false;
+let bulkFileUploadRowIndex = null;
 
 // Job order dropdown state
 let jobOrderDropdowns = new Map(); // Store dropdown references by row index
 let jobOrderDropdownOptions = []; // Array of { job_no, title }
+
+function createEmptyRow() {
+    return { ...Object.fromEntries(columns.map(c => [c.key, ''])), _files: [] };
+}
+
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+function renderRowFilesCell(row, rowIndex) {
+    const files = row._files || [];
+    const count = files.length;
+    const namesHtml = files.map((file, fileIndex) => `
+        <span class="bulk-file-name" title="${escapeHtml(file.name)}">
+            <i class="fas fa-file me-1"></i>${escapeHtml(file.name)}
+            <button type="button" class="btn btn-link btn-sm p-0 text-danger bulk-file-remove"
+                    data-row="${rowIndex}" data-file="${fileIndex}" title="Kaldır">&times;</button>
+        </span>
+    `).join('');
+
+    return `
+        <td class="bulk-files-cell">
+            <button type="button" class="btn btn-sm btn-outline-secondary bulk-file-btn" data-row="${rowIndex}" title="Dosya ekle">
+                <i class="fas fa-paperclip"></i>
+                ${count > 0 ? `<span class="badge bg-primary ms-1">${count}</span>` : ''}
+            </button>
+            ${count > 0 ? `<div class="bulk-file-names">${namesHtml}</div>` : ''}
+        </td>
+    `;
+}
 
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
@@ -170,7 +205,7 @@ function renderBulkCreateTable() {
     for (const col of columns) {
         html += `<th>${col.label}${col.required ? ' *' : ''}</th>`;
     }
-    html += `<th>İşlem</th></tr></thead><tbody>`;
+    html += `<th>Dosyalar</th><th>İşlem</th></tr></thead><tbody>`;
     
     rows.forEach((row, i) => {
         html += `<tr>`;
@@ -191,6 +226,7 @@ function renderBulkCreateTable() {
                 html += `<td><input type="${inputType}" class="form-control form-control-sm bulk-input" data-row="${i}" data-key="${col.key}" value="${row[col.key] || ''}" ${col.required ? 'required' : ''} ${inputAttrs}></td>`;
             }
         }
+        html += renderRowFilesCell(row, i);
         html += `<td>
             <div class="btn-group btn-group-sm" role="group">
                 <button type="button" class="btn btn-outline-secondary bulk-duplicate" data-row="${i}" title="Kopyala">
@@ -252,8 +288,31 @@ function setupBulkCreateEventListeners() {
         }
     });
     
-    // Click events for duplicate and remove buttons
+    // Click events for duplicate, remove, and file buttons
     container.addEventListener('click', (e) => {
+        if (e.target.closest('.bulk-file-btn')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const btn = e.target.closest('.bulk-file-btn');
+            bulkFileUploadRowIndex = parseInt(btn.getAttribute('data-row'), 10);
+            document.getElementById('bulk-file-upload-input')?.click();
+            return;
+        }
+
+        if (e.target.closest('.bulk-file-remove')) {
+            e.preventDefault();
+            e.stopPropagation();
+            const btn = e.target.closest('.bulk-file-remove');
+            const rowIdx = parseInt(btn.getAttribute('data-row'), 10);
+            const fileIdx = parseInt(btn.getAttribute('data-file'), 10);
+            if (rows[rowIdx]?._files) {
+                rows[rowIdx]._files.splice(fileIdx, 1);
+                jobOrderDropdowns.clear();
+                renderBulkCreateTable();
+            }
+            return;
+        }
+
         // Duplicate row functionality
         if (e.target.closest('.bulk-duplicate')) {
             e.preventDefault();
@@ -266,7 +325,8 @@ function setupBulkCreateEventListeners() {
                 const jobNo = dropdown?.getValue() || rows[rowIdx].job_no || '';
                 
                 const newRow = { ...rows[rowIdx] };
-                newRow.job_no = jobNo; // Preserve job_no value
+                newRow.job_no = jobNo;
+                newRow._files = [...(rows[rowIdx]._files || [])];
                 rows.splice(rowIdx + 1, 0, newRow);
                 
                 // Clear dropdown references (will be recreated in renderBulkCreateTable)
@@ -321,11 +381,29 @@ function setupEventListeners() {
     const clearBtn = document.getElementById('clear-form-btn');
     if (clearBtn) {
         clearBtn.addEventListener('click', () => {
-            rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
+            rows = [createEmptyRow()];
             // Clear dropdown references
             jobOrderDropdowns.clear();
             renderBulkCreateTable();
             showNotification('Form temizlendi', 'info');
+        });
+    }
+
+    const bulkFileInput = document.getElementById('bulk-file-upload-input');
+    if (bulkFileInput) {
+        bulkFileInput.addEventListener('change', (e) => {
+            const fileList = e.target.files;
+            if (!fileList?.length || bulkFileUploadRowIndex === null) return;
+            if (!rows[bulkFileUploadRowIndex]) return;
+
+            if (!rows[bulkFileUploadRowIndex]._files) {
+                rows[bulkFileUploadRowIndex]._files = [];
+            }
+            rows[bulkFileUploadRowIndex]._files.push(...Array.from(fileList));
+            jobOrderDropdowns.clear();
+            renderBulkCreateTable();
+            e.target.value = '';
+            bulkFileUploadRowIndex = null;
         });
     }
     
@@ -339,7 +417,7 @@ function setupEventListeners() {
         newAddRowBtn.addEventListener('click', (e) => {
             e.preventDefault();
             e.stopPropagation();
-            rows.push(Object.fromEntries(columns.map(c => [c.key, ''])));
+            rows.push(createEmptyRow());
             renderBulkCreateTable();
         });
     }
@@ -423,22 +501,40 @@ async function handleBulkCreateSave() {
     
     try {
         const responseData = await bulkCreateParts(payload);
+        const totalFilesQueued = rows.reduce((sum, row) => sum + (row._files?.length || 0), 0);
+
+        // Upload files for each created part (row order matches response order)
+        if (responseData?.parts?.length) {
+            const uploadErrors = [];
+            await Promise.all(responseData.parts.map(async (part, index) => {
+                const files = rows[index]?._files;
+                if (!files?.length) return;
+                try {
+                    await uploadPartFiles(part.key, files);
+                } catch (uploadErr) {
+                    uploadErrors.push(`${part.key}: ${uploadErr.message}`);
+                }
+            }));
+            if (uploadErrors.length) {
+                showNotification(
+                    `Parçalar oluşturuldu ancak bazı dosyalar yüklenemedi:<br>${uploadErrors.join('<br>')}`,
+                    'warning',
+                    8000
+                );
+            }
+        }
         
         // Check if the response contains created parts data
         if (responseData && responseData.parts && Array.isArray(responseData.parts)) {
-            // Show the created parts modal
             showCreatedTasksModal(responseData.parts);
-            
-            // Reset form
-            rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
+            rows = [createEmptyRow()];
             jobOrderDropdowns.clear();
             renderBulkCreateTable();
-            
-            showNotification(`${responseData.created || responseData.parts.length} parça başarıyla oluşturuldu!`, 'success');
+            const fileMsg = totalFilesQueued > 0 ? ` (${totalFilesQueued} dosya eklendi)` : '';
+            showNotification(`${responseData.created || responseData.parts.length} parça başarıyla oluşturuldu!${fileMsg}`, 'success');
         } else {
             showNotification(`${payload.length} parça başarıyla oluşturuldu!`, 'success');
-            // Reset form
-            rows = [Object.fromEntries(columns.map(c => [c.key, '']))];
+            rows = [createEmptyRow()];
             jobOrderDropdowns.clear();
             renderBulkCreateTable();
         }

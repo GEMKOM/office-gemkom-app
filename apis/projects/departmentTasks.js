@@ -20,6 +20,7 @@ import { backendBase } from '../../base.js';
  * @param {boolean} options.parent__isnull - Filter main tasks only (true) or subtasks (false)
  * @param {boolean} options.is_blocked - Filter blocked tasks (true)
  * @param {boolean} options.main_only - Custom filter for main tasks only (true)
+ * @param {number} options.customer - Filter by customer ID (job order or sales offer)
  * @param {string} options.search - Search in title, description
  * @param {string} options.ordering - Sort: sequence, created_at, -created_at, target_completion_date, job_order__job_no, -job_order__job_no
  * @param {string} options.date_range_start - Filter range start date (YYYY-MM-DD)
@@ -63,6 +64,9 @@ export async function listDepartmentTasks(options = {}) {
         }
         if (options.main_only !== undefined) {
             queryParams.append('main_only', options.main_only.toString());
+        }
+        if (options.customer !== undefined && options.customer !== null) {
+            queryParams.append('customer', options.customer.toString());
         }
         if (options.search) {
             queryParams.append('search', options.search);

@@ -200,6 +200,25 @@ body:has(.job-no-dropdown-container .modern-dropdown.open) .filters-component .d
     box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
 }
 
+.bulk-files-cell {
+    white-space: normal !important;
+    min-width: 120px;
+}
+
+.bulk-file-names {
+    margin-top: 0.35rem;
+    max-width: 160px;
+}
+
+.bulk-file-name {
+    display: block;
+    font-size: 0.7rem;
+    line-height: 1.3;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
 .table-sm td, .table-sm th {
     padding: 0.5rem;
     vertical-align: middle;
