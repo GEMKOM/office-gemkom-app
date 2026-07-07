@@ -103,6 +103,14 @@ function isDepartmentTaskRow(row) {
     return !!(row && row._isDepartmentTask);
 }
 
+function canDeleteDepartmentTaskFromTracking(task) {
+    const taskType = task?.task_type ?? null;
+    return canEditJobOrders() &&
+        !!task?.parent &&
+        (task?.subtasks_count || 0) === 0 &&
+        (taskType === null || taskType === 'part');
+}
+
 function getDepartmentTaskStatusBadgeClass(status) {
     switch (status) {
         case 'completed': return 'status-green';
@@ -1470,7 +1478,7 @@ function initializeTableComponent() {
                 icon: 'fas fa-trash',
                 class: 'btn-outline-danger',
                 onClick: (row) => handleDeleteDepartmentTaskFromTracking(row),
-                visible: (row) => isDepartmentTaskRow(row) && (row.subtasks_count || 0) === 0
+                visible: (row) => isDepartmentTaskRow(row) && canDeleteDepartmentTaskFromTracking(row)
             }
         ],
         emptyMessage: 'İş emri bulunamadı',
@@ -2339,6 +2347,19 @@ function setupExpandButtonListeners() {
 
 // Fetch department tasks for a specific job order (main tasks only; subtasks expand separately)
 async function handleDeleteDepartmentTaskFromTracking(task) {
+    if (!canEditJobOrders()) {
+        showNotification('Bu işlem için yetkiniz yok', 'error');
+        return;
+    }
+    if (!task.parent) {
+        showNotification('Sadece alt görevler silinebilir.', 'warning');
+        return;
+    }
+    const taskType = task.task_type ?? null;
+    if (!(taskType === null || taskType === 'part')) {
+        showNotification('Bu görev tipi silinemez.', 'warning');
+        return;
+    }
     if ((task.subtasks_count || 0) > 0) {
         showNotification('Alt görevi olan görev silinemez. Önce alt görevleri silin.', 'warning');
         return;
@@ -2775,8 +2796,8 @@ window.viewJobOrder = async function(jobNo) {
             ? `<div class="alert alert-info d-flex align-items-center mb-4" role="alert">
                     <i class="fas fa-layer-group me-2"></i>
                     <div>
-                        Bu bir <strong>üretim fazıdır</strong>${jobOrder.phase_number ? ` (Faz ${jobOrder.phase_number})` : ''}.
-                        ${jobOrder.source_job_order ? `Kaynak mühendislik iş emri: <a href="#" class="phase-source-link" data-job-no="${jobOrder.source_job_order}"><strong>${jobOrder.source_job_order}</strong></a>` : ''}
+                        Bu bir <strong>üretim fazıdır</strong>${jobOrder.phase_number ? ` (Faz ${escapeHtml(jobOrder.phase_number)})` : ''}.
+                        ${jobOrder.source_job_order ? `Kaynak mühendislik iş emri: <a href="#" class="phase-source-link" data-job-no="${escapeHtml(jobOrder.source_job_order)}"><strong>${escapeHtml(jobOrder.source_job_order)}</strong></a>` : ''}
                     </div>
                </div>`
             : (jobOrder.has_phases
