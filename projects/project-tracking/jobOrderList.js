@@ -3721,19 +3721,19 @@ function renderPhasesTable(phases, jobNo, getStatusBadgeClass) {
                 field: 'phase_number',
                 label: 'Faz',
                 sortable: true,
-                formatter: (value) => value != null ? `<strong>P${value}</strong>` : '-'
+                formatter: (value) => value != null ? `<strong>P${escapeHtml(value)}</strong>` : '-'
             },
             {
                 field: 'job_no',
                 label: 'İş Emri No',
                 sortable: true,
-                formatter: (value) => `<strong>${value || '-'}</strong>`
+                formatter: (value) => `<strong>${escapeHtml(value || '-')}</strong>`
             },
             {
                 field: 'title',
                 label: 'Başlık',
                 sortable: true,
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'status_display',
@@ -3741,7 +3741,7 @@ function renderPhasesTable(phases, jobNo, getStatusBadgeClass) {
                 sortable: true,
                 formatter: (value, row) => {
                     if (!value || value === '-') return '-';
-                    return `<span class="status-badge ${getStatusBadgeClass(row.status)}">${value}</span>`;
+                    return `<span class="status-badge ${getStatusBadgeClass(row.status)}">${escapeHtml(value)}</span>`;
                 }
             },
             {
@@ -3876,8 +3876,8 @@ function showCreatePhasesForm(jobNo) {
                 <div class="fw-bold small mb-1">Faz P${i + 1}
                     ${phases.length > 1 ? `<button type="button" class="btn btn-sm btn-link text-danger p-0 float-end remove-phase-btn" data-idx="${i}" title="Fazı kaldır"><i class="fas fa-times"></i></button>` : ''}
                 </div>
-                <input type="text" class="form-control form-control-sm mb-1 phase-title-input" placeholder="Başlık (örn. Faz 1 - Acil)" value="${(p.title || '').replace(/"/g, '&quot;')}">
-                <input type="date" class="form-control form-control-sm phase-date-input" value="${p.date || ''}">
+                <input type="text" class="form-control form-control-sm mb-1 phase-title-input" placeholder="Başlık (örn. Faz 1 - Acil)" value="${escapeHtml(p.title || '')}">
+                <input type="date" class="form-control form-control-sm phase-date-input" value="${escapeHtml(p.date || '')}">
             </div>
         `).join('');
 
@@ -3886,11 +3886,11 @@ function showCreatePhasesForm(jobNo) {
             const cells = phases.map((p, i) => `
                 <td class="text-center">
                     <input type="number" min="0" class="form-control form-control-sm alloc-input" style="width:72px;display:inline-block"
-                           data-master="${m.job_no}" data-phase="${i}" value="${alloc[m.job_no][i] || 0}">
+                           data-master="${escapeHtml(m.job_no)}" data-phase="${i}" value="${escapeHtml(alloc[m.job_no][i] || 0)}">
                 </td>`).join('');
-            return `<tr data-master="${m.job_no}" data-qty="${m.quantity}">
-                <td><strong>${m.job_no}</strong><br><span class="small text-muted">${m.title || ''}</span></td>
-                <td class="text-center fw-bold">${m.quantity}</td>
+            return `<tr data-master="${escapeHtml(m.job_no)}" data-qty="${escapeHtml(m.quantity)}">
+                <td><strong>${escapeHtml(m.job_no)}</strong><br><span class="small text-muted">${escapeHtml(m.title || '')}</span></td>
+                <td class="text-center fw-bold">${escapeHtml(m.quantity)}</td>
                 ${cells}
                 <td class="text-center remaining-cell"></td>
             </tr>`;
@@ -3900,8 +3900,8 @@ function showCreatePhasesForm(jobNo) {
           <div class="card mb-3"><div class="card-body">
             <h6 class="card-title mb-3"><i class="fas fa-plus-circle me-2 text-primary"></i>Üretim Fazları Oluştur</h6>
             <div class="alert alert-light small mb-3">
-                Her faz <strong>${jobNo}/P{n}</strong> teslimat düğümü olarak; her ürün miktarı da
-                <strong>${jobNo}-XX/P{n}</strong> alt işi olarak oluşturulur. Her ürünün faz miktarları
+                Her faz <strong>${escapeHtml(jobNo)}/P{n}</strong> teslimat düğümü olarak; her ürün miktarı da
+                <strong>${escapeHtml(jobNo)}-XX/P{n}</strong> alt işi olarak oluşturulur. Her ürünün faz miktarları
                 toplamı, ürün miktarına eşit olmalıdır (<strong>Kalan = 0</strong>).
             </div>
             <div class="d-flex flex-wrap align-items-stretch mb-2">
