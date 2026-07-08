@@ -1,6 +1,55 @@
 import { authedFetch } from '../authService.js';
 import { backendBase } from '../base.js';
 
+/**
+ * Flatten a DRF error response body into a human-readable string.
+ * Handles the common shapes returned by the backend:
+ *   - "some string"
+ *   - { error: "..." } / { detail: "..." }
+ *   - { detail: "...", errors: [ ... ] }              (custom action responses)
+ *   - { field_name: ["msg", "msg", ...] }             (serializer validation errors)
+ *   - { field_name: { nested: ["msg"] } }             (nested serializer errors)
+ * Field messages are joined with newlines so multi-line validation errors
+ * (e.g. planning item availability) are shown in full instead of being dropped.
+ */
+export function extractErrorMessage(errorData, fallback = 'Sunucu hatası') {
+    if (errorData == null) return fallback;
+    if (typeof errorData === 'string') return errorData || fallback;
+
+    // Single-message keys take priority when present
+    if (typeof errorData.error === 'string' && errorData.error) return errorData.error;
+
+    // { detail, errors: [...] } — custom action error format
+    if (errorData.detail && Array.isArray(errorData.errors) && errorData.errors.length) {
+        return [errorData.detail, ...errorData.errors].join('\n');
+    }
+    if (typeof errorData.detail === 'string' && errorData.detail) return errorData.detail;
+
+    // Flatten every field/non-field error value into a flat list of strings
+    const parts = [];
+    const collect = (val) => {
+        if (val == null) return;
+        if (typeof val === 'string') { parts.push(val); return; }
+        if (Array.isArray(val)) { val.forEach(collect); return; }
+        if (typeof val === 'object') { Object.values(val).forEach(collect); return; }
+        parts.push(String(val));
+    };
+    collect(errorData);
+
+    const message = parts.filter(Boolean).join('\n');
+    return message || fallback;
+}
+
+/** Read a fetch Response's error body and return a readable message. */
+async function readErrorMessage(response, fallback) {
+    try {
+        const errorData = await response.json();
+        return extractErrorMessage(errorData, fallback);
+    } catch (_) {
+        return fallback;
+    }
+}
+
 // Purchase Request API Functions
 export async function createPurchaseRequest(requestData) {
     try {
@@ -13,8 +62,7 @@ export async function createPurchaseRequest(requestData) {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Sunucu hatası');
+            throw new Error(await readErrorMessage(response, 'Sunucu hatası'));
         }
 
         return await response.json();
@@ -56,8 +104,7 @@ export async function submitPurchaseRequest(requestId) {
         });
 
         if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Talep gönderilirken hata oluştu');
+            throw new Error(await readErrorMessage(response, 'Talep gönderilirken hata oluştu'));
         }
 
         return await response.json();
