@@ -30,6 +30,22 @@ let users = [];
 let selectedPartsForConvert = [];
 let partFileUploadTargetKey = null;
 
+function escapeHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value).replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    }[char]));
+}
+
+function displayText(value, fallback = '-') {
+    const escaped = escapeHtml(value);
+    return escaped === '' ? fallback : escaped;
+}
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
@@ -151,7 +167,10 @@ function populateModalMachineDropdowns() {
         if (dropdown) {
             dropdown.innerHTML = '<option value="">Makine seçin...</option>';
             machines.forEach(machine => {
-                dropdown.innerHTML += `<option value="${machine.id}">${machine.name}</option>`;
+                const option = document.createElement('option');
+                option.value = machine.id;
+                option.textContent = machine.name;
+                dropdown.appendChild(option);
             });
         }
     };
@@ -347,8 +366,8 @@ function initializeTableComponent() {
                 sortable: true,
                 width: '10%',
                 formatter: (value, row) => {
-                    const partKey = value || '-';
-                    const taskKey = row?.task_key ? ` (${row.task_key})` : '';
+                    const partKey = displayText(value);
+                    const taskKey = row?.task_key ? ` (${displayText(row.task_key, '')})` : '';
                     return `<span class="part-key">${partKey}${taskKey}</span>`;
                 }
             },
@@ -357,35 +376,35 @@ function initializeTableComponent() {
                 label: 'Ad',
                 sortable: true,
                 width: '15%',
-                formatter: (value) => `<strong>${value || '-'}</strong>`
+                formatter: (value) => `<strong>${displayText(value)}</strong>`
             },
             {
                 field: 'description',
                 label: 'Açıklama',
                 sortable: false,
                 width: '15%',
-                formatter: (value) => value || '-'
+                formatter: (value) => displayText(value)
             },
             {
                 field: 'job_no',
                 label: 'İş No',
                 sortable: true,
                 width: '10%',
-                formatter: (value) => value || '-'
+                formatter: (value) => displayText(value)
             },
             {
                 field: 'image_no',
                 label: 'Resim No',
                 sortable: false,
                 width: '10%',
-                formatter: (value) => value || '-'
+                formatter: (value) => displayText(value)
             },
             {
                 field: 'position_no',
                 label: 'Poz No',
                 sortable: false,
                 width: '10%',
-                formatter: (value) => value || '-'
+                formatter: (value) => displayText(value)
             },
             {
                 field: 'quantity',
@@ -393,14 +412,14 @@ function initializeTableComponent() {
                 sortable: false,
                 width: '8%',
                 type: 'number',
-                formatter: (value) => `<span class="quantity-badge">${value || 0}</span>`
+                formatter: (value) => `<span class="quantity-badge">${displayText(value ?? 0, '0')}</span>`
             },
             {
                 field: 'material',
                 label: 'Malzeme',
                 sortable: false,
                 width: '9%',
-                formatter: (value) => value || '-'
+                formatter: (value) => displayText(value)
             },
             {
                 field: 'weight_kg',
@@ -408,7 +427,10 @@ function initializeTableComponent() {
                 sortable: false,
                 width: '8%',
                 type: 'number',
-                formatter: (value) => value ? `${parseFloat(value).toFixed(3)} kg` : '-'
+                formatter: (value) => {
+                    const weight = Number(value);
+                    return Number.isFinite(weight) ? `${weight.toFixed(3)} kg` : '-';
+                }
             },
             {
                 field: 'operation_count',
@@ -416,7 +438,7 @@ function initializeTableComponent() {
                 sortable: false,
                 width: '8%',
                 editable: false,
-                formatter: (value) => `<span class="operation-count-badge">${value || 0}</span>`
+                formatter: (value) => `<span class="operation-count-badge">${displayText(value ?? 0, '0')}</span>`
             },
             {
                 field: 'incomplete_operation_count',
@@ -425,9 +447,9 @@ function initializeTableComponent() {
                 width: '8%',
                 editable: false,
                 formatter: (value) => {
-                    const count = value || 0;
+                    const count = Number(value) || 0;
                     const badgeClass = count > 0 ? 'incomplete-count-badge' : 'complete-count-badge';
-                    return `<span class="${badgeClass}">${count}</span>`;
+                    return `<span class="${badgeClass}">${displayText(count, '0')}</span>`;
                 }
             },
             {
@@ -456,7 +478,7 @@ function initializeTableComponent() {
                     }
                     return `
                         <button type="button" class="btn btn-sm btn-outline-secondary part-file-upload-btn"
-                                data-part-key="${row.key}" title="Dosya yükle">
+                                data-part-key="${escapeHtml(row.key)}" title="Dosya yükle">
                             <i class="fas fa-paperclip"></i>
                             ${count > 0 ? `<span class="badge bg-primary ms-1">${count}</span>` : ''}
                         </button>
@@ -470,8 +492,8 @@ function initializeTableComponent() {
                 width: '12%',
                 formatter: (value, row) => {
                     if (row.is_locked) {
-                        const drNum = row.department_request_number || '';
-                        return `<span class="status-badge status-blue">Departman Talebine Dönüştürüldü${drNum ? ` → ${drNum}` : ''}</span>`;
+                        const drNum = displayText(row.department_request_number, '');
+                        return `<span class="status-badge status-blue">Departman Talebine Dönüştürüldü${drNum ? ` &rarr; ${drNum}` : ''}</span>`;
                     }
                     if (row.completion_date) {
                         return '<span class="status-badge status-green">Tamamlandı</span>';
@@ -545,7 +567,7 @@ function initializeTableComponent() {
         small: false,
         emptyMessage: 'Parça bulunamadı',
         emptyIcon: 'fas fa-box',
-        rowAttributes: (row) => `data-part-key="${row.key}" class="data-update"`,
+        rowAttributes: (row) => `data-part-key="${escapeHtml(row.key)}" class="data-update"`,
         // Enable cell editing
         editable: true,
         editableColumns: ['name', 'description', 'job_no', 'image_no', 'position_no', 'quantity', 'material', 'weight_kg', 'finish_time'],
@@ -939,7 +961,7 @@ function setupEventListeners() {
             await loadParts(currentPage);
         } catch (error) {
             console.error('File upload error:', error);
-            showNotification(error.message || 'Dosya yüklenirken hata oluştu', 'error');
+            showNotification(escapeHtml(error.message || 'Dosya yüklenirken hata oluştu'), 'error');
         } finally {
             e.target.value = '';
             partFileUploadTargetKey = null;
@@ -991,11 +1013,11 @@ function showConvertToDepartmentRequestModal() {
     if (previewBody) {
         previewBody.innerHTML = selected.map((part) => `
             <tr>
-                <td>${part.name || '-'}</td>
-                <td>${part.job_no || '-'}</td>
-                <td>${part.quantity ?? '-'}</td>
+                <td>${displayText(part.name)}</td>
+                <td>${displayText(part.job_no)}</td>
+                <td>${displayText(part.quantity)}</td>
                 <td>adet</td>
-                <td>${buildItemDescription(part) || '-'}</td>
+                <td>${displayText(buildItemDescription(part))}</td>
                 <td>${part.files?.length || 0}</td>
             </tr>
         `).join('');
@@ -1033,7 +1055,7 @@ async function submitConvertToDepartmentRequest() {
 
         const link = `/general/department-requests/list?request=${result.id}`;
         showNotification(
-            `Departman talebi oluşturuldu: <a href="${link}" class="alert-link">${result.request_number}</a>`,
+            `Departman talebi oluşturuldu: <a href="${escapeHtml(link)}" class="alert-link">${displayText(result.request_number, 'Talep')}</a>`,
             'success',
             8000
         );
@@ -1045,7 +1067,7 @@ async function submitConvertToDepartmentRequest() {
         await loadParts(currentPage);
     } catch (error) {
         console.error('Convert error:', error);
-        showNotification(error.message || 'Dönüştürme başarısız', 'error');
+        showNotification(escapeHtml(error.message || 'Dönüştürme başarısız'), 'error');
     } finally {
         if (submitBtn) submitBtn.disabled = false;
     }
@@ -1209,7 +1231,7 @@ async function savePart() {
         }
     } catch (error) {
         console.error('Error creating part:', error);
-        showNotification('Parça oluşturulurken hata oluştu: ' + (error.message || 'Bilinmeyen hata'), 'error');
+        showNotification('Parça oluşturulurken hata oluştu: ' + escapeHtml(error.message || 'Bilinmeyen hata'), 'error');
     }
 }
 
@@ -1240,7 +1262,7 @@ function setupPartDetailFilesSection(part, isLocked) {
                 await showPartDetails(part.key);
                 await loadParts(currentPage);
             } catch (error) {
-                showNotification(error.message || 'Dosya silinemedi', 'error');
+                showNotification(escapeHtml(error.message || 'Dosya silinemedi'), 'error');
             }
         },
     });
@@ -1257,7 +1279,7 @@ function setupPartDetailFilesSection(part, isLocked) {
                 await showPartDetails(part.key);
                 await loadParts(currentPage);
             } catch (error) {
-                showNotification(error.message || 'Dosya yüklenirken hata oluştu', 'error');
+                showNotification(escapeHtml(error.message || 'Dosya yüklenirken hata oluştu'), 'error');
             } finally {
                 e.target.value = '';
             }
@@ -1290,7 +1312,7 @@ function showPartDetailsModal(part, operations = []) {
     const isLocked = Boolean(part.is_locked || part.department_request_id);
     // Create display modal instance with fullscreen size
     const displayModal = new DisplayModal('display-modal-container', {
-        title: `Operasyonlar - ${part.key} - ${part.name}${isLocked ? ' (Kilitli)' : ''}`,
+        title: `Operasyonlar - ${displayText(part.key, '')} - ${displayText(part.name, '')}${isLocked ? ' (Kilitli)' : ''}`,
         icon: 'fas fa-cogs text-primary',
         size: 'xl',
         fullscreen: true,
@@ -1490,33 +1512,21 @@ function createOperationRow(operation, isNew = false) {
         isReadOnly = false;
     }
     
-    // Escape HTML for text values to prevent XSS
-    const escapeHtml = (text) => {
-        if (text === null || text === undefined) return '';
-        const map = {
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#039;'
-        };
-        return String(text).replace(/[&<>"']/g, m => map[m]);
-    };
-    
     const nameValue = escapeHtml(operation.name || '');
     const descValue = escapeHtml(operation.description || '');
-    const orderValue = operation.order || '';
-    const estimatedHoursValue = operation.estimated_hours || '';
+    const orderValue = escapeHtml(operation.order || '');
+    const estimatedHoursValue = escapeHtml(operation.estimated_hours || '');
     const keyValue = escapeHtml(operation.key || '');
+    const rowIdValue = escapeHtml(rowId);
     
     // Build machine options HTML
     const machineOptionsHtml = machines.map(m => {
         const selected = operation.machine_fk == m.id ? 'selected' : '';
-        return `<option value="${m.id}" ${selected}>${escapeHtml(m.name)}</option>`;
+        return `<option value="${escapeHtml(m.id)}" ${selected}>${escapeHtml(m.name)}</option>`;
     }).join('');
     
     return `
-        <tr data-operation-key="${operation.key || ''}" data-is-new="${isNew}" data-row-id="${rowId}">
+        <tr data-operation-key="${keyValue}" data-is-new="${isNew}" data-row-id="${rowIdValue}">
             <td>
                 <span class="operation-key-display">${keyValue || '-'}</span>
                 <input type="hidden" class="operation-order" value="${orderValue}">
@@ -1528,7 +1538,7 @@ function createOperationRow(operation, isNew = false) {
                 <textarea class="form-control form-control-sm operation-description" rows="1" ${isReadOnly ? 'readonly' : ''}>${descValue}</textarea>
             </td>
             <td>
-                <select class="form-control form-control-sm operation-machine" ${isReadOnly ? 'disabled' : ''} data-operation-key="${operation.key || ''}">
+                <select class="form-control form-control-sm operation-machine" ${isReadOnly ? 'disabled' : ''} data-operation-key="${keyValue}">
                     <option value="">Makine seçin...</option>
                     ${machineOptionsHtml}
                 </select>
@@ -1541,7 +1551,7 @@ function createOperationRow(operation, isNew = false) {
             </td>
             <td class="text-center">
                 <div class="form-check d-flex justify-content-center">
-                    <input class="form-check-input operation-interchangeable" type="checkbox" ${operation.interchangeable ? 'checked' : ''} ${isReadOnly ? '' : ''} id="interchangeable-${rowId}" data-operation-key="${operation.key || ''}">
+                    <input class="form-check-input operation-interchangeable" type="checkbox" ${operation.interchangeable ? 'checked' : ''} ${isReadOnly ? '' : ''} id="interchangeable-${rowIdValue}" data-operation-key="${keyValue}">
                 </div>
             </td>
             <td class="text-center">
@@ -1549,15 +1559,15 @@ function createOperationRow(operation, isNew = false) {
                 ${operation.key && !isPartLocked ? `
                     <div class="mt-2">
                         ${isCompleted ? `
-                            <button type="button" class="btn btn-sm btn-outline-warning toggle-completion-btn" 
-                                    data-operation-key="${operation.key}" 
+                            <button type="button" class="btn btn-sm btn-outline-warning toggle-completion-btn"
+                                    data-operation-key="${keyValue}"
                                     data-action="uncomplete"
                                     title="Tamamlanmamış olarak işaretle">
                                 <i class="fas fa-undo me-1"></i>Geri Al
                             </button>
                         ` : `
-                            <button type="button" class="btn btn-sm btn-outline-success toggle-completion-btn" 
-                                    data-operation-key="${operation.key}" 
+                            <button type="button" class="btn btn-sm btn-outline-success toggle-completion-btn"
+                                    data-operation-key="${keyValue}"
                                     data-action="complete"
                                     title="Tamamlandı olarak işaretle">
                                 <i class="fas fa-check me-1"></i>Tamamla
@@ -1568,9 +1578,9 @@ function createOperationRow(operation, isNew = false) {
             </td>
             <td class="text-center">
                 ${operation.key && !isPartLocked ? `
-                    <button type="button" class="btn btn-sm btn-outline-info manual-time-btn" 
-                            data-operation-key="${operation.key}" 
-                            data-operation-machine="${operation.machine_fk || ''}"
+                    <button type="button" class="btn btn-sm btn-outline-info manual-time-btn"
+                            data-operation-key="${keyValue}"
+                            data-operation-machine="${escapeHtml(operation.machine_fk || '')}"
                             title="Manuel Zaman Girişi">
                         <i class="fas fa-clock me-1"></i>Manuel Zaman
                     </button>
@@ -2060,7 +2070,7 @@ async function saveOperationsChanges(part) {
         }
     } catch (error) {
         console.error('Error saving operations:', error);
-        showNotification('Operasyonlar kaydedilirken hata oluştu: ' + (error.message || 'Bilinmeyen hata'), 'error');
+        showNotification('Operasyonlar kaydedilirken hata oluştu: ' + escapeHtml(error.message || 'Bilinmeyen hata'), 'error');
     }
 }
 
@@ -2084,7 +2094,7 @@ async function toggleOperationCompletion(operationKey, markAsCompleted, part) {
         }
     } catch (error) {
         console.error('Error toggling operation completion:', error);
-        showNotification('Operasyon durumu değiştirilirken hata oluştu: ' + (error.message || 'Bilinmeyen hata'), 'error');
+        showNotification('Operasyon durumu değiştirilirken hata oluştu: ' + escapeHtml(error.message || 'Bilinmeyen hata'), 'error');
     }
 }
 

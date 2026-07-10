@@ -36,6 +36,7 @@ const columns = [
 let rows = [createEmptyRow()];
 let eventListenersSetup = false;
 let bulkFileUploadRowIndex = null;
+let isBulkCreating = false;
 
 // Job order dropdown state
 let jobOrderDropdowns = new Map(); // Store dropdown references by row index
@@ -51,7 +52,13 @@ function escapeHtml(text) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
+function displayText(value, fallback = '-') {
+    const escaped = escapeHtml(value);
+    return escaped === '' ? fallback : escaped;
 }
 
 function renderRowFilesCell(row, rowIndex) {
@@ -214,7 +221,7 @@ function renderBulkCreateTable() {
                 // Use dropdown container for job_no
                 html += `<td><div id="job-no-dropdown-${i}" class="job-no-dropdown-container"></div></td>`;
             } else if (col.type === 'textarea') {
-                html += `<td><textarea class="form-control form-control-sm bulk-input" data-row="${i}" data-key="${col.key}" rows="2" ${col.required ? 'required' : ''}>${row[col.key] || ''}</textarea></td>`;
+                html += `<td><textarea class="form-control form-control-sm bulk-input" data-row="${i}" data-key="${col.key}" rows="2" ${col.required ? 'required' : ''}>${escapeHtml(row[col.key] || '')}</textarea></td>`;
             } else {
                 const inputType = col.type === 'number' ? 'number' : (col.type === 'date' ? 'date' : 'text');
                 let inputAttrs = '';
@@ -223,7 +230,7 @@ function renderBulkCreateTable() {
                 } else if (col.key === 'weight_kg') {
                     inputAttrs = 'min="0" step="0.01"';
                 }
-                html += `<td><input type="${inputType}" class="form-control form-control-sm bulk-input" data-row="${i}" data-key="${col.key}" value="${row[col.key] || ''}" ${col.required ? 'required' : ''} ${inputAttrs}></td>`;
+                html += `<td><input type="${inputType}" class="form-control form-control-sm bulk-input" data-row="${i}" data-key="${col.key}" value="${escapeHtml(row[col.key] || '')}" ${col.required ? 'required' : ''} ${inputAttrs}></td>`;
             }
         }
         html += renderRowFilesCell(row, i);
@@ -432,6 +439,8 @@ function setupEventListeners() {
 }
 
 async function handleBulkCreateSave() {
+    if (isBulkCreating) return;
+
     // Validate required fields
     const requiredFields = ['name', 'job_no', 'quantity', 'finish_time'];
     const missingFields = [];
@@ -460,15 +469,15 @@ async function handleBulkCreateSave() {
     rows.forEach((row, index) => {
         // Check quantity constraints
         if (row.quantity) {
-            const quantity = parseInt(row.quantity);
-            if (quantity <= 0) {
-                validationErrors.push(`Satır ${index + 1}: Adet 0'dan büyük olmalıdır`);
+            const quantity = Number(row.quantity);
+            if (!Number.isInteger(quantity) || quantity <= 0) {
+                validationErrors.push(`Satır ${index + 1}: Adet geçerli ve 0'dan büyük bir tam sayı olmalıdır`);
             }
         }
         // Check weight constraints
         if (row.weight_kg) {
-            const weight = parseFloat(row.weight_kg);
-            if (isNaN(weight) || weight < 0) {
+            const weight = Number(row.weight_kg);
+            if (!Number.isFinite(weight) || weight < 0) {
                 validationErrors.push(`Satır ${index + 1}: Ağırlık geçerli bir pozitif sayı olmalıdır`);
             }
         }
@@ -490,18 +499,27 @@ async function handleBulkCreateSave() {
             job_no: jobNo,
             image_no: row.image_no || null,
             position_no: row.position_no || null,
-            quantity: row.quantity ? parseInt(row.quantity) : null,
+            quantity: row.quantity ? Number(row.quantity) : null,
             material: row.material || null,
-            weight_kg: row.weight_kg ? parseFloat(row.weight_kg) : null,
+            weight_kg: row.weight_kg ? Number(row.weight_kg) : null,
             finish_time: row.finish_time,
             description: row.description || null,
             operations: [] // Empty operations array - operations can be added later
         };
     });
-    
+
+    isBulkCreating = true;
+    const createBtn = document.getElementById('create-tasks-btn');
+    const originalCreateBtnHtml = createBtn?.innerHTML;
+    if (createBtn) {
+        createBtn.disabled = true;
+        createBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Oluşturuluyor...';
+    }
+
     try {
         const responseData = await bulkCreateParts(payload);
-        const totalFilesQueued = rows.reduce((sum, row) => sum + (row._files?.length || 0), 0);
+        let uploadedFileCount = 0;
+        let failedFileCount = 0;
 
         // Upload files for each created part (row order matches response order)
         if (responseData?.parts?.length) {
@@ -511,13 +529,15 @@ async function handleBulkCreateSave() {
                 if (!files?.length) return;
                 try {
                     await uploadPartFiles(part.key, files);
+                    uploadedFileCount += files.length;
                 } catch (uploadErr) {
-                    uploadErrors.push(`${part.key}: ${uploadErr.message}`);
+                    failedFileCount += files.length;
+                    uploadErrors.push(`${escapeHtml(part.key)}: ${escapeHtml(uploadErr.message || 'Dosya yüklenemedi')}`);
                 }
             }));
             if (uploadErrors.length) {
                 showNotification(
-                    `Parçalar oluşturuldu ancak bazı dosyalar yüklenemedi:<br>${uploadErrors.join('<br>')}`,
+                    `Parçalar oluşturuldu ancak ${failedFileCount} dosya yüklenemedi:<br>${uploadErrors.join('<br>')}`,
                     'warning',
                     8000
                 );
@@ -530,7 +550,7 @@ async function handleBulkCreateSave() {
             rows = [createEmptyRow()];
             jobOrderDropdowns.clear();
             renderBulkCreateTable();
-            const fileMsg = totalFilesQueued > 0 ? ` (${totalFilesQueued} dosya eklendi)` : '';
+            const fileMsg = uploadedFileCount > 0 ? ` (${uploadedFileCount} dosya eklendi)` : '';
             showNotification(`${responseData.created || responseData.parts.length} parça başarıyla oluşturuldu!${fileMsg}`, 'success');
         } else {
             showNotification(`${payload.length} parça başarıyla oluşturuldu!`, 'success');
@@ -544,7 +564,13 @@ async function handleBulkCreateSave() {
         
     } catch (err) {
         console.error('Error creating parts:', err);
-        showNotification('Hata: ' + err.message, 'error');
+        showNotification('Hata: ' + escapeHtml(err.message || 'Bilinmeyen hata'), 'error');
+    } finally {
+        isBulkCreating = false;
+        if (createBtn) {
+            createBtn.disabled = false;
+            createBtn.innerHTML = originalCreateBtnHtml || 'Görevleri Oluştur';
+        }
     }
 }
 
@@ -555,9 +581,9 @@ function showCreatedTasksModal(tasks) {
     if (tbody) {
         tbody.innerHTML = tasks.map(task => `
             <tr>
-                <td>${task.name || 'N/A'}</td>
-                <td><strong class="text-primary">${task.key || 'N/A'}</strong></td>
-                <td>${task.job_no || 'N/A'}</td>
+                <td>${displayText(task.name, 'N/A')}</td>
+                <td><strong class="text-primary">${displayText(task.key, 'N/A')}</strong></td>
+                <td>${displayText(task.job_no, 'N/A')}</td>
             </tr>
         `).join('');
     }
@@ -746,42 +772,42 @@ function initializeTableComponent() {
                 label: 'TI No',
                 sortable: true,
                 width: '10%',
-                formatter: (value) => `<span class="task-key">${value || '-'}</span>`
+                formatter: (value) => `<span class="task-key">${displayText(value)}</span>`
             },
             {
                 field: 'name',
                 label: 'Ad',
                 sortable: true,
                 width: '12%',
-                formatter: (value) => `<strong>${value || '-'}</strong>`
+                formatter: (value) => `<strong>${displayText(value)}</strong>`
             },
             {
                 field: 'description',
                 label: 'Açıklama',
                 sortable: true,
                 width: '15%',
-                formatter: (value) => value || '-'
+                formatter: (value) => displayText(value)
             },
             {
                 field: 'job_no',
                 label: 'İş No',
                 sortable: true,
                 width: '8%',
-                formatter: (value) => value || '-'
+                formatter: (value) => displayText(value)
             },
             {
                 field: 'image_no',
                 label: 'Resim No',
                 sortable: true,
                 width: '8%',
-                formatter: (value) => value || '-'
+                formatter: (value) => displayText(value)
             },
             {
                 field: 'position_no',
                 label: 'Poz No',
                 sortable: true,
                 width: '8%',
-                formatter: (value) => value || '-'
+                formatter: (value) => displayText(value)
             },
             {
                 field: 'quantity',
@@ -789,7 +815,7 @@ function initializeTableComponent() {
                 sortable: true,
                 width: '6%',
                 type: 'number',
-                formatter: (value) => `<span class="quantity-badge">${value || 0}</span>`
+                formatter: (value) => `<span class="quantity-badge">${displayText(value ?? 0, '0')}</span>`
             },
             {
                 field: 'estimated_hours',
@@ -797,14 +823,14 @@ function initializeTableComponent() {
                 sortable: true,
                 width: '10%',
                 type: 'number',
-                formatter: (value) => `<span class="estimated-hours">${value ? value + ' saat' : 'Belirtilmemiş'}</span>`
+                formatter: (value) => `<span class="estimated-hours">${value ? `${displayText(value, '')} saat` : 'Belirtilmemiş'}</span>`
             },
             {
                 field: 'total_hours_spent',
                 label: 'Harcanan Saat',
                 sortable: true,
                 width: '10%',
-                formatter: (value) => `<span class="hours-spent">${value || 0} saat</span>`
+                formatter: (value) => `<span class="hours-spent">${displayText(value ?? 0, '0')} saat</span>`
             },
             {
                 field: 'finish_time',
