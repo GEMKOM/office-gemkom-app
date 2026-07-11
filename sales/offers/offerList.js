@@ -1678,6 +1678,7 @@ function buildGenelTab(statusLabel, statusColor) {
         : '-';
 
     const customerDetail = getOfferCustomerDetail(offer);
+    const safeStatusLabel = escapeHtml(statusLabel || '-');
 
     let html = `
         <div style="padding: 20px;">
@@ -1692,26 +1693,26 @@ function buildGenelTab(statusLabel, statusColor) {
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-barcode me-1"></i>Teklif No
                         </div>
-                        <div class="field-value fw-medium flex-grow-1">${offer.offer_no || '-'}</div>
+                        <div class="field-value fw-medium flex-grow-1">${formatCustomerDisplayValue(offer.offer_no)}</div>
                     </div>
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-tasks me-1"></i>Durum
                         </div>
-                        <div class="field-value flex-grow-1"><span class="status-badge ${BADGE_CLASS_MAP[statusColor] || 'status-grey'}">${statusLabel}</span></div>
+                        <div class="field-value flex-grow-1"><span class="status-badge ${BADGE_CLASS_MAP[statusColor] || 'status-grey'}">${safeStatusLabel}</span></div>
                     </div>
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-heading me-1"></i>Başlık
                         </div>
-                        <div class="field-value flex-grow-1">${offer.title || '-'}</div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(offer.title)}</div>
                     </div>
                     ${offer.description ? `
                     <div class="field-row d-flex align-items-start py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-align-left me-1"></i>Açıklama
                         </div>
-                        <div class="field-value flex-grow-1">${offer.description}</div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(offer.description, true)}</div>
                     </div>
                     ` : ''}
                 </div>
@@ -1735,7 +1736,7 @@ function buildGenelTab(statusLabel, statusColor) {
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-building me-1"></i>Müşteri
                         </div>
-                        <div class="field-value flex-grow-1">${offer.customer_name || '-'}${offer.customer_code ? ` <span class="text-muted">(${escapeHtml(offer.customer_code)})</span>` : ''}</div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(offer.customer_name)}${offer.customer_code ? ` <span class="text-muted">(${escapeHtml(offer.customer_code)})</span>` : ''}</div>
                     </div>
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
@@ -1785,27 +1786,27 @@ function buildGenelTab(statusLabel, statusColor) {
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-file-signature me-1"></i>Sipariş No
                         </div>
-                        <div class="field-value flex-grow-1">${offer.order_no || '-'}</div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(offer.order_no)}</div>
                     </div>
                     ${offer.incoterms ? `
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-shipping-fast me-1"></i>Incoterms
                         </div>
-                        <div class="field-value flex-grow-1">${offer.incoterms}</div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(offer.incoterms)}</div>
                     </div>
                     ` : ''}
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-map-marker-alt me-1"></i>Teslim Yeri
                         </div>
-                        <div class="field-value flex-grow-1">${offer.delivery_place || '-'}</div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(offer.delivery_place)}</div>
                     </div>
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-credit-card me-1"></i>Ödeme Şekli
                         </div>
-                        <div class="field-value flex-grow-1">${getPaymentTermsLabel(offer.payment_terms)}</div>
+                        <div class="field-value flex-grow-1">${escapeHtml(getPaymentTermsLabel(offer.payment_terms))}</div>
                     </div>
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
@@ -1865,7 +1866,7 @@ function buildGenelTab(statusLabel, statusColor) {
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-user me-1"></i>Oluşturan
                         </div>
-                        <div class="field-value flex-grow-1">${offer.created_by_name || '-'}</div>
+                        <div class="field-value flex-grow-1">${formatCustomerDisplayValue(offer.created_by_name)}</div>
                     </div>
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">

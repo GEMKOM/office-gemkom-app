@@ -33,6 +33,15 @@ let customersTable = null; // Table component instance
 let createCustomerModal = null;
 let deleteCustomerModal = null;
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
     // Initialize route protection
@@ -106,37 +115,39 @@ function initializeTableComponent() {
                 field: 'code',
                 label: 'Müşteri Kodu',
                 sortable: true,
-                formatter: (value) => `<strong>${value || '-'}</strong>`
+                formatter: (value) => `<strong>${escapeHtml(value || '-')}</strong>`
             },
             {
                 field: 'name',
                 label: 'Firma Adı',
                 sortable: true,
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'short_name',
                 label: 'Kısa Ad',
                 sortable: true,
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'contact_person',
                 label: 'İletişim Kişisi',
                 sortable: false,
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'email',
                 label: 'E-posta',
                 sortable: false,
-                formatter: (value) => value ? `<a href="mailto:${value}">${value}</a>` : '-'
+                formatter: (value) => value
+                    ? `<a href="mailto:${encodeURIComponent(String(value))}">${escapeHtml(value)}</a>`
+                    : '-'
             },
             {
                 field: 'phone',
                 label: 'Telefon',
                 sortable: false,
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'default_currency',
@@ -145,7 +156,7 @@ function initializeTableComponent() {
                 formatter: (value) => {
                     if (!value) return '-';
                     const currency = CURRENCY_OPTIONS.find(c => c.value === value);
-                    return currency ? currency.label : value;
+                    return escapeHtml(currency ? currency.label : value);
                 }
             },
             {

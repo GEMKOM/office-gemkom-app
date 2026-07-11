@@ -10,22 +10,39 @@ import { showNotification } from '../../../../components/notification/notificati
 // Formatters
 // ---------------------------------------------------------------------------
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function toFiniteNumber(value) {
+    const number = Number(value);
+    return Number.isFinite(number) ? number : null;
+}
+
 function renderTaskKeyBadge(value) {
     if (!value) return '-';
+    const safeValue = escapeHtml(value);
+    const safeHref = encodeURIComponent(String(value));
     return `
-        <a href="/manufacturing/machining/tasks/list/?task=${value}" target="_blank" rel="noopener noreferrer"
+        <a href="/manufacturing/machining/tasks/list/?task=${safeHref}" target="_blank" rel="noopener noreferrer"
            style="text-decoration:none; cursor:pointer;">
             <span style="font-weight:700; color:#0d6efd; font-family:'Courier New',monospace; font-size:1rem;
                          background:rgba(13,110,253,0.1); padding:0.25rem 0.5rem; border-radius:4px;
                          border:1px solid rgba(13,110,253,0.2); display:inline-block;">
-                ${value}
+                ${safeValue}
             </span>
         </a>`;
 }
 
 function renderEfficiencyBadge(value) {
-    if (value === null || value === undefined) return '-';
-    const pct = Math.round(value);
+    const numericValue = toFiniteNumber(value);
+    if (numericValue === null) return '-';
+    const pct = Math.round(numericValue);
     const cls = pct >= 100 ? 'text-success' : pct >= 80 ? 'text-warning' : 'text-danger';
     return `<span class="${cls} fw-bold">${pct}%</span>`;
 }
@@ -46,12 +63,17 @@ function renderBoolBadge(value) {
 
 function truncate(str, max = 30) {
     if (!str) return '-';
-    return str.length > max ? `<span title="${str}">${str.substring(0, max)}…</span>` : str;
+    const value = String(str);
+    const escaped = escapeHtml(value);
+    return value.length > max
+        ? `<span title="${escaped}">${escapeHtml(value.substring(0, max))}...</span>`
+        : escaped;
 }
 
 function hoursCell(value) {
-    if (value === null || value === undefined) return '-';
-    return `<span class="text-success fw-bold">${value.toFixed(2)}</span>`;
+    const numericValue = toFiniteNumber(value);
+    if (numericValue === null) return '-';
+    return `<span class="text-success fw-bold">${numericValue.toFixed(2)}</span>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,7 +100,7 @@ function buildColumns() {
             label: 'İş No',
             sortable: true,
             headerClass: 'text-nowrap',
-            formatter: (v) => v || '-'
+            formatter: (v) => escapeHtml(v || '-')
         },
         {
             field: 'machine_name',
@@ -99,14 +121,20 @@ function buildColumns() {
             label: 'Tahmini Saat',
             sortable: true,
             headerClass: 'text-nowrap',
-            formatter: (v) => (v !== null && v !== undefined ? v.toFixed(2) : '-')
+            formatter: (v) => {
+                const numericValue = toFiniteNumber(v);
+                return numericValue === null ? '-' : numericValue.toFixed(2);
+            }
         },
         {
             field: 'total_hours_spent',
             label: 'Toplam Harcanan (s)',
             sortable: true,
             headerClass: 'text-nowrap',
-            formatter: (v) => (v !== null && v !== undefined ? v.toFixed(2) : '-')
+            formatter: (v) => {
+                const numericValue = toFiniteNumber(v);
+                return numericValue === null ? '-' : numericValue.toFixed(2);
+            }
         },
         {
             field: 'efficiency',
@@ -133,7 +161,7 @@ function buildColumns() {
             label: 'Termin',
             sortable: true,
             headerClass: 'text-nowrap',
-            formatter: (v) => v || '-'
+            formatter: (v) => escapeHtml(v || '-')
         },
     ];
 }
@@ -144,18 +172,18 @@ function buildColumns() {
 
 function buildGroupHeader(groupRows) {
     const row = groupRows[0];
-    const name = row._displayName;
-    const username = row._username;
+    const name = escapeHtml(row._displayName || '-');
+    const username = escapeHtml(row._username || '-');
     const usernameHtml = row._firstName && row._lastName
         ? `<small class="text-muted ms-2">(@${username})</small>`
         : '';
 
     const taskCount = groupRows.length;
-    const totalHours = (row._totalHours || 0).toFixed(2);
-    const avgDaily = (row._avgDailyHours || 0).toFixed(2);
+    const totalHours = (toFiniteNumber(row._totalHours) || 0).toFixed(2);
+    const avgDaily = (toFiniteNumber(row._avgDailyHours) || 0).toFixed(2);
     const tasksCompleted = row._tasksCompleted ?? 0;
-    const avgEff = row._avgEfficiency;
-    const onTimeRate = row._onTimeRate;
+    const avgEff = toFiniteNumber(row._avgEfficiency);
+    const onTimeRate = toFiniteNumber(row._onTimeRate);
 
     const effHtml = avgEff !== null && avgEff !== undefined
         ? (() => {
@@ -391,16 +419,19 @@ function setupExport() {
 function updateStats() {
     if (!perfStats || !reportData) return;
     const s = reportData.summary || {};
+    const totalHours = toFiniteNumber(s.total_hours) || 0;
+    const avgEfficiency = toFiniteNumber(s.avg_efficiency);
+    const onTimeRate = toFiniteNumber(s.on_time_rate);
     perfStats.updateValues({
         0: String(s.total_users ?? 0),
-        1: (s.total_hours ?? 0).toFixed(2),
+        1: totalHours.toFixed(2),
         2: String(s.tasks_completed ?? 0),
         3: String(s.total_tasks_worked ?? 0),
-        4: s.avg_efficiency !== null && s.avg_efficiency !== undefined
-            ? `${Math.round(s.avg_efficiency)}%`
+        4: avgEfficiency !== null
+            ? `${Math.round(avgEfficiency)}%`
             : '-',
-        5: s.on_time_rate !== null && s.on_time_rate !== undefined
-            ? `${s.on_time_rate.toFixed(1)}%`
+        5: onTimeRate !== null
+            ? `${onTimeRate.toFixed(1)}%`
             : '-',
     });
 }

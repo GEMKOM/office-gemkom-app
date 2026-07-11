@@ -8256,7 +8256,7 @@ function renderDepartmentTaskJobTargets(parentJob, childJobOrders) {
 function resolveDepartmentTaskTitleForPayload(task, targetJobOrders) {
     const fallback = (task.title || (task.isChildTask ? 'Alt görev' : 'Yeni Görev')).toString();
     if (targetJobOrders.length > 1 && task.isMainTask && task.fromTemplate) {
-        return task.originalTemplateTitle || '';
+        return task.originalTemplateTitle || fallback;
     }
     return fallback;
 }

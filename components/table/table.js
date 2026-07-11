@@ -4,6 +4,15 @@
  */
 import { showNotification } from '../notification/notification.js';
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 export class TableComponent {
     constructor(containerId, options = {}) {
         this.containerId = containerId;
@@ -1275,7 +1284,7 @@ export class TableComponent {
             return value ? 'Evet' : 'Hayır';
         }
         
-        return value.toString();
+        return escapeHtml(value);
     }
     
     isColumnEditable(column) {

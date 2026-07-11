@@ -51,7 +51,37 @@ function escapeHtml(text) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function normalizeSignatureValue(value) {
+    return value === null || value === undefined ? '' : String(value).trim();
+}
+
+function normalizeSignatureNumber(value) {
+    if (value === null || value === undefined || value === '') return '';
+    const number = Number(value);
+    return Number.isFinite(number) ? String(number) : normalizeSignatureValue(value);
+}
+
+function normalizeSignatureDate(value) {
+    const normalized = normalizeSignatureValue(value);
+    return normalized ? normalized.slice(0, 10) : '';
+}
+
+function buildBulkPartSignature(part) {
+    return JSON.stringify({
+        name: normalizeSignatureValue(part.name),
+        job_no: normalizeSignatureValue(part.job_no),
+        image_no: normalizeSignatureValue(part.image_no),
+        position_no: normalizeSignatureValue(part.position_no),
+        quantity: normalizeSignatureNumber(part.quantity),
+        material: normalizeSignatureValue(part.material),
+        weight_kg: normalizeSignatureNumber(part.weight_kg),
+        finish_time: normalizeSignatureDate(part.finish_time || part.planned_end_date || part.planned_end),
+        description: normalizeSignatureValue(part.description)
+    });
 }
 
 function renderRowFilesCell(row, rowIndex) {
@@ -503,21 +533,52 @@ async function handleBulkCreateSave() {
         const responseData = await bulkCreateParts(payload);
         const totalFilesQueued = rows.reduce((sum, row) => sum + (row._files?.length || 0), 0);
 
-        // Upload files for each created part (row order matches response order)
+        // Upload files only when the created part can be matched back to a unique submitted row.
         if (responseData?.parts?.length) {
             const uploadErrors = [];
-            await Promise.all(responseData.parts.map(async (part, index) => {
+            const filesBySignature = new Map();
+            const ambiguousSignatures = new Set();
+
+            payload.forEach((submittedPart, index) => {
                 const files = rows[index]?._files;
                 if (!files?.length) return;
+                const signature = buildBulkPartSignature(submittedPart);
+                if (filesBySignature.has(signature)) {
+                    ambiguousSignatures.add(signature);
+                } else {
+                    filesBySignature.set(signature, { files, rowNumber: index + 1 });
+                }
+            });
+
+            await Promise.all(responseData.parts.map(async (part) => {
+                const signature = buildBulkPartSignature(part);
+                const match = filesBySignature.get(signature);
+                if (!match) return;
+                if (ambiguousSignatures.has(signature)) {
+                    uploadErrors.push(`${part.key || 'Parça'}: aynı bilgilerle birden fazla satır olduğu için dosyalar otomatik eşleştirilemedi`);
+                    return;
+                }
+                if (!part.key) {
+                    uploadErrors.push(`Satır ${match.rowNumber}: oluşturulan parça numarası alınamadı`);
+                    return;
+                }
                 try {
-                    await uploadPartFiles(part.key, files);
+                    await uploadPartFiles(part.key, match.files);
+                    filesBySignature.delete(signature);
                 } catch (uploadErr) {
                     uploadErrors.push(`${part.key}: ${uploadErr.message}`);
                 }
             }));
+
+            filesBySignature.forEach((match, signature) => {
+                if (!ambiguousSignatures.has(signature)) {
+                    uploadErrors.push(`Satır ${match.rowNumber}: oluşturulan parça ile dosyalar eşleştirilemedi`);
+                }
+            });
+
             if (uploadErrors.length) {
                 showNotification(
-                    `Parçalar oluşturuldu ancak bazı dosyalar yüklenemedi:<br>${uploadErrors.join('<br>')}`,
+                    `Parçalar oluşturuldu ancak bazı dosyalar yüklenemedi:<br>${uploadErrors.map(escapeHtml).join('<br>')}`,
                     'warning',
                     8000
                 );
@@ -555,9 +616,9 @@ function showCreatedTasksModal(tasks) {
     if (tbody) {
         tbody.innerHTML = tasks.map(task => `
             <tr>
-                <td>${task.name || 'N/A'}</td>
-                <td><strong class="text-primary">${task.key || 'N/A'}</strong></td>
-                <td>${task.job_no || 'N/A'}</td>
+                <td>${escapeHtml(task.name || 'N/A')}</td>
+                <td><strong class="text-primary">${escapeHtml(task.key || 'N/A')}</strong></td>
+                <td>${escapeHtml(task.job_no || 'N/A')}</td>
             </tr>
         `).join('');
     }
@@ -746,42 +807,42 @@ function initializeTableComponent() {
                 label: 'TI No',
                 sortable: true,
                 width: '10%',
-                formatter: (value) => `<span class="task-key">${value || '-'}</span>`
+                formatter: (value) => `<span class="task-key">${escapeHtml(value || '-')}</span>`
             },
             {
                 field: 'name',
                 label: 'Ad',
                 sortable: true,
                 width: '12%',
-                formatter: (value) => `<strong>${value || '-'}</strong>`
+                formatter: (value) => `<strong>${escapeHtml(value || '-')}</strong>`
             },
             {
                 field: 'description',
                 label: 'Açıklama',
                 sortable: true,
                 width: '15%',
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'job_no',
                 label: 'İş No',
                 sortable: true,
                 width: '8%',
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'image_no',
                 label: 'Resim No',
                 sortable: true,
                 width: '8%',
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'position_no',
                 label: 'Poz No',
                 sortable: true,
                 width: '8%',
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'quantity',

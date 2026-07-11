@@ -2693,7 +2693,7 @@ function setupAssignedEditListeners() {
                     displayValue = user.name || user.username;
                 }
             }
-            assignedCell.innerHTML = displayValue;
+            assignedCell.textContent = displayValue;
             assignedCell.setAttribute('data-assigned-to', assignedToId || '');
             assignedCell.style.display = '';
             assignedCell.style.justifyContent = '';
@@ -3178,7 +3178,7 @@ function setupTitleEditListeners() {
         // Helper function to update title display without reloading
         const updateTitleDisplay = (titleValue) => {
             const displayValue = titleValue || '-';
-            titleCell.innerHTML = displayValue;
+            titleCell.textContent = displayValue;
             titleCell.setAttribute('data-title-value', titleValue || '');
             titleCell.style.display = '';
             titleCell.style.justifyContent = '';

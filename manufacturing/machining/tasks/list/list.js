@@ -30,6 +30,15 @@ let users = [];
 let selectedPartsForConvert = [];
 let partFileUploadTargetKey = null;
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Initialize the page
 document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
@@ -347,8 +356,8 @@ function initializeTableComponent() {
                 sortable: true,
                 width: '10%',
                 formatter: (value, row) => {
-                    const partKey = value || '-';
-                    const taskKey = row?.task_key ? ` (${row.task_key})` : '';
+                    const partKey = escapeHtml(value || '-');
+                    const taskKey = row?.task_key ? ` (${escapeHtml(row.task_key)})` : '';
                     return `<span class="part-key">${partKey}${taskKey}</span>`;
                 }
             },
@@ -357,35 +366,35 @@ function initializeTableComponent() {
                 label: 'Ad',
                 sortable: true,
                 width: '15%',
-                formatter: (value) => `<strong>${value || '-'}</strong>`
+                formatter: (value) => `<strong>${escapeHtml(value || '-')}</strong>`
             },
             {
                 field: 'description',
                 label: 'Açıklama',
                 sortable: false,
                 width: '15%',
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'job_no',
                 label: 'İş No',
                 sortable: true,
                 width: '10%',
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'image_no',
                 label: 'Resim No',
                 sortable: false,
                 width: '10%',
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'position_no',
                 label: 'Poz No',
                 sortable: false,
                 width: '10%',
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'quantity',
@@ -400,7 +409,7 @@ function initializeTableComponent() {
                 label: 'Malzeme',
                 sortable: false,
                 width: '9%',
-                formatter: (value) => value || '-'
+                formatter: (value) => escapeHtml(value || '-')
             },
             {
                 field: 'weight_kg',
@@ -456,7 +465,7 @@ function initializeTableComponent() {
                     }
                     return `
                         <button type="button" class="btn btn-sm btn-outline-secondary part-file-upload-btn"
-                                data-part-key="${row.key}" title="Dosya yükle">
+                                data-part-key="${escapeHtml(row.key)}" title="Dosya yükle">
                             <i class="fas fa-paperclip"></i>
                             ${count > 0 ? `<span class="badge bg-primary ms-1">${count}</span>` : ''}
                         </button>
@@ -470,7 +479,7 @@ function initializeTableComponent() {
                 width: '12%',
                 formatter: (value, row) => {
                     if (row.is_locked) {
-                        const drNum = row.department_request_number || '';
+                        const drNum = row.department_request_number ? escapeHtml(row.department_request_number) : '';
                         return `<span class="status-badge status-blue">Departman Talebine Dönüştürüldü${drNum ? ` → ${drNum}` : ''}</span>`;
                     }
                     if (row.completion_date) {
@@ -545,7 +554,7 @@ function initializeTableComponent() {
         small: false,
         emptyMessage: 'Parça bulunamadı',
         emptyIcon: 'fas fa-box',
-        rowAttributes: (row) => `data-part-key="${row.key}" class="data-update"`,
+        rowAttributes: (row) => `data-part-key="${escapeHtml(row.key)}" class="data-update"`,
         // Enable cell editing
         editable: true,
         editableColumns: ['name', 'description', 'job_no', 'image_no', 'position_no', 'quantity', 'material', 'weight_kg', 'finish_time'],
@@ -991,11 +1000,11 @@ function showConvertToDepartmentRequestModal() {
     if (previewBody) {
         previewBody.innerHTML = selected.map((part) => `
             <tr>
-                <td>${part.name || '-'}</td>
-                <td>${part.job_no || '-'}</td>
+                <td>${escapeHtml(part.name || '-')}</td>
+                <td>${escapeHtml(part.job_no || '-')}</td>
                 <td>${part.quantity ?? '-'}</td>
                 <td>adet</td>
-                <td>${buildItemDescription(part) || '-'}</td>
+                <td>${escapeHtml(buildItemDescription(part) || '-')}</td>
                 <td>${part.files?.length || 0}</td>
             </tr>
         `).join('');
@@ -1290,7 +1299,7 @@ function showPartDetailsModal(part, operations = []) {
     const isLocked = Boolean(part.is_locked || part.department_request_id);
     // Create display modal instance with fullscreen size
     const displayModal = new DisplayModal('display-modal-container', {
-        title: `Operasyonlar - ${part.key} - ${part.name}${isLocked ? ' (Kilitli)' : ''}`,
+        title: `Operasyonlar - ${escapeHtml(part.key)} - ${escapeHtml(part.name)}${isLocked ? ' (Kilitli)' : ''}`,
         icon: 'fas fa-cogs text-primary',
         size: 'xl',
         fullscreen: true,

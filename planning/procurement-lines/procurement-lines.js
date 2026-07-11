@@ -1037,6 +1037,12 @@ function clampDecimals(value, places) {
     return String(parseFloat(parseFloat(s).toFixed(places)));
 }
 
+function lineHasEnteredData(line) {
+    if (line.id || line.item || line.planning_request_item || line.item_code || line.item_name) return true;
+    if ((line.item_description || '').trim()) return true;
+    return (parseFloat(line.quantity) || 0) !== 0 || (parseFloat(line.unit_price) || 0) !== 0;
+}
+
 function syncLinesFromDom() {
     const tbody = document.getElementById(linesTableContainerId);
     if (!tbody) return;
@@ -1060,11 +1066,17 @@ async function saveLines() {
 
     const saveBtn = document.getElementById('procurement-lines-save');
     const prevSaveHtml = saveBtn ? saveBtn.innerHTML : null;
+    const restoreSaveButton = () => {
+        if (!saveBtn) return;
+        saveBtn.disabled = false;
+        if (prevSaveHtml != null) saveBtn.innerHTML = prevSaveHtml;
+    };
     if (saveBtn) {
         saveBtn.disabled = true;
         saveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Kaydediliyor...';
     }
 
+    const invalidLineNumbers = [];
     const payload = editingLines.map((line, idx) => {
         const itemDesc = (line.item_description || '').trim();
         const quantity = (line.quantity != null && line.quantity !== '') ? clampDecimals(line.quantity, 2) : '0';
@@ -1073,7 +1085,8 @@ async function saveLines() {
         const item = line.item ?? null;
         const planningRequestItem = line.planning_request_item ?? null;
         if (!item && !itemDesc) {
-            return null; // skip invalid line; we'll filter
+            if (lineHasEnteredData(line)) invalidLineNumbers.push(idx + 1);
+            return null;
         }
         return {
             item: item || undefined,
@@ -1085,10 +1098,15 @@ async function saveLines() {
         };
     }).filter(Boolean);
 
-    // Validate: at least one line must have item or item_description
-    const valid = payload.every(p => p.item != null || (p.item_description != null && p.item_description !== ''));
-    if (payload.length > 0 && !valid) {
-        showNotification('Her satırda malzeme veya açıklama girilmelidir.', 'error');
+    if (invalidLineNumbers.length > 0) {
+        showNotification(`Malzeme veya açıklama eksik satırlar kaydedilemez: ${invalidLineNumbers.join(', ')}`, 'error');
+        restoreSaveButton();
+        return;
+    }
+
+    if (payload.length === 0) {
+        showNotification('Kaydedilecek geçerli satır yok. Tüm satırları silmek için satırları kaydetmeyin.', 'error');
+        restoreSaveButton();
         return;
     }
 
