@@ -26,6 +26,15 @@ const TYPE_LABELS = Object.fromEntries(
     QUALITY_DOCUMENT_TYPE_CHOICES.map(c => [c.value, c.label])
 );
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) return;
     await initNavbar();
@@ -87,12 +96,12 @@ function initTable() {
         icon: 'fas fa-file-alt',
         columns: [
             { field: 'title', label: 'Başlık', sortable: true },
-            { field: 'document_type', label: 'Tip', sortable: true, formatter: (v) => TYPE_LABELS[v] || v },
-            { field: 'document_number', label: 'Evrak No', sortable: false, formatter: (v) => v || '-' },
-            { field: 'revision', label: 'Rev.', sortable: false, formatter: (v) => v || '-' },
-            { field: 'job_order_no', label: 'İş Emri', sortable: false, formatter: (v) => v || '-' },
+            { field: 'document_type', label: 'Tip', sortable: true, formatter: (v) => escapeHtml(TYPE_LABELS[v] || v || '-') },
+            { field: 'document_number', label: 'Evrak No', sortable: false, formatter: (v) => escapeHtml(v || '-') },
+            { field: 'revision', label: 'Rev.', sortable: false, formatter: (v) => escapeHtml(v || '-') },
+            { field: 'job_order_no', label: 'İş Emri', sortable: false, formatter: (v) => escapeHtml(v || '-') },
             { field: 'valid_until', label: 'Geçerlilik', sortable: true, formatter: formatDate },
-            { field: 'uploaded_by_name', label: 'Yükleyen', sortable: false, formatter: (v) => v || '-' },
+            { field: 'uploaded_by_name', label: 'Yükleyen', sortable: false, formatter: (v) => escapeHtml(v || '-') },
             { field: 'created_at', label: 'Yüklenme', sortable: true, formatter: formatDate }
         ],
         data: [],

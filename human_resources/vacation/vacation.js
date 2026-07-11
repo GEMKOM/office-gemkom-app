@@ -49,7 +49,7 @@ function statusBadge(status, statusLabel) {
             : status === 'rejected' || status === 'cancelled'
                 ? 'status-red'
                 : 'status-grey';
-    return `<span class="status-badge ${cls}">${text}</span>`;
+    return `<span class="status-badge ${cls}">${escapeHtml(text)}</span>`;
 }
 
 function approvalKindBadge(kind) {
@@ -626,9 +626,9 @@ function showApproveModal(requestId) {
         details: `
             <div class="small text-muted">
                 <div>Tip: ${isCancellation ? 'İptal Talebi' : 'Onay Süreci'}</div>
-                <div>Talep Eden: ${request.requester_username || '-'}</div>
+                <div>Talep Eden: ${escapeHtml(request.requester_username || '-')}</div>
                 <div>Tarih: ${formatVacationDate(request.start_date, request.start_time)} - ${formatVacationDate(request.end_date, request.end_time)}</div>
-                ${isCancellation && request.cancellation_reason ? `<div>İptal Gerekçesi: ${request.cancellation_reason}</div>` : ''}
+                ${isCancellation && request.cancellation_reason ? `<div>İptal Gerekçesi: ${escapeHtml(request.cancellation_reason)}</div>` : ''}
             </div>
         `,
         onConfirm: async () => {
@@ -821,13 +821,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: 'fas fa-user-check',
         iconColor: 'text-warning',
         columns: [
-            { field: 'id', label: 'Talep No', sortable: true, formatter: v => `<strong>#${v || '-'}</strong>` },
-            { field: 'requester_username', label: 'Talep Eden', sortable: true, formatter: v => v || '-' },
+            { field: 'id', label: 'Talep No', sortable: true, formatter: v => `<strong>#${escapeHtml(v || '-')}</strong>` },
+            { field: 'requester_username', label: 'Talep Eden', sortable: true, formatter: v => escapeHtml(v || '-') },
             {
                 field: 'leave_type',
                 label: 'İzin Türü',
                 sortable: true,
-                formatter: (v, row) => row.leave_type_label || leaveTypeLabelMap.get(v) || v || '-'
+                formatter: (v, row) => escapeHtml(row.leave_type_label || leaveTypeLabelMap.get(v) || v || '-')
             },
             {
                 field: 'start_date',
@@ -846,7 +846,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 field: 'cancellation_reason',
                 label: 'İptal Gerekçesi',
                 sortable: false,
-                formatter: (v, row) => row.kind === 'cancellation_request' ? (v || '-') : '-'
+                formatter: (v, row) => row.kind === 'cancellation_request' ? escapeHtml(v || '-') : '-'
             },
             { field: 'status', label: 'Durum', sortable: true, formatter: (_v, row) => pendingApprovalStatusBadge(row) }
         ],
