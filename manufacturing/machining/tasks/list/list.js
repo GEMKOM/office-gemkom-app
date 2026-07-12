@@ -1565,14 +1565,14 @@ function createOperationRow(operation, isNew = false) {
                     <div class="mt-2">
                         ${isCompleted ? `
                             <button type="button" class="btn btn-sm btn-outline-warning toggle-completion-btn" 
-                                    data-operation-key="${keyValue}" 
+                                    data-operation-key="${keyValue}"
                                     data-action="uncomplete"
                                     title="Tamamlanmamış olarak işaretle">
                                 <i class="fas fa-undo me-1"></i>Geri Al
                             </button>
                         ` : `
                             <button type="button" class="btn btn-sm btn-outline-success toggle-completion-btn" 
-                                    data-operation-key="${keyValue}" 
+                                    data-operation-key="${keyValue}"
                                     data-action="complete"
                                     title="Tamamlandı olarak işaretle">
                                 <i class="fas fa-check me-1"></i>Tamamla
@@ -1584,7 +1584,7 @@ function createOperationRow(operation, isNew = false) {
             <td class="text-center">
                 ${operation.key && !isPartLocked ? `
                     <button type="button" class="btn btn-sm btn-outline-info manual-time-btn" 
-                            data-operation-key="${keyValue}" 
+                            data-operation-key="${keyValue}"
                             data-operation-machine="${machineFkValue}"
                             title="Manuel Zaman Girişi">
                         <i class="fas fa-clock me-1"></i>Manuel Zaman
