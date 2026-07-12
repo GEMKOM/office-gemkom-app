@@ -1369,13 +1369,29 @@ export class TableComponent {
             this.options.currentPage = currentPage;
         }
 
-        // Drop cached row data for keys no longer on this page
-        const pageKeys = new Set(data.map((row) => String(row.key)));
+        // Refresh cached selections from the latest page data. This prevents
+        // actions from using stale row snapshots after server-side refreshes.
+        let selectionChanged = false;
+        const pageRows = new Map(data.map((row, index) => [
+            row.key != null ? String(row.key) : String(index),
+            { row, index }
+        ]));
         for (const key of Array.from(this.selectedRowsData.keys())) {
-            if (!pageKeys.has(key)) {
+            const latest = pageRows.get(key);
+            const isSelectable = latest && (
+                !this.options.isRowSelectable || this.options.isRowSelectable(latest.row, latest.index)
+            );
+            if (!isSelectable) {
                 this.selectedRowsData.delete(key);
                 this.selectedKeys.delete(key);
+                selectionChanged = true;
+            } else if (this.selectedRowsData.get(key) !== latest.row) {
+                this.selectedRowsData.set(key, latest.row);
+                selectionChanged = true;
             }
+        }
+        if (selectionChanged) {
+            this._notifySelectionChange();
         }
         
         // Remove pagination loading state

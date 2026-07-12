@@ -49,7 +49,7 @@ function statusBadge(status, statusLabel) {
             : status === 'rejected' || status === 'cancelled'
                 ? 'status-red'
                 : 'status-grey';
-    return `<span class="status-badge ${cls}">${text}</span>`;
+    return `<span class="status-badge ${cls}">${escapeHtml(text)}</span>`;
 }
 
 function approvalKindBadge(kind) {
@@ -72,7 +72,7 @@ function pendingApprovalStatusBadge(row) {
 function formatDate(value) {
     if (!value) return '-';
     const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return String(value);
+    if (Number.isNaN(d.getTime())) return escapeHtml(value);
     return d.toLocaleDateString('tr-TR');
 }
 
@@ -86,13 +86,13 @@ function formatVacationDate(dateValue, timeValue) {
 function formatTime(value) {
     if (!value) return '-';
     const match = String(value).match(/^(\d{2}:\d{2})/);
-    return match ? match[1] : String(value);
+    return match ? match[1] : escapeHtml(value);
 }
 
 function formatDateTime(value) {
     if (!value) return '-';
     const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return String(value);
+    if (Number.isNaN(d.getTime())) return escapeHtml(value);
     return d.toLocaleString('tr-TR', {
         year: 'numeric',
         month: '2-digit',
@@ -357,7 +357,7 @@ async function loadLeaveLedger(userId) {
         renderLeaveLedger(data);
     } catch (error) {
         clearLeaveLedgerView();
-        showNotification(error?.message || 'İzin hareketleri yüklenemedi.', 'error');
+        showNotification(escapeHtml(error?.message || 'İzin hareketleri yüklenemedi.'), 'error');
     } finally {
         setLeaveLedgerLoading(false);
     }
@@ -384,7 +384,7 @@ async function loadBalances() {
         const parsed = parseListResponse(response);
         balancesTable?.updateData(parsed.results, parsed.count, 1);
     } catch (error) {
-        showNotification(error?.message || 'İzin bakiyeleri yüklenemedi.', 'error');
+        showNotification(escapeHtml(error?.message || 'İzin bakiyeleri yüklenemedi.'), 'error');
         balancesTable?.updateData([], 0, 1);
     } finally {
         balancesTable?.setLoading(false);
@@ -399,7 +399,7 @@ async function loadPendingApprovals() {
         currentPending = parsed.results;
         pendingTable?.updateData(parsed.results, parsed.count, 1);
     } catch (error) {
-        showNotification(error?.message || 'Bekleyen talepler yüklenemedi.', 'error');
+        showNotification(escapeHtml(error?.message || 'Bekleyen talepler yüklenemedi.'), 'error');
         currentPending = [];
         pendingTable?.updateData([], 0, 1);
     } finally {
@@ -435,7 +435,7 @@ async function loadApprovedRequests(page = approvedCurrentPage) {
         const parsed = parseListResponse(response);
         approvedTable?.updateData(parsed.results, parsed.count, page);
     } catch (error) {
-        showNotification(error?.message || 'Onaylanmış izinler yüklenemedi.', 'error');
+        showNotification(escapeHtml(error?.message || 'Onaylanmış izinler yüklenemedi.'), 'error');
         approvedTable?.updateData([], 0, page);
     } finally {
         approvedTable?.setLoading(false);
@@ -611,7 +611,7 @@ async function showDetail(requestOrId) {
         detailModal.render();
         detailModal.show();
     } catch (error) {
-        showNotification(error?.message || 'Talep detayı yüklenemedi.', 'error');
+        showNotification(escapeHtml(error?.message || 'Talep detayı yüklenemedi.'), 'error');
     }
 }
 
@@ -619,6 +619,9 @@ function showApproveModal(requestId) {
     const request = currentPending.find(item => Number(item.id) === Number(requestId));
     if (!request) return;
     const isCancellation = request.kind === 'cancellation_request';
+    const cancellationReasonHtml = isCancellation && request.cancellation_reason
+        ? `<div>İptal Gerekçesi: ${escapeHtml(request.cancellation_reason)}</div>`
+        : '';
     approveModal.show({
         message: isCancellation
             ? `#${request.id} numaralı izin iptal talebi onaylansın mı?`
@@ -626,9 +629,9 @@ function showApproveModal(requestId) {
         details: `
             <div class="small text-muted">
                 <div>Tip: ${isCancellation ? 'İptal Talebi' : 'Onay Süreci'}</div>
-                <div>Talep Eden: ${request.requester_username || '-'}</div>
+                <div>Talep Eden: ${escapeHtml(request.requester_username || '-')}</div>
                 <div>Tarih: ${formatVacationDate(request.start_date, request.start_time)} - ${formatVacationDate(request.end_date, request.end_time)}</div>
-                ${isCancellation && request.cancellation_reason ? `<div>İptal Gerekçesi: ${request.cancellation_reason}</div>` : ''}
+                ${cancellationReasonHtml}
             </div>
         `,
         onConfirm: async () => {
@@ -642,7 +645,7 @@ function showApproveModal(requestId) {
                 }
                 await Promise.all([loadPendingApprovals(), loadApprovedRequests(1), loadBalances()]);
             } catch (error) {
-                showNotification(error?.message || 'Onaylama işlemi başarısız.', 'error');
+                showNotification(escapeHtml(error?.message || 'Onaylama işlemi başarısız.'), 'error');
                 throw error;
             }
         }
@@ -686,7 +689,7 @@ function bindRejectModal() {
             bootstrap.Modal.getOrCreateInstance(document.getElementById('hrRejectVacationModal')).hide();
             await Promise.all([loadPendingApprovals(), loadApprovedRequests(1), loadBalances()]);
         } catch (error) {
-            showNotification(error?.message || 'Reddetme işlemi başarısız.', 'error');
+            showNotification(escapeHtml(error?.message || 'Reddetme işlemi başarısız.'), 'error');
         } finally {
             if (button) {
                 button.disabled = false;
@@ -773,18 +776,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: 'fas fa-wallet',
         iconColor: 'text-success',
         columns: [
-            { field: 'id', label: 'ID', sortable: true, formatter: v => String(v || '-') },
-            { field: 'user_full_name', label: 'Çalışan', sortable: true, formatter: v => v || '-' },
-            { field: 'year', label: 'Yıl', sortable: true, formatter: v => String(v || '-') },
+            { field: 'id', label: 'ID', sortable: true, formatter: v => escapeHtml(v || '-') },
+            { field: 'user_full_name', label: 'Çalışan', sortable: true, formatter: v => escapeHtml(v || '-') },
+            { field: 'year', label: 'Yıl', sortable: true, formatter: v => escapeHtml(v || '-') },
             {
                 field: 'leave_type',
                 label: 'İzin Türü',
                 sortable: true,
-                formatter: (v, row) => row.leave_type_label || leaveTypeLabelMap.get(v) || v || '-'
+                formatter: (v, row) => escapeHtml(row.leave_type_label || leaveTypeLabelMap.get(v) || v || '-')
             },
             { field: 'total_days', label: 'Toplam Gün', sortable: true, type: 'number' },
-            { field: 'used_days', label: 'Kullanılan', sortable: true, formatter: v => String(v || '0') },
-            { field: 'remaining_days', label: 'Kalan', sortable: true, formatter: v => `<strong>${v || '0'}</strong>` }
+            { field: 'used_days', label: 'Kullanılan', sortable: true, formatter: v => escapeHtml(v || '0') },
+            { field: 'remaining_days', label: 'Kalan', sortable: true, formatter: v => `<strong>${escapeHtml(v || '0')}</strong>` }
         ],
         actions: [
             {
@@ -821,13 +824,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: 'fas fa-user-check',
         iconColor: 'text-warning',
         columns: [
-            { field: 'id', label: 'Talep No', sortable: true, formatter: v => `<strong>#${v || '-'}</strong>` },
-            { field: 'requester_username', label: 'Talep Eden', sortable: true, formatter: v => v || '-' },
+            { field: 'id', label: 'Talep No', sortable: true, formatter: v => `<strong>#${escapeHtml(v || '-')}</strong>` },
+            { field: 'requester_username', label: 'Talep Eden', sortable: true, formatter: v => escapeHtml(v || '-') },
             {
                 field: 'leave_type',
                 label: 'İzin Türü',
                 sortable: true,
-                formatter: (v, row) => row.leave_type_label || leaveTypeLabelMap.get(v) || v || '-'
+                formatter: (v, row) => escapeHtml(row.leave_type_label || leaveTypeLabelMap.get(v) || v || '-')
             },
             {
                 field: 'start_date',
@@ -841,12 +844,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 sortable: true,
                 formatter: (v, row) => formatVacationDate(v, row.end_time)
             },
-            { field: 'duration_days', label: 'Süre', sortable: true, formatter: v => `${v || 0} gün` },
+            { field: 'duration_days', label: 'Süre', sortable: true, formatter: v => `${escapeHtml(v || 0)} gün` },
             {
                 field: 'cancellation_reason',
                 label: 'İptal Gerekçesi',
                 sortable: false,
-                formatter: (v, row) => row.kind === 'cancellation_request' ? (v || '-') : '-'
+                formatter: (v, row) => row.kind === 'cancellation_request' ? escapeHtml(v || '-') : '-'
             },
             { field: 'status', label: 'Durum', sortable: true, formatter: (_v, row) => pendingApprovalStatusBadge(row) }
         ],
@@ -897,14 +900,14 @@ document.addEventListener('DOMContentLoaded', async () => {
         icon: 'fas fa-calendar-check',
         iconColor: 'text-success',
         columns: [
-            { field: 'id', label: 'Talep No', sortable: false, formatter: v => `<strong>#${v || '-'}</strong>` },
-            { field: 'requester_full_name', label: 'Çalışan', sortable: false, formatter: (v, row) => v || row.requester_username || '-' },
-            { field: 'team_label', label: 'Takım', sortable: false, formatter: (v, row) => v || row.team || '-' },
+            { field: 'id', label: 'Talep No', sortable: false, formatter: v => `<strong>#${escapeHtml(v || '-')}</strong>` },
+            { field: 'requester_full_name', label: 'Çalışan', sortable: false, formatter: (v, row) => escapeHtml(v || row.requester_username || '-') },
+            { field: 'team_label', label: 'Takım', sortable: false, formatter: (v, row) => escapeHtml(v || row.team || '-') },
             {
                 field: 'leave_type',
                 label: 'İzin Türü',
                 sortable: false,
-                formatter: (v, row) => row.leave_type_label || leaveTypeLabelMap.get(v) || v || '-'
+                formatter: (v, row) => escapeHtml(row.leave_type_label || leaveTypeLabelMap.get(v) || v || '-')
             },
             {
                 field: 'start_date',
@@ -918,7 +921,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 sortable: false,
                 formatter: (v, row) => formatVacationDate(v, row.end_time)
             },
-            { field: 'duration_days', label: 'Süre', sortable: false, formatter: v => `${v || 0} gün` },
+            { field: 'duration_days', label: 'Süre', sortable: false, formatter: v => `${escapeHtml(v || 0)} gün` },
             { field: 'status', label: 'Durum', sortable: false, formatter: (v, row) => statusBadge(v, row.status_label) }
         ],
         actions: [

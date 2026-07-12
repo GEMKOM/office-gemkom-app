@@ -51,7 +51,28 @@ function escapeHtml(text) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function normalizePartMatchValue(value, field = null) {
+    if (field === 'quantity' && value !== null && value !== undefined && value !== '') {
+        const numberValue = Number(value);
+        if (Number.isFinite(numberValue)) return String(numberValue);
+    }
+    return value === null || value === undefined ? '' : String(value);
+}
+
+function findCreatedPartForUpload(rowPayload, createdParts, usedPartKeys) {
+    const matchFields = ['name', 'job_no', 'image_no', 'position_no', 'quantity', 'finish_time'];
+    const matches = createdParts.filter((part) => {
+        if (!part?.key || usedPartKeys.has(String(part.key))) return false;
+        return matchFields.every((field) =>
+            normalizePartMatchValue(part[field], field) === normalizePartMatchValue(rowPayload[field], field)
+        );
+    });
+
+    return matches.length === 1 ? matches[0] : null;
 }
 
 function renderRowFilesCell(row, rowIndex) {
@@ -502,22 +523,33 @@ async function handleBulkCreateSave() {
     try {
         const responseData = await bulkCreateParts(payload);
         const totalFilesQueued = rows.reduce((sum, row) => sum + (row._files?.length || 0), 0);
+        let successfulFileUploads = 0;
 
-        // Upload files for each created part (row order matches response order)
+        // Upload files only when the created part can be matched unambiguously.
         if (responseData?.parts?.length) {
             const uploadErrors = [];
-            await Promise.all(responseData.parts.map(async (part, index) => {
-                const files = rows[index]?._files;
+            const skippedUploads = [];
+            const usedPartKeys = new Set();
+            await Promise.all(rows.map(async (row, index) => {
+                const files = row._files;
                 if (!files?.length) return;
+                const part = findCreatedPartForUpload(payload[index], responseData.parts, usedPartKeys);
+                if (!part) {
+                    skippedUploads.push(`${escapeHtml(row.name || `Satır ${index + 1}`)}: eşleşen parça bulunamadı`);
+                    return;
+                }
+                usedPartKeys.add(String(part.key));
                 try {
                     await uploadPartFiles(part.key, files);
+                    successfulFileUploads += files.length;
                 } catch (uploadErr) {
-                    uploadErrors.push(`${part.key}: ${uploadErr.message}`);
+                    uploadErrors.push(`${escapeHtml(part.key)}: ${escapeHtml(uploadErr.message)}`);
                 }
             }));
-            if (uploadErrors.length) {
+            if (uploadErrors.length || skippedUploads.length) {
+                const details = [...skippedUploads, ...uploadErrors].join('<br>');
                 showNotification(
-                    `Parçalar oluşturuldu ancak bazı dosyalar yüklenemedi:<br>${uploadErrors.join('<br>')}`,
+                    `Parçalar oluşturuldu ancak bazı dosyalar yüklenemedi:<br>${details}`,
                     'warning',
                     8000
                 );
@@ -530,7 +562,9 @@ async function handleBulkCreateSave() {
             rows = [createEmptyRow()];
             jobOrderDropdowns.clear();
             renderBulkCreateTable();
-            const fileMsg = totalFilesQueued > 0 ? ` (${totalFilesQueued} dosya eklendi)` : '';
+            const fileMsg = totalFilesQueued > 0
+                ? ` (${successfulFileUploads}/${totalFilesQueued} dosya eklendi)`
+                : '';
             showNotification(`${responseData.created || responseData.parts.length} parça başarıyla oluşturuldu!${fileMsg}`, 'success');
         } else {
             showNotification(`${payload.length} parça başarıyla oluşturuldu!`, 'success');
@@ -544,7 +578,7 @@ async function handleBulkCreateSave() {
         
     } catch (err) {
         console.error('Error creating parts:', err);
-        showNotification('Hata: ' + err.message, 'error');
+        showNotification('Hata: ' + escapeHtml(err.message), 'error');
     }
 }
 
@@ -555,9 +589,9 @@ function showCreatedTasksModal(tasks) {
     if (tbody) {
         tbody.innerHTML = tasks.map(task => `
             <tr>
-                <td>${task.name || 'N/A'}</td>
-                <td><strong class="text-primary">${task.key || 'N/A'}</strong></td>
-                <td>${task.job_no || 'N/A'}</td>
+                <td>${escapeHtml(task.name || 'N/A')}</td>
+                <td><strong class="text-primary">${escapeHtml(task.key || 'N/A')}</strong></td>
+                <td>${escapeHtml(task.job_no || 'N/A')}</td>
             </tr>
         `).join('');
     }
