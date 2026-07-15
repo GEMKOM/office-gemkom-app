@@ -3698,7 +3698,9 @@ function renderPhasesTab(phases, jobNo, getStatusBadgeClass) {
     renderPhasesTable(phases, jobNo, getStatusBadgeClass);
 
     const btn = container.querySelector('#create-phases-btn');
-    if (btn) btn.addEventListener('click', () => showCreatePhasesForm(jobNo));
+    if (btn) btn.addEventListener('click', () => {
+        void showCreatePhasesForm(jobNo);
+    });
 }
 
 function renderPhasesTable(phases, jobNo, getStatusBadgeClass) {
@@ -3790,14 +3792,27 @@ const PHASE_STATUS_BADGE = (status) => ({
 
 // Inline matrix form: define phases (columns) and allocate each product's
 // quantity across them (rows). Each product's row must sum to its quantity.
-function showCreatePhasesForm(jobNo) {
+async function showCreatePhasesForm(jobNo) {
     const formContainer = viewJobOrderModal.content.querySelector('#phases-form-container');
     if (!formContainer) return;
 
-    const jobOrder = jobOrderTabCache.jobOrder || {};
+    let children = jobOrderTabCache.children;
+    if (children === null) {
+        formContainer.innerHTML = '<div class="text-center py-3"><i class="fas fa-spinner fa-spin text-muted"></i><span class="ms-2 text-muted">Ürün alt işleri yükleniyor...</span></div>';
+        try {
+            children = extractResultsFromResponse(await getJobOrderChildren(jobNo));
+            jobOrderTabCache.children = children;
+        } catch (error) {
+            console.error('Error loading product jobs for phase creation:', error);
+            formContainer.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Ürün alt işleri yüklenemedi.</div>';
+            return;
+        }
+    }
+
     // Product masters = direct children that are not themselves phase mirrors.
-    const masters = (jobOrder.children || []).filter(c => !c.is_phase_job && !c.source_job_order);
+    const masters = extractResultsFromResponse(children).filter(c => !c.is_phase_job && !c.source_job_order);
     if (masters.length === 0) {
+        formContainer.innerHTML = '';
         showNotification('Bu iş emrinin fazlanacak ürün alt işi bulunamadı.', 'error');
         return;
     }
