@@ -31,6 +31,13 @@
         .welding-job-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.1); }
         .welding-job-card:active { cursor: grabbing; }
         .welding-job-card.dragging { opacity: .5; }
+        .welding-job-card.no-weight {
+            cursor: not-allowed;
+            opacity: .6;
+            border-left-color: #9ca3af;
+            background: #f9fafb;
+        }
+        .welding-job-card.no-weight:hover { box-shadow: none; }
         .welding-job-card .job-no { font-weight: 700; color: #1f2937; font-size: .85rem; }
         .welding-job-card .job-title { color: #374151; font-size: .8rem; }
         .welding-job-card .job-meta { color: #6b7280; font-size: .72rem; margin-top: 2px; }
@@ -50,7 +57,7 @@
             <div id="header-placeholder"></div>
 
             <div class="row">
-                <div class="col-lg-8 mb-3">
+                <div class="col-lg-8 mb-3" id="gantt-col">
                     <div class="dashboard-card">
                         <div class="card-header">
                             <h5 class="card-title">
@@ -58,6 +65,10 @@
                                 Kapasite Planı
                             </h5>
                             <div class="card-actions">
+                                <button class="btn btn-sm btn-outline-secondary" id="toggle-jobs-btn"
+                                        title="Kaynak İşleri panelini gizle/göster">
+                                    <i class="fas fa-table-columns me-1"></i>İşleri Gizle
+                                </button>
                                 <button class="btn btn-sm btn-success" id="save-btn" disabled>
                                     <i class="fas fa-save me-1"></i>Kaydet
                                 </button>
@@ -69,7 +80,7 @@
                         </div>
                     </div>
                 </div>
-                <div class="col-lg-4 mb-3">
+                <div class="col-lg-4 mb-3" id="jobs-col">
                     <div class="dashboard-card h-100">
                         <div class="card-header">
                             <h5 class="card-title">
@@ -81,6 +92,12 @@
                         <div class="card-body">
                             <input type="text" id="jobs-search" class="form-control form-control-sm mb-2"
                                    placeholder="İş no, başlık veya müşteri ara...">
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="checkbox" id="show-completed-toggle">
+                                <label class="form-check-label small text-muted" for="show-completed-toggle">
+                                    Tamamlanan işleri göster
+                                </label>
+                            </div>
                             <div id="jobs-table-container" class="welding-jobs-list"></div>
                         </div>
                     </div>

@@ -15,10 +15,28 @@ async function parseError(resp, fallbackMessage) {
 }
 
 // Grouped snapshot for the capacity-planning Gantt.
-export async function getWeldingPlanBoard() {
-    const resp = await authedFetch(`${BASE}/board/`);
+export async function getWeldingPlanBoard(includeCompleted = false) {
+    const qs = includeCompleted ? "?include_completed=true" : "";
+    const resp = await authedFetch(`${BASE}/board/${qs}`);
     if (!resp.ok) {
         throw new Error(await parseError(resp, "Kaynak plan panosu yüklenirken hata oluştu"));
+    }
+    return await resp.json();
+}
+
+// Schedule a real welding subtask (committed / promoted row) by setting its target dates.
+export async function setWeldingSubtaskDates(subtaskId, plannedStartDate, plannedEndDate) {
+    const resp = await authedFetch(`${BASE}/set-subtask-dates/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+            subtask_id: subtaskId,
+            planned_start_date: plannedStartDate,
+            planned_end_date: plannedEndDate,
+        }),
+    });
+    if (!resp.ok) {
+        throw new Error(await parseError(resp, "Tarihler kaydedilirken hata oluştu"));
     }
     return await resp.json();
 }

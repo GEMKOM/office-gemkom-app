@@ -389,6 +389,9 @@ function buildTeamModal(modal, team) {
         value: team?.is_active !== undefined ? !!team.is_active : true,
         colSize: 12
     });
+
+    // Sections/fields are only queued by addSection/addField — render() writes them to the DOM.
+    modal.render();
 }
 
 async function createTeamHandler(formData) {

@@ -4,7 +4,6 @@ import { HeaderComponent } from '../../../components/header/header.js';
 import { ComparisonTable } from '../../../components/comparison-table/comparison-table.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
-import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
 import { FileViewer } from '../../../components/file-viewer/file-viewer.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
@@ -20,8 +19,7 @@ import {
     getStatusChoices,
     cancelPurchaseRequest,
     revisePurchaseRequest,
-    createSupplierEvaluation,
-    listSupplierEvaluations
+    createSupplierEvaluation
 } from '../../../apis/procurement.js';
 import { fetchCurrencyRates } from '../../../apis/formatters.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
@@ -191,6 +189,27 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-eye',
                 class: 'btn-outline-primary',
                 onClick: (row) => viewRequestDetails(row.id)
+            },
+            {
+                key: 'rate',
+                label: 'Tedarikçi Değerlendir',
+                icon: 'fas fa-star',
+                class: 'btn-outline-warning',
+                // Show only when there are non-cancelled POs not yet all rated.
+                visible: (row) => canWriteProcurement()
+                    && (row.po_count || 0) > 0
+                    && (row.evaluated_po_count || 0) < (row.po_count || 0),
+                onClick: (row) => openPrEvaluation(row.id)
+            },
+            {
+                key: 'rated',
+                label: 'Değerlendirildi',
+                icon: 'fas fa-star',
+                class: 'btn-outline-success',
+                // All non-cancelled POs rated → review/adjust.
+                visible: (row) => (row.po_count || 0) > 0
+                    && (row.evaluated_po_count || 0) >= (row.po_count || 0),
+                onClick: (row) => openPrEvaluation(row.id)
             },
             {
                 key: 'revise',
@@ -528,6 +547,7 @@ function setupEventListeners() {
     if (cancelBtn) {
         cancelBtn.addEventListener('click', handleCancelRequest);
     }
+
     
     // Add event listeners for modal close to clean up URL
     const modal = document.getElementById('requestDetailsModal');
@@ -867,23 +887,8 @@ async function showRequestDetailsModal() {
         });
     }
 
-    // Add purchase-order / supplier-evaluation section if the PR spawned any POs
-    if (Array.isArray(currentRequest.purchase_orders) && currentRequest.purchase_orders.length > 0
-        && typeof currentRequest.purchase_orders[0] === 'object') {
-        displayModal.addCustomSection({
-            id: 'po-evaluation-section',
-            title: 'Satın Alma Emirleri & Tedarikçi Değerlendirme',
-            icon: 'fas fa-star',
-            iconColor: 'text-warning',
-            customContent: buildPurchaseOrderEvaluationHTML(currentRequest.purchase_orders)
-        });
-    }
-
     // Render the modal
     displayModal.render();
-
-    // Wire up "Değerlendir" buttons in the PO evaluation section
-    bindPurchaseOrderEvaluationButtons();
 
     // Initialize comparison table after rendering if there are offers
     if (currentRequest.offers && currentRequest.offers.length > 0) {
@@ -931,18 +936,17 @@ async function showRequestDetailsModal() {
     displayModal.show();
 }
 
-// --- Supplier evaluation from the PR registry (rate each resulting PO) ---
+// --- Supplier evaluation from the PR registry (rate each resulting PO inline) ---
 
 function canWriteProcurement() {
     return isSuperuser() || hasPerm('access_procurement_write');
 }
 
-const EVAL_SCORE_OPTIONS = [
-    { value: '5', label: '5 - Çok İyi' },
-    { value: '4', label: '4 - İyi' },
-    { value: '3', label: '3 - Orta' },
-    { value: '2', label: '2 - Zayıf' },
-    { value: '1', label: '1 - Kötü' },
+const EVAL_CRITERIA = [
+    { key: 'quality_score', label: 'Kalite' },
+    { key: 'delivery_score', label: 'Teslimat' },
+    { key: 'price_score', label: 'Fiyat' },
+    { key: 'service_score', label: 'Servis' },
 ];
 
 function poStatusBadgeClass(status) {
@@ -951,125 +955,175 @@ function poStatusBadgeClass(status) {
     return 'status-yellow';
 }
 
+// One criterion row: label on the left, 5 clickable stars on the right.
+function starInputRow(criterion, label) {
+    const stars = [1, 2, 3, 4, 5]
+        .map(n => `<i class="far fa-star po-eval-star" data-value="${n}"></i>`)
+        .join('');
+    return `
+        <div class="d-flex justify-content-between align-items-center py-1 border-bottom po-eval-crit-row">
+            <span class="small fw-semibold">${label}</span>
+            <span class="po-eval-stars text-warning" data-criterion="${criterion}" data-value="0"
+                  style="font-size:1.2rem; cursor:pointer; letter-spacing:2px;">${stars}</span>
+        </div>`;
+}
+
+function poInlineFormHTML() {
+    return `
+        <div class="po-eval-form mt-2">
+            ${EVAL_CRITERIA.map(c => starInputRow(c.key, c.label)).join('')}
+            <div class="mt-2">
+                <label class="form-label small mb-1">Yorum</label>
+                <textarea class="form-control form-control-sm po-eval-comment" rows="2" placeholder="Opsiyonel"></textarea>
+            </div>
+            <div class="text-end mt-2">
+                <button class="btn btn-sm btn-warning po-eval-save">
+                    <i class="fas fa-save me-1"></i>Kaydet
+                </button>
+            </div>
+        </div>`;
+}
+
 function buildPurchaseOrderEvaluationHTML(purchaseOrders) {
     const canWrite = canWriteProcurement();
-    const rows = purchaseOrders.map(po => {
+    if (!purchaseOrders.length) {
+        return '<p class="text-muted mb-0">Bu talebe ait sipariş bulunmuyor.</p>';
+    }
+    return purchaseOrders.map(po => {
         const statusBadge = `<span class="status-badge ${poStatusBadgeClass(po.status)}">${escapeHtml(po.status_label || po.status)}</span>`;
         const supplierBadge = renderSupplierStatusBadge({ status: po.supplier_status }, { onlyWarn: true });
-        let action;
+        let body;
         if (po.is_evaluated) {
-            action = '<span class="text-success small"><i class="fas fa-check-circle me-1"></i>Değerlendirildi</span>';
+            body = '<div class="text-success small"><i class="fas fa-check-circle me-1"></i>Bu sipariş değerlendirildi.</div>';
         } else if (canWrite && po.status !== 'cancelled') {
-            action = `<button class="btn btn-sm btn-outline-warning po-evaluate-btn" data-po-id="${po.id}"><i class="fas fa-star me-1"></i>Değerlendir</button>`;
+            body = poInlineFormHTML();
+        } else if (po.status === 'cancelled') {
+            body = '<div class="text-muted small">İptal edilmiş sipariş değerlendirilemez.</div>';
         } else {
-            action = '<span class="text-muted small">-</span>';
+            body = '<div class="text-muted small">Değerlendirme yetkiniz yok.</div>';
         }
-        return `<tr>
-            <td>PO-${po.id}</td>
-            <td>${escapeHtml(po.supplier_name || '')} ${supplierBadge}</td>
-            <td class="text-center">${statusBadge}</td>
-            <td class="text-end">${action}</td>
-        </tr>`;
+        return `
+            <div class="po-eval-card border rounded p-3 mb-3" data-po-id="${po.id}">
+                <div class="d-flex justify-content-between align-items-center mb-1">
+                    <div><strong>PO-${po.id}</strong> · ${escapeHtml(po.supplier_name || '')} ${supplierBadge}</div>
+                    ${statusBadge}
+                </div>
+                ${body}
+            </div>`;
     }).join('');
-    return `
-        <div class="table-responsive">
-            <table class="table table-sm align-middle mb-0">
-                <thead><tr>
-                    <th>Sipariş</th><th>Tedarikçi</th><th class="text-center">Durum</th><th class="text-end">İşlem</th>
-                </tr></thead>
-                <tbody>${rows}</tbody>
-            </table>
-        </div>
-        <p class="small text-muted mt-2 mb-0">Not: Sadece teslim alınmış veya ödemesi tamamlanmış siparişler değerlendirilebilir.</p>`;
 }
 
-function bindPurchaseOrderEvaluationButtons() {
-    document.querySelectorAll('.po-evaluate-btn').forEach(btn => {
-        btn.addEventListener('click', () => openPoEvaluation(Number(btn.dataset.poId)));
+// Paint the stars up to `value` (solid) and the rest (outline). Does NOT
+// change the committed value — used for both commit and hover preview.
+function paintStars(group, value) {
+    group.querySelectorAll('.po-eval-star').forEach(star => {
+        const n = Number(star.dataset.value);
+        star.classList.toggle('fas', n <= value);
+        star.classList.toggle('far', n > value);
     });
 }
 
-let poEvaluationModal = null;
-let evaluatingPoId = null;
-
-function initPoEvaluationModal() {
-    if (poEvaluationModal) return;
-    poEvaluationModal = new EditModal('po-evaluation-modal-container', {
-        title: 'Tedarikçi Değerlendirme',
-        icon: 'fas fa-star',
-        saveButtonText: 'Değerlendirmeyi Kaydet',
-        size: 'md',
-    });
-    poEvaluationModal.addSection({
-        id: 'evaluation',
-        title: 'Değerlendirme (1–5)',
-        icon: 'fas fa-star',
-        iconColor: 'text-warning',
-        fields: [
-            { id: 'quality_score', name: 'quality_score', label: 'Kalite', type: 'select', required: true, colSize: 6, options: EVAL_SCORE_OPTIONS },
-            { id: 'delivery_score', name: 'delivery_score', label: 'Teslimat', type: 'select', required: true, colSize: 6, options: EVAL_SCORE_OPTIONS },
-            { id: 'price_score', name: 'price_score', label: 'Fiyat', type: 'select', required: true, colSize: 6, options: EVAL_SCORE_OPTIONS },
-            { id: 'service_score', name: 'service_score', label: 'Servis', type: 'select', required: true, colSize: 6, options: EVAL_SCORE_OPTIONS },
-            { id: 'comment', name: 'comment', label: 'Yorum', type: 'textarea', rows: 3, colSize: 12, placeholder: 'Opsiyonel' },
-        ],
-    });
-    poEvaluationModal.render();
-    poEvaluationModal.onSaveCallback(handlePoEvaluationSave);
+function setStarGroup(group, value) {
+    group.dataset.value = String(value);
+    paintStars(group, value);
 }
 
-async function handlePoEvaluationSave(formData) {
-    if (!evaluatingPoId) return;
-    const payload = {
-        purchase_order: evaluatingPoId,
-        quality_score: Number(formData.quality_score),
-        delivery_score: Number(formData.delivery_score),
-        price_score: Number(formData.price_score),
-        service_score: Number(formData.service_score),
-        comment: (formData.comment || '').trim(),
+function bindInlineEvaluationInteractions() {
+    // Star selection + hover preview
+    document.querySelectorAll('.po-eval-stars').forEach(group => {
+        group.querySelectorAll('.po-eval-star').forEach(star => {
+            const n = Number(star.dataset.value);
+            star.addEventListener('click', () => setStarGroup(group, n));
+            star.addEventListener('mouseenter', () => paintStars(group, n));
+        });
+        // On leave, revert preview to the committed value.
+        group.addEventListener('mouseleave', () => paintStars(group, Number(group.dataset.value || 0)));
+    });
+    // Per-PO save
+    document.querySelectorAll('.po-eval-save').forEach(btn => {
+        btn.addEventListener('click', () => saveInlineEvaluation(btn));
+    });
+}
+
+async function saveInlineEvaluation(btn) {
+    if (!canWriteProcurement()) return;
+    const card = btn.closest('.po-eval-card');
+    if (!card) return;
+    const poId = Number(card.dataset.poId);
+    const getVal = (crit) => Number(card.querySelector(`.po-eval-stars[data-criterion="${crit}"]`)?.dataset.value || 0);
+    const scores = {
+        quality_score: getVal('quality_score'),
+        delivery_score: getVal('delivery_score'),
+        price_score: getVal('price_score'),
+        service_score: getVal('service_score'),
     };
+    if (!Object.values(scores).every(v => v >= 1 && v <= 5)) {
+        showNotification('Lütfen tüm kriterleri (1–5) yıldız ile değerlendirin.', 'error');
+        return;
+    }
+    const comment = card.querySelector('.po-eval-comment')?.value?.trim() || '';
+    btn.disabled = true;
     try {
-        const result = await createSupplierEvaluation(payload);
+        const result = await createSupplierEvaluation({ purchase_order: poId, ...scores, comment });
         const score = result?.supplier?.rating_score;
         showNotification(
             'Değerlendirme kaydedildi.' + (score != null ? ` Yeni puan: ${Number(score).toFixed(2)}` : ''),
             'success'
         );
-        // Reflect the change in the open detail modal's PO section.
-        const po = (currentRequest.purchase_orders || []).find(p => p.id === evaluatingPoId);
+        // Update just this card in place so other unsaved cards keep their input.
+        const po = (prEvaluationRequest?.purchase_orders || []).find(p => p.id === poId);
         if (po) po.is_evaluated = true;
-        const section = document.querySelector('[data-section-id="po-evaluation-section"] .custom-content');
-        if (section && Array.isArray(currentRequest.purchase_orders)) {
-            section.innerHTML = buildPurchaseOrderEvaluationHTML(currentRequest.purchase_orders);
-            bindPurchaseOrderEvaluationButtons();
+        const form = card.querySelector('.po-eval-form');
+        if (form) {
+            form.outerHTML = '<div class="text-success small mt-2"><i class="fas fa-check-circle me-1"></i>Bu sipariş değerlendirildi.</div>';
         }
-        poEvaluationModal.hide();
-        evaluatingPoId = null;
+        // Refresh the table so the row's rate/rated button reflects the new count.
+        loadRequests();
     } catch (error) {
         console.error('Error saving supplier evaluation:', error);
         showNotification(error.message || 'Değerlendirme kaydedilirken hata oluştu', 'error');
-        throw error;
+        btn.disabled = false;
     }
 }
 
-async function openPoEvaluation(poId) {
-    if (!canWriteProcurement()) return;
-    try {
-        const existing = await listSupplierEvaluations({ purchase_order: poId });
-        const rows = Array.isArray(existing) ? existing : (existing.results || []);
-        if (rows.length > 0) {
-            showNotification('Bu sipariş zaten değerlendirilmiş.', 'error');
-            return;
-        }
-    } catch (_) {
-        // Fall through; the backend enforces uniqueness.
-    }
-    evaluatingPoId = poId;
-    initPoEvaluationModal();
-    poEvaluationModal.clearForm();
-    poEvaluationModal.setFormData({
-        quality_score: '4', delivery_score: '4', price_score: '4', service_score: '4', comment: '',
+// --- Per-PR focused evaluation modal (opened from the registry row button) ---
+
+let prEvaluationModal = null;
+let prEvaluationRequest = null;   // the PR whose POs are shown in the focused modal
+
+function renderPrEvaluationContent() {
+    if (!prEvaluationModal || !prEvaluationRequest) return;
+    prEvaluationModal.clearData();
+    prEvaluationModal.setTitle(`Tedarikçi Değerlendirme — ${prEvaluationRequest.request_number || ''}`);
+    prEvaluationModal.addCustomSection({
+        id: 'pr-po-eval',
+        customContent: buildPurchaseOrderEvaluationHTML(prEvaluationRequest.purchase_orders || []),
     });
-    poEvaluationModal.show();
+    prEvaluationModal.render();
+    bindInlineEvaluationInteractions();
+}
+
+async function openPrEvaluation(prId) {
+    if (!prEvaluationModal) {
+        prEvaluationModal = new DisplayModal('pr-evaluation-modal-container', {
+            title: 'Tedarikçi Değerlendirme',
+            icon: 'fas fa-star',
+            size: 'lg',
+        });
+    }
+    prEvaluationModal.clearData();
+    prEvaluationModal.addCustomSection({ id: 'pr-po-eval-loading', customContent: '<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Yükleniyor...</div>' });
+    prEvaluationModal.render();
+    prEvaluationModal.show();
+    try {
+        prEvaluationRequest = await getPurchaseRequest(prId);
+        renderPrEvaluationContent();
+    } catch (error) {
+        console.error('Error loading PR for evaluation:', error);
+        prEvaluationModal.clearData();
+        prEvaluationModal.addCustomSection({ id: 'pr-po-eval-error', customContent: `<div class="text-danger">Yüklenirken hata oluştu: ${escapeHtml(error.message)}</div>` });
+        prEvaluationModal.render();
+    }
 }
 
 async function openModalFromTalepNo(talepNo) {

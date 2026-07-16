@@ -17,3 +17,14 @@
 .supplier-col-blacklisted {
     background-color: #fee2e2 !important;
 }
+
+/* Interactive star-rating input (inline PO evaluation). */
+.po-eval-stars .po-eval-star {
+    transition: transform 0.08s ease;
+}
+.po-eval-stars:hover .po-eval-star {
+    transform: scale(1.1);
+}
+.po-eval-stars .po-eval-star:hover {
+    transform: scale(1.25);
+}

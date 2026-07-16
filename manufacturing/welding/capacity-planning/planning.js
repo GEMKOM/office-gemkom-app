@@ -10,6 +10,7 @@ import {
     getWeldingPlanBoard,
     bulkSaveWeldingPlanAllocations,
     promoteWeldingPlanAllocation,
+    setWeldingSubtaskDates,
 } from '../../../apis/welding/planAllocations.js';
 import { fetchPriceTiers } from '../../../apis/subcontracting/priceTiers.js';
 
@@ -34,6 +35,7 @@ let editingKey = null;             // clientKey currently open in the modal
 let promotingKey = null;           // clientKey being promoted
 let pendingJobTaskId = null;       // department_task id for a drag-initiated allocation
 let jobsSearchTerm = '';           // filter text for the jobs list
+let showCompleted = false;         // include completed/cancelled jobs on the board
 
 // ---- helpers -------------------------------------------------------------
 function resourceKey(type, id) { return `${type}-${id}`; }
@@ -54,10 +56,14 @@ function flattenBoardToAllocations(boardData) {
     const rows = [];
     (boardData.resources || []).forEach(res => {
         (res.allocations || []).forEach(a => {
+            const committed = a.kind === 'committed';
             rows.push({
-                clientKey: String(a.id),
+                // Plan rows have a real id; committed rows are keyed by their source.
+                clientKey: a.id != null ? String(a.id) : `committed-${a.source}-${a.source_id}`,
                 id: a.id,
-                department_task: a.department_task,
+                committed,                         // read-only, not saveable
+                subtask_id: a.subtask_id != null ? a.subtask_id : null,   // real subtask (committed/promoted)
+                department_task: a.department_task != null ? a.department_task : a.department_task_id,
                 job_no: a.job_no,
                 job_order_title: a.job_order_title,
                 resource_type: res.resource_type,
@@ -78,7 +84,7 @@ function hydrateFromBoard(boardData) {
     board = boardData;
     currentAllocations = flattenBoardToAllocations(boardData);
     originalById = new Map();
-    currentAllocations.forEach(a => originalById.set(a.id, JSON.stringify(a)));
+    currentAllocations.forEach(a => { if (a.id != null) originalById.set(a.id, JSON.stringify(a)); });
     deletedIds = new Set();
     hasUnsavedChanges = false;
     const saveBtn = document.getElementById('save-btn');
@@ -88,16 +94,29 @@ function hydrateFromBoard(boardData) {
     renderGantt();
 }
 
+// kg planned for a welding task in the current (possibly unsaved) session.
+function allocatedForTask(taskId) {
+    return currentAllocations
+        .filter(a => a.department_task === Number(taskId) && !(a.id && deletedIds.has(a.id)))
+        .reduce((sum, a) => sum + Number(a.allocated_weight_kg || 0), 0);
+}
+
+function remainingForTask(task) {
+    if (!task || task.total_weight_kg == null) return null;
+    return Number(task.total_weight_kg) - allocatedForTask(task.department_task_id);
+}
+
+// Only jobs WITH a total weight can be planned. Weightless jobs are excluded here (fallback dropdown).
 function weldingTaskOptions() {
-    return (board.welding_tasks || []).map(t => {
-        const remaining = (t.total_weight_kg != null)
-            ? ` (kalan ~${Number(t.total_weight_kg) - Number(t.allocated_total || 0)} kg)`
-            : '';
-        return {
-            value: String(t.department_task_id),
-            label: `${t.job_no} — ${t.job_order_title || ''}${remaining}`,
-        };
-    });
+    return (board.welding_tasks || [])
+        .filter(t => t.total_weight_kg != null)
+        .map(t => {
+            const remaining = remainingForTask(t);
+            return {
+                value: String(t.department_task_id),
+                label: `${t.job_no} — ${t.job_order_title || ''} (kalan ~${remaining} kg)`,
+            };
+        });
 }
 
 function resourceOptions(type) {
@@ -220,8 +239,9 @@ function syncAllocExtraActions({ isNew, promoted }) {
     extras.querySelector('#alloc-delete-btn').classList.toggle('d-none', isNew || promoted);
     extras.querySelector('#alloc-promote-btn').classList.toggle('d-none', isNew || promoted);
 
+    // Save stays visible even for real rows — their dates are editable.
     const saveBtn = footer.querySelector('#save-edit-btn');
-    if (saveBtn) saveBtn.classList.toggle('d-none', promoted);
+    if (saveBtn) saveBtn.classList.remove('d-none');
 }
 
 // ---- jobs list (draggable) ----------------------------------------------
@@ -247,25 +267,46 @@ function renderJobsTable() {
         return;
     }
 
+    const fmt = (n) => Number(n).toLocaleString('tr-TR');
     container.innerHTML = tasks.map(t => {
-        const weight = t.total_weight_kg != null ? `${Number(t.total_weight_kg).toLocaleString('tr-TR')} kg` : '—';
-        const allocClass = t.over_allocated ? 'job-alloc over' : 'job-alloc';
+        const hasWeight = t.total_weight_kg != null;
+        const allocated = allocatedForTask(t.department_task_id);
+        const remaining = hasWeight ? Number(t.total_weight_kg) - allocated : null;
+        const over = hasWeight && remaining < 0;
+
+        if (!hasWeight) {
+            // No total weight → cannot be planned. Show but disable.
+            return `
+                <div class="welding-job-card no-weight" draggable="false" data-task-id="${t.department_task_id}">
+                    <div class="job-no">${t.job_no || ''}</div>
+                    <div class="job-title">${t.job_order_title || ''}</div>
+                    <div class="job-meta">
+                        <i class="fas fa-user me-1"></i>${t.customer_name || '—'}
+                        &nbsp;·&nbsp;<i class="fas fa-flag-checkered me-1"></i>${formatDate(t.target_completion_date)}
+                    </div>
+                    <div class="job-meta text-danger">
+                        <i class="fas fa-exclamation-triangle me-1"></i>Ağırlık tanımlı değil — tahsis yapılamaz
+                    </div>
+                </div>`;
+        }
+
         return `
             <div class="welding-job-card" draggable="true" data-task-id="${t.department_task_id}">
                 <div class="job-no">${t.job_no || ''}</div>
                 <div class="job-title">${t.job_order_title || ''}</div>
                 <div class="job-meta">
                     <i class="fas fa-user me-1"></i>${t.customer_name || '—'}
-                    &nbsp;·&nbsp;<i class="fas fa-weight-hanging me-1"></i>${weight}
+                    &nbsp;·&nbsp;<i class="fas fa-weight-hanging me-1"></i>${fmt(t.total_weight_kg)} kg
                     &nbsp;·&nbsp;<i class="fas fa-flag-checkered me-1"></i>${formatDate(t.target_completion_date)}
                 </div>
-                <div class="job-meta ${allocClass}">
-                    <i class="fas fa-industry me-1"></i>Tahsis: ${Number(t.allocated_total || 0).toLocaleString('tr-TR')} kg
+                <div class="job-meta ${over ? 'job-alloc over' : 'job-alloc'}">
+                    <i class="fas fa-industry me-1"></i>Atanmış: ${fmt(allocated)} kg ·
+                    Kalan: ${fmt(remaining)} kg
                 </div>
             </div>`;
     }).join('');
 
-    container.querySelectorAll('.welding-job-card').forEach(card => {
+    container.querySelectorAll('.welding-job-card:not(.no-weight)').forEach(card => {
         card.addEventListener('dragstart', (e) => {
             card.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'copy';
@@ -273,6 +314,27 @@ function renderJobsTable() {
         });
         card.addEventListener('dragend', () => card.classList.remove('dragging'));
     });
+}
+
+let jobsCollapsed = false;
+function toggleJobsPanel() {
+    jobsCollapsed = !jobsCollapsed;
+    const gcol = document.getElementById('gantt-col');
+    const jcol = document.getElementById('jobs-col');
+    const btn = document.getElementById('toggle-jobs-btn');
+    if (jobsCollapsed) {
+        jcol.classList.add('d-none');
+        gcol.classList.remove('col-lg-8');
+        gcol.classList.add('col-12');
+        if (btn) btn.innerHTML = '<i class="fas fa-table-columns me-1"></i>İşleri Göster';
+    } else {
+        jcol.classList.remove('d-none');
+        gcol.classList.remove('col-12');
+        gcol.classList.add('col-lg-8');
+        if (btn) btn.innerHTML = '<i class="fas fa-table-columns me-1"></i>İşleri Gizle';
+    }
+    // Let the layout settle, then re-render so the Gantt columns re-stretch to the new width.
+    requestAnimationFrame(() => { if (ganttChart) ganttChart.setTasks(lastGanttRows); });
 }
 
 function setupGanttDropZone() {
@@ -292,7 +354,13 @@ function setupGanttDropZone() {
         e.preventDefault();
         zone.classList.remove('drop-active');
         const taskId = Number(e.dataTransfer.getData('text/plain'));
-        if (taskId) openAllocationModal(null, taskId);
+        if (!taskId) return;
+        const task = (board.welding_tasks || []).find(t => t.department_task_id === taskId);
+        if (!task || task.total_weight_kg == null) {
+            showNotification('Bu işin toplam ağırlığı tanımlı olmadığı için tahsis yapılamaz.', 'error');
+            return;
+        }
+        openAllocationModal(null, taskId);
     });
 }
 
@@ -308,6 +376,30 @@ function openAllocationModal(clientKey, prefilledJobTaskId = null) {
         ? (board.welding_tasks || []).find(t => t.department_task_id === Number(prefilledJobTaskId))
         : null;
 
+    // Weight context for the welding task this allocation targets.
+    const contextTaskId = isNew ? prefilledJobTaskId : (alloc ? alloc.department_task : null);
+    const contextTask = contextTaskId != null
+        ? (board.welding_tasks || []).find(t => t.department_task_id === Number(contextTaskId))
+        : null;
+    const totalWeight = contextTask && contextTask.total_weight_kg != null
+        ? Number(contextTask.total_weight_kg) : null;
+    const fmtKg = (n) => Number(n).toLocaleString('tr-TR');
+    const isRealRow = !!(alloc && alloc.subtask_id);
+
+    // DISPLAY: total already assigned to this welding task, INCLUDING the row being edited.
+    const allocatedTotal = contextTask ? allocatedForTask(contextTask.department_task_id) : 0;
+    const remainingOverall = totalWeight != null ? totalWeight - allocatedTotal : null;
+    const weightInfoValue = totalWeight != null
+        ? `Toplam ${fmtKg(totalWeight)} kg · Atanmış ${fmtKg(allocatedTotal)} kg · Kalan ${fmtKg(remainingOverall)} kg`
+        : 'Bu iş için ağırlık tanımlı değil';
+
+    // INPUT: room available for THIS allocation — exclude its own current weight so re-sizing is intuitive.
+    const ownWeight = alloc ? Number(alloc.allocated_weight_kg || 0) : 0;
+    const assignableRemaining = totalWeight != null ? totalWeight - (allocatedTotal - ownWeight) : null;
+    const defaultWeight = alloc
+        ? alloc.allocated_weight_kg
+        : (remainingOverall != null && remainingOverall > 0 ? remainingOverall : '');
+
     allocModal.clearAll();
     allocModal.setTitle(isNew ? 'Tahsis Ekle' : 'Tahsis Düzenle');
     allocModal.setIcon(isNew ? 'fas fa-plus-circle' : 'fas fa-edit');
@@ -315,7 +407,7 @@ function openAllocationModal(clientKey, prefilledJobTaskId = null) {
 
     if (promoted) {
         allocModal.addSection({
-            title: 'Kilitli Tahsis',
+            title: 'Gerçek Atama',
             icon: 'fas fa-lock',
             iconColor: 'text-info',
             fields: [{
@@ -323,7 +415,7 @@ function openAllocationModal(clientKey, prefilledJobTaskId = null) {
                 name: 'promoted_hint',
                 label: 'Durum',
                 type: 'text',
-                value: 'Bu tahsis gerçek atamaya dönüştürülmüş; düzenlenemez.',
+                value: 'Bu gerçek bir atama. Ağırlık ve kaynak değiştirilemez; yalnızca planlama tarihlerini düzenleyebilirsiniz.',
                 readonly: true,
                 colSize: 12,
             }],
@@ -403,6 +495,16 @@ function openAllocationModal(clientKey, prefilledJobTaskId = null) {
         iconColor: 'text-primary',
         fields: [
             {
+                id: 'weight_info',
+                name: 'weight_info',
+                label: 'Ağırlık Durumu',
+                type: 'text',
+                readonly: true,
+                icon: 'fas fa-balance-scale',
+                colSize: 12,
+                value: weightInfoValue,
+            },
+            {
                 id: 'allocated_weight_kg',
                 name: 'allocated_weight_kg',
                 label: 'Ağırlık (kg)',
@@ -412,8 +514,9 @@ function openAllocationModal(clientKey, prefilledJobTaskId = null) {
                 step: 0.01,
                 icon: 'fas fa-weight-hanging',
                 colSize: 12,
-                value: alloc ? alloc.allocated_weight_kg : '',
+                value: defaultWeight,
                 readonly: promoted,
+                help: (!isRealRow && assignableRemaining != null) ? `Atanabilir kalan: ${fmtKg(assignableRemaining)} kg` : '',
             },
             {
                 id: 'planned_start_date',
@@ -423,7 +526,7 @@ function openAllocationModal(clientKey, prefilledJobTaskId = null) {
                 icon: 'fas fa-play',
                 colSize: 6,
                 value: alloc ? (alloc.planned_start_date || '') : '',
-                readonly: promoted,
+                // Dates are always schedulable — even for real (committed/promoted) rows.
             },
             {
                 id: 'planned_end_date',
@@ -433,7 +536,6 @@ function openAllocationModal(clientKey, prefilledJobTaskId = null) {
                 icon: 'fas fa-flag-checkered',
                 colSize: 6,
                 value: alloc ? (alloc.planned_end_date || '') : '',
-                readonly: promoted,
             },
             {
                 id: 'notes',
@@ -454,7 +556,7 @@ function openAllocationModal(clientKey, prefilledJobTaskId = null) {
     allocModal.show();
 }
 
-function onAllocationSave(formData) {
+async function onAllocationSave(formData) {
     const isNew = editingKey == null;
     const weight = formData.allocated_weight_kg;
     const start = formData.planned_start_date || null;
@@ -489,20 +591,37 @@ function onAllocationSave(formData) {
             progress: 0,
             is_promoted: false,
         });
-    } else {
-        if (!weight || Number(weight) <= 0) {
-            showNotification('Geçerli bir ağırlık zorunludur.', 'error');
-            return;
-        }
-        const alloc = currentAllocations.find(a => a.clientKey === editingKey);
-        if (alloc && !alloc.is_promoted) {
-            alloc.allocated_weight_kg = weight;
-            alloc.planned_start_date = start;
-            alloc.planned_end_date = end;
-            alloc.notes = notes;
-        }
+        markDirty();
+        allocModal.hide();
+        renderGantt();
+        return;
     }
 
+    const alloc = currentAllocations.find(a => a.clientKey === editingKey);
+    if (!alloc) { allocModal.hide(); return; }
+
+    // Real subtask (committed / promoted): only the dates are editable, saved immediately.
+    if (alloc.subtask_id) {
+        try {
+            await setWeldingSubtaskDates(alloc.subtask_id, start, end);
+            showNotification('Tarihler kaydedildi.', 'success');
+            allocModal.hide();
+            await loadBoard();
+        } catch (e) {
+            showNotification(e.message, 'error');
+        }
+        return;
+    }
+
+    // Pure planning row: edit in memory.
+    if (!weight || Number(weight) <= 0) {
+        showNotification('Geçerli bir ağırlık zorunludur.', 'error');
+        return;
+    }
+    alloc.allocated_weight_kg = weight;
+    alloc.planned_start_date = start;
+    alloc.planned_end_date = end;
+    alloc.notes = notes;
     markDirty();
     allocModal.hide();
     renderGantt();
@@ -620,6 +739,7 @@ async function onPromoteConfirm(formData) {
 function buildBulkItems() {
     const items = [];
     currentAllocations.forEach(a => {
+        if (a.committed) return;   // real assignments made outside planning — never saved from here
         const payload = {
             department_task: a.department_task,
             subcontractor: a.resource_type === 'subcontractor' ? a.resource_id : null,
@@ -659,7 +779,7 @@ async function onSave() {
 
 async function loadBoard() {
     try {
-        const data = await getWeldingPlanBoard();
+        const data = await getWeldingPlanBoard(showCompleted);
         hydrateFromBoard(data);
     } catch (e) {
         showNotification(e.message, 'error');
@@ -722,11 +842,26 @@ function init() {
     initModals();
     setupGanttDropZone();
 
+    const toggleBtn = document.getElementById('toggle-jobs-btn');
+    if (toggleBtn) toggleBtn.addEventListener('click', toggleJobsPanel);
+
     const jobsSearch = document.getElementById('jobs-search');
     if (jobsSearch) {
         jobsSearch.addEventListener('input', (e) => {
             jobsSearchTerm = e.target.value || '';
             renderJobsTable();
+        });
+    }
+
+    const completedToggle = document.getElementById('show-completed-toggle');
+    if (completedToggle) {
+        completedToggle.addEventListener('change', (e) => {
+            if (hasUnsavedChanges && !confirm('Kaydedilmemiş değişiklikler var. Devam edilsin mi?')) {
+                e.target.checked = showCompleted;
+                return;
+            }
+            showCompleted = e.target.checked;
+            loadBoard();
         });
     }
 
