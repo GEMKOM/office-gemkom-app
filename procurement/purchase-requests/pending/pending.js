@@ -1050,7 +1050,10 @@ function renderComparisonTable() {
     const suppliers = currentRequest.offers.map(offer => ({
         id: offer.supplier.id,
         name: offer.supplier.name,
-        default_currency: offer.currency
+        default_currency: offer.currency,
+        status: offer.supplier.status,
+        rating_score: offer.supplier.rating_score,
+        on_time_delivery_pct: offer.supplier.on_time_delivery_pct
     }));
 
     // Transform offers to match component format
@@ -1120,7 +1123,10 @@ function renderComparisonTableForModal(modalComparisonTable) {
     const suppliers = currentRequest.offers.map(offer => ({
         id: offer.supplier.id,
         name: offer.supplier.name,
-        default_currency: offer.currency
+        default_currency: offer.currency,
+        status: offer.supplier.status,
+        rating_score: offer.supplier.rating_score,
+        on_time_delivery_pct: offer.supplier.on_time_delivery_pct
     }));
 
     // Transform offers to match component format

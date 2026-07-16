@@ -11,6 +11,7 @@
     <link rel="stylesheet" href="../../../style.css">
     <link rel="stylesheet" href="../../../components/navbar.css">
     <link rel="stylesheet" href="../../../components/badges/badges.css">
+    <link rel="stylesheet" href="../../../components/supplier-badges/supplier-badges.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
     <link rel="stylesheet" href="create.css">
     <link rel="stylesheet" href="../../../components/header/header.css">
@@ -378,8 +379,9 @@
                         <!-- Supplier Information -->
                         <div id="supplier-info-display" style="display: none;">
                             <div class="card mb-3">
-                                <div class="card-header">
+                                <div class="card-header d-flex justify-content-between align-items-center">
                                     <h6 class="mb-0"><i class="fas fa-info-circle me-2"></i>Tedarikçi Bilgileri</h6>
+                                    <span id="display-supplier-status-badge"></span>
                                 </div>
                                 <div class="card-body">
                                     <div class="row">
@@ -387,6 +389,12 @@
                                             <div class="supplier-info-item">
                                                 <div class="supplier-info-label">Tedarikçi Adı</div>
                                                 <div class="supplier-info-value" id="display-supplier-name">-</div>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="supplier-info-item">
+                                                <div class="supplier-info-label">Performans Puanı</div>
+                                                <div class="supplier-info-value" id="display-supplier-rating">-</div>
                                             </div>
                                         </div>
                                         <div class="col-md-6">

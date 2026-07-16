@@ -2,19 +2,31 @@ import { guardRoute } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
-import { 
-    getSuppliers, 
-    getSupplier, 
+import {
+    getSuppliers,
+    getSupplier,
     createSupplier,
     updateSupplier,
     deleteSupplier,
     toggleSupplierStatus,
+    setSupplierStatus,
+    getSupplierEvaluations,
+    getSupplierStatusHistory,
     getPaymentTerms
 } from '../../../apis/procurement.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
+import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
+import { hasPerm, isSuperuser } from '../../../authService.js';
+import {
+    renderSupplierStatusBadge,
+    renderStarRating,
+    renderOnTimePct,
+    escapeHtml,
+    SUPPLIER_STATUS_META,
+} from '../../../components/supplier-badges/supplier-badges.js';
 
 // State management
 let currentPage = 1;
@@ -32,6 +44,11 @@ let isEditMode = false; // Track if we're editing an existing supplier
 let paymentTerms = []; // Payment terms for dropdown
 let actionConfirmModal = null;
 let supplierFormModal = null;
+let statusChangeModal = null; // dedicated status-change modal (needs a reason)
+
+// Whether the current user may write procurement data (rate / blacklist).
+// Superusers always qualify (matches the backend's user_has_role_perm).
+const canWriteSuppliers = isSuperuser() || hasPerm('access_procurement_write');
 
 const CURRENCY_DROPDOWN_OPTIONS = [
     { value: 'TRY', label: 'TRY — Türk Lirası' },
@@ -81,7 +98,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             animation: true,
             columns: 4
         });
-        console.log('StatisticsCards initialized successfully');
     } catch (error) {
         console.error('Error initializing StatisticsCards:', error);
     }
@@ -176,6 +192,21 @@ async function initializeFiltersComponent() {
         label: 'Oluşturulma Tarihi',
         colSize: 4
     });
+
+    // Add Supplier lifecycle status filter (approved/watch/blacklisted)
+    supplierFilters.addDropdownFilter({
+        id: 'supplier-status-filter',
+        label: 'Tedarikçi Durumu',
+        placeholder: 'Durum seçin...',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'approved', label: 'Onaylı' },
+            { value: 'watch', label: 'İzlemede' },
+            { value: 'blacklisted', label: 'Kara Liste' }
+        ],
+        value: '',
+        colSize: 4
+    });
 }
 
 function initializeSortableHeaders() {
@@ -223,8 +254,6 @@ async function loadPaymentTerms() {
         } else {
             paymentTerms = [];
         }
-        
-        console.log('Loaded payment terms:', paymentTerms);
     } catch (error) {
         console.error('Error loading payment terms:', error);
         paymentTerms = [];
@@ -270,6 +299,11 @@ async function loadSuppliers() {
             if (filterValues['created-at-filter']) {
                 apiFilters.created_at__gte = filterValues['created-at-filter'];
             }
+
+            // Add supplier lifecycle status filter (approved/watch/blacklisted)
+            if (filterValues['supplier-status-filter']) {
+                apiFilters.supplier_status = filterValues['supplier-status-filter'];
+            }
         }
         
         // Add ordering parameters
@@ -284,9 +318,7 @@ async function loadSuppliers() {
         apiFilters.page_size = itemsPerPage;
         
         const response = await getSuppliers(apiFilters);
-        
-        console.log('API Response:', response);
-        
+
         // Handle paginated response
         if (response && response.results) {
             suppliers = response.results;
@@ -298,8 +330,6 @@ async function loadSuppliers() {
             suppliers = [];
             totalSuppliers = 0;
         }
-        
-        console.log('Processed suppliers:', suppliers);
         
         // Update the table
         renderSuppliersTable(suppliers);
@@ -352,7 +382,7 @@ function renderSuppliersTable(suppliers) {
     if (!suppliers || suppliers.length === 0) {
                  tbody.innerHTML = `
              <tr>
-                 <td colspan="12" class="text-center">
+                 <td colspan="14" class="text-center">
                     <div class="empty-state">
                         <i class="fas fa-building"></i>
                         <h5>Henüz tedarikçi bulunmuyor</h5>
@@ -370,7 +400,7 @@ function renderSuppliersTable(suppliers) {
                 <span class="supplier-id">${supplier.id}</span>
             </td>
             <td>
-                <div class="supplier-name">${supplier.name || 'İsimsiz'}</div>
+                <div class="supplier-name">${escapeHtml(supplier.name) || 'İsimsiz'}</div>
             </td>
             <td>
                 <div class="contact-person">
@@ -408,8 +438,22 @@ function renderSuppliersTable(suppliers) {
             <td class="text-center">
                 <div class="dbs-limit">${formatDbsLimit(supplier.dbs_limit, supplier.dbs_currency || supplier.default_currency)}</div>
             </td>
+            <td class="text-center">
+                ${renderSupplierStatusBadge(supplier)}
+            </td>
+            <td class="text-center">
+                ${renderStarRating(supplier.rating_score, { compact: true })}
+                ${supplier.rating_count ? `<div class="small text-muted">(${supplier.rating_count})</div>` : ''}
+            </td>
              <td class="text-center">
                 <div class="action-buttons">
+                    <button class="btn btn-sm btn-outline-warning me-1" title="Değerlendirmeler" onclick="event.stopPropagation(); viewSupplierRatings(${supplier.id})">
+                        <i class="fas fa-star"></i>
+                    </button>
+                    ${canWriteSuppliers ? `
+                    <button class="btn btn-sm btn-outline-secondary me-1" title="Durum Değiştir" onclick="event.stopPropagation(); changeSupplierStatus(${supplier.id})">
+                        <i class="fas fa-shield-halved"></i>
+                    </button>` : ''}
                     <button class="btn btn-sm btn-outline-primary me-1" onclick="event.stopPropagation(); editSupplier(${supplier.id})">
                         <i class="fas fa-edit"></i>
                     </button>
@@ -970,6 +1014,8 @@ function showLoadingState() {
                      <td><div class="loading-skeleton" style="width: 120px;"></div></td>
                      <td><div class="loading-skeleton" style="width: 80px;"></div></td>
                      <td><div class="loading-skeleton" style="width: 100px;"></div></td>
+                     <td><div class="loading-skeleton" style="width: 90px;"></div></td>
+                     <td><div class="loading-skeleton" style="width: 90px;"></div></td>
                      <td><div class="loading-skeleton" style="width: 72px;"></div></td>
                  </tr>
             `);
@@ -997,5 +1043,157 @@ window.deleteSupplierConfirm = (supplierId) => {
     currentSupplier = suppliers.find(s => s.id === supplierId);
     if (currentSupplier) {
         handleDeleteSupplier();
+    }
+};
+
+// --- Supplier status change (approved / watch / blacklisted) with a reason ---
+
+function initStatusChangeModal() {
+    if (statusChangeModal) return;
+    statusChangeModal = new EditModal('status-change-modal-container', {
+        title: 'Tedarikçi Durumu Değiştir',
+        icon: 'fas fa-shield-halved',
+        saveButtonText: 'Kaydet',
+        size: 'md',
+    });
+    statusChangeModal.addSection({
+        id: 'status-change',
+        title: 'Durum',
+        icon: 'fas fa-shield-halved',
+        iconColor: 'text-secondary',
+        fields: [
+            {
+                id: 'status', name: 'status', label: 'Durum', type: 'select', required: true, colSize: 12,
+                options: Object.entries(SUPPLIER_STATUS_META).map(([value, meta]) => ({ value, label: meta.label })),
+            },
+            {
+                id: 'reason', name: 'reason', label: 'Gerekçe', type: 'textarea', rows: 3, colSize: 12,
+                placeholder: 'Durum değişikliği gerekçesi (özellikle kara liste için önerilir)',
+            },
+        ],
+    });
+    statusChangeModal.render();
+    statusChangeModal.onSaveCallback(handleStatusChangeSave);
+}
+
+async function handleStatusChangeSave(formData) {
+    if (!currentSupplier) return;
+    const newStatus = formData.status;
+    const reason = (formData.reason || '').trim();
+    if (!newStatus) {
+        showNotification('Lütfen bir durum seçin', 'error');
+        throw new Error('validation');
+    }
+    try {
+        showLoading(true);
+        await setSupplierStatus(currentSupplier.id, { status: newStatus, reason });
+        showNotification('Tedarikçi durumu güncellendi', 'success');
+        statusChangeModal.hide();
+        currentSupplier = null;
+        await loadSuppliers();
+    } catch (error) {
+        console.error('Error changing supplier status:', error);
+        showNotification('Durum güncellenirken hata oluştu: ' + error.message, 'error');
+        throw error;
+    } finally {
+        showLoading(false);
+    }
+}
+
+window.changeSupplierStatus = (supplierId) => {
+    if (!canWriteSuppliers) return;
+    currentSupplier = suppliers.find(s => s.id === supplierId);
+    if (!currentSupplier) return;
+    initStatusChangeModal();
+    statusChangeModal.clearForm();
+    statusChangeModal.setFormData({ status: currentSupplier.status || 'approved', reason: '' });
+    statusChangeModal.show();
+};
+
+// --- Read-only drill-down: evaluations + status history ---
+
+let ratingsDisplayModal = null;
+
+function fmtDate(value) {
+    if (!value) return '-';
+    try { return new Date(value).toLocaleDateString('tr-TR'); } catch (_) { return '-'; }
+}
+
+function statusLabel(key) {
+    return (SUPPLIER_STATUS_META[key] && SUPPLIER_STATUS_META[key].label) || key || '-';
+}
+
+window.viewSupplierRatings = async (supplierId) => {
+    const supplier = suppliers.find(s => s.id === supplierId);
+    if (!ratingsDisplayModal) {
+        ratingsDisplayModal = new DisplayModal('supplier-ratings-modal-container', {
+            title: 'Tedarikçi Değerlendirmeleri',
+            icon: 'fas fa-star',
+            size: 'lg',
+        });
+    }
+    ratingsDisplayModal.clearData?.();
+    ratingsDisplayModal.setTitle?.(`Değerlendirmeler — ${supplier ? supplier.name : ''}`);
+    ratingsDisplayModal.addCustomSection({ id: 'ratings-loading', customContent: '<div class="text-center py-4"><i class="fas fa-spinner fa-spin"></i> Yükleniyor...</div>' });
+    ratingsDisplayModal.render();
+    ratingsDisplayModal.show();
+
+    try {
+        const [evals, history] = await Promise.all([
+            getSupplierEvaluations(supplierId),
+            getSupplierStatusHistory(supplierId),
+        ]);
+
+        const summary = supplier ? `
+            <div class="mb-3">
+                ${renderStarRating(supplier.rating_score, { compact: true })}
+                <span class="ms-2">${renderSupplierStatusBadge(supplier)}</span>
+                <span class="ms-2 small text-muted">Zamanında Teslimat: ${renderOnTimePct(supplier.on_time_delivery_pct)}</span>
+            </div>` : '';
+
+        const evalRows = (evals || []).map(e => `
+            <tr>
+                <td>${escapeHtml(e.po_number || ('PO-' + e.purchase_order))}</td>
+                <td class="text-center">${e.quality_score}</td>
+                <td class="text-center">${e.delivery_score}</td>
+                <td class="text-center">${e.price_score}</td>
+                <td class="text-center">${e.service_score}</td>
+                <td class="text-center"><strong>${Number(e.composite_score).toFixed(2)}</strong></td>
+                <td>${escapeHtml(e.comment || '')}</td>
+                <td class="small text-muted">${escapeHtml(e.evaluated_by_username || '')} · ${fmtDate(e.created_at)}</td>
+            </tr>`).join('');
+
+        const evalTable = (evals && evals.length) ? `
+            <h6 class="text-primary mt-2">Değerlendirmeler</h6>
+            <div class="table-responsive"><table class="table table-sm table-striped">
+                <thead><tr>
+                    <th>Sipariş</th><th class="text-center">Kalite</th><th class="text-center">Teslimat</th>
+                    <th class="text-center">Fiyat</th><th class="text-center">Servis</th><th class="text-center">Puan</th>
+                    <th>Yorum</th><th>Değerlendiren</th>
+                </tr></thead><tbody>${evalRows}</tbody>
+            </table></div>` : '<p class="text-muted">Henüz değerlendirme yok.</p>';
+
+        const histRows = (history || []).map(h => `
+            <tr>
+                <td>${statusLabel(h.previous_status)} → <strong>${statusLabel(h.new_status)}</strong></td>
+                <td>${escapeHtml(h.reason || '')}</td>
+                <td class="small text-muted">${escapeHtml(h.changed_by_username || '')} · ${fmtDate(h.changed_at)}</td>
+            </tr>`).join('');
+
+        const histTable = (history && history.length) ? `
+            <h6 class="text-primary mt-3">Durum Geçmişi</h6>
+            <div class="table-responsive"><table class="table table-sm table-striped">
+                <thead><tr><th>Değişiklik</th><th>Gerekçe</th><th>Değiştiren</th></tr></thead>
+                <tbody>${histRows}</tbody>
+            </table></div>` : '';
+
+        ratingsDisplayModal.clearData?.();
+        ratingsDisplayModal.addCustomSection({ id: 'ratings-content', customContent: summary + evalTable + histTable });
+        ratingsDisplayModal.render();
+    } catch (error) {
+        console.error('Error loading supplier ratings:', error);
+        ratingsDisplayModal.clearData?.();
+        ratingsDisplayModal.addCustomSection({ id: 'ratings-error', customContent: `<div class="text-danger">Yüklenirken hata oluştu: ${escapeHtml(error.message)}</div>` });
+        ratingsDisplayModal.render();
     }
 };

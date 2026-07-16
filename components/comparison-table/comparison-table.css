@@ -524,3 +524,12 @@
         font-size: 0.9rem;
     }
 }
+
+/* Supplier rating/blacklist integration (see components/supplier-badges) */
+.supplier-col-blacklisted {
+    background-color: #fee2e2 !important;
+}
+.comparison-table .supplier-stars {
+    white-space: nowrap;
+    font-size: 0.8rem;
+}

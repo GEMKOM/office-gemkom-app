@@ -598,6 +598,86 @@ export async function toggleSupplierStatus(supplierId) {
     }
 }
 
+// --- Supplier Rating & Blacklist API Functions ---
+
+/**
+ * Change a supplier's lifecycle status (approved/watch/blacklisted) with a reason.
+ * POST /procurement/suppliers/{id}/set-status/
+ */
+export async function setSupplierStatus(supplierId, { status, reason = '' }) {
+    const response = await authedFetch(`${backendBase}/procurement/suppliers/${supplierId}/set-status/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status, reason }),
+    });
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Tedarikçi durumu güncellenirken hata oluştu'));
+    }
+    return await response.json();
+}
+
+/** GET /procurement/suppliers/{id}/evaluations/ */
+export async function getSupplierEvaluations(supplierId) {
+    const response = await authedFetch(`${backendBase}/procurement/suppliers/${supplierId}/evaluations/`);
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Değerlendirmeler yüklenirken hata oluştu'));
+    }
+    return await response.json();
+}
+
+/** GET /procurement/suppliers/{id}/status-history/ */
+export async function getSupplierStatusHistory(supplierId) {
+    const response = await authedFetch(`${backendBase}/procurement/suppliers/${supplierId}/status-history/`);
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Durum geçmişi yüklenirken hata oluştu'));
+    }
+    return await response.json();
+}
+
+/**
+ * Create a supplier evaluation for a completed purchase order.
+ * POST /procurement/supplier-evaluations/
+ * payload: { purchase_order, quality_score, delivery_score, price_score, service_score, comment }
+ */
+export async function createSupplierEvaluation(payload) {
+    const response = await authedFetch(`${backendBase}/procurement/supplier-evaluations/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Değerlendirme kaydedilirken hata oluştu'));
+    }
+    return await response.json();
+}
+
+/** PUT /procurement/supplier-evaluations/{id}/ */
+export async function updateSupplierEvaluation(evaluationId, payload) {
+    const response = await authedFetch(`${backendBase}/procurement/supplier-evaluations/${evaluationId}/`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Değerlendirme güncellenirken hata oluştu'));
+    }
+    return await response.json();
+}
+
+/** GET /procurement/supplier-evaluations/?supplier=&purchase_order= */
+export async function listSupplierEvaluations(filters = {}) {
+    const queryParams = new URLSearchParams();
+    Object.entries(filters).forEach(([k, v]) => {
+        if (v !== undefined && v !== null && v !== '') queryParams.append(k, v);
+    });
+    const qs = queryParams.toString();
+    const response = await authedFetch(`${backendBase}/procurement/supplier-evaluations/${qs ? '?' + qs : ''}`);
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Değerlendirmeler yüklenirken hata oluştu'));
+    }
+    return await response.json();
+}
+
 // Item API Functions
 export async function searchItems(searchTerm, searchType = 'code') {
     try {

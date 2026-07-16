@@ -7464,19 +7464,41 @@ window.resumeJobOrder = async function(jobNo) {
 };
 
 window.cancelJobOrder = async function(jobNo) {
-    // Show confirmation modal but don't make the API request
+    // Show confirmation modal
+    confirmationModal.setOnConfirm(async () => {
+        try {
+            const response = await cancelJobOrderAPI(jobNo);
+            if (response && response.status === 'success') {
+                confirmationModal.hide();
+                showNotification(response.message || 'İş emri iptal edildi', 'success');
+                await loadJobOrders();
+            } else {
+                throw new Error('İş emri iptal edilemedi');
+            }
+        } catch (error) {
+            console.error('Error cancelling job order:', error);
+            let errorMessage = 'İş emri iptal edilirken hata oluştu';
+            try {
+                if (error.message) {
+                    const errorData = JSON.parse(error.message);
+                    if (typeof errorData === 'object') {
+                        const errors = Object.values(errorData).flat();
+                        errorMessage = errors.join(', ') || errorMessage;
+                    }
+                }
+            } catch (e) {}
+            confirmationModal.hide();
+            showNotification(errorMessage, 'error');
+        }
+    });
+
     confirmationModal.show({
         title: 'İş Emri İptal Onayı',
         message: `İş emri ${jobNo} iptal edilecek mi? Bu işlem geri alınamaz.`,
         icon: 'fas fa-exclamation-triangle',
         confirmText: 'Evet',
         cancelText: 'Vazgeç',
-        confirmButtonClass: 'btn-danger',
-        onConfirm: () => {
-            // Don't make the API request - just show a message
-            confirmationModal.hide();
-            showNotification('İş emri iptal işlemi gerçekleştirilemiyor. Lütfen sistem yöneticisi ile iletişime geçin.', 'info');
-        }
+        confirmButtonClass: 'btn-danger'
     });
 };
 

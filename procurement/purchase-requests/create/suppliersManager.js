@@ -1,6 +1,11 @@
 import { getSuppliers, getPaymentTerms } from '../../../apis/procurement.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { showNotification } from '../../../components/notification/notification.js';
+import {
+    renderSupplierStatusBadge,
+    renderStarRating,
+    escapeHtml,
+} from '../../../components/supplier-badges/supplier-badges.js';
 
 // Suppliers Manager Module
 export class SuppliersManager {
@@ -130,10 +135,13 @@ export class SuppliersManager {
                 });
             }
             
-            // Convert suppliers to dropdown items format
+            // Convert suppliers to dropdown items format.
+            // item.text is injected via innerHTML by ModernDropdown, so the name
+            // MUST be escaped; the warn badge is app-generated and safe.
             const dropdownItems = this.availableSuppliers.map(supplier => ({
                 value: supplier.id,
-                text: supplier.name
+                text: `${escapeHtml(supplier.name)} ${renderSupplierStatusBadge(supplier, { onlyWarn: true })}`,
+                supplier,
             }));
             
             // Set items in dropdown
@@ -233,6 +241,15 @@ export class SuppliersManager {
         if (contactDisplay) contactDisplay.textContent = supplier.contact_person || '-';
         if (phoneDisplay) phoneDisplay.textContent = supplier.phone || '-';
         if (emailDisplay) emailDisplay.textContent = supplier.email || '-';
+
+        // Status badge + performance rating (app-generated markup → innerHTML is safe).
+        const statusBadge = document.getElementById('display-supplier-status-badge');
+        if (statusBadge) statusBadge.innerHTML = renderSupplierStatusBadge(supplier);
+        const ratingDisplay = document.getElementById('display-supplier-rating');
+        if (ratingDisplay) {
+            ratingDisplay.innerHTML = renderStarRating(supplier.rating_score, { compact: true })
+                + (supplier.rating_count ? ` <span class="text-muted small">(${supplier.rating_count})</span>` : '');
+        }
     }
 
 
@@ -481,7 +498,8 @@ export class SuppliersManager {
 
             // Get the selected supplier ID from dropdown
             const selectedSupplierId = this.supplierDropdown ? this.supplierDropdown.getValue() : null;
-            
+            const apiSupplier = this.availableSuppliers.find(s => s.id == selectedSupplierId);
+
             supplier = {
                 id: this.generateSupplierId(),
                 name: cleanName,
@@ -490,7 +508,11 @@ export class SuppliersManager {
                 email: cleanEmail,
                 default_currency: currency,
                 default_payment_terms: paymentTerms,
-                default_tax_rate: taxRate
+                default_tax_rate: taxRate,
+                // Carry rating/status so the supplier card can render the badge.
+                status: apiSupplier ? apiSupplier.status : undefined,
+                rating_score: apiSupplier ? apiSupplier.rating_score : undefined,
+                rating_count: apiSupplier ? apiSupplier.rating_count : undefined,
             };
         } else {
             // Editing existing supplier - get data from display fields
@@ -510,15 +532,20 @@ export class SuppliersManager {
             const cleanPhone = phone === '-' ? '' : phone;
             const cleanEmail = email === '-' ? '' : email;
 
+            const existing = editIndex !== undefined ? this.requestData.suppliers[editIndex] : null;
             supplier = {
-                id: editIndex !== undefined ? this.requestData.suppliers[editIndex].id : this.generateSupplierId(),
+                id: existing ? existing.id : this.generateSupplierId(),
                 name: cleanName,
                 contact_person: cleanContact,
                 phone: cleanPhone,
                 email: cleanEmail,
                 default_currency: currency,
                 default_payment_terms: paymentTerms,
-                default_tax_rate: taxRate
+                default_tax_rate: taxRate,
+                // Preserve rating/status carried on the existing supplier entry.
+                status: existing ? existing.status : undefined,
+                rating_score: existing ? existing.rating_score : undefined,
+                rating_count: existing ? existing.rating_count : undefined,
             };
         }
 
@@ -617,23 +644,30 @@ export class SuppliersManager {
             
             card.innerHTML = `
                 <div class="supplier-header">
-                    <div class="supplier-name">${supplier.name}</div>
+                    <div class="supplier-name">
+                        ${escapeHtml(supplier.name)}
+                        ${renderSupplierStatusBadge(supplier, { onlyWarn: true })}
+                    </div>
                     <div class="supplier-status ${hasOffer ? 'completed' : 'pending'}">
                         ${hasOffer ? 'Teklif Alındı' : 'Teklif Bekleniyor'}
                     </div>
                 </div>
                 <div class="supplier-info">
                     <div class="supplier-info-item">
+                        <div class="supplier-info-label">Performans Puanı</div>
+                        <div class="supplier-info-value">${renderStarRating(supplier.rating_score, { compact: true })}</div>
+                    </div>
+                    <div class="supplier-info-item">
                         <div class="supplier-info-label">İletişim Kişisi</div>
-                        <div class="supplier-info-value">${supplier.contact_person || '-'}</div>
+                        <div class="supplier-info-value">${escapeHtml(supplier.contact_person) || '-'}</div>
                     </div>
                     <div class="supplier-info-item">
                         <div class="supplier-info-label">Telefon</div>
-                        <div class="supplier-info-value">${supplier.phone || '-'}</div>
+                        <div class="supplier-info-value">${escapeHtml(supplier.phone) || '-'}</div>
                     </div>
                     <div class="supplier-info-item">
                         <div class="supplier-info-label">E-posta</div>
-                        <div class="supplier-info-value">${supplier.email || '-'}</div>
+                        <div class="supplier-info-value">${escapeHtml(supplier.email) || '-'}</div>
                     </div>
                     <div class="supplier-info-item">
                         <div class="supplier-info-label">Para Birimi</div>

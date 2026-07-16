@@ -13,6 +13,7 @@
     <link rel="stylesheet" href="../../../components/dropdown/dropdown.css">
     <link rel="stylesheet" href="../../../components/edit-modal/edit-modal.css">
     <link rel="stylesheet" href="../../../components/badges/badges.css">
+    <link rel="stylesheet" href="../../../components/supplier-badges/supplier-badges.css">
     <link rel="icon" type="image/png" href="../../../images/gemkom.png">
     <link rel="stylesheet" href="../../../pre-auth.css">
     <link rel="stylesheet" href="suppliers.css">
@@ -21,6 +22,7 @@
     <link rel="stylesheet" href="../../../components/filters/filters.css">
     <link rel="stylesheet" href="../../../components/table/table.css">
     <link rel="stylesheet" href="../../../components/confirmation-modal/confirmation-modal.css">
+    <link rel="stylesheet" href="../../../components/display-modal/display-modal.css">
 </head>
 <body class="pre-auth">
     <!-- Navigation -->
@@ -97,6 +99,12 @@
                                             <th class="sortable" data-field="dbs_limit">
                                                 DBS Limiti <i class="fas fa-sort sort-icon"></i>
                                             </th>
+                                            <th class="sortable text-center" data-field="status">
+                                                Tedarikçi Durumu <i class="fas fa-sort sort-icon"></i>
+                                            </th>
+                                            <th class="sortable text-center" data-field="rating_score">
+                                                Puan <i class="fas fa-sort sort-icon"></i>
+                                            </th>
                                             <th class="text-center">İşlemler</th>
                                         </tr>
                                     </thead>
@@ -124,6 +132,8 @@
     </section>
 
     <div id="supplier-form-modal-container"></div>
+    <div id="status-change-modal-container"></div>
+    <div id="supplier-ratings-modal-container"></div>
 
     <!-- Bootstrap JS -->
     <div id="action-confirm-modal-container"></div>

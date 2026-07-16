@@ -11,8 +11,15 @@ import {
     getSupplier,
     listDbsPayments,
     createDbsPayment,
-    deleteDbsPayment
+    deleteDbsPayment,
+    createSupplierEvaluation,
+    listSupplierEvaluations
 } from '../../apis/procurement.js';
+import { hasPerm, isSuperuser } from '../../authService.js';
+
+// Whether the current user may rate suppliers. Superusers always qualify
+// (matches the backend's user_has_role_perm).
+const canWriteProcurement = () => isSuperuser() || hasPerm('access_procurement_write');
 import {
     getExpenses,
     createExpense,
@@ -4140,6 +4147,15 @@ async function viewPurchaseOrderDetails(orderId) {
                      </table>
                 </div>
             </div>
+            ${(canWriteProcurement() && order.status !== 'cancelled') ? `
+            <div class="row mt-3">
+                <div class="col-12 text-end">
+                    <button class="btn btn-outline-warning btn-sm" onclick="openSupplierEvaluation(${order.id})">
+                        <i class="fas fa-star me-1"></i>Tedarikçi Değerlendir
+                    </button>
+                </div>
+            </div>
+            ` : ''}
             <div class="row mt-3">
                 <div class="col-12">
                     <div id="payment-schedule-table-container"></div>
@@ -4242,6 +4258,91 @@ async function viewPurchaseOrderDetails(orderId) {
         showErrorMessage('Sipariş detayları yüklenirken hata oluştu.');
     }
 }
+
+// --- Supplier evaluation (rate a completed purchase order) ---
+
+let supplierEvaluationModal = null;
+let evaluatingOrderId = null;
+
+const EVAL_SCORE_OPTIONS = [
+    { value: '5', label: '5 - Çok İyi' },
+    { value: '4', label: '4 - İyi' },
+    { value: '3', label: '3 - Orta' },
+    { value: '2', label: '2 - Zayıf' },
+    { value: '1', label: '1 - Kötü' },
+];
+
+function initSupplierEvaluationModal() {
+    if (supplierEvaluationModal) return;
+    supplierEvaluationModal = new EditModal('supplier-evaluation-modal-container', {
+        title: 'Tedarikçi Değerlendirme',
+        icon: 'fas fa-star',
+        saveButtonText: 'Değerlendirmeyi Kaydet',
+        size: 'md',
+    });
+    supplierEvaluationModal.addSection({
+        id: 'evaluation',
+        title: 'Değerlendirme (1–5)',
+        icon: 'fas fa-star',
+        iconColor: 'text-warning',
+        fields: [
+            { id: 'quality_score', name: 'quality_score', label: 'Kalite', type: 'select', required: true, colSize: 6, options: EVAL_SCORE_OPTIONS },
+            { id: 'delivery_score', name: 'delivery_score', label: 'Teslimat', type: 'select', required: true, colSize: 6, options: EVAL_SCORE_OPTIONS },
+            { id: 'price_score', name: 'price_score', label: 'Fiyat', type: 'select', required: true, colSize: 6, options: EVAL_SCORE_OPTIONS },
+            { id: 'service_score', name: 'service_score', label: 'Servis', type: 'select', required: true, colSize: 6, options: EVAL_SCORE_OPTIONS },
+            { id: 'comment', name: 'comment', label: 'Yorum', type: 'textarea', rows: 3, colSize: 12, placeholder: 'Opsiyonel' },
+        ],
+    });
+    supplierEvaluationModal.render();
+    supplierEvaluationModal.onSaveCallback(handleSupplierEvaluationSave);
+}
+
+async function handleSupplierEvaluationSave(formData) {
+    if (!evaluatingOrderId) return;
+    const payload = {
+        purchase_order: evaluatingOrderId,
+        quality_score: Number(formData.quality_score),
+        delivery_score: Number(formData.delivery_score),
+        price_score: Number(formData.price_score),
+        service_score: Number(formData.service_score),
+        comment: (formData.comment || '').trim(),
+    };
+    try {
+        const result = await createSupplierEvaluation(payload);
+        const score = result?.supplier?.rating_score;
+        showSuccessMessage(
+            'Değerlendirme kaydedildi.' + (score != null ? ` Tedarikçinin yeni puanı: ${Number(score).toFixed(2)}` : '')
+        );
+        supplierEvaluationModal.hide();
+        evaluatingOrderId = null;
+    } catch (error) {
+        console.error('Error saving supplier evaluation:', error);
+        showErrorMessage(error.message || 'Değerlendirme kaydedilirken hata oluştu.');
+        throw error;
+    }
+}
+
+window.openSupplierEvaluation = async (orderId) => {
+    if (!canWriteProcurement()) return;
+    try {
+        // Guard against duplicate evaluations for this PO.
+        const existing = await listSupplierEvaluations({ purchase_order: orderId });
+        const rows = Array.isArray(existing) ? existing : (existing.results || []);
+        if (rows.length > 0) {
+            showErrorMessage('Bu sipariş zaten değerlendirilmiş.');
+            return;
+        }
+    } catch (_) {
+        // If the check fails, still let the backend enforce uniqueness.
+    }
+    evaluatingOrderId = orderId;
+    initSupplierEvaluationModal();
+    supplierEvaluationModal.clearForm();
+    supplierEvaluationModal.setFormData({
+        quality_score: '4', delivery_score: '4', price_score: '4', service_score: '4', comment: '',
+    });
+    supplierEvaluationModal.show();
+};
 
 
 

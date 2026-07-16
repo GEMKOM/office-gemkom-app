@@ -490,6 +490,14 @@ class GanttChart {
             taskLabels = visibleTasks.map(task => {
                 const taskTitle = task.title || task.name || `Görev ${task.id}`;
                 const tiNumber = task.ti_number || task.key || task.id;
+                // Group header rows (e.g. resource rows in the welding capacity planner)
+                // render as a distinct, dateless header band.
+                if (task.is_group) {
+                    return `<div class="gantt-task-label gantt-group-label" data-group-id="${task.group_id ?? ''}">
+                        <div class="gantt-task-ti-number">${tiNumber}</div>
+                        <div class="gantt-task-name">${taskTitle}</div>
+                    </div>`;
+                }
                 return `<div class="gantt-task-label">
                     <div class="gantt-task-ti-number">${tiNumber}</div>
                     <div class="gantt-task-name">${taskTitle}</div>
@@ -926,6 +934,10 @@ class GanttChart {
     }
 
     generateTaskBar(task) {
+        // Group header rows carry no bar — just an empty aligned band.
+        if (task.is_group) {
+            return `<div class="gantt-task-bar-container gantt-group-row"></div>`;
+        }
         // Handle tasks with multiple segments (for "All Machines" view)
         if (Array.isArray(task.segments)) {
             return this.generateMultiSegmentTaskBar(task);

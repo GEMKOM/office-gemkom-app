@@ -196,6 +196,11 @@ export const NAVIGATION_STRUCTURE = {
                         icon: 'fas fa-users',
                         children: {}
                     },
+                    '/manufacturing/welding/capacity-planning': {
+                        label: 'Kapasite Planlama',
+                        icon: 'fas fa-calendar-alt',
+                        children: {}
+                    },
                     '/manufacturing/welding/reports': {
                         label: 'Raporlar',
                         icon: 'fas fa-chart-bar',

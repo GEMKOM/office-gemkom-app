@@ -376,6 +376,26 @@
     box-sizing: border-box;
 }
 
+/* Group header rows (e.g. resource rows in the welding capacity planner) */
+.gantt-task-label.gantt-group-label {
+    background: linear-gradient(135deg, #8b0000 0%, #660000 100%);
+    border-bottom: 1px solid #660000;
+    cursor: default;
+}
+
+.gantt-task-label.gantt-group-label .gantt-task-ti-number {
+    color: #ffffff;
+    font-size: 0.85rem;
+}
+
+.gantt-task-label.gantt-group-label .gantt-task-name {
+    color: rgba(255, 255, 255, 0.8);
+}
+
+.gantt-task-bar-container.gantt-group-row {
+    background: rgba(139, 0, 0, 0.06);
+}
+
 .gantt-task-bar {
     height: 36px;
     border-radius: 6px;

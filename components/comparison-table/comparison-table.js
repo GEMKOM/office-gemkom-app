@@ -1,4 +1,10 @@
 // Comparison Table Component
+import {
+    renderSupplierStatusBadge,
+    renderStarRating,
+    escapeHtml,
+} from '../supplier-badges/supplier-badges.js';
+
 export class ComparisonTable {
     constructor(containerId, options = {}) {
         this.containerId = containerId;
@@ -295,11 +301,20 @@ export class ComparisonTable {
 
     generateSupplierSubheaders() {
         const columnsPerSupplier = this.getVisibleColumnsCount();
-        return this.data.suppliers.map(supplier => `
-            <th class="text-center align-middle" colspan="${columnsPerSupplier}">
+        return this.data.suppliers.map(supplier => {
+            const isBlacklisted = supplier.status === 'blacklisted';
+            const badge = renderSupplierStatusBadge(supplier, { onlyWarn: true });
+            const rating = supplier.rating_score != null
+                ? `<div class="small">${renderStarRating(supplier.rating_score, { compact: true })}</div>`
+                : '';
+            const safeName = escapeHtml(supplier.name);
+            return `
+            <th class="text-center align-middle ${isBlacklisted ? 'supplier-col-blacklisted' : ''}" colspan="${columnsPerSupplier}">
                 <div class="d-flex flex-column align-items-center gap-1">
-                    <div class="fw-semibold supplier-name-truncate" title="${supplier.name}">${supplier.name}</div>
-                    <div class="small text-muted">${supplier.default_currency || 'TRY'}</div>
+                    <div class="fw-semibold supplier-name-truncate" title="${safeName}">${safeName}</div>
+                    ${badge ? `<div>${badge}</div>` : ''}
+                    ${rating}
+                    <div class="small text-muted">${escapeHtml(supplier.default_currency || 'TRY')}</div>
                     ${this.options.showRecommendations ? `
                         <button class="btn btn-sm btn-outline-warning recommend-all-btn" data-supplier-id="${supplier.id}">
                             <i class="fas fa-star me-1"></i>Hepsi için Öner
@@ -307,7 +322,8 @@ export class ComparisonTable {
                     ` : ''}
                 </div>
             </th>
-        `).join('');
+        `;
+        }).join('');
     }
     
     generateSupplierHeaders() {

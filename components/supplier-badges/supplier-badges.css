@@ -1,0 +1,19 @@
+/* Supplier rating & status badge styling.
+   Relies on the shared .status-badge / .status-* colors in components/badges/badges.css. */
+
+.supplier-status-badge {
+    min-width: auto;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.supplier-stars {
+    white-space: nowrap;
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+}
+
+/* Blacklisted supplier column tint on the approval comparison table. */
+.supplier-col-blacklisted {
+    background-color: #fee2e2 !important;
+}

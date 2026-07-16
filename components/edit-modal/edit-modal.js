@@ -582,6 +582,11 @@ export class EditModal {
                 const select = fieldElement.querySelector('select.field-input');
                 if (select) select.value = value ?? '';
             }
+        } else if (field.type === 'radio') {
+            const radios = fieldElement.querySelectorAll('input[type="radio"]');
+            radios.forEach(radio => {
+                radio.checked = String(radio.value) === String(value);
+            });
         } else {
             const input = fieldElement.querySelector('.field-input');
             if (input) {
@@ -617,6 +622,9 @@ export class EditModal {
             const select = fieldElement.querySelector('select.field-input');
             if (select) return select.value;
             return field.value ?? null;
+        } else if (field.type === 'radio') {
+            const checked = fieldElement.querySelector('input[type="radio"]:checked');
+            return checked ? checked.value : (field.value ?? null);
         } else {
             const input = fieldElement.querySelector('.field-input');
             if (input) {
