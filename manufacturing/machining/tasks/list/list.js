@@ -2,7 +2,7 @@ import { initNavbar } from '../../../../components/navbar.js';
 import { getParts, updatePart, deletePart, createPart, updatePartOperations, getPartsStats, uploadPartFiles, deletePartFile, convertPartsToDepartmentRequest } from '../../../../apis/machining/parts.js';
 import { getOperations, markOperationCompleted, unmarkOperationCompleted, createManualTimeEntry } from '../../../../apis/machining/operations.js';
 import { fetchMachinesDropdown } from '../../../../apis/machines.js';
-import { authFetchUsers } from '../../../../apis/users.js';
+import { fetchAllUsers } from '../../../../apis/users.js';
 import { HeaderComponent } from '../../../../components/header/header.js';
 import { FiltersComponent } from '../../../../components/filters/filters.js';
 import { StatisticsCards } from '../../../../components/statistics-cards/statistics-cards.js';
@@ -119,11 +119,7 @@ async function loadMachines() {
 
 async function loadUsers() {
     try {
-        const usersResponse = await authFetchUsers(1, 1000, { 
-            group: 'manufacturing_team',
-            ordering: 'full_name'
-        });
-        users = usersResponse.results || [];
+        users = await fetchAllUsers();
         
         // Update created_by filter options if filters component is already initialized
         if (partsFilters && users.length > 0) {

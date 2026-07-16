@@ -3,7 +3,7 @@ import { ModernDropdown } from '../../../../components/dropdown/dropdown.js';
 import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
 import { TableComponent } from '../../../../components/table/table.js';
 import { fetchMachinesDropdown } from '../../../../apis/machines.js';
-import { fetchUsers } from '../../../../apis/users.js';
+import { fetchAllUsers } from '../../../../apis/users.js';
 import { fetchTaskById } from '../../../../apis/tasks.js';
 import { backendBase } from '../../../../base.js';
 import { authedFetch } from '../../../../authService.js';
@@ -529,7 +529,7 @@ function initializeFiltersComponent() {
 
 async function loadUsers() {
     try {
-        users = await fetchUsers('machining_team');
+        users = await fetchAllUsers();
         
         // Update user filter options if filters component is initialized
         if (timerFilters) {

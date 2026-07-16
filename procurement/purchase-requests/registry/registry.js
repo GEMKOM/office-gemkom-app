@@ -939,7 +939,9 @@ async function showRequestDetailsModal() {
 // --- Supplier evaluation from the PR registry (rate each resulting PO inline) ---
 
 function canWriteProcurement() {
-    return isSuperuser() || hasPerm('access_procurement_write');
+    // Procurement uses page-based permissions; the PR-create page permission is
+    // the write gate. Superusers always qualify.
+    return isSuperuser() || hasPerm('access_procurement_purchase_requests_create');
 }
 
 const EVAL_CRITERIA = [

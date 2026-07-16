@@ -11,7 +11,7 @@ import {
     deleteWeldingTimeEntry,
     bulkCreateWeldingTimeEntries
 } from '../../../../apis/welding/crud.js';
-import { authFetchUsers } from '../../../../apis/users.js';
+import { fetchAllUsers } from '../../../../apis/users.js';
 import { showNotification } from '../../../../components/notification/notification.js';
 import { getJobOrderDropdown } from '../../../../apis/projects/jobOrders.js';
 
@@ -157,17 +157,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function loadUsers() {
     try {
-        const response = await authFetchUsers(1, 10000, { 
-            group: 'welding_team',
-            ordering: 'full_name'
-        });
-        users = response.results || [];
-
-        const allResponse = await authFetchUsers(1, 10000, {
-            ordering: 'full_name',
-            is_active: 'true'
-        });
-        allUsersForMatching = allResponse.results || [];
+        users = await fetchAllUsers();
+        allUsersForMatching = await fetchAllUsers({ is_active: 'true' });
     } catch (error) {
         console.error('Error loading users:', error);
         users = [];

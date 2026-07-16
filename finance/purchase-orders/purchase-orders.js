@@ -17,9 +17,10 @@ import {
 } from '../../apis/procurement.js';
 import { hasPerm, isSuperuser } from '../../authService.js';
 
-// Whether the current user may rate suppliers. Superusers always qualify
-// (matches the backend's user_has_role_perm).
-const canWriteProcurement = () => isSuperuser() || hasPerm('access_procurement_write');
+// Whether the current user may rate suppliers. Procurement uses page-based
+// permissions; the PR-create page permission is the write gate. Superusers
+// always qualify (matches the backend's user_has_role_perm).
+const canWriteProcurement = () => isSuperuser() || hasPerm('access_procurement_purchase_requests_create');
 import {
     getExpenses,
     createExpense,

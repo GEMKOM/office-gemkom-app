@@ -8,7 +8,7 @@ import {
     canCancelOvertime,
     validateOvertimeRequest
 } from '../../../apis/overtime.js';
-import { authFetchUsers } from '../../../apis/users.js';
+import { fetchAllUsers } from '../../../apis/users.js';
 import { formatDateTime } from '../../../apis/formatters.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { StatisticsCards } from '../../../components/statistics-cards/statistics-cards.js';
@@ -786,8 +786,7 @@ async function loadUsersForModal() {
     if (!currentUser) {
         throw new Error('Current user not available');
     }
-    const response = await authFetchUsers(1, 1000);
-    allUsers = response.results || response;
+    allUsers = await fetchAllUsers();
 }
 
 // Show/hide loading state for submit button

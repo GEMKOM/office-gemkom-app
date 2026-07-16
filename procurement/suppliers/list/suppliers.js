@@ -46,9 +46,10 @@ let actionConfirmModal = null;
 let supplierFormModal = null;
 let statusChangeModal = null; // dedicated status-change modal (needs a reason)
 
-// Whether the current user may write procurement data (rate / blacklist).
-// Superusers always qualify (matches the backend's user_has_role_perm).
-const canWriteSuppliers = isSuperuser() || hasPerm('access_procurement_write');
+// Whether the current user may manage suppliers (blacklist / status change).
+// Procurement uses page-based permissions; the suppliers-list page permission is
+// the management gate. Superusers always qualify (matches user_has_role_perm).
+const canWriteSuppliers = isSuperuser() || hasPerm('access_procurement_suppliers_list');
 
 const CURRENCY_DROPDOWN_OPTIONS = [
     { value: 'TRY', label: 'TRY — Türk Lirası' },

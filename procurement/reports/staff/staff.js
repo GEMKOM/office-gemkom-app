@@ -4,7 +4,7 @@ import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { getStaffReport } from '../../../apis/procurement/reports.js';
-import { authFetchUsers } from '../../../apis/users.js';
+import { fetchAllUsers } from '../../../apis/users.js';
 
 // Global variables
 let currentSortField = 'total_spent_eur';
@@ -36,12 +36,7 @@ const filtersComponent = new FiltersComponent('filters-placeholder', {
 // Load users for dropdown filter
 async function loadUsers() {
     try {
-        const usersResponse = await authFetchUsers(1, 1000, { 
-            group: 'procurement_team,external_workshop_team',
-            ordering: 'full_name'
-        });
-        
-        const users = usersResponse.results || [];
+        const users = await fetchAllUsers();
         
         // Add user dropdown filter
         filtersComponent.addDropdownFilter({

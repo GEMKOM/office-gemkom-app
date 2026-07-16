@@ -8,7 +8,7 @@ import { TableComponent } from '../../../../components/table/table.js';
 import { EditModal } from '../../../../components/edit-modal/edit-modal.js';
 import { DisplayModal } from '../../../../components/display-modal/display-modal.js';
 import { showNotification } from '../../../../components/notification/notification.js';
-import { authFetchUsers } from '../../../../apis/users.js';
+import { fetchAllUsers } from '../../../../apis/users.js';
 import { fetchTeams, createTeam, updateTeam, deleteTeam } from '../../../../apis/welding/teams.js';
 
 let teamsStats = null;
@@ -230,8 +230,7 @@ function initializeModalComponents() {
 
 async function loadUsers() {
     try {
-        const response = await authFetchUsers(1, 10000, { ordering: 'full_name' });
-        users = response.results || [];
+        users = await fetchAllUsers();
     } catch (error) {
         console.error('Error loading users:', error);
         users = [];

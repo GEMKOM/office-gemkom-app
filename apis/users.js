@@ -4,20 +4,33 @@ import { authedFetch } from "../authService.js";
 
 
 /**
- * Large user list for dropdowns (paginated on backend).
- * @param {{ is_active?: boolean | string, page_size?: number }} [options]
+ * Ultra-light, un-paginated user list for dropdowns / pickers / @mentions.
+ * Hits the dedicated `/users/dropdown/` endpoint which returns only
+ * id/username/first_name/last_name/full_name/is_active — no heavy profile
+ * data, keeping payloads small even with thousands of users.
+ * @param {{ is_active?: boolean | string }} [options]
+ * @returns {Promise<Array>} plain array of light user objects
  */
-export async function fetchAllUsers(options = {}) {
+export async function fetchUsersDropdown(options = {}) {
     const params = new URLSearchParams();
-    params.set('for_dropdown', 'true');
-    params.set('page_size', String(options.page_size ?? 10000));
     if (options.is_active !== undefined && options.is_active !== null && options.is_active !== '') {
         params.set('is_active', String(options.is_active));
     }
-    const resp = await authedFetch(`${backendBase}/users/?${params.toString()}`);
+    const query = params.toString();
+    const resp = await authedFetch(`${backendBase}/users/dropdown/${query ? `?${query}` : ''}`);
     if (!resp.ok) return [];
     const data = await resp.json();
-    return data.results;
+    // Endpoint returns a plain array; tolerate a paginated envelope just in case.
+    return Array.isArray(data) ? data : (data.results || []);
+}
+
+/**
+ * Backwards-compatible alias for {@link fetchUsersDropdown}. The `page_size`
+ * option is now ignored (the dropdown endpoint is un-paginated).
+ * @param {{ is_active?: boolean | string, page_size?: number }} [options]
+ */
+export async function fetchAllUsers(options = {}) {
+    return fetchUsersDropdown(options);
 }
 
 export async function fetchUsers(group = null) {
