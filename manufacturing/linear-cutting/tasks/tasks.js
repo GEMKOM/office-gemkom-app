@@ -6,6 +6,7 @@ import { DisplayModal } from '../../../components/display-modal/display-modal.js
 import { EditModal } from '../../../components/edit-modal/edit-modal.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { showNotification } from '../../../components/notification/notification.js';
+import { drawBarCanvas, buildPassTableHtml, formatAngleTr } from '../lc-geometry.js';
 
 import { fetchMachinesDropdown } from '../../../apis/machines.js';
 import {
@@ -51,12 +52,7 @@ function escapeAttr(v) {
     return String(v ?? '').replaceAll('"', '&quot;');
 }
 
-// ─────────────────────────── BAR DIAGRAM (from cuts page) ───────────────────────────
-function colorForIndex(i) {
-    const palette = ['#0d6efd','#198754','#fd7e14','#6f42c1','#20c997','#dc3545','#0dcaf0','#ffc107'];
-    return palette[i % palette.length];
-}
-
+// ─────────────────────────── BAR DIAGRAM (shared renderer: lc-geometry.js) ───────────────────────────
 const barCanvasDrawMap = new WeakMap(); // canvas -> { bar, kerfMm }
 
 function scheduleDrawBar(canvas, tooltipEl) {
@@ -70,107 +66,9 @@ function scheduleDrawBar(canvas, tooltipEl) {
             requestAnimationFrame(run);
             return;
         }
-        drawBar(canvas, payload.bar, payload.kerfMm, tooltipEl);
+        drawBarCanvas(canvas, payload.bar, { kerfMm: payload.kerfMm, tooltipEl });
     };
     requestAnimationFrame(run);
-}
-
-function drawBar(canvas, bar, kerfMm, tooltipEl) {
-    const dpr = window.devicePixelRatio || 1;
-    const W = canvas.clientWidth || 900;
-    const H = 62;
-    canvas.width = Math.floor(W * dpr);
-    canvas.height = Math.floor(H * dpr);
-    canvas.style.height = `${H}px`;
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-
-    const pad = 8, barY = 22, barH = 22;
-    const barX = pad, barW = W - pad * 2;
-    ctx.clearRect(0, 0, W, H);
-    ctx.fillStyle = '#f6f7f9';
-    ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 6); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,.08)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    const scale = barW / (bar.stock_length_mm || 1);
-    const hitBoxes = [];
-
-    (bar.cuts || []).forEach((cut, idx) => {
-        const x = barX + (cut.offset_mm || 0) * scale;
-        const w = Math.max(1, (cut.effective_mm || 0) * scale);
-        ctx.fillStyle = colorForIndex(idx);
-        ctx.beginPath(); ctx.roundRect(x, barY, w, barH, 4); ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,.55)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        if (kerfMm > 0) {
-            const kx = x + w, kw = Math.max(1, kerfMm * scale);
-            ctx.fillStyle = 'rgba(0,0,0,.22)';
-            ctx.fillRect(kx, barY, kw, barH);
-        }
-        hitBoxes.push({ x, y: barY, w, h: barH, cut });
-
-        if (w > 55) {
-            ctx.fillStyle = 'rgba(255,255,255,.95)';
-            ctx.font = '600 11px system-ui';
-            ctx.textBaseline = 'middle';
-            const lbl = (cut.label ? `${cut.label} ` : '') + `${cut.nominal_mm ?? ''}mm`;
-            ctx.fillText(lbl, x + 6, barY + barH / 2);
-        }
-    });
-
-    const wasteW = Math.max(0, (bar.waste_mm || 0) * scale);
-    if (wasteW > 0.5) {
-        const wasteX = barX + barW - wasteW;
-        ctx.save();
-        ctx.beginPath(); ctx.roundRect(wasteX, barY, wasteW, barH, 4); ctx.clip();
-        ctx.fillStyle = '#c6ccd2';
-        ctx.fillRect(wasteX, barY, wasteW, barH);
-        ctx.strokeStyle = 'rgba(0,0,0,.12)';
-        ctx.lineWidth = 1;
-        for (let i = -barH; i < wasteW + barH; i += 7) {
-            ctx.beginPath();
-            ctx.moveTo(wasteX + i, barY);
-            ctx.lineTo(wasteX + i + barH, barY + barH);
-            ctx.stroke();
-        }
-        ctx.restore();
-        hitBoxes.push({
-            x: wasteX, y: barY, w: wasteW, h: barH,
-            cut: { label: 'Fire', nominal_mm: bar.waste_mm, effective_mm: bar.waste_mm, offset_mm: bar.stock_length_mm - bar.waste_mm, job_no: '' }
-        });
-    }
-
-    ctx.fillStyle = '#6c757d'; ctx.font = '10px system-ui'; ctx.textBaseline = 'top';
-    ctx.fillText('0', barX, 6);
-    const endLabel = `${bar.stock_length_mm} mm`;
-    ctx.fillText(endLabel, barX + barW - ctx.measureText(endLabel).width, 6);
-    const mid = bar.stock_length_mm ? Math.round(bar.stock_length_mm / 2) : 0;
-    const midLabel = `${mid}`;
-    ctx.fillText(midLabel, barX + (barW / 2) - (ctx.measureText(midLabel).width / 2), 6);
-
-    const fmt = v => (v == null || Number.isNaN(v)) ? '—' : String(v);
-    canvas.onmousemove = e => {
-        const r = canvas.getBoundingClientRect();
-        const mx = e.clientX - r.left, my = e.clientY - r.top;
-        const hb = hitBoxes.find(h => mx >= h.x && mx <= h.x + h.w && my >= h.y && my <= h.y + h.h);
-        if (!hb) { tooltipEl.style.display = 'none'; canvas.style.cursor = 'default'; return; }
-        canvas.style.cursor = 'help';
-        const c = hb.cut;
-        tooltipEl.innerHTML = `
-            <div style="font-weight:700;margin-bottom:4px;">${escapeHtml(c.label || '—')}</div>
-            <div><span style="opacity:.7">Nominal:</span> ${fmt(c.nominal_mm)} mm</div>
-            <div><span style="opacity:.7">Efektif:</span> ${fmt(c.effective_mm)} mm</div>
-            <div><span style="opacity:.7">Offset:</span> ${fmt(c.offset_mm)} mm</div>
-            ${c.job_no ? `<div><span style="opacity:.7">İş No:</span> ${escapeHtml(c.job_no)}</div>` : ''}`;
-        tooltipEl.style.left = `${e.clientX + 14}px`;
-        tooltipEl.style.top = `${e.clientY + 12}px`;
-        tooltipEl.style.display = 'block';
-    };
-    canvas.onmouseleave = () => { tooltipEl.style.display = 'none'; canvas.style.cursor = 'default'; };
 }
 
 function formatDate(value) {
@@ -253,6 +151,7 @@ async function showTaskDetails(taskKey) {
         const planTxt = `${task.session || ''}${task.session_title ? ` — ${task.session_title}` : ''}`.trim() || '-';
         const matTxt = task.item_name || task.item_code || task.material || '-';
         const hasLayout = Array.isArray(task.layout_json) && task.layout_json.length;
+        const passes = Array.isArray(task.passes_json) ? task.passes_json : [];
 
         detailsModal.addSection({
             title: 'Özet',
@@ -275,6 +174,7 @@ async function showTaskDetails(taskKey) {
                     <div class="lc-bar-header">
                         <div class="lc-bar-title">
                             Bar #${task.bar_index ?? '—'}
+                            ${task.is_remnant_bar ? '<span class="badge bg-warning text-dark ms-1">Artık Bar</span>' : ''}
                             <span class="text-muted" style="font-weight:500;">(${task.stock_length_mm ?? '—'} mm)</span>
                         </div>
                         <div class="lc-bar-meta">
@@ -286,6 +186,17 @@ async function showTaskDetails(taskKey) {
                         Parçaların üzerine gelince detayları görebilirsiniz.
                     </div>
                 </div>
+                ${passes.length ? `
+                <div class="lc-canvas-wrap mt-3">
+                    <div class="lc-bar-header">
+                        <div class="lc-bar-title"><i class="fas fa-list-ol me-1"></i>Kesim Sırası</div>
+                        <div class="lc-bar-meta">Toplam: <strong>${passes.length}</strong> kesim</div>
+                    </div>
+                    ${buildPassTableHtml(passes)}
+                    <div class="mt-2 text-muted" style="font-size:.85rem;">
+                        Ayar ölçüleri kalan barın taze kesim kenarından ölçülür; doğrudan boy dayamasına ayarlanabilir.
+                    </div>
+                </div>` : ''}
             </div>
         ` : `
             <div class="mt-2">
@@ -314,18 +225,20 @@ async function showTaskDetails(taskKey) {
 
         detailsModal.render().show();
 
-        // Draw bar canvas (same as cuts optimization)
+        // Draw bar canvas (shared renderer, same as cuts optimization)
         if (hasLayout) {
             const canvas = document.getElementById('lc-task-bar-canvas');
             const tooltipEl = document.getElementById('lc-task-tooltip');
             if (canvas && tooltipEl) {
                 barCanvasDrawMap.set(canvas, {
                     bar: {
-                        stock_length_mm: task.stock_length_mm ?? 0,
-                        waste_mm: task.waste_mm ?? 0,
-                        cuts: task.layout_json
+                        stock_length_mm: task.stock_length_mm,
+                        waste_mm: task.waste_mm,
+                        is_remnant: task.is_remnant_bar,
+                        cuts: task.layout_json,
+                        passes: task.passes_json
                     },
-                    kerfMm: 0 // Task detail response doesn't include kerf; keep diagram clean.
+                    kerfMm: Number(task.kerf_mm) || 0
                 });
                 scheduleDrawBar(canvas, tooltipEl);
             }
@@ -337,11 +250,33 @@ async function showTaskDetails(taskKey) {
                 icon: 'fas fa-stream',
                 iconColor: 'text-success',
                 columns: [
-                    { field: 'job_no', label: 'İş No', sortable: true, width: '18%', formatter: v => v || '-' },
-                    { field: 'label', label: 'Parça', sortable: true, width: '34%', formatter: v => v || '-' },
-                    { field: 'nominal_mm', label: 'Nominal (mm)', sortable: true, width: '16%', formatter: v => v ?? '-' },
-                    { field: 'effective_mm', label: 'Effective (mm)', sortable: true, width: '16%', formatter: v => v ?? '-' },
-                    { field: 'offset_mm', label: 'Offset (mm)', sortable: true, width: '16%', formatter: v => v ?? '-' }
+                    { field: 'job_no', label: 'İş No', sortable: true, width: '12%', formatter: v => escapeHtml(v || '-') },
+                    {
+                        field: 'label',
+                        label: 'Parça',
+                        sortable: true,
+                        width: '20%',
+                        formatter: (v, row) => {
+                            let html = escapeHtml(v || '-');
+                            if (row.flipped) {
+                                html += ' <span title="Parça 180° döndürülerek yerleştirildi">↻</span>';
+                            }
+                            if (row.requires_bending) {
+                                html += ' <span class="badge bg-warning text-dark" title="Boy açınım boyudur — kesimden sonra bükülür">Büküm</span>';
+                            }
+                            return html;
+                        }
+                    },
+                    { field: 'nominal_mm', label: 'Boy (mm)', sortable: true, width: '12%', formatter: (v, row) => v ?? row.effective_mm ?? '-' },
+                    {
+                        field: 'offset_mm',
+                        label: 'Başlangıç (mm)',
+                        sortable: true,
+                        width: '12%',
+                        formatter: v => `<span class="d-block text-end">${v ?? '-'}</span>`
+                    },
+                    { field: 'angle_left_deg', label: 'Sol Açı', sortable: true, width: '16%', formatter: v => formatAngleTr(v) },
+                    { field: 'angle_right_deg', label: 'Sağ Açı', sortable: true, width: '16%', formatter: v => formatAngleTr(v) }
                 ],
                 data: task.layout_json,
                 sortable: true,

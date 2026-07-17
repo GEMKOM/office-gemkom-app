@@ -25,6 +25,7 @@ import {
     deleteLinearCuttingPart
 } from '../../../apis/linear_cutting/parts.js';
 import { getLinearCuttingTask } from '../../../apis/linear_cutting/tasks.js';
+import { drawBarCanvas, buildPassTableHtml, piecePictogramSVG, formatAngleTr } from '../lc-geometry.js';
 
 // ─────────────────────────── STATE ────────────────────────────
 let currentSessionKey = null;
@@ -53,7 +54,14 @@ function normalizePaginated(data) {
 }
 
 function escapeAttr(v) {
-    return String(v ?? '').replaceAll('"', '&quot;');
+    // Full HTML escaper — used for both attribute values and text content
+    // (user-entered labels/job numbers must never reach innerHTML raw).
+    return String(v ?? '')
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#39;');
 }
 
 function castNumber(value, fallback = null) {
@@ -113,6 +121,18 @@ function inputHtml({ rowId, field, type = 'text', value = '', placeholder = '', 
     return `<input class="form-control form-control-sm" style="min-width:60px"
         data-lc-row="${escapeAttr(rowId)}" data-lc-field="${escapeAttr(field)}"
         type="${type}" value="${escapeAttr(value)}" placeholder="${escapeAttr(placeholder)}"${minAttr}>`;
+}
+
+function checkboxHtml({ rowId, field, checked = false, title = '' }) {
+    const titleAttr = title ? ` title="${escapeAttr(title)}"` : '';
+    return `<div class="text-center"><input class="form-check-input" type="checkbox"
+        data-lc-row="${escapeAttr(rowId)}" data-lc-field="${escapeAttr(field)}"${checked ? ' checked' : ''}${titleAttr}></div>`;
+}
+
+function boolBadgeHtml(value) {
+    return value
+        ? '<div class="text-center text-success fw-bold">✓</div>'
+        : '<div class="text-center text-muted">—</div>';
 }
 
 function selectHtml({ rowId, field, value = '', options = [], placeholder = 'Seçiniz…' }) {
@@ -187,6 +207,8 @@ function buildPartsTableRows(parts) {
             angle_left_deg: p.angle_left_deg ?? 0,
             angle_right_deg: p.angle_right_deg ?? 0,
             profile_height_mm: p.profile_height_mm ?? 0,
+            allow_rotation: p.allow_rotation ?? true,
+            requires_bending: p.requires_bending ?? false,
             job_no: p.job_no ?? '',
             order: p.order ?? null
         }));
@@ -263,19 +285,45 @@ function renderPartsTable() {
             key: 'angle_left_deg', label: 'Sol Açı', sortable: false, width: '90px',
             formatter: (v, row) => isRowEditable(row)
                 ? inputHtml({ rowId: row.__rowId, field: 'angle_left_deg', type: 'number', value: row.angle_left_deg ?? 0 })
-                : `<div class="text-center">${row.angle_left_deg ?? 0}°</div>`
+                : `<div class="text-center">${formatAngleTr(row.angle_left_deg)}</div>`
         },
         {
             key: 'angle_right_deg', label: 'Sağ Açı', sortable: false, width: '90px',
             formatter: (v, row) => isRowEditable(row)
                 ? inputHtml({ rowId: row.__rowId, field: 'angle_right_deg', type: 'number', value: row.angle_right_deg ?? 0 })
-                : `<div class="text-center">${row.angle_right_deg ?? 0}°</div>`
+                : `<div class="text-center">${formatAngleTr(row.angle_right_deg)}</div>`
         },
         {
-            key: 'profile_height_mm', label: 'Yükseklik.', sortable: false, width: '90px',
+            key: 'shape', label: 'Şekil', sortable: false, width: '100px',
+            formatter: (v, row) => `<div class="text-center">${piecePictogramSVG({
+                angle_left_deg: row.angle_left_deg,
+                angle_right_deg: row.angle_right_deg,
+                profile_height_mm: row.profile_height_mm
+            })}</div>`
+        },
+        {
+            key: 'profile_height_mm',
+            label: '<span title="Açı düzlemindeki kesit ölçüsü — açılı kesim için zorunlu">Profil (mm)</span>',
+            sortable: false, width: '90px',
             formatter: (v, row) => isRowEditable(row)
                 ? inputHtml({ rowId: row.__rowId, field: 'profile_height_mm', type: 'number', value: row.profile_height_mm ?? 0, min: 0 })
                 : (row.profile_height_mm ? `<div class="text-center">${row.profile_height_mm}</div>` : '<div class="text-center text-muted">—</div>')
+        },
+        {
+            key: 'allow_rotation',
+            label: '<span title="Optimizasyon parçayı 180° döndürebilir">Döndür</span>',
+            sortable: false, width: '70px',
+            formatter: (v, row) => isRowEditable(row)
+                ? checkboxHtml({ rowId: row.__rowId, field: 'allow_rotation', checked: row.allow_rotation ?? true, title: 'Optimizasyon parçayı 180° döndürebilir' })
+                : boolBadgeHtml(row.allow_rotation ?? true)
+        },
+        {
+            key: 'requires_bending',
+            label: '<span title="Bükülecek parça — boy açınım (düz) boyu girilmelidir">Büküm</span>',
+            sortable: false, width: '70px',
+            formatter: (v, row) => isRowEditable(row)
+                ? checkboxHtml({ rowId: row.__rowId, field: 'requires_bending', checked: row.requires_bending ?? false, title: 'Bükülecek parça — boy açınım (düz) boyu girilmelidir' })
+                : boolBadgeHtml(row.requires_bending ?? false)
         },
         {
             key: 'actions', label: '', sortable: false, width: '140px',
@@ -334,7 +382,10 @@ function renderPartsTable() {
 function readRowInputs(rowId) {
     const inputs = document.querySelectorAll(`[data-lc-row="${CSS.escape(rowId)}"][data-lc-field]`);
     const data = {};
-    inputs.forEach(inp => { data[inp.getAttribute('data-lc-field')] = inp.value; });
+    inputs.forEach(inp => {
+        const field = inp.getAttribute('data-lc-field');
+        data[field] = (inp.type === 'checkbox') ? inp.checked : inp.value;
+    });
     return data;
 }
 
@@ -358,6 +409,8 @@ function mergeRowFromDom(rowId) {
     if (raw.angle_left_deg != null) row.angle_left_deg = castNumber(raw.angle_left_deg, row.angle_left_deg);
     if (raw.angle_right_deg != null) row.angle_right_deg = castNumber(raw.angle_right_deg, row.angle_right_deg);
     if (raw.profile_height_mm != null) row.profile_height_mm = castNumber(raw.profile_height_mm, row.profile_height_mm);
+    if (raw.allow_rotation != null) row.allow_rotation = !!raw.allow_rotation;
+    if (raw.requires_bending != null) row.requires_bending = !!raw.requires_bending;
     if (raw.order != null) row.order = castNumber(raw.order, row.order);
 
     // Capture dropdown display texts (so rerenders/duplication preserve visuals)
@@ -394,6 +447,8 @@ function buildPartPayloadFromRowId(rowId) {
         angle_left_deg: castNumber(raw.angle_left_deg, 0),
         angle_right_deg: castNumber(raw.angle_right_deg, 0),
         profile_height_mm: castNumber(raw.profile_height_mm, 0),
+        allow_rotation: (raw.allow_rotation != null) ? !!raw.allow_rotation : true,
+        requires_bending: (raw.requires_bending != null) ? !!raw.requires_bending : false,
         order: castNumber(raw.order, 1)
     };
 }
@@ -406,6 +461,10 @@ function validatePartPayload(payload, rowLabelForError = '') {
     }
     if (!(payload.nominal_length_mm > 0) || !(payload.quantity > 0)) {
         showNotification(`${prefix}Uzunluk ve Adet sıfırdan büyük olmalı.`, 'warning');
+        return false;
+    }
+    if ((payload.angle_left_deg || payload.angle_right_deg) && !(payload.profile_height_mm > 0)) {
+        showNotification(`${prefix}Açılı kesim için Profil (mm) girilmelidir.`, 'warning');
         return false;
     }
     return true;
@@ -627,6 +686,8 @@ function addNewPartRow() {
         angle_left_deg: 0,
         angle_right_deg: 0,
         profile_height_mm: 0,
+        allow_rotation: true,
+        requires_bending: false,
         job_no: '',
         order: nextOrder
     }, ...partsTableRows];
@@ -660,6 +721,8 @@ function duplicateRow(rowId) {
         angle_left_deg: row.angle_left_deg ?? 0,
         angle_right_deg: row.angle_right_deg ?? 0,
         profile_height_mm: row.profile_height_mm ?? 0,
+        allow_rotation: row.allow_rotation ?? true,
+        requires_bending: row.requires_bending ?? false,
         job_no: row.job_no ?? '',
         job_no_display: row.job_no_display ?? '',
         order: nextOrder
@@ -741,11 +804,6 @@ async function onDeletePart(rowId) {
 }
 
 // ─────────────────────────── BAR DIAGRAM ──────────────────────
-function colorForIndex(i) {
-    const palette = ['#0d6efd','#198754','#fd7e14','#6f42c1','#20c997','#dc3545','#0dcaf0','#ffc107'];
-    return palette[i % palette.length];
-}
-
 const barCanvasDrawMap = new WeakMap(); // canvas -> { bar, kerfMm, referenceStockMm }
 
 function scheduleDrawBar(canvas, tooltipEl) {
@@ -759,123 +817,13 @@ function scheduleDrawBar(canvas, tooltipEl) {
             requestAnimationFrame(run);
             return;
         }
-        drawBar(canvas, payload.bar, payload.kerfMm, payload.referenceStockMm, tooltipEl);
+        drawBarCanvas(canvas, payload.bar, {
+            kerfMm: payload.kerfMm,
+            referenceStockMm: payload.referenceStockMm,
+            tooltipEl
+        });
     };
     requestAnimationFrame(run);
-}
-
-function drawBar(canvas, bar, kerfMm, referenceStockMm, tooltipEl) {
-    const dpr   = window.devicePixelRatio || 1;
-    const W     = canvas.clientWidth || 900;
-    const H     = 62;
-    canvas.width  = Math.floor(W * dpr);
-    canvas.height = Math.floor(H * dpr);
-    canvas.style.height = `${H}px`;
-    const ctx = canvas.getContext('2d');
-    ctx.scale(dpr, dpr);
-
-    const pad = 8, barY = 22, barH = 22;
-    const barX = pad;
-    const maxBarW = W - pad * 2;
-    const stockLength = Number(bar.stock_length_mm ?? 0) || 0;
-    const referenceStock = Number(referenceStockMm ?? stockLength ?? 0) || stockLength || 1;
-    const barRatio = Math.min(1, Math.max(0.08, stockLength / (referenceStock || 1)));
-    const barW = Math.max(36, maxBarW * barRatio);
-    ctx.clearRect(0, 0, W, H);
-
-    // Draw a faint reference envelope for the max stock length in the group.
-    ctx.fillStyle = '#f8f9fb';
-    ctx.beginPath(); ctx.roundRect(barX, barY, maxBarW, barH, 6); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,.05)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    // Actual bar track background + stroke (proportional to stock length)
-    ctx.fillStyle = '#f6f7f9';
-    ctx.beginPath(); ctx.roundRect(barX, barY, barW, barH, 6); ctx.fill();
-    ctx.strokeStyle = 'rgba(0,0,0,.08)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    const scale = barW / (stockLength || 1);
-    const hitBoxes = [];
-
-    (bar.cuts || []).forEach((cut, idx) => {
-        const x = barX + (cut.offset_mm || 0) * scale;
-        const w = Math.max(1, (cut.effective_mm || 0) * scale);
-        ctx.fillStyle = colorForIndex(idx);
-        ctx.beginPath(); ctx.roundRect(x, barY, w, barH, 4); ctx.fill();
-        ctx.strokeStyle = 'rgba(255,255,255,.55)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        if (kerfMm > 0) {
-            const kx = x + w, kw = Math.max(1, kerfMm * scale);
-            ctx.fillStyle = 'rgba(0,0,0,.22)';
-            ctx.fillRect(kx, barY, kw, barH);
-        }
-        hitBoxes.push({ x, y: barY, w, h: barH, cut });
-
-        if (w > 55) {
-            ctx.fillStyle = 'rgba(255,255,255,.95)';
-            ctx.font = '600 11px system-ui';
-            ctx.textBaseline = 'middle';
-            const lbl = (cut.label ? `${cut.label} ` : '') + `${cut.nominal_mm ?? ''}mm`;
-            ctx.fillText(lbl, x + 6, barY + barH / 2);
-        }
-    });
-
-    const wasteW = Math.max(0, (bar.waste_mm || 0) * scale);
-    if (wasteW > 0.5) {
-        const wasteX = barX + barW - wasteW;
-        // Waste: hatched pattern
-        ctx.save();
-        ctx.beginPath(); ctx.roundRect(wasteX, barY, wasteW, barH, 4); ctx.clip();
-        ctx.fillStyle = '#c6ccd2';
-        ctx.fillRect(wasteX, barY, wasteW, barH);
-        ctx.strokeStyle = 'rgba(0,0,0,.12)';
-        ctx.lineWidth = 1;
-        for (let i = -barH; i < wasteW + barH; i += 7) {
-            ctx.beginPath();
-            ctx.moveTo(wasteX + i, barY);
-            ctx.lineTo(wasteX + i + barH, barY + barH);
-            ctx.stroke();
-        }
-        ctx.restore();
-        hitBoxes.push({
-            x: wasteX, y: barY, w: wasteW, h: barH,
-            cut: { label: 'Fire', nominal_mm: bar.waste_mm, effective_mm: bar.waste_mm, offset_mm: bar.stock_length_mm - bar.waste_mm, job_no: '' }
-        });
-    }
-
-    // axis labels
-    ctx.fillStyle = '#6c757d'; ctx.font = '10px system-ui'; ctx.textBaseline = 'top';
-    ctx.fillText('0', barX, 6);
-    const endLabel = `${bar.stock_length_mm} mm`;
-    ctx.fillText(endLabel, barX + barW - ctx.measureText(endLabel).width, 6);
-    const mid = bar.stock_length_mm ? Math.round(bar.stock_length_mm / 2) : 0;
-    const midLabel = `${mid}`;
-    ctx.fillText(midLabel, barX + (barW / 2) - (ctx.measureText(midLabel).width / 2), 6);
-
-    const fmt = v => (v == null || Number.isNaN(v)) ? '—' : String(v);
-    canvas.onmousemove = e => {
-        const r = canvas.getBoundingClientRect();
-        const mx = e.clientX - r.left, my = e.clientY - r.top;
-        const hb = hitBoxes.find(h => mx >= h.x && mx <= h.x + h.w && my >= h.y && my <= h.y + h.h);
-        if (!hb) { tooltipEl.style.display = 'none'; canvas.style.cursor = 'default'; return; }
-        canvas.style.cursor = 'help';
-        const c = hb.cut;
-        tooltipEl.innerHTML = `
-            <div style="font-weight:700;margin-bottom:4px;">${c.label || '—'}</div>
-            <div><span style="opacity:.7">Nominal:</span> ${fmt(c.nominal_mm)} mm</div>
-            <div><span style="opacity:.7">Efektif:</span> ${fmt(c.effective_mm)} mm</div>
-            <div><span style="opacity:.7">Offset:</span> ${fmt(c.offset_mm)} mm</div>
-            ${c.job_no ? `<div><span style="opacity:.7">İş No:</span> ${c.job_no}</div>` : ''}`;
-        tooltipEl.style.left = `${e.clientX + 14}px`;
-        tooltipEl.style.top  = `${e.clientY + 12}px`;
-        tooltipEl.style.display = 'block';
-    };
-    canvas.onmouseleave = () => { tooltipEl.style.display = 'none'; canvas.style.cursor = 'default'; };
 }
 
 function renderOptimization(result) {
@@ -990,6 +938,14 @@ function renderOptimization(result) {
                     <span class="badge bg-light text-dark border">
                         <i class="fas fa-trash-alt me-1 text-muted"></i>${g.total_waste_mm ?? '—'} mm fire
                     </span>
+                    ${g.total_pass_count != null ? `
+                    <span class="badge bg-light text-dark border">
+                        <i class="fas fa-list-ol me-1 text-muted"></i>${g.total_pass_count} kesim
+                    </span>` : ''}
+                    ${(Number(g.material_saved_by_nesting_mm) || 0) > 0 ? `
+                    <span class="badge bg-light text-dark border">
+                        <i class="fas fa-compress-arrows-alt me-1 text-success"></i>Ortak kesim kazancı: ${g.material_saved_by_nesting_mm} mm
+                    </span>` : ''}
                 </div>
                 <div class="text-muted mt-2" style="font-size:.9rem;">
                     ${escapeAttr(g.item_name || '')}
@@ -1037,6 +993,26 @@ function renderOptimization(result) {
             canvas.style.width = '100%';
             canvasWrap.appendChild(canvas);
             body.appendChild(canvasWrap);
+
+            // Pass table (operator contract) — collapsed by default
+            const passes = Array.isArray(bar.passes) ? bar.passes : [];
+            if (passes.length) {
+                const passToggle = document.createElement('button');
+                passToggle.type = 'button';
+                passToggle.className = 'btn btn-sm btn-outline-secondary lc-pass-toggle';
+                passToggle.innerHTML = `<i class="fas fa-list-ol me-1"></i>Kesim sırası (${passes.length})`;
+                const passWrap = document.createElement('div');
+                passWrap.className = 'lc-pass-table-wrap mt-2';
+                passWrap.style.display = 'none';
+                passWrap.innerHTML = buildPassTableHtml(passes);
+                passToggle.addEventListener('click', () => {
+                    const hidden = passWrap.style.display === 'none';
+                    passWrap.style.display = hidden ? '' : 'none';
+                    passToggle.classList.toggle('active', hidden);
+                });
+                body.appendChild(passToggle);
+                body.appendChild(passWrap);
+            }
 
             list.appendChild(card);
             barCanvasDrawMap.set(canvas, { bar, kerfMm: groupKerf, referenceStockMm: maxStockInGroup });
@@ -1117,7 +1093,7 @@ function renderStockBarsHtml(stockBars = []) {
     if (!stockBars.length) {
         return `
             <div class="text-muted py-2">
-                Bu planda tanimli stok bar bulunmuyor.
+                Bu planda tanımlı stok bar bulunmuyor.
             </div>
         `;
     }

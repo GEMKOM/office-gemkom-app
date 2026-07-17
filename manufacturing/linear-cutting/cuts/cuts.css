@@ -234,6 +234,28 @@
     padding: 0.9rem 1rem 1rem;
 }
 
+/* Pass table (operator contract) toggle inside bar cards */
+.lc-pass-toggle {
+    font-size: 0.8rem;
+}
+
+.lc-pass-toggle.active {
+    background: #6c757d;
+    color: #fff;
+}
+
+.lc-pass-table-wrap {
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+/* Geometry conventions help note */
+.lc-geometry-help {
+    font-size: 0.85rem;
+    color: #495057;
+}
+
 /* (removed) usage progress bar: diagram should communicate efficiency */
 
 @media (max-width: 992px) {

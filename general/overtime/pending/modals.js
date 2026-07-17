@@ -2,6 +2,7 @@ import { DisplayModal } from '../../../components/display-modal/display-modal.js
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import {
     approveOvertimeRequest,
+    rejectOvertimeEntries,
     formatOvertimeDuration,
     getOvertimeCostImpact
 } from '../../../apis/overtime.js';
@@ -77,7 +78,15 @@ async function showOvertimeDetailsModal(request = null) {
     // Use provided request or fall back to global currentRequest
     const requestToShow = request || currentRequest;
     if (!requestToShow) return;
-    
+
+    // Is the current user an approver on this request? (used to allow retracting
+    // participants after approval)
+    let currentUserId = null;
+    try { currentUserId = JSON.parse(localStorage.getItem('user'))?.id ?? null; } catch (e) { /* noop */ }
+    const isApprover = !!(currentUserId && (requestToShow.approval?.stage_instances || [])
+        .some(s => (s.approver_user_ids || []).includes(currentUserId)));
+    const canRetract = requestToShow.status === 'approved' && isApprover;
+
     // Clear previous data
     if (overtimeDetailsModal) {
         overtimeDetailsModal.clearData();
@@ -245,15 +254,29 @@ async function showOvertimeDetailsModal(request = null) {
                 return ops.map(o => `<span class="badge bg-light text-dark border me-1">${o.name || o.key}</span>`).join('');
             };
 
-            // Header: checkbox column only while the request is decidable.
-            const checkHeader = isSubmitted ? '<th style="width:70px;">Onay</th>' : '<th>Durum</th>';
+            // Header: checkbox column while decidable (submitted) or while an
+            // approver can retract participants from an approved request.
+            let checkHeader = '<th>Durum</th>';
+            if (isSubmitted) checkHeader = '<th style="width:70px;">Onay</th>';
+            else if (canRetract) checkHeader = '<th style="width:70px;">Reddet</th>';
+
             const rowsHtml = requestToShow.entries.map((entry, index) => {
                 const name = entry.user_full_name || entry.user_username || entry.username;
-                const firstCell = isSubmitted
-                    ? `<td class="text-center">
+                let firstCell;
+                if (isSubmitted) {
+                    firstCell = `<td class="text-center">
                          <input type="checkbox" class="form-check-input entry-approve-check" data-entry-id="${entry.id}" checked>
-                       </td>`
-                    : `<td>${entryStatusBadge(entry.status, entry.status_label)}</td>`;
+                       </td>`;
+                } else if (canRetract) {
+                    // Only offer a reject checkbox for entries that aren't already rejected.
+                    firstCell = entry.status === 'rejected'
+                        ? `<td>${entryStatusBadge(entry.status, entry.status_label)}</td>`
+                        : `<td class="text-center">
+                             <input type="checkbox" class="form-check-input entry-reject-check" data-entry-id="${entry.id}">
+                           </td>`;
+                } else {
+                    firstCell = `<td>${entryStatusBadge(entry.status, entry.status_label)}</td>`;
+                }
                 return `
                     <tr>
                         <td>${index + 1}</td>
@@ -265,9 +288,12 @@ async function showOvertimeDetailsModal(request = null) {
                     </tr>`;
             }).join('');
 
-            const legend = isSubmitted
-                ? `<div class="small text-muted mb-2"><i class="fas fa-info-circle me-1"></i>İşaretli kalemler onaylanır. İşareti kaldırılan kalemler <strong>reddedilir</strong> (kısmi onay).</div>`
-                : '';
+            let legend = '';
+            if (isSubmitted) {
+                legend = `<div class="small text-muted mb-2"><i class="fas fa-info-circle me-1"></i>İşaretli kalemler onaylanır. İşareti kaldırılan kalemler <strong>reddedilir</strong> (kısmi onay).</div>`;
+            } else if (canRetract) {
+                legend = `<div class="small text-muted mb-2"><i class="fas fa-info-circle me-1"></i>İşaretlediğiniz kişiler onaylı mesaiden <strong>çıkarılır</strong> (reddedilir).</div>`;
+            }
 
             const tableHtml = `
                 <div id="participants-table-container" class="mt-3">
@@ -314,6 +340,18 @@ async function showOvertimeDetailsModal(request = null) {
                         </button>
                         <button type="button" class="btn btn-success" id="approve-overtime-btn" style="min-width: 120px;">
                             <i class="fas fa-check me-1"></i>Onayla
+                        </button>
+                    </div>
+                `;
+            } else if (canRetract) {
+                // Approver can retract participants from an approved request.
+                modalFooter.innerHTML = `
+                    <div class="d-flex justify-content-end gap-2">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">
+                            <i class="fas fa-times me-1"></i>Kapat
+                        </button>
+                        <button type="button" class="btn btn-danger" id="reject-entries-btn" data-request-id="${requestToShow.id}" style="min-width: 160px;">
+                            <i class="fas fa-user-minus me-1"></i>Seçili Kişileri Reddet
                         </button>
                     </div>
                 `;
@@ -638,6 +676,40 @@ function setupModalEventListeners() {
         if (rejectBtn) {
             if (currentRequest) {
                 await rejectOvertime(currentRequest.id);
+            }
+        }
+
+        // Reject-selected-entries button (approver retracting people post-approval)
+        const rejectEntriesBtn = e.target.closest('#reject-entries-btn');
+        if (rejectEntriesBtn && !rejectEntriesBtn.disabled) {
+            const requestId = parseInt(rejectEntriesBtn.dataset.requestId);
+            const checks = document.querySelectorAll('.entry-reject-check');
+            const entryIds = Array.from(checks)
+                .filter(c => c.checked)
+                .map(c => parseInt(c.dataset.entryId))
+                .filter(id => !Number.isNaN(id));
+
+            if (entryIds.length === 0) {
+                showNotification('Lütfen reddetmek istediğiniz en az bir kişi seçin.', 'warning');
+                return;
+            }
+
+            const confirmMsg = `${entryIds.length} kişiyi onaylı mesaiden çıkarmak istediğinize emin misiniz?`;
+            if (!window.confirm(confirmMsg)) return;
+
+            const original = rejectEntriesBtn.innerHTML;
+            rejectEntriesBtn.disabled = true;
+            rejectEntriesBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>İşleniyor...';
+            try {
+                const res = await rejectOvertimeEntries(requestId, entryIds);
+                showNotification(`${res.rejected_count ?? entryIds.length} kişi mesaiden çıkarıldı.`, 'success');
+                if (overtimeDetailsModal) overtimeDetailsModal.hide();
+                if (loadRequests) await loadRequests();
+                if (loadApprovedRequests) await loadApprovedRequests();
+            } catch (error) {
+                rejectEntriesBtn.disabled = false;
+                rejectEntriesBtn.innerHTML = original;
+                showNotification('Kişi reddedilirken hata oluştu: ' + error.message, 'error');
             }
         }
     });

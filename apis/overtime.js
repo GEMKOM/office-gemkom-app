@@ -309,6 +309,29 @@ export async function approveOvertimeRequest(requestId, options = {}) {
 }
 
 /**
+ * Reject individual participant entries on a request — usable even after the
+ * request is approved (an approver retracting people). Only workflow approvers
+ * or staff are allowed (backend enforces; returns 403 otherwise).
+ * @param {number} requestId
+ * @param {number[]} entryIds - OvertimeEntry ids to reject
+ * @param {string} [comment]
+ * @returns {Promise<Object>} { detail, status, rejected_count }
+ */
+export async function rejectOvertimeEntries(requestId, entryIds, comment = '') {
+    const url = `${backendBase}/overtime/requests/${requestId}/reject_entries/`;
+    const resp = await authedFetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ entry_ids: entryIds, comment })
+    });
+    if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.detail || errorData.message || 'Kişi reddetme işlemi başarısız');
+    }
+    return await resp.json();
+}
+
+/**
  * Fetch the per-job profit / overtime-cost impact for a request.
  * Only users with cost visibility (view_job_costs) may access this; a 403
  * is returned otherwise (surfaced here as `null` so the UI can hide the section).
