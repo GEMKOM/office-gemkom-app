@@ -1,12 +1,16 @@
 import { initNavbar } from '../../../components/navbar.js';
-import { 
+import {
     fetchOvertimeRequests,
     fetchOvertimeRequest,
     createOvertimeRequest,
+    updateOvertimeRequest,
     cancelOvertimeRequest,
     formatOvertimeDuration,
     canCancelOvertime,
-    validateOvertimeRequest
+    canResubmitOvertime,
+    validateOvertimeRequest,
+    getOperationsForJob,
+    getMachiningOperators
 } from '../../../apis/overtime.js';
 import { fetchAllUsers } from '../../../apis/users.js';
 import { formatDateTime } from '../../../apis/formatters.js';
@@ -36,7 +40,10 @@ let allUsers = [];
 let overtimeTable = null; // TableComponent instance
 let userDropdowns = new Map(); // Store dropdown references
 let jobOrderDropdowns = new Map(); // Store job order dropdown references
+let operationDropdowns = new Map(); // Store per-participant operation multi-selects
 let jobOrderDropdownOptions = []; // Array of { job_no, title }
+let machiningOperatorIds = new Set(); // User ids in the machining team
+let editingRequestId = null; // When set, the create modal is in resubmit/edit mode
 let cancelOvertimeModal = null; // DisplayModal instance for cancel
 let createOvertimeModal = null; // EditModal instance for create
 
@@ -61,7 +68,7 @@ document.addEventListener('DOMContentLoaded', function() {
         showRefreshButton: 'none',
         createButtonText: 'Yeni Mesai Talebi',
         onBackClick: () => window.location.href = '/general/overtime',
-        onCreateClick: showCreateOvertimeModal
+        onCreateClick: () => showCreateOvertimeModal()
     });
     
     // Check for request ID in URL parameters
@@ -145,6 +152,7 @@ document.addEventListener('DOMContentLoaded', function() {
             { value: '', label: 'Tümü' },
             { value: 'submitted', label: 'Bekliyor' },
             { value: 'approved', label: 'Onaylandı' },
+            { value: 'rejected', label: 'Reddedildi' },
             { value: 'cancelled', label: 'İptal Edildi' }
         ],
         colSize: 2
@@ -341,6 +349,16 @@ function initializeTableComponent() {
                 }
             },
             {
+                key: 'resubmit',
+                label: 'Düzenle & Gönder',
+                icon: 'fas fa-redo',
+                class: 'btn-outline-warning',
+                visible: (row) => canResubmitOvertime(row, currentUser?.id),
+                onClick: (row) => {
+                    openResubmitOvertimeModal(row.id);
+                }
+            },
+            {
                 key: 'cancel',
                 label: 'İptal Et',
                 icon: 'fas fa-ban',
@@ -510,26 +528,53 @@ function initializeCreateModal() {
     });
 }
 
-// Show create overtime modal using EditModal
-async function showCreateOvertimeModal() {
+// Convert an ISO/UTC datetime string to local {date:'YYYY-MM-DD', time:'HH:MM'}.
+function isoToLocalParts(iso) {
+    if (!iso) return { date: '', time: '' };
+    const d = new Date(iso);
+    const pad = (n) => String(n).padStart(2, '0');
+    return {
+        date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+        time: `${pad(d.getHours())}:${pad(d.getMinutes())}`,
+    };
+}
+
+// Open the create modal pre-filled with a rejected/cancelled request to re-submit.
+async function openResubmitOvertimeModal(requestId) {
+    try {
+        const request = await fetchOvertimeRequest(requestId);
+        await showCreateOvertimeModal(request);
+    } catch (error) {
+        showErrorMessage('Talep yüklenirken hata oluştu.');
+    }
+}
+
+// Show create overtime modal using EditModal.
+// When `prefillRequest` is provided the modal is in edit/resubmit mode.
+async function showCreateOvertimeModal(prefillRequest = null) {
     if (!createOvertimeModal) {
         return;
     }
-    
+
+    editingRequestId = prefillRequest && prefillRequest.id ? prefillRequest.id : null;
+    const start = prefillRequest ? isoToLocalParts(prefillRequest.start_at) : { date: '', time: '' };
+    const end = prefillRequest ? isoToLocalParts(prefillRequest.end_at) : { date: '', time: '' };
+
     // Clear previous data
     createOvertimeModal.clearAll();
-    
+
     // Clear dropdown references
     userDropdowns.clear();
     jobOrderDropdowns.clear();
-    
+    operationDropdowns.clear();
+
     // Add basic information section
     createOvertimeModal.addSection({
         title: 'Temel Bilgiler',
         icon: 'fas fa-info-circle',
         iconColor: 'text-primary'
     });
-    
+
     // Add reason field
     createOvertimeModal.addField({
         id: 'reason',
@@ -540,70 +585,52 @@ async function showCreateOvertimeModal() {
         required: true,
         icon: 'fas fa-comment',
         colSize: 12,
+        value: prefillRequest ? (prefillRequest.reason || '') : '',
         helpText: 'Mesai talebinin nedenini detaylı olarak açıklayın'
     });
-    
+
     // Add date and time section
     createOvertimeModal.addSection({
         title: 'Tarih ve Saat',
         icon: 'fas fa-calendar',
         iconColor: 'text-info'
     });
-    
-    // Add start date field
+
     createOvertimeModal.addField({
-        id: 'start_date',
-        name: 'start_date',
-        label: 'Başlangıç Tarihi',
-        type: 'date',
-        required: true,
-        icon: 'fas fa-calendar-day',
-        colSize: 6
+        id: 'start_date', name: 'start_date', label: 'Başlangıç Tarihi', type: 'date',
+        required: true, icon: 'fas fa-calendar-day', colSize: 6, value: start.date
     });
-    
-    // Add start time field
     createOvertimeModal.addField({
-        id: 'start_time',
-        name: 'start_time',
-        label: 'Başlangıç Saati',
-        type: 'time',
-        required: true,
-        icon: 'fas fa-clock',
-        colSize: 6
+        id: 'start_time', name: 'start_time', label: 'Başlangıç Saati', type: 'time',
+        required: true, icon: 'fas fa-clock', colSize: 6, value: start.time
     });
-    
-    // Add end date field
     createOvertimeModal.addField({
-        id: 'end_date',
-        name: 'end_date',
-        label: 'Bitiş Tarihi',
-        type: 'date',
-        required: true,
-        icon: 'fas fa-calendar-day',
-        colSize: 6
+        id: 'end_date', name: 'end_date', label: 'Bitiş Tarihi', type: 'date',
+        required: true, icon: 'fas fa-calendar-day', colSize: 6, value: end.date
     });
-    
-    // Add end time field
     createOvertimeModal.addField({
-        id: 'end_time',
-        name: 'end_time',
-        label: 'Bitiş Saati',
-        type: 'time',
-        required: true,
-        icon: 'fas fa-clock',
-        colSize: 6
+        id: 'end_time', name: 'end_time', label: 'Bitiş Saati', type: 'time',
+        required: true, icon: 'fas fa-clock', colSize: 6, value: end.time
     });
-    
+
     // Add participants section
     createOvertimeModal.addSection({
         title: 'Katılımcılar',
         icon: 'fas fa-users',
         iconColor: 'text-success'
     });
-    
+
     // Render modal first
     createOvertimeModal.render();
-    
+
+    // Set modal title depending on mode.
+    const titleEl = createOvertimeModal.container.querySelector('.modal-title');
+    if (titleEl) {
+        titleEl.innerHTML = editingRequestId
+            ? '<i class="fas fa-redo me-2"></i>Mesai Talebini Düzenle & Gönder'
+            : '<i class="fas fa-plus me-2"></i>Yeni Mesai Talebi';
+    }
+
     // Add participants table inside the Katılımcılar section
     const participantsHtml = `
         <div class="d-flex justify-content-between align-items-center mb-2">
@@ -616,8 +643,7 @@ async function showCreateOvertimeModal() {
             <!-- Participants will be added here -->
         </div>
     `;
-    
-    // Find the Katılımcılar section and add the participants table inside it
+
     const katilimcilarSection = createOvertimeModal.container.querySelector('[data-section-id*="section"]:last-of-type');
     if (katilimcilarSection) {
         const fieldsContainer = katilimcilarSection.querySelector('.row.g-2');
@@ -625,25 +651,33 @@ async function showCreateOvertimeModal() {
             fieldsContainer.insertAdjacentHTML('beforeend', participantsHtml);
         }
     }
-    
-    // Add event listener for add participant button
+
     const addParticipantBtn = createOvertimeModal.container.querySelector('#add-participant-btn');
     if (addParticipantBtn) {
-        addParticipantBtn.addEventListener('click', addParticipant);
+        addParticipantBtn.addEventListener('click', () => addParticipant());
     }
-    
+
     // Load users and job orders for dropdowns
     try {
         await loadUsersForModal();
         await loadJobOrderDropdownOptions();
-        // Add initial participant
+        // Add participants: one per prefilled entry, or a single empty row.
         setTimeout(() => {
-            addParticipant();
+            if (prefillRequest && Array.isArray(prefillRequest.entries) && prefillRequest.entries.length) {
+                prefillRequest.entries.forEach(entry => addParticipant({
+                    user: entry.user_id,
+                    job_no: entry.job_no,
+                    description: entry.description || '',
+                    operations: (entry.operations || []).map(o => o.key),
+                }));
+            } else {
+                addParticipant();
+            }
         }, 100);
     } catch (error) {
         showErrorMessage('Veriler yüklenirken hata oluştu.');
     }
-    
+
     createOvertimeModal.show();
 }
 
@@ -746,6 +780,9 @@ function renderStatusBadge(status, statusLabel) {
         case 'submitted':
             badgeClass = 'status-yellow';
             break;
+        case 'rejected':
+            badgeClass = 'status-red';
+            break;
         case 'cancelled':
             badgeClass = 'status-red';
             break;
@@ -787,6 +824,19 @@ async function loadUsersForModal() {
         throw new Error('Current user not available');
     }
     allUsers = await fetchAllUsers();
+
+    // Load machining operators once (users with access_machining_tasks) so we
+    // know which entries should offer the machining-operation multi-select.
+    if (machiningOperatorIds.size === 0) {
+        try {
+            const machinists = await getMachiningOperators();
+            const rows = Array.isArray(machinists) ? machinists : (machinists?.results || []);
+            machiningOperatorIds = new Set(rows.map(u => u.id).filter(Boolean));
+        } catch (e) {
+            console.warn('Could not load machining operators:', e);
+            machiningOperatorIds = new Set();
+        }
+    }
 }
 
 // Show/hide loading state for submit button
@@ -816,14 +866,14 @@ function showSubmitLoading(show) {
     }
 }
 
-// Add participant to form
-function addParticipant() {
+// Add participant to form. `prefill` = { user, job_no, description, operations:[keys] }
+function addParticipant(prefill = null) {
     const container = document.getElementById('participants-container');
     if (!container) {
         return;
     }
     const participantIndex = container.children.length;
-    
+
     const participantHtml = `
         <div class="participant-row mb-3" data-index="${participantIndex}">
             <div class="row g-2">
@@ -863,40 +913,111 @@ function addParticipant() {
                     </div>
                 </div>
             </div>
+            <div class="row g-2 operations-row" id="operations-row-${participantIndex}" style="display:none;">
+                <div class="col-12">
+                    <div class="mb-2">
+                        <label class="form-label compact">
+                            <i class="fas fa-cogs me-1"></i>Talaşlı İmalat Operasyonları
+                        </label>
+                        <div id="operations-dropdown-${participantIndex}"></div>
+                        <div class="form-text compact">Bu operatörün mesaide çalışacağı operasyonlar (iş emrine göre)</div>
+                    </div>
+                </div>
+            </div>
         </div>
     `;
-    
+
     container.insertAdjacentHTML('beforeend', participantHtml);
-    
-    // Initialize user dropdown for this participant with a small delay to ensure DOM is ready
+
+    // Initialize dropdowns for this participant with a small delay to ensure DOM is ready
     setTimeout(() => {
-        initializeUserDropdown(participantIndex);
-        initializeJobOrderDropdown(participantIndex);
+        initializeUserDropdown(participantIndex, prefill);
+        initializeJobOrderDropdown(participantIndex, prefill);
+        wireParticipantChangeEvents(participantIndex, prefill);
     }, 10);
 }
 
+// Listen for user/job selection changes to show & populate the operations select.
+function wireParticipantChangeEvents(index, prefill = null) {
+    const userContainer = document.getElementById(`user-dropdown-${index}`);
+    const jobContainer = document.getElementById(`job-no-dropdown-${index}`);
+    const handler = () => maybeShowOperations(index);
+    if (userContainer) userContainer.addEventListener('dropdown:select', handler);
+    if (jobContainer) jobContainer.addEventListener('dropdown:select', handler);
+
+    // If prefilled, populate operations after the dropdowns settle.
+    if (prefill && (prefill.operations?.length || (prefill.user && prefill.job_no))) {
+        setTimeout(() => maybeShowOperations(index, prefill.operations || []), 200);
+    }
+}
+
+// Show/populate operations multi-select when a machining operator + job are chosen.
+async function maybeShowOperations(index, preselectKeys = null) {
+    const row = document.getElementById(`operations-row-${index}`);
+    if (!row) return;
+
+    const userId = parseInt(userDropdowns.get(index)?.getValue());
+    const jobNo = jobOrderDropdowns.get(index)?.getValue();
+    const isMachinist = userId && machiningOperatorIds.has(userId);
+
+    if (!isMachinist || !jobNo) {
+        row.style.display = 'none';
+        operationDropdowns.delete(index);
+        return;
+    }
+
+    row.style.display = '';
+    const container = document.getElementById(`operations-dropdown-${index}`);
+    if (!container) return;
+    container.innerHTML = '';
+
+    const dropdown = new ModernDropdown(container, {
+        placeholder: 'Operasyon seçiniz...',
+        searchable: true,
+        multiple: true,
+        maxHeight: 200,
+        width: '100%'
+    });
+
+    let items = [];
+    try {
+        items = await getOperationsForJob(jobNo);
+    } catch (e) {
+        items = [];
+    }
+    dropdown.setItems(items);
+    if (preselectKeys && preselectKeys.length) {
+        dropdown.setValue(preselectKeys.filter(k => items.some(it => it.value === k)));
+    }
+    operationDropdowns.set(index, dropdown);
+}
+
 // Initialize user dropdown
-function initializeUserDropdown(index) {
+function initializeUserDropdown(index, prefill = null) {
     const container = document.getElementById(`user-dropdown-${index}`);
     if (!container) {
         return;
     }
-    
+
     const dropdown = new ModernDropdown(container, {
         placeholder: 'Çalışan seçiniz...',
         searchable: true
     });
-    
+
     // Set user options - try ID first, fallback to username
     const userItems = allUsers.map(user => ({
         value: user.id || user.username, // Try ID first, fallback to username
-        text: (user.first_name && user.last_name) ? 
-            `${user.first_name} ${user.last_name}` : 
+        text: (user.first_name && user.last_name) ?
+            `${user.first_name} ${user.last_name}` :
             user.username
     }));
-    
+
     dropdown.setItems(userItems);
-    
+
+    if (prefill && prefill.user) {
+        dropdown.setValue(prefill.user);
+    }
+
     // Store dropdown reference in Map
     userDropdowns.set(index, dropdown);
 }
@@ -913,25 +1034,25 @@ async function loadJobOrderDropdownOptions() {
 }
 
 // Initialize job order dropdown for a specific participant
-function initializeJobOrderDropdown(participantIndex) {
+function initializeJobOrderDropdown(participantIndex, prefill = null) {
     const container = document.getElementById(`job-no-dropdown-${participantIndex}`);
     if (!container) return;
 
     // Load options if not already loaded
     if (jobOrderDropdownOptions.length === 0) {
         loadJobOrderDropdownOptions().then(() => {
-            setupJobOrderDropdown(container, participantIndex);
+            setupJobOrderDropdown(container, participantIndex, prefill);
         }).catch(() => {
             // Initialize with empty options if loading fails
-            setupJobOrderDropdown(container, participantIndex);
+            setupJobOrderDropdown(container, participantIndex, prefill);
         });
     } else {
-        setupJobOrderDropdown(container, participantIndex);
+        setupJobOrderDropdown(container, participantIndex, prefill);
     }
 }
 
 // Setup the job order dropdown component
-function setupJobOrderDropdown(container, participantIndex) {
+function setupJobOrderDropdown(container, participantIndex, prefill = null) {
     // Clear container
     container.innerHTML = '';
 
@@ -952,6 +1073,10 @@ function setupJobOrderDropdown(container, participantIndex) {
 
     dropdown.setItems(dropdownItems);
 
+    if (prefill && prefill.job_no) {
+        dropdown.setValue(prefill.job_no);
+    }
+
     // Store dropdown reference in Map
     jobOrderDropdowns.set(participantIndex, dropdown);
 }
@@ -966,6 +1091,7 @@ function removeParticipant(index) {
             // Clean up dropdown references
             userDropdowns.delete(index);
             jobOrderDropdowns.delete(index);
+            operationDropdowns.delete(index);
             participantRow.remove();
         } else {
             showErrorMessage('En az bir katılımcı olmalıdır.');
@@ -998,16 +1124,20 @@ async function submitOvertimeRequest(formData) {
             const userId = userDropdown?.getValue();
             const jobNo = jobOrderDropdown?.getValue();
             const description = descriptionInput?.value?.trim() || '';
-            
+
             if (!userId || !jobNo) {
                 showErrorMessage('Lütfen tüm katılımcılar için gerekli bilgileri doldurun.');
                 return;
             }
-            
+
+            const operationDropdown = operationDropdowns.get(participantIndex);
+            const operations = operationDropdown ? (operationDropdown.getValue() || []) : [];
+
             participants.push({
                 user: parseInt(userId),
                 job_no: jobNo,
-                description: description
+                description: description,
+                operations: operations
             });
         }
         
@@ -1038,16 +1168,21 @@ async function submitOvertimeRequest(formData) {
             showErrorMessage(validation.errors.join('<br>'));
             return;
         }
-        
-        // Submit request
-        const response = await createOvertimeRequest(requestData);
-        
-        // If we reach here, the request was successful
-        showSuccessMessage('Mesai talebi başarıyla oluşturuldu.');
-        
+
+        // Create, or re-submit an existing rejected/cancelled request.
+        if (editingRequestId) {
+            await updateOvertimeRequest(editingRequestId, requestData);
+            showSuccessMessage('Mesai talebi güncellendi ve yeniden gönderildi.');
+        } else {
+            await createOvertimeRequest(requestData);
+            showSuccessMessage('Mesai talebi başarıyla oluşturuldu.');
+        }
+
+        editingRequestId = null;
+
         // Close modal
         createOvertimeModal.hide();
-        
+
         // Refresh data
         loadOvertimeRequests();
         

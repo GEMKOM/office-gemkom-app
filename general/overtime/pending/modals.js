@@ -1,8 +1,9 @@
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
-import { 
+import {
     approveOvertimeRequest,
-    formatOvertimeDuration
+    formatOvertimeDuration,
+    getOvertimeCostImpact
 } from '../../../apis/overtime.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 
@@ -16,6 +17,9 @@ let requests = [];
 let loadRequests = null;
 let loadApprovedRequests = null;
 let showNotification = null;
+
+// Entry ids the approver has un-checked (to reject) in the details modal.
+let pendingRejectedEntryIds = [];
 
 // Initialize modal components
 function initializeModalComponents() {
@@ -225,23 +229,49 @@ async function showOvertimeDetailsModal(request = null) {
         
         // Add participants section with table component
         if (requestToShow.entries && requestToShow.entries.length > 0) {
+            const isSubmitted = requestToShow.status === 'submitted';
             overtimeDetailsModal.addSection({
                 title: 'Katılımcılar',
                 icon: 'fas fa-users',
                 iconColor: 'text-primary'
             });
-            
-            // Create participants table using TableComponent
-            const participantsData = requestToShow.entries.map((entry, index) => ({
-                id: index + 1,
-                user_name: entry.user_full_name || entry.user_username || entry.username,
-                job_no: entry.job_no || '-',
-                reason: entry.description || 'Belirtilmemiş'
-            }));
-            
-            // Add custom HTML content for the table
+
+            const entryStatusBadge = (status, label) => {
+                const map = { pending: 'status-yellow', approved: 'status-green', rejected: 'status-red' };
+                return `<span class="badge ${map[status] || 'status-pending'}">${label || status || '-'}</span>`;
+            };
+            const opsCell = (ops) => {
+                if (!ops || !ops.length) return '<span class="text-muted">-</span>';
+                return ops.map(o => `<span class="badge bg-light text-dark border me-1">${o.name || o.key}</span>`).join('');
+            };
+
+            // Header: checkbox column only while the request is decidable.
+            const checkHeader = isSubmitted ? '<th style="width:70px;">Onay</th>' : '<th>Durum</th>';
+            const rowsHtml = requestToShow.entries.map((entry, index) => {
+                const name = entry.user_full_name || entry.user_username || entry.username;
+                const firstCell = isSubmitted
+                    ? `<td class="text-center">
+                         <input type="checkbox" class="form-check-input entry-approve-check" data-entry-id="${entry.id}" checked>
+                       </td>`
+                    : `<td>${entryStatusBadge(entry.status, entry.status_label)}</td>`;
+                return `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td><strong>${name}</strong></td>
+                        <td>${entry.job_no || '-'}</td>
+                        <td>${opsCell(entry.operations)}</td>
+                        <td>${entry.description || 'Belirtilmemiş'}</td>
+                        ${firstCell}
+                    </tr>`;
+            }).join('');
+
+            const legend = isSubmitted
+                ? `<div class="small text-muted mb-2"><i class="fas fa-info-circle me-1"></i>İşaretli kalemler onaylanır. İşareti kaldırılan kalemler <strong>reddedilir</strong> (kısmi onay).</div>`
+                : '';
+
             const tableHtml = `
                 <div id="participants-table-container" class="mt-3">
+                    ${legend}
                     <div class="table-responsive">
                         <table class="table table-sm table-striped">
                             <thead class="table-light">
@@ -249,27 +279,23 @@ async function showOvertimeDetailsModal(request = null) {
                                     <th>#</th>
                                     <th>Katılımcı</th>
                                     <th>İş No</th>
+                                    <th>Operasyonlar</th>
                                     <th>Neden</th>
+                                    ${checkHeader}
                                 </tr>
                             </thead>
-                            <tbody>
-                                ${participantsData.map(participant => `
-                                    <tr>
-                                        <td>${participant.id}</td>
-                                        <td><strong>${participant.user_name}</strong></td>
-                                        <td>${participant.job_no}</td>
-                                        <td>${participant.reason}</td>
-                                    </tr>
-                                `).join('')}
-                            </tbody>
+                            <tbody>${rowsHtml}</tbody>
                         </table>
                     </div>
                 </div>
             `;
-            
+
             overtimeDetailsModal.addCustomContent(tableHtml);
         }
-        
+
+        // Add cost-impact section (only for cost-authorized users; hidden on 403).
+        await appendCostImpactSection(requestToShow.id);
+
         // Render the modal
         overtimeDetailsModal.render();
         
@@ -306,6 +332,77 @@ async function showOvertimeDetailsModal(request = null) {
         // Show the modal
         overtimeDetailsModal.show();
     }
+}
+
+// Append the per-job profit / overtime-cost section to the details modal.
+// Silently does nothing when the user lacks cost visibility (API returns null).
+async function appendCostImpactSection(requestId) {
+    let impact = null;
+    try {
+        impact = await getOvertimeCostImpact(requestId);
+    } catch (e) {
+        // On any error just skip the section rather than blocking the modal.
+        console.warn('cost impact unavailable:', e.message);
+        return;
+    }
+    if (!impact || !Array.isArray(impact.jobs) || impact.jobs.length === 0) return;
+
+    const fmt = (v) => (v === null || v === undefined)
+        ? '<span class="text-muted">-</span>'
+        : `€${Number(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const pct = (v) => (v === null || v === undefined) ? '-' : `%${Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}`;
+    const profitClass = (v) => (v !== null && v !== undefined && Number(v) < 0) ? 'text-danger' : 'text-success';
+
+    overtimeDetailsModal.addSection({
+        title: 'Maliyet / Kâr Etkisi',
+        icon: 'fas fa-coins',
+        iconColor: 'text-warning'
+    });
+
+    const rows = impact.jobs.map(j => {
+        if (!j.job_order_found) {
+            return `
+                <tr>
+                    <td><strong>${j.job_no || '-'}</strong><br><span class="badge bg-secondary">İş emri bulunamadı</span></td>
+                    <td class="text-end">-</td>
+                    <td class="text-end">-</td>
+                    <td class="text-end text-warning">${fmt(j.overtime_cost_eur)}</td>
+                    <td class="text-end">-</td>
+                </tr>`;
+        }
+        return `
+            <tr>
+                <td><strong>${j.job_no}</strong>${j.title ? `<br><span class="text-muted small">${j.title}</span>` : ''}</td>
+                <td class="text-end ${profitClass(j.current_profit_eur)}">${fmt(j.current_profit_eur)}<br><span class="text-muted small">${pct(j.current_margin_pct)}</span></td>
+                <td class="text-end ${profitClass(j.projected_profit_eur)}">${fmt(j.projected_profit_eur)}<br><span class="text-muted small">${pct(j.projected_margin_pct)}</span></td>
+                <td class="text-end text-warning">${fmt(j.overtime_cost_eur)}</td>
+                <td class="text-end">${fmt(j.current_selling_price_eur)}</td>
+            </tr>`;
+    }).join('');
+
+    const html = `
+        <div class="mt-2">
+            <div class="alert alert-warning d-flex justify-content-between align-items-center py-2">
+                <span><i class="fas fa-hourglass-half me-2"></i>Toplam Mesai Maliyeti</span>
+                <strong class="fs-5">${fmt(impact.total_overtime_cost_eur)}</strong>
+            </div>
+            <div class="table-responsive">
+                <table class="table table-sm table-bordered align-middle">
+                    <thead class="table-light">
+                        <tr>
+                            <th>İş Emri</th>
+                            <th class="text-end">Mevcut Kâr</th>
+                            <th class="text-end">Mesai Sonrası Kâr</th>
+                            <th class="text-end">Mesai Maliyeti</th>
+                            <th class="text-end">Satış Fiyatı</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        </div>
+    `;
+    overtimeDetailsModal.addCustomContent(html);
 }
 
 // Show approve overtime modal
@@ -377,8 +474,15 @@ async function confirmApproveOvertime(requestId) {
     }
     
     try {
-        await approveOvertimeRequest(requestId);
-        showNotification('Mesai talebi başarıyla onaylandı', 'success');
+        await approveOvertimeRequest(requestId, { rejected_entry_ids: pendingRejectedEntryIds });
+        const partial = pendingRejectedEntryIds.length > 0;
+        showNotification(
+            partial
+                ? `Mesai talebi kısmi olarak onaylandı (${pendingRejectedEntryIds.length} kalem reddedildi)`
+                : 'Mesai talebi başarıyla onaylandı',
+            'success'
+        );
+        pendingRejectedEntryIds = [];
         
         // Clear stored request ID
         window.currentApproveRequestId = null;
@@ -491,11 +595,24 @@ function setupModalEventListeners() {
         const approveBtn = e.target.closest('#approve-overtime-btn');
         if (approveBtn && !approveBtn.disabled) {
             if (currentRequest) {
+                // Collect un-checked entries (to reject) BEFORE the details modal closes.
+                const checks = document.querySelectorAll('.entry-approve-check');
+                pendingRejectedEntryIds = Array.from(checks)
+                    .filter(c => !c.checked)
+                    .map(c => parseInt(c.dataset.entryId))
+                    .filter(id => !Number.isNaN(id));
+
+                const totalEntries = checks.length;
+                if (totalEntries > 0 && pendingRejectedEntryIds.length === totalEntries) {
+                    showNotification('Tüm kalemleri reddediyorsunuz. Bunun yerine "Reddet" kullanın.', 'warning');
+                    return;
+                }
+
                 // Disable button and show loading state
                 approveBtn.disabled = true;
                 const originalContent = approveBtn.innerHTML;
                 approveBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Yükleniyor...';
-                
+
                 try {
                     // Show approve confirmation modal
                     approveOvertime(currentRequest.id);

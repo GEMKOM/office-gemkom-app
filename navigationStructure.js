@@ -31,6 +31,11 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Mesai Kullanıcıları',
                         icon: 'fas fa-users',
                         children: {}
+                    },
+                    '/general/overtime/machining-report': {
+                        label: 'Talaşlı İmalat Mesai Raporu',
+                        icon: 'fas fa-cogs',
+                        children: {}
                     }
                 }
             },

@@ -110,6 +110,14 @@ export async function updateOvertimeRequest(requestId, updateData) {
         body: JSON.stringify(updateData)
     });
     const data = await resp.json();
+    if (!resp.ok) {
+        const errorMessage = data.errors || data.error || data.detail
+            || (Array.isArray(data) ? data.join(', ') : null)
+            || 'Mesai talebi güncellenirken hata oluştu.';
+        const error = new Error(Array.isArray(errorMessage) ? errorMessage.join(', ') : errorMessage);
+        error.response = data;
+        throw error;
+    }
     return data;
 }
 
@@ -147,7 +155,18 @@ export function canCancelOvertime(overtimeRequest, currentUserId) {
  * @returns {boolean} True if user can edit the request
  */
 export function canEditOvertime(overtimeRequest, currentUserId) {
-    return overtimeRequest.status === 'submitted' && 
+    return overtimeRequest.status === 'submitted' &&
+           overtimeRequest.requester === currentUserId;
+}
+
+/**
+ * Check if user can edit & re-submit a rejected/cancelled request.
+ * @param {Object} overtimeRequest - Overtime request object
+ * @param {number} currentUserId - Current user's ID
+ * @returns {boolean}
+ */
+export function canResubmitOvertime(overtimeRequest, currentUserId) {
+    return ['rejected', 'cancelled'].includes(overtimeRequest.status) &&
            overtimeRequest.requester === currentUserId;
 }
 
@@ -187,6 +206,12 @@ export function getOvertimeStatusInfo(status) {
             class: 'status-green',
             icon: 'fas fa-check-circle',
             color: 'success'
+        },
+        'rejected': {
+            label: 'Reddedildi',
+            class: 'status-red',
+            icon: 'fas fa-times-circle',
+            color: 'danger'
         },
         'cancelled': {
             label: 'İptal Edildi',
@@ -260,21 +285,103 @@ export function validateOvertimeRequest(overtimeData) {
  * @param {number} requestId - Overtime request ID
  * @returns {Promise<Object>} Response data
  */
-export async function approveOvertimeRequest(requestId) {
+export async function approveOvertimeRequest(requestId, options = {}) {
     const url = `${backendBase}/overtime/requests/${requestId}/approve/`;
+    const body = {};
+    if (options.comment) body.comment = options.comment;
+    if (Array.isArray(options.rejected_entry_ids) && options.rejected_entry_ids.length) {
+        body.rejected_entry_ids = options.rejected_entry_ids;
+    }
     const resp = await authedFetch(url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
-        }
+        },
+        body: JSON.stringify(body)
     });
-    
+
     if (!resp.ok) {
         const errorData = await resp.json();
         throw new Error(errorData.detail || errorData.message || 'Onaylama işlemi başarısız');
     }
-    
+
     return await resp.json();
+}
+
+/**
+ * Fetch the per-job profit / overtime-cost impact for a request.
+ * Only users with cost visibility (view_job_costs) may access this; a 403
+ * is returned otherwise (surfaced here as `null` so the UI can hide the section).
+ * @param {number} requestId
+ * @returns {Promise<Object|null>}
+ */
+export async function getOvertimeCostImpact(requestId) {
+    const url = `${backendBase}/overtime/requests/${requestId}/cost_impact/`;
+    const resp = await authedFetch(url);
+    if (resp.status === 403) return null;
+    if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Maliyet etkisi yüklenemedi');
+    }
+    return await resp.json();
+}
+
+/**
+ * Fetch the machining overtime report rows.
+ * @param {Object} filters - { start_date, end_date, user, job_no }
+ * @returns {Promise<Array>}
+ */
+export async function getOvertimeMachiningReport(filters = {}) {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== '') {
+            params.append(key, value);
+        }
+    });
+    const url = `${backendBase}/overtime/requests/machining_report/${params.toString() ? '?' + params.toString() : ''}`;
+    const resp = await authedFetch(url);
+    if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Mesai raporu yüklenirken hata oluştu');
+    }
+    return await resp.json();
+}
+
+/**
+ * Fetch active machining operators (users holding `access_machining_tasks`).
+ * Classification is done on the backend via the Django permission system, so
+ * it correctly reflects positions/groups (there is no `machining` department).
+ * @returns {Promise<Array<{id:number, username:string, full_name:string}>>}
+ */
+export async function getMachiningOperators() {
+    const url = `${backendBase}/overtime/requests/machining_operators/`;
+    const resp = await authedFetch(url);
+    if (!resp.ok) return [];
+    return await resp.json();
+}
+
+/**
+ * Fetch incomplete machining operations belonging to a job order, for the
+ * per-entry operation multi-select. Returns dropdown-friendly items.
+ * @param {string} jobNo
+ * @returns {Promise<Array<{value:string, text:string}>>}
+ */
+export async function getOperationsForJob(jobNo) {
+    if (!jobNo) return [];
+    const params = new URLSearchParams({
+        job_no: jobNo,
+        completion_date__isnull: 'true',
+        page_size: '200',
+    });
+    const url = `${backendBase}/tasks/operations/?${params.toString()}`;
+    const resp = await authedFetch(url);
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    const rows = Array.isArray(data) ? data : (data.results || []);
+    return rows.map(op => ({
+        value: op.key,
+        text: `${op.name || op.key}${op.order != null ? ' (#' + op.order + ')' : ''}`,
+    }));
 }
 
 /**

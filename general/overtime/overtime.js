@@ -40,6 +40,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-users',
                 iconColor: 'primary',
                 link: '/general/overtime/users'
+            },
+            {
+                title: 'Talaşlı İmalat Mesai Raporu',
+                description: 'Onaylı mesailerdeki operasyonların o gün çalışılıp çalışılmadığı ve süreleri.',
+                icon: 'fas fa-cogs',
+                iconColor: 'success',
+                link: '/general/overtime/machining-report'
             }
         ]
     });
