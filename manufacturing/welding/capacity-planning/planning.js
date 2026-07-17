@@ -602,6 +602,12 @@ async function onAllocationSave(formData) {
 
     // Real subtask (committed / promoted): only the dates are editable, saved immediately.
     if (alloc.subtask_id) {
+        // Reloading after the immediate date save replaces the entire working plan.
+        // Require pending plan changes to be persisted first so they are not lost.
+        if (hasUnsavedChanges) {
+            showNotification('Tarihleri güncellemeden önce plan değişikliklerini kaydedin.', 'error');
+            return;
+        }
         try {
             await setWeldingSubtaskDates(alloc.subtask_id, start, end);
             showNotification('Tarihler kaydedildi.', 'success');
