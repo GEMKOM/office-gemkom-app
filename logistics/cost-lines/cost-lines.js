@@ -33,6 +33,8 @@ let currentJobOrderForLines = null;
 let linesTableBodyId = 'shipping-lines-tbody';
 /** @type {Array<{ description: string, amount_eur: string, date: string, notes: string }>} */
 let editingLines = [];
+let linesLoading = false;
+let linesRequestSeq = 0;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) return;
@@ -163,7 +165,8 @@ function initHasEntriesTable() {
             { field: 'title', label: 'Başlık', sortable: true },
             { field: 'customer_name', label: 'Müşteri', sortable: false },
             { field: 'status', label: 'Durum', sortable: true, formatter: formatStatus },
-            { field: 'target_completion_date', label: 'Hedef Bitiş', sortable: true, formatter: formatDate }
+            { field: 'target_completion_date', label: 'Hedef Bitiş', sortable: true, formatter: formatDate },
+            { field: 'shipping_total_eur', label: 'Toplam (EUR)', sortable: false, formatter: formatEur }
         ],
         data: [],
         sortable: true,
@@ -194,6 +197,12 @@ function formatStatus(value) {
 function formatDate(value) {
     if (!value) return '–';
     try { return new Date(value).toLocaleDateString('tr-TR'); } catch { return value; }
+}
+
+function formatEur(value) {
+    const num = parseFloat(value);
+    if (value == null || isNaN(num)) return '–';
+    return `€${num.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function initLinesModal() {
@@ -231,23 +240,29 @@ function initLinesModal() {
     linesModalBootstrap = new bootstrap.Modal(linesModal);
 
     document.getElementById('lines-add-line-btn').addEventListener('click', () => {
+        if (linesLoading) return;
         editingLines.push({ description: '', amount_eur: '0.00', date: '', notes: '' });
         renderLinesTable();
     });
     document.getElementById('lines-save-btn').addEventListener('click', saveLines);
-    linesModal.addEventListener('shown.bs.modal', () => renderLinesTable());
 }
 
 async function openLinesModal(jobNo) {
     currentJobOrderForLines = jobNo;
+    editingLines = [];
+    linesLoading = true;
+    const requestId = ++linesRequestSeq;
     const titleEl = document.getElementById('lines-modal-title');
     if (titleEl) titleEl.textContent = `Sevkiyat Maliyet Satırları — ${jobNo}`;
+    const summaryEl = document.getElementById('lines-summary');
+    if (summaryEl) summaryEl.textContent = '';
     const tbody = document.getElementById(linesTableBodyId);
     if (tbody) tbody.innerHTML = '<tr><td colspan="5" class="text-center text-muted">Yükleniyor...</td></tr>';
     linesModalBootstrap.show();
 
     try {
         const lines = await getShippingCostLines(jobNo);
+        if (requestId !== linesRequestSeq) return;
         editingLines = (Array.isArray(lines) ? lines : []).map((line) => ({
             description: line.description ?? '',
             amount_eur: line.amount_eur != null ? String(line.amount_eur) : '0.00',
@@ -258,10 +273,12 @@ async function openLinesModal(jobNo) {
             editingLines = [{ description: '', amount_eur: '0.00', date: '', notes: '' }];
         }
     } catch (err) {
+        if (requestId !== linesRequestSeq) return;
         console.error(err);
         showNotification(err.message || 'Satırlar yüklenemedi', 'error');
         editingLines = [{ description: '', amount_eur: '0.00', date: '', notes: '' }];
     }
+    linesLoading = false;
     renderLinesTable();
 }
 
@@ -323,7 +340,7 @@ function syncLinesFromDom() {
 }
 
 async function saveLines() {
-    if (!currentJobOrderForLines) return;
+    if (!currentJobOrderForLines || linesLoading) return;
     syncLinesFromDom();
 
     const lines = editingLines
