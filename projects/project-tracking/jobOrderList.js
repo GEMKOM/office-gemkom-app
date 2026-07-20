@@ -5017,6 +5017,11 @@ const COST_PRICE_SOURCE_LABELS = {
 
 const SELLING_PRICE_SOURCE_LABELS = {
     sales_offer_current_price: 'Satış teklifi güncel fiyatı',
+    sales_offer_phase_share: 'Satış teklifi kalem payı',
+    sales_offer_current_price_qty_split: 'Satış teklifi güncel fiyatı (faz miktar payı)',
+    sales_offer_phase_share_qty_split: 'Satış teklifi kalem payı (faz miktar payı)',
+    phased_master: 'Fazlara bölündü (fiyat faz işlerinde)',
+    phase_children_sum: 'Faz kapsamındaki işlerin toplamı',
     cost_summary: 'Manuel maliyet özeti',
     none: 'Tanımsız',
 };
