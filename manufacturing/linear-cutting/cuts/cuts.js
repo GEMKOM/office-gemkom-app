@@ -930,7 +930,7 @@ function renderOptimization(result) {
                         <i class="fas fa-cut me-1 text-muted"></i>Kerf ${groupKerf}
                     </span>
                     <span class="badge bg-light text-dark border">
-                        <i class="fas fa-layer-group me-1 text-muted"></i>${g.bars_needed ?? '—'} çubuk
+                        <i class="fas fa-layer-group me-1 text-muted"></i>${g.bars_needed ?? '—'} bar
                     </span>
                     <span class="badge bg-light text-dark border">
                         <i class="fas fa-chart-line me-1 text-muted"></i>${g.efficiency_pct != null ? `${g.efficiency_pct}%` : '—'}
@@ -975,7 +975,7 @@ function renderOptimization(result) {
                 <div class="head">
                     <div class="title">
                         <i class="fas fa-grip-lines-vertical text-primary"></i>
-                        Çubuk #${displayBarNo}
+                        Bar #${displayBarNo}
                     </div>
                     <div class="meta">
                         ${remnantBadge}

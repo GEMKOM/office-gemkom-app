@@ -355,5 +355,10 @@ export function buildPassTableHtml(passes) {
                 </thead>
                 <tbody>${rows}</tbody>
             </table>
+            <div class="text-muted mt-1" style="font-size:.75rem;">
+                Tür — <strong>Ortak kesim:</strong> tek geçiş iki parçaya hizmet eder (bıçağın iki tarafı da parça).
+                <strong>Parça ayırma:</strong> parçayı bitirir; kesimin öbür tarafı parça yüzeyi değildir.
+                <strong>Baş kesim:</strong> parça çıkmaz, sonraki parçanın yüzeyini hazırlar (çıkan küçük parça firedir).
+            </div>
         </div>`;
 }
