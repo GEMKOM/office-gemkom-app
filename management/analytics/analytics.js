@@ -34,6 +34,25 @@ const COLUMN_FIELD_TO_ORDERING = {
     target_completion_date: 'date'
 };
 
+// İmalat filter: has the job (or its subtree) a manufacturing department task.
+const MANUFACTURED_OPTIONS = [
+    { value: 'true', label: 'İmalatı Bizde' },
+    { value: 'false', label: 'İmalat Harici' },
+];
+
+// Which job order date the date-range filter applies to. The empty value
+// (select placeholder) means the default: target completion date.
+const DATE_FIELD_OPTIONS = [
+    { value: 'created', label: 'Oluşturulma Tarihi' },
+    { value: 'last_updated', label: 'Son Maliyet Güncellemesi' },
+];
+
+const DATE_FIELD_PARAMS = {
+    target: ['target_completion_date__gte', 'target_completion_date__lte'],
+    created: ['created_at__date__gte', 'created_at__date__lte'],
+    last_updated: ['cost_summary__last_updated__date__gte', 'cost_summary__last_updated__date__lte'],
+};
+
 /** All valid `ordering` query values (Sıralama dropdown + column-sort sync). */
 const ORDERING_SELECT_VALUES = new Set([
     'job_no', '-job_no', 'title', '-title', 'weight', '-weight',
@@ -295,11 +314,11 @@ function buildFooter({ displayedData, columns, hasActions }) {
         if (rate != null && rate !== '') { const rv = toNumber(rate); if (Number.isFinite(rv) && rv !== 0) { grSum += rv; grCount++; } }
     });
 
-    // Footer "Kg Fiyatı" should be average (not weighted by kg).
-    const ppkgList = rows
-        .map(r => toNumber(r.price_per_kg))
-        .filter(v => Number.isFinite(v) && v > 0);
-    const ppkg = ppkgList.length > 0 ? (ppkgList.reduce((a, b) => a + b, 0) / ppkgList.length) : null;
+    // Footer "Kg Maliyeti" / "Kg Fiyatı" are weighted averages: total cost (or
+    // selling price) / total weight — a plain column average would let small
+    // jobs skew the €/kg figure.
+    const ppkg = s.weightKg > 0 ? (s.actualTotalCost / s.weightKg) : null;
+    const sppkg = (s.weightKg > 0 && s.sellingPrice > 0) ? (s.sellingPrice / s.weightKg) : null;
     const mpct = s.sellingPrice > 0 ? (s.marginEur / s.sellingPrice) * 100 : null;
     const grAvg = grCount > 0 ? grSum / grCount : null;
 
@@ -321,6 +340,7 @@ function buildFooter({ displayedData, columns, hasActions }) {
     vm.set('actual_total_cost', `<span class="fw-bold">${formatMoney(s.actualTotalCost)}</span>`);
     vm.set('estimated_total_cost', `<span class="fw-bold">${formatMoney(s.estimatedTotalCost)}</span>`);
     vm.set('selling_price', `<span class="fw-bold">${formatMoney(s.sellingPrice)}</span>`);
+    vm.set('selling_price_per_kg', sppkg != null ? `<span class="fw-bold text-success">€${formatNumber(sppkg, 2)}</span>` : '<span class="text-muted">-</span>');
     vm.set('margin_eur', `<span class="fw-bold">${formatMoney(s.marginEur)}</span>`);
     vm.set('margin_pct', mpct != null ? `<span class="fw-bold">${formatPct(mpct)}</span>` : '<span class="text-muted">-</span>');
     vm.set('target_completion_date', '<span class="text-muted">-</span>');
@@ -485,6 +505,25 @@ document.addEventListener('DOMContentLoaded', async () => {
             ]
         })
         .addSelectFilter({
+            id: 'manufactured',
+            label: 'İmalat',
+            colSize: 2,
+            placeholder: 'Tümü',
+            options: MANUFACTURED_OPTIONS
+        })
+        .addSelectFilter({
+            id: 'date_field',
+            label: 'Tarih Alanı',
+            colSize: 2,
+            placeholder: 'Hedef Tarih',
+            options: DATE_FIELD_OPTIONS
+        })
+        .addDateRangeFilter({
+            id: 'date_range',
+            label: 'Tarih Aralığı',
+            colSize: 3
+        })
+        .addSelectFilter({
             id: 'ordering',
             label: 'Sıralama',
             colSize: 3,
@@ -500,8 +539,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 { value: '-weight', label: 'Ağırlık (azalan)' },
                 { value: '-actual_cost', label: 'Toplam maliyet (azalan)' },
                 { value: 'actual_cost', label: 'Toplam maliyet (artan)' },
-                { value: 'price_per_kg', label: 'Kg fiyatı (artan)' },
-                { value: '-price_per_kg', label: 'Kg fiyatı (azalan)' },
+                { value: 'price_per_kg', label: 'Kg maliyeti (artan)' },
+                { value: '-price_per_kg', label: 'Kg maliyeti (azalan)' },
                 { value: 'selling_price', label: 'Satış fiyatı (artan)' },
                 { value: '-selling_price', label: 'Satış fiyatı (azalan)' },
                 { value: 'margin_eur', label: 'Marj € (artan)' },
@@ -544,6 +583,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             },
             { field: 'status', label: 'Durum', sortable: false, formatter: v => statusBadge(v) },
+            {
+                field: 'is_manufactured', label: 'İmalat', sortable: false, width: '90px',
+                formatter: v => v === true
+                    ? '<span class="status-badge status-green">Bizde</span>'
+                    : (v === false ? '<span class="status-badge status-yellow">Harici</span>' : '-')
+            },
             { field: 'total_weight_kg', label: 'Ağırlık (kg)', sortable: true, formatter: v => (v != null && v !== '' ? parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '<span class="text-muted">-</span>') },
             /* detail columns — hidden by default, revealed via toggle */
             { field: 'labor_cost', label: 'İşçilik + Vergi', sortable: false, formatter: laborCellFormatter },
@@ -556,11 +601,12 @@ document.addEventListener('DOMContentLoaded', async () => {
             /* end detail columns */
             { field: 'actual_total_cost', label: 'Toplam Maliyet', sortable: true, formatter: v => `<span class="fw-bold">${formatMoney(v)}</span>` },
             { field: 'estimated_total_cost', label: 'Tahmini Maliyet', sortable: false, formatter: estimatedCostCellFormatter },
-            { field: 'price_per_kg', label: 'Kg Fiyatı', sortable: true, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-primary">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
+            { field: 'price_per_kg', label: 'Kg Maliyeti', sortable: true, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-primary">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
             {
                 field: 'selling_price', label: 'Satış Fiyatı', sortable: true,
                 formatter: (v, row) => (v != null && v !== '' ? formatMoney(v) + (row.selling_price_currency && row.selling_price_currency !== 'EUR' ? ` <small class="text-muted">${row.selling_price_currency}</small>` : '') : '<span class="text-muted">-</span>')
             },
+            { field: 'selling_price_per_kg', label: 'Kg Fiyatı', sortable: false, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-success">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
             { field: 'margin_eur', label: 'Marj (€)', sortable: true, formatter: v => (v != null && v !== '' ? formatMoney(v) : '<span class="text-muted">-</span>') },
             { field: 'margin_pct', label: 'Marj %', sortable: true, formatter: (v, row) => marginChip(v, row?.selling_price) },
             { field: 'completion_pct', label: 'Tamamlanma', sortable: true, width: '160px', formatter: v => completionBar(v) },
@@ -686,6 +732,12 @@ async function loadData() {
     const ordering = currentOrdering;
     const selectedNodeIds = catalogPicker ? catalogPicker.getSelectedIds() : [];
     const template_node = selectedNodeIds.length ? selectedNodeIds.join(',') : undefined;
+    const manufactured = (filters.manufactured === 'true' || filters.manufactured === 'false') ? filters.manufactured : undefined;
+    const dateRange = filters.date_range || {};
+    const [dateStartParam, dateEndParam] = DATE_FIELD_PARAMS[filters.date_field] || DATE_FIELD_PARAMS.target;
+    const dateParams = {};
+    if (dateRange.start) dateParams[dateStartParam] = dateRange.start;
+    if (dateRange.end) dateParams[dateEndParam] = dateRange.end;
 
     showAnalyticsLoading();
     costTable.setLoading(true);
@@ -697,6 +749,8 @@ async function loadData() {
             search: search || undefined,
             customer: customer ? parseInt(customer, 10) : undefined,
             template_node,
+            manufactured,
+            ...dateParams,
             ordering,
             facility,
             page: currentPage,

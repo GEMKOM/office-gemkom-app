@@ -12,6 +12,25 @@ import { getWeldingJobCostDetail } from '../../apis/welding/reports.js';
 import { fetchAssignments } from '../../apis/subcontracting/assignments.js';
 import { CatalogTreePicker } from '../../components/catalog-tree-picker/catalog-tree-picker.js';
 
+// Which job order date the date-range filter applies to. The empty value
+// (select placeholder) means the default: target completion date.
+const DATE_FIELD_OPTIONS = [
+    { value: 'created', label: 'Oluşturulma Tarihi' },
+    { value: 'last_updated', label: 'Son Maliyet Güncellemesi' },
+];
+
+const DATE_FIELD_PARAMS = {
+    target: ['target_completion_date__gte', 'target_completion_date__lte'],
+    created: ['created_at__date__gte', 'created_at__date__lte'],
+    last_updated: ['cost_summary__last_updated__date__gte', 'cost_summary__last_updated__date__lte'],
+};
+
+// İmalat filter: has the job a manufacturing department task or not.
+const MANUFACTURED_OPTIONS = [
+    { value: 'true', label: 'İmalatı Bizde' },
+    { value: 'false', label: 'İmalat Harici' },
+];
+
 const STATUS_OPTIONS = [
     { value: '', label: 'Tümü' },
     { value: 'draft', label: 'Taslak' },
@@ -338,6 +357,26 @@ document.addEventListener('DOMContentLoaded', async () => {
         colSize: 3
     });
 
+    filtersComponent.addSelectFilter({
+        id: 'manufactured',
+        label: 'İmalat',
+        options: MANUFACTURED_OPTIONS,
+        placeholder: 'Tümü',
+        colSize: 2
+    });
+    filtersComponent.addSelectFilter({
+        id: 'date_field',
+        label: 'Tarih Alanı',
+        options: DATE_FIELD_OPTIONS,
+        placeholder: 'Hedef Tarih',
+        colSize: 2
+    });
+    filtersComponent.addDateRangeFilter({
+        id: 'date_range',
+        label: 'Tarih Aralığı',
+        colSize: 3
+    });
+
     // Customer: remote search via GET /projects/customers/?search=...&is_active=true, results after 3 characters
     filtersComponent.addDropdownFilter({
         id: 'customer',
@@ -428,8 +467,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                 }
             },
             { field: 'status', label: 'Durum', sortable: true, formatter: v => statusBadge(v) },
-            { 
-                field: 'labor_cost', 
+            {
+                field: 'is_manufactured',
+                label: 'İmalat',
+                sortable: false,
+                width: '90px',
+                formatter: v => v === true
+                    ? '<span class="status-badge status-green">Bizde</span>'
+                    : (v === false ? '<span class="status-badge status-yellow">Harici</span>' : '-')
+            },
+            {
+                field: 'labor_cost',
                 label: 'İşçilik + Vergi', 
                 sortable: true, 
                 formatter: (v, row) => {
@@ -496,8 +544,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             { field: 'total_weight_kg', label: 'Toplam Ağırlık (kg)', sortable: true, formatter: v => (v != null && v !== '' ? parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '<span class="text-muted">-</span>') },
             { 
-                field: 'price_per_kg', 
-                label: 'Kg Fiyatı', 
+                field: 'price_per_kg',
+                label: 'Kg Maliyeti',
                 sortable: true, 
                 formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-primary">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') 
             },
@@ -533,6 +581,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     `;
                 }
             },
+            { field: 'selling_price_per_kg', label: 'Kg Fiyatı', sortable: false, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-success">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
             { field: 'margin_eur', label: 'Marj (€)', sortable: true, formatter: v => (v != null && v !== '' ? formatMoney(v) : '<span class="text-muted">-</span>') },
             { field: 'margin_pct', label: 'Marj %', sortable: true, formatter: v => (v != null && v !== '' ? formatPct(v) : '<span class="text-muted">-</span>') },
             { field: 'last_updated', label: 'Tarih', sortable: false, formatter: formatDate }
@@ -609,6 +658,12 @@ async function loadData() {
     const selectedNodeIds = catalogPicker ? catalogPicker.getSelectedIds() : [];
     const template_node = selectedNodeIds.length ? selectedNodeIds.join(',') : undefined;
 
+    const dateRange = filters.date_range || {};
+    const [dateStartParam, dateEndParam] = DATE_FIELD_PARAMS[filters.date_field] || DATE_FIELD_PARAMS.target;
+    const dateParams = {};
+    if (dateRange.start) dateParams[dateStartParam] = dateRange.start;
+    if (dateRange.end) dateParams[dateEndParam] = dateRange.end;
+
     costTable.setLoading(true);
     try {
         const res = await getCostTable({
@@ -617,6 +672,8 @@ async function loadData() {
             search: search || undefined,
             customer: customer ? parseInt(customer, 10) : undefined,
             template_node,
+            manufactured: filters.manufactured || undefined,
+            ...dateParams,
             ordering: currentOrdering,
             page: currentPage,
             page_size: pageSize

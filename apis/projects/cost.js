@@ -17,12 +17,31 @@ import { backendBase } from '../../base.js';
  * @param {string} [options.ordering] - Order by any field (e.g. -actual_total_cost, job_no)
  * @param {string} [options.facility] - `rolling_mill` (RM only), `meltshop` (non-RM); omit for all jobs
  * @param {string} [options.template_node] - Filter by catalog item id(s), comma-separated (e.g. "1,2,3")
+ * @param {string} [options.manufactured] - 'true' = has a manufacturing (İmalat) task; 'false' = not manufactured in-house
+ * @param {string} [options.target_completion_date__gte] - Target date range start (YYYY-MM-DD)
+ * @param {string} [options.target_completion_date__lte] - Target date range end (YYYY-MM-DD)
+ * @param {string} [options.created_at__date__gte] - Created date range start (YYYY-MM-DD)
+ * @param {string} [options.created_at__date__lte] - Created date range end (YYYY-MM-DD)
+ * @param {string} [options.cost_summary__last_updated__date__gte] - Cost last-update range start (YYYY-MM-DD)
+ * @param {string} [options.cost_summary__last_updated__date__lte] - Cost last-update range end (YYYY-MM-DD)
  * @param {number} [options.page] - Page number
  * @param {number} [options.page_size] - Page size
  * @returns {Promise<{ count: number, next: string|null, previous: string|null, results: Array }>}
  */
+const COST_TABLE_DATE_PARAMS = [
+    'target_completion_date__gte', 'target_completion_date__lte',
+    'created_at__date__gte', 'created_at__date__lte',
+    'cost_summary__last_updated__date__gte', 'cost_summary__last_updated__date__lte',
+];
+
 export async function getCostTable(options = {}) {
     const queryParams = new URLSearchParams();
+
+    for (const param of COST_TABLE_DATE_PARAMS) {
+        if (options[param] != null && options[param] !== '') {
+            queryParams.append(param, options[param]);
+        }
+    }
 
     if (options.status != null && options.status !== '') {
         queryParams.append('status', options.status);
@@ -44,6 +63,9 @@ export async function getCostTable(options = {}) {
     }
     if (options.template_node != null && options.template_node !== '') {
         queryParams.append('template_node', options.template_node);
+    }
+    if (options.manufactured === 'true' || options.manufactured === 'false') {
+        queryParams.append('manufactured', options.manufactured);
     }
     if (options.page != null) {
         queryParams.append('page', String(options.page));
