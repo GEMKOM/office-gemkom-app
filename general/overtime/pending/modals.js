@@ -6,7 +6,7 @@ import {
     formatOvertimeDuration,
     getOvertimeCostImpact
 } from '../../../apis/overtime.js';
-import { formatDate, formatDateTime } from '../../../apis/formatters.js';
+import { formatDate, formatDateTime, formatDerivedPrice } from '../../../apis/formatters.js';
 
 // Modal instances
 let overtimeDetailsModal = null;
@@ -21,6 +21,12 @@ let showNotification = null;
 
 // Entry ids the approver has un-checked (to reject) in the details modal.
 let pendingRejectedEntryIds = [];
+
+// Bumped on every open of the details modal. showOvertimeDetailsModal clears the
+// modal synchronously but then awaits the cost-impact fetch, so a second click
+// during that gap would wipe the first call's sections and both fetches would
+// then append their own cost table. Work started under a stale token is dropped.
+let detailsRenderToken = 0;
 
 // Initialize modal components
 function initializeModalComponents() {
@@ -78,6 +84,9 @@ async function showOvertimeDetailsModal(request = null) {
     // Use provided request or fall back to global currentRequest
     const requestToShow = request || currentRequest;
     if (!requestToShow) return;
+
+    // Claim this open; anything already in flight becomes stale.
+    const renderToken = ++detailsRenderToken;
 
     // Is the current user an approver on this request? (used to allow retracting
     // participants after approval)
@@ -320,7 +329,11 @@ async function showOvertimeDetailsModal(request = null) {
         }
 
         // Add cost-impact section (only for cost-authorized users; hidden on 403).
-        await appendCostImpactSection(requestToShow.id);
+        await appendCostImpactSection(requestToShow.id, renderToken);
+
+        // A newer open started while the fetch was in flight — it owns the modal
+        // now, so stop rather than rendering this stale build over it.
+        if (renderToken !== detailsRenderToken) return;
 
         // Render the modal
         overtimeDetailsModal.render();
@@ -374,7 +387,7 @@ async function showOvertimeDetailsModal(request = null) {
 
 // Append the per-job profit / overtime-cost section to the details modal.
 // Silently does nothing when the user lacks cost visibility (API returns null).
-async function appendCostImpactSection(requestId) {
+async function appendCostImpactSection(requestId, renderToken) {
     let impact = null;
     try {
         impact = await getOvertimeCostImpact(requestId);
@@ -383,6 +396,9 @@ async function appendCostImpactSection(requestId) {
         console.warn('cost impact unavailable:', e.message);
         return;
     }
+    // Another open superseded this one while the request was in flight; appending
+    // now would add a second cost table to the modal it rebuilt.
+    if (renderToken !== undefined && renderToken !== detailsRenderToken) return;
     if (!impact || !Array.isArray(impact.jobs) || impact.jobs.length === 0) return;
 
     const fmt = (v) => (v === null || v === undefined)
@@ -434,7 +450,9 @@ async function appendCostImpactSection(requestId) {
                 <td class="text-end ${profitClass(j.current_profit_eur)}">${fmt(j.current_profit_eur)}<br><span class="text-muted small">${pct(j.current_margin_pct)}</span></td>
                 <td class="text-end ${profitClass(j.projected_profit_eur)}">${fmt(j.projected_profit_eur)}<br><span class="text-muted small">${pct(j.projected_margin_pct)}</span></td>
                 <td class="text-end text-warning">${fmt(j.overtime_cost_eur)}</td>
-                <td class="text-end">${fmt(j.current_selling_price_eur)}</td>
+                <td class="text-end">${j.selling_price_is_derived
+                    ? formatDerivedPrice(j.current_selling_price_eur, j.selling_price_source, j.selling_price_derived_basis)
+                    : fmt(j.current_selling_price_eur)}</td>
             </tr>`;
     }).join('');
 

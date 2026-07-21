@@ -6,6 +6,7 @@ import { DisplayModal } from '../../components/display-modal/display-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { getCostTable, getCostChildren, getProcurementLines, patchJobCostSummary } from '../../apis/projects/cost.js';
 import { listCustomers } from '../../apis/projects/customers.js';
+import { formatDerivedPrice } from '../../apis/formatters.js';
 import { getCombinedJobCosts } from '../../apis/planning/reports.js';
 import { getMachiningJobEntries } from '../../apis/machining/reports.js';
 import { getWeldingJobCostDetail } from '../../apis/welding/reports.js';
@@ -563,21 +564,41 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const currency = row.selling_price_currency || 'EUR';
                     const jobNo = (row.job_no || '').replace(/"/g, '&quot;');
 
+                    // Representative price for rows with none of their own. It
+                    // is shown BESIDE the input, never inside it — the input is
+                    // bound to the entered value, so seeding it with a computed
+                    // figure would let a stray blur save it as real data.
+                    const derivedHint = row.selling_price_is_derived
+                        ? `<div class="small mt-1">${formatDerivedPrice(
+                              row.selling_price_display,
+                              row.selling_price_display_source,
+                              row.selling_price_derived_basis)}</div>`
+                        : '';
+
+                    if (window.isExporting) {
+                        return row.selling_price_is_derived
+                            ? `${row.selling_price_display} (dağıtılmış)`
+                            : displayValue;
+                    }
+
                     // Temporary inline edit: click to focus, blur / Enter to save
                     return `
-                        <div class="d-flex align-items-center gap-1" style="min-width: 160px;">
-                            <span class="text-muted me-1">€</span>
-                            <input
-                                type="text"
-                                class="form-control form-control-sm text-end"
-                                style="max-width: 120px;"
-                                data-selling-price-input="true"
-                                data-job-no="${jobNo}"
-                                data-original-value="${displayValue}"
-                                value="${displayValue}"
-                                placeholder="Fiyat"
-                            />
-                            ${currency && currency !== 'EUR' ? `<small class="text-muted ms-1">${currency}</small>` : ''}
+                        <div style="min-width: 160px;">
+                            <div class="d-flex align-items-center gap-1">
+                                <span class="text-muted me-1">€</span>
+                                <input
+                                    type="text"
+                                    class="form-control form-control-sm text-end"
+                                    style="max-width: 120px;"
+                                    data-selling-price-input="true"
+                                    data-job-no="${jobNo}"
+                                    data-original-value="${displayValue}"
+                                    value="${displayValue}"
+                                    placeholder="Fiyat"
+                                />
+                                ${currency && currency !== 'EUR' ? `<small class="text-muted ms-1">${currency}</small>` : ''}
+                            </div>
+                            ${derivedHint}
                         </div>
                     `;
                 }

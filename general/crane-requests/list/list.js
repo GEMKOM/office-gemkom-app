@@ -380,6 +380,14 @@ function initializeTableComponent() {
                 visible: (row) => row.status === 'approved' && myPermissions.can_complete
             },
             {
+                key: 'fix-actuals',
+                label: 'Fiili Değeri Düzelt',
+                icon: 'fas fa-pen',
+                class: 'btn-outline-warning',
+                onClick: (row) => showCompleteModal(row),
+                visible: (row) => row.status === 'completed' && myPermissions.can_complete
+            },
+            {
                 key: 'cancel',
                 label: 'İptal Et',
                 icon: 'fas fa-ban',
@@ -1004,7 +1012,11 @@ function showRequestDetailsModal(request) {
             buttons.push('<button type="button" class="btn btn-danger" id="cancel-crane-request-btn"><i class="fas fa-ban me-1"></i>İptal Et</button>');
         }
         if (request.can_complete) {
-            buttons.push('<button type="button" class="btn btn-success" id="complete-crane-request-btn"><i class="fas fa-flag-checkered me-1"></i>Tamamla</button>');
+            const isCorrection = request.status === 'completed';
+            const completeLabel = isCorrection ? 'Fiili Değeri Düzelt' : 'Tamamla';
+            const completeIcon = isCorrection ? 'fa-pen' : 'fa-flag-checkered';
+            const completeClass = isCorrection ? 'btn-warning' : 'btn-success';
+            buttons.push(`<button type="button" class="btn ${completeClass}" id="complete-crane-request-btn"><i class="fas ${completeIcon} me-1"></i>${completeLabel}</button>`);
         }
         modalFooter.innerHTML = `<div class="d-flex justify-content-end gap-2">${buttons.join('')}</div>`;
 
@@ -1047,17 +1059,89 @@ function showRequestDetailsModal(request) {
 // Complete + cancel
 // ============================================================
 
+/**
+ * Suggested cost from the ACTUAL quantity: cranes auto-promote to the
+ * matching bracket (≤3h → 3h price if offered, otherwise 8h price),
+ * platforms use days × daily price + transport. Rigger fee follows the
+ * request. Returns {total, currency, note} or null.
+ */
+function suggestActualCost(requestRow, quantity) {
+    const type = getTypeById(requestRow.crane_type);
+    const rate = type?.current_rate;
+    const qty = parseFloat(quantity);
+    if (!rate || Number.isNaN(qty) || qty <= 0) return null;
+
+    const isPlatform = requestRow.crane_type_category
+        ? PLATFORM_CATEGORIES.includes(requestRow.crane_type_category)
+        : isPlatformType(type);
+
+    let total = null;
+    let note = '';
+    if (isPlatform) {
+        if (rate.price_per_day == null) return null;
+        const days = Math.max(Math.ceil(qty), 1);
+        total = days * parseFloat(rate.price_per_day);
+        if (rate.transport_fee != null) {
+            total += parseFloat(rate.transport_fee);
+            note = `${days} gün × günlük + nakliye`;
+        } else {
+            note = `${days} gün × günlük`;
+        }
+    } else {
+        const p3 = rate.price_up_to_3h != null ? parseFloat(rate.price_up_to_3h) : null;
+        const p8 = rate.price_up_to_8h != null ? parseFloat(rate.price_up_to_8h) : null;
+        if (qty <= 3 && p3 != null) {
+            total = p3;
+            note = '3 saate kadar tarifesi';
+        } else if (p8 != null) {
+            total = p8;
+            note = '8 saate kadar tarifesi';
+        } else if (p3 != null) {
+            total = p3;
+            note = '3 saate kadar tarifesi';
+        } else {
+            return null;
+        }
+        if (requestRow.needs_rigger && rate.rigger_fee != null) {
+            total += parseFloat(rate.rigger_fee);
+            note += ' + sapancı';
+        }
+        if (qty > 8) {
+            note += ' — 8 saati aşan kullanım için tedarikçi faturasını esas alın';
+        }
+    }
+    return { total, currency: rate.currency || 'TRY', note };
+}
+
 function showCompleteModal(requestRow) {
     currentRequest = requestRow;
     const type = getTypeById(requestRow.crane_type);
     const isPlatform = requestRow.crane_type_category
         ? PLATFORM_CATEGORIES.includes(requestRow.crane_type_category)
         : isPlatformType(type);
+    const isCorrection = requestRow.status === 'completed';
     const quantityLabel = isPlatform ? 'Fiili Gün Sayısı' : 'Fiili Saat';
 
+    // Prefill: corrections show the stored actuals; first completion starts
+    // from the requested duration and its price-list suggestion.
+    let initialQuantity;
+    if (isCorrection && requestRow.actual_quantity != null) {
+        initialQuantity = parseFloat(requestRow.actual_quantity);
+    } else if (requestRow.pricing_option === 'daily') {
+        initialQuantity = requestRow.days || 1;
+    } else {
+        initialQuantity = requestRow.pricing_option === 'up_to_3h' ? 3 : 8;
+    }
+    const initialSuggestion = suggestActualCost(requestRow, initialQuantity);
+    const initialCost = isCorrection && requestRow.actual_cost != null
+        ? requestRow.actual_cost
+        : (initialSuggestion ? initialSuggestion.total : (requestRow.estimated_cost || ''));
+
     completeModal.clearAll();
-    completeModal.setTitle(`Talebi Tamamla — ${requestRow.request_number}`);
-    completeModal.setSaveButtonText('Tamamla ve Maliyeti İşle');
+    completeModal.setTitle(isCorrection
+        ? `Fiili Değeri Düzelt — ${requestRow.request_number}`
+        : `Talebi Tamamla — ${requestRow.request_number}`);
+    completeModal.setSaveButtonText(isCorrection ? 'Güncelle ve Maliyeti Yeniden Hesapla' : 'Tamamla ve Maliyeti İşle');
 
     completeModal.addSection({
         id: 'actuals-section',
@@ -1070,31 +1154,33 @@ function showCompleteModal(requestRow) {
                 name: 'actual_quantity',
                 label: quantityLabel,
                 type: 'number',
-                value: requestRow.pricing_option === 'daily' ? (requestRow.days || 1) : '',
+                value: initialQuantity,
                 required: false,
                 min: 0,
                 step: 0.5,
                 colSize: 12,
-                helpText: 'Vinç için çalışılan saat, platform için gün'
+                helpText: isPlatform
+                    ? 'Platformun sahada kaldığı gün sayısı'
+                    : `Vincin fiilen çalıştığı saat (talep: ${PRICING_OPTION_LABELS[requestRow.pricing_option] || '-'})`
             },
             {
                 id: 'actual_cost',
                 name: 'actual_cost',
                 label: 'Fiili Maliyet (fatura tutarı, KDV hariç)',
                 type: 'number',
-                value: requestRow.estimated_cost || '',
+                value: initialCost,
                 required: true,
                 min: 0,
                 step: 0.01,
                 colSize: 8,
-                helpText: 'Tahmini tutar önerilir; tedarikçi faturasına göre düzeltin'
+                helpText: 'Girilen süreye göre önerilir; tedarikçi faturasına göre düzeltin'
             },
             {
                 id: 'actual_cost_currency',
                 name: 'actual_cost_currency',
                 label: 'Para Birimi',
                 type: 'select',
-                value: requestRow.estimated_cost_currency || 'TRY',
+                value: (isCorrection && requestRow.actual_cost_currency) || requestRow.estimated_cost_currency || 'TRY',
                 required: false,
                 colSize: 4,
                 options: [
@@ -1117,7 +1203,9 @@ function showCompleteModal(requestRow) {
                 actual_cost: formData.actual_cost,
                 actual_cost_currency: formData.actual_cost_currency || 'TRY'
             });
-            showNotification('Talep tamamlandı; maliyet iş emrine işlendi', 'success');
+            showNotification(isCorrection
+                ? 'Fiili değerler güncellendi; iş maliyeti yeniden hesaplandı'
+                : 'Talep tamamlandı; maliyet iş emrine işlendi', 'success');
             completeModal.hide();
             detailsModal.hide();
             await loadRequests();
@@ -1132,6 +1220,45 @@ function showCompleteModal(requestRow) {
 
     completeModal.render();
     completeModal.show();
+
+    // Live suggestion: entering the real hours/days recomputes the suggested
+    // cost from the price list. The cost field auto-follows the suggestion
+    // until the coordinator edits it manually.
+    setTimeout(() => {
+        const container = completeModal.container;
+        const qtyInput = container.querySelector('[data-field-id="actual_quantity"] .field-input');
+        const costInput = container.querySelector('[data-field-id="actual_cost"] .field-input');
+        const costGroup = container.querySelector('[data-field-id="actual_cost"]');
+        if (!qtyInput || !costInput || !costGroup) return;
+
+        let hint = costGroup.querySelector('.actual-cost-suggestion');
+        if (!hint) {
+            hint = document.createElement('div');
+            hint.className = 'actual-cost-suggestion';
+            hint.style.cssText = 'font-size: 0.8rem; color: #0d6efd; margin-top: 0.25rem;';
+            costGroup.appendChild(hint);
+        }
+
+        let lastSuggestion = initialSuggestion ? initialSuggestion.total : null;
+
+        const refreshSuggestion = () => {
+            const suggestion = suggestActualCost(requestRow, qtyInput.value);
+            if (!suggestion) {
+                hint.textContent = '';
+                return;
+            }
+            hint.innerHTML = `<i class="fas fa-calculator me-1"></i>Öneri: <strong>${formatMoney(suggestion.total, suggestion.currency)}</strong> (${suggestion.note})`;
+            const currentVal = parseFloat(costInput.value);
+            const untouched = costInput.value === '' || (lastSuggestion !== null && !Number.isNaN(currentVal) && currentVal === lastSuggestion);
+            if (untouched) {
+                costInput.value = suggestion.total;
+            }
+            lastSuggestion = suggestion.total;
+        };
+
+        qtyInput.addEventListener('input', refreshSuggestion);
+        refreshSuggestion();
+    }, 250);
 }
 
 function showCancelConfirmation(requestRow) {

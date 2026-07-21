@@ -200,6 +200,66 @@ export function formatJobNumber(jobNo) {
     return `<code class="job-number">${jobNo.trim()}</code>`;
 }
 
+// ===== Derived ("representative") selling price =====
+//
+// A job order that carries no selling price of its own gets a representative
+// one from the backend (projects/services/selling_price.py): split down from a
+// priced parent by weight, or summed up from priced children. These are NOT
+// entered figures, so they always render distinctly — italic, muted, prefixed
+// with "≈" — and must never be written back into an editable price field or
+// added into a revenue total.
+
+const DERIVED_PRICE_META = {
+    allocated_from_parent: {
+        icon: 'fas fa-turn-down',
+        label: 'ağırlığa göre dağıtıldı',
+    },
+    rolled_up_from_children: {
+        icon: 'fas fa-turn-up',
+        label: 'alt işlerin toplamı',
+    },
+};
+
+/**
+ * Human-readable explanation of where a derived price came from.
+ * @param {string} source - selling_price_display_source
+ * @param {Object|null} basis - selling_price_derived_basis
+ * @returns {string} plain text, safe for a title attribute
+ */
+export function describeDerivedPrice(source, basis) {
+    const money = (v) => `€${Number(v || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const kg = (v) => `${Number(v || 0).toLocaleString('tr-TR', { maximumFractionDigits: 2 })} kg`;
+    if (source === 'allocated_from_parent' && basis) {
+        return `Bu iş emrinin kendi satış fiyatı girilmemiş. `
+             + `${basis.from_job_no} iş emrinin ${money(basis.from_amount_eur)} tutarından `
+             + `ağırlık oranına göre hesaplandı (${kg(basis.weight_kg)} / ${kg(basis.total_weight_kg)}).`;
+    }
+    if (source === 'rolled_up_from_children') {
+        return 'Bu iş emrinin kendi satış fiyatı girilmemiş. '
+             + 'Alt iş emirlerinde girili satış fiyatlarının toplamı gösteriliyor.';
+    }
+    return '';
+}
+
+/**
+ * Render a derived selling price so it reads as computed, not entered.
+ * @param {number|string} amountEur
+ * @param {string} source - 'allocated_from_parent' | 'rolled_up_from_children'
+ * @param {Object|null} basis
+ * @returns {string} HTML
+ */
+export function formatDerivedPrice(amountEur, source, basis = null) {
+    const meta = DERIVED_PRICE_META[source];
+    if (!meta) return '<span class="text-muted">-</span>';
+    const amount = `€${Number(amountEur || 0).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    if (typeof window !== 'undefined' && window.isExporting) {
+        return `${amount} (${meta.label})`;
+    }
+    const title = describeDerivedPrice(source, basis).replace(/"/g, '&quot;');
+    return `<span class="fst-italic text-secondary" title="${title}" data-derived-price="${source}">`
+         + `<i class="${meta.icon} me-1 small"></i>≈${amount}</span>`;
+}
+
 /**
  * Format description with truncation if too long
  * @param {string} description - Description text

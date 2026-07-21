@@ -12,6 +12,7 @@ import { getMachiningJobEntries } from '../../apis/machining/reports.js';
 import { getWeldingJobCostDetail } from '../../apis/welding/reports.js';
 import { fetchSubcontractorCostBreakdown } from '../../apis/subcontracting/subcontractors.js';
 import { listCustomers } from '../../apis/projects/customers.js';
+import { formatDerivedPrice } from '../../apis/formatters.js';
 import { CatalogTreePicker } from '../../components/catalog-tree-picker/catalog-tree-picker.js';
 
 /* ── state ─────────────────────────────────────────────────────────── */
@@ -289,7 +290,12 @@ function estimatedCostCellFormatter(v, row) {
 /* ── summary footer builder ────────────────────────────────────────── */
 
 function buildFooter({ displayedData, columns, hasActions }) {
-    const rows = Array.isArray(displayedData) ? displayedData : [];
+    const all = Array.isArray(displayedData) ? displayedData : [];
+    // Only top-level rows. Expanding a parent splices its children into the
+    // displayed data (mergeExpandedChildren), and a parent's cost figures are
+    // already subtree totals — so summing expanded children would count their
+    // cost twice. hierarchy_level is stamped during that merge.
+    const rows = all.filter(r => (r.hierarchy_level ?? 0) === 0);
     const s = {
         laborWithTax: 0, material: 0, subcontractor: 0, paintWithMaterial: 0,
         qc: 0, shipping: 0, machineRental: 0, generalExpenses: 0, weightKg: 0,
@@ -309,11 +315,21 @@ function buildFooter({ displayedData, columns, hasActions }) {
         s.weightKg += toNumber(r.total_weight_kg);
         s.actualTotalCost += toNumber(r.actual_total_cost);
         s.estimatedTotalCost += toNumber(r.estimated_total_cost);
-        s.sellingPrice += toNumber(r.selling_price);
-        s.marginEur += toNumber(r.margin_eur);
+        // Revenue: the entered price, plus the rolled-up figure for parents that
+        // hold no price themselves (that revenue is real, it just lives on
+        // descendants which are not in this list). Never add
+        // 'allocated_from_parent' — that revenue is already on the ancestor.
+        s.sellingPrice += r.selling_price_display_source === 'rolled_up_from_children'
+            ? toNumber(r.selling_price_display)
+            : toNumber(r.selling_price);
         const rate = r.general_expenses_rate;
         if (rate != null && rate !== '') { const rv = toNumber(rate); if (Number.isFinite(rv) && rv !== 0) { grSum += rv; grCount++; } }
     });
+
+    // Derive the margin total from the revenue and cost totals above rather than
+    // summing per-row margin_eur: those rows mix entered and derived price
+    // bases, so adding them would not reconcile with the columns beside it.
+    s.marginEur = s.sellingPrice - s.actualTotalCost;
 
     // Footer "Kg Maliyeti" / "Kg Fiyatı" are weighted averages: total cost (or
     // selling price) / total weight — a plain column average would let small
@@ -607,11 +623,26 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'price_per_kg', label: 'Kg Maliyeti', sortable: true, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-primary">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
             {
                 field: 'selling_price', label: 'Satış Fiyatı', sortable: true,
-                formatter: (v, row) => (v != null && v !== '' ? formatMoney(v) + (row.selling_price_currency && row.selling_price_currency !== 'EUR' ? ` <small class="text-muted">${row.selling_price_currency}</small>` : '') : '<span class="text-muted">-</span>')
+                formatter: (v, row) => {
+                    if (row.selling_price_is_derived) {
+                        return formatDerivedPrice(
+                            row.selling_price_display,
+                            row.selling_price_display_source,
+                            row.selling_price_derived_basis);
+                    }
+                    return v != null && v !== ''
+                        ? formatMoney(v) + (row.selling_price_currency && row.selling_price_currency !== 'EUR'
+                            ? ` <small class="text-muted">${row.selling_price_currency}</small>` : '')
+                        : '<span class="text-muted">-</span>';
+                }
             },
             { field: 'selling_price_per_kg', label: 'Kg Fiyatı', sortable: false, formatter: v => (v != null && v !== '' ? `<span class="fw-bold text-success">€${parseFloat(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>` : '<span class="text-muted">-</span>') },
             { field: 'margin_eur', label: 'Marj (€)', sortable: true, formatter: v => (v != null && v !== '' ? formatMoney(v) : '<span class="text-muted">-</span>') },
-            { field: 'margin_pct', label: 'Marj %', sortable: true, formatter: (v, row) => marginChip(v, row?.selling_price) },
+            // Colour the chip against whichever price the margin was computed
+            // from, otherwise derived rows (own price 0) always read as amber.
+            { field: 'margin_pct', label: 'Marj %', sortable: true,
+              formatter: (v, row) => marginChip(v, row?.selling_price_is_derived
+                  ? row?.selling_price_display : row?.selling_price) },
             { field: 'completion_pct', label: 'Tamamlanma', sortable: true, width: '160px', formatter: v => completionBar(v) },
             { field: 'target_completion_date', label: 'Hedef tarih', sortable: true, width: '120px', formatter: formatDate }
         ],
