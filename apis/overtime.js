@@ -371,6 +371,41 @@ export async function getOvertimeMachiningReport(filters = {}) {
 }
 
 /**
+ * Fetch the period overtime cost report.
+ *
+ * Returns { meta, summary, by_bucket, by_team, by_user, by_job, requests },
+ * where each request carries its own `entries` breakdown — the detail modal
+ * renders from this payload, so no second round-trip is needed.
+ *
+ * Resolves to `null` on 403 (caller lacks `view_job_costs`), matching
+ * getOvertimeCostImpact, so the page can show a permission message instead of
+ * an error toast.
+ *
+ * @param {Object} filters - { start_date, end_date, status, team, user, job_no }
+ *                           `status` may be a string or an array of statuses.
+ * @returns {Promise<Object|null>}
+ */
+export async function getOvertimeCostReport(filters = {}) {
+    const params = new URLSearchParams();
+    Object.entries(filters).forEach(([key, value]) => {
+        if (value === null || value === undefined || value === '') return;
+        if (Array.isArray(value)) {
+            value.forEach(v => { if (v !== '' && v != null) params.append(key, v); });
+        } else {
+            params.append(key, value);
+        }
+    });
+    const url = `${backendBase}/overtime/requests/cost_report/${params.toString() ? '?' + params.toString() : ''}`;
+    const resp = await authedFetch(url);
+    if (resp.status === 403) return null;
+    if (!resp.ok) {
+        const errorData = await resp.json().catch(() => ({}));
+        throw new Error(errorData.detail || 'Mesai maliyet raporu yüklenirken hata oluştu');
+    }
+    return await resp.json();
+}
+
+/**
  * Fetch active machining operators (users holding `access_machining_tasks`).
  * Classification is done on the backend via the Django permission system, so
  * it correctly reflects positions/groups (there is no `machining` department).

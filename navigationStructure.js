@@ -36,6 +36,11 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Talaşlı İmalat Mesai Raporu',
                         icon: 'fas fa-cogs',
                         children: {}
+                    },
+                    '/general/overtime/cost-report': {
+                        label: 'Mesai Maliyet Raporu',
+                        icon: 'fas fa-coins',
+                        children: {}
                     }
                 }
             },
@@ -67,6 +72,27 @@ export const NAVIGATION_STRUCTURE = {
                     '/general/department-requests/pending': {
                         label: 'Bekleyen Talepler',
                         icon: 'fas fa-clock',
+                        children: {}
+                    }
+                }
+            },
+            '/general/crane-requests': {
+                label: 'Vinç Talepleri',
+                icon: 'fas fa-truck-pickup',
+                children: {
+                    '/general/crane-requests/list': {
+                        label: 'Tüm Talepler',
+                        icon: 'fas fa-list',
+                        children: {}
+                    },
+                    '/general/crane-requests/pending': {
+                        label: 'Bekleyen Talepler',
+                        icon: 'fas fa-clock',
+                        children: {}
+                    },
+                    '/general/crane-requests/prices': {
+                        label: 'Fiyat Listesi',
+                        icon: 'fas fa-tags',
                         children: {}
                     }
                 }

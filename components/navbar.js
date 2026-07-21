@@ -922,7 +922,7 @@ export function initNavbar() {
                             return;
                         }
                         
-                                        if (path.startsWith('/general/') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime') && !path.startsWith('/general/vacation') && !path.startsWith('/general/department-requests')) {
+                                        if (path.startsWith('/general/') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime') && !path.startsWith('/general/vacation') && !path.startsWith('/general/department-requests') && !path.startsWith('/general/crane-requests')) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;
@@ -1045,7 +1045,7 @@ export function initNavbar() {
                     return;
                 }
                 
-                if (path.startsWith('/general/') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime') && !path.startsWith('/general/vacation') && !path.startsWith('/general/department-requests')) {
+                if (path.startsWith('/general/') && !path.startsWith('/general/machines') && !path.startsWith('/general/overtime') && !path.startsWith('/general/vacation') && !path.startsWith('/general/department-requests') && !path.startsWith('/general/crane-requests')) {
                     // Show placeholder for management pages
                     alert(`Bu sayfa henüz geliştirilme aşamasında: ${path}`);
                     return;

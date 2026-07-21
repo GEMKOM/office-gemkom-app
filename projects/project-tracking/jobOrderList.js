@@ -4989,6 +4989,7 @@ const COST_COMPONENT_ORDER = [
     'employee_overhead_cost',
     'qc_cost',
     'shipping_cost',
+    'machine_rental_cost',
     'general_expenses_cost',
     'other_cost',
 ];
@@ -5002,6 +5003,7 @@ const COST_COMPONENT_LABELS = {
     employee_overhead_cost: 'Personel Genel Giderleri',
     qc_cost: 'Kalite Kontrol',
     shipping_cost: 'Sevkiyat',
+    machine_rental_cost: 'Makine Kirası',
     general_expenses_cost: 'Genel Giderler',
     other_cost: 'Diğer',
 };

@@ -390,6 +390,20 @@ async function appendCostImpactSection(requestId) {
         : `€${Number(v).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const pct = (v) => (v === null || v === undefined) ? '-' : `%${Number(v).toLocaleString('tr-TR', { maximumFractionDigits: 1 })}`;
     const profitClass = (v) => (v !== null && v !== undefined && Number(v) < 0) ? 'text-danger' : 'text-success';
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) =>
+        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const dash = '<span class="text-muted">-</span>';
+
+    // Termin: flag job orders already past their target completion date — an
+    // approver deciding on overtime wants to see that at a glance.
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const termin = (iso) => {
+        if (!iso) return dash;
+        const label = new Date(iso).toLocaleDateString('tr-TR');
+        return iso < todayIso
+            ? `<span class="text-danger" title="Termin tarihi geçti"><i class="fas fa-exclamation-circle me-1"></i>${label}</span>`
+            : label;
+    };
 
     overtimeDetailsModal.addSection({
         title: 'Maliyet / Kâr Etkisi',
@@ -401,7 +415,9 @@ async function appendCostImpactSection(requestId) {
         if (!j.job_order_found) {
             return `
                 <tr>
-                    <td><strong>${j.job_no || '-'}</strong><br><span class="badge bg-secondary">İş emri bulunamadı</span></td>
+                    <td><strong>${esc(j.job_no) || '-'}</strong><br><span class="badge bg-secondary">İş emri bulunamadı</span></td>
+                    <td>${dash}</td>
+                    <td>${dash}</td>
                     <td class="text-end">-</td>
                     <td class="text-end">-</td>
                     <td class="text-end text-warning">${fmt(j.overtime_cost_eur)}</td>
@@ -410,7 +426,11 @@ async function appendCostImpactSection(requestId) {
         }
         return `
             <tr>
-                <td><strong>${j.job_no}</strong>${j.title ? `<br><span class="text-muted small">${j.title}</span>` : ''}</td>
+                <td><strong>${esc(j.job_no)}</strong>${j.title ? `<br><span class="text-muted small">${esc(j.title)}</span>` : ''}</td>
+                <td>${j.customer_name
+                        ? `${esc(j.customer_name)}${j.customer_code ? `<br><span class="text-muted small">${esc(j.customer_code)}</span>` : ''}`
+                        : dash}</td>
+                <td>${termin(j.target_completion_date)}</td>
                 <td class="text-end ${profitClass(j.current_profit_eur)}">${fmt(j.current_profit_eur)}<br><span class="text-muted small">${pct(j.current_margin_pct)}</span></td>
                 <td class="text-end ${profitClass(j.projected_profit_eur)}">${fmt(j.projected_profit_eur)}<br><span class="text-muted small">${pct(j.projected_margin_pct)}</span></td>
                 <td class="text-end text-warning">${fmt(j.overtime_cost_eur)}</td>
@@ -429,6 +449,8 @@ async function appendCostImpactSection(requestId) {
                     <thead class="table-light">
                         <tr>
                             <th>İş Emri</th>
+                            <th>Müşteri</th>
+                            <th>Termin</th>
                             <th class="text-end">Mevcut Kâr</th>
                             <th class="text-end">Mesai Sonrası Kâr</th>
                             <th class="text-end">Mesai Maliyeti</th>

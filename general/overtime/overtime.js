@@ -47,6 +47,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                 icon: 'fas fa-cogs',
                 iconColor: 'success',
                 link: '/general/overtime/machining-report'
+            },
+            {
+                title: 'Mesai Maliyet Raporu',
+                description: 'Seçilen dönemdeki toplam mesai maliyeti; ekip, kişi ve iş bazında dağılım.',
+                icon: 'fas fa-coins',
+                iconColor: 'warning',
+                link: '/general/overtime/cost-report'
             }
         ]
     });

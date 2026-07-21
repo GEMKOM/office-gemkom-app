@@ -65,7 +65,7 @@ let expandedRows = new Set();
 let costTableRoots = [];
 let childrenCache = new Map();
 let costBreakdownVisible = false;
-const DETAIL_FIELDS = new Set(['labor_cost', 'material_cost', 'subcontractor_cost', 'paint_cost', 'qc_cost', 'shipping_cost', 'general_expenses_cost']);
+const DETAIL_FIELDS = new Set(['labor_cost', 'material_cost', 'subcontractor_cost', 'paint_cost', 'qc_cost', 'shipping_cost', 'machine_rental_cost', 'general_expenses_cost']);
 
 /* ── format helpers ────────────────────────────────────────────────── */
 
@@ -292,7 +292,7 @@ function buildFooter({ displayedData, columns, hasActions }) {
     const rows = Array.isArray(displayedData) ? displayedData : [];
     const s = {
         laborWithTax: 0, material: 0, subcontractor: 0, paintWithMaterial: 0,
-        qc: 0, shipping: 0, generalExpenses: 0, weightKg: 0,
+        qc: 0, shipping: 0, machineRental: 0, generalExpenses: 0, weightKg: 0,
         actualTotalCost: 0, estimatedTotalCost: 0, sellingPrice: 0, marginEur: 0
     };
     let grSum = 0, grCount = 0;
@@ -304,6 +304,7 @@ function buildFooter({ displayedData, columns, hasActions }) {
         s.paintWithMaterial += toNumber(r.paint_cost) + toNumber(r.paint_material_cost);
         s.qc += toNumber(r.qc_cost);
         s.shipping += toNumber(r.shipping_cost);
+        s.machineRental += toNumber(r.machine_rental_cost);
         s.generalExpenses += toNumber(r.general_expenses_cost);
         s.weightKg += toNumber(r.total_weight_kg);
         s.actualTotalCost += toNumber(r.actual_total_cost);
@@ -334,6 +335,7 @@ function buildFooter({ displayedData, columns, hasActions }) {
     vm.set('paint_cost', `<span class="fw-bold">${formatMoney(s.paintWithMaterial)}</span>`);
     vm.set('qc_cost', `<span class="fw-bold">${formatMoney(s.qc)}</span>`);
     vm.set('shipping_cost', `<span class="fw-bold">${formatMoney(s.shipping)}</span>`);
+    vm.set('machine_rental_cost', `<span class="fw-bold">${formatMoney(s.machineRental)}</span>`);
     vm.set('general_expenses_cost', `<span class="fw-bold" style="white-space:nowrap;">${formatMoney(s.generalExpenses)}${grAvg != null ? ` <small class="text-muted">(${formatNumber(grAvg, 2)})</small>` : ''}</span>`);
     vm.set('total_weight_kg', `<span class="fw-bold">${formatNumber(s.weightKg, 2)}</span>`);
     vm.set('price_per_kg', ppkg != null ? `<span class="fw-bold text-primary">€${formatNumber(ppkg, 2)}</span>` : '<span class="text-muted">-</span>');
@@ -597,6 +599,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             { field: 'paint_cost', label: 'Boya + Malzeme', sortable: false, formatter: paintCellFormatter },
             { field: 'qc_cost', label: 'KK', sortable: false, formatter: formatMoney },
             { field: 'shipping_cost', label: 'Sevkiyat', sortable: false, formatter: formatMoney },
+            { field: 'machine_rental_cost', label: 'Makine Kirası', sortable: false, formatter: formatMoney },
             { field: 'general_expenses_cost', label: 'Genel Giderler', sortable: false, formatter: generalExpensesCellFormatter },
             /* end detail columns */
             { field: 'actual_total_cost', label: 'Toplam Maliyet', sortable: true, formatter: v => `<span class="fw-bold">${formatMoney(v)}</span>` },

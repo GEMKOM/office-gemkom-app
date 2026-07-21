@@ -524,6 +524,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             { field: 'qc_cost', label: 'KK', sortable: true, formatter: formatMoney },
             { field: 'shipping_cost', label: 'Sevkiyat', sortable: true, formatter: formatMoney },
+            { field: 'machine_rental_cost', label: 'Makine Kirası', sortable: true, formatter: formatMoney },
             { 
                 field: 'general_expenses_cost', 
                 label: 'Genel Giderler', 
