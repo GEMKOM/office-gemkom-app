@@ -343,8 +343,21 @@ export class ModernDropdown {
         } else {
             this.portalWrapper.style.top = `${rect.bottom}px`;
         }
-        this.portalWrapper.style.left = `${Math.max(viewportPadding, rect.left)}px`;
-        this.portalWrapper.style.width = `${rect.width}px`;
+        // Menu width: at least the trigger's width, optionally wider via
+        // options.menuMinWidth (useful when the trigger sits in a narrow
+        // table column but option texts are long). Kept inside the viewport.
+        const menuMinW = Number.isFinite(this.options.menuMinWidth) ? this.options.menuMinWidth : 0;
+        const viewportW = window.innerWidth || document.documentElement.clientWidth || 0;
+        const menuW = Math.min(
+            Math.max(rect.width, menuMinW),
+            Math.max(120, viewportW - 2 * viewportPadding)
+        );
+        let menuLeft = rect.left;
+        if (menuLeft + menuW > viewportW - viewportPadding) {
+            menuLeft = viewportW - viewportPadding - menuW;
+        }
+        this.portalWrapper.style.left = `${Math.max(viewportPadding, menuLeft)}px`;
+        this.portalWrapper.style.width = `${menuW}px`;
         this.portalWrapper.style.height = `${availableMenuH}px`;
         
         // Ensure menu is positioned correctly within portal

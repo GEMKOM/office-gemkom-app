@@ -43,6 +43,7 @@ let jobNoDropdowns    = new Map(); // rowId -> ModernDropdown
 let partItemDropdowns = new Map(); // rowId -> ModernDropdown
 let newRowSeq         = 0;
 let jobNoSyncHandle   = null;
+let stockColExpanded  = false; // Stok (mm) override column — rarely used, collapsed by default
 
 // ─────────────────────────── HELPERS ──────────────────────────
 const $ = id => document.getElementById(id);
@@ -153,14 +154,14 @@ function jobNoDropdownHtml({ rowId, value = '' }) {
     // Dropdown renders into the container and updates the hidden input on selection.
     return `
         <input type="hidden" data-lc-row="${escapeAttr(rowId)}" data-lc-field="job_no" value="${escapeAttr(value || '')}">
-        <div id="lc-jobno-dd-${escapeAttr(rowId)}" style="min-width:170px;"></div>
+        <div id="lc-jobno-dd-${escapeAttr(rowId)}" style="min-width:120px;"></div>
     `;
 }
 
 function partItemDropdownHtml({ rowId, itemPk = '', itemText = '' }) {
     return `
         <input type="hidden" data-lc-row="${escapeAttr(rowId)}" data-lc-field="item" value="${escapeAttr(itemPk || '')}">
-        <div id="lc-partitem-dd-${escapeAttr(rowId)}" style="min-width:260px;"></div>
+        <div id="lc-partitem-dd-${escapeAttr(rowId)}" style="min-width:160px;"></div>
     `;
 }
 
@@ -217,21 +218,24 @@ function buildPartsTableRows(parts) {
 function renderPartsTable() {
     const columns = [
         {
-            key: 'order', label: '#', sortable: false, width: '52px',
+            key: 'order', label: '<div class="text-center">#</div>', sortable: false, width: '52px',
             formatter: (v, row) => isRowEditable(row)
                 ? inputHtml({ rowId: row.__rowId, field: 'order', type: 'number', value: row.order ?? '', min: 0 })
                 : `<div class="text-center text-muted fw-bold">${row.order ?? '—'}</div>`
         },
         {
-            key: 'job_no', label: 'İş No', sortable: false, width: '170px',
+            key: 'job_no', label: 'İş No', sortable: false, width: '120px',
             formatter: (v, row) => isRowEditable(row)
                 ? jobNoDropdownHtml({ rowId: row.__rowId, value: row.job_no ?? '' })
-                : (row.job_no ? `<span class="fw-semibold">${escapeAttr(row.job_no)}</span>` : '<span class="text-muted">—</span>')
+                : (row.job_no
+                    ? `<div class="text-truncate" style="max-width:120px;" title="${escapeAttr(row.job_no)}"><span class="fw-semibold">${escapeAttr(row.job_no)}</span></div>`
+                    : '<span class="text-muted">—</span>')
         },
         {
-            key: 'item', label: 'Malzeme', sortable: false, width: '300px',
+            key: 'item', label: 'Malzeme', sortable: false, width: '170px',
             formatter: (v, row) => {
-                const serverTxt = [row.item_code, row.item_name].filter(Boolean).join(' — ') + (row.item_unit ? ` (${row.item_unit})` : '');
+                // Title first, then code — the title is what people recognize.
+                const serverTxt = [row.item_name, row.item_code].filter(Boolean).join(' — ') + (row.item_unit ? ` (${row.item_unit})` : '');
                 const txt = serverTxt || row.item_display || '';
                 if (isRowEditable(row)) {
                     return partItemDropdownHtml({
@@ -240,16 +244,24 @@ function renderPartsTable() {
                         itemText: txt
                     });
                 }
-                if (txt.trim()) return `<div class="text-truncate" style="max-width:300px;" title="${escapeAttr(txt)}">${escapeAttr(txt)}</div>`;
+                if (txt.trim()) return `<div class="text-truncate" style="max-width:170px;" title="${escapeAttr(txt)}">${escapeAttr(txt)}</div>`;
                 return '<span class="text-muted">—</span>';
             }
         },
         {
-            key: 'label', label: 'Parça Adı', sortable: false, width: '220px',
+            key: 'profile_height_mm',
+            label: '<div class="text-center"><span title="Malzemenin açı düzlemindeki kesit ölçüsü: boru için dış çap, kutu profil için açı yönündeki kenar. Malzeme başına BİR satırda girilmesi yeterli — aynı malzemenin diğer satırlarına otomatik uygulanır. Düz kesimlerde gerekmez.">Kesit (mm)</span></div>',
+            sortable: false, width: '90px',
+            formatter: (v, row) => isRowEditable(row)
+                ? inputHtml({ rowId: row.__rowId, field: 'profile_height_mm', type: 'number', value: row.profile_height_mm ?? 0, min: 0 })
+                : (row.profile_height_mm ? `<div class="text-center">${row.profile_height_mm}</div>` : '<div class="text-center text-muted">—</div>')
+        },
+        {
+            key: 'label', label: 'Parça Adı', sortable: false, width: '150px',
             formatter: (v, row) => isRowEditable(row)
                 ? inputHtml({ rowId: row.__rowId, field: 'label', value: row.label, placeholder: 'Parça adı' })
                 : (row.label
-                    ? `<div class="text-truncate" style="max-width:220px;" title="${escapeAttr(row.label)}">${escapeAttr(row.label)}</div>`
+                    ? `<div class="text-truncate" style="max-width:150px;" title="${escapeAttr(row.label)}">${escapeAttr(row.label)}</div>`
                     : '<span class="text-muted">—</span>')
         },
         {
@@ -261,40 +273,51 @@ function renderPartsTable() {
                     : '<span class="text-muted">—</span>')
         },
         {
-            key: 'stock_length_mm', label: 'Stok (mm)', sortable: false, width: '120px',
+            key: 'stock_length_mm',
+            label: stockColExpanded
+                ? `<div class="text-center">Stok (mm) <button class="btn btn-link btn-sm p-0 ms-1 align-baseline" data-lc-toggle-stock
+                       title="Sütunu daralt"><i class="fas fa-compress"></i></button></div>`
+                : `<div class="text-center"><button class="btn btn-link btn-sm p-0" data-lc-toggle-stock
+                       title="Stok boyu (mm) sütununu genişlet — özel durumlarda bar boyu satır bazında değiştirilebilir"><i class="fas fa-ruler-horizontal"></i></button></div>`,
+            sortable: false, width: stockColExpanded ? '110px' : '40px',
             formatter: (v, row) => {
+                if (!stockColExpanded) {
+                    return row.stock_length_mm != null
+                        ? `<div class="text-center small" title="Stok boyu: ${row.stock_length_mm} mm">${row.stock_length_mm}</div>`
+                        : '<div class="text-center text-muted">·</div>';
+                }
                 const ph = currentSession?.stock_length_mm ? `Varsayılan: ${currentSession.stock_length_mm}` : '';
                 return isRowEditable(row)
                     ? inputHtml({ rowId: row.__rowId, field: 'stock_length_mm', type: 'number', value: row.stock_length_mm ?? '', placeholder: ph, min: 0 })
-                    : (row.stock_length_mm != null ? `<div class="text-end">${row.stock_length_mm}</div>` : '<span class="text-muted">—</span>');
+                    : (row.stock_length_mm != null ? `<div class="text-center">${row.stock_length_mm}</div>` : '<div class="text-center text-muted">—</div>');
             }
         },
         {
-            key: 'nominal_length_mm', label: 'Uzunluk (mm)', sortable: false, width: '120px',
+            key: 'nominal_length_mm', label: '<div class="text-center">Uzunluk (mm)</div>', sortable: false, width: '120px',
             formatter: (v, row) => isRowEditable(row)
                 ? inputHtml({ rowId: row.__rowId, field: 'nominal_length_mm', type: 'number', value: row.nominal_length_mm ?? '', min: 0 })
-                : (row.nominal_length_mm != null ? `<div class="text-end fw-bold">${row.nominal_length_mm}</div>` : '—')
+                : (row.nominal_length_mm != null ? `<div class="text-center fw-bold">${row.nominal_length_mm}</div>` : '<div class="text-center">—</div>')
         },
         {
-            key: 'quantity', label: 'Adet', sortable: false, width: '80px',
+            key: 'quantity', label: '<div class="text-center">Adet</div>', sortable: false, width: '80px',
             formatter: (v, row) => isRowEditable(row)
                 ? inputHtml({ rowId: row.__rowId, field: 'quantity', type: 'number', value: row.quantity ?? '', min: 1 })
-                : (row.quantity != null ? `<div class="text-center">${row.quantity}</div>` : '—')
+                : (row.quantity != null ? `<div class="text-center">${row.quantity}</div>` : '<div class="text-center">—</div>')
         },
         {
-            key: 'angle_left_deg', label: 'Sol Açı', sortable: false, width: '90px',
+            key: 'angle_left_deg', label: '<div class="text-center">Sol Açı</div>', sortable: false, width: '90px',
             formatter: (v, row) => isRowEditable(row)
                 ? inputHtml({ rowId: row.__rowId, field: 'angle_left_deg', type: 'number', value: row.angle_left_deg ?? 0 })
                 : `<div class="text-center">${formatAngleTr(row.angle_left_deg)}</div>`
         },
         {
-            key: 'angle_right_deg', label: 'Sağ Açı', sortable: false, width: '90px',
+            key: 'angle_right_deg', label: '<div class="text-center">Sağ Açı</div>', sortable: false, width: '90px',
             formatter: (v, row) => isRowEditable(row)
                 ? inputHtml({ rowId: row.__rowId, field: 'angle_right_deg', type: 'number', value: row.angle_right_deg ?? 0 })
                 : `<div class="text-center">${formatAngleTr(row.angle_right_deg)}</div>`
         },
         {
-            key: 'shape', label: 'Şekil', sortable: false, width: '100px',
+            key: 'shape', label: '<div class="text-center">Şekil</div>', sortable: false, width: '100px',
             formatter: (v, row) => `<div class="text-center">${piecePictogramSVG({
                 angle_left_deg: row.angle_left_deg,
                 angle_right_deg: row.angle_right_deg,
@@ -302,51 +325,43 @@ function renderPartsTable() {
             })}</div>`
         },
         {
-            key: 'profile_height_mm',
-            label: '<span title="Açı düzlemindeki kesit ölçüsü — açılı kesim için zorunlu">Profil (mm)</span>',
-            sortable: false, width: '90px',
-            formatter: (v, row) => isRowEditable(row)
-                ? inputHtml({ rowId: row.__rowId, field: 'profile_height_mm', type: 'number', value: row.profile_height_mm ?? 0, min: 0 })
-                : (row.profile_height_mm ? `<div class="text-center">${row.profile_height_mm}</div>` : '<div class="text-center text-muted">—</div>')
-        },
-        {
             key: 'allow_rotation',
-            label: '<span title="Optimizasyon parçayı 180° döndürebilir">Döndür</span>',
-            sortable: false, width: '70px',
+            label: '<div class="text-center"><span title="Döndür — optimizasyon parçayı 180° döndürerek ortak kesim oluşturabilir. Simetrik profillerde açık bırakın."><i class="fas fa-arrows-rotate"></i></span></div>',
+            sortable: false, width: '44px',
             formatter: (v, row) => isRowEditable(row)
-                ? checkboxHtml({ rowId: row.__rowId, field: 'allow_rotation', checked: row.allow_rotation ?? true, title: 'Optimizasyon parçayı 180° döndürebilir' })
+                ? checkboxHtml({ rowId: row.__rowId, field: 'allow_rotation', checked: row.allow_rotation ?? true, title: 'Döndür — optimizasyon parçayı 180° döndürerek ortak kesim oluşturabilir' })
                 : boolBadgeHtml(row.allow_rotation ?? true)
         },
         {
             key: 'requires_bending',
-            label: '<span title="Bükülecek parça — boy açınım (düz) boyu girilmelidir">Büküm</span>',
-            sortable: false, width: '70px',
+            label: '<div class="text-center"><span title="Büküm — parça kesimden sonra bükülür; boy olarak açınım (düz) boyu girilmelidir."><i class="fas fa-wave-square"></i></span></div>',
+            sortable: false, width: '44px',
             formatter: (v, row) => isRowEditable(row)
-                ? checkboxHtml({ rowId: row.__rowId, field: 'requires_bending', checked: row.requires_bending ?? false, title: 'Bükülecek parça — boy açınım (düz) boyu girilmelidir' })
+                ? checkboxHtml({ rowId: row.__rowId, field: 'requires_bending', checked: row.requires_bending ?? false, title: 'Büküm — parça kesimden sonra bükülür; boy olarak açınım (düz) boyu girilmelidir' })
                 : boolBadgeHtml(row.requires_bending ?? false)
         },
         {
-            key: 'actions', label: '', sortable: false, width: '140px',
+            key: 'actions', label: '', sortable: false, width: '100px',
             formatter: (v, row) => {
                 if (!row.id) {
-                    return `<div class="d-flex gap-1 justify-content-end flex-nowrap">
+                    return `<div class="d-flex gap-1 justify-content-start flex-nowrap">
                         <button class="btn btn-sm btn-outline-secondary" data-lc-dup-row="${row.__rowId}" title="Kopyala">
-                            <i class="fas fa-clone me-1"></i>Kopyala</button>
+                            <i class="fas fa-clone"></i></button>
                         <button class="btn btn-sm btn-outline-danger" data-lc-remove-new-row="${row.__rowId}" title="Satırı Kaldır">
                             <i class="fas fa-trash"></i></button>
                     </div>`;
                 }
                 if (isRowEditing(row)) {
-                    return `<div class="d-flex gap-1 justify-content-end flex-nowrap">
+                    return `<div class="d-flex gap-1 justify-content-start flex-nowrap">
                         <button class="btn btn-sm btn-success" data-lc-save-row="${row.__rowId}" title="Kaydet">
                             <i class="fas fa-check"></i></button>
                         <button class="btn btn-sm btn-outline-secondary" data-lc-cancel-row="${row.__rowId}" title="İptal">
                             <i class="fas fa-times"></i></button>
                     </div>`;
                 }
-                return `<div class="d-flex gap-1 justify-content-end flex-nowrap">
+                return `<div class="d-flex gap-1 justify-content-start flex-nowrap">
                     <button class="btn btn-sm btn-outline-secondary" data-lc-dup-row="${row.__rowId}" title="Kopyala">
-                        <i class="fas fa-clone me-1"></i>Kopyala</button>
+                        <i class="fas fa-clone"></i></button>
                     <button class="btn btn-sm btn-outline-primary" data-lc-edit-row="${row.__rowId}" title="Düzenle">
                         <i class="fas fa-edit"></i></button>
                     ${row.id ? `<button class="btn btn-sm btn-outline-danger" data-lc-del-row="${row.__rowId}" title="Sil">
@@ -464,8 +479,15 @@ function validatePartPayload(payload, rowLabelForError = '') {
         return false;
     }
     if ((payload.angle_left_deg || payload.angle_right_deg) && !(payload.profile_height_mm > 0)) {
-        showNotification(`${prefix}Açılı kesim için Profil (mm) girilmelidir.`, 'warning');
-        return false;
+        // Profile size is a material property: entering it once on ANY row of
+        // the same material is enough (the backend inherits it).
+        const siblingHasHeight = partsTableRows.some(r =>
+            r.item != null && Number(r.item) === Number(payload.item)
+            && Number(r.profile_height_mm) > 0);
+        if (!siblingHasHeight) {
+            showNotification(`${prefix}Açılı kesim için Kesit (mm) girin — malzeme başına bir satırda girilmesi yeterlidir.`, 'warning');
+            return false;
+        }
     }
     return true;
 }
@@ -522,6 +544,7 @@ function syncJobNoDropdowns() {
         const dropdown = new ModernDropdown(container, {
             placeholder: 'İş no seçin…',
             searchable: true,
+            menuMinWidth: 280,
             remoteSearch: async (term) => {
                 const t = (term || '').trim();
                 if (t.length < 2) return [];
@@ -601,6 +624,7 @@ function syncPartItemDropdowns() {
         const dropdown = new ModernDropdown(container, {
             placeholder: 'Malzeme seçin…',
             searchable: true,
+            menuMinWidth: 560,
             remoteSearch: async (term) => {
                 const t = (term || '').trim();
                 if (t.length < 2) return [];
@@ -608,7 +632,8 @@ function syncPartItemDropdowns() {
                 const items = normalizePaginated(data);
                 return items.map(it => ({
                     value: it.id,
-                    text: `${it.item_code || it.code || '-'} — ${it.item_name || it.name || '-'}${it.item_unit || it.unit ? ` • ${it.item_unit || it.unit}` : ''}`
+                    // Title first — that is what people recognize; code after.
+                    text: `${it.item_name || it.name || '-'} — ${it.item_code || it.code || '-'}${it.item_unit || it.unit ? ` • ${it.item_unit || it.unit}` : ''}`
                 }));
             },
             minSearchLength: 2,
@@ -629,6 +654,21 @@ function syncPartItemDropdowns() {
             if (row) {
                 row.item = val ? Number(val) : null;
                 row.item_display = e.detail?.item?.text || row.item_display || '';
+                // Profile size is a material property — inherit it from any
+                // sibling row of the same material so it is entered only once.
+                if (row.item != null && !(Number(row.profile_height_mm) > 0)) {
+                    const sibling = partsTableRows.find(r =>
+                        r !== row && Number(r.item) === row.item
+                        && Number(r.profile_height_mm) > 0);
+                    if (sibling) {
+                        row.profile_height_mm = sibling.profile_height_mm;
+                        const hInput = document.querySelector(
+                            `[data-lc-row="${CSS.escape(rowId)}"][data-lc-field="profile_height_mm"]`);
+                        if (hInput && !(Number(hInput.value) > 0)) {
+                            hInput.value = sibling.profile_height_mm;
+                        }
+                    }
+                }
             }
         });
 
@@ -840,6 +880,18 @@ function renderOptimization(result) {
             <p>Optimizasyon henüz çalıştırılmadı.<br>Parçaları ekledikten sonra <strong>Optimize Et</strong> butonuna basın.</p>
         </div>`;
         return;
+    }
+
+    // Data-quality warnings from the backend (e.g. implausible Profil (mm))
+    const warnings = Array.isArray(result.warnings) ? result.warnings : [];
+    if (warnings.length) {
+        const warnBox = document.createElement('div');
+        warnBox.className = 'alert alert-warning py-2 mb-3';
+        warnBox.innerHTML = warnings.map(w =>
+            `<div><i class="fas fa-triangle-exclamation me-1"></i>${escapeAttr(w)}</div>`
+        ).join('');
+        barsEl.appendChild(warnBox);
+        warnings.forEach(w => showNotification(w, 'warning'));
     }
 
     const groups = Array.isArray(result.groups) ? result.groups : [];
@@ -1467,6 +1519,14 @@ function wireEvents() {
 
     // Delegated: parts table actions
     document.body.addEventListener('click', async e => {
+        // Stok (mm) column collapse/expand toggle
+        const stockToggle = e.target.closest('[data-lc-toggle-stock]');
+        if (stockToggle) {
+            mergeAllEditableRowsFromDom();
+            stockColExpanded = !stockColExpanded;
+            renderPartsTable();
+            return;
+        }
         // Parts table actions
         const editBtn = e.target.closest('[data-lc-edit-row]');
         if (editBtn) {
