@@ -3271,12 +3271,12 @@ function renderProductionPlanSummary(plan, jobNo) {
 
     const s = plan.summary;
     const chips = [
-        { label: 'Toplam', value: s.total, cls: 'bg-primary' },
-        { label: 'Zamanında', value: s.completed_on_time, cls: 'bg-success' },
-        { label: 'Geç Bitti', value: s.completed_late, cls: 'bg-danger' },
-        { label: 'Gecikmede', value: s.overdue, cls: 'bg-danger' },
-        { label: 'Plansız', value: s.unplanned, cls: 'bg-warning text-dark' }
-    ].map(c => `<span class="badge ${c.cls} me-2 mb-2" style="font-size: 0.85rem;">${c.label}: ${c.value}</span>`).join('');
+        { label: 'Toplam', value: s.total, cls: 'status-blue' },
+        { label: 'Zamanında', value: s.completed_on_time, cls: 'status-green' },
+        { label: 'Geç Bitti', value: s.completed_late, cls: 'status-red' },
+        { label: 'Gecikmede', value: s.overdue, cls: 'status-red' },
+        { label: 'Plansız', value: s.unplanned, cls: 'status-orange' }
+    ].map(c => `<span class="status-badge ${c.cls} me-2 mb-2">${c.label}: ${c.value}</span>`).join('');
 
     // Problem tasks: completed late or currently overdue, worst first
     const problemTasks = plan.tasks
@@ -3296,8 +3296,8 @@ function renderProductionPlanSummary(plan, jobNo) {
         const rows = problemTasks.map(t => {
             const variance = t.schedule.end_variance_wd ?? t.schedule.overdue_wd;
             const stateBadge = t.schedule.classification === 'overdue'
-                ? '<span class="badge bg-danger">Gecikmede</span>'
-                : '<span class="badge bg-danger">Geç Bitti</span>';
+                ? '<span class="status-badge status-red">Gecikmede</span>'
+                : '<span class="status-badge status-red">Geç Bitti</span>';
             return `
                 <tr>
                     <td class="text-nowrap"><small>${esc(t.job_no)}</small></td>

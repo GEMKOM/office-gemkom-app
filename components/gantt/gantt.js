@@ -293,6 +293,21 @@ class GanttChart {
         this.machineCalendar = calendar;
         this.renderChart(); // Re-render to show working hours
     }
+
+    scheduleRerenderWhenVisible() {
+        if (this.visibilityObserver || typeof ResizeObserver === 'undefined') {
+            return;
+        }
+        this.visibilityObserver = new ResizeObserver(() => {
+            if (this.container.offsetWidth > 0) {
+                this.visibilityObserver.disconnect();
+                this.visibilityObserver = null;
+                this.filterTasksForCurrentView();
+                this.renderChart();
+            }
+        });
+        this.visibilityObserver.observe(this.container);
+    }
     
     getAllTasks() {
         return this.allTasks;
@@ -459,9 +474,17 @@ class GanttChart {
     renderChart() {
         const chartContainer = this.container.querySelector('#gantt-chart');
         const dateOverlay = this.container.querySelector('#gantt-date-overlay');
-        
+
         if (!chartContainer) {
             return;
+        }
+
+        // Rendering while the container is hidden (display:none) computes cell
+        // widths from a 0-width column (falls back to 800px) and produces a
+        // broken layout until the next re-render. Self-heal: re-render once
+        // when the container first becomes visible.
+        if (this.container.offsetWidth === 0) {
+            this.scheduleRerenderWhenVisible();
         }
 
         // The date overlay will be created in the HTML below
@@ -1885,6 +1908,10 @@ class GanttChart {
 
 
     destroy() {
+        if (this.visibilityObserver) {
+            this.visibilityObserver.disconnect();
+            this.visibilityObserver = null;
+        }
         if (this.container) {
             this.container.innerHTML = '';
         }

@@ -38,6 +38,18 @@
 
 
 
+.status-orange {
+    background-color: #ffedd5;
+    color: #9a3412;
+    border: 1px solid #f97316;
+}
+
+.status-purple {
+    background-color: #ede9fe;
+    color: #5b21b6;
+    border: 1px solid #8b5cf6;
+}
+
 .status-green {
     background-color: #d1fae5;
     color: #065f46;

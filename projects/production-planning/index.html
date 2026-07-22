@@ -12,6 +12,7 @@
     <link rel="stylesheet" href="../../components/navbar.css">
     <link rel="stylesheet" href="../../components/header/header.css">
     <link rel="stylesheet" href="../../components/table/table.css">
+    <link rel="stylesheet" href="../../components/badges/badges.css">
     <link rel="stylesheet" href="../../components/statistics-cards/statistics-cards.css">
     <link rel="stylesheet" href="../../components/gantt/gantt.css">
     <link rel="stylesheet" href="../../components/dropdown/dropdown.css">
@@ -28,14 +29,19 @@
             <!-- Header Component Placeholder -->
             <div id="header-placeholder"></div>
 
-            <!-- Job Order Picker -->
+            <!-- Job Order Picker (multi-select) -->
             <div id="job-order-picker-container" class="mb-3" style="display: none;">
                 <div class="dashboard-card">
                     <div class="card-body py-3">
                         <label class="form-label fw-semibold mb-2">
-                            <i class="fas fa-briefcase me-1"></i>İş Emri
+                            <i class="fas fa-briefcase me-1"></i>İş Emirleri
                         </label>
-                        <div id="job-order-picker"></div>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <div id="job-order-picker" class="flex-grow-1" style="min-width: 280px; max-width: 560px;"></div>
+                            <button type="button" id="apply-job-orders" class="btn btn-primary">
+                                <i class="fas fa-eye me-1"></i>Görüntüle
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
