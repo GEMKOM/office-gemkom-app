@@ -487,6 +487,15 @@ class GanttChart {
             this.scheduleRerenderWhenVisible();
         }
 
+        // Measure the cell width ONCE per render pass. The header cells and
+        // task bars are generated BEFORE the new DOM is inserted while the
+        // grid background is sized AFTER — without this cache the first data
+        // render mixed a fallback-based cell width (no .gantt-scrolling-column
+        // exists yet) into the headers/bars and the real width into the grid,
+        // leaving the header covering only part of the timeline.
+        this._cellWidthCache = null;
+        this._cellWidthCache = this.calculateCellWidth();
+
         // The date overlay will be created in the HTML below
 
         // Always calculate view range and create timeline structure
@@ -608,14 +617,21 @@ class GanttChart {
 
         // Bind task events
         this.bindTaskEvents();
-        
+
+        // Re-render once if the width assumed during generation turned out
+        // wrong now that the real column exists (first render / resizes).
+        this._settleCellWidthAfterRender();
+
         // Note: Scroll position for day view is now handled in setTasks() when data is loaded
     }
 
     // Centralized width calculation method
     calculateCellWidth() {
-        const containerWidth = this.container.querySelector('.gantt-scrolling-column')?.offsetWidth || 800;
-        
+        if (this._cellWidthCache) {
+            return this._cellWidthCache;
+        }
+        const containerWidth = this._measureTimelineWidth();
+
         switch (this.currentPeriod) {
             case 'day':
                 const visibleHours = 11; // Initially show 7-17 (11 hours)
@@ -638,6 +654,43 @@ class GanttChart {
             default:
                 return 100;
         }
+    }
+
+    _measureTimelineWidth() {
+        const scrollingColumn = this.container.querySelector('.gantt-scrolling-column');
+        if (scrollingColumn && scrollingColumn.offsetWidth > 0) {
+            return scrollingColumn.offsetWidth;
+        }
+        // First render: renderChart itself creates the scrolling column, so it
+        // doesn't exist yet. Estimate its width from the component container
+        // minus the fixed label column (220px, gantt.css). The settle pass
+        // after render corrects any residual difference (e.g. scrollbars).
+        if (this.container.offsetWidth > 0) {
+            const estimated = this.container.offsetWidth - 220;
+            if (estimated > 0) {
+                return estimated;
+            }
+        }
+        return 800;
+    }
+
+    _settleCellWidthAfterRender() {
+        const usedWidth = this._cellWidthCache;
+        this._cellWidthCache = null;
+        const actualWidth = this.calculateCellWidth();
+        if (
+            usedWidth &&
+            Math.abs(actualWidth - usedWidth) > 1 &&
+            (this._settleDepth || 0) < 2
+        ) {
+            this._settleDepth = (this._settleDepth || 0) + 1;
+            this.renderChart();
+            this._settleDepth -= 1;
+            return;
+        }
+        // Keep the settled value cached so post-render callers (day-view
+        // scroll positioning, skeletons) match the rendered layout.
+        this._cellWidthCache = actualWidth;
     }
 
     calculateCellHeight() {
@@ -1098,7 +1151,6 @@ class GanttChart {
     }
 
     generateContinuousTaskBar(task, taskStart, taskEnd, taskClass, categoryClass, taskTitle, tiNumber) {
-        const duration = taskEnd - taskStart;
         const overdueClass = task?.is_overdue ? 'overdue' : '';
         
         // Calculate position and width based on current period
@@ -1131,36 +1183,47 @@ class GanttChart {
                 }
                 break;
                 
-            case 'week':
-                // Position based on days (Monday to Sunday) - fit in visible area
-                const startOffsetDays = (taskStart - this.viewStart) / (1000 * 60 * 60 * 24);
-                const durationDays = duration / (1000 * 60 * 60 * 24);
+            case 'week': {
+                // Position based on days (Monday to Sunday). Clip the bar to the
+                // view window: tasks extending past the week must not widen the
+                // timeline beyond its header columns.
+                const dayMs = 1000 * 60 * 60 * 24;
+                const clampedStart = Math.max(taskStart.getTime(), this.viewStart.getTime());
+                const clampedEnd = Math.min(taskEnd.getTime(), this.viewEnd.getTime());
                 const weekDayWidth = this.calculateCellWidth();
-                
-                left = Math.max(0, startOffsetDays * weekDayWidth);
-                width = Math.max(20, durationDays * weekDayWidth);
+
+                left = ((clampedStart - this.viewStart.getTime()) / dayMs) * weekDayWidth;
+                width = Math.max(20, ((clampedEnd - clampedStart) / dayMs) * weekDayWidth);
                 break;
-                
-            case 'month':
-                // Position based on days (1st to last day of month) - fit in visible area
-                const monthStartOffsetDays = (taskStart - this.viewStart) / (1000 * 60 * 60 * 24);
-                const monthDurationDays = duration / (1000 * 60 * 60 * 24);
+            }
+
+            case 'month': {
+                // Position based on days (1st to last day of month), clipped to
+                // the month window — same reasoning as the week view.
+                const dayMs = 1000 * 60 * 60 * 24;
+                const clampedStart = Math.max(taskStart.getTime(), this.viewStart.getTime());
+                const clampedEnd = Math.min(taskEnd.getTime(), this.viewEnd.getTime());
                 const monthDayWidth = this.calculateCellWidth();
-                
-                left = Math.max(0, monthStartOffsetDays * monthDayWidth);
-                width = Math.max(20, monthDurationDays * monthDayWidth);
-                
+
+                left = ((clampedStart - this.viewStart.getTime()) / dayMs) * monthDayWidth;
+                width = Math.max(20, ((clampedEnd - clampedStart) / dayMs) * monthDayWidth);
                 break;
-                
-            case 'year':
-                // Position based on months (January to December) - fit in visible area
-                const startMonth = taskStart.getMonth();
-                const endMonth = taskEnd.getMonth();
+            }
+
+            case 'year': {
+                // Month-aligned bars, clipped to the view year. getMonth() on the
+                // raw dates would be wrong for tasks starting/ending in another
+                // year (e.g. Nov 2025 → Feb 2026 gave a negative month span).
+                const clampedStart = new Date(Math.max(taskStart.getTime(), this.viewStart.getTime()));
+                const clampedEnd = new Date(Math.min(taskEnd.getTime(), this.viewEnd.getTime()));
+                const startMonth = clampedStart.getMonth();
+                const endMonth = clampedEnd.getMonth();
                 const yearMonthWidth = this.calculateCellWidth();
-                
-                left = Math.max(0, startMonth * yearMonthWidth);
+
+                left = startMonth * yearMonthWidth;
                 width = Math.max(20, (endMonth - startMonth + 1) * yearMonthWidth);
                 break;
+            }
         }
         
         // Don't render task if it's hidden (completely outside current view)
