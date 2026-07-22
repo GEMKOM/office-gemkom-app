@@ -10,6 +10,14 @@ import { hasPerm, isAdmin, getPermissions, getGrantedPageRoutes } from '../authS
 
 const ALWAYS_ALLOWED_ROUTES = new Set(['/', '/login', '/login/']);
 
+// Routes that inherit access from another page's grant: whoever can open the
+// base page can also open the derived page. The derived page can still be
+// granted independently via its own "Page:" permission — this is an OR.
+const ROUTE_ACCESS_INHERITS = {
+    // Üretim Planlama is a companion view of Proje Takibi
+    '/projects/production-planning': ['/projects/project-tracking'],
+};
+
 function normalizePath(path) {
     if (!path) return '/';
     const noQuery = String(path).split('?')[0].split('#')[0];
@@ -56,6 +64,12 @@ export function hasRouteAccess(route) {
         // New permission payload includes "name": "Page: /some/route/"
         // Use that mapping (and allow subroutes under granted base routes).
         if (routeIsAllowedByGrantedPages(normalized)) return true;
+
+        // Inherited access: some pages follow another page's grant.
+        const inheritsFrom = ROUTE_ACCESS_INHERITS[normalized];
+        if (inheritsFrom && inheritsFrom.some(base => hasRouteAccess(base))) {
+            return true;
+        }
 
         // Backward compatibility: fall back to codename-based checks
         // for environments that still return boolean permissions.

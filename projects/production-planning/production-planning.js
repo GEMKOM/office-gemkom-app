@@ -10,7 +10,6 @@
 import { initNavbar } from '../../components/navbar.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
 import { HeaderComponent } from '../../components/header/header.js';
-import { StatisticsCards } from '../../components/statistics-cards/statistics-cards.js';
 import { TableComponent } from '../../components/table/table.js';
 import { GanttChart } from '../../components/gantt/gantt.js';
 import { ModernDropdown } from '../../components/dropdown/dropdown.js';
@@ -23,13 +22,13 @@ let currentJobNos = [];
 let planTable = null;
 let ganttChart = null;
 let ganttDirty = false;
-let statsCards = null;
 let currentView = 'table';
 let jobOrderDropdown = null;
 let departmentFilterDropdown = null;
 let classificationFilterDropdown = null;
 let activeFilters = { departments: [], classifications: [] };
 let taskLabelById = new Map();
+let taskById = new Map();
 let loadedPlans = [];
 
 // House badge component classes (components/badges/badges.css) — no yellow.
@@ -111,10 +110,12 @@ async function setupJobOrderPicker() {
     if (!mount || !container || !applyButton) return;
 
     container.style.display = '';
+    mount.style.width = '300px';
     jobOrderDropdown = new ModernDropdown(mount, {
         placeholder: 'İş emri seçin (birden fazla seçilebilir)...',
         searchable: true,
         multiple: true,
+        width: '300px',
         maxHeight: 320
     });
 
@@ -181,12 +182,12 @@ async function loadPlans(jobNos) {
 
     plan = mergePlans(plans);
     loadedPlans = plans;
+    taskById = new Map(plan.tasks.map(t => [t.id, t]));
     taskLabelById = new Map(plan.tasks.map(t => [
         t.id, `${t.job_no} · ${t.department_display}${t.title ? ' · ' + t.title : ''}`
     ]));
 
     renderHeader(buildSubtitle(plans));
-    renderStatistics();
     renderVerdicts();
     initViewLayout();
     updateFilterOptions();
@@ -265,124 +266,162 @@ function summarizeTasks(tasks, nodeCount) {
 }
 
 // ---------------------------------------------------------------------------
-// Statistics
+// Job order finish verdicts — the hero panel (Hedef vs Öngörülen Bitiş)
 // ---------------------------------------------------------------------------
 
-function renderStatistics() {
-    const s = plan.summary;
-    const maxLate = Math.max(s.max_end_variance_wd || 0, s.max_overdue_wd || 0);
-    const cards = [
-        {
-            title: 'Toplam Görev',
-            value: String(s.total),
-            icon: 'fas fa-tasks',
-            color: 'primary',
-            tooltip: `${s.main_tasks} ana görev · ${s.node_count} iş emri`
-        },
-        {
-            title: 'Zamanında Biten',
-            value: String(s.completed_on_time),
-            icon: 'fas fa-check-circle',
-            color: 'success'
-        },
-        {
-            title: 'Geç Biten',
-            value: String(s.completed_late),
-            icon: 'fas fa-exclamation-circle',
-            color: 'danger'
-        },
-        {
-            title: 'Gecikmede',
-            value: String(s.overdue),
-            icon: 'fas fa-hourglass-end',
-            color: 'danger',
-            tooltip: 'Hedef bitişi geçmiş, hâlâ tamamlanmamış görevler'
-        },
-        {
-            title: 'Riskte',
-            value: String(s.at_risk),
-            icon: 'fas fa-triangle-exclamation',
-            color: s.at_risk > 0 ? 'dark' : 'secondary',
-            tooltip: 'Mevcut ilerleme hızı ve önceki görevlerin itmesiyle hedefinden geç bitmesi öngörülen görevler'
-        },
-        {
-            title: 'Plansız',
-            value: String(s.unplanned),
-            icon: 'fas fa-question-circle',
-            color: 'secondary',
-            tooltip: 'Hedef bitiş tarihi girilmemiş görevler'
-        },
-        {
-            title: 'En Büyük Gecikme',
-            value: maxLate > 0 ? `${formatWd(maxLate)} iş günü` : '-',
-            icon: 'fas fa-clock',
-            color: maxLate > 0 ? 'danger' : 'secondary'
-        }
-    ];
+const VERDICT_META = {
+    on_track: { theme: 'green', label: 'Zamanında Bitecek', icon: 'fa-circle-check' },
+    late_risk: { theme: 'red', label: 'Gecikecek', icon: 'fa-triangle-exclamation' },
+    finished_on_time: { theme: 'green', label: 'Tamamlandı · Zamanında', icon: 'fa-flag-checkered' },
+    finished_late: { theme: 'red', label: 'Tamamlandı · Geç', icon: 'fa-flag-checkered' },
+    no_target: { theme: 'orange', label: 'Hedef Tarih Girilmemiş', icon: 'fa-circle-question' },
+    unknown: { theme: 'grey', label: 'Öngörü Yok', icon: 'fa-circle-question' }
+};
 
-    if (!statsCards) {
-        statsCards = new StatisticsCards('plan-statistics-container', {
-            cards,
-            compact: true,
-            animation: true,
-            itemsPerRow: 7
-        });
-    } else {
-        statsCards.setCards(cards);
+function verdictHeadline(forecast) {
+    const meta = VERDICT_META[forecast.verdict] || VERDICT_META.unknown;
+    let detail = '';
+    if (forecast.verdict === 'late_risk' || forecast.verdict === 'finished_late') {
+        detail = ` · +${formatWd(forecast.variance_wd)} iş günü`;
     }
+    return `
+        <div class="pp-verdict-headline pp-vh-${meta.theme}">
+            <i class="fas ${meta.icon}"></i>
+            <span>${meta.label}${detail}</span>
+        </div>`;
 }
 
-// ---------------------------------------------------------------------------
-// Job order finish verdicts (Hedef vs Öngörülen Bitiş)
-// ---------------------------------------------------------------------------
+function verdictTimelineHtml(p) {
+    const forecast = p.job_order.forecast || {};
+    const ms = (d) => d ? new Date(d).getTime() : null;
+    const today = ms(p.today);
+    const target = ms(forecast.target_completion_date);
+    const projected = ms(forecast.projected_completion_date);
+    const summary = p.summary || {};
+    const workStart = [
+        ms(summary.planned_window && summary.planned_window.start),
+        ms(summary.actual_window && summary.actual_window.start),
+        today
+    ].filter(Boolean).sort()[0];
 
-function verdictBadge(forecast) {
-    switch (forecast.verdict) {
-        case 'on_track':
-            return '<span class="status-badge status-green">Zamanında Bitecek</span>';
-        case 'late_risk':
-            return `<span class="status-badge status-red">Gecikecek · +${formatWd(forecast.variance_wd)} İş Günü</span>`;
-        case 'finished_on_time':
-            return '<span class="status-badge status-green">Tamamlandı · Zamanında</span>';
-        case 'finished_late':
-            return `<span class="status-badge status-red">Tamamlandı · +${formatWd(forecast.variance_wd)} İş Günü Geç</span>`;
-        case 'no_target':
-            return '<span class="status-badge status-orange">Hedef Tarih Girilmemiş</span>';
-        default:
-            return '<span class="status-badge status-grey">Öngörü Yok</span>';
+    const points = [today, target, projected, workStart].filter(Boolean);
+    if (points.length < 2 || !(target || projected)) return '';
+
+    let min = Math.min(...points);
+    let max = Math.max(...points);
+    if (max === min) max = min + 24 * 60 * 60 * 1000;
+    const pad = (max - min) * 0.05;
+    min -= pad;
+    max += pad;
+    const pos = (t) => (((t - min) / (max - min)) * 100).toFixed(2);
+    const clampLabel = (t) => Math.min(93, Math.max(7, (t - min) / (max - min) * 100)).toFixed(2);
+    const shortDate = (t) => new Date(t).toLocaleDateString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric' });
+
+    // Base span: work window up to target (or projected when no target)
+    const baseEnd = target ?? projected;
+    const segments = [
+        `<div class="pp-tl-plan" style="left: ${pos(workStart)}%; width: ${(pos(baseEnd) - pos(workStart)).toFixed(2)}%"></div>`
+    ];
+    if (target && projected && projected > target) {
+        segments.push(`<div class="pp-tl-overshoot" style="left: ${pos(target)}%; width: ${(pos(projected) - pos(target)).toFixed(2)}%"></div>`);
+    } else if (target && projected && projected < target) {
+        segments.push(`<div class="pp-tl-slack" style="left: ${pos(projected)}%; width: ${(pos(target) - pos(projected)).toFixed(2)}%"></div>`);
     }
+
+    const markers = [`
+        <div class="pp-tl-today" style="left: ${pos(today)}%">
+            <span>Bugün</span>
+        </div>`];
+    if (target) markers.push(`<div class="pp-tl-marker pp-tl-target" style="left: ${pos(target)}%"></div>`);
+    if (projected) markers.push(`<div class="pp-tl-marker pp-tl-projected" style="left: ${pos(projected)}%"></div>`);
+
+    const labels = [];
+    if (target) {
+        labels.push(`<div class="pp-tl-label pp-tl-label-target" style="left: ${clampLabel(target)}%">
+            <i class="fas fa-bullseye"></i> Hedef · ${shortDate(target)}</div>`);
+    }
+    if (projected) {
+        labels.push(`<div class="pp-tl-label pp-tl-label-projected" style="left: ${clampLabel(projected)}%">
+            <i class="fas fa-location-arrow"></i> Öngörülen · ${shortDate(projected)}</div>`);
+    }
+
+    return `
+        <div class="pp-timeline">
+            <div class="pp-tl-track">${segments.join('')}${markers.join('')}</div>
+            <div class="pp-tl-labels">${labels.join('')}</div>
+        </div>`;
+}
+
+function verdictMetaHtml(p) {
+    // Counts over the VISIBLE tasks (parents represented by their children are
+    // hidden), so the meta line matches what the table shows.
+    const summary = summarizeTasks(visibleOf(p.tasks), (p.nodes || []).length);
+    const forecast = p.job_order.forecast || {};
+    const bits = [
+        `<span>%${Math.round(p.job_order.completion_percentage || 0)} tamamlandı</span>`,
+        `<span>${summary.total || 0} görev</span>`
+    ];
+    if (summary.completed_late > 0) bits.push(`<span class="pp-dot pp-dot-red">${summary.completed_late} geç bitti</span>`);
+    if (summary.overdue > 0) bits.push(`<span class="pp-dot pp-dot-red">${summary.overdue} gecikmede</span>`);
+    if (summary.at_risk > 0) bits.push(`<span class="pp-dot pp-dot-purple">${summary.at_risk} riskte</span>`);
+    if (forecast.unplanned_open_tasks > 0) {
+        bits.push(`<span class="pp-dot pp-dot-orange">${forecast.unplanned_open_tasks} açık görev plansız — öngörü eksik olabilir</span>`);
+    } else if (summary.unplanned > 0) {
+        bits.push(`<span class="pp-dot pp-dot-orange">${summary.unplanned} plansız</span>`);
+    }
+    return `<div class="pp-verdict-meta">${bits.join('<span class="pp-meta-sep">·</span>')}</div>`;
 }
 
 function renderVerdicts() {
     const container = document.getElementById('plan-verdict-container');
     if (!container) return;
 
-    const rows = loadedPlans.map((p, index) => {
+    container.innerHTML = loadedPlans.map((p) => {
         const jo = p.job_order;
         const forecast = jo.forecast || { verdict: 'unknown', unplanned_open_tasks: 0 };
-        const caveat = forecast.unplanned_open_tasks > 0
-            ? `<span class="text-muted small"><i class="fas fa-circle-info me-1"></i>${forecast.unplanned_open_tasks} açık görev plansız — öngörü eksik olabilir</span>`
-            : '';
+        const meta = VERDICT_META[forecast.verdict] || VERDICT_META.unknown;
+        const variance = forecast.variance_wd;
+        const varianceFigure = variance === null || variance === undefined
+            ? '<span class="pp-fig-value">—</span>'
+            : (variance > 0
+                ? `<span class="pp-fig-value pp-fig-late">+${formatWd(variance)} iş günü</span>`
+                : (variance < 0
+                    ? `<span class="pp-fig-value pp-fig-early">${formatWd(variance)} iş günü erken</span>`
+                    : '<span class="pp-fig-value">Tam zamanında</span>'));
+        const projectedClass = variance !== null && variance !== undefined && variance > 0
+            ? 'pp-fig-late' : '';
+
         return `
-            <div class="d-flex flex-wrap align-items-center gap-3 py-2 ${index > 0 ? 'border-top' : ''}">
-                <div class="pp-verdict-job">
-                    <strong>${escapeHtml(jo.job_no)}</strong>
-                    <span class="text-muted">${escapeHtml(jo.title || '')}</span>
+            <div class="dashboard-card pp-verdict-card pp-verdict-${meta.theme} mb-4">
+                <div class="card-body">
+                    <div class="pp-verdict-head">
+                        <div class="pp-verdict-job">
+                            <span class="pp-verdict-jobno">${escapeHtml(jo.job_no)}</span>
+                            <span class="pp-verdict-title">${escapeHtml(jo.title || '')}</span>
+                            ${jo.customer_name ? `<span class="pp-verdict-customer">${escapeHtml(jo.customer_name)}</span>` : ''}
+                        </div>
+                        ${verdictHeadline(forecast)}
+                    </div>
+                    <div class="pp-verdict-figures">
+                        <div class="pp-fig">
+                            <label>Hedef Bitiş</label>
+                            <span class="pp-fig-value">${formatDateCell(forecast.target_completion_date)}</span>
+                        </div>
+                        <div class="pp-fig-arrow"><i class="fas fa-arrow-right-long"></i></div>
+                        <div class="pp-fig">
+                            <label>Öngörülen Bitiş</label>
+                            <span class="pp-fig-value ${projectedClass}">${formatDateCell(forecast.projected_completion_date)}</span>
+                        </div>
+                        <div class="pp-fig">
+                            <label>Sapma</label>
+                            ${varianceFigure}
+                        </div>
+                    </div>
+                    ${verdictTimelineHtml(p)}
+                    ${verdictMetaHtml(p)}
                 </div>
-                <div>Hedef Bitiş: <strong>${formatDateCell(forecast.target_completion_date)}</strong></div>
-                <div>Öngörülen Bitiş: <strong>${formatDateCell(forecast.projected_completion_date)}</strong></div>
-                ${verdictBadge(forecast)}
-                ${caveat}
             </div>`;
     }).join('');
-
-    container.innerHTML = rows ? `
-        <div class="dashboard-card mb-4">
-            <div class="card-body py-2">
-                <h6 class="mb-1"><i class="fas fa-flag-checkered me-2 text-primary"></i>Bitiş Öngörüsü</h6>
-                ${rows}
-            </div>
-        </div>` : '';
 }
 
 // ---------------------------------------------------------------------------
@@ -390,51 +429,36 @@ function renderVerdicts() {
 // ---------------------------------------------------------------------------
 
 function initViewLayout() {
-    if (document.getElementById('production-plan-table-host')) {
-        return;
-    }
-    const container = document.getElementById('plan-view-container');
-    container.innerHTML = `
-        <div class="dashboard-card mb-3">
-            <div class="card-body py-2">
-                <div class="d-flex flex-wrap align-items-center pp-toolbar">
-                    <div class="btn-group btn-group-sm" role="group" aria-label="Görünüm seçimi">
-                        <button type="button" class="btn btn-outline-primary" data-plan-view="table">
-                            <i class="fas fa-table me-1"></i>Tablo
-                        </button>
-                        <button type="button" class="btn btn-outline-primary" data-plan-view="gantt">
-                            <i class="fas fa-chart-gantt me-1"></i>Gantt
-                        </button>
-                    </div>
-                    <div id="pp-filter-department" class="pp-filter"></div>
-                    <div id="pp-filter-classification" class="pp-filter"></div>
-                    <button type="button" id="pp-filter-clear" class="btn btn-sm btn-outline-secondary" style="display: none;">
-                        <i class="fas fa-times me-1"></i>Filtreleri Temizle
-                    </button>
-                    <span class="text-muted small ms-auto">
-                        Sapma değerleri iş günü cinsindendir (hafta sonu ve resmi tatiller sayılmaz).
-                    </span>
+    if (!document.getElementById('production-plan-table-host')) {
+        const container = document.getElementById('plan-view-container');
+        container.innerHTML = `
+            <div id="production-plan-table-host"></div>
+            <div id="production-plan-gantt-card" class="dashboard-card" style="display: none;">
+                <div class="card-body">
+                    <div id="production-plan-gantt-host"></div>
                 </div>
             </div>
-        </div>
-        <div id="production-plan-table-host"></div>
-        <div id="production-plan-gantt-card" class="dashboard-card" style="display: none;">
-            <div class="card-body">
-                <div id="production-plan-gantt-host"></div>
-            </div>
-        </div>
-    `;
+        `;
+    }
 
-    container.querySelectorAll('[data-plan-view]').forEach((button) => {
-        button.addEventListener('click', () => {
-            const selected = button.dataset.planView;
-            if (!selected || selected === currentView) return;
-            currentView = selected;
-            updateViewState();
+    // Toolbar controls live in the static header row (index.html) — bind once
+    // and reveal them on the first data load.
+    const controls = document.getElementById('pp-view-controls');
+    if (controls && controls.classList.contains('d-none')) {
+        controls.classList.remove('d-none');
+        controls.classList.add('d-flex');
+
+        document.querySelectorAll('[data-plan-view]').forEach((button) => {
+            button.addEventListener('click', () => {
+                const selected = button.dataset.planView;
+                if (!selected || selected === currentView) return;
+                currentView = selected;
+                updateViewState();
+            });
         });
-    });
 
-    setupFilterDropdowns();
+        setupFilterDropdowns();
+    }
     updateViewState();
 }
 
@@ -443,16 +467,18 @@ function setupFilterDropdowns() {
     const classificationMount = document.getElementById('pp-filter-classification');
     const clearButton = document.getElementById('pp-filter-clear');
 
+    departmentMount.style.width = '170px';
+    classificationMount.style.width = '170px';
     departmentFilterDropdown = new ModernDropdown(departmentMount, {
-        placeholder: 'Departman (tümü)',
+        placeholder: 'Departman',
         multiple: true,
-        width: '190px',
+        width: '170px',
         maxHeight: 280
     });
     classificationFilterDropdown = new ModernDropdown(classificationMount, {
-        placeholder: 'Plan Durumu (tümü)',
+        placeholder: 'Plan Durumu',
         multiple: true,
-        width: '190px',
+        width: '170px',
         maxHeight: 280
     });
 
@@ -482,8 +508,9 @@ function onFiltersChanged() {
 function updateFilterOptions() {
     if (!departmentFilterDropdown) return;
 
+    const visible = visibleOf(plan.tasks);
     const departments = new Map();
-    for (const task of plan.tasks) {
+    for (const task of visible) {
         if (!departments.has(task.department)) {
             departments.set(task.department, task.department_display);
         }
@@ -494,7 +521,7 @@ function updateFilterOptions() {
     departmentFilterDropdown.setValue(activeFilters.departments.filter(d => departments.has(d)));
     activeFilters.departments = departmentFilterDropdown.getValue() || [];
 
-    const present = new Set(plan.tasks.map(t => t.schedule.classification));
+    const present = new Set(visible.map(t => t.schedule.classification));
     classificationFilterDropdown.setItems(
         Object.entries(CLASSIFICATION_BADGES)
             .filter(([key]) => present.has(key))
@@ -522,12 +549,22 @@ function updateViewState() {
 }
 
 // ---------------------------------------------------------------------------
-// Filtering
+// Filtering & visibility
 // ---------------------------------------------------------------------------
+
+// Parents whose progress is carried by their children are hidden — the
+// children rows represent them (renamed "Parent - Child").
+function visibleOf(tasks) {
+    const parentIds = new Set();
+    for (const t of tasks) {
+        if (t.parent !== null) parentIds.add(t.parent);
+    }
+    return tasks.filter(t => !parentIds.has(t.id));
+}
 
 function getFilteredTasks() {
     const { departments, classifications } = activeFilters;
-    return plan.tasks.filter(task =>
+    return visibleOf(plan.tasks).filter(task =>
         (departments.length === 0 || departments.includes(task.department)) &&
         (classifications.length === 0 || classifications.includes(task.schedule.classification))
     );
@@ -611,9 +648,20 @@ function groupHeaderHtml(rows) {
         </div>`;
 }
 
+function parentLabelOf(parentTask, node) {
+    if (!parentTask) return null;
+    const hasCustomTitle = parentTask.title && node && parentTask.title !== node.title;
+    return hasCustomTitle ? parentTask.title : parentTask.department_display;
+}
+
 function taskCellHtml(row) {
-    if (row._isSubtask) {
-        return `<span class="pp-subtask-title"><i class="fas fa-level-up-alt fa-rotate-90"></i>${escapeHtml(row.title || '')}</span>`;
+    // Visible child rows stand in for their (hidden) parent: "Parent - Child".
+    if (row.parent !== null) {
+        const parentLabel = parentLabelOf(taskById.get(row.parent), row._node);
+        return `
+            <div class="pp-main-task">
+                ${parentLabel ? `<span class="pp-main-task-dept">${escapeHtml(parentLabel)}</span><span class="pp-child-sep"> - </span>` : ''}<span class="pp-child-name">${escapeHtml(row.title || '')}</span>
+            </div>`;
     }
     // Main tasks are auto-titled with the job order title; the department is
     // the meaningful label. Show the title only when it's a custom one.
@@ -623,6 +671,15 @@ function taskCellHtml(row) {
             <span class="pp-main-task-dept">${escapeHtml(row.department_display || '')}</span>
             ${hasCustomTitle ? `<div class="pp-task-subtitle">${escapeHtml(row.title)}</div>` : ''}
         </div>`;
+}
+
+function displayLabelOf(task, node) {
+    if (task.parent !== null) {
+        const parentLabel = parentLabelOf(taskById.get(task.parent), node);
+        return parentLabel ? `${parentLabel} - ${task.title || ''}` : (task.title || '');
+    }
+    const hasCustomTitle = task.title && node && task.title !== node.title;
+    return hasCustomTitle ? `${task.department_display} - ${task.title}` : task.department_display;
 }
 
 function getTableColumns() {
@@ -739,7 +796,7 @@ function exportToExcel() {
         row.job_no,
         row._node ? row._node.title : '',
         row.department_display || '',
-        row.title || '',
+        displayLabelOf(row, row._node),
         row._isSubtask ? 'Evet' : 'Hayır',
         row.status_display || '',
         row.assigned_to_name || '',
@@ -837,7 +894,7 @@ function buildGanttTasks() {
 
             ganttTasks.push({
                 id: task.id,
-                title: task.parent === null ? task.department_display : task.title,
+                title: displayLabelOf(task, node),
                 ti_number: task.job_no,
                 job_no: task.job_no,
                 planned_start_ms: startMs,

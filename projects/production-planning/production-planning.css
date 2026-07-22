@@ -1,12 +1,29 @@
 /* Üretim Planlama page */
 
-/* Toolbar: view toggle + filters */
-#plan-view-container .pp-toolbar {
+/* Toolbar: picker + view toggle + filters in one horizontal row */
+.pp-toolbar {
     gap: 10px;
+    row-gap: 8px;
 }
 
-#plan-view-container .pp-filter {
-    min-width: 190px;
+.pp-toolbar-label {
+    font-weight: 600;
+    color: #59616d;
+    font-size: 0.85rem;
+    white-space: nowrap;
+}
+
+#job-order-picker {
+    width: 300px;
+}
+
+.pp-filter {
+    width: 170px;
+}
+
+.pp-toolbar .vr {
+    align-self: stretch;
+    opacity: 0.15;
 }
 
 /* Job-order group headers in the table */
@@ -38,17 +55,14 @@
     margin-top: 1px;
 }
 
-/* Subtask rows: lighter, all at the same fixed indent from the cell edge */
-#production-plan-table-host .pp-subtask-title {
-    display: block;
-    text-align: left;
-    padding-left: 22px;
-    color: #555;
+/* Child rows stand in for their hidden parent: "Parent - Child" */
+#production-plan-table-host .pp-child-sep {
+    color: #a5adb8;
+    font-weight: 600;
 }
 
-#production-plan-table-host .pp-subtask-title i {
-    color: #a5adb8;
-    margin-right: 6px;
+#production-plan-table-host .pp-child-name {
+    color: #3a4150;
 }
 
 /* Working-day variance */
@@ -125,7 +139,209 @@
     padding: 12px;
 }
 
-/* Finish-verdict banner: align job columns across rows */
-#plan-verdict-container .pp-verdict-job {
-    min-width: 260px;
+/* ==========================================================================
+   Finish-verdict hero panel — the headline of the page
+   ========================================================================== */
+
+.pp-verdict-card {
+    border-left: 5px solid #9ca3af;
 }
+
+.pp-verdict-green { border-left-color: #10b981; background: linear-gradient(to right, #f0fdf6, #ffffff 55%); }
+.pp-verdict-red { border-left-color: #ef4444; background: linear-gradient(to right, #fef2f2, #ffffff 55%); }
+.pp-verdict-orange { border-left-color: #f97316; background: linear-gradient(to right, #fff7ed, #ffffff 55%); }
+.pp-verdict-grey { border-left-color: #9ca3af; }
+
+.pp-verdict-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 14px;
+}
+
+.pp-verdict-jobno {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1f2530;
+    margin-right: 8px;
+}
+
+.pp-verdict-title {
+    font-size: 1rem;
+    color: #444;
+}
+
+.pp-verdict-customer {
+    display: block;
+    font-size: 0.8rem;
+    color: #8a919c;
+    margin-top: 2px;
+}
+
+/* Big verdict statement */
+.pp-verdict-headline {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 1.05rem;
+    font-weight: 700;
+    padding: 8px 18px;
+    border-radius: 999px;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+.pp-vh-green { background: #d1fae5; color: #065f46; border: 1px solid #10b981; }
+.pp-vh-red { background: #fee2e2; color: #991b1b; border: 1px solid #ef4444; box-shadow: 0 2px 8px rgba(239, 68, 68, 0.25); }
+.pp-vh-orange { background: #ffedd5; color: #9a3412; border: 1px solid #f97316; }
+.pp-vh-grey { background: #e5e7eb; color: #374151; border: 1px solid #d1d5db; }
+
+/* Key figures: Hedef -> Öngörülen | Sapma */
+.pp-verdict-figures {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 26px;
+    margin-bottom: 6px;
+}
+
+.pp-fig label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8a919c;
+    margin-bottom: 2px;
+}
+
+.pp-fig-value {
+    font-size: 1.45rem;
+    font-weight: 700;
+    color: #1f2530;
+    line-height: 1.15;
+}
+
+.pp-fig-value.pp-fig-late { color: #dc2626; }
+.pp-fig-value.pp-fig-early { color: #059669; }
+
+.pp-fig-arrow {
+    color: #b6bcc6;
+    font-size: 1.2rem;
+    padding-bottom: 6px;
+}
+
+/* Timeline strip: work window, today, hedef & öngörülen markers */
+.pp-timeline {
+    margin: 16px 2px 4px;
+}
+
+.pp-tl-track {
+    position: relative;
+    height: 12px;
+    background: #eceef2;
+    border-radius: 6px;
+}
+
+.pp-tl-plan {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: #c7d6f0;
+    border-radius: 6px;
+}
+
+.pp-tl-overshoot {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: repeating-linear-gradient(45deg, #f87171, #f87171 6px, #fca5a5 6px, #fca5a5 12px);
+    border-radius: 0 6px 6px 0;
+}
+
+.pp-tl-slack {
+    position: absolute;
+    top: 0;
+    height: 100%;
+    background: #a7f3d0;
+}
+
+.pp-tl-today {
+    position: absolute;
+    top: -6px;
+    bottom: -6px;
+    width: 2px;
+    background: #1f2530;
+    transform: translateX(-50%);
+}
+
+.pp-tl-today span {
+    position: absolute;
+    top: -16px;
+    left: 50%;
+    transform: translateX(-50%);
+    font-size: 0.68rem;
+    font-weight: 600;
+    color: #1f2530;
+    white-space: nowrap;
+}
+
+.pp-tl-marker {
+    position: absolute;
+    top: 50%;
+    width: 14px;
+    height: 14px;
+    transform: translate(-50%, -50%) rotate(45deg);
+    border-radius: 3px;
+    border: 2px solid #ffffff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+
+.pp-tl-target { background: #2563eb; }
+.pp-tl-projected { background: #7c3aed; }
+
+.pp-tl-labels {
+    position: relative;
+    height: 40px;
+    margin-top: 8px;
+}
+
+.pp-tl-label {
+    position: absolute;
+    transform: translateX(-50%);
+    font-size: 0.78rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.pp-tl-label-target { top: 0; color: #2563eb; }
+.pp-tl-label-projected { top: 20px; color: #7c3aed; }
+
+/* Meta line: completion, counts, caveat */
+.pp-verdict-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: #59616d;
+    margin-top: 6px;
+}
+
+.pp-meta-sep { color: #c3c9d2; }
+
+.pp-dot::before {
+    content: '●';
+    font-size: 0.6rem;
+    margin-right: 4px;
+    vertical-align: 1px;
+}
+
+.pp-dot-red { color: #b91c1c; }
+.pp-dot-red::before { color: #ef4444; }
+.pp-dot-purple { color: #5b21b6; }
+.pp-dot-purple::before { color: #8b5cf6; }
+.pp-dot-orange { color: #9a3412; }
+.pp-dot-orange::before { color: #f97316; }
