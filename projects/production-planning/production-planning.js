@@ -29,12 +29,15 @@ let jobOrderDropdown = null;
 let departmentFilterDropdown = null;
 let classificationFilterDropdown = null;
 let activeFilters = { departments: [], classifications: [] };
+let taskLabelById = new Map();
+let loadedPlans = [];
 
 // House badge component classes (components/badges/badges.css) — no yellow.
 const CLASSIFICATION_BADGES = {
     completed_on_time: { label: 'Zamanında', badgeClass: 'status-green' },
     completed_late: { label: 'Geç Bitti', badgeClass: 'status-red' },
     overdue: { label: 'Gecikmede', badgeClass: 'status-red' },
+    at_risk: { label: 'Riskte', badgeClass: 'status-purple' },
     in_progress: { label: 'Devam Ediyor', badgeClass: 'status-blue' },
     not_started: { label: 'Başlamadı', badgeClass: 'status-grey' },
     unplanned: { label: 'Plansız', badgeClass: 'status-orange' },
@@ -177,9 +180,14 @@ async function loadPlans(jobNos) {
     }
 
     plan = mergePlans(plans);
+    loadedPlans = plans;
+    taskLabelById = new Map(plan.tasks.map(t => [
+        t.id, `${t.job_no} · ${t.department_display}${t.title ? ' · ' + t.title : ''}`
+    ]));
 
     renderHeader(buildSubtitle(plans));
     renderStatistics();
+    renderVerdicts();
     initViewLayout();
     updateFilterOptions();
     renderAll();
@@ -233,10 +241,11 @@ function summarizeTasks(tasks, nodeCount) {
         node_count: nodeCount,
         total: tasks.length,
         main_tasks: 0,
-        completed_on_time: 0, completed_late: 0, overdue: 0,
+        completed_on_time: 0, completed_late: 0, overdue: 0, at_risk: 0,
         in_progress: 0, not_started: 0, unplanned: 0, excluded: 0,
         max_end_variance_wd: null,
-        max_overdue_wd: null
+        max_overdue_wd: null,
+        max_projected_variance_wd: null
     };
     for (const task of tasks) {
         const sched = task.schedule;
@@ -247,6 +256,9 @@ function summarizeTasks(tasks, nodeCount) {
         }
         if (sched.overdue_wd !== null) {
             summary.max_overdue_wd = Math.max(summary.max_overdue_wd || 0, sched.overdue_wd);
+        }
+        if (sched.projected_variance_wd !== null && sched.projected_variance_wd > 0) {
+            summary.max_projected_variance_wd = Math.max(summary.max_projected_variance_wd || 0, sched.projected_variance_wd);
         }
     }
     return summary;
@@ -287,6 +299,13 @@ function renderStatistics() {
             tooltip: 'Hedef bitişi geçmiş, hâlâ tamamlanmamış görevler'
         },
         {
+            title: 'Riskte',
+            value: String(s.at_risk),
+            icon: 'fas fa-triangle-exclamation',
+            color: s.at_risk > 0 ? 'dark' : 'secondary',
+            tooltip: 'Mevcut ilerleme hızı ve önceki görevlerin itmesiyle hedefinden geç bitmesi öngörülen görevler'
+        },
+        {
             title: 'Plansız',
             value: String(s.unplanned),
             icon: 'fas fa-question-circle',
@@ -306,11 +325,64 @@ function renderStatistics() {
             cards,
             compact: true,
             animation: true,
-            itemsPerRow: 6
+            itemsPerRow: 7
         });
     } else {
         statsCards.setCards(cards);
     }
+}
+
+// ---------------------------------------------------------------------------
+// Job order finish verdicts (Hedef vs Öngörülen Bitiş)
+// ---------------------------------------------------------------------------
+
+function verdictBadge(forecast) {
+    switch (forecast.verdict) {
+        case 'on_track':
+            return '<span class="status-badge status-green">Zamanında Bitecek</span>';
+        case 'late_risk':
+            return `<span class="status-badge status-red">Gecikecek · +${formatWd(forecast.variance_wd)} İş Günü</span>`;
+        case 'finished_on_time':
+            return '<span class="status-badge status-green">Tamamlandı · Zamanında</span>';
+        case 'finished_late':
+            return `<span class="status-badge status-red">Tamamlandı · +${formatWd(forecast.variance_wd)} İş Günü Geç</span>`;
+        case 'no_target':
+            return '<span class="status-badge status-orange">Hedef Tarih Girilmemiş</span>';
+        default:
+            return '<span class="status-badge status-grey">Öngörü Yok</span>';
+    }
+}
+
+function renderVerdicts() {
+    const container = document.getElementById('plan-verdict-container');
+    if (!container) return;
+
+    const rows = loadedPlans.map((p, index) => {
+        const jo = p.job_order;
+        const forecast = jo.forecast || { verdict: 'unknown', unplanned_open_tasks: 0 };
+        const caveat = forecast.unplanned_open_tasks > 0
+            ? `<span class="text-muted small"><i class="fas fa-circle-info me-1"></i>${forecast.unplanned_open_tasks} açık görev plansız — öngörü eksik olabilir</span>`
+            : '';
+        return `
+            <div class="d-flex flex-wrap align-items-center gap-3 py-2 ${index > 0 ? 'border-top' : ''}">
+                <div class="pp-verdict-job">
+                    <strong>${escapeHtml(jo.job_no)}</strong>
+                    <span class="text-muted">${escapeHtml(jo.title || '')}</span>
+                </div>
+                <div>Hedef Bitiş: <strong>${formatDateCell(forecast.target_completion_date)}</strong></div>
+                <div>Öngörülen Bitiş: <strong>${formatDateCell(forecast.projected_completion_date)}</strong></div>
+                ${verdictBadge(forecast)}
+                ${caveat}
+            </div>`;
+    }).join('');
+
+    container.innerHTML = rows ? `
+        <div class="dashboard-card mb-4">
+            <div class="card-body py-2">
+                <h6 class="mb-1"><i class="fas fa-flag-checkered me-2 text-primary"></i>Bitiş Öngörüsü</h6>
+                ${rows}
+            </div>
+        </div>` : '';
 }
 
 // ---------------------------------------------------------------------------
@@ -493,6 +565,9 @@ function buildRows() {
                 actual_end_date: task.schedule.actual_end_date,
                 variance_wd: task.schedule.end_variance_wd ?? task.schedule.overdue_wd ?? null,
                 classification: task.schedule.classification,
+                projected_end_date: task.schedule.projected_end_date,
+                projected_variance_wd: task.schedule.projected_variance_wd,
+                pushed_by: task.schedule.pushed_by,
                 _isSubtask: task.parent !== null,
                 _node: node,
                 // Zero-padded DFS index: alphabetical group-key sort == tree order
@@ -578,6 +653,11 @@ function getTableColumns() {
             formatter: (value, row) => formatVarianceCell(value, row)
         },
         {
+            field: 'projected_end_date',
+            label: 'Öngörülen Bitiş',
+            formatter: (value, row) => formatProjectedCell(row)
+        },
+        {
             field: 'classification',
             label: 'Plan Durumu',
             formatter: (value) => {
@@ -591,10 +671,15 @@ function getTableColumns() {
             formatter: (value) => {
                 const pct = Math.round(value || 0);
                 const barClass = pct >= 100 ? 'bg-success' : (pct > 0 ? 'bg-primary' : 'bg-secondary');
+                // Label overlays the whole track (a tiny bar can't hold text):
+                // dark text while the center is over the track, white once the
+                // bar reaches past it.
+                const labelClass = pct >= 50 ? 'pp-progress-label-light' : 'pp-progress-label-dark';
                 return `
                     <div class="pp-progress">
                         <div class="progress">
-                            <div class="progress-bar ${barClass}" style="width: ${Math.min(pct, 100)}%">%${pct}</div>
+                            <div class="progress-bar ${barClass}" style="width: ${Math.min(pct, 100)}%"></div>
+                            <span class="pp-progress-label ${labelClass}">%${pct}</span>
                         </div>
                     </div>`;
             }
@@ -646,7 +731,9 @@ function exportToExcel() {
     const headers = [
         'İş Emri', 'İş Emri Başlığı', 'Departman', 'Görev', 'Alt Görev mi',
         'Durum', 'Atanan', 'Hedef Başlangıç', 'Hedef Bitiş',
-        'Gerçek Başlangıç', 'Gerçek Bitiş', 'Sapma (İş Günü)', 'Plan Durumu', 'İlerleme %'
+        'Gerçek Başlangıç', 'Gerçek Bitiş', 'Sapma (İş Günü)',
+        'Öngörülen Bitiş', 'Öngörülen Sapma (İş Günü)', 'İten Görev',
+        'Plan Durumu', 'İlerleme %'
     ];
     const data = rows.map(row => [
         row.job_no,
@@ -661,6 +748,9 @@ function exportToExcel() {
         formatDateCell(row.actual_start_date),
         formatDateCell(row.actual_end_date),
         row.variance_wd === null || row.variance_wd === undefined ? '' : row.variance_wd,
+        row.projected_end_date ? formatDateCell(row.projected_end_date) : '',
+        row.projected_variance_wd === null || row.projected_variance_wd === undefined ? '' : row.projected_variance_wd,
+        row.pushed_by ? (taskLabelById.get(row.pushed_by) || row.pushed_by) : '',
         (CLASSIFICATION_BADGES[row.classification] || { label: row.classification }).label,
         typeof row.completion_percentage === 'number' ? Math.round(row.completion_percentage) : ''
     ]);
@@ -795,4 +885,20 @@ function formatVarianceCell(value, row) {
         return `<span class="pp-variance-early">-${formatWd(value)}</span>`;
     }
     return '<span class="pp-variance-zero">0</span>';
+}
+
+function formatProjectedCell(row) {
+    if (!row.projected_end_date) return '<span class="text-muted">-</span>';
+    const parts = [formatDateCell(row.projected_end_date)];
+    const variance = row.projected_variance_wd;
+    if (variance !== null && variance !== undefined && variance > 0) {
+        parts.push(`<span class="pp-variance-risk">(+${formatWd(variance)})</span>`);
+    } else if (variance !== null && variance !== undefined && variance < 0) {
+        parts.push(`<span class="pp-variance-early">(-${formatWd(variance)})</span>`);
+    }
+    if (row.pushed_by) {
+        const pusher = escapeHtml(taskLabelById.get(row.pushed_by) || `#${row.pushed_by}`);
+        parts.push(`<i class="fas fa-link pp-push-icon" title="Önceki görev itiyor: ${pusher}"></i>`);
+    }
+    return parts.join(' ');
 }

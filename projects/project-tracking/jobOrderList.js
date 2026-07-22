@@ -3275,14 +3275,17 @@ function renderProductionPlanSummary(plan, jobNo) {
         { label: 'Zamanında', value: s.completed_on_time, cls: 'status-green' },
         { label: 'Geç Bitti', value: s.completed_late, cls: 'status-red' },
         { label: 'Gecikmede', value: s.overdue, cls: 'status-red' },
+        { label: 'Riskte', value: s.at_risk ?? 0, cls: 'status-purple' },
         { label: 'Plansız', value: s.unplanned, cls: 'status-orange' }
     ].map(c => `<span class="status-badge ${c.cls} me-2 mb-2">${c.label}: ${c.value}</span>`).join('');
 
-    // Problem tasks: completed late or currently overdue, worst first
+    // Problem tasks: completed late, currently overdue, or projected to be
+    // late (at risk) — worst first.
+    const severity = (t) => (t.schedule.end_variance_wd ?? t.schedule.overdue_wd
+                             ?? t.schedule.projected_variance_wd) || 0;
     const problemTasks = plan.tasks
-        .filter(t => ['completed_late', 'overdue'].includes(t.schedule.classification))
-        .sort((a, b) => ((b.schedule.end_variance_wd ?? b.schedule.overdue_wd) || 0)
-                      - ((a.schedule.end_variance_wd ?? a.schedule.overdue_wd) || 0))
+        .filter(t => ['completed_late', 'overdue', 'at_risk'].includes(t.schedule.classification))
+        .sort((a, b) => severity(b) - severity(a))
         .slice(0, 10);
 
     let problemsHtml;
@@ -3290,39 +3293,78 @@ function renderProductionPlanSummary(plan, jobNo) {
         problemsHtml = `
             <div class="text-center text-success py-3">
                 <i class="fas fa-check-circle fa-2x mb-2"></i>
-                <p class="mb-0">Geciken görev yok.</p>
+                <p class="mb-0">Geciken veya riskli görev yok.</p>
             </div>`;
     } else {
         const rows = problemTasks.map(t => {
-            const variance = t.schedule.end_variance_wd ?? t.schedule.overdue_wd;
-            const stateBadge = t.schedule.classification === 'overdue'
-                ? '<span class="status-badge status-red">Gecikmede</span>'
-                : '<span class="status-badge status-red">Geç Bitti</span>';
+            const cls = t.schedule.classification;
+            const isRisk = cls === 'at_risk';
+            const variance = isRisk
+                ? t.schedule.projected_variance_wd
+                : (t.schedule.end_variance_wd ?? t.schedule.overdue_wd);
+            const stateBadge = isRisk
+                ? '<span class="status-badge status-purple">Riskte</span>'
+                : (cls === 'overdue'
+                    ? '<span class="status-badge status-red">Gecikmede</span>'
+                    : '<span class="status-badge status-red">Geç Bitti</span>');
+            const endCell = isRisk
+                ? `<span class="text-muted">öngörü: ${fmtDate(t.schedule.projected_end_date)}</span>`
+                : fmtDate(t.schedule.actual_end_date);
+            const varianceCell = isRisk
+                ? `<span class="fw-bold text-nowrap" style="color: #5b21b6;">+${fmtWd(variance || 0)} iş günü</span>`
+                : `<span class="text-danger fw-bold text-nowrap">+${fmtWd(variance || 0)} iş günü</span>`;
             return `
                 <tr>
                     <td class="text-nowrap"><small>${esc(t.job_no)}</small></td>
                     <td>${esc(t.department_display)}</td>
                     <td>${esc(t.title)}</td>
                     <td class="text-nowrap">${fmtDate(t.target_completion_date)}</td>
-                    <td class="text-nowrap">${fmtDate(t.schedule.actual_end_date)}</td>
-                    <td class="text-danger fw-bold text-nowrap">+${fmtWd(variance || 0)} iş günü</td>
+                    <td class="text-nowrap">${endCell}</td>
+                    <td>${varianceCell}</td>
                     <td>${stateBadge}</td>
                 </tr>`;
         }).join('');
+        const problemCount = plan.tasks.filter(
+            t => ['completed_late', 'overdue', 'at_risk'].includes(t.schedule.classification)).length;
         problemsHtml = `
             <div class="table-responsive">
                 <table class="table table-sm table-hover align-middle">
                     <thead>
                         <tr>
                             <th>İş Emri</th><th>Departman</th><th>Görev</th>
-                            <th>Hedef Bitiş</th><th>Gerçek Bitiş</th><th>Sapma</th><th></th>
+                            <th>Hedef Bitiş</th><th>Gerçek / Öngörülen Bitiş</th><th>Sapma</th><th></th>
                         </tr>
                     </thead>
                     <tbody>${rows}</tbody>
                 </table>
             </div>
-            ${plan.tasks.filter(t => ['completed_late', 'overdue'].includes(t.schedule.classification)).length > 10
+            ${problemCount > 10
                 ? '<p class="text-muted small mb-0">İlk 10 görev gösteriliyor — tamamı için tüm planı açın.</p>' : ''}`;
+    }
+
+    // Job-level finish verdict (Hedef vs Öngörülen Bitiş)
+    const forecast = plan.job_order?.forecast;
+    let verdictHtml = '';
+    if (forecast) {
+        const badge = (() => {
+            switch (forecast.verdict) {
+                case 'on_track': return '<span class="status-badge status-green">Zamanında Bitecek</span>';
+                case 'late_risk': return `<span class="status-badge status-red">Gecikecek · +${fmtWd(forecast.variance_wd || 0)} İş Günü</span>`;
+                case 'finished_on_time': return '<span class="status-badge status-green">Tamamlandı · Zamanında</span>';
+                case 'finished_late': return `<span class="status-badge status-red">Tamamlandı · +${fmtWd(forecast.variance_wd || 0)} İş Günü Geç</span>`;
+                case 'no_target': return '<span class="status-badge status-orange">Hedef Tarih Girilmemiş</span>';
+                default: return '<span class="status-badge status-grey">Öngörü Yok</span>';
+            }
+        })();
+        verdictHtml = `
+            <div class="d-flex flex-wrap align-items-center gap-3 mb-2">
+                <span>Hedef Bitiş: <strong>${fmtDate(forecast.target_completion_date)}</strong></span>
+                <span>Öngörülen Bitiş: <strong>${fmtDate(forecast.projected_completion_date)}</strong></span>
+                ${badge}
+                ${forecast.unplanned_open_tasks > 0
+                    ? `<span class="text-muted small">${forecast.unplanned_open_tasks} açık görev plansız — öngörü eksik olabilir</span>`
+                    : ''}
+            </div>`;
     }
 
     container.innerHTML = `
@@ -3333,10 +3375,11 @@ function renderProductionPlanSummary(plan, jobNo) {
                 <i class="fas fa-external-link-alt me-1"></i>Tüm planı görüntüle
             </a>
         </div>
+        ${verdictHtml}
         <p class="text-muted small mb-3">
             ${s.node_count} iş emri (alt işler dahil) · ${s.total} görev · Sapmalar iş günü cinsindendir.
         </p>
-        <h6 class="mb-2"><i class="fas fa-exclamation-triangle text-danger me-1"></i>Geciken Görevler</h6>
+        <h6 class="mb-2"><i class="fas fa-exclamation-triangle text-danger me-1"></i>Geciken ve Riskli Görevler</h6>
         ${problemsHtml}`;
 }
 
