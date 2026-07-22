@@ -18,7 +18,9 @@ import {
     removeTemplateItem,
     addTemplateItemChild,
     getDepartmentChoices,
-    DEPARTMENT_OPTIONS
+    getTaskTypeChoices,
+    DEPARTMENT_OPTIONS,
+    TASK_TYPE_OPTIONS
 } from '../../../apis/projects/taskTemplates.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 import { showNotification } from '../../../components/notification/notification.js';
@@ -31,6 +33,7 @@ let isLoading = false;
 let templatesTable = null;
 let filtersComponent = null;
 let departmentOptions = DEPARTMENT_OPTIONS;
+let taskTypeOptions = TASK_TYPE_OPTIONS;
 
 // Modal instances
 let createTemplateModal = null;
@@ -64,7 +67,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // Load department choices
     await loadDepartmentChoices();
-    
+
+    // Load task type choices
+    await loadTaskTypeChoices();
+
     // Load templates
     await loadTemplates();
 });
@@ -138,6 +144,32 @@ async function loadDepartmentChoices() {
         console.error('Error loading department choices:', error);
         // Use static fallback
     }
+}
+
+// Load task type choices from API
+async function loadTaskTypeChoices() {
+    try {
+        const choices = await getTaskTypeChoices();
+        if (choices && choices.length > 0) {
+            taskTypeOptions = choices;
+        }
+    } catch (error) {
+        console.error('Error loading task type choices:', error);
+        // Use static fallback
+    }
+}
+
+// Task type helpers
+function getTaskTypeLabel(value) {
+    if (!value) return null;
+    return taskTypeOptions.find(t => t.value === value)?.label || value;
+}
+
+function getTaskTypeDropdownOptions() {
+    return [
+        { value: '', label: 'Normal Görev (Tip Yok)' },
+        ...taskTypeOptions
+    ];
 }
 
 // Load templates
@@ -599,12 +631,13 @@ async function refreshManageItemsModal() {
                     department: item.department,
                     department_display: deptLabel,
                     title: item.title,
+                    task_type: item.task_type || null,
                     weight: item.weight || 10,
                     depends_on: dependsOn,
                     children_count: item.children_count || 0,
                     children: item.children || []
                 });
-                
+
                 // Add child items
                 if (item.children && item.children.length > 0) {
                     item.children.forEach((child) => {
@@ -618,6 +651,7 @@ async function refreshManageItemsModal() {
                             department: child.department || item.department,
                             department_display: child.department_display || deptLabel,
                             title: child.title,
+                            task_type: child.task_type || null,
                             weight: child.weight || 10,
                             depends_on: '-',
                             children_count: 0,
@@ -732,12 +766,13 @@ function showManageItemsModal(template, items) {
             department: item.department,
             department_display: deptLabel,
             title: item.title,
+            task_type: item.task_type || null,
             weight: item.weight || 10,
             depends_on: dependsOn,
             children_count: item.children_count || 0,
             children: item.children || []
         });
-        
+
         // Add child items
         if (item.children && item.children.length > 0) {
             item.children.forEach((child) => {
@@ -751,6 +786,7 @@ function showManageItemsModal(template, items) {
                     department: child.department || item.department,
                     department_display: child.department_display || deptLabel,
                     title: child.title,
+                    task_type: child.task_type || null,
                     weight: child.weight || 10,
                     depends_on: '-',
                     children_count: 0,
@@ -850,6 +886,18 @@ function showManageItemsModal(template, items) {
                     }
                 },
                 {
+                    field: 'task_type',
+                    label: 'Görev Tipi',
+                    sortable: true,
+                    width: '130px',
+                    formatter: (value, row) => {
+                        if (!value) {
+                            return '<span class="text-muted">-</span>';
+                        }
+                        return `<span class="status-badge status-yellow">${escapeHtml(getTaskTypeLabel(value))}</span>`;
+                    }
+                },
+                {
                     field: 'weight',
                     label: 'Ağırlık',
                     sortable: true,
@@ -905,11 +953,8 @@ function showManageItemsModal(template, items) {
                     icon: 'fas fa-edit',
                     class: 'btn-outline-primary',
                     onClick: (row) => {
-                        if (!row.isChildItem) {
-                            openEditItemModal(currentTemplate.id, row.itemId, tableData);
-                        }
-                    },
-                    visible: (row) => !row.isChildItem
+                        openEditItemModal(currentTemplate.id, row.itemId, tableData);
+                    }
                 },
                 {
                     key: 'add_child',
@@ -1067,6 +1112,18 @@ function openAddItemModal(templateId, existingItems) {
                     help: 'Tamamlanma yüzdesi hesaplamasında kullanılır (1-100)'
                 },
                 {
+                    id: 'task_type',
+                    name: 'task_type',
+                    label: 'Görev Tipi',
+                    type: 'dropdown',
+                    placeholder: 'Görev tipi seçin...',
+                    required: false,
+                    icon: 'fas fa-tag',
+                    options: getTaskTypeDropdownOptions(),
+                    colSize: 12,
+                    help: 'Özel görev tipi (Kaynaklı İmalat → Kaynak, Boya vb.). Şablon uygulanınca göreve aktarılır.'
+                },
+                {
                     id: 'depends_on',
                     name: 'depends_on',
                     label: 'Bağımlılıklar',
@@ -1081,7 +1138,7 @@ function openAddItemModal(templateId, existingItems) {
             ]
         })
         .render();
-    
+
     // Set save callback AFTER rendering but BEFORE showing to ensure it's ready
     addItemModal.onSaveCallback(async (formData) => {
         try {
@@ -1091,6 +1148,7 @@ function openAddItemModal(templateId, existingItems) {
                 // title is auto-filled by backend from department
                 sequence: parseInt(formData.sequence) || currentExistingItems.filter(item => item.parent === null).length + 1,
                 weight: formData.weight ? parseInt(formData.weight) : 10,
+                task_type: formData.task_type || null,
                 depends_on: formData.depends_on ? (Array.isArray(formData.depends_on) ? formData.depends_on : [formData.depends_on]).map(id => parseInt(id)) : []
             };
             await addTemplateItem(currentTemplateId, itemData);
@@ -1111,20 +1169,31 @@ function openAddItemModal(templateId, existingItems) {
     addItemModal.show();
 }
 
-// Open edit item modal (for main items only)
+// Open edit item modal (main items and child items)
 async function openEditItemModal(templateId, itemId, tableData) {
     try {
         // Get the current template to access all items
         const template = await getTaskTemplateById(templateId);
         const existingItems = template.items || [];
-        
-        // Find the item to edit
-        const itemToEdit = existingItems.find(item => item.id === itemId);
+
+        // Find the item to edit (search main items first, then their children)
+        let itemToEdit = existingItems.find(item => item.id === itemId);
+        let isChildItem = false;
+        if (!itemToEdit) {
+            for (const mainItem of existingItems) {
+                const child = (mainItem.children || []).find(c => c.id === itemId);
+                if (child) {
+                    itemToEdit = child;
+                    isChildItem = true;
+                    break;
+                }
+            }
+        }
         if (!itemToEdit) {
             showNotification('Görev bulunamadı', 'error');
             return;
         }
-        
+
         // Prepare dependency options for dropdown (only main items, excluding current item)
         const dependencyOptions = existingItems
             .filter(item => item.parent === null && item.id !== itemId) // Only main items, exclude current item
@@ -1143,75 +1212,94 @@ async function openEditItemModal(templateId, itemId, tableData) {
         const currentTemplateId = templateId;
         const currentItemId = itemId;
         
+        const editFields = [
+            {
+                id: 'department',
+                name: 'department',
+                label: 'Departman',
+                type: 'text',
+                value: departmentOptions.find(d => d.value === itemToEdit.department)?.label || itemToEdit.department_display || itemToEdit.department,
+                readonly: true,
+                icon: 'fas fa-building',
+                colSize: 12,
+                help: 'Departman değiştirilemez'
+            },
+            {
+                id: 'title',
+                name: 'title',
+                label: 'Başlık',
+                type: 'text',
+                value: itemToEdit.title,
+                readonly: true,
+                icon: 'fas fa-heading',
+                colSize: 12,
+                help: 'Başlık değiştirilemez'
+            },
+            {
+                id: 'sequence',
+                name: 'sequence',
+                label: 'Sıra',
+                type: 'number',
+                placeholder: 'Sıra numarası',
+                value: itemToEdit.sequence || 1,
+                min: 1,
+                icon: 'fas fa-sort-numeric-up',
+                colSize: 6
+            },
+            {
+                id: 'weight',
+                name: 'weight',
+                label: 'Ağırlık',
+                type: 'number',
+                placeholder: 'Ağırlık (1-100)',
+                value: itemToEdit.weight || 10,
+                min: 1,
+                max: 100,
+                icon: 'fas fa-weight',
+                colSize: 6,
+                help: 'Tamamlanma yüzdesi hesaplamasında kullanılır (1-100)'
+            },
+            {
+                id: 'task_type',
+                name: 'task_type',
+                label: 'Görev Tipi',
+                type: 'dropdown',
+                placeholder: 'Görev tipi seçin...',
+                required: false,
+                icon: 'fas fa-tag',
+                options: getTaskTypeDropdownOptions(),
+                value: itemToEdit.task_type || '',
+                colSize: 12,
+                help: 'Özel görev tipi. Şablon uygulanınca göreve aktarılır.'
+            }
+        ];
+
+        // Dependencies only apply to main items
+        if (!isChildItem) {
+            editFields.push({
+                id: 'depends_on',
+                name: 'depends_on',
+                label: 'Bağımlılıklar',
+                type: 'dropdown',
+                placeholder: 'Bağımlılık seçin...',
+                multiple: true,
+                searchable: true,
+                options: dependencyOptions,
+                value: itemToEdit.depends_on || [],
+                help: 'Bu görevin başlaması için tamamlanması gereken ana görevler',
+                colSize: 12
+            });
+        }
+
         editItemModal
             .addSection({
-                title: 'Görev Bilgileri',
+                title: isChildItem ? 'Alt Görev Bilgileri' : 'Görev Bilgileri',
                 icon: 'fas fa-info-circle',
                 iconColor: 'text-primary',
-                fields: [
-                    {
-                        id: 'department',
-                        name: 'department',
-                        label: 'Departman',
-                        type: 'text',
-                        value: departmentOptions.find(d => d.value === itemToEdit.department)?.label || itemToEdit.department_display || itemToEdit.department,
-                        readonly: true,
-                        icon: 'fas fa-building',
-                        colSize: 12,
-                        help: 'Departman değiştirilemez'
-                    },
-                    {
-                        id: 'title',
-                        name: 'title',
-                        label: 'Başlık',
-                        type: 'text',
-                        value: itemToEdit.title,
-                        readonly: true,
-                        icon: 'fas fa-heading',
-                        colSize: 12,
-                        help: 'Başlık değiştirilemez'
-                    },
-                    {
-                        id: 'sequence',
-                        name: 'sequence',
-                        label: 'Sıra',
-                        type: 'number',
-                        placeholder: 'Sıra numarası',
-                        value: itemToEdit.sequence || 1,
-                        min: 1,
-                        icon: 'fas fa-sort-numeric-up',
-                        colSize: 6
-                    },
-                    {
-                        id: 'weight',
-                        name: 'weight',
-                        label: 'Ağırlık',
-                        type: 'number',
-                        placeholder: 'Ağırlık (1-100)',
-                        value: itemToEdit.weight || 10,
-                        min: 1,
-                        max: 100,
-                        icon: 'fas fa-weight',
-                        colSize: 6,
-                        help: 'Tamamlanma yüzdesi hesaplamasında kullanılır (1-100)'
-                    },
-                    {
-                        id: 'depends_on',
-                        name: 'depends_on',
-                        label: 'Bağımlılıklar',
-                        type: 'dropdown',
-                        placeholder: 'Bağımlılık seçin...',
-                        multiple: true,
-                        searchable: true,
-                        options: dependencyOptions,
-                        value: itemToEdit.depends_on || [],
-                        help: 'Bu görevin başlaması için tamamlanması gereken ana görevler',
-                        colSize: 12
-                    }
-                ]
+                fields: editFields
             })
             .render();
-        
+
         // Set save callback AFTER rendering but BEFORE showing to ensure it's ready
         editItemModal.onSaveCallback(async (formData) => {
             try {
@@ -1219,8 +1307,11 @@ async function openEditItemModal(templateId, itemId, tableData) {
                 const itemData = {
                     sequence: parseInt(formData.sequence) || itemToEdit.sequence,
                     weight: formData.weight ? parseInt(formData.weight) : 10,
-                    depends_on: formData.depends_on ? (Array.isArray(formData.depends_on) ? formData.depends_on : [formData.depends_on]).map(id => parseInt(id)) : []
+                    task_type: formData.task_type || null
                 };
+                if (!isChildItem) {
+                    itemData.depends_on = formData.depends_on ? (Array.isArray(formData.depends_on) ? formData.depends_on : [formData.depends_on]).map(id => parseInt(id)) : [];
+                }
                 await updateTemplateItem(currentTemplateId, currentItemId, itemData);
                 editItemModal.hide();
                 showNotification('Görev başarıyla güncellendi', 'success');
@@ -1322,11 +1413,23 @@ function openAddChildItemModal(templateId, parentItemId) {
                     icon: 'fas fa-weight',
                     colSize: 6,
                     help: 'Tamamlanma yüzdesi hesaplamasında kullanılır (1-100)'
+                },
+                {
+                    id: 'task_type',
+                    name: 'task_type',
+                    label: 'Görev Tipi',
+                    type: 'dropdown',
+                    placeholder: 'Görev tipi seçin...',
+                    required: false,
+                    icon: 'fas fa-tag',
+                    options: getTaskTypeDropdownOptions(),
+                    colSize: 12,
+                    help: 'Özel görev tipi (Kaynaklı İmalat → Kaynak, Boya vb.). Şablon uygulanınca göreve aktarılır.'
                 }
             ]
         })
         .render();
-    
+
     // Set save callback AFTER rendering but BEFORE showing to ensure it's ready
     addChildItemModal.onSaveCallback(async (formData) => {
         try {
@@ -1334,7 +1437,8 @@ function openAddChildItemModal(templateId, parentItemId) {
             const childData = {
                 title: formData.title,
                 sequence: parseInt(formData.sequence) || nextSequence,
-                weight: formData.weight ? parseInt(formData.weight) : 10
+                weight: formData.weight ? parseInt(formData.weight) : 10,
+                task_type: formData.task_type || null
             };
             await addTemplateItemChild(templateId, parentItemId, childData);
             addChildItemModal.hide();

@@ -22,11 +22,12 @@ import {
     getJobOrderPhases,
     createJobOrderPhases,
     activateJobOrderPhase,
+    getJobOrderProductionPlan,
     JOB_ORDER_FILE_TYPE_OPTIONS,
     STATUS_OPTIONS
 } from '../../apis/projects/jobOrders.js';
 import { createDepartmentTask, bulkCreateDepartmentTasks, patchDepartmentTask, applyDepartmentTasksTemplate, getDepartmentChoices as getDepartmentTaskChoices, listDepartmentTasks, deleteDepartmentTask } from '../../apis/projects/departmentTasks.js';
-import { listTaskTemplates, getTaskTemplateById } from '../../apis/projects/taskTemplates.js';
+import { listTaskTemplates, getTaskTemplateById, TASK_TYPE_OPTIONS } from '../../apis/projects/taskTemplates.js';
 import { listCustomers, getCustomerById } from '../../apis/projects/customers.js';
 import { CURRENCY_OPTIONS } from '../../apis/projects/customers.js';
 import {
@@ -1811,7 +1812,8 @@ function initializeModalComponents() {
             drawingReleasesJobNo: null,
             ncrs: null,
             costSummary: null,
-            progressHistory: null
+            progressHistory: null,
+            productionPlan: null
         };
         
         // Remove deep-link parameters from URL
@@ -2652,7 +2654,8 @@ let jobOrderTabCache = {
     ncrs: null,
     costSummary: null,
     progressHistory: null,
-    phases: null
+    phases: null,
+    productionPlan: null
 };
 
 window.viewJobOrder = async function(jobNo) {
@@ -2671,7 +2674,8 @@ window.viewJobOrder = async function(jobNo) {
             ncrs: null,
             costSummary: null,
             progressHistory: null,
-            phases: null
+            phases: null,
+            productionPlan: null
         };
         
         // Fetch only basic job order data
@@ -2813,7 +2817,7 @@ window.viewJobOrder = async function(jobNo) {
                             <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                                 <i class="fas fa-align-left me-1"></i>Açıklama
                             </div>
-                            <div class="field-value flex-grow-1">${jobOrder.description}</div>
+                            <div class="field-value flex-grow-1" style="white-space: pre-wrap;">${escapeHtml(jobOrder.description)}</div>
                         </div>
                         ` : ''}
                     </div>
@@ -3006,6 +3010,15 @@ window.viewJobOrder = async function(jobNo) {
             iconColor: 'text-primary',
             customContent: '<div id="department-tasks-table-container"></div>'
         });
+
+        // Add Üretim Planı tab (full-subtree schedule summary)
+        viewJobOrderModal.addTab({
+            id: 'uretim-plani',
+            label: 'Üretim Planı',
+            icon: 'fas fa-calendar-check',
+            iconColor: 'text-primary',
+            customContent: '<div id="production-plan-summary-container" style="padding: 20px;"></div>'
+        });
         
         // Add Alt Görevler tab (only if count > 0)
         if (jobOrder.children_count && jobOrder.children_count > 0) {
@@ -3174,6 +3187,9 @@ function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate, formatCur
                 case 'departman-gorevleri':
                     await loadDepartmentTasksTab(jobNo, getStatusBadgeClass, formatDate);
                     break;
+                case 'uretim-plani':
+                    await loadProductionPlanTab(jobNo);
+                    break;
                 case 'alt-gorevler':
                     await loadChildrenTab(jobNo, getStatusBadgeClass);
                     break;
@@ -3208,6 +3224,120 @@ function setupTabClickHandlers(jobNo, getStatusBadgeClass, formatDate, formatCur
             }
         });
     });
+}
+
+// Load Üretim Planı Tab (full-subtree schedule summary)
+async function loadProductionPlanTab(jobNo) {
+    // Check cache first
+    if (jobOrderTabCache.productionPlan !== null) {
+        renderProductionPlanSummary(jobOrderTabCache.productionPlan, jobNo);
+        return;
+    }
+
+    const container = viewJobOrderModal.content.querySelector('#production-plan-summary-container');
+    if (!container) return;
+
+    // Show loading state
+    container.innerHTML = '<div class="text-center py-4"><i class="fas fa-spinner fa-spin fa-2x text-muted"></i><p class="mt-2 text-muted">Yükleniyor...</p></div>';
+
+    try {
+        const plan = await getJobOrderProductionPlan(jobNo);
+
+        // Cache the data
+        jobOrderTabCache.productionPlan = plan;
+
+        renderProductionPlanSummary(plan, jobNo);
+    } catch (error) {
+        console.error('Error loading production plan:', error);
+        container.innerHTML = '<div class="alert alert-danger"><i class="fas fa-exclamation-triangle me-2"></i>Üretim planı yüklenirken hata oluştu.</div>';
+    }
+}
+
+// Render Üretim Planı summary (chips + problem tasks + link to full page)
+function renderProductionPlanSummary(plan, jobNo) {
+    const container = viewJobOrderModal.content.querySelector('#production-plan-summary-container');
+    if (!container) return;
+
+    const esc = (text) => {
+        const div = document.createElement('div');
+        div.textContent = text ?? '';
+        return div.innerHTML;
+    };
+    const fmtDate = (d) => d ? new Date(d).toLocaleDateString('tr-TR') : '-';
+    const fmtWd = (v) => {
+        const abs = Math.abs(v);
+        return (abs % 1 === 0 ? abs.toFixed(0) : abs.toFixed(1)).replace('.', ',');
+    };
+
+    const s = plan.summary;
+    const chips = [
+        { label: 'Toplam', value: s.total, cls: 'bg-primary' },
+        { label: 'Zamanında', value: s.completed_on_time, cls: 'bg-success' },
+        { label: 'Geç Bitti', value: s.completed_late, cls: 'bg-danger' },
+        { label: 'Gecikmede', value: s.overdue, cls: 'bg-danger' },
+        { label: 'Plansız', value: s.unplanned, cls: 'bg-warning text-dark' }
+    ].map(c => `<span class="badge ${c.cls} me-2 mb-2" style="font-size: 0.85rem;">${c.label}: ${c.value}</span>`).join('');
+
+    // Problem tasks: completed late or currently overdue, worst first
+    const problemTasks = plan.tasks
+        .filter(t => ['completed_late', 'overdue'].includes(t.schedule.classification))
+        .sort((a, b) => ((b.schedule.end_variance_wd ?? b.schedule.overdue_wd) || 0)
+                      - ((a.schedule.end_variance_wd ?? a.schedule.overdue_wd) || 0))
+        .slice(0, 10);
+
+    let problemsHtml;
+    if (problemTasks.length === 0) {
+        problemsHtml = `
+            <div class="text-center text-success py-3">
+                <i class="fas fa-check-circle fa-2x mb-2"></i>
+                <p class="mb-0">Geciken görev yok.</p>
+            </div>`;
+    } else {
+        const rows = problemTasks.map(t => {
+            const variance = t.schedule.end_variance_wd ?? t.schedule.overdue_wd;
+            const stateBadge = t.schedule.classification === 'overdue'
+                ? '<span class="badge bg-danger">Gecikmede</span>'
+                : '<span class="badge bg-danger">Geç Bitti</span>';
+            return `
+                <tr>
+                    <td class="text-nowrap"><small>${esc(t.job_no)}</small></td>
+                    <td>${esc(t.department_display)}</td>
+                    <td>${esc(t.title)}</td>
+                    <td class="text-nowrap">${fmtDate(t.target_completion_date)}</td>
+                    <td class="text-nowrap">${fmtDate(t.schedule.actual_end_date)}</td>
+                    <td class="text-danger fw-bold text-nowrap">+${fmtWd(variance || 0)} iş günü</td>
+                    <td>${stateBadge}</td>
+                </tr>`;
+        }).join('');
+        problemsHtml = `
+            <div class="table-responsive">
+                <table class="table table-sm table-hover align-middle">
+                    <thead>
+                        <tr>
+                            <th>İş Emri</th><th>Departman</th><th>Görev</th>
+                            <th>Hedef Bitiş</th><th>Gerçek Bitiş</th><th>Sapma</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+            ${plan.tasks.filter(t => ['completed_late', 'overdue'].includes(t.schedule.classification)).length > 10
+                ? '<p class="text-muted small mb-0">İlk 10 görev gösteriliyor — tamamı için tüm planı açın.</p>' : ''}`;
+    }
+
+    container.innerHTML = `
+        <div class="d-flex align-items-center justify-content-between flex-wrap mb-2">
+            <div>${chips}</div>
+            <a class="btn btn-outline-primary btn-sm mb-2"
+               href="/projects/production-planning/?job_no=${encodeURIComponent(jobNo)}" target="_blank">
+                <i class="fas fa-external-link-alt me-1"></i>Tüm planı görüntüle
+            </a>
+        </div>
+        <p class="text-muted small mb-3">
+            ${s.node_count} iş emri (alt işler dahil) · ${s.total} görev · Sapmalar iş günü cinsindendir.
+        </p>
+        <h6 class="mb-2"><i class="fas fa-exclamation-triangle text-danger me-1"></i>Geciken Görevler</h6>
+        ${problemsHtml}`;
 }
 
 // Load Department Tasks Tab
@@ -8449,6 +8579,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                         title: resolveDepartmentTaskTitleForPayload(task, targetJobOrders),
                         sequence: task.sequence ? parseInt(task.sequence) : null,
                         weight: task.weight ? parseFloat(task.weight) : 10,
+                        task_type: task.task_type || null,
                     };
 
                     // Parent references must exist in the same request and refer to temp_id
@@ -8622,6 +8753,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                                 description: item.description || '',
                                 depends_on: item.depends_on || [],
                                 weight: item.weight || 10, // Include weight from template, default to 10
+                                task_type: item.task_type || null, // Propagate special task type from template
                                 fromTemplate: true,
                                 templateItemId: item.id, // Store original template item ID for mapping
                                 children: item.children || [], // Store children for later processing
@@ -8657,6 +8789,7 @@ window.showAddDepartmentTaskModal = async function(jobNo) {
                                         description: child.description || '',
                                         depends_on: [],
                                         weight: child.weight || 10, // Include weight from template, default to 10
+                                        task_type: child.task_type || null, // Propagate special task type from template
                                         fromTemplate: true,
                                         templateItemId: child.id,
                                         parentTemplateItemId: mainTask.templateItemId, // Reference to parent template item
@@ -8764,22 +8897,29 @@ function renderTasksTable() {
                         const indentClass = isChildTask ? 'ps-4' : '';
                         const childIndicator = isChildTask ? '<span class="text-muted me-1">↳</span>' : '';
                         const titleValue = (task.title || '').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                        const taskTypeLabel = task.task_type
+                            ? (TASK_TYPE_OPTIONS.find(t => t.value === task.task_type)?.label || task.task_type)
+                            : null;
+                        const taskTypeBadge = taskTypeLabel
+                            ? `<div class="mt-1"><span class="badge bg-warning text-dark" title="Görev Tipi">${taskTypeLabel}</span></div>`
+                            : '';
                         return `
                         <tr data-task-index="${actualIndex}" ${isChildTask ? 'class="table-light"' : ''}>
                             <td class="${indentClass}">
                                 ${childIndicator}
-                                <input type="number" class="form-control form-control-sm task-sequence" 
-                                       value="${task.sequence || actualIndex + 1}" 
-                                       data-index="${actualIndex}" 
+                                <input type="number" class="form-control form-control-sm task-sequence"
+                                       value="${task.sequence || actualIndex + 1}"
+                                       data-index="${actualIndex}"
                                        style="width: 60px;"
                                        ${isChildTask ? 'readonly' : ''}>
                             </td>
                             <td class="${indentClass}">
                                 ${childIndicator}
-                                <input type="text" class="form-control form-control-sm task-title" 
-                                       value="${titleValue}" 
-                                       data-index="${actualIndex}" 
+                                <input type="text" class="form-control form-control-sm task-title"
+                                       value="${titleValue}"
+                                       data-index="${actualIndex}"
                                        placeholder="${isChildTask ? 'Alt görev başlığı' : 'Görev başlığı'}">
+                                ${taskTypeBadge}
                             </td>
                             <td>
                                 <select class="form-select form-select-sm task-department" 
@@ -8996,6 +9136,7 @@ function addNewTask() {
         description: '',
         depends_on: [],
         weight: 10, // Default weight
+        task_type: null,
         fromTemplate: false,
         isMainTask: true
     };

@@ -342,15 +342,35 @@ export async function addTemplateItemChild(templateId, itemId, childData) {
 export async function getDepartmentChoices() {
     try {
         const response = await authedFetch(`${backendBase}/projects/task-templates/department_choices/`);
-        
+
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+
         const data = await response.json();
         return data;
     } catch (error) {
         console.error('Error fetching department choices:', error);
+        throw error;
+    }
+}
+
+/**
+ * Get task type choices for template items
+ * @returns {Promise<Array>} Array of task type options with value and label
+ */
+export async function getTaskTypeChoices() {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/task-templates/task_type_choices/`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        const data = await response.json();
+        return data;
+    } catch (error) {
+        console.error('Error fetching task type choices:', error);
         throw error;
     }
 }
@@ -397,4 +417,19 @@ export const DEPARTMENT_OPTIONS = [
     { value: 'manufacturing', label: 'Üretim' },
     { value: 'painting', label: 'Boya' },
     { value: 'logistics', label: 'Lojistik' },
+];
+
+/**
+ * Task type options (static fallback if API is unavailable)
+ * Mirrors DepartmentTaskTemplateItem.TASK_TYPE_CHOICES on the backend.
+ */
+export const TASK_TYPE_OPTIONS = [
+    { value: 'cnc_cutting', label: 'CNC Kesim' },
+    { value: 'linear_cutting', label: 'Lineer Kesim' },
+    { value: 'machining', label: 'Talaşlı İmalat' },
+    { value: 'welding', label: 'Kaynaklı İmalat' },
+    { value: 'painting', label: 'Boya' },
+    { value: 'part', label: 'Parça' },
+    { value: 'subcontracting', label: 'Taşeron' },
+    { value: 'internal_team', label: 'Dahili Takım' },
 ];

@@ -107,6 +107,11 @@ export const NAVIGATION_STRUCTURE = {
                 label: 'Proje Takibi',
                 icon: 'fas fa-tasks',
                 children: {}
+            },
+            '/projects/production-planning': {
+                label: 'Üretim Planlama',
+                icon: 'fas fa-calendar-check',
+                children: {}
             }
         }
     },

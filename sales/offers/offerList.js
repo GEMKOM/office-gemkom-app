@@ -1711,7 +1711,7 @@ function buildGenelTab(statusLabel, statusColor) {
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-align-left me-1"></i>Açıklama
                         </div>
-                        <div class="field-value flex-grow-1">${offer.description}</div>
+                        <div class="field-value flex-grow-1" style="white-space: pre-wrap;">${escapeHtml(offer.description)}</div>
                     </div>
                     ` : ''}
                 </div>

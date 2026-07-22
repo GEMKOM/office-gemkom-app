@@ -837,3 +837,26 @@ export async function activateJobOrderPhase(phaseJobNo) {
         throw error;
     }
 }
+
+/**
+ * Full-subtree production plan for a job order: every department task
+ * (main tasks + subtasks) of the job order and all descendant job orders,
+ * with planned vs. actual dates and working-day lateness.
+ * Endpoint: GET /projects/job-orders/{job_no}/production-plan/
+ * @param {string} jobNo - Job order number (phase job_nos like "270-01/P1" supported)
+ * @returns {Promise<Object>} {job_order, nodes, tasks, summary, generated_at, today}
+ */
+export async function getJobOrderProductionPlan(jobNo) {
+    try {
+        const response = await authedFetch(`${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/production-plan/`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching production plan for ${jobNo}:`, error);
+        throw error;
+    }
+}

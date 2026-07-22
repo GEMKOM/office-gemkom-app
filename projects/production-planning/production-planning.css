@@ -1,0 +1,59 @@
+/* Üretim Planlama page */
+
+/* Job-order group headers in the table */
+#production-plan-table-host .group-header-cell {
+    background: #f1f3f6;
+    border-top: 2px solid #d8dde3;
+}
+
+#production-plan-table-host .group-header .pp-node-title {
+    font-weight: 400;
+    color: #444;
+}
+
+/* Subtask rows: lighter, indented via formatter */
+#production-plan-table-host .pp-subtask-title {
+    display: inline-block;
+    padding-left: 22px;
+    color: #555;
+}
+
+#production-plan-table-host .pp-subtask-title i {
+    color: #a5adb8;
+    margin-right: 6px;
+}
+
+/* Working-day variance */
+.pp-variance-late {
+    color: #dc3545;
+    font-weight: 600;
+}
+
+.pp-variance-early {
+    color: #198754;
+    font-weight: 600;
+}
+
+.pp-variance-zero {
+    color: #6c757d;
+}
+
+/* Compact progress bar in table cells */
+.pp-progress {
+    min-width: 90px;
+}
+
+.pp-progress .progress {
+    height: 14px;
+    background-color: #e9ecef;
+}
+
+.pp-progress .progress-bar {
+    font-size: 10px;
+    line-height: 14px;
+}
+
+/* View toggle card */
+#plan-view-container .pp-toolbar {
+    gap: 8px;
+}

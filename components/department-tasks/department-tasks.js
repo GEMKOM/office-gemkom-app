@@ -5182,7 +5182,7 @@ async function renderConsultationTab(task) {
                 </div>
                 ${logisticsOfferExtras}
                 <div class="mt-2"><strong>Başlık:</strong> ${summary.title || '-'}</div>
-                ${summary.description ? `<div class="mt-1"><strong>Açıklama:</strong> ${summary.description}</div>` : ''}
+                ${summary.description ? `<div class="mt-1"><strong>Açıklama:</strong> <span style="white-space: pre-wrap;">${escapeHtml(summary.description)}</span></div>` : ''}
             </div>
         </div>
     `;
