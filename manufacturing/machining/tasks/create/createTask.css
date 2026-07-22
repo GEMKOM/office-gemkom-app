@@ -3,41 +3,6 @@
 /* Import shared styles */
 @import url('../../shared.css');
 
-/* Form Section Styling */
-.form-section {
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 8px;
-    padding: 1rem;
-    background: #f8f9fa;
-    margin-bottom: 1rem;
-}
-
-.section-subtitle {
-    font-weight: 600;
-    margin-bottom: 1rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 2px solid rgba(0, 0, 0, 0.1);
-}
-
-.form-label.compact {
-    font-size: 0.875rem;
-    font-weight: 500;
-    margin-bottom: 0.25rem;
-}
-
-.form-text.compact {
-    font-size: 0.75rem;
-    color: #6c757d;
-    margin-top: 0.25rem;
-}
-
-.form-actions {
-    border-top: 1px solid rgba(0, 0, 0, 0.1);
-    padding-top: 1rem;
-    display: flex;
-    align-items: center;
-}
-
 /* Task-specific styling */
 .task-key {
     font-weight: 700;
@@ -71,46 +36,6 @@
     font-weight: 500;
 }
 
-/* Status Badges */
-.status-badge {
-    display: inline-block;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.75rem;
-    font-weight: 500;
-}
-
-.status-badge.status-green {
-    background: rgba(40, 167, 69, 0.2);
-    color: #28a745;
-    border: 1px solid rgba(40, 167, 69, 0.3);
-}
-
-.status-badge.status-yellow {
-    background: #e3f2fd;
-    color: #1976d2;
-    border: 1px solid #bbdefb;
-}
-
-.status-badge.status-grey {
-    background: #fff3e0;
-    color: #f57c00;
-    border: 1px solid #ffcc02;
-}
-
-/* Section-specific styling */
-.form-section:nth-child(1) .section-subtitle {
-    border-bottom-color: rgba(13, 110, 253, 0.2);
-}
-
-.form-section:nth-child(2) .section-subtitle {
-    border-bottom-color: rgba(40, 167, 69, 0.2);
-}
-
-.form-section:nth-child(3) .section-subtitle {
-    border-bottom-color: rgba(23, 162, 184, 0.2);
-}
-
 /* Bulk Create Styles */
 .bulk-create-header {
     border-bottom: 1px solid rgba(0, 0, 0, 0.1);
@@ -122,58 +47,6 @@
     margin-bottom: 0.5rem;
 }
 
-/* Ensure table-responsive allows dropdown overflow */
-#bulk-create-table-container .table-responsive {
-    overflow-x: auto;
-    overflow-y: visible;
-    position: relative;
-}
-
-/* When dropdown is open, allow full overflow */
-#bulk-create-table-container .table-responsive:has(.modern-dropdown.open) {
-    overflow: visible !important;
-}
-
-/* Ensure card body allows dropdown overflow */
-.dashboard-card .card-body {
-    overflow: visible;
-    position: relative;
-    z-index: 1; /* Lower than dropdown */
-}
-
-/* Ensure dashboard-card compact has lower z-index than dropdown */
-/* Override filters.css z-index: 100 !important with more specific selector */
-.dashboard-card.compact {
-    position: relative;
-    z-index: 1 !important; /* Lower than dropdown - override filters.css */
-}
-
-/* Specifically target filters section to have lower z-index */
-#filters-placeholder .dashboard-card.compact,
-.filters-component .dashboard-card.compact {
-    position: relative;
-    z-index: 1 !important; /* Lower than dropdown - override filters.css */
-}
-
-/* When dropdown is open, ensure it's above dashboard-card compact */
-.dashboard-card.compact:has(.modern-dropdown.open) {
-    z-index: 1 !important;
-}
-
-/* Ensure filters section stays below when dropdown is open anywhere on page */
-body:has(.job-no-dropdown-container .modern-dropdown.open) #filters-placeholder .dashboard-card.compact,
-body:has(.job-no-dropdown-container .modern-dropdown.open) .filters-component .dashboard-card.compact {
-    z-index: 1 !important;
-    position: relative;
-}
-
-/* Ensure buttons stay below dropdown */
-#create-tasks-btn,
-#clear-form-btn {
-    position: relative;
-    z-index: 1;
-}
-
 .bulk-create-footer {
     text-align: right;
     padding-top: 0.5rem;
@@ -182,13 +55,46 @@ body:has(.job-no-dropdown-container .modern-dropdown.open) .filters-component .d
 .bulk-create-actions {
     border-top: 1px solid rgba(0, 0, 0, 0.1);
     padding-top: 1rem;
-    position: relative;
-    z-index: 1; /* Lower than dropdown */
-    text-align: right;
     display: flex;
     justify-content: flex-end;
     gap: 0.5rem;
 }
+
+/*
+ * Bulk entry table: every column keeps a usable minimum width and the wrapper
+ * scrolls horizontally on narrow screens. The open dropdown menu is portaled
+ * to <body> by ModernDropdown, so nothing here needs overflow: visible.
+ */
+#bulk-create-table-container .table-responsive {
+    overflow-x: auto;
+}
+
+#bulk-create-table-container table {
+    width: 100%;
+    margin-bottom: 0;
+}
+
+#bulk-create-table-container th,
+#bulk-create-table-container td {
+    padding: 0.5rem;
+    vertical-align: middle;
+}
+
+#bulk-create-table-container th {
+    white-space: nowrap;
+}
+
+.bulk-col-name { min-width: 150px; }
+.bulk-col-job_no { min-width: 210px; }
+.bulk-col-image_no { min-width: 105px; }
+.bulk-col-position_no { min-width: 105px; }
+.bulk-col-quantity { min-width: 75px; }
+.bulk-col-material { min-width: 110px; }
+.bulk-col-weight_kg { min-width: 95px; }
+.bulk-col-finish_time { min-width: 140px; }
+.bulk-col-description { min-width: 170px; }
+.bulk-col-files { min-width: 130px; }
+.bulk-col-actions { min-width: 90px; }
 
 .bulk-input {
     font-size: 0.875rem;
@@ -200,95 +106,54 @@ body:has(.job-no-dropdown-container .modern-dropdown.open) .filters-component .d
     box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
 }
 
+/* Dim and lock the entry table while the create request is in flight */
+#bulk-create-table-container.bulk-submitting {
+    opacity: 0.65;
+    pointer-events: none;
+}
+
+/* Job order dropdown: compact to match form-control-sm, long titles ellipsize */
+.job-no-dropdown-container .dropdown-selected {
+    min-height: 31px;
+    padding: 0.25rem 0.5rem;
+    border-width: 1px;
+    border-radius: 4px;
+    box-shadow: none;
+}
+
+.job-no-dropdown-container .dropdown-selected:hover {
+    transform: none;
+    box-shadow: none;
+}
+
+.job-no-dropdown-container .selected-text {
+    font-size: 0.875rem;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.job-no-dropdown-container .dropdown-arrow {
+    font-size: 0.75rem;
+}
+
 .bulk-files-cell {
-    white-space: normal !important;
-    min-width: 120px;
+    white-space: normal;
 }
 
 .bulk-file-names {
     margin-top: 0.35rem;
-    max-width: 160px;
 }
 
 .bulk-file-name {
     display: block;
     font-size: 0.7rem;
     line-height: 1.3;
+    max-width: 160px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-}
-
-.table-sm td, .table-sm th {
-    padding: 0.5rem;
-    vertical-align: middle;
-}
-
-/* Ensure table maintains column widths during loading */
-.table-responsive table {
-    table-layout: fixed;
-    width: 100%;
-    min-height: 200px; /* Prevent layout shift when empty */
-}
-
-.table-responsive table th,
-.table-responsive table td {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-/* Allow dropdown containers to overflow table cells */
-.table-responsive table td {
-    position: relative;
-}
-
-/* Specific override for cells containing dropdowns */
-.table-responsive table td:has(.job-no-dropdown-container),
-.table-responsive table td:has(.modern-dropdown-container) {
-    overflow: visible !important;
-}
-
-/* Fallback for browsers that don't support :has() - target all cells and let dropdown handle it */
-.job-no-dropdown-container {
-    position: relative;
-    z-index: 1;
-}
-
-/* Ensure dropdown menu can overflow table cell */
-.job-no-dropdown-container .modern-dropdown,
-.job-no-dropdown-container .modern-dropdown-container {
-    position: relative;
-    z-index: 1;
-}
-
-.job-no-dropdown-container .modern-dropdown.open {
-    z-index: 99999 !important;
-    position: relative !important;
-}
-
-.job-no-dropdown-container .modern-dropdown.open .dropdown-menu {
-    position: absolute !important;
-    z-index: 99999 !important;
-    overflow: visible !important;
-}
-
-/* Ensure dropdown container has high z-index when open */
-.job-no-dropdown-container:has(.modern-dropdown.open) {
-    z-index: 99999 !important;
-    position: relative !important;
-}
-
-/* Ensure the entire table row has high z-index when dropdown is open */
-.table-responsive table tbody tr:has(.modern-dropdown.open) {
-    z-index: 99999 !important;
-    position: relative !important;
-}
-
-/* Ensure table cell has high z-index when dropdown is open */
-.table-responsive table tbody tr td:has(.modern-dropdown.open) {
-    z-index: 99999 !important;
-    position: relative !important;
 }
 
 /* Preserve dropdown menu styles when portaled to body */
@@ -349,52 +214,13 @@ body:has(.job-no-dropdown-container .modern-dropdown.open) .filters-component .d
     border-bottom-color: var(--secondary-color, #DC143C) !important;
 }
 
-/* Force table-responsive to allow overflow when any dropdown in it is open */
-#bulk-create-table-container:has(.modern-dropdown.open) .table-responsive {
-    overflow: visible !important;
-}
-
-/* More specific: when dropdown is open, make table cell overflow visible */
-#bulk-create-table-container .table-responsive table tbody tr td:has(.modern-dropdown.open) {
-    overflow: visible !important;
-}
-
-/* Ensure the entire chain allows overflow */
-#bulk-create-table-container,
-#bulk-create-table-container .table-responsive,
-#bulk-create-table-container .table-responsive table,
-#bulk-create-table-container .table-responsive table tbody,
-#bulk-create-table-container .table-responsive table tbody tr {
-    position: relative;
-}
-
-/* Allow text wrapping for specific columns */
-.table-responsive table td:nth-child(1), /* Task name column */
-.table-responsive table td:nth-child(8) { /* Description column */
-    white-space: normal;
-    word-wrap: break-word;
-}
-
 /* Responsive adjustments */
 @media (max-width: 768px) {
-    .form-section {
-        padding: 0.75rem;
-    }
-    
     .bulk-create-actions {
         flex-direction: column;
-        gap: 0.5rem;
     }
-    
+
     .bulk-create-actions .btn {
         width: 100%;
-    }
-    
-    .table-responsive {
-        font-size: 0.75rem;
-    }
-    
-    .table-sm td, .table-sm th {
-        padding: 0.25rem;
     }
 }

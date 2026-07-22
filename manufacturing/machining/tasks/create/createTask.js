@@ -36,6 +36,7 @@ const columns = [
 let rows = [createEmptyRow()];
 let eventListenersSetup = false;
 let bulkFileUploadRowIndex = null;
+let isSubmitting = false;
 
 // Job order dropdown state
 let jobOrderDropdowns = new Map(); // Store dropdown references by row index
@@ -203,9 +204,9 @@ function renderBulkCreateTable() {
     `;
     
     for (const col of columns) {
-        html += `<th>${col.label}${col.required ? ' *' : ''}</th>`;
+        html += `<th class="bulk-col-${col.key}">${col.label}${col.required ? ' *' : ''}</th>`;
     }
-    html += `<th>Dosyalar</th><th>İşlem</th></tr></thead><tbody>`;
+    html += `<th class="bulk-col-files">Dosyalar</th><th class="bulk-col-actions">İşlem</th></tr></thead><tbody>`;
     
     rows.forEach((row, i) => {
         html += `<tr>`;
