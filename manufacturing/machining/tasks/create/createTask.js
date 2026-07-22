@@ -432,7 +432,26 @@ function setupEventListeners() {
     }
 }
 
+function setSubmitting(submitting) {
+    isSubmitting = submitting;
+    const createBtn = document.getElementById('create-tasks-btn');
+    const clearBtn = document.getElementById('clear-form-btn');
+    const addRowBtn = document.getElementById('bulk-add-row');
+    if (createBtn) {
+        createBtn.disabled = submitting;
+        createBtn.innerHTML = submitting
+            ? '<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Oluşturuluyor...'
+            : '<i class="fas fa-save me-1"></i>Görevleri Oluştur';
+    }
+    if (clearBtn) clearBtn.disabled = submitting;
+    if (addRowBtn) addRowBtn.disabled = submitting;
+    const container = document.getElementById('bulk-create-table-container');
+    if (container) container.classList.toggle('bulk-submitting', submitting);
+}
+
 async function handleBulkCreateSave() {
+    if (isSubmitting) return;
+
     // Validate required fields
     const requiredFields = ['name', 'job_no', 'quantity', 'finish_time'];
     const missingFields = [];
@@ -480,12 +499,16 @@ async function handleBulkCreateSave() {
         return;
     }
     
+    // Snapshot the rows being submitted so in-flight edits can't desync
+    // the row index -> created part mapping used for file uploads
+    const submittedRows = rows;
+
     // Prepare payload for bulk create parts (without operations)
-    const payload = rows.map((row, index) => {
+    const payload = submittedRows.map((row, index) => {
         // Get job_no from dropdown
         const dropdown = jobOrderDropdowns.get(index);
         const jobNo = dropdown?.getValue() || row.job_no || '';
-        
+
         return {
             name: row.name,
             job_no: jobNo,
@@ -499,16 +522,17 @@ async function handleBulkCreateSave() {
             operations: [] // Empty operations array - operations can be added later
         };
     });
-    
+
+    setSubmitting(true);
     try {
         const responseData = await bulkCreateParts(payload);
-        const totalFilesQueued = rows.reduce((sum, row) => sum + (row._files?.length || 0), 0);
+        const totalFilesQueued = submittedRows.reduce((sum, row) => sum + (row._files?.length || 0), 0);
 
         // Upload files for each created part (row order matches response order)
         if (responseData?.parts?.length) {
             const uploadErrors = [];
             await Promise.all(responseData.parts.map(async (part, index) => {
-                const files = rows[index]?._files;
+                const files = submittedRows[index]?._files;
                 if (!files?.length) return;
                 try {
                     await uploadPartFiles(part.key, files);
@@ -524,7 +548,7 @@ async function handleBulkCreateSave() {
                 );
             }
         }
-        
+
         // Check if the response contains created parts data
         if (responseData && responseData.parts && Array.isArray(responseData.parts)) {
             showCreatedTasksModal(responseData.parts);
@@ -539,13 +563,34 @@ async function handleBulkCreateSave() {
             jobOrderDropdowns.clear();
             renderBulkCreateTable();
         }
-        
+
         // Reload tasks list
         await loadTasks(1);
-        
+
     } catch (err) {
         console.error('Error creating parts:', err);
-        showNotification('Hata: ' + err.message, 'error');
+        if (err?.name === 'AbortError') {
+            showNotification(
+                'İstek zaman aşımına uğradı. Görevler yine de oluşturulmuş olabilir; ' +
+                'aşağıdaki liste yenilendi, kontrol edip gerekirse tekrar deneyin.',
+                'error',
+                10000
+            );
+            await loadTasks(1);
+        } else if (err instanceof TypeError) {
+            // fetch network failure ("Failed to fetch"): server unreachable or connection dropped
+            showNotification(
+                'Sunucuya ulaşılamadı (bağlantı sorunu). Girdiğiniz veriler korundu. ' +
+                'Görevler oluşturulmuş olabilir; aşağıdaki liste yenilendi, kontrol edip gerekirse tekrar deneyin.',
+                'error',
+                10000
+            );
+            await loadTasks(1);
+        } else {
+            showNotification('Hata: ' + String(err.message || err).replace(/\n/g, '<br>'), 'error', 8000);
+        }
+    } finally {
+        setSubmitting(false);
     }
 }
 
@@ -840,9 +885,9 @@ function initializeTableComponent() {
                     if (row.completion_date) {
                         return '<span class="status-badge status-green">Tamamlandı</span>';
                     } else if (row.total_hours_spent > 0) {
-                        return '<span class="status-badge status-yellow">Çalışıldı</span>';
+                        return '<span class="status-badge status-blue">Çalışıldı</span>';
                     } else {
-                        return '<span class="status-badge status-grey">Bekliyor</span>';
+                        return '<span class="status-badge status-orange">Bekliyor</span>';
                     }
                 }
             }

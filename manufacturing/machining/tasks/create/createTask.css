@@ -69,7 +69,11 @@
     overflow-x: auto;
 }
 
+/* Fixed layout + explicit column widths: cells can neither be crushed nor
+   expanded by long content; the table exceeds 100% width when needed and the
+   wrapper scrolls (per CSS, fixed-layout table width = max(width, sum of cols)) */
 #bulk-create-table-container table {
+    table-layout: fixed;
     width: 100%;
     margin-bottom: 0;
 }
@@ -84,17 +88,17 @@
     white-space: nowrap;
 }
 
-.bulk-col-name { min-width: 150px; }
-.bulk-col-job_no { min-width: 210px; }
-.bulk-col-image_no { min-width: 105px; }
-.bulk-col-position_no { min-width: 105px; }
-.bulk-col-quantity { min-width: 75px; }
-.bulk-col-material { min-width: 110px; }
-.bulk-col-weight_kg { min-width: 95px; }
-.bulk-col-finish_time { min-width: 140px; }
-.bulk-col-description { min-width: 170px; }
-.bulk-col-files { min-width: 130px; }
-.bulk-col-actions { min-width: 90px; }
+.bulk-col-name { width: 150px; }
+.bulk-col-job_no { width: 210px; }
+.bulk-col-image_no { width: 105px; }
+.bulk-col-position_no { width: 105px; }
+.bulk-col-quantity { width: 75px; }
+.bulk-col-material { width: 110px; }
+.bulk-col-weight_kg { width: 95px; }
+.bulk-col-finish_time { width: 140px; }
+.bulk-col-description { width: 170px; }
+.bulk-col-files { width: 150px; }
+.bulk-col-actions { width: 90px; }
 
 .bulk-input {
     font-size: 0.875rem;
@@ -112,21 +116,29 @@
     pointer-events: none;
 }
 
-/* Job order dropdown: compact to match form-control-sm, long titles ellipsize */
-.job-no-dropdown-container .dropdown-selected {
+/* Job order dropdown: compact to match form-control-sm, long titles ellipsize.
+   Scoped by container id because ModernDropdown replaces the wrapper's class
+   with .modern-dropdown-container on init. */
+#bulk-create-table-container .modern-dropdown {
+    min-height: 0;
+    height: 31px;
+}
+
+#bulk-create-table-container .dropdown-selected {
     min-height: 31px;
+    height: 31px;
     padding: 0.25rem 0.5rem;
     border-width: 1px;
     border-radius: 4px;
     box-shadow: none;
 }
 
-.job-no-dropdown-container .dropdown-selected:hover {
+#bulk-create-table-container .dropdown-selected:hover {
     transform: none;
     box-shadow: none;
 }
 
-.job-no-dropdown-container .selected-text {
+#bulk-create-table-container .selected-text {
     font-size: 0.875rem;
     min-width: 0;
     overflow: hidden;
@@ -134,7 +146,7 @@
     white-space: nowrap;
 }
 
-.job-no-dropdown-container .dropdown-arrow {
+#bulk-create-table-container .dropdown-arrow {
     font-size: 0.75rem;
 }
 

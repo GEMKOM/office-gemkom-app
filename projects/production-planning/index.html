@@ -33,6 +33,16 @@
                 <div class="dashboard-card">
                     <div class="card-body py-2">
                         <div class="pp-toolbar d-flex flex-wrap align-items-center">
+                            <button type="button" id="pp-back-portfolio" class="btn btn-outline-primary btn-sm" style="display: none;">
+                                <i class="fas fa-arrow-left me-1"></i>Tüm Projeler
+                            </button>
+                            <div id="pp-portfolio-controls" class="d-none flex-wrap align-items-center pp-toolbar">
+                                <label class="pp-toolbar-label mb-0"><i class="fas fa-layer-group me-1"></i>Durum</label>
+                                <div id="pp-portfolio-status" class="pp-filter"></div>
+                                <label class="pp-toolbar-label mb-0"><i class="fas fa-sort me-1"></i>Sırala</label>
+                                <div id="pp-portfolio-sort" class="pp-filter"></div>
+                                <div class="vr mx-1 d-none d-md-block"></div>
+                            </div>
                             <label class="pp-toolbar-label mb-0"><i class="fas fa-briefcase me-1"></i>İş Emri</label>
                             <div id="job-order-picker"></div>
                             <button type="button" id="apply-job-orders" class="btn btn-primary btn-sm">

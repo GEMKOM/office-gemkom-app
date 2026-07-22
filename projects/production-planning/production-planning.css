@@ -345,3 +345,35 @@
 .pp-dot-purple::before { color: #8b5cf6; }
 .pp-dot-orange { color: #9a3412; }
 .pp-dot-orange::before { color: #f97316; }
+
+/* İlerleme figure: big percentage + mini progress bar */
+.pp-fig-progressbar {
+    width: 140px;
+    height: 7px;
+    background: #e7e9ee;
+    border-radius: 4px;
+    margin-top: 5px;
+    overflow: hidden;
+}
+
+.pp-fig-progressfill {
+    height: 100%;
+    border-radius: 4px;
+    background: #6b7280;
+}
+
+.pp-fig-progressfill.pp-pf-green { background: #10b981; }
+.pp-fig-progressfill.pp-pf-red { background: #ef4444; }
+.pp-fig-progressfill.pp-pf-orange { background: #f97316; }
+.pp-fig-progressfill.pp-pf-grey { background: #9ca3af; }
+
+/* Portfolio cards are clickable */
+.pp-verdict-card.pp-clickable {
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.pp-verdict-card.pp-clickable:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 18px rgba(31, 37, 48, 0.12);
+}

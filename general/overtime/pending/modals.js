@@ -111,6 +111,12 @@ async function showOvertimeDetailsModal(request = null) {
         iconColor: 'text-primary'
     });
 
+    // Participant counts exclude entries rejected in an earlier decision, so this
+    // agrees with `total_users` on the list endpoint (which also drops rejected).
+    const allEntries = requestToShow.entries || [];
+    const activeEntryCount = allEntries.filter(e => e.status !== 'rejected').length;
+    const rejectedEntryCount = allEntries.length - activeEntryCount;
+
     // Add custom HTML content for two-column layout
     const twoColumnHtml = `
         <div class="row">
@@ -203,7 +209,11 @@ async function showOvertimeDetailsModal(request = null) {
                             <label class="field-label me-2 mb-0 flex-shrink-0">
                                 <i class="fas fa-users me-1"></i>Katılımcı Sayısı:
                             </label>
-                            <div class="field-value">${requestToShow.entries?.length || 0} kişi</div>
+                            <div class="field-value">${activeEntryCount} kişi${
+                                rejectedEntryCount > 0
+                                    ? ` <span class="text-muted small">(${rejectedEntryCount} kişi reddedildi)</span>`
+                                    : ''
+                            }</div>
                         </div>
                     </div>
                     <div class="col-12">
@@ -271,25 +281,35 @@ async function showOvertimeDetailsModal(request = null) {
 
             const rowsHtml = requestToShow.entries.map((entry, index) => {
                 const name = entry.user_full_name || entry.user_username || entry.username;
+                const isRejected = entry.status === 'rejected';
                 let firstCell;
-                if (isSubmitted) {
+                // Rejected is checked FIRST, before the request-level branches: a
+                // still-'submitted' request can already hold entries rejected by an
+                // earlier stage (reject_entries accepts submitted requests, and a
+                // partial approve rejects entries while the request stays submitted
+                // until the final stage). Those must never render as a checked
+                // "will be approved" box — and approve() only ever transitions
+                // 'pending' entries, so a control here would imply an impossible
+                // action anyway.
+                if (isRejected) {
+                    firstCell = `<td>${entryStatusBadge(entry.status, entry.status_label)}</td>`;
+                } else if (isSubmitted) {
                     firstCell = `<td class="text-center">
                          <input type="checkbox" class="form-check-input entry-approve-check" data-entry-id="${entry.id}" checked>
                        </td>`;
                 } else if (canRetract) {
-                    // Only offer a reject checkbox for entries that aren't already rejected.
-                    firstCell = entry.status === 'rejected'
-                        ? `<td>${entryStatusBadge(entry.status, entry.status_label)}</td>`
-                        : `<td class="text-center">
+                    firstCell = `<td class="text-center">
                              <input type="checkbox" class="form-check-input entry-reject-check" data-entry-id="${entry.id}">
                            </td>`;
                 } else {
                     firstCell = `<td>${entryStatusBadge(entry.status, entry.status_label)}</td>`;
                 }
+                const rowAttr = isRejected ? ' class="table-secondary text-muted"' : '';
+                const nameHtml = isRejected ? `<s>${name}</s>` : `<strong>${name}</strong>`;
                 return `
-                    <tr>
+                    <tr${rowAttr}>
                         <td>${index + 1}</td>
-                        <td><strong>${name}</strong></td>
+                        <td>${nameHtml}</td>
                         <td>${entry.job_no || '-'}</td>
                         <td>${opsCell(entry.operations)}</td>
                         <td>${entry.description || 'Belirtilmemiş'}</td>

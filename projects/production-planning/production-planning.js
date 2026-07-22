@@ -14,7 +14,11 @@ import { TableComponent } from '../../components/table/table.js';
 import { GanttChart } from '../../components/gantt/gantt.js';
 import { ModernDropdown } from '../../components/dropdown/dropdown.js';
 import { showNotification } from '../../components/notification/notification.js';
-import { getJobOrderProductionPlan, getJobOrderDropdown } from '../../apis/projects/jobOrders.js';
+import {
+    getJobOrderProductionPlan,
+    getJobOrderDropdown,
+    getProductionPlanOverview
+} from '../../apis/projects/jobOrders.js';
 
 // Module state
 let plan = null;                 // merged plan for all selected job orders
@@ -24,12 +28,30 @@ let ganttChart = null;
 let ganttDirty = false;
 let currentView = 'table';
 let jobOrderDropdown = null;
+let viewControlsBound = false;
 let departmentFilterDropdown = null;
 let classificationFilterDropdown = null;
 let activeFilters = { departments: [], classifications: [] };
 let taskLabelById = new Map();
 let taskById = new Map();
 let loadedPlans = [];
+
+// Portfolio (weekly review) mode state
+let currentMode = null;                 // 'portfolio' | 'detail'
+let overviewData = null;                // last fetched overview payload
+let overviewStatus = 'active';          // status the cached overview was fetched with
+let portfolioSort = 'job_no';           // 'job_no' | 'risk'
+let portfolioStatusDropdown = null;
+let portfolioSortDropdown = null;
+
+const PORTFOLIO_STATUS_OPTIONS = [
+    { value: 'active', text: 'Aktif' },
+    { value: 'all', text: 'Tümü' },
+    { value: 'on_hold', text: 'Beklemede' },
+    { value: 'draft', text: 'Taslak' },
+    { value: 'completed', text: 'Tamamlandı' },
+    { value: 'cancelled', text: 'İptal Edildi' }
+];
 
 // House badge component classes (components/badges/badges.css) — no yellow.
 const CLASSIFICATION_BADGES = {
@@ -60,16 +82,53 @@ document.addEventListener('DOMContentLoaded', async () => {
     await initNavbar();
     renderHeader();
 
-    currentJobNos = new URLSearchParams(window.location.search).getAll('job_no').filter(Boolean);
-
     setupJobOrderPicker();
+    setupPortfolioControls();
+    setupBackButton();
+    window.addEventListener('popstate', () => handleRoute());
 
-    if (currentJobNos.length) {
-        await loadPlans(currentJobNos);
-    } else {
-        renderEmptyState();
-    }
+    await handleRoute();
 });
+
+// URL is the source of truth: ?job_no= params -> detail, none -> portfolio.
+async function handleRoute() {
+    const jobNos = new URLSearchParams(window.location.search).getAll('job_no').filter(Boolean);
+    if (jobNos.length) {
+        currentJobNos = jobNos;
+        if (jobOrderDropdown) jobOrderDropdown.setValue(jobNos);
+        await enterDetail(jobNos);
+    } else {
+        await enterPortfolio();
+    }
+}
+
+function setModeChrome(mode) {
+    currentMode = mode;
+    const backButton = document.getElementById('pp-back-portfolio');
+    const portfolioControls = document.getElementById('pp-portfolio-controls');
+    const detailControls = document.getElementById('pp-view-controls');
+    const viewContainer = document.getElementById('plan-view-container');
+
+    if (backButton) backButton.style.display = mode === 'detail' ? '' : 'none';
+    if (portfolioControls) {
+        portfolioControls.classList.toggle('d-none', mode !== 'portfolio');
+        portfolioControls.classList.toggle('d-flex', mode === 'portfolio');
+    }
+    if (detailControls && mode === 'portfolio') {
+        detailControls.classList.add('d-none');
+        detailControls.classList.remove('d-flex');
+    }
+    if (viewContainer) viewContainer.style.display = mode === 'detail' ? '' : 'none';
+}
+
+function setupBackButton() {
+    const backButton = document.getElementById('pp-back-portfolio');
+    if (!backButton) return;
+    backButton.addEventListener('click', () => {
+        window.history.pushState(null, '', window.location.pathname);
+        handleRoute();
+    });
+}
 
 function renderHeader(subtitle) {
     new HeaderComponent({
@@ -80,23 +139,15 @@ function renderHeader(subtitle) {
         showBackButton: 'block',
         backUrl: '/projects/project-tracking/',
         showRefreshButton: 'block',
-        onRefreshClick: () => {
-            if (currentJobNos.length) {
+        onRefreshClick: async () => {
+            if (currentMode === 'portfolio') {
+                await fetchOverview(overviewStatus);
+                renderPortfolio();
+            } else if (currentJobNos.length) {
                 loadPlans(currentJobNos);
             }
         }
     });
-}
-
-function renderEmptyState() {
-    const container = document.getElementById('plan-view-container');
-    container.innerHTML = `
-        <div class="dashboard-card">
-            <div class="card-body text-center text-muted py-5">
-                <i class="fas fa-calendar-check fa-2x mb-3"></i>
-                <p class="mb-0">Üretim planını görüntülemek için yukarıdan bir veya birden fazla iş emri seçin.</p>
-            </div>
-        </div>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,11 +176,10 @@ async function setupJobOrderPicker() {
             showNotification('En az bir iş emri seçin', 'warning');
             return;
         }
-        currentJobNos = selected;
         const params = new URLSearchParams();
         selected.forEach(jobNo => params.append('job_no', jobNo));
-        window.history.replaceState(null, '', `${window.location.pathname}?${params.toString()}`);
-        loadPlans(selected);
+        window.history.pushState(null, '', `${window.location.pathname}?${params.toString()}`);
+        handleRoute();
     });
 
     try {
@@ -291,13 +341,11 @@ function verdictHeadline(forecast) {
         </div>`;
 }
 
-function verdictTimelineHtml(p) {
-    const forecast = p.job_order.forecast || {};
+function verdictTimelineHtml(forecast, summary, todayIso) {
     const ms = (d) => d ? new Date(d).getTime() : null;
-    const today = ms(p.today);
+    const today = ms(todayIso);
     const target = ms(forecast.target_completion_date);
     const projected = ms(forecast.projected_completion_date);
-    const summary = p.summary || {};
     const workStart = [
         ms(summary.planned_window && summary.planned_window.start),
         ms(summary.actual_window && summary.actual_window.start),
@@ -352,13 +400,8 @@ function verdictTimelineHtml(p) {
         </div>`;
 }
 
-function verdictMetaHtml(p) {
-    // Counts over the VISIBLE tasks (parents represented by their children are
-    // hidden), so the meta line matches what the table shows.
-    const summary = summarizeTasks(visibleOf(p.tasks), (p.nodes || []).length);
-    const forecast = p.job_order.forecast || {};
+function verdictMetaHtml(summary, forecast) {
     const bits = [
-        `<span>%${Math.round(p.job_order.completion_percentage || 0)} tamamlandı</span>`,
         `<span>${summary.total || 0} görev</span>`
     ];
     if (summary.completed_late > 0) bits.push(`<span class="pp-dot pp-dot-red">${summary.completed_late} geç bitti</span>`);
@@ -372,56 +415,199 @@ function verdictMetaHtml(p) {
     return `<div class="pp-verdict-meta">${bits.join('<span class="pp-meta-sep">·</span>')}</div>`;
 }
 
+function verdictCardHtml(jobOrderLike, summary, todayIso, opts = {}) {
+    const forecast = jobOrderLike.forecast || { verdict: 'unknown', unplanned_open_tasks: 0 };
+    const meta = VERDICT_META[forecast.verdict] || VERDICT_META.unknown;
+    const variance = forecast.variance_wd;
+    const varianceFigure = variance === null || variance === undefined
+        ? '<span class="pp-fig-value">—</span>'
+        : (variance > 0
+            ? `<span class="pp-fig-value pp-fig-late">+${formatWd(variance)} iş günü</span>`
+            : (variance < 0
+                ? `<span class="pp-fig-value pp-fig-early">${formatWd(variance)} iş günü erken</span>`
+                : '<span class="pp-fig-value">Tam zamanında</span>'));
+    const projectedClass = variance !== null && variance !== undefined && variance > 0
+        ? 'pp-fig-late' : '';
+    const pct = Math.round(jobOrderLike.completion_percentage || 0);
+    const statusChip = jobOrderLike.status && jobOrderLike.status !== 'active'
+        ? `<span class="status-badge status-grey ms-2">${escapeHtml(jobOrderLike.status_display || jobOrderLike.status)}</span>`
+        : '';
+    const clickable = opts.clickable
+        ? ` pp-clickable" role="button" data-job-no="${escapeHtml(jobOrderLike.job_no)}` : '';
+
+    return `
+        <div class="dashboard-card pp-verdict-card pp-verdict-${meta.theme} mb-4${clickable}">
+            <div class="card-body">
+                <div class="pp-verdict-head">
+                    <div class="pp-verdict-job">
+                        <span class="pp-verdict-jobno">${escapeHtml(jobOrderLike.job_no)}</span>
+                        <span class="pp-verdict-title">${escapeHtml(jobOrderLike.title || '')}</span>
+                        ${statusChip}
+                        ${jobOrderLike.customer_name ? `<span class="pp-verdict-customer">${escapeHtml(jobOrderLike.customer_name)}</span>` : ''}
+                    </div>
+                    ${verdictHeadline(forecast)}
+                </div>
+                <div class="pp-verdict-figures">
+                    <div class="pp-fig">
+                        <label>Hedef Bitiş</label>
+                        <span class="pp-fig-value">${formatDateCell(forecast.target_completion_date)}</span>
+                    </div>
+                    <div class="pp-fig-arrow"><i class="fas fa-arrow-right-long"></i></div>
+                    <div class="pp-fig">
+                        <label>Öngörülen Bitiş</label>
+                        <span class="pp-fig-value ${projectedClass}">${formatDateCell(forecast.projected_completion_date)}</span>
+                    </div>
+                    <div class="pp-fig">
+                        <label>Sapma</label>
+                        ${varianceFigure}
+                    </div>
+                    <div class="pp-fig">
+                        <label>İlerleme</label>
+                        <span class="pp-fig-value">%${pct}</span>
+                        <div class="pp-fig-progressbar">
+                            <div class="pp-fig-progressfill pp-pf-${meta.theme}" style="width: ${Math.min(pct, 100)}%"></div>
+                        </div>
+                    </div>
+                </div>
+                ${verdictTimelineHtml(forecast, summary, todayIso)}
+                ${verdictMetaHtml(summary, forecast)}
+            </div>
+        </div>`;
+}
+
 function renderVerdicts() {
     const container = document.getElementById('plan-verdict-container');
     if (!container) return;
 
-    container.innerHTML = loadedPlans.map((p) => {
-        const jo = p.job_order;
-        const forecast = jo.forecast || { verdict: 'unknown', unplanned_open_tasks: 0 };
-        const meta = VERDICT_META[forecast.verdict] || VERDICT_META.unknown;
-        const variance = forecast.variance_wd;
-        const varianceFigure = variance === null || variance === undefined
-            ? '<span class="pp-fig-value">—</span>'
-            : (variance > 0
-                ? `<span class="pp-fig-value pp-fig-late">+${formatWd(variance)} iş günü</span>`
-                : (variance < 0
-                    ? `<span class="pp-fig-value pp-fig-early">${formatWd(variance)} iş günü erken</span>`
-                    : '<span class="pp-fig-value">Tam zamanında</span>'));
-        const projectedClass = variance !== null && variance !== undefined && variance > 0
-            ? 'pp-fig-late' : '';
+    container.innerHTML = loadedPlans.map((p) => verdictCardHtml(
+        p.job_order,
+        {
+            // Counts follow the visible rule; windows come from the server
+            // summary over ALL tasks (same as the portfolio cards).
+            ...summarizeTasks(visibleOf(p.tasks), (p.nodes || []).length),
+            planned_window: p.summary.planned_window,
+            actual_window: p.summary.actual_window,
+            projected_completion: p.summary.projected_completion
+        },
+        p.today
+    )).join('');
+}
 
-        return `
-            <div class="dashboard-card pp-verdict-card pp-verdict-${meta.theme} mb-4">
-                <div class="card-body">
-                    <div class="pp-verdict-head">
-                        <div class="pp-verdict-job">
-                            <span class="pp-verdict-jobno">${escapeHtml(jo.job_no)}</span>
-                            <span class="pp-verdict-title">${escapeHtml(jo.title || '')}</span>
-                            ${jo.customer_name ? `<span class="pp-verdict-customer">${escapeHtml(jo.customer_name)}</span>` : ''}
-                        </div>
-                        ${verdictHeadline(forecast)}
-                    </div>
-                    <div class="pp-verdict-figures">
-                        <div class="pp-fig">
-                            <label>Hedef Bitiş</label>
-                            <span class="pp-fig-value">${formatDateCell(forecast.target_completion_date)}</span>
-                        </div>
-                        <div class="pp-fig-arrow"><i class="fas fa-arrow-right-long"></i></div>
-                        <div class="pp-fig">
-                            <label>Öngörülen Bitiş</label>
-                            <span class="pp-fig-value ${projectedClass}">${formatDateCell(forecast.projected_completion_date)}</span>
-                        </div>
-                        <div class="pp-fig">
-                            <label>Sapma</label>
-                            ${varianceFigure}
-                        </div>
-                    </div>
-                    ${verdictTimelineHtml(p)}
-                    ${verdictMetaHtml(p)}
+// ---------------------------------------------------------------------------
+// Portfolio mode (weekly review): verdict cards for all root job orders
+// ---------------------------------------------------------------------------
+
+async function fetchOverview(status) {
+    const container = document.getElementById('plan-verdict-container');
+    if (container && !overviewData) {
+        container.innerHTML = `
+            <div class="dashboard-card">
+                <div class="card-body text-center py-5">
+                    <div class="spinner-border text-primary" role="status"></div>
+                    <p class="text-muted mt-3 mb-0">Proje portföyü yükleniyor...</p>
                 </div>
             </div>`;
-    }).join('');
+    }
+    try {
+        overviewData = await getProductionPlanOverview(status);
+        overviewStatus = status;
+    } catch (error) {
+        console.error('Overview load failed:', error);
+        overviewData = null;
+        showNotification('Proje portföyü yüklenemedi', 'error');
+    }
+}
+
+async function enterPortfolio() {
+    setModeChrome('portfolio');
+    if (!overviewData) {
+        await fetchOverview(overviewStatus);
+    }
+    renderPortfolio();
+}
+
+function renderPortfolio() {
+    const container = document.getElementById('plan-verdict-container');
+    if (!container) return;
+    if (!overviewData) {
+        container.innerHTML = `
+            <div class="dashboard-card">
+                <div class="card-body text-center text-danger py-5">
+                    <i class="fas fa-exclamation-triangle fa-2x mb-3"></i>
+                    <p class="mb-0">Proje portföyü yüklenemedi.</p>
+                </div>
+            </div>`;
+        return;
+    }
+
+    const items = [...overviewData.items];
+    if (portfolioSort === 'risk') {
+        const severity = (item) => {
+            const v = item.forecast ? item.forecast.variance_wd : null;
+            return v === null || v === undefined ? -Infinity : v;
+        };
+        items.sort((a, b) => severity(b) - severity(a));
+    } else {
+        items.sort((a, b) => (a.job_no || '').localeCompare(b.job_no || '', undefined, { numeric: true }));
+    }
+
+    const statusOption = PORTFOLIO_STATUS_OPTIONS.find(o => o.value === overviewStatus);
+    renderHeader(`${items.length} proje · ${statusOption ? statusOption.text : overviewStatus} · Haftalık gözden geçirme`);
+
+    container.innerHTML = items.length
+        ? items.map(item => verdictCardHtml(item, item.summary || {}, overviewData.today, { clickable: true })).join('')
+        : `
+            <div class="dashboard-card">
+                <div class="card-body text-center text-muted py-5">
+                    <i class="fas fa-folder-open fa-2x mb-3"></i>
+                    <p class="mb-0">Bu durumda proje bulunamadı.</p>
+                </div>
+            </div>`;
+}
+
+async function enterDetail(jobNos) {
+    setModeChrome('detail');
+    await loadPlans(jobNos);
+}
+
+function setupPortfolioControls() {
+    const statusMount = document.getElementById('pp-portfolio-status');
+    const sortMount = document.getElementById('pp-portfolio-sort');
+    if (!statusMount || !sortMount) return;
+
+    statusMount.style.width = '150px';
+    sortMount.style.width = '150px';
+    portfolioStatusDropdown = new ModernDropdown(statusMount, { placeholder: 'Durum', width: '150px' });
+    portfolioStatusDropdown.setItems(PORTFOLIO_STATUS_OPTIONS);
+    portfolioStatusDropdown.setValue('active');
+    statusMount.addEventListener('dropdown:select', async (e) => {
+        await fetchOverview(e.detail.value || 'active');
+        renderPortfolio();
+    });
+
+    portfolioSortDropdown = new ModernDropdown(sortMount, { placeholder: 'Sırala', width: '150px' });
+    portfolioSortDropdown.setItems([
+        { value: 'job_no', text: 'İş No' },
+        { value: 'risk', text: 'En Riskli' }
+    ]);
+    portfolioSortDropdown.setValue('job_no');
+    sortMount.addEventListener('dropdown:select', (e) => {
+        portfolioSort = e.detail.value || 'job_no';
+        renderPortfolio();
+    });
+
+    // Card click -> drill into the detail view for that job order
+    const verdictContainer = document.getElementById('plan-verdict-container');
+    if (verdictContainer) {
+        verdictContainer.addEventListener('click', (e) => {
+            if (currentMode !== 'portfolio') return;
+            const card = e.target.closest('.pp-verdict-card[data-job-no]');
+            if (!card) return;
+            const jobNo = card.dataset.jobNo;
+            window.history.pushState(null, '', `${window.location.pathname}?job_no=${encodeURIComponent(jobNo)}`);
+            handleRoute();
+        });
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -441,23 +627,28 @@ function initViewLayout() {
         `;
     }
 
-    // Toolbar controls live in the static header row (index.html) — bind once
-    // and reveal them on the first data load.
+    // Toolbar controls live in the static header row (index.html). Reveal on
+    // every detail entry (portfolio mode hides them), but bind only ONCE —
+    // gating on the class would duplicate listeners/dropdowns after a
+    // portfolio round-trip.
     const controls = document.getElementById('pp-view-controls');
-    if (controls && controls.classList.contains('d-none')) {
+    if (controls) {
         controls.classList.remove('d-none');
         controls.classList.add('d-flex');
+        if (!viewControlsBound) {
+            viewControlsBound = true;
 
-        document.querySelectorAll('[data-plan-view]').forEach((button) => {
-            button.addEventListener('click', () => {
-                const selected = button.dataset.planView;
-                if (!selected || selected === currentView) return;
-                currentView = selected;
-                updateViewState();
+            document.querySelectorAll('[data-plan-view]').forEach((button) => {
+                button.addEventListener('click', () => {
+                    const selected = button.dataset.planView;
+                    if (!selected || selected === currentView) return;
+                    currentView = selected;
+                    updateViewState();
+                });
             });
-        });
 
-        setupFilterDropdowns();
+            setupFilterDropdowns();
+        }
     }
     updateViewState();
 }

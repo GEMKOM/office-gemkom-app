@@ -860,3 +860,25 @@ export async function getJobOrderProductionPlan(jobNo) {
         throw error;
     }
 }
+
+/**
+ * Portfolio overview: schedule verdict per ROOT job order (weekly review).
+ * Endpoint: GET /projects/job-orders/production-plan-overview/?status=...
+ * @param {string} status - Job order status filter ('active' default, or 'all')
+ * @returns {Promise<Object>} {items: [...], today, generated_at}
+ */
+export async function getProductionPlanOverview(status = 'active') {
+    try {
+        const response = await authedFetch(
+            `${backendBase}/projects/job-orders/production-plan-overview/?status=${encodeURIComponent(status)}`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error('Error fetching production plan overview:', error);
+        throw error;
+    }
+}

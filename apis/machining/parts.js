@@ -156,13 +156,24 @@ export async function bulkCreateParts(partsData) {
             throw new Error('partsData must be a non-empty array');
         }
 
-        const response = await authedFetch(`${MACHINING_2_BASE_URL}/parts/bulk-create/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(partsData)
-        });
+        // Abort if the server doesn't answer in time so the UI can recover
+        // instead of waiting on a dead connection indefinitely
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 90000);
+
+        let response;
+        try {
+            response = await authedFetch(`${MACHINING_2_BASE_URL}/parts/bulk-create/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(partsData),
+                signal: controller.signal
+            });
+        } finally {
+            clearTimeout(timeoutId);
+        }
         
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({}));
