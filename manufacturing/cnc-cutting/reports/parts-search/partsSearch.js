@@ -65,6 +65,57 @@ function parseQuantityToNumber(quantity) {
 }
 
 /**
+ * Combined "N mm MATERIAL" text from the part's cut fields (legacy/derived).
+ * Derived materials already start with "N mm ..." — don't prepend twice.
+ */
+function plateInfoText(row) {
+    const material = (row.material || '').trim();
+    const thickness = row.thickness_mm !== null && row.thickness_mm !== undefined && row.thickness_mm !== ''
+        ? parseFloat(row.thickness_mm)
+        : null;
+    if (material && /^\s*\d+([.,]\d+)?\s*mm/i.test(material)) return material;
+    const parts = [];
+    if (thickness) parts.push(`${thickness} mm`);
+    if (material) parts.push(material);
+    return parts.join(' ');
+}
+
+/**
+ * Plate source cell: full material name + status badge (same as cuts table).
+ */
+function plateSourceCellHtml(row) {
+    if (row.planning_request_item) {
+        const delivered = row.plate_item_is_delivered === true;
+        const badge = delivered
+            ? '<span class="status-badge status-green">Teslim</span>'
+            : '<span class="status-badge status-orange">Malzeme Bekliyor</span>';
+        const name = row.plate_item_name || plateInfoText(row) || row.plate_item_code || '-';
+        const tooltip = `${name}${row.plate_item_code ? ' (' + row.plate_item_code + ')' : ''}`;
+        return `<div title="${tooltip}"><div>${name}</div>${badge}</div>`;
+    }
+    if (row.has_remnant_plate) {
+        const info = plateInfoText(row);
+        return `<div title="Fire plaka kullanılıyor">${info ? `<div>${info}</div>` : ''}<span class="status-badge status-grey">Fire Plaka</span></div>`;
+    }
+    return plateInfoText(row) || '-';
+}
+
+/**
+ * Plain-text plate source for exports.
+ */
+function plateSourceText(row) {
+    if (row.planning_request_item) {
+        const name = row.plate_item_name || plateInfoText(row) || row.plate_item_code || '-';
+        return `${name} (${row.plate_item_is_delivered === true ? 'Teslim' : 'Malzeme Bekliyor'})`;
+    }
+    if (row.has_remnant_plate) {
+        const info = plateInfoText(row);
+        return info ? `${info} (Fire Plaka)` : 'Fire Plaka';
+    }
+    return plateInfoText(row) || '-';
+}
+
+/**
  * Initialize filters component
  */
 function initFilters() {
@@ -142,6 +193,12 @@ function initTable() {
             field: 'nesting_id',
             label: 'Nesting ID',
             sortable: true
+        },
+        {
+            field: 'plate_item_name',
+            label: 'Plaka Kaynağı',
+            sortable: false,
+            formatter: (value, row) => plateSourceCellHtml(row)
         },
         {
             field: 'planned_start_ms',
@@ -347,6 +404,7 @@ function handleExport(format = 'csv') {
                 'Ağırlık (kg)': row.weight_kg || '-',
                 'Adet': row.quantity || '-',
                 'Nesting ID': row.nesting_id || '-',
+                'Plaka Kaynağı': plateSourceText(row),
                 'Planlanan Başlangıç': row.planned_start_ms ? formatDateForExport(row.planned_start_ms) : '-',
                 'Planlanan Bitiş': row.planned_end_ms ? formatDateForExport(row.planned_end_ms) : '-',
                 'Tamamlanma Tarihi': row.completion_date ? formatDateForExport(row.completion_date) : '-',

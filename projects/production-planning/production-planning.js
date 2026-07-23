@@ -51,6 +51,7 @@ let meetingItems = [];                  // portfolio items in slide order
 let meetingIndex = 0;
 let meetingBound = false;               // meeting listeners bound once
 let meetingWheelAt = 0;                 // wheel debounce timestamp
+let meetingFetchTimer = null;           // settle-debounce for brief fetching
 const meetingBriefCache = new Map();    // job_no -> meeting brief payload
 const meetingBriefPromises = new Map(); // job_no -> in-flight fetch promise
 const meetingPlanCache = new Map();     // job_no -> production plan (hero modal)
@@ -721,6 +722,18 @@ function bindMeetingControls() {
     // delegated from the static container via data-action attributes.
     const container = document.getElementById('pp-meeting-container');
     if (container) {
+        // The strip is re-rendered per slide, so the search box is handled by
+        // delegation too: Enter jumps, Esc leaves the box (next Esc exits).
+        container.addEventListener('keydown', (e) => {
+            if (e.target.id !== 'pp-meeting-search') return;
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                jumpToJob(e.target.value);
+            } else if (e.key === 'Escape') {
+                e.stopPropagation();
+                e.target.blur();
+            }
+        });
         container.addEventListener('click', (e) => {
             if (e.target.closest('a')) return;  // real links (files) stay native
             const control = e.target.closest('[data-action]');
@@ -949,6 +962,25 @@ async function openPlanModal(item) {
         (SEVERITY_ORDER[a.schedule.classification] ?? 9) - (SEVERITY_ORDER[b.schedule.classification] ?? 9)
         || magnitude(b.schedule) - magnitude(a.schedule);
 
+    // How the projection was derived — the answer to "where does this date
+    // come from?" for unplanned tasks.
+    const basisCell = (t) => {
+        const s = t.schedule;
+        if (t.status === 'completed') return '<span class="text-muted">—</span>';
+        const remaining = s.projection_remaining_wd;
+        if (s.projection_kind === 'rate') {
+            return `${formatWd(s.projection_elapsed_wd)} günde %${Math.round(t.completion_percentage)} · ~${formatWd(remaining)} g kaldı`;
+        }
+        if (s.projection_kind === 'weight') {
+            return `<span title="Görev ağırlığının, işin bugüne kadarki temposuna oranı">ağırlık payı · ~${formatWd(remaining)} g</span>`;
+        }
+        if (s.projection_kind === 'push') {
+            const pusher = s.pushed_by && byId.get(s.pushed_by);
+            return `<span class="pp-td-muted" title="${pusher ? escapeHtml(label(pusher)) : ''}">İten: ${pusher ? escapeHtml(label(pusher)) : 'önceki görev'}</span>`;
+        }
+        return '<span class="text-muted">—</span>';
+    };
+
     const taskRow = (t) => {
         const s = t.schedule;
         const badge = CLASSIFICATION_BADGES[s.classification] || CLASSIFICATION_BADGES.not_started;
@@ -958,15 +990,15 @@ async function openPlanModal(item) {
             : (variance > 0
                 ? ` <span class="pp-num-red">(+${formatWd(variance)})</span>`
                 : (variance < 0 ? ` <span class="pp-num-green">(${formatWd(variance)} erken)</span>` : ''));
-        const pusher = s.pushed_by && byId.get(s.pushed_by);
         const materialWaitHtml = s.material_wait ? ` ${materialWaitBadgeHtml(s.material_wait)}` : '';
+        const driver = s.drives_completion;
         return `
-            <tr>
-                <td class="pp-td-main" title="${escapeHtml(label(t))}">${escapeHtml(label(t))}</td>
+            <tr${driver ? ' class="pp-modal-driver"' : ''}>
+                <td class="pp-td-main" title="${escapeHtml(label(t))}">${driver ? '<i class="fas fa-flag pp-driver-flag" title="Bitişi belirleyen görev"></i> ' : ''}${escapeHtml(label(t))}</td>
                 <td><span class="status-badge ${badge.badgeClass}">${badge.label}</span>${materialWaitHtml}</td>
                 <td>${fmtShortDate(t.target_completion_date)}</td>
                 <td>${fmtShortDate(end)}${varianceHtml}</td>
-                <td class="pp-td-muted" title="${pusher ? escapeHtml(label(pusher)) : ''}">${pusher ? escapeHtml(label(pusher)) : '—'}</td>
+                <td class="pp-td-basis">${basisCell(t)}</td>
             </tr>`;
     };
 
@@ -999,12 +1031,27 @@ async function openPlanModal(item) {
         rows.push(...tasks.map(taskRow));
     }
 
+    // The one-line answer to "why this date": the task whose projected end IS
+    // the job's projected completion.
+    const driverTask = planData.tasks.find(t => t.schedule.drives_completion);
+    const driverLine = driverTask ? `
+        <div class="pp-modal-driver-line">
+            <i class="fas fa-flag pp-driver-flag"></i>
+            Bitişi belirleyen: <strong>${escapeHtml(label(driverTask))}</strong>
+            <span class="text-muted">· ${escapeHtml(driverTask.job_no)}</span>
+            — ${fmtShortDate(driverTask.schedule.projected_end_date)}
+            <span class="text-muted">(${basisCell(driverTask).replace(/<[^>]*>/g, '')})</span>
+        </div>` : '';
+
     document.getElementById('pp-modal-body').innerHTML = `
         ${verdictHeadline(item.forecast || { verdict: 'unknown' })}
+        ${driverLine}
         <div class="pp-modal-note">${multiNode
-            ? 'Alt iş emirlerine göre gruplu; her grupta geciken ve riskli işler üstte. "İten" sütunu, bitişini geciktiren önceki görevi gösterir.'
-            : 'Görevler önem sırasıyla: geciken ve riskli işler üstte. "İten" sütunu, bitişini geciktiren önceki görevi gösterir.'}</div>
-        ${modalTableHtml(['Görev', 'Durum', 'Hedef', 'Öngörülen / Gerçek', 'İten'], rows)}`;
+            ? 'Alt iş emirlerine göre gruplu; her grupta geciken ve riskli işler üstte.'
+            : 'Görevler önem sırasıyla: geciken ve riskli işler üstte.'}
+            "Öngörü Dayanağı" her tarihin nereden geldiğini söyler: tempo (şu sürede şu kadar ilerledi),
+            ağırlık payı (henüz tempo yok — görev ağırlığının işin temposuna oranı) veya iten görev.</div>
+        ${modalTableHtml(['Görev', 'Durum', 'Hedef', 'Öngörülen / Gerçek', 'Öngörü Dayanağı'], rows)}`;
 }
 
 function weldingModalHtml(brief) {
@@ -1194,6 +1241,22 @@ function exitMeeting() {
     handleRoute();
 }
 
+function jumpToJob(query) {
+    const needle = (query || '').trim().toUpperCase();
+    if (!needle) return;
+    const index = meetingItems.findIndex(i => i.job_no.toUpperCase() === needle);
+    const fallback = index >= 0 ? index
+        : meetingItems.findIndex(i => i.job_no.toUpperCase().startsWith(needle));
+    const found = fallback >= 0 ? fallback
+        : meetingItems.findIndex(i => i.job_no.toUpperCase().includes(needle));
+    if (found < 0) {
+        showNotification(`"${needle}" portföyde bulunamadı`, 'warning');
+        return;
+    }
+    meetingIndex = found;
+    renderMeetingSlide();
+}
+
 function meetingStep(delta) {
     const target = meetingIndex + delta;
     if (target < 0 || target >= meetingItems.length) return;
@@ -1218,18 +1281,28 @@ function renderMeetingSlide() {
 
     if (brief) {
         renderMeetingPanels(item, brief);
-    } else {
-        ensureBrief(item.job_no).then((loaded) => {
-            const current = meetingItems[meetingIndex];
-            if (currentMode === 'meeting' && loaded && current && current.job_no === item.job_no) {
-                renderMeetingPanels(current, loaded);
-            }
-        });
     }
-    // Warm the neighbours so prev/next feels instant on the projector.
-    [meetingIndex - 1, meetingIndex + 1].forEach((i) => {
-        if (meetingItems[i]) ensureBrief(meetingItems[i].job_no);
-    });
+
+    // Fetching waits until the user SETTLES on a slide — flipping through ten
+    // slides must not fire ten briefs plus twenty prefetches. Cached slides
+    // render instantly above regardless.
+    clearTimeout(meetingFetchTimer);
+    meetingFetchTimer = setTimeout(() => {
+        const current = meetingItems[meetingIndex];
+        if (currentMode !== 'meeting' || !current) return;
+        if (!meetingBriefCache.has(current.job_no)) {
+            ensureBrief(current.job_no).then((loaded) => {
+                const still = meetingItems[meetingIndex];
+                if (currentMode === 'meeting' && loaded && still && still.job_no === current.job_no) {
+                    renderMeetingPanels(still, loaded);
+                }
+            });
+        }
+        // Warm the neighbours so prev/next feels instant on the projector.
+        [meetingIndex - 1, meetingIndex + 1].forEach((i) => {
+            if (meetingItems[i]) ensureBrief(meetingItems[i].job_no);
+        });
+    }, 250);
 }
 
 function meetingStripHtml(item) {
@@ -1250,6 +1323,8 @@ function meetingStripHtml(item) {
             </div>
             <div class="pp-strip-title">Haftalık Gözden Geçirme</div>
             <div class="pp-strip-actions">
+                <input type="text" id="pp-meeting-search" class="pp-strip-search"
+                       placeholder="İş no + Enter" autocomplete="off" spellcheck="false">
                 <span class="pp-strip-hint d-none d-lg-inline">← → gezin · Esc çık</span>
                 <button type="button" class="btn btn-sm pp-strip-btn" data-action="detail">
                     <i class="fas fa-table-list me-1"></i>Planı Aç

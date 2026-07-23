@@ -397,6 +397,40 @@ function applyUrlFilters() {
     }
 }
 
+// Combined "N mm MATERIAL" text from a row's own (legacy/derived) fields.
+// Derived materials already start with "N mm ..." (plate item names) — don't
+// prepend the thickness twice in that case.
+function plateInfoText(row) {
+    const material = (row.material || '').trim();
+    const thickness = row.thickness_mm !== null && row.thickness_mm !== undefined && row.thickness_mm !== ''
+        ? parseFloat(row.thickness_mm)
+        : null;
+    if (material && /^\s*\d+([.,]\d+)?\s*mm/i.test(material)) return material;
+    const parts = [];
+    if (thickness) parts.push(`${thickness} mm`);
+    if (material) parts.push(material);
+    return parts.join(' ');
+}
+
+// One cell describing the cut's plate source: full material name + status badge.
+function plateSourceCellHtml(row) {
+    if (row.planning_request_item) {
+        const delivered = row.plate_item_is_delivered === true;
+        const badge = delivered
+            ? '<span class="status-badge status-green">Teslim</span>'
+            : '<span class="status-badge status-orange">Malzeme Bekliyor</span>';
+        const name = row.plate_item_name || plateInfoText(row) || row.plate_item_code || '-';
+        const tooltip = `${name}${row.plate_item_code ? ' (' + row.plate_item_code + ')' : ''}`;
+        return `<div title="${tooltip}"><div>${name}</div>${badge}</div>`;
+    }
+    if (row.has_remnant_plate) {
+        const info = plateInfoText(row);
+        return `<div title="Fire plaka kullanılıyor">${info ? `<div>${info}</div>` : ''}<span class="status-badge status-grey">Fire Plaka</span></div>`;
+    }
+    // Legacy cut with no linked source: show its own plate fields as one text.
+    return plateInfoText(row) || '-';
+}
+
 function initializeTableComponent() {
     // Initialize table component
     cutsTable = new TableComponent('cuts-table-container', {
@@ -423,13 +457,6 @@ function initializeTableComponent() {
                 formatter: (value) => `<strong>${value || '-'}</strong>`
             },
             {
-                field: 'material',
-                label: 'Malzeme',
-                sortable: true,
-                width: '10%',
-                formatter: (value) => value || '-'
-            },
-            {
                 field: 'dimensions',
                 label: 'Boyutlar',
                 sortable: true,
@@ -437,31 +464,19 @@ function initializeTableComponent() {
                 formatter: (value) => value || '-'
             },
             {
-                field: 'thickness_mm',
-                label: 'Kalınlık (mm)',
-                sortable: true,
-                width: '10%',
-                type: 'number',
-                formatter: (value) => `<span class="thickness-badge">${value || 0} mm</span>`
-            },
-            {
                 field: 'plate_item_code',
                 label: 'Plaka Kaynağı',
                 sortable: false,
-                width: '8%',
-                formatter: (value, row) => {
-                    if (row.planning_request_item) {
-                        const delivered = row.plate_item_is_delivered === true;
-                        const badgeClass = delivered ? 'status-green' : 'status-orange';
-                        const text = delivered ? 'Teslim' : 'Malzeme Bekliyor';
-                        const tooltip = `${value || ''}${row.plate_item_name ? ' — ' + row.plate_item_name : ''}`;
-                        return `<span class="status-badge ${badgeClass}" title="${tooltip}">${text}</span>`;
-                    }
-                    if (row.has_remnant_plate) {
-                        return '<span class="status-badge status-grey" title="Fire plaka kullanılıyor">Fire Plaka</span>';
-                    }
-                    return '-';
-                }
+                width: '18%',
+                formatter: (value, row) => plateSourceCellHtml(row)
+            },
+            {
+                field: 'quantity',
+                label: 'Adet',
+                sortable: true,
+                width: '6%',
+                type: 'number',
+                formatter: (value) => value ? `${value}` : '-'
             },
             {
                 field: 'machine_fk',
@@ -1314,6 +1329,18 @@ function setupCreateCutForm(createCutModal) {
                 helpText: 'Kesim işleminin tahmini süresi saat cinsinden'
             },
             {
+                id: 'cut-quantity',
+                name: 'cut-quantity',
+                label: 'Adet',
+                type: 'number',
+                required: false,
+                placeholder: '1',
+                step: '1',
+                min: '1',
+                colSize: 6,
+                helpText: 'Aynı kesim kaç kez yapılacak (varsayılan: 1)'
+            },
+            {
                 id: 'cut-files',
                 label: 'Dosyalar',
                 type: 'file',
@@ -1515,6 +1542,7 @@ async function handleCreateCutSave(formData) {
         dimensions: formData['cut-dimensions'],
         machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
         estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null,
+        quantity: formData['cut-quantity'] ? parseInt(formData['cut-quantity']) : null,
         files: uploadedFiles,
         parts_data: [],
         selected_plate_id: selectedRemnantPlate ? selectedRemnantPlate.id : null,
@@ -1726,6 +1754,19 @@ async function setupEditCutForm(editCutModal, cut) {
                 value: cut.estimated_hours || '',
                 colSize: 6,
                 helpText: 'Kesim işleminin tahmini süresi saat cinsinden'
+            },
+            {
+                id: 'cut-quantity',
+                name: 'cut-quantity',
+                label: 'Adet',
+                type: 'number',
+                required: false,
+                placeholder: '1',
+                step: '1',
+                min: '1',
+                value: cut.quantity || '',
+                colSize: 6,
+                helpText: 'Aynı kesim kaç kez yapılacak (varsayılan: 1)'
             },
         ]
     });
@@ -2956,6 +2997,7 @@ async function handleEditCutSave(formData, cutKey) {
         dimensions: formData['cut-dimensions'],
         machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
         estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null,
+        quantity: formData['cut-quantity'] ? parseInt(formData['cut-quantity']) : null,
         // Both source keys are always sent (null clears) so switching sources
         // works: the backend clears the one that is empty.
         selected_plate_id: selectedRemnantPlate ? selectedRemnantPlate.id : null,
@@ -4335,8 +4377,8 @@ function updateSelectedPlanningItemDisplayFor(modal, suffix) {
         if (usageText) {
             const count = selectedPlanningItem.cnc_cuts_count ?? 0;
             usageText.textContent = count > 0
-                ? `Bu kalem daha önce ${count} kesimde kullanıldı.`
-                : 'Bu kalem daha önce hiç kesimde kullanılmadı.';
+                ? `Bu kalemden daha önce ${count} kesim yapıldı (adetler dahil).`
+                : 'Bu kalemden daha önce hiç kesim yapılmadı.';
         }
         if (deliveryText) {
             const delivered = selectedPlanningItem.is_delivered === true;
