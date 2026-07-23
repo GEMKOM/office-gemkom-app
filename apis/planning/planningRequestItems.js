@@ -33,6 +33,8 @@ export async function getNumberOfAvailablePlanningRequestItems() {
  * @param {string} [filters.item_type] - Exact item type
  * @param {string} [filters.item_type_exclude] - Exclude specific item type
  * @param {boolean|string} [filters.is_delivered] - Delivery status
+ * @param {boolean|string} [filters.is_plate] - Raw plate items only (item code starts with 0100/0101)
+ * @param {boolean|string} [filters.is_consumed] - Physical stock used up (CNC plate consumption)
  * @param {boolean|string} [filters.is_available] - Has remaining qty for purchase
  * @param {boolean|string} [filters.needs_purchase] - quantity_to_purchase > 0
  * @param {boolean|string} [filters.available_for_procurement] - Ready for procurement (status + qty checks)
@@ -359,6 +361,60 @@ export async function getPlanningRequestItemsFiles(itemIds = []) {
         return await response.json();
     } catch (error) {
         console.error('Error fetching planning request item files:', error);
+        throw error;
+    }
+}
+
+/**
+ * Mark a planning request item's physical stock as used up (consumed).
+ * Standalone — no CNC cut required (legacy already-cut items can be retired too).
+ * Consumed items can't be selected as the plate source of new CNC cuts.
+ * @param {string|number} itemId - Planning request item ID
+ * @returns {Promise<Object>} Updated planning request item
+ */
+export async function markPlanningRequestItemConsumed(itemId) {
+    try {
+        const response = await authedFetch(`${PLANNING_BASE_URL}/items/${itemId}/mark_consumed/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Kalem kullanıldı olarak işaretlenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error marking planning request item ${itemId} as consumed:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Revert a mistaken consumed flag on a planning request item.
+ * @param {string|number} itemId - Planning request item ID
+ * @returns {Promise<Object>} Updated planning request item
+ */
+export async function unmarkPlanningRequestItemConsumed(itemId) {
+    try {
+        const response = await authedFetch(`${PLANNING_BASE_URL}/items/${itemId}/unmark_consumed/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Kullanıldı işareti kaldırılırken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error unmarking planning request item ${itemId} as consumed:`, error);
         throw error;
     }
 }

@@ -37,6 +37,7 @@ import { showNotification } from '../../../components/notification/notification.
 import { markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
 import { getRemnantPlates, getRemnantPlateById } from '../../../apis/cnc_cutting/remnants.js';
+import { getPlanningItems, markPlanningRequestItemConsumed } from '../../../apis/planning/planningRequestItems.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
 
@@ -67,6 +68,11 @@ let quantityUsed = 1; // Quantity of remnant plate to use (default 1)
 let selectRemnantModal = null; // Modal for selecting remnant plate
 let remnantFilters = null; // Filters component for remnant selection
 let remnantSelectionTable = null; // Table component for remnant selection
+let selectedPlanningItem = null; // Selected planning request item (plate stock line)
+let markItemConsumed = false; // "Kullanıldı olarak işaretle" checkbox state
+let selectPlanningItemModal = null; // Modal for selecting planning request item
+let planningItemFilters = null; // Filters component for planning item selection
+let planningItemSelectionTable = null; // Table component for planning item selection
 
 // Check URL and start fetching modal data immediately (before page load)
 let modalDataPromise = null;
@@ -439,12 +445,23 @@ function initializeTableComponent() {
                 formatter: (value) => `<span class="thickness-badge">${value || 0} mm</span>`
             },
             {
-                field: 'quantity',
-                label: 'Adet',
-                sortable: true,
+                field: 'plate_item_code',
+                label: 'Plaka Kaynağı',
+                sortable: false,
                 width: '8%',
-                type: 'number',
-                formatter: (value) => value ? `${value}` : '-'
+                formatter: (value, row) => {
+                    if (row.planning_request_item) {
+                        const delivered = row.plate_item_is_delivered === true;
+                        const badgeClass = delivered ? 'status-green' : 'status-orange';
+                        const text = delivered ? 'Teslim' : 'Malzeme Bekliyor';
+                        const tooltip = `${value || ''}${row.plate_item_name ? ' — ' + row.plate_item_name : ''}`;
+                        return `<span class="status-badge ${badgeClass}" title="${tooltip}">${text}</span>`;
+                    }
+                    if (row.has_remnant_plate) {
+                        return '<span class="status-badge status-grey" title="Fire plaka kullanılıyor">Fire Plaka</span>';
+                    }
+                    return '-';
+                }
             },
             {
                 field: 'machine_fk',
@@ -474,7 +491,7 @@ function initializeTableComponent() {
                 formatter: (value, row) => {
                     // Status based on completion_date - make it clickable to toggle
                     const isCompleted = !!row.completion_date;
-                    const statusClass = isCompleted ? 'status-green' : 'status-yellow';
+                    const statusClass = isCompleted ? 'status-green' : 'status-orange';
                     const statusText = isCompleted ? 'Tamamlandı' : 'Bekliyor';
                     const taskKey = row.key || row.id;
                     
@@ -1215,19 +1232,21 @@ async function showCreateCutModal() {
 }
 
 function setupCreateCutForm(createCutModal) {
-    // Reset selected remnant plate
+    // Reset selected plate sources
     selectedRemnantPlate = null;
     quantityUsed = 1; // Reset to default
-    
-    // Add remnant plate selection section at the top
+    selectedPlanningItem = null;
+    markItemConsumed = false;
+
+    // Add plate source selection section at the top
     createCutModal.addSection({
         id: 'remnant-selection',
-        title: 'Fire Plaka Seçimi',
+        title: 'Plaka Kaynağı',
         icon: 'fas fa-layer-group',
         iconColor: 'text-info',
         fields: []
     });
-    
+
     // Add basic information section
     createCutModal.addSection({
         id: 'basic-info',
@@ -1256,36 +1275,14 @@ function setupCreateCutForm(createCutModal) {
                 helpText: 'Nesting dosyası ID\'si'
             },
             {
-                id: 'cut-material',
-                name: 'cut-material',
-                label: 'Malzeme',
-                type: 'text',
-                required: true,
-                placeholder: 'Malzeme türü',
-                colSize: 6,
-                helpText: 'Kesilecek malzeme türü'
-            },
-            {
                 id: 'cut-dimensions',
                 name: 'cut-dimensions',
                 label: 'Boyutlar',
                 type: 'text',
-                required: true,
-                placeholder: '100x50x10',
+                required: false,
+                placeholder: '1500x3000',
                 colSize: 6,
-                helpText: 'Malzeme boyutları (örn: 100x50x10)'
-            },
-            {
-                id: 'cut-thickness',
-                name: 'cut-thickness',
-                label: 'Kalınlık (mm)',
-                type: 'number',
-                required: true,
-                placeholder: '10.0',
-                step: '0.1',
-                min: '0.1',
-                colSize: 6,
-                helpText: 'Malzeme kalınlığı milimetre cinsinden'
+                helpText: 'Plaka boyutları (opsiyonel; fire plaka seçilirse otomatik alınır)'
             },
             {
                 id: 'cut-machine-fk',
@@ -1296,9 +1293,9 @@ function setupCreateCutForm(createCutModal) {
                 placeholder: 'Makine seçin...',
                 options: [
                     { value: '', label: 'Makine seçin...' },
-                    ...machines.map(machine => ({ 
-                        value: machine.id.toString(), 
-                        label: machine.name 
+                    ...machines.map(machine => ({
+                        value: machine.id.toString(),
+                        label: machine.name
                     }))
                 ],
                 colSize: 6,
@@ -1315,18 +1312,6 @@ function setupCreateCutForm(createCutModal) {
                 min: '0',
                 colSize: 6,
                 helpText: 'Kesim işleminin tahmini süresi saat cinsinden'
-            },
-            {
-                id: 'cut-quantity',
-                name: 'cut-quantity',
-                label: 'Adet',
-                type: 'number',
-                required: false,
-                placeholder: '1',
-                step: '1',
-                min: '1',
-                colSize: 6,
-                helpText: 'Kesim adedi'
             },
             {
                 id: 'cut-files',
@@ -1390,82 +1375,9 @@ function setupCreateCutForm(createCutModal) {
     // Render the modal
     createCutModal.render();
     
-    // Add remnant plate selection button
+    // Add plate source selection (remnant plate OR planning request item)
     setTimeout(() => {
-        const remnantSection = createCutModal.container.querySelector('[data-section-id="remnant-selection"]');
-        if (remnantSection) {
-            const fieldsContainer = remnantSection.querySelector('.row.g-2');
-            if (fieldsContainer) {
-                const remnantHtml = `
-                    <div class="col-12">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div>
-                                <button type="button" class="btn btn-outline-info" id="select-remnant-btn">
-                                    <i class="fas fa-layer-group me-2"></i>Fire Plaka Seç
-                                </button>
-                            </div>
-                            <div id="selected-remnant-display" style="display: none;">
-                                <span class="badge bg-success" id="selected-remnant-badge" style="cursor: pointer;">
-                                    <i class="fas fa-check me-1"></i>
-                                    Seçili: <span id="selected-remnant-info">-</span>
-                                </span>
-                                <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="clear-remnant-btn">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div id="quantity-used-container" style="display: none;" class="mb-2">
-                            <label for="quantity-used-input" class="form-label">Kullanılacak Adet</label>
-                            <input type="number" id="quantity-used-input" class="form-control" min="1" step="1" value="1" placeholder="1">
-                            <small class="form-text text-muted" id="quantity-used-help-text">Bu plakadan kaç adet kullanılacak (varsayılan: 1)</small>
-                            <div class="invalid-feedback" id="quantity-used-error" style="display: none;"></div>
-                        </div>
-                    </div>
-                `;
-                fieldsContainer.innerHTML = remnantHtml;
-                
-                // Add event listener for select button
-                const selectBtn = createCutModal.container.querySelector('#select-remnant-btn');
-                if (selectBtn) {
-                    selectBtn.addEventListener('click', () => {
-                        // Get values from cut form fields
-                        const thickness = createCutModal.container.querySelector('#cut-thickness')?.value?.trim();
-                        const material = createCutModal.container.querySelector('#cut-material')?.value?.trim();
-                        const dimensions = createCutModal.container.querySelector('#cut-dimensions')?.value?.trim();
-                        
-                        // Pass filter values to modal
-                        showSelectRemnantModal({
-                            thickness: thickness || null,
-                            material: material || null,
-                            dimensions: dimensions || null
-                        });
-                    });
-                }
-                
-                // Add event listener for clear button
-                const clearBtn = createCutModal.container.querySelector('#clear-remnant-btn');
-                if (clearBtn) {
-                    clearBtn.addEventListener('click', () => {
-                        selectedRemnantPlate = null;
-                        quantityUsed = 1;
-                        updateSelectedRemnantDisplay();
-                    });
-                }
-                
-                // Add event listener for quantity used input
-                const quantityUsedInput = createCutModal.container.querySelector('#quantity-used-input');
-                if (quantityUsedInput) {
-                    quantityUsedInput.addEventListener('change', (e) => {
-                        validateQuantityUsed(quantityUsedInput, 'quantity-used-error', 'quantity-used-help-text');
-                    });
-                    quantityUsedInput.addEventListener('input', (e) => {
-                        validateQuantityUsed(quantityUsedInput, 'quantity-used-error', 'quantity-used-help-text');
-                    });
-                }
-                
-                updateSelectedRemnantDisplay();
-            }
-        }
+        injectPlateSourceSection(createCutModal, '');
     }, 100);
     
     // Add parts table inside the Parça Bilgileri section
@@ -1600,19 +1512,24 @@ async function handleCreateCutSave(formData) {
     const cutData = {
         name: formData['cut-name'],
         nesting_id: formData['cut-nesting-id'],
-        material: formData['cut-material'],
         dimensions: formData['cut-dimensions'],
-        thickness_mm: parseFloat(formData['cut-thickness']) || 0,
         machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
         estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null,
-        quantity: formData['cut-quantity'] ? parseInt(formData['cut-quantity']) : null,
         files: uploadedFiles,
         parts_data: [],
         selected_plate_id: selectedRemnantPlate ? selectedRemnantPlate.id : null,
-        quantity_used: selectedRemnantPlate ? quantityUsed : null
+        quantity_used: selectedRemnantPlate ? quantityUsed : null,
+        planning_request_item_id: selectedPlanningItem ? selectedPlanningItem.id : null,
+        mark_item_consumed: selectedPlanningItem ? markItemConsumed : undefined
     };
-    
-    
+
+    // Every cut needs exactly one plate source.
+    if (!selectedRemnantPlate && !selectedPlanningItem) {
+        showNotification('Fire plaka veya plaka kalemi seçmelisiniz', 'error');
+        return;
+    }
+
+
     // Collect parts data from dynamic rows
     const partRows = document.querySelectorAll('.part-row');
     for (const row of partRows) {
@@ -1709,37 +1626,31 @@ function showEditCutModal(cut) {
 async function setupEditCutForm(editCutModal, cut) {
     // Store current task for parts and files operations
     currentEditTask = cut;
-    
-    // Load existing selected remnant plate if it exists
-    // Handle both object and ID cases
-    // Check selected_plate_id first (new field name), then fallback to selected_plate for backward compatibility
-    const plateField = cut.selected_plate_id || cut.selected_plate;
-    if (plateField) {
-        if (typeof plateField === 'object' && plateField.id) {
-            selectedRemnantPlate = plateField;
-        } else if (typeof plateField === 'number' || typeof plateField === 'string') {
-            // If it's just an ID, create a minimal object with just the ID
-            // Full details will be available if user clicks to change the remnant
-            selectedRemnantPlate = { id: plateField, dimensions: '-', material: '-' };
-        }
-    } else if (cut.remnant_plate) {
-        // Fallback to remnant_plate field
-        if (typeof cut.remnant_plate === 'object' && cut.remnant_plate.id) {
-            selectedRemnantPlate = cut.remnant_plate;
-        } else {
-            selectedRemnantPlate = { id: cut.remnant_plate, dimensions: '-', material: '-' };
-        }
+
+    // Load the existing plate source from the GET payload. selected_plate_id is
+    // write-only on the backend — the readable remnant link lives in
+    // plate_usage_records, and the planning-item link in plate_item.
+    const usageRecord = Array.isArray(cut.plate_usage_records) && cut.plate_usage_records.length > 0
+        ? cut.plate_usage_records[0]
+        : null;
+    if (usageRecord) {
+        selectedRemnantPlate = usageRecord.remnant_plate_details
+            || { id: usageRecord.remnant_plate, dimensions: '-', material: '-' };
+        quantityUsed = usageRecord.quantity_used !== undefined && usageRecord.quantity_used !== null
+            ? parseInt(usageRecord.quantity_used)
+            : 1;
     } else {
         selectedRemnantPlate = null;
+        quantityUsed = 1;
     }
-    
-    // Load quantity_used if it exists, otherwise default to 1
-    quantityUsed = cut.quantity_used !== undefined && cut.quantity_used !== null ? parseInt(cut.quantity_used) : 1;
-    
-    // Add remnant plate selection section at the top
+
+    selectedPlanningItem = cut.plate_item || null;
+    markItemConsumed = cut.plate_item ? !!cut.plate_item.is_consumed : false;
+
+    // Add plate source selection section at the top
     editCutModal.addSection({
         id: 'remnant-selection',
-        title: 'Fire Plaka Seçimi',
+        title: 'Plaka Kaynağı',
         icon: 'fas fa-layer-group',
         iconColor: 'text-info',
         fields: []
@@ -1775,39 +1686,15 @@ async function setupEditCutForm(editCutModal, cut) {
                 helpText: 'Nesting dosyası ID\'si'
             },
             {
-                id: 'cut-material',
-                name: 'cut-material',
-                label: 'Malzeme',
-                type: 'text',
-                required: true,
-                placeholder: 'Malzeme türü',
-                value: cut.material || '',
-                colSize: 6,
-                helpText: 'Kesilecek malzeme türü'
-            },
-            {
                 id: 'cut-dimensions',
                 name: 'cut-dimensions',
                 label: 'Boyutlar',
                 type: 'text',
-                required: true,
-                placeholder: '100x50x10',
+                required: false,
+                placeholder: '1500x3000',
                 value: cut.dimensions || '',
                 colSize: 6,
-                helpText: 'Malzeme boyutları (örn: 100x50x10)'
-            },
-            {
-                id: 'cut-thickness',
-                name: 'cut-thickness',
-                label: 'Kalınlık (mm)',
-                type: 'number',
-                required: true,
-                placeholder: '10.0',
-                step: '0.1',
-                min: '0.1',
-                value: cut.thickness_mm || '',
-                colSize: 6,
-                helpText: 'Malzeme kalınlığı milimetre cinsinden'
+                helpText: 'Plaka boyutları (opsiyonel)'
             },
             {
                 id: 'cut-machine-fk',
@@ -1840,19 +1727,6 @@ async function setupEditCutForm(editCutModal, cut) {
                 colSize: 6,
                 helpText: 'Kesim işleminin tahmini süresi saat cinsinden'
             },
-            {
-                id: 'cut-quantity',
-                name: 'cut-quantity',
-                label: 'Adet',
-                type: 'number',
-                required: false,
-                placeholder: '1',
-                step: '1',
-                min: '1',
-                value: cut.quantity || '',
-                colSize: 6,
-                helpText: 'Kesim adedi'
-            }
         ]
     });
     
@@ -1881,85 +1755,12 @@ async function setupEditCutForm(editCutModal, cut) {
     // Render the modal
     editCutModal.render();
     
-    // Add remnant plate selection button
+    // Add plate source selection (remnant plate OR planning request item)
     setTimeout(() => {
-        const remnantSection = editCutModal.container.querySelector('[data-section-id="remnant-selection"]');
-        if (remnantSection) {
-            const fieldsContainer = remnantSection.querySelector('.row.g-2');
-            if (fieldsContainer) {
-                const remnantHtml = `
-                    <div class="col-12">
-                        <div class="d-flex justify-content-between align-items-center mb-3">
-                            <div>
-                                <button type="button" class="btn btn-outline-info" id="select-remnant-btn-edit">
-                                    <i class="fas fa-layer-group me-2"></i>Fire Plaka Seç
-                                </button>
-                            </div>
-                            <div id="selected-remnant-display-edit" style="display: none;">
-                                <span class="badge bg-success" id="selected-remnant-badge-edit" style="cursor: pointer;">
-                                    <i class="fas fa-check me-1"></i>
-                                    Seçili: <span id="selected-remnant-info-edit">-</span>
-                                </span>
-                                <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="clear-remnant-btn-edit">
-                                    <i class="fas fa-times"></i>
-                                </button>
-                            </div>
-                        </div>
-                        <div id="quantity-used-container-edit" style="display: none;" class="mb-2">
-                            <label for="quantity-used-input-edit" class="form-label">Kullanılacak Adet</label>
-                            <input type="number" id="quantity-used-input-edit" class="form-control" min="1" step="1" value="${quantityUsed}" placeholder="1">
-                            <small class="form-text text-muted" id="quantity-used-help-text-edit">Bu plakadan kaç adet kullanılacak (varsayılan: 1)</small>
-                            <div class="invalid-feedback" id="quantity-used-error-edit" style="display: none;"></div>
-                        </div>
-                    </div>
-                `;
-                fieldsContainer.innerHTML = remnantHtml;
-                
-                // Add event listener for select button
-                const selectBtn = editCutModal.container.querySelector('#select-remnant-btn-edit');
-                if (selectBtn) {
-                    selectBtn.addEventListener('click', () => {
-                        // Get values from cut form fields
-                        const thickness = editCutModal.container.querySelector('#cut-thickness')?.value?.trim();
-                        const material = editCutModal.container.querySelector('#cut-material')?.value?.trim();
-                        const dimensions = editCutModal.container.querySelector('#cut-dimensions')?.value?.trim();
-                        
-                        // Pass filter values to modal
-                        showSelectRemnantModal({
-                            thickness: thickness || null,
-                            material: material || null,
-                            dimensions: dimensions || null
-                        });
-                    });
-                }
-                
-                // Add event listener for clear button
-                const clearBtn = editCutModal.container.querySelector('#clear-remnant-btn-edit');
-                if (clearBtn) {
-                    clearBtn.addEventListener('click', () => {
-                        selectedRemnantPlate = null;
-                        quantityUsed = 1;
-                        updateSelectedRemnantDisplayEdit();
-                    });
-                }
-                
-                // Add event listener for quantity used input
-                const quantityUsedInput = editCutModal.container.querySelector('#quantity-used-input-edit');
-                if (quantityUsedInput) {
-                    quantityUsedInput.addEventListener('change', (e) => {
-                        validateQuantityUsed(quantityUsedInput, 'quantity-used-error-edit', 'quantity-used-help-text-edit');
-                    });
-                    quantityUsedInput.addEventListener('input', (e) => {
-                        validateQuantityUsed(quantityUsedInput, 'quantity-used-error-edit', 'quantity-used-help-text-edit');
-                    });
-                }
-                
-                updateSelectedRemnantDisplayEdit();
-            }
-        }
-        
+        injectPlateSourceSection(editCutModal, '-edit');
+
         addTableContainers();
-        
+
         // Initialize tables after containers are added
         initializePartsTable(cut);
         initializeFilesTable(cut);
@@ -3152,17 +2953,17 @@ async function handleEditCutSave(formData, cutKey) {
     const cutData = {
         name: formData['cut-name'],
         nesting_id: formData['cut-nesting-id'],
-        material: formData['cut-material'],
         dimensions: formData['cut-dimensions'],
-        thickness_mm: parseFloat(formData['cut-thickness']) || 0,
         machine_fk: machineFkValue ? parseInt(machineFkValue) : null,
         estimated_hours: formData['cut-estimated-hours'] ? parseFloat(formData['cut-estimated-hours']) : null,
-        quantity: formData['cut-quantity'] ? parseInt(formData['cut-quantity']) : null,
+        // Both source keys are always sent (null clears) so switching sources
+        // works: the backend clears the one that is empty.
         selected_plate_id: selectedRemnantPlate ? selectedRemnantPlate.id : null,
-        quantity_used: selectedRemnantPlate ? quantityUsed : null
+        quantity_used: selectedRemnantPlate ? quantityUsed : null,
+        planning_request_item_id: selectedPlanningItem ? selectedPlanningItem.id : null,
+        mark_item_consumed: selectedPlanningItem ? markItemConsumed : undefined
     };
-    
-    
+
     // Validate data
     const validation = validateCncTaskData(cutData);
     if (!validation.isValid) {
@@ -3527,7 +3328,37 @@ async function showCutDetails(cutData) {
             colSize: 3,
             layout: 'horizontal'
         });
-        
+
+        // Plate source (planning request item or remnant plate)
+        if (taskData.plate_item) {
+            const pi = taskData.plate_item;
+            const deliveredText = pi.is_delivered ? 'Teslim edildi' : 'Malzeme bekleniyor (satın alma)';
+            const consumedText = pi.is_consumed ? ' · Kullanıldı' : '';
+            detailsModal.addField({
+                id: 'cut-plate-item',
+                name: 'plate_item',
+                label: 'Plaka Kalemi',
+                type: 'text',
+                value: `${pi.item_code || ''} — ${pi.item_name || ''} (${pi.planning_request_number || '-'}) · ${deliveredText}${consumedText} · ${pi.cnc_cuts_count ?? 0} kesimde kullanıldı`,
+                icon: 'fas fa-box-open',
+                colSize: 6,
+                layout: 'horizontal'
+            });
+        } else if (taskData.plate_usage_records && taskData.plate_usage_records.length > 0) {
+            const usage = taskData.plate_usage_records[0];
+            const plate = usage.remnant_plate_details || {};
+            detailsModal.addField({
+                id: 'cut-remnant-plate',
+                name: 'remnant_plate',
+                label: 'Fire Plaka',
+                type: 'text',
+                value: `ID: ${plate.id ?? usage.remnant_plate} · ${plate.material || '-'} · ${plate.thickness_mm ? plate.thickness_mm + ' mm' : '-'} · ${plate.dimensions || '-'} (${usage.quantity_used || 1} adet)`,
+                icon: 'fas fa-layer-group',
+                colSize: 6,
+                layout: 'horizontal'
+            });
+        }
+
         // Add files if available
         if (taskData.files && taskData.files.length > 0) {
             console.log('Files found:', taskData.files.length, taskData.files);
@@ -4261,10 +4092,17 @@ function initializeRemnantSelectionTable() {
                 onClick: (row) => {
                     selectedRemnantPlate = row;
                     // Reset quantity_used to 1 when selecting a new plate, but ensure it doesn't exceed available_quantity
-                    const availableQuantity = row.available_quantity !== undefined && row.available_quantity !== null 
-                        ? parseInt(row.available_quantity) 
+                    const availableQuantity = row.available_quantity !== undefined && row.available_quantity !== null
+                        ? parseInt(row.available_quantity)
                         : null;
                     quantityUsed = availableQuantity !== null && availableQuantity < 1 ? availableQuantity : 1;
+
+                    // A cut has exactly one plate source — clear any planning-item selection.
+                    selectedPlanningItem = null;
+                    markItemConsumed = false;
+                    updateSelectedPlanningItemDisplay();
+                    updateSelectedPlanningItemDisplayEdit();
+
                     updateSelectedRemnantDisplay();
                     updateSelectedRemnantDisplayEdit();
                     
@@ -4361,13 +4199,469 @@ function buildRemnantSelectionQuery(page = 1) {
         const thickness = filterValues['remnant-thickness-mm-filter']?.toString().trim();
         const dimensions = filterValues['remnant-dimensions-filter']?.toString().trim();
         const material = filterValues['remnant-material-filter']?.toString().trim();
-        
+
         if (thickness) params.append('thickness_mm', thickness);
         if (dimensions) params.append('dimensions', dimensions);
         if (material) params.append('material', material);
     }
-    
+
     return params;
+}
+
+// ============================================================================
+// Plate source section (shared by create & edit modals)
+// Every cut consumes exactly one plate source: a remnant plate (fire plaka)
+// or a planning request item (plaka kalemi, item codes 0100/0101).
+// ============================================================================
+
+function injectPlateSourceSection(modal, suffix) {
+    if (!modal || !modal.container) return;
+    const section = modal.container.querySelector('[data-section-id="remnant-selection"]');
+    if (!section) return;
+    const fieldsContainer = section.querySelector('.row.g-2');
+    if (!fieldsContainer) return;
+
+    fieldsContainer.innerHTML = `
+        <div class="col-12">
+            <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+                <button type="button" class="btn btn-outline-info" id="select-remnant-btn${suffix}">
+                    <i class="fas fa-layer-group me-2"></i>Fire Plaka Seç
+                </button>
+                <button type="button" class="btn btn-outline-primary" id="select-planning-item-btn${suffix}">
+                    <i class="fas fa-box-open me-2"></i>Plaka Kalemi Seç
+                </button>
+                <div id="selected-remnant-display${suffix}" style="display: none;">
+                    <span class="badge bg-success" id="selected-remnant-badge${suffix}" style="cursor: pointer;">
+                        <i class="fas fa-check me-1"></i>
+                        Seçili: <span id="selected-remnant-info${suffix}">-</span>
+                    </span>
+                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="clear-remnant-btn${suffix}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+                <div id="selected-planning-item-display${suffix}" style="display: none;">
+                    <span class="badge bg-success" id="selected-planning-item-badge${suffix}">
+                        <i class="fas fa-check me-1"></i>
+                        Seçili: <span id="selected-planning-item-info${suffix}">-</span>
+                    </span>
+                    <button type="button" class="btn btn-sm btn-outline-danger ms-2" id="clear-planning-item-btn${suffix}">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            </div>
+            <small class="form-text text-muted d-block mb-2">
+                Her kesim için fire plaka veya plaka kalemi seçilmelidir; malzeme ve kalınlık seçilen kaynaktan otomatik alınır.
+            </small>
+            <div id="planning-item-meta${suffix}" style="display: none;" class="mb-2">
+                <small class="form-text d-block" id="planning-item-usage-text${suffix}"></small>
+                <small class="form-text d-block" id="planning-item-delivery-text${suffix}"></small>
+                <div class="form-check mt-1">
+                    <input class="form-check-input" type="checkbox" id="mark-item-consumed-checkbox${suffix}">
+                    <label class="form-check-label" for="mark-item-consumed-checkbox${suffix}">
+                        Kullanıldı olarak işaretle (bu kalemin son plakası kesiliyor)
+                    </label>
+                </div>
+            </div>
+            <div id="quantity-used-container${suffix}" style="display: none;" class="mb-2">
+                <label for="quantity-used-input${suffix}" class="form-label">Kullanılacak Adet</label>
+                <input type="number" id="quantity-used-input${suffix}" class="form-control" min="1" step="1" value="${quantityUsed || 1}" placeholder="1">
+                <small class="form-text text-muted" id="quantity-used-help-text${suffix}">Bu plakadan kaç adet kullanılacak (varsayılan: 1)</small>
+                <div class="invalid-feedback" id="quantity-used-error${suffix}" style="display: none;"></div>
+            </div>
+        </div>
+    `;
+
+    const updateRemnantDisplay = suffix === '-edit' ? updateSelectedRemnantDisplayEdit : updateSelectedRemnantDisplay;
+    const updateItemDisplay = suffix === '-edit' ? updateSelectedPlanningItemDisplayEdit : updateSelectedPlanningItemDisplay;
+
+    modal.container.querySelector(`#select-remnant-btn${suffix}`)?.addEventListener('click', () => {
+        showSelectRemnantModal({});
+    });
+
+    modal.container.querySelector(`#select-planning-item-btn${suffix}`)?.addEventListener('click', () => {
+        showSelectPlanningItemModal();
+    });
+
+    modal.container.querySelector(`#clear-remnant-btn${suffix}`)?.addEventListener('click', () => {
+        selectedRemnantPlate = null;
+        quantityUsed = 1;
+        updateRemnantDisplay();
+    });
+
+    modal.container.querySelector(`#clear-planning-item-btn${suffix}`)?.addEventListener('click', () => {
+        selectedPlanningItem = null;
+        markItemConsumed = false;
+        updateItemDisplay();
+    });
+
+    modal.container.querySelector(`#mark-item-consumed-checkbox${suffix}`)?.addEventListener('change', (e) => {
+        markItemConsumed = !!e.target.checked;
+    });
+
+    const quantityUsedInput = modal.container.querySelector(`#quantity-used-input${suffix}`);
+    if (quantityUsedInput) {
+        quantityUsedInput.addEventListener('change', () => {
+            validateQuantityUsed(quantityUsedInput, `quantity-used-error${suffix}`, `quantity-used-help-text${suffix}`);
+        });
+        quantityUsedInput.addEventListener('input', () => {
+            validateQuantityUsed(quantityUsedInput, `quantity-used-error${suffix}`, `quantity-used-help-text${suffix}`);
+        });
+    }
+
+    updateRemnantDisplay();
+    updateItemDisplay();
+}
+
+function updateSelectedPlanningItemDisplayFor(modal, suffix) {
+    if (!modal || !modal.container) return;
+    const display = modal.container.querySelector(`#selected-planning-item-display${suffix}`);
+    const info = modal.container.querySelector(`#selected-planning-item-info${suffix}`);
+    const selectBtn = modal.container.querySelector(`#select-planning-item-btn${suffix}`);
+    const meta = modal.container.querySelector(`#planning-item-meta${suffix}`);
+    const usageText = modal.container.querySelector(`#planning-item-usage-text${suffix}`);
+    const deliveryText = modal.container.querySelector(`#planning-item-delivery-text${suffix}`);
+    const checkbox = modal.container.querySelector(`#mark-item-consumed-checkbox${suffix}`);
+
+    if (!display || !info || !selectBtn) return;
+
+    if (selectedPlanningItem) {
+        display.style.display = 'block';
+        const code = selectedPlanningItem.item_code || `#${selectedPlanningItem.id}`;
+        const name = selectedPlanningItem.item_name || '';
+        info.textContent = name ? `${code} — ${name}` : `${code}`;
+        selectBtn.innerHTML = '<i class="fas fa-box-open me-2"></i>Plaka Kalemi Değiştir';
+
+        if (meta) meta.style.display = 'block';
+        if (usageText) {
+            const count = selectedPlanningItem.cnc_cuts_count ?? 0;
+            usageText.textContent = count > 0
+                ? `Bu kalem daha önce ${count} kesimde kullanıldı.`
+                : 'Bu kalem daha önce hiç kesimde kullanılmadı.';
+        }
+        if (deliveryText) {
+            const delivered = selectedPlanningItem.is_delivered === true;
+            deliveryText.textContent = delivered
+                ? 'Malzeme teslim alındı.'
+                : 'Malzeme henüz teslim edilmedi — satın alma bekleniyor.';
+            deliveryText.className = `form-text d-block ${delivered ? 'text-success' : 'text-danger'}`;
+        }
+        if (checkbox) checkbox.checked = !!markItemConsumed;
+    } else {
+        display.style.display = 'none';
+        selectBtn.innerHTML = '<i class="fas fa-box-open me-2"></i>Plaka Kalemi Seç';
+        if (meta) meta.style.display = 'none';
+    }
+}
+
+function updateSelectedPlanningItemDisplay() {
+    updateSelectedPlanningItemDisplayFor(createCutModal, '');
+}
+
+function updateSelectedPlanningItemDisplayEdit() {
+    updateSelectedPlanningItemDisplayFor(editCutModal, '-edit');
+}
+
+// ---------------------------------------------------------------------------
+// Planning request item selection modal (plaka kalemi)
+// ---------------------------------------------------------------------------
+
+let planningItemSelectionPage = 1;
+let consumedConfirmModal = null;
+
+function showSelectPlanningItemModal() {
+    selectPlanningItemModal = new EditModal('select-planning-item-modal-container', {
+        title: 'Plaka Kalemi Seç',
+        icon: 'fas fa-box-open',
+        saveButtonText: 'Seç',
+        size: 'xl',
+        showSaveButton: false,
+        showCancelButton: true
+    });
+
+    selectPlanningItemModal.addSection({
+        id: 'planning-item-filters',
+        title: 'Filtreler',
+        icon: 'fas fa-filter',
+        iconColor: 'text-primary',
+        fields: []
+    });
+
+    selectPlanningItemModal.addSection({
+        id: 'planning-item-table-section',
+        title: 'Plaka Kalemleri',
+        icon: 'fas fa-table',
+        iconColor: 'text-info',
+        fields: []
+    });
+
+    selectPlanningItemModal.render();
+
+    setTimeout(() => {
+        initializePlanningItemSelectionFilters();
+        initializePlanningItemSelectionTable();
+        // The list is already scoped to unconsumed plate items — load right away.
+        loadPlanningItemSelectionTable(1);
+    }, 100);
+
+    selectPlanningItemModal.show();
+}
+
+function initializePlanningItemSelectionFilters() {
+    const filterSection = selectPlanningItemModal.container.querySelector('[data-section-id="planning-item-filters"]');
+    if (!filterSection) return;
+    const fieldsContainer = filterSection.querySelector('.row.g-2');
+    if (!fieldsContainer) return;
+
+    const filterContainer = document.createElement('div');
+    filterContainer.id = 'planning-item-selection-filters-container';
+    filterContainer.className = 'col-12';
+    fieldsContainer.appendChild(filterContainer);
+
+    planningItemFilters = new FiltersComponent('planning-item-selection-filters-container', {
+        title: 'Kalem Filtreleri',
+        onApply: () => {
+            loadPlanningItemSelectionTable(1);
+        },
+        onClear: () => {
+            loadPlanningItemSelectionTable(1);
+        },
+        onFilterChange: () => {
+            // Only load on Apply
+        }
+    });
+
+    planningItemFilters.addTextFilter({
+        id: 'planning-item-job-no-filter',
+        label: 'İş Emri No',
+        placeholder: 'örn. 270-01',
+        colSize: 3
+    });
+
+    planningItemFilters.addTextFilter({
+        id: 'planning-item-search-filter',
+        label: 'Kalem Kodu / Adı',
+        placeholder: 'örn. 10 mm',
+        colSize: 3
+    });
+
+    planningItemFilters.addDropdownFilter({
+        id: 'planning-item-delivered-filter',
+        label: 'Teslim Durumu',
+        options: [
+            { value: '', label: 'Tümü' },
+            { value: 'true', label: 'Teslim Edildi' },
+            { value: 'false', label: 'Teslim Bekleniyor' }
+        ],
+        colSize: 3
+    });
+}
+
+function initializePlanningItemSelectionTable() {
+    const tableSection = selectPlanningItemModal.container.querySelector('[data-section-id="planning-item-table-section"]');
+    if (!tableSection) return;
+    const fieldsContainer = tableSection.querySelector('.row.g-2');
+    if (!fieldsContainer) return;
+
+    const tableContainer = document.createElement('div');
+    tableContainer.id = 'planning-item-selection-table-container';
+    tableContainer.className = 'col-12';
+    fieldsContainer.appendChild(tableContainer);
+
+    planningItemSelectionTable = new TableComponent('planning-item-selection-table-container', {
+        title: 'Plaka Kalemleri Listesi',
+        icon: 'fas fa-table',
+        iconColor: 'text-primary',
+        columns: [
+            {
+                field: 'item_code',
+                label: 'Kalem Kodu',
+                sortable: false,
+                width: '18%',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'item_name',
+                label: 'Kalem Adı',
+                sortable: false,
+                width: '24%',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'job_no',
+                label: 'İş Emri',
+                sortable: false,
+                width: '10%',
+                formatter: (value) => value || '-'
+            },
+            {
+                field: 'quantity',
+                label: 'Miktar',
+                sortable: false,
+                width: '10%',
+                formatter: (value, row) => value ? `${value} ${row.item_unit || ''}`.trim() : '-'
+            },
+            {
+                field: 'is_delivered',
+                label: 'Teslim',
+                sortable: false,
+                width: '8%',
+                formatter: (value) => value
+                    ? '<span class="status-badge status-green">Teslim</span>'
+                    : '<span class="status-badge status-orange">Bekliyor</span>'
+            },
+            {
+                field: 'cnc_cuts_count',
+                label: 'Kullanım',
+                sortable: false,
+                width: '8%',
+                formatter: (value) => `${value ?? 0} kesim`
+            },
+            {
+                field: 'planning_request_number',
+                label: 'Talep No',
+                sortable: false,
+                width: '12%',
+                formatter: (value) => value || '-'
+            }
+        ],
+        actions: [
+            {
+                key: 'select',
+                label: 'Seç',
+                icon: 'fas fa-check',
+                class: 'btn-outline-success',
+                title: 'Bu kalemi seç',
+                onClick: (row) => {
+                    selectedPlanningItem = row;
+                    markItemConsumed = row.is_consumed === true;
+
+                    // A cut has exactly one plate source — clear any remnant selection.
+                    selectedRemnantPlate = null;
+                    quantityUsed = 1;
+                    updateSelectedRemnantDisplay();
+                    updateSelectedRemnantDisplayEdit();
+                    updateSelectedPlanningItemDisplay();
+                    updateSelectedPlanningItemDisplayEdit();
+
+                    const modalElement = document.querySelector('#select-planning-item-modal-container .modal');
+                    if (modalElement) {
+                        const modalInstance = bootstrap.Modal.getOrCreateInstance(modalElement);
+                        if (modalInstance) {
+                            modalInstance.hide();
+                        }
+                    }
+
+                    showNotification('Plaka kalemi seçildi', 'success');
+                }
+            },
+            {
+                key: 'mark-consumed',
+                label: 'Kullanıldı',
+                icon: 'fas fa-box',
+                class: 'btn-outline-danger',
+                title: 'Kalemi kullanıldı olarak işaretle (kesim oluşturmadan)',
+                onClick: (row) => {
+                    confirmMarkPlanningItemConsumed(row);
+                }
+            }
+        ],
+        data: [],
+        loading: false,
+        sortable: false,
+        pagination: true,
+        itemsPerPage: 20,
+        currentPage: 1,
+        totalItems: 0,
+        serverSidePagination: true,
+        onPageChange: (page) => {
+            loadPlanningItemSelectionTable(page);
+        },
+        striped: false,
+        small: false,
+        emptyMessage: 'Plaka kalemi bulunamadı',
+        emptyIcon: 'fas fa-box-open'
+    });
+}
+
+async function loadPlanningItemSelectionTable(page = 1) {
+    if (!planningItemSelectionTable) return;
+
+    planningItemSelectionTable.setLoading(true);
+    planningItemSelectionPage = page;
+
+    try {
+        const filters = {
+            is_plate: 'true',
+            is_consumed: 'false',
+            fields: 'simple',
+            ordering: '-id',
+            page: page,
+            page_size: 20
+        };
+
+        if (planningItemFilters) {
+            const filterValues = planningItemFilters.getFilterValues();
+            const jobNo = filterValues['planning-item-job-no-filter']?.toString().trim();
+            const search = filterValues['planning-item-search-filter']?.toString().trim();
+            const delivered = filterValues['planning-item-delivered-filter'];
+
+            if (jobNo) filters.job_no = jobNo;
+            if (search) filters.search = search;
+            if (delivered === 'true' || delivered === 'false') filters.is_delivered = delivered;
+        }
+
+        const response = await getPlanningItems(filters);
+
+        let items = [];
+        let totalItems = 0;
+        if (Array.isArray(response)) {
+            items = response;
+            totalItems = response.length;
+        } else if (response && Array.isArray(response.results)) {
+            items = response.results;
+            totalItems = response.count ?? response.results.length;
+        } else {
+            throw new Error('Failed to load planning items');
+        }
+
+        planningItemSelectionTable.setLoading(false);
+        planningItemSelectionTable.updateData(items, totalItems, page);
+    } catch (error) {
+        console.error('Error loading planning item selection table:', error);
+        showNotification('Plaka kalemleri yüklenirken hata oluştu', 'error');
+        planningItemSelectionTable.setLoading(false);
+        planningItemSelectionTable.updateData([], 0, 1);
+    }
+}
+
+function confirmMarkPlanningItemConsumed(row) {
+    if (!consumedConfirmModal) {
+        consumedConfirmModal = new ConfirmationModal('consumed-confirm-modal-container', {
+            title: 'Kullanıldı Olarak İşaretle',
+            icon: 'fas fa-box',
+            confirmText: 'Evet, Kullanıldı',
+            cancelText: 'İptal'
+        });
+    }
+
+    consumedConfirmModal.show({
+        message: `${row.item_code || ''} kalemi kullanıldı olarak işaretlenecek.`,
+        description: 'Kullanıldı işaretlenen kalemler yeni kesimler için seçilemez. (Planlama Kalemleri sayfasından geri alınabilir.)',
+        onConfirm: async () => {
+            try {
+                await markPlanningRequestItemConsumed(row.id);
+                showNotification('Kalem kullanıldı olarak işaretlendi', 'success');
+                loadPlanningItemSelectionTable(planningItemSelectionPage);
+            } catch (error) {
+                console.error('Error marking planning item consumed:', error);
+                showNotification('Kalem işaretlenirken hata oluştu', 'error');
+            } finally {
+                if (consumedConfirmModal) {
+                    consumedConfirmModal.hide();
+                }
+            }
+        }
+    });
 }
 
 window.showAddPartModal = showAddPartModal;

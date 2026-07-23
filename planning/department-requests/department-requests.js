@@ -1,4 +1,4 @@
-import { guardRoute } from '../../../authService.js';
+import { guardRoute, isSuperuser } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { TableComponent } from '../../../components/table/table.js';
@@ -583,34 +583,37 @@ async function initializeFiltersComponents() {
         colSize: 2
     });
 
-    // Created by filter for planning requests
-    try {
-        const users = await fetchAllUsers();
-        const userOptions = users.map(user => ({
-            value: user.id ? user.id.toString() : user.username,
-            label: user.full_name ? `${user.full_name} (${user.username})` : 
-                   (user.first_name && user.last_name) ? `${user.first_name} ${user.last_name} (${user.username})` :
-                   user.username
-        }));
+    // Created by filter for planning requests — only meaningful for superusers,
+    // the backend scopes everyone else's list to their own requests.
+    if (isSuperuser()) {
+        try {
+            const users = await fetchAllUsers();
+            const userOptions = users.map(user => ({
+                value: user.id ? user.id.toString() : user.username,
+                label: user.full_name ? `${user.full_name} (${user.username})` :
+                       (user.first_name && user.last_name) ? `${user.first_name} ${user.last_name} (${user.username})` :
+                       user.username
+            }));
 
-        planningRequestsFilters.addDropdownFilter({
-            id: 'created-by-filter',
-            label: 'Oluşturan',
-            options: userOptions,
-            placeholder: 'Kullanıcı seçin',
-            colSize: 2,
-            searchable: true
-        });
-    } catch (error) {
-        console.error('Error loading users for filter:', error);
-        planningRequestsFilters.addDropdownFilter({
-            id: 'created-by-filter',
-            label: 'Oluşturan',
-            options: [],
-            placeholder: 'Kullanıcı yüklenemedi',
-            colSize: 2,
-            searchable: true
-        });
+            planningRequestsFilters.addDropdownFilter({
+                id: 'created-by-filter',
+                label: 'Oluşturan',
+                options: userOptions,
+                placeholder: 'Kullanıcı seçin',
+                colSize: 2,
+                searchable: true
+            });
+        } catch (error) {
+            console.error('Error loading users for filter:', error);
+            planningRequestsFilters.addDropdownFilter({
+                id: 'created-by-filter',
+                label: 'Oluşturan',
+                options: [],
+                placeholder: 'Kullanıcı yüklenemedi',
+                colSize: 2,
+                searchable: true
+            });
+        }
     }
 
     // Department request filter for planning requests (text input for ID)
@@ -651,34 +654,37 @@ async function initializeFiltersComponents() {
         colSize: 2
     });
 
-    // Created by filter for pending ERP entry requests
-    try {
-        const users = await fetchAllUsers();
-        const userOptions = users.map(user => ({
-            value: user.id ? user.id.toString() : user.username,
-            label: user.full_name ? `${user.full_name} (${user.username})` : 
-                   (user.first_name && user.last_name) ? `${user.first_name} ${user.last_name} (${user.username})` :
-                   user.username
-        }));
+    // Created by filter for pending ERP entry requests — superusers only,
+    // the backend scopes everyone else's list to their own requests.
+    if (isSuperuser()) {
+        try {
+            const users = await fetchAllUsers();
+            const userOptions = users.map(user => ({
+                value: user.id ? user.id.toString() : user.username,
+                label: user.full_name ? `${user.full_name} (${user.username})` :
+                       (user.first_name && user.last_name) ? `${user.first_name} ${user.last_name} (${user.username})` :
+                       user.username
+            }));
 
-        pendingErpEntryFilters.addDropdownFilter({
-            id: 'pending-erp-created-by-filter',
-            label: 'Oluşturan',
-            options: userOptions,
-            placeholder: 'Kullanıcı seçin',
-            colSize: 2,
-            searchable: true
-        });
-    } catch (error) {
-        console.error('Error loading users for filter:', error);
-        pendingErpEntryFilters.addDropdownFilter({
-            id: 'pending-erp-created-by-filter',
-            label: 'Oluşturan',
-            options: [],
-            placeholder: 'Kullanıcı yüklenemedi',
-            colSize: 2,
-            searchable: true
-        });
+            pendingErpEntryFilters.addDropdownFilter({
+                id: 'pending-erp-created-by-filter',
+                label: 'Oluşturan',
+                options: userOptions,
+                placeholder: 'Kullanıcı seçin',
+                colSize: 2,
+                searchable: true
+            });
+        } catch (error) {
+            console.error('Error loading users for filter:', error);
+            pendingErpEntryFilters.addDropdownFilter({
+                id: 'pending-erp-created-by-filter',
+                label: 'Oluşturan',
+                options: [],
+                placeholder: 'Kullanıcı yüklenemedi',
+                colSize: 2,
+                searchable: true
+            });
+        }
     }
 
     // Department request filter for pending ERP entry requests (text input for ID)

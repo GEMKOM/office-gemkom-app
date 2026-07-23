@@ -89,6 +89,17 @@ const TASK_STATUS_BADGES = {
     skipped: 'status-grey'
 };
 
+// CNC "material wait" badge — the plate stock line(s) feeding this job's cuts
+// have not been delivered, so the delay belongs to procurement, not CNC.
+function materialWaitBadgeHtml(materialWait) {
+    if (!materialWait) return '';
+    const parts = [];
+    if (materialWait.cuts_waiting > 0) parts.push(`${materialWait.cuts_waiting} kesim plaka bekliyor`);
+    if (materialWait.plate_items_pending > 0) parts.push(`${materialWait.plate_items_pending} plaka kalemi teslim edilmedi`);
+    const tooltip = `Satın alma kaynaklı bekleme: ${parts.join(' · ') || 'plaka malzemesi teslim edilmedi'}`;
+    return `<span class="status-badge status-orange" title="${escapeHtml(tooltip)}">Malzeme Bekliyor</span>`;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!initRouteProtection()) {
         return;
@@ -948,10 +959,11 @@ async function openPlanModal(item) {
                 ? ` <span class="pp-num-red">(+${formatWd(variance)})</span>`
                 : (variance < 0 ? ` <span class="pp-num-green">(${formatWd(variance)} erken)</span>` : ''));
         const pusher = s.pushed_by && byId.get(s.pushed_by);
+        const materialWaitHtml = s.material_wait ? ` ${materialWaitBadgeHtml(s.material_wait)}` : '';
         return `
             <tr>
                 <td class="pp-td-main" title="${escapeHtml(label(t))}">${escapeHtml(label(t))}</td>
-                <td><span class="status-badge ${badge.badgeClass}">${badge.label}</span></td>
+                <td><span class="status-badge ${badge.badgeClass}">${badge.label}</span>${materialWaitHtml}</td>
                 <td>${fmtShortDate(t.target_completion_date)}</td>
                 <td>${fmtShortDate(end)}${varianceHtml}</td>
                 <td class="pp-td-muted" title="${pusher ? escapeHtml(label(pusher)) : ''}">${pusher ? escapeHtml(label(pusher)) : '—'}</td>
@@ -1072,15 +1084,19 @@ function cuttingModalHtml(brief, detail) {
             <td class="pp-td-num">${fmtInt(p.weight_kg)} kg</td>
             <td>${p.cut
                 ? '<span class="status-badge status-green">Kesildi</span>'
-                : '<span class="status-badge status-orange">Bekliyor</span>'}</td>
+                : (p.material_pending
+                    ? `<span class="status-badge status-orange" title="Plaka teslim edilmedi${p.plate_item_code ? ' — ' + escapeHtml(p.plate_item_code) : ''} (satın alma)">Malzeme Bekliyor</span>`
+                    : '<span class="status-badge status-orange">Bekliyor</span>')}</td>
         </tr>`);
+    const materialWaiting = cutting.parts_waiting_material || 0;
     const body = `
         <div class="pp-modal-stats">
             <span>Bekleyen <strong>${fmtInt(cutting.parts_waiting)} parça · ${fmtInt(cutting.weight_waiting)} kg</strong></span>
+            ${materialWaiting ? `<span>Malzeme bekleyen <strong class="pp-num-orange">${fmtInt(materialWaiting)} parça · ${fmtInt(cutting.weight_waiting_material)} kg</strong></span>` : ''}
             <span>Kesilen <strong>${fmtInt(cutting.parts_cut)} / ${fmtInt(cutting.parts_total)} parça</strong></span>
             <span>Ağırlık <strong>${fmtInt(cutting.weight_cut)} / ${fmtInt(cutting.weight_total)} kg</strong></span>
         </div>
-        <div class="pp-modal-note">Bekleyenler üstte, ağır olan önce.</div>
+        <div class="pp-modal-note">Bekleyenler üstte, ağır olan önce. "Malzeme Bekliyor" = plaka teslim edilmedi, gecikme satın almada.</div>
         ${modalTableHtml(['Resim / Poz', 'Nesting', 'İş Emri',
             { label: 'Adet', num: true }, { label: 'Ağırlık', num: true }, 'Durum'], rows)}`;
     return { title: 'CNC Kesim Detayı', body };
@@ -1529,6 +1545,7 @@ function procurementPanelHtml(procurement) {
 function cuttingPanelHtml(cutting) {
     if (!cutting) return '';
     const waiting = cutting.parts_waiting || 0;
+    const materialWaiting = cutting.parts_waiting_material || 0;
     const body = `
         <div class="pp-panel-hero">
             <span class="pp-panel-big ${waiting ? 'pp-num-orange' : 'pp-num-green'}">${fmtInt(waiting)}</span>
@@ -1536,6 +1553,7 @@ function cuttingPanelHtml(cutting) {
             <span class="pp-panel-sub text-muted">${fmtInt(cutting.weight_waiting)} kg</span>
         </div>
         <div class="pp-panel-sub">Kesilen: <strong>${fmtInt(cutting.parts_cut)}</strong> / ${fmtInt(cutting.parts_total)} parça · ${fmtInt(cutting.weight_cut)} / ${fmtInt(cutting.weight_total)} kg</div>
+        ${materialWaiting ? `<div class="pp-panel-sub"><span class="pp-num-orange"><strong>${fmtInt(materialWaiting)} parça · ${fmtInt(cutting.weight_waiting_material)} kg</strong> malzeme bekliyor (satın alma)</span></div>` : ''}
         ${miniBarHtml(cutting.weight_total ? cutting.weight_cut / cutting.weight_total : 0, 'blue')}`;
     return panelHtml('scissors', 'CNC Kesim', body, 'pp-span-3', 'cutting');
 }
@@ -1834,6 +1852,7 @@ function buildRows() {
                 projected_end_date: task.schedule.projected_end_date,
                 projected_variance_wd: task.schedule.projected_variance_wd,
                 pushed_by: task.schedule.pushed_by,
+                material_wait: task.schedule.material_wait || null,
                 _isSubtask: task.parent !== null,
                 _node: node,
                 // Zero-padded DFS index: alphabetical group-key sort == tree order
@@ -1946,9 +1965,15 @@ function getTableColumns() {
         {
             field: 'classification',
             label: 'Plan Durumu',
-            formatter: (value) => {
+            formatter: (value, row) => {
                 const meta = CLASSIFICATION_BADGES[value] || { label: value, badgeClass: 'status-grey' };
-                return `<span class="status-badge ${meta.badgeClass}">${meta.label}</span>`;
+                const badges = [`<span class="status-badge ${meta.badgeClass}">${meta.label}</span>`];
+                // CNC tasks blocked on undelivered plate material: the delay
+                // belongs to procurement, not CNC.
+                if (row.material_wait) {
+                    badges.push(materialWaitBadgeHtml(row.material_wait));
+                }
+                return badges.join(' ');
             }
         },
         {

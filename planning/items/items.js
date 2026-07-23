@@ -3,8 +3,13 @@ import { initNavbar } from '../../components/navbar.js';
 import { HeaderComponent } from '../../components/header/header.js';
 import { FiltersComponent } from '../../components/filters/filters.js';
 import { TableComponent } from '../../components/table/table.js';
+import { ConfirmationModal } from '../../components/confirmation-modal/confirmation-modal.js';
 import { initRouteProtection } from '../../apis/routeProtection.js';
-import { getPlanningItems } from '../../apis/planning/planningRequestItems.js';
+import {
+    getPlanningItems,
+    markPlanningRequestItemConsumed,
+    unmarkPlanningRequestItemConsumed
+} from '../../apis/planning/planningRequestItems.js';
 import { extractResultsFromResponse } from '../../apis/paginationHelper.js';
 import { showNotification } from '../../components/notification/notification.js';
 
@@ -17,6 +22,7 @@ let isLoading = false;
 /** @type {import('../../components/table/table.js').TableComponent | null} */
 let table = null;
 let filtersComponent = null;
+let consumedToggleModal = null;
 
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) return;
@@ -193,6 +199,28 @@ function initFilters() {
             colSize: 2
         })
         .addDropdownFilter({
+            id: 'is_plate',
+            label: 'Plaka Kalemi',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'true', label: 'Sadece Plakalar (0100/0101)' },
+                { value: 'false', label: 'Plaka Dışı' }
+            ],
+            placeholder: 'Tümü',
+            colSize: 2
+        })
+        .addDropdownFilter({
+            id: 'is_consumed',
+            label: 'Kullanıldı',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'true', label: 'Kullanıldı' },
+                { value: 'false', label: 'Kullanılmadı' }
+            ],
+            placeholder: 'Tümü',
+            colSize: 2
+        })
+        .addDropdownFilter({
             id: 'from_inventory',
             label: 'Stoktan Karşılandı',
             options: [
@@ -274,7 +302,34 @@ function initTable() {
                 formatter: (v) => renderLatestUnitPriceSource(v)
             },
             { field: 'is_delivered', label: 'Teslim', type: 'boolean', sortable: false, formatter: (v) => renderBoolIcon(v) },
+            {
+                field: 'is_consumed',
+                label: 'Kullanıldı',
+                type: 'boolean',
+                sortable: false,
+                formatter: (v, row) => {
+                    if (v !== true) return renderBoolIcon(v);
+                    const who = row.consumed_by_username ? ` (${row.consumed_by_username})` : '';
+                    return `<span class="status-badge status-purple" style="min-width: auto;" title="Fiziksel stok tükendi${who} — yeni CNC kesimleri için seçilemez">Kullanıldı</span>`;
+                }
+            },
+            {
+                field: 'cnc_cuts_count',
+                label: 'CNC Kesim',
+                sortable: false,
+                formatter: (v) => (v ? `${v}` : '-')
+            },
             { field: 'purchase_request_number', label: 'Satın Alma PR No', sortable: false, formatter: (v) => renderPurchaseRequestNumberBadge(v) }
+        ],
+        actions: [
+            {
+                key: 'toggle-consumed',
+                label: 'Kullanıldı',
+                icon: 'fas fa-box',
+                class: 'btn-outline-secondary',
+                title: 'Kullanıldı işaretini değiştir',
+                onClick: (row) => confirmToggleConsumed(row)
+            }
         ],
         pagination: true,
         itemsPerPage: currentPageSize,
@@ -344,6 +399,8 @@ async function loadItems() {
             planning_request_status: values.planning_request_status || undefined,
             job_no: values.job_no || undefined,
             is_delivered: values.is_delivered || undefined,
+            is_plate: values.is_plate || undefined,
+            is_consumed: values.is_consumed || undefined,
             from_inventory: values.from_inventory || undefined,
             is_available: values.is_available || undefined,
             has_price: values.has_price || undefined,
@@ -366,5 +423,46 @@ async function loadItems() {
         isLoading = false;
         table.setLoading(false);
     }
+}
+
+function confirmToggleConsumed(row) {
+    const isConsumed = row.is_consumed === true;
+
+    if (!consumedToggleModal) {
+        consumedToggleModal = new ConfirmationModal('consumed-toggle-confirm-modal-container', {
+            title: 'Kullanıldı İşareti',
+            icon: 'fas fa-box',
+            confirmText: 'Evet',
+            cancelText: 'İptal'
+        });
+    }
+
+    consumedToggleModal.show({
+        message: isConsumed
+            ? `${row.item_code || ''} kaleminin "kullanıldı" işareti kaldırılacak.`
+            : `${row.item_code || ''} kalemi "kullanıldı" olarak işaretlenecek.`,
+        description: isConsumed
+            ? 'Kalem yeniden CNC kesimleri için seçilebilir hale gelir.'
+            : 'Kullanıldı işaretlenen kalemler yeni CNC kesimleri için seçilemez. Kesim oluşturmadan da işaretlenebilir (eski talepler için).',
+        onConfirm: async () => {
+            try {
+                if (isConsumed) {
+                    await unmarkPlanningRequestItemConsumed(row.id);
+                    showNotification('Kullanıldı işareti kaldırıldı', 'success');
+                } else {
+                    await markPlanningRequestItemConsumed(row.id);
+                    showNotification('Kalem kullanıldı olarak işaretlendi', 'success');
+                }
+                loadItems();
+            } catch (error) {
+                console.error('Error toggling consumed flag:', error);
+                showNotification(error?.message || 'İşlem sırasında hata oluştu', 'danger');
+            } finally {
+                if (consumedToggleModal) {
+                    consumedToggleModal.hide();
+                }
+            }
+        }
+    });
 }
 

@@ -85,33 +85,53 @@ export async function createCncTask(taskData) {
         // Add basic task fields
         formData.append('name', taskData.name);
         formData.append('nesting_id', taskData.nesting_id);
-        formData.append('material', taskData.material);
-        formData.append('dimensions', taskData.dimensions);
-        formData.append('thickness_mm', taskData.thickness_mm);
-        
+
+        // Material/dimensions/thickness are optional now — the backend derives
+        // them from the chosen plate source when they are not sent.
+        if (taskData.material !== undefined && taskData.material !== null && taskData.material !== '') {
+            formData.append('material', taskData.material);
+        }
+        if (taskData.dimensions !== undefined && taskData.dimensions !== null && taskData.dimensions !== '') {
+            formData.append('dimensions', taskData.dimensions);
+        }
+        if (taskData.thickness_mm !== undefined && taskData.thickness_mm !== null && taskData.thickness_mm !== '') {
+            formData.append('thickness_mm', taskData.thickness_mm);
+        }
+
         // Add machine_fk if provided
         if (taskData.machine_fk !== undefined && taskData.machine_fk !== null) {
             formData.append('machine_fk', taskData.machine_fk);
         }
-        
+
         // Add estimated_hours if provided
         if (taskData.estimated_hours !== undefined && taskData.estimated_hours !== null) {
             formData.append('estimated_hours', taskData.estimated_hours);
         }
-        
+
         // Add quantity if provided
         if (taskData.quantity !== undefined && taskData.quantity !== null) {
             formData.append('quantity', taskData.quantity);
         }
-        
+
         // Add selected_plate_id if provided
         if (taskData.selected_plate_id !== undefined && taskData.selected_plate_id !== null) {
             formData.append('selected_plate_id', taskData.selected_plate_id);
         }
-        
+
         // Add quantity_used if provided
         if (taskData.quantity_used !== undefined && taskData.quantity_used !== null) {
             formData.append('quantity_used', taskData.quantity_used);
+        }
+
+        // Add planning_request_item_id if provided (plate stock line source)
+        if (taskData.planning_request_item_id !== undefined && taskData.planning_request_item_id !== null) {
+            formData.append('planning_request_item_id', taskData.planning_request_item_id);
+        }
+
+        // Only send mark_item_consumed when explicitly boolean — never '' (the
+        // backend applies it only when the key is present in the request).
+        if (typeof taskData.mark_item_consumed === 'boolean') {
+            formData.append('mark_item_consumed', taskData.mark_item_consumed ? 'true' : 'false');
         }
         
         // Add files if provided
@@ -174,10 +194,20 @@ export async function updateCncTask(taskId, taskData) {
         if (taskData.selected_plate_id !== undefined) {
             formData.append('selected_plate_id', taskData.selected_plate_id === null ? '' : taskData.selected_plate_id);
         }
-        
+
         // Add quantity_used if provided
         if (taskData.quantity_used !== undefined && taskData.quantity_used !== null) {
             formData.append('quantity_used', taskData.quantity_used);
+        }
+
+        // Always include planning_request_item_id when defined (even if null) to allow removal
+        if (taskData.planning_request_item_id !== undefined) {
+            formData.append('planning_request_item_id', taskData.planning_request_item_id === null ? '' : taskData.planning_request_item_id);
+        }
+
+        // Only send mark_item_consumed when explicitly boolean — never ''
+        if (typeof taskData.mark_item_consumed === 'boolean') {
+            formData.append('mark_item_consumed', taskData.mark_item_consumed ? 'true' : 'false');
         }
         
         // Add nesting file if provided
@@ -291,27 +321,19 @@ export function formatCncTaskForDisplay(task) {
  */
 export function validateCncTaskData(taskData) {
     const errors = [];
-    
+
     if (!taskData.name || taskData.name.trim() === '') {
-        errors.push('Task name is required');
+        errors.push('Kesim adı gerekli');
     }
-    
+
     if (!taskData.nesting_id || taskData.nesting_id.trim() === '') {
-        errors.push('Nesting ID is required');
+        errors.push('Nesting ID gerekli');
     }
-    
-    if (!taskData.material || taskData.material.trim() === '') {
-        errors.push('Material is required');
-    }
-    
-    if (!taskData.dimensions || taskData.dimensions.trim() === '') {
-        errors.push('Dimensions are required');
-    }
-    
-    if (!taskData.thickness_mm || isNaN(taskData.thickness_mm) || taskData.thickness_mm <= 0) {
-        errors.push('Valid thickness (mm) is required');
-    }
-    
+
+    // Material / dimensions / thickness are no longer entered manually — they
+    // are derived server-side from the selected plate source (remnant plate or
+    // planning request item).
+
     return {
         isValid: errors.length === 0,
         errors
