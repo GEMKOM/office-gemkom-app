@@ -52,6 +52,13 @@ let meetingIndex = 0;
 let meetingBound = false;               // meeting listeners bound once
 let meetingWheelAt = 0;                 // wheel debounce timestamp
 let meetingFetchTimer = null;           // settle-debounce for brief fetching
+let meetingPrefetchTimer = null;        // neighbours wait even longer
+
+// The current slide fetches only after the user is still for longer than any
+// continuous-navigation cadence (wheel steps alone are 600ms apart), so
+// flipping through the portfolio sends nothing at all.
+const MEETING_SETTLE_MS = 700;
+const MEETING_PREFETCH_MS = 1300;
 const meetingBriefCache = new Map();    // job_no -> meeting brief payload
 const meetingBriefPromises = new Map(); // job_no -> in-flight fetch promise
 const meetingPlanCache = new Map();     // job_no -> production plan (hero modal)
@@ -1287,6 +1294,7 @@ function renderMeetingSlide() {
     // slides must not fire ten briefs plus twenty prefetches. Cached slides
     // render instantly above regardless.
     clearTimeout(meetingFetchTimer);
+    clearTimeout(meetingPrefetchTimer);
     meetingFetchTimer = setTimeout(() => {
         const current = meetingItems[meetingIndex];
         if (currentMode !== 'meeting' || !current) return;
@@ -1298,11 +1306,15 @@ function renderMeetingSlide() {
                 }
             });
         }
-        // Warm the neighbours so prev/next feels instant on the projector.
-        [meetingIndex - 1, meetingIndex + 1].forEach((i) => {
-            if (meetingItems[i]) ensureBrief(meetingItems[i].job_no);
-        });
-    }, 250);
+        // Warm the neighbours so prev/next feels instant — but only once the
+        // user has clearly parked on this slide.
+        meetingPrefetchTimer = setTimeout(() => {
+            if (currentMode !== 'meeting') return;
+            [meetingIndex - 1, meetingIndex + 1].forEach((i) => {
+                if (meetingItems[i]) ensureBrief(meetingItems[i].job_no);
+            });
+        }, MEETING_PREFETCH_MS);
+    }, MEETING_SETTLE_MS);
 }
 
 function meetingStripHtml(item) {
