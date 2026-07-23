@@ -1669,6 +1669,35 @@ async function refreshConvertModalCustomerWarning(updatedCustomer) {
     renderConvertCustomerWarning(convertModalOfferData, warningEl);
 }
 
+// Builds the "İş Emri" field row shown when an offer has been converted to a
+// job order. Links each root job order to its project-tracking page (new tab).
+function buildConvertedJobOrderField(offer) {
+    const jobOrders = Array.isArray(offer.job_orders) ? offer.job_orders : [];
+    // Root job orders only (parent === null) — children are shown inside tracking.
+    let roots = jobOrders.filter(jo => jo && jo.job_no && jo.parent == null);
+    // Fallback to the primary converted job order if the list is unavailable.
+    if (roots.length === 0 && offer.converted_job_order_no) {
+        roots = [{ job_no: offer.converted_job_order_no, title: '' }];
+    }
+    if (roots.length === 0) return '';
+
+    const links = roots.map(jo => {
+        const url = `/projects/project-tracking/?job_no=${encodeURIComponent(jo.job_no)}`;
+        const titleAttr = jo.title ? ` title="${escapeHtml(jo.title)}"` : '';
+        return `<a href="${url}" target="_blank" rel="noopener" class="text-decoration-none me-3"${titleAttr}>
+                    <strong>${escapeHtml(jo.job_no)}</strong><i class="fas fa-external-link-alt ms-1 small"></i>
+                </a>`;
+    }).join('');
+
+    return `
+                    <div class="field-row d-flex align-items-center py-2 border-bottom">
+                        <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                            <i class="fas fa-briefcase me-1"></i>İş Emri
+                        </div>
+                        <div class="field-value flex-grow-1">${links}</div>
+                    </div>`;
+}
+
 function buildGenelTab(statusLabel, statusColor) {
     const totalPrice = offer.total_price ? parseFloat(offer.total_price) : 0;
     const totalWeight = offer.total_weight_kg ? parseFloat(offer.total_weight_kg) : 0;
@@ -1700,6 +1729,7 @@ function buildGenelTab(statusLabel, statusColor) {
                         </div>
                         <div class="field-value flex-grow-1"><span class="status-badge ${BADGE_CLASS_MAP[statusColor] || 'status-grey'}">${statusLabel}</span></div>
                     </div>
+                    ${buildConvertedJobOrderField(offer)}
                     <div class="field-row d-flex align-items-center py-2 border-bottom">
                         <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
                             <i class="fas fa-heading me-1"></i>Başlık

@@ -882,3 +882,27 @@ export async function getProductionPlanOverview(status = 'active') {
         throw error;
     }
 }
+
+/**
+ * Meeting brief (Sunum Modu): NCR/revision/procurement/cutting/manufacturing/
+ * files/financial context for one ROOT job order's whole subtree.
+ * Endpoint: GET /projects/job-orders/{jobNo}/meeting-brief/
+ * The `financial` key is present only for cost-authorized users.
+ * @param {string} jobNo - Root job order number
+ * @returns {Promise<Object>} meeting brief payload
+ */
+export async function getJobOrderMeetingBrief(jobNo) {
+    try {
+        const response = await authedFetch(
+            `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/meeting-brief/`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching meeting brief for ${jobNo}:`, error);
+        throw error;
+    }
+}

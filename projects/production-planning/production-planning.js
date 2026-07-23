@@ -17,7 +17,8 @@ import { showNotification } from '../../components/notification/notification.js'
 import {
     getJobOrderProductionPlan,
     getJobOrderDropdown,
-    getProductionPlanOverview
+    getProductionPlanOverview,
+    getJobOrderMeetingBrief
 } from '../../apis/projects/jobOrders.js';
 
 // Module state
@@ -37,12 +38,20 @@ let taskById = new Map();
 let loadedPlans = [];
 
 // Portfolio (weekly review) mode state
-let currentMode = null;                 // 'portfolio' | 'detail'
+let currentMode = null;                 // 'portfolio' | 'detail' | 'meeting'
 let overviewData = null;                // last fetched overview payload
 let overviewStatus = 'active';          // status the cached overview was fetched with
 let portfolioSort = 'job_no';           // 'job_no' | 'risk'
 let portfolioStatusDropdown = null;
 let portfolioSortDropdown = null;
+
+// Meeting (Sunum Modu) state
+let meetingItems = [];                  // portfolio items in slide order
+let meetingIndex = 0;
+let meetingBound = false;               // meeting listeners bound once
+let meetingWheelAt = 0;                 // wheel debounce timestamp
+const meetingBriefCache = new Map();    // job_no -> meeting brief payload
+const meetingBriefLoading = new Set();  // job_nos with an in-flight fetch
 
 const PORTFOLIO_STATUS_OPTIONS = [
     { value: 'active', text: 'Aktif' },
@@ -90,9 +99,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     await handleRoute();
 });
 
-// URL is the source of truth: ?job_no= params -> detail, none -> portfolio.
+// URL is the source of truth: ?meeting=1 -> meeting view (optional job_no =
+// current slide), ?job_no= params -> detail, none -> portfolio.
 async function handleRoute() {
-    const jobNos = new URLSearchParams(window.location.search).getAll('job_no').filter(Boolean);
+    const params = new URLSearchParams(window.location.search);
+    const jobNos = params.getAll('job_no').filter(Boolean);
+    if (params.get('meeting')) {
+        await enterMeeting(jobNos[0] || null);
+        return;
+    }
     if (jobNos.length) {
         currentJobNos = jobNos;
         if (jobOrderDropdown) jobOrderDropdown.setValue(jobNos);
@@ -108,17 +123,26 @@ function setModeChrome(mode) {
     const portfolioControls = document.getElementById('pp-portfolio-controls');
     const detailControls = document.getElementById('pp-view-controls');
     const viewContainer = document.getElementById('plan-view-container');
+    const meetingContainer = document.getElementById('pp-meeting-container');
+    const verdictContainer = document.getElementById('plan-verdict-container');
 
     if (backButton) backButton.style.display = mode === 'detail' ? '' : 'none';
     if (portfolioControls) {
         portfolioControls.classList.toggle('d-none', mode !== 'portfolio');
         portfolioControls.classList.toggle('d-flex', mode === 'portfolio');
     }
-    if (detailControls && mode === 'portfolio') {
+    if (detailControls && mode !== 'detail') {
         detailControls.classList.add('d-none');
         detailControls.classList.remove('d-flex');
     }
     if (viewContainer) viewContainer.style.display = mode === 'detail' ? '' : 'none';
+
+    // Meeting mode is fullscreen: the body class hides navbar, header,
+    // toolbar and page decor via CSS, and freezes page scroll. Toggling it
+    // here covers every exit path (Esc, Çık, browser Back, direct URL).
+    document.body.classList.toggle('pp-meeting-fullscreen', mode === 'meeting');
+    if (meetingContainer) meetingContainer.style.display = mode === 'meeting' ? '' : 'none';
+    if (verdictContainer) verdictContainer.style.display = mode === 'meeting' ? 'none' : '';
 }
 
 function setupBackButton() {
@@ -526,6 +550,22 @@ async function enterPortfolio() {
     renderPortfolio();
 }
 
+// Current portfolio items in display order (shared by cards and slides).
+function sortedPortfolioItems() {
+    if (!overviewData) return [];
+    const items = [...overviewData.items];
+    if (portfolioSort === 'risk') {
+        const severity = (item) => {
+            const v = item.forecast ? item.forecast.variance_wd : null;
+            return v === null || v === undefined ? -Infinity : v;
+        };
+        items.sort((a, b) => severity(b) - severity(a));
+    } else {
+        items.sort((a, b) => (a.job_no || '').localeCompare(b.job_no || '', undefined, { numeric: true }));
+    }
+    return items;
+}
+
 function renderPortfolio() {
     const container = document.getElementById('plan-verdict-container');
     if (!container) return;
@@ -540,16 +580,7 @@ function renderPortfolio() {
         return;
     }
 
-    const items = [...overviewData.items];
-    if (portfolioSort === 'risk') {
-        const severity = (item) => {
-            const v = item.forecast ? item.forecast.variance_wd : null;
-            return v === null || v === undefined ? -Infinity : v;
-        };
-        items.sort((a, b) => severity(b) - severity(a));
-    } else {
-        items.sort((a, b) => (a.job_no || '').localeCompare(b.job_no || '', undefined, { numeric: true }));
-    }
+    const items = sortedPortfolioItems();
 
     const statusOption = PORTFOLIO_STATUS_OPTIONS.find(o => o.value === overviewStatus);
     renderHeader(`${items.length} proje · ${statusOption ? statusOption.text : overviewStatus} · Haftalık gözden geçirme`);
@@ -608,6 +639,549 @@ function setupPortfolioControls() {
             handleRoute();
         });
     }
+
+    const meetingButton = document.getElementById('pp-enter-meeting');
+    if (meetingButton) {
+        meetingButton.addEventListener('click', () => {
+            window.history.pushState(null, '', `${window.location.pathname}?meeting=1`);
+            handleRoute();
+        });
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Meeting view (Sunum Modu): one job order per full-page slide
+// ---------------------------------------------------------------------------
+
+async function enterMeeting(jobNo) {
+    setModeChrome('meeting');
+    // Bind BEFORE any early return — the empty state must still offer Esc/Çık
+    // (fullscreen with no controls would be an exit trap).
+    bindMeetingControls();
+    if (!overviewData) {
+        await fetchOverview(overviewStatus);
+    }
+    meetingItems = sortedPortfolioItems();
+    const container = document.getElementById('pp-meeting-container');
+    if (!meetingItems.length) {
+        if (container) {
+            container.innerHTML = `
+                <div class="pp-slide-empty">
+                    <i class="fas fa-folder-open fa-2x mb-3"></i>
+                    <p>Sunulacak proje bulunamadı.</p>
+                    <button type="button" class="btn btn-outline-secondary" data-action="exit">
+                        <i class="fas fa-xmark me-1"></i>Çık
+                    </button>
+                </div>`;
+        }
+        return;
+    }
+    const index = jobNo ? meetingItems.findIndex(i => i.job_no === jobNo) : 0;
+    meetingIndex = index >= 0 ? index : 0;
+    renderMeetingSlide();
+}
+
+function bindMeetingControls() {
+    if (meetingBound) return;
+    meetingBound = true;
+
+    // The strip is re-rendered with every slide, so its controls are
+    // delegated from the static container via data-action attributes.
+    const container = document.getElementById('pp-meeting-container');
+    if (container) {
+        container.addEventListener('click', (e) => {
+            const control = e.target.closest('[data-action]');
+            if (!control) return;
+            const action = control.dataset.action;
+            if (action === 'prev') meetingStep(-1);
+            else if (action === 'next') meetingStep(1);
+            else if (action === 'exit') exitMeeting();
+            else if (action === 'detail') {
+                const item = meetingItems[meetingIndex];
+                if (!item) return;
+                window.history.pushState(null, '', `${window.location.pathname}?job_no=${encodeURIComponent(item.job_no)}`);
+                handleRoute();
+            }
+        });
+    }
+
+    // Bound once, guarded by mode — inert outside the meeting.
+    document.addEventListener('keydown', (e) => {
+        if (currentMode !== 'meeting') return;
+        if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+        if (e.key === 'ArrowLeft') { e.preventDefault(); meetingStep(-1); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); meetingStep(1); }
+        else if (e.key === 'Escape') { e.preventDefault(); exitMeeting(); }
+    });
+
+    // The page cannot scroll in fullscreen, so a decisive wheel gesture turns
+    // the slide. The deltaY threshold keeps trackpad inertia tails from
+    // double-stepping (tail deltas decay below it); line-mode mice normalize
+    // roughly to pixels first.
+    window.addEventListener('wheel', (e) => {
+        if (currentMode !== 'meeting') return;
+        const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
+        if (Math.abs(delta) < 30) return;
+        const now = Date.now();
+        if (now - meetingWheelAt < 600) return;
+        meetingWheelAt = now;
+        meetingStep(delta > 0 ? 1 : -1);
+    }, { passive: true });
+}
+
+function exitMeeting() {
+    window.history.pushState(null, '', window.location.pathname);
+    handleRoute();
+}
+
+function meetingStep(delta) {
+    const target = meetingIndex + delta;
+    if (target < 0 || target >= meetingItems.length) return;
+    meetingIndex = target;
+    renderMeetingSlide();
+}
+
+function renderMeetingSlide() {
+    const item = meetingItems[meetingIndex];
+    const container = document.getElementById('pp-meeting-container');
+    if (!item || !container) return;
+
+    // Slide changes replace the history entry: browser Back exits the meeting.
+    window.history.replaceState(
+        null, '', `${window.location.pathname}?meeting=1&job_no=${encodeURIComponent(item.job_no)}`);
+
+    const brief = meetingBriefCache.get(item.job_no);
+    container.innerHTML =
+        meetingStripHtml(item) +
+        meetingHeroHtml(item, brief && brief.financial) +
+        `<div id="pp-meeting-panels" class="pp-meeting-grid">${brief ? '' : meetingSkeletonHtml()}</div>`;
+
+    if (brief) {
+        renderMeetingPanels(item, brief);
+    } else {
+        ensureBrief(item.job_no).then(() => {
+            const current = meetingItems[meetingIndex];
+            const loaded = current && meetingBriefCache.get(current.job_no);
+            if (currentMode === 'meeting' && loaded && current.job_no === item.job_no) {
+                renderMeetingPanels(current, loaded);
+            }
+        });
+    }
+    // Warm the neighbours so prev/next feels instant on the projector.
+    [meetingIndex - 1, meetingIndex + 1].forEach((i) => {
+        if (meetingItems[i]) ensureBrief(meetingItems[i].job_no);
+    });
+}
+
+function meetingStripHtml(item) {
+    const atStart = meetingIndex === 0;
+    const atEnd = meetingIndex === meetingItems.length - 1;
+    return `
+        <div class="pp-strip">
+            <div class="pp-strip-nav">
+                <button type="button" class="btn btn-sm pp-strip-btn" data-action="prev"
+                        ${atStart ? 'disabled' : ''} aria-label="Önceki proje">
+                    <i class="fas fa-chevron-left"></i>
+                </button>
+                <span class="pp-strip-count">${meetingIndex + 1} / ${meetingItems.length}</span>
+                <button type="button" class="btn btn-sm pp-strip-btn" data-action="next"
+                        ${atEnd ? 'disabled' : ''} aria-label="Sonraki proje">
+                    <i class="fas fa-chevron-right"></i>
+                </button>
+            </div>
+            <div class="pp-strip-title">Haftalık Gözden Geçirme</div>
+            <div class="pp-strip-actions">
+                <span class="pp-strip-hint d-none d-lg-inline">← → gezin · Esc çık</span>
+                <button type="button" class="btn btn-sm pp-strip-btn" data-action="detail">
+                    <i class="fas fa-table-list me-1"></i>Planı Aç
+                </button>
+                <button type="button" class="btn btn-sm pp-strip-btn" data-action="exit">
+                    <i class="fas fa-xmark me-1"></i>Çık
+                </button>
+            </div>
+        </div>`;
+}
+
+const FINANCIAL_META = {
+    healthy: { theme: 'green', label: 'Finans · Sağlıklı' },
+    risky: { theme: 'orange', label: 'Finans · Riskli' },
+    critical: { theme: 'red', label: 'Finans · Kritik' },
+    no_price: { theme: 'grey', label: 'Finans · Fiyat Yok' },
+    no_data: { theme: 'grey', label: 'Finans · Veri Yok' },
+};
+
+function financialChipHtml(financial) {
+    if (!financial) return '';
+    const meta = FINANCIAL_META[financial.verdict] || FINANCIAL_META.no_data;
+    const reason = (financial.reason || '') +
+        (financial.price_is_derived ? ' (satış fiyatı türetilmiş)' : '');
+    return `<span class="pp-verdict-headline pp-fin-pill pp-vh-${meta.theme}" title="${escapeHtml(reason)}">
+        <i class="fas fa-coins"></i>${meta.label}</span>`;
+}
+
+// Compact hero for the slide — reuses the verdict pill + timeline helpers but
+// never touches verdictCardHtml (portfolio/detail keep their card as-is).
+function meetingHeroHtml(item, financial) {
+    const forecast = item.forecast || { verdict: 'unknown', unplanned_open_tasks: 0 };
+    const meta = VERDICT_META[forecast.verdict] || VERDICT_META.unknown;
+    const summary = item.summary || {};
+    const variance = forecast.variance_wd;
+    const varianceFigure = variance === null || variance === undefined
+        ? '<span class="pp-fig-value">—</span>'
+        : (variance > 0
+            ? `<span class="pp-fig-value pp-fig-late">+${formatWd(variance)} iş günü</span>`
+            : (variance < 0
+                ? `<span class="pp-fig-value pp-fig-early">${formatWd(variance)} iş günü erken</span>`
+                : '<span class="pp-fig-value">Tam zamanında</span>'));
+    const projectedClass = variance !== null && variance !== undefined && variance > 0
+        ? 'pp-fig-late' : '';
+    const pct = Math.round(item.completion_percentage || 0);
+    const statusChip = item.status && item.status !== 'active'
+        ? `<span class="status-badge status-grey">${escapeHtml(item.status_display || item.status)}</span>`
+        : '';
+
+    return `
+        <div class="dashboard-card pp-hero pp-verdict-card pp-verdict-${meta.theme}">
+            <div class="card-body">
+                <div class="pp-hero-top">
+                    <div class="pp-hero-id">
+                        <span class="pp-verdict-jobno">${escapeHtml(item.job_no)}</span>
+                        <span class="pp-hero-title">${escapeHtml(item.title || '')}</span>
+                        ${item.customer_name ? `<span class="pp-hero-customer">${escapeHtml(item.customer_name)}</span>` : ''}
+                        ${statusChip}
+                    </div>
+                    <div class="pp-hero-pills">
+                        ${verdictHeadline(forecast)}
+                        <span id="pp-fin-chip">${financialChipHtml(financial)}</span>
+                    </div>
+                </div>
+                <div class="pp-verdict-figures pp-hero-figures">
+                    <div class="pp-fig">
+                        <label>Hedef Bitiş</label>
+                        <span class="pp-fig-value">${formatDateCell(forecast.target_completion_date)}</span>
+                    </div>
+                    <div class="pp-fig-arrow"><i class="fas fa-arrow-right-long"></i></div>
+                    <div class="pp-fig">
+                        <label>Öngörülen Bitiş</label>
+                        <span class="pp-fig-value ${projectedClass}">${formatDateCell(forecast.projected_completion_date)}</span>
+                    </div>
+                    <div class="pp-fig">
+                        <label>Sapma</label>
+                        ${varianceFigure}
+                    </div>
+                    <div class="pp-fig">
+                        <label>İlerleme</label>
+                        <span class="pp-fig-value">%${pct}</span>
+                        <div class="pp-fig-progressbar">
+                            <div class="pp-fig-progressfill pp-pf-${meta.theme}" style="width: ${Math.min(pct, 100)}%"></div>
+                        </div>
+                    </div>
+                </div>
+                ${verdictTimelineHtml(forecast, summary, overviewData ? overviewData.today : null)}
+            </div>
+        </div>`;
+}
+
+// Content caps shrink one step on short screens (laptop 768p) so every panel
+// stays inside its clipped cell.
+function meetingCaps() {
+    const short = window.matchMedia('(max-height: 860px)').matches;
+    return { resources: short ? 3 : 4, files: short ? 3 : 4, ncrs: short ? 2 : 3 };
+}
+
+async function ensureBrief(jobNo) {
+    if (meetingBriefCache.has(jobNo) || meetingBriefLoading.has(jobNo)) return;
+    meetingBriefLoading.add(jobNo);
+    try {
+        meetingBriefCache.set(jobNo, await getJobOrderMeetingBrief(jobNo));
+    } catch (error) {
+        console.error(`Meeting brief failed for ${jobNo}:`, error);
+        const item = meetingItems[meetingIndex];
+        if (currentMode === 'meeting' && item && item.job_no === jobNo) {
+            const panels = document.getElementById('pp-meeting-panels');
+            if (panels) {
+                panels.innerHTML = `
+                    <div class="dashboard-card pp-panel pp-panel-wide">
+                        <div class="card-body text-center text-danger py-4">
+                            <i class="fas fa-exclamation-triangle me-2"></i>Toplantı özeti yüklenemedi.
+                        </div>
+                    </div>`;
+            }
+        }
+    } finally {
+        meetingBriefLoading.delete(jobNo);
+    }
+}
+
+function meetingSkeletonHtml() {
+    return ['pp-span-5', 'pp-span-4', 'pp-span-3', 'pp-span-3', 'pp-span-3', 'pp-span-3', 'pp-span-3']
+        .map(span => `
+        <div class="dashboard-card pp-panel ${span}">
+            <div class="card-body">
+                <div class="pp-skeleton pp-skeleton-title"></div>
+                <div class="pp-skeleton pp-skeleton-big"></div>
+                <div class="pp-skeleton"></div>
+                <div class="pp-skeleton pp-skeleton-short"></div>
+            </div>
+        </div>`).join('');
+}
+
+function panelHtml(icon, title, bodyHtml, extraClass = '') {
+    return `
+        <div class="dashboard-card pp-panel${extraClass ? ' ' + extraClass : ''}">
+            <div class="card-body">
+                <div class="pp-panel-title"><i class="fas fa-${icon} me-2"></i>${title}</div>
+                ${bodyHtml}
+            </div>
+        </div>`;
+}
+
+function fmtInt(value) {
+    return Math.round(value ?? 0).toLocaleString('tr-TR');
+}
+
+function fmtHours(value) {
+    return (value ?? 0).toLocaleString('tr-TR', { maximumFractionDigits: 1 });
+}
+
+function fmtShortDate(value) {
+    return value ? formatDateCell(String(value)) : '—';
+}
+
+function miniBarHtml(ratio, theme = 'blue') {
+    const pct = Math.max(0, Math.min(100, Math.round((ratio || 0) * 100)));
+    return `
+        <div class="pp-mini-bar"><div class="pp-mini-fill pp-mini-${theme}" style="width: ${pct}%"></div></div>`;
+}
+
+function renderMeetingPanels(item, brief) {
+    const finChip = document.getElementById('pp-fin-chip');
+    if (finChip && brief.financial) finChip.innerHTML = financialChipHtml(brief.financial);
+    const panels = document.getElementById('pp-meeting-panels');
+    if (!panels) return;
+    // Grid placement: row A = welding(5) machining(4) cutting(3),
+    // row B = quality(3) procurement(3) revisions(3) files(3).
+    panels.innerHTML = [
+        weldingPanelHtml(brief.welding),
+        machiningPanelHtml(brief.machining),
+        cuttingPanelHtml(brief.cutting),
+        qualityPanelHtml(brief.quality),
+        procurementPanelHtml(brief.procurement),
+        revisionsPanelHtml(brief.revisions),
+        filesPanelHtml(brief.files),
+    ].join('');
+}
+
+const NCR_SEVERITY_BADGES = { critical: 'status-red', major: 'status-orange', minor: 'status-grey' };
+
+function qualityPanelHtml(quality) {
+    if (!quality) return '';
+    const caps = meetingCaps();
+    const open = quality.open || 0;
+    const sev = quality.open_by_severity || {};
+    if (!open) {
+        const body = `
+            <div class="pp-panel-hero">
+                <span class="pp-panel-big pp-num-green"><i class="fas fa-circle-check"></i></span>
+                <span class="pp-panel-big-label">Açık NCR yok</span>
+                <span class="pp-panel-sub text-muted">toplam ${fmtInt(quality.total)}</span>
+            </div>`;
+        return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-span-3');
+    }
+    const shown = (quality.open_list || []).slice(0, caps.ncrs);
+    const list = shown.map(n => `
+        <div class="pp-line">
+            <span class="pp-line-main"><strong>${escapeHtml(n.ncr_number)}</strong> ${escapeHtml(n.title)}</span>
+            <span class="status-badge ${NCR_SEVERITY_BADGES[n.severity] || 'status-grey'}">${escapeHtml(n.severity_display)}</span>
+        </div>`).join('');
+    const body = `
+        <div class="pp-panel-hero">
+            <span class="pp-panel-big pp-num-red">${fmtInt(open)}</span>
+            <span class="pp-panel-big-label">açık NCR</span>
+            <span class="pp-panel-dots">
+                ${sev.critical ? `<span class="pp-dot pp-dot-red">Kritik ${fmtInt(sev.critical)}</span>` : ''}
+                ${sev.major ? `<span class="pp-dot pp-dot-orange">Majör ${fmtInt(sev.major)}</span>` : ''}
+                ${sev.minor ? `<span class="pp-dot pp-dot-grey">Minör ${fmtInt(sev.minor)}</span>` : ''}
+                ${open > shown.length ? `<span class="text-muted">+${fmtInt(open - shown.length)}</span>` : ''}
+            </span>
+        </div>
+        ${list}`;
+    // The ONLY panel with a colored top strip — quality problems must pop.
+    return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-span-3 pp-panel-alert');
+}
+
+function revisionsPanelHtml(revisions) {
+    if (!revisions) return '';
+    const drawing = revisions.drawing || {};
+    const target = revisions.target_date || {};
+    const latest = drawing.latest;
+    const latestTarget = (target.latest_list || [])[0];
+    // Date-led: WHEN it was last revised is the meeting signal, the code is
+    // supporting detail.
+    const body = `
+        <div class="pp-rev-cols">
+            <div>
+                <div class="pp-rev-heading">Teknik Resim</div>
+                <div class="pp-panel-hero">
+                    <span class="pp-panel-big">${latest ? fmtShortDate(latest.released_at) : '—'}</span>
+                </div>
+                ${latest
+                    ? `<div class="pp-panel-sub">Rev ${escapeHtml(latest.revision_code || `R${latest.revision_number}`)} · ${escapeHtml(latest.job_no)}</div>`
+                    : '<div class="pp-panel-sub text-muted">Yayın yok</div>'}
+                <div class="pp-panel-sub ${drawing.revision_count ? 'pp-num-orange' : 'text-muted'}">${fmtInt(drawing.revision_count)} kez revize edildi</div>
+                ${drawing.in_revision_count ? `<div class="pp-panel-sub pp-text-orange">${fmtInt(drawing.in_revision_count)} yayın revizyonda</div>` : ''}
+            </div>
+            <div>
+                <div class="pp-rev-heading">Hedef Tarih</div>
+                <div class="pp-panel-hero">
+                    <span class="pp-panel-big">${latestTarget ? fmtShortDate(latestTarget.changed_at) : '—'}</span>
+                </div>
+                ${latestTarget ? `
+                    <div class="pp-panel-sub">${fmtShortDate(latestTarget.previous_date)} → ${fmtShortDate(latestTarget.new_date)}</div>
+                    ${latestTarget.reason ? `<div class="pp-panel-sub text-muted">“${escapeHtml(latestTarget.reason)}”</div>` : ''}`
+                : '<div class="pp-panel-sub text-muted">Değişiklik yok</div>'}
+                <div class="pp-panel-sub ${target.count ? 'pp-num-orange' : 'text-muted'}">${fmtInt(target.count)} kez değişti</div>
+            </div>
+        </div>`;
+    return panelHtml('code-branch', 'Revizyonlar', body, 'pp-span-3');
+}
+
+function procurementPanelHtml(procurement) {
+    if (!procurement) return '';
+    const waiting = procurement.items_waiting || 0;
+    const body = `
+        <div class="pp-panel-hero">
+            <span class="pp-panel-big ${waiting ? 'pp-num-orange' : 'pp-num-green'}">${fmtInt(waiting)}</span>
+            <span class="pp-panel-big-label">bekleyen kalem</span>
+            <span class="pp-panel-sub text-muted">toplam ${fmtInt(procurement.items_total)}</span>
+        </div>
+        <div class="pp-panel-sub">Talebe dönüşmedi: <strong>${fmtInt(procurement.not_yet_requested)}</strong></div>
+        <div class="pp-panel-sub">Talepte · teslim bekliyor: <strong>${fmtInt(procurement.requested_waiting)}</strong></div>
+        <div class="pp-panel-sub pp-num-green">Teslim edildi: <strong>${fmtInt(procurement.items_delivered)}</strong></div>
+        ${miniBarHtml(procurement.items_total ? procurement.items_delivered / procurement.items_total : 0, 'green')}`;
+    return panelHtml('cart-shopping', 'Satın Alma', body, 'pp-span-3');
+}
+
+function cuttingPanelHtml(cutting) {
+    if (!cutting) return '';
+    const waiting = cutting.parts_waiting || 0;
+    const body = `
+        <div class="pp-panel-hero">
+            <span class="pp-panel-big ${waiting ? 'pp-num-orange' : 'pp-num-green'}">${fmtInt(waiting)}</span>
+            <span class="pp-panel-big-label">parça kesim bekliyor</span>
+            <span class="pp-panel-sub text-muted">${fmtInt(cutting.weight_waiting)} kg</span>
+        </div>
+        <div class="pp-panel-sub">Kesilen: <strong>${fmtInt(cutting.parts_cut)}</strong> / ${fmtInt(cutting.parts_total)} parça · ${fmtInt(cutting.weight_cut)} / ${fmtInt(cutting.weight_total)} kg</div>
+        ${miniBarHtml(cutting.weight_total ? cutting.weight_cut / cutting.weight_total : 0, 'blue')}`;
+    return panelHtml('scissors', 'CNC Kesim', body, 'pp-span-3');
+}
+
+function machiningPanelHtml(machining) {
+    if (!machining) return '';
+    const waiting = machining.operations_waiting || 0;
+    const body = `
+        <div class="pp-panel-hero">
+            <span class="pp-panel-big ${waiting ? 'pp-num-orange' : 'pp-num-green'}">${fmtInt(waiting)}</span>
+            <span class="pp-panel-big-label">operasyon bekliyor</span>
+            <span class="pp-panel-sub text-muted">${fmtInt(machining.operations_completed)} / ${fmtInt(machining.operations_total)} tamamlandı</span>
+        </div>
+        <div class="pp-panel-sub">Tahmini <strong>${fmtHours(machining.estimated_hours_total)} s</strong> · Harcanan <strong>${fmtHours(machining.hours_spent)} s</strong> · Kalan ~<strong>${fmtHours(machining.hours_remaining)} s</strong></div>
+        <div class="pp-panel-sub text-muted">${fmtInt(machining.parts_completed)} / ${fmtInt(machining.parts_total)} parça tamam</div>
+        ${miniBarHtml(machining.estimated_hours_total ? machining.hours_earned / machining.estimated_hours_total : 0, 'blue')}`;
+    return panelHtml('gears', 'Talaşlı İmalat', body, 'pp-span-4');
+}
+
+function weldingPanelHtml(welding) {
+    if (!welding) return '';
+    const caps = meetingCaps();
+    const resources = welding.resources || [];
+    const shown = resources.slice(0, caps.resources);
+    const rows = shown.map((r) => {
+        const badge = r.kind === 'subcontractor'
+            ? '<span class="status-badge status-purple">Taşeron</span>'
+            : '<span class="status-badge status-blue">Dahili</span>';
+        const right = r.planned
+            ? `<span class="text-muted">(plan${r.planned_start_date ? ` · ${fmtShortDate(r.planned_start_date)} – ${fmtShortDate(r.planned_end_date)}` : ''})</span>`
+            : `${miniBarHtml((r.progress_pct || 0) / 100, 'blue')}<span class="pp-res-pct">%${fmtInt(r.progress_pct)}</span>`;
+        return `
+            <div class="pp-line${r.planned ? ' pp-line-muted' : ''}">
+                <span class="pp-line-main" title="${escapeHtml(r.name)}">${badge} ${escapeHtml(r.name)}
+                    <span class="text-muted">· ${fmtInt(r.allocated_weight_kg)} kg</span></span>
+                <span class="pp-res-right">${right}</span>
+            </div>`;
+    }).join('');
+
+    // Assignments carry the headline; without committed kg the welding tasks'
+    // own (manual) progress speaks — work happens before allocation.
+    const overall = welding.weighted_progress_pct;
+    const taskPct = welding.task_progress_pct;
+    const usingTaskProgress = (overall === null || overall === undefined)
+        && taskPct !== null && taskPct !== undefined;
+    const big = usingTaskProgress ? taskPct : overall;
+    const bigLabel = usingTaskProgress ? 'görev ilerlemesi' : 'ağırlıklı ilerleme';
+    const kgNote = welding.allocated_kg_total
+        ? `<span class="pp-panel-sub text-muted">${fmtInt(welding.allocated_kg_total)} kg tahsis</span>` : '';
+    const moreNote = resources.length > shown.length
+        ? `<span class="pp-panel-sub text-muted">+${fmtInt(resources.length - shown.length)} kaynak</span>` : '';
+
+    const hours = welding.hours || {};
+    const hourParts = [];
+    if (hours.regular) hourParts.push(`İşçilik <strong>${fmtHours(hours.regular)} s</strong>`);
+    if (hours.after_hours) hourParts.push(`Fazla mesai <strong>${fmtHours(hours.after_hours)} s</strong>`);
+    if (hours.holiday) hourParts.push(`Tatil <strong>${fmtHours(hours.holiday)} s</strong>`);
+    const hoursStrip = hourParts.length
+        ? `<div class="pp-hours-strip"><i class="fas fa-user-clock me-1"></i>${hourParts.join('<span class="pp-meta-sep"> · </span>')}</div>`
+        : '';
+
+    const body = `
+        <div class="pp-panel-hero">
+            <span class="pp-panel-big">${big === null || big === undefined ? '—' : `%${fmtInt(big)}`}</span>
+            <span class="pp-panel-big-label">${bigLabel}</span>
+            ${kgNote}${moreNote}
+        </div>
+        ${rows || (usingTaskProgress || big === null
+            ? '<div class="text-muted pp-empty">Kaynak ataması yok.</div>' : '')}
+        ${hoursStrip}`;
+    return panelHtml('fire', 'Kaynaklı İmalat', body, 'pp-span-5');
+}
+
+const FILE_GROUP_LABELS = [
+    ['job_order', 'İş Emri'],
+    ['task', 'Görev'],
+    ['discussion', 'Tartışma'],
+];
+
+function filesPanelHtml(files) {
+    if (!files) return '';
+    const caps = meetingCaps();
+    const totalAll = FILE_GROUP_LABELS.reduce(
+        (n, [key]) => n + ((files[key] || {}).total || 0), 0);
+    const merged = FILE_GROUP_LABELS.flatMap(([key, label]) =>
+        ((files[key] || {}).items || []).map(f => ({ ...f, source: label })));
+    merged.sort((a, b) => String(b.uploaded_at || '').localeCompare(String(a.uploaded_at || '')));
+    const shown = merged.slice(0, caps.files);
+
+    const chips = FILE_GROUP_LABELS.map(([key, label]) =>
+        `<span class="pp-chip">${label} <strong>${fmtInt((files[key] || {}).total)}</strong></span>`).join('');
+    const moreChip = totalAll > shown.length
+        ? `<span class="pp-chip pp-chip-muted">+${fmtInt(totalAll - shown.length)}</span>` : '';
+
+    const lines = shown.map((f) => {
+        const name = escapeHtml(f.name || 'dosya');
+        const link = f.url
+            ? `<a href="${escapeHtml(f.url)}" target="_blank" rel="noopener" title="${name}">${name}</a>`
+            : `<span title="${name}">${name}</span>`;
+        return `
+            <div class="pp-file-line">
+                ${link}
+                <span class="pp-file-src">${escapeHtml(f.source)} · ${fmtShortDate(f.uploaded_at)}</span>
+            </div>`;
+    }).join('');
+
+    const body = `
+        <div class="pp-chips-row">${chips}${moreChip}</div>
+        ${lines || '<div class="text-muted pp-empty">Dosya yok.</div>'}`;
+    return panelHtml('folder-open', 'Dosyalar', body, 'pp-span-3');
 }
 
 // ---------------------------------------------------------------------------
