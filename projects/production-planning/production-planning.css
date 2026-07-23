@@ -317,7 +317,16 @@
 }
 
 .pp-tl-label-target { top: 0; color: #2563eb; }
-.pp-tl-label-projected { top: 20px; color: #7c3aed; }
+.pp-tl-label-projected { top: 0; color: #7c3aed; }
+
+/* Colliding dates merge into one label; the color classes ride on inner
+   spans (position rules are inert on static spans, colors apply) */
+.pp-tl-label-combined {
+    top: 0;
+    display: inline-flex;
+    gap: 14px;
+    align-items: baseline;
+}
 
 /* Meta line: completion, counts, caveat */
 .pp-verdict-meta {
@@ -379,13 +388,22 @@
 }
 
 /* ==========================================================================
-   Meeting view (Sunum Modu) — fullscreen slide
+   Meeting view (Sunum Modu) — fullscreen dark presentation theme
+   --------------------------------------------------------------------------
+   Everything here renders ONLY under body.pp-meeting-fullscreen, so the
+   meeting-only classes carry dark values directly; classes shared with the
+   portfolio/detail cards (verdict tints, pills, figures, timeline) get
+   body-scoped overrides and keep their light styling everywhere else.
+   Ink: primary #f2f4f8 · secondary #c3c9d6 · muted #8b93a3
+   Surface: page #0e1117 · card #161b24 · hairline rgba(255,255,255,0.07)
+   Status: green #34d399 · red #f87171 · orange #fb923c (no yellow, ever)
    ========================================================================== */
 
 /* Fullscreen chrome: hide the app shell + decor, freeze page scroll. The
    section carries Bootstrap .py-5 (!important), hence the override. */
 body.pp-meeting-fullscreen {
     overflow: hidden;
+    background: #0e1117;
 }
 
 body.pp-meeting-fullscreen #navbar-container,
@@ -402,6 +420,7 @@ body.pp-meeting-fullscreen::after {
 
 body.pp-meeting-fullscreen .modules-section {
     padding: 0 !important;
+    background: transparent;
 }
 
 body.pp-meeting-fullscreen .modules-section::before {
@@ -414,17 +433,35 @@ body.pp-meeting-fullscreen .modules-section > .container-fluid {
     max-width: none;
 }
 
-/* The slide: strip / hero / panel grid, exactly one viewport tall */
+/* The slide: strip / hero / panel grid, exactly one viewport tall. A faint
+   blue cast up top gives the projector frame some depth. */
 body.pp-meeting-fullscreen #pp-meeting-container {
     height: 100vh;
     display: grid;
     grid-template-rows: auto auto minmax(0, 1fr);
     gap: 12px;
-    padding: 12px 20px 16px;
-    background: #f4f5f8;
+    padding: 12px 22px 16px;
+    background:
+        radial-gradient(1100px 500px at 18% -12%, rgba(59, 130, 246, 0.10), transparent 60%),
+        radial-gradient(900px 460px at 92% -18%, rgba(124, 58, 237, 0.07), transparent 55%),
+        #0e1117;
+    color: #c3c9d6;
 }
 
-/* Top strip */
+/* Slide entrance: content rises in, staggered — reads as a presentation cut */
+#pp-meeting-container > * {
+    animation: pp-slide-in 0.28s ease-out backwards;
+}
+
+#pp-meeting-container > *:nth-child(2) { animation-delay: 0.05s; }
+#pp-meeting-container > *:nth-child(3) { animation-delay: 0.10s; }
+
+@keyframes pp-slide-in {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: none; }
+}
+
+/* Top strip — quiet chrome, ghost buttons */
 .pp-strip {
     display: flex;
     align-items: center;
@@ -440,7 +477,7 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 .pp-strip-count {
     font-weight: 700;
     font-size: 1.05rem;
-    color: #1f2530;
+    color: #f2f4f8;
     min-width: 64px;
     text-align: center;
     font-variant-numeric: tabular-nums;
@@ -453,11 +490,11 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     text-overflow: ellipsis;
     white-space: nowrap;
     text-align: center;
-    font-size: 0.85rem;
+    font-size: 0.82rem;
     font-weight: 700;
-    letter-spacing: 0.14em;
+    letter-spacing: 0.22em;
     text-transform: uppercase;
-    color: #8a919c;
+    color: #5c6572;
 }
 
 .pp-strip-actions {
@@ -467,34 +504,66 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 }
 
 .pp-strip-hint {
-    color: #a5adb8;
+    color: #6f7889;
     font-size: 0.78rem;
     margin-right: 6px;
 }
 
 .pp-strip-btn {
-    border: 1px solid #d8dde3;
-    background: #ffffff;
-    color: #3a4150;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: #c3c9d6;
 }
 
 .pp-strip-btn:hover:not(:disabled) {
-    background: #eef1f5;
-    color: #1f2530;
+    background: rgba(255, 255, 255, 0.10);
+    border-color: rgba(255, 255, 255, 0.22);
+    color: #f2f4f8;
 }
 
 .pp-strip-btn:disabled {
-    opacity: 0.35;
+    opacity: 0.3;
 }
 
-/* Hero band: compact variant of the verdict card. Scoped overrides only —
-   the shared classes still style portfolio/detail. Explicit max-height so a
-   long title can never steal panel space. */
+/* --------------------------------------------------------------------------
+   Hero band — the apex of the slide. Dark card washed with the verdict color,
+   glowing edge, one dominant figure (Öngörülen Bitiş).
+   -------------------------------------------------------------------------- */
+
 .pp-hero {
     margin-bottom: 0;
     max-height: 224px;
     overflow: hidden;
-    border-radius: 12px;
+    border-radius: 14px;
+}
+
+body.pp-meeting-fullscreen .pp-hero.pp-verdict-card {
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-left-width: 5px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+}
+
+body.pp-meeting-fullscreen .pp-hero.pp-verdict-green {
+    border-left-color: #10b981;
+    background: linear-gradient(105deg, rgba(16, 185, 129, 0.16), #161b24 52%);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), inset 0 0 60px rgba(16, 185, 129, 0.05);
+}
+
+body.pp-meeting-fullscreen .pp-hero.pp-verdict-red {
+    border-left-color: #ef4444;
+    background: linear-gradient(105deg, rgba(239, 68, 68, 0.18), #161b24 52%);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), inset 0 0 60px rgba(239, 68, 68, 0.06);
+}
+
+body.pp-meeting-fullscreen .pp-hero.pp-verdict-orange {
+    border-left-color: #f97316;
+    background: linear-gradient(105deg, rgba(249, 115, 22, 0.16), #161b24 52%);
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45), inset 0 0 60px rgba(249, 115, 22, 0.05);
+}
+
+body.pp-meeting-fullscreen .pp-hero.pp-verdict-grey {
+    border-left-color: #4a5261;
+    background: #161b24;
 }
 
 .pp-hero .card-body {
@@ -503,10 +572,10 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 
 .pp-hero-top {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     justify-content: space-between;
     gap: 14px;
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 
 .pp-hero-id {
@@ -518,19 +587,21 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     overflow: hidden;
 }
 
-.pp-hero-id .pp-verdict-jobno {
-    font-size: 1.6rem;
+body.pp-meeting-fullscreen .pp-hero-id .pp-verdict-jobno {
+    font-size: 1.65rem;
+    color: #f2f4f8;
+    letter-spacing: 0.01em;
 }
 
 .pp-hero-title {
     font-size: 1.05rem;
-    color: #444;
+    color: #c3c9d6;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .pp-hero-customer {
-    color: #8a919c;
+    color: #8b93a3;
     font-size: 0.85rem;
     flex-shrink: 0;
 }
@@ -542,32 +613,134 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     flex-shrink: 0;
 }
 
+/* Both hero pills share one size so they read as a matched pair */
+.pp-hero-pills .pp-verdict-headline {
+    font-size: 0.92rem;
+    padding: 8px 16px;
+    line-height: 1.2;
+}
+
 .pp-fin-pill {
-    font-size: 0.82rem;
-    padding: 6px 14px;
     cursor: help;
 }
 
+/* Verdict + financial pills as glass chips that glow on the dark card */
+body.pp-meeting-fullscreen .pp-vh-green {
+    background: rgba(16, 185, 129, 0.14);
+    color: #34d399;
+    border-color: rgba(16, 185, 129, 0.45);
+    box-shadow: none;
+}
+
+body.pp-meeting-fullscreen .pp-vh-red {
+    background: rgba(239, 68, 68, 0.16);
+    color: #f87171;
+    border-color: rgba(239, 68, 68, 0.55);
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.25);
+}
+
+body.pp-meeting-fullscreen .pp-vh-orange {
+    background: rgba(249, 115, 22, 0.14);
+    color: #fb923c;
+    border-color: rgba(249, 115, 22, 0.45);
+    box-shadow: none;
+}
+
+body.pp-meeting-fullscreen .pp-vh-grey {
+    background: rgba(255, 255, 255, 0.06);
+    color: #9aa3b2;
+    border-color: rgba(255, 255, 255, 0.14);
+    box-shadow: none;
+}
+
+/* Figures: Öngörülen Bitiş is THE number of the slide. Values sit on one
+   shared baseline (last-baseline alignment); İlerleme anchors the right edge
+   with its meter inline beside the percentage, so no column outgrows the row. */
 .pp-hero .pp-verdict-figures {
-    gap: 22px;
+    gap: 34px;
     margin-bottom: 0;
+    align-items: last baseline;
+    width: 100%;
 }
 
-.pp-hero .pp-fig-value {
-    font-size: 1.3rem;
+.pp-hero .pp-fig-progress {
+    margin-left: auto;
 }
 
-/* Keep headroom for the Bugün label (drawn at top:-16px over the track) */
+.pp-fig-value-line {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.pp-hero .pp-fig-progressbar {
+    width: 130px;
+    height: 8px;
+    margin: 0;
+    border-radius: 4px;
+    overflow: hidden;
+    display: inline-block;
+}
+
+.pp-hero .pp-fig-progressfill {
+    display: block;
+    height: 100%;
+}
+
+body.pp-meeting-fullscreen .pp-hero .pp-fig label {
+    color: #7c8595;
+}
+
+body.pp-meeting-fullscreen .pp-hero .pp-fig-value {
+    font-size: 1.25rem;
+    color: #e6eaf1;
+}
+
+body.pp-meeting-fullscreen .pp-hero .pp-fig-primary .pp-fig-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: #f2f4f8;
+}
+
+body.pp-meeting-fullscreen .pp-hero .pp-fig-value.pp-fig-late { color: #f87171; }
+body.pp-meeting-fullscreen .pp-hero .pp-fig-value.pp-fig-early { color: #34d399; }
+
+body.pp-meeting-fullscreen .pp-hero .pp-fig-arrow {
+    color: #4a5261;
+    font-size: 1rem;
+    padding-bottom: 0;
+    align-self: last baseline;
+}
+
+body.pp-meeting-fullscreen .pp-hero .pp-fig-progressbar {
+    background: #262d3a;
+}
+
+/* Timeline on dark: brighter fills, white today-tick */
 .pp-hero .pp-timeline {
-    margin: 18px 2px 0;
+    margin: 16px 2px 0;
 }
 
 .pp-hero .pp-tl-labels {
-    height: 34px;
-    margin-top: 6px;
+    height: 24px;
+    margin-top: 4px;
 }
 
-/* Panel grid: 12 columns × 2 rows, cells clip their own overflow */
+body.pp-meeting-fullscreen .pp-hero .pp-tl-track { background: #232a37; }
+body.pp-meeting-fullscreen .pp-hero .pp-tl-plan { background: #3d5f94; }
+body.pp-meeting-fullscreen .pp-hero .pp-tl-slack { background: rgba(52, 211, 153, 0.45); }
+body.pp-meeting-fullscreen .pp-hero .pp-tl-today { background: #f2f4f8; }
+body.pp-meeting-fullscreen .pp-hero .pp-tl-today span { color: #f2f4f8; }
+body.pp-meeting-fullscreen .pp-hero .pp-tl-marker { border-color: #161b24; }
+body.pp-meeting-fullscreen .pp-hero .pp-tl-target { background: #60a5fa; }
+body.pp-meeting-fullscreen .pp-hero .pp-tl-projected { background: #a78bfa; }
+body.pp-meeting-fullscreen .pp-hero .pp-tl-label-target { color: #60a5fa; }
+body.pp-meeting-fullscreen .pp-hero .pp-tl-label-projected { color: #a78bfa; }
+
+/* --------------------------------------------------------------------------
+   Panel grid — dark cards one step below the hero
+   -------------------------------------------------------------------------- */
+
 .pp-meeting-grid {
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
@@ -581,14 +754,14 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 .pp-span-4 { grid-column: span 4; }
 .pp-span-3 { grid-column: span 3; }
 
-.pp-panel {
+body.pp-meeting-fullscreen .pp-panel {
     min-height: 0;
     overflow: hidden;
     margin-bottom: 0;
-    border: 1px solid #e6e9ee;
-    border-radius: 12px;
-    box-shadow: 0 1px 4px rgba(31, 37, 48, 0.05);
-    background: #ffffff;
+    background: #161b24;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    border-radius: 14px;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.30);
 }
 
 .pp-panel .card-body {
@@ -598,28 +771,267 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     flex-direction: column;
 }
 
-/* The only accent strip: quality problems must pop, so nothing else glows */
-.pp-panel-alert {
+/* The only accent: quality problems glow red so they pop above everything */
+body.pp-meeting-fullscreen .pp-panel-alert {
     border-top: 3px solid #ef4444;
+    box-shadow: 0 6px 24px rgba(0, 0, 0, 0.30), 0 0 28px rgba(239, 68, 68, 0.14);
 }
 
 .pp-panel-title {
-    font-size: 0.78rem;
+    display: flex;
+    align-items: center;
+    font-size: 0.76rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: #8a919c;
+    letter-spacing: 0.10em;
+    color: #7c8595;
     margin-bottom: 10px;
     padding-bottom: 8px;
-    border-bottom: 1px solid #f0f2f5;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
     flex-shrink: 0;
 }
 
-.pp-panel-title i {
-    color: #b6bcc6;
+.pp-link-hint {
+    margin-left: auto;
+    color: #3d4553;
+    font-size: 0.68rem;
+    transition: color 0.15s ease;
 }
 
-/* Big number + label row */
+/* Everything on the slide is a door: hero and panels open in-slide modals */
+body.pp-meeting-fullscreen .pp-hero {
+    cursor: pointer;
+    transition: border-color 0.15s ease, transform 0.12s ease;
+}
+
+body.pp-meeting-fullscreen .pp-hero:hover {
+    border-color: rgba(255, 255, 255, 0.20);
+}
+
+body.pp-meeting-fullscreen .pp-panel[data-modal] {
+    cursor: pointer;
+    transition: transform 0.12s ease, border-color 0.15s ease;
+}
+
+body.pp-meeting-fullscreen .pp-panel[data-modal]:hover {
+    transform: translateY(-2px);
+    border-color: rgba(255, 255, 255, 0.18);
+}
+
+body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
+    color: #8b93a3;
+}
+
+/* --------------------------------------------------------------------------
+   In-slide detail modal (dark)
+   -------------------------------------------------------------------------- */
+
+.pp-modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 3000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(5, 8, 14, 0.72);
+    backdrop-filter: blur(3px);
+    padding: 4vh 4vw;
+}
+
+.pp-modal {
+    width: min(880px, 94vw);
+    max-height: 86vh;
+    display: flex;
+    flex-direction: column;
+    background: #161b24;
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 16px;
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+    color: #c3c9d6;
+    animation: pp-modal-in 0.18s ease-out;
+}
+
+@keyframes pp-modal-in {
+    from { opacity: 0; transform: translateY(8px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+}
+
+.pp-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 20px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    flex-shrink: 0;
+}
+
+.pp-modal-title {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #f2f4f8;
+}
+
+.pp-modal-job {
+    color: #8b93a3;
+    font-weight: 600;
+}
+
+.pp-modal-close {
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: rgba(255, 255, 255, 0.04);
+    color: #c3c9d6;
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    line-height: 1;
+}
+
+.pp-modal-close:hover {
+    background: rgba(255, 255, 255, 0.10);
+    color: #f2f4f8;
+}
+
+.pp-modal-body {
+    padding: 14px 20px 18px;
+    overflow-y: auto;
+    min-height: 80px;
+}
+
+.pp-modal-loading {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    color: #8b93a3;
+    padding: 20px 0;
+}
+
+/* Stat chips row at the top of a modal */
+.pp-modal-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 22px;
+    font-size: 0.9rem;
+    color: #8b93a3;
+    margin-bottom: 12px;
+}
+
+.pp-modal-stats strong {
+    color: #f2f4f8;
+}
+
+.pp-modal-note {
+    font-size: 0.82rem;
+    color: #7c8595;
+    margin: 10px 0;
+}
+
+.pp-modal-section {
+    font-size: 0.85rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #aeb6c4;
+    margin: 16px 0 8px;
+}
+
+.pp-modal-section:first-child {
+    margin-top: 0;
+}
+
+/* Modal data table */
+.pp-modal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.pp-modal-table th {
+    text-align: left;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #7c8595;
+    padding: 6px 10px 6px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+    white-space: nowrap;
+}
+
+.pp-modal-table .pp-th-num {
+    text-align: right;
+}
+
+.pp-modal-table td {
+    padding: 7px 10px 7px 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    color: #c3c9d6;
+    vertical-align: middle;
+}
+
+.pp-modal-table td strong {
+    color: #f2f4f8;
+}
+
+.pp-modal-table .pp-td-main {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pp-modal-table .pp-td-muted {
+    color: #8b93a3;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.pp-modal-table .pp-td-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.pp-modal-table tr:last-child td {
+    border-bottom: none;
+}
+
+/* Job-order group headers inside the plan modal (subtree jobs) */
+.pp-modal-table .pp-modal-group td {
+    background: rgba(255, 255, 255, 0.035);
+    border-top: 2px solid rgba(255, 255, 255, 0.10);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    font-weight: 700;
+    color: #f2f4f8;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 0;
+}
+
+.pp-modal-group-title {
+    color: #aeb6c4;
+    font-weight: 500;
+    margin-left: 6px;
+}
+
+.pp-modal-group-meta {
+    color: #7c8595;
+    font-weight: 600;
+    font-size: 0.82rem;
+    margin-left: 8px;
+}
+
+.pp-panel-title i {
+    color: #4a5261;
+    margin-right: 2px;
+}
+
+/* Big number + label row — proportional figures at display size */
 .pp-panel-hero {
     display: flex;
     align-items: baseline;
@@ -630,26 +1042,37 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 }
 
 .pp-panel-big {
-    font-size: 2.3rem;
-    font-weight: 700;
+    font-size: 2.35rem;
+    font-weight: 800;
     line-height: 1.05;
-    color: #1f2530;
-    font-variant-numeric: tabular-nums;
+    letter-spacing: -0.01em;
+    color: #f2f4f8;
 }
 
 .pp-panel-big-label {
     font-size: 0.95rem;
     font-weight: 600;
-    color: #59616d;
+    color: #8b93a3;
+}
+
+/* Denominator riding a big figure: "97/211" */
+.pp-panel-big-dim {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #8b93a3;
 }
 
 .pp-panel-sub {
     font-size: 0.92rem;
-    color: #3a4150;
+    color: #aeb6c4;
     margin-top: 2px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+.pp-panel-sub strong {
+    color: #e6eaf1;
 }
 
 .pp-panel-dots {
@@ -659,9 +1082,18 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     margin-left: 4px;
 }
 
-.pp-num-red { color: #dc2626; }
-.pp-num-green { color: #059669; }
-.pp-num-orange { color: #ea580c; }
+/* Status inks tuned for the dark surface (orange stands in for warning —
+   yellow is banned) */
+body.pp-meeting-fullscreen .pp-num-red { color: #f87171; }
+body.pp-meeting-fullscreen .pp-num-green { color: #34d399; }
+body.pp-meeting-fullscreen .pp-num-orange { color: #fb923c; }
+body.pp-meeting-fullscreen .pp-text-orange { color: #fb923c; }
+body.pp-meeting-fullscreen .pp-panel .text-muted,
+body.pp-meeting-fullscreen .pp-hero .text-muted { color: #7c8595 !important; }
+body.pp-meeting-fullscreen .pp-dot-red { color: #f87171; }
+body.pp-meeting-fullscreen .pp-dot-orange { color: #fb923c; }
+body.pp-meeting-fullscreen .pp-dot-grey { color: #9aa3b2; }
+body.pp-meeting-fullscreen .pp-dot-grey::before { color: #6b7484; }
 
 /* List line: content left, status right — single line, always */
 .pp-line {
@@ -670,8 +1102,9 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     justify-content: space-between;
     gap: 10px;
     padding: 5px 0;
-    border-top: 1px solid #f0f2f5;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
     font-size: 0.92rem;
+    color: #c3c9d6;
 }
 
 .pp-line-main {
@@ -681,8 +1114,12 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     white-space: nowrap;
 }
 
+.pp-line-main strong {
+    color: #e6eaf1;
+}
+
 .pp-line-muted {
-    opacity: 0.6;
+    opacity: 0.55;
 }
 
 .pp-res-right {
@@ -696,6 +1133,7 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     font-weight: 700;
     min-width: 44px;
     text-align: right;
+    color: #e6eaf1;
     font-variant-numeric: tabular-nums;
 }
 
@@ -708,27 +1146,34 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 .pp-hours-strip {
     margin-top: auto;
     padding-top: 8px;
-    border-top: 1px solid #f0f2f5;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
     font-size: 0.88rem;
-    color: #59616d;
+    color: #8b93a3;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
-.pp-hours-strip i {
-    color: #b6bcc6;
+.pp-hours-strip strong {
+    color: #e6eaf1;
 }
 
-/* Mini progress bar */
+.pp-hours-strip i {
+    color: #4a5261;
+}
+
+body.pp-meeting-fullscreen .pp-meta-sep { color: #4a5261; }
+
+/* Mini progress bar: track is a darker step of the fill's own hue, so the
+   whole bar reads as one meter (blue-on-blue, green-on-green) */
 .pp-mini-bar {
     width: 110px;
     height: 8px;
-    background: #e7e9ee;
     border-radius: 4px;
     overflow: hidden;
     display: inline-block;
     vertical-align: middle;
+    background: #262d3a;
 }
 
 .pp-mini-fill {
@@ -738,6 +1183,10 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 
 .pp-mini-blue { background: #3b82f6; }
 .pp-mini-green { background: #10b981; }
+
+body.pp-meeting-fullscreen .pp-mini-bar { background: #223049; }
+body.pp-meeting-fullscreen .pp-mini-fill.pp-mini-blue { background: #4f8ef7; }
+body.pp-meeting-fullscreen .pp-mini-fill.pp-mini-green { background: #22c58b; }
 
 /* Revisions panel: two columns, everything single-line */
 .pp-rev-cols {
@@ -752,16 +1201,16 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 }
 
 .pp-rev-heading {
-    font-size: 0.75rem;
+    font-size: 0.73rem;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.05em;
-    color: #8a919c;
+    letter-spacing: 0.06em;
+    color: #7c8595;
     margin-bottom: 4px;
 }
 
 .pp-rev-cols .pp-panel-big {
-    font-size: 1.6rem;
+    font-size: 1.55rem;
 }
 
 /* Files panel: group-count chips + newest files across groups */
@@ -774,16 +1223,21 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 }
 
 .pp-chip {
-    background: #f1f3f6;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.07);
     border-radius: 999px;
     padding: 3px 10px;
     font-size: 0.8rem;
-    color: #3a4150;
+    color: #aeb6c4;
     white-space: nowrap;
 }
 
+.pp-chip strong {
+    color: #e6eaf1;
+}
+
 .pp-chip-muted {
-    color: #8a919c;
+    color: #7c8595;
 }
 
 .pp-file-line {
@@ -792,8 +1246,17 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     justify-content: space-between;
     gap: 10px;
     padding: 4px 0;
-    border-top: 1px solid #f0f2f5;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
     font-size: 0.88rem;
+}
+
+.pp-file-line a {
+    color: #60a5fa;
+    text-decoration: none;
+}
+
+.pp-file-line a:hover {
+    text-decoration: underline;
 }
 
 .pp-file-line a,
@@ -805,7 +1268,7 @@ body.pp-meeting-fullscreen #pp-meeting-container {
 }
 
 .pp-file-src {
-    color: #8a919c;
+    color: #7c8595;
     font-size: 0.75rem;
     flex-shrink: 0;
 }
@@ -818,14 +1281,14 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     align-items: center;
     justify-content: center;
     gap: 8px;
-    color: #8a919c;
+    color: #8b93a3;
 }
 
-/* Loading skeleton */
+/* Loading skeleton, dark shimmer */
 .pp-skeleton {
     height: 12px;
     border-radius: 6px;
-    background: linear-gradient(90deg, #eceef2 25%, #f6f7f9 50%, #eceef2 75%);
+    background: linear-gradient(90deg, #1c2230 25%, #242c3d 50%, #1c2230 75%);
     background-size: 200% 100%;
     animation: pp-shimmer 1.2s infinite;
     margin-bottom: 10px;
@@ -860,12 +1323,16 @@ body.pp-meeting-fullscreen #pp-meeting-container {
         display: none;
     }
 
-    .pp-hero .pp-fig-value {
-        font-size: 1.1rem;
+    body.pp-meeting-fullscreen .pp-hero .pp-fig-value {
+        font-size: 1.05rem;
+    }
+
+    body.pp-meeting-fullscreen .pp-hero .pp-fig-primary .pp-fig-value {
+        font-size: 1.45rem;
     }
 
     .pp-hero .pp-tl-labels {
-        height: 28px;
+        height: 22px;
     }
 
     .pp-meeting-grid {
@@ -886,7 +1353,7 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     }
 
     .pp-rev-cols .pp-panel-big {
-        font-size: 1.35rem;
+        font-size: 1.3rem;
     }
 
     .pp-line,

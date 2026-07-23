@@ -18,7 +18,8 @@ import {
     getJobOrderProductionPlan,
     getJobOrderDropdown,
     getProductionPlanOverview,
-    getJobOrderMeetingBrief
+    getJobOrderMeetingBrief,
+    getMeetingBriefSection
 } from '../../apis/projects/jobOrders.js';
 
 // Module state
@@ -51,7 +52,11 @@ let meetingIndex = 0;
 let meetingBound = false;               // meeting listeners bound once
 let meetingWheelAt = 0;                 // wheel debounce timestamp
 const meetingBriefCache = new Map();    // job_no -> meeting brief payload
-const meetingBriefLoading = new Set();  // job_nos with an in-flight fetch
+const meetingBriefPromises = new Map(); // job_no -> in-flight fetch promise
+const meetingPlanCache = new Map();     // job_no -> production plan (hero modal)
+const meetingSectionCache = new Map();  // `${job_no}:${section}` -> detail payload
+let meetingModalOpen = false;
+let meetingModalContext = null;         // {jobNo, kind} of the open modal
 
 const PORTFOLIO_STATUS_OPTIONS = [
     { value: 'active', text: 'Aktif' },
@@ -141,6 +146,7 @@ function setModeChrome(mode) {
     // toolbar and page decor via CSS, and freezes page scroll. Toggling it
     // here covers every exit path (Esc, Çık, browser Back, direct URL).
     document.body.classList.toggle('pp-meeting-fullscreen', mode === 'meeting');
+    if (mode !== 'meeting') closeMeetingModal();
     if (meetingContainer) meetingContainer.style.display = mode === 'meeting' ? '' : 'none';
     if (verdictContainer) verdictContainer.style.display = mode === 'meeting' ? 'none' : '';
 }
@@ -407,14 +413,29 @@ function verdictTimelineHtml(forecast, summary, todayIso) {
     if (target) markers.push(`<div class="pp-tl-marker pp-tl-target" style="left: ${pos(target)}%"></div>`);
     if (projected) markers.push(`<div class="pp-tl-marker pp-tl-projected" style="left: ${pos(projected)}%"></div>`);
 
+    // Labels live on ONE row — the hero clips vertically, so there is no
+    // second row to fall back to. When the two dates sit close enough to
+    // collide (centre-anchored labels are ~150px wide ≈ 14% of the track),
+    // they merge into a single combined label at the midpoint; the wider
+    // label needs a wider edge clamp so it can't slide out of the card.
+    const collide = target && projected
+        && Math.abs(clampLabel(target) - clampLabel(projected)) < 14;
     const labels = [];
-    if (target) {
-        labels.push(`<div class="pp-tl-label pp-tl-label-target" style="left: ${clampLabel(target)}%">
-            <i class="fas fa-bullseye"></i> Hedef · ${shortDate(target)}</div>`);
-    }
-    if (projected) {
-        labels.push(`<div class="pp-tl-label pp-tl-label-projected" style="left: ${clampLabel(projected)}%">
-            <i class="fas fa-location-arrow"></i> Öngörülen · ${shortDate(projected)}</div>`);
+    if (collide) {
+        const mid = Math.min(85, Math.max(15,
+            (Number(clampLabel(target)) + Number(clampLabel(projected))) / 2));
+        labels.push(`<div class="pp-tl-label pp-tl-label-combined" style="left: ${mid.toFixed(2)}%">
+            <span class="pp-tl-label-target"><i class="fas fa-bullseye"></i> Hedef · ${shortDate(target)}</span>
+            <span class="pp-tl-label-projected"><i class="fas fa-location-arrow"></i> Öngörülen · ${shortDate(projected)}</span></div>`);
+    } else {
+        if (target) {
+            labels.push(`<div class="pp-tl-label pp-tl-label-target" style="left: ${clampLabel(target)}%">
+                <i class="fas fa-bullseye"></i> Hedef · ${shortDate(target)}</div>`);
+        }
+        if (projected) {
+            labels.push(`<div class="pp-tl-label pp-tl-label-projected" style="left: ${clampLabel(projected)}%">
+                <i class="fas fa-location-arrow"></i> Öngörülen · ${shortDate(projected)}</div>`);
+        }
     }
 
     return `
@@ -690,25 +711,37 @@ function bindMeetingControls() {
     const container = document.getElementById('pp-meeting-container');
     if (container) {
         container.addEventListener('click', (e) => {
+            if (e.target.closest('a')) return;  // real links (files) stay native
             const control = e.target.closest('[data-action]');
-            if (!control) return;
-            const action = control.dataset.action;
-            if (action === 'prev') meetingStep(-1);
-            else if (action === 'next') meetingStep(1);
-            else if (action === 'exit') exitMeeting();
-            else if (action === 'detail') {
-                const item = meetingItems[meetingIndex];
-                if (!item) return;
-                window.history.pushState(null, '', `${window.location.pathname}?job_no=${encodeURIComponent(item.job_no)}`);
-                handleRoute();
+            if (control) {
+                const action = control.dataset.action;
+                if (action === 'prev') meetingStep(-1);
+                else if (action === 'next') meetingStep(1);
+                else if (action === 'exit') exitMeeting();
+                else if (action === 'detail') {
+                    const item = meetingItems[meetingIndex];
+                    if (!item) return;
+                    window.history.pushState(null, '', `${window.location.pathname}?job_no=${encodeURIComponent(item.job_no)}`);
+                    handleRoute();
+                }
+                return;
             }
+            // Section drill-down: an in-slide modal — the meeting never leaves
+            // the screen.
+            const trigger = e.target.closest('[data-modal]');
+            if (trigger) openSectionModal(trigger.dataset.modal);
         });
     }
 
-    // Bound once, guarded by mode — inert outside the meeting.
+    // Bound once, guarded by mode — inert outside the meeting. An open modal
+    // captures Esc (close it, not the meeting) and mutes slide navigation.
     document.addEventListener('keydown', (e) => {
         if (currentMode !== 'meeting') return;
         if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+        if (meetingModalOpen) {
+            if (e.key === 'Escape') { e.preventDefault(); closeMeetingModal(); }
+            return;
+        }
         if (e.key === 'ArrowLeft') { e.preventDefault(); meetingStep(-1); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); meetingStep(1); }
         else if (e.key === 'Escape') { e.preventDefault(); exitMeeting(); }
@@ -717,9 +750,10 @@ function bindMeetingControls() {
     // The page cannot scroll in fullscreen, so a decisive wheel gesture turns
     // the slide. The deltaY threshold keeps trackpad inertia tails from
     // double-stepping (tail deltas decay below it); line-mode mice normalize
-    // roughly to pixels first.
+    // roughly to pixels first. With a modal open the wheel belongs to the
+    // modal's own scroll area.
     window.addEventListener('wheel', (e) => {
-        if (currentMode !== 'meeting') return;
+        if (currentMode !== 'meeting' || meetingModalOpen) return;
         const delta = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY;
         if (Math.abs(delta) < 30) return;
         const now = Date.now();
@@ -727,6 +761,416 @@ function bindMeetingControls() {
         meetingWheelAt = now;
         meetingStep(delta > 0 ? 1 : -1);
     }, { passive: true });
+}
+
+// ---------------------------------------------------------------------------
+// Meeting detail modals — every section opens in place
+// ---------------------------------------------------------------------------
+
+function ensureMeetingModalHost() {
+    let host = document.getElementById('pp-meeting-modal');
+    if (host) return host;
+    host = document.createElement('div');
+    host.id = 'pp-meeting-modal';
+    host.className = 'pp-modal-backdrop';
+    host.style.display = 'none';
+    host.innerHTML = `
+        <div class="pp-modal" role="dialog" aria-modal="true">
+            <div class="pp-modal-head">
+                <span class="pp-modal-title" id="pp-modal-title"></span>
+                <button type="button" class="pp-modal-close" data-modal-close aria-label="Kapat">
+                    <i class="fas fa-xmark"></i>
+                </button>
+            </div>
+            <div class="pp-modal-body" id="pp-modal-body"></div>
+        </div>`;
+    host.addEventListener('click', (e) => {
+        if (e.target === host || e.target.closest('[data-modal-close]')) closeMeetingModal();
+    });
+    document.body.appendChild(host);
+    return host;
+}
+
+function openMeetingModal(title, bodyHtml, context = null) {
+    const host = ensureMeetingModalHost();
+    host.querySelector('#pp-modal-title').innerHTML = title;
+    host.querySelector('#pp-modal-body').innerHTML = bodyHtml;
+    host.style.display = 'flex';
+    meetingModalOpen = true;
+    meetingModalContext = context;
+}
+
+function closeMeetingModal() {
+    const host = document.getElementById('pp-meeting-modal');
+    if (host) host.style.display = 'none';
+    meetingModalOpen = false;
+    meetingModalContext = null;
+}
+
+const MODAL_LOADING_HTML =
+    '<div class="pp-modal-loading"><div class="spinner-border spinner-border-sm"></div> Yükleniyor...</div>';
+
+const SECTION_MODAL_TITLES = {
+    machining: 'Talaşlı İmalat Detayı',
+    cutting: 'CNC Kesim Detayı',
+    quality: 'Kalite · NCR Detayı',
+    procurement: 'Satın Alma Detayı',
+    revisions: 'Revizyon Detayı',
+};
+
+// Sections whose detail list is fetched only when the modal opens — the main
+// brief carries aggregates, not item lists.
+const SECTION_MODAL_BUILDERS = {
+    machining: machiningModalHtml,
+    cutting: cuttingModalHtml,
+    quality: qualityModalHtml,
+    procurement: procurementModalHtml,
+    revisions: revisionsModalHtml,
+};
+
+async function openSectionModal(kind) {
+    const item = meetingItems[meetingIndex];
+    if (!item) return;
+    if (kind === 'plan') { openPlanModal(item); return; }
+    const brief = meetingBriefCache.get(item.job_no);
+    if (!brief) return;
+
+    // Welding renders straight from the brief (its resources already drive
+    // the panel); everything else fetches its detail on demand.
+    if (kind === 'welding') {
+        const built = weldingModalHtml(brief);
+        openMeetingModal(
+            `${built.title} <span class="pp-modal-job">· ${escapeHtml(item.job_no)}</span>`,
+            built.body, { jobNo: item.job_no, kind });
+        return;
+    }
+
+    const build = SECTION_MODAL_BUILDERS[kind];
+    if (!build) return;
+    openMeetingModal(
+        `${SECTION_MODAL_TITLES[kind]} <span class="pp-modal-job">· ${escapeHtml(item.job_no)}</span>`,
+        MODAL_LOADING_HTML, { jobNo: item.job_no, kind });
+
+    const cacheKey = `${item.job_no}:${kind}`;
+    let detail = meetingSectionCache.get(cacheKey);
+    if (!detail) {
+        try {
+            detail = await getMeetingBriefSection(item.job_no, kind);
+            meetingSectionCache.set(cacheKey, detail);
+        } catch (error) {
+            console.error(`Section ${kind} failed for ${item.job_no}:`, error);
+            if (meetingModalOpen && meetingModalContext
+                && meetingModalContext.jobNo === item.job_no && meetingModalContext.kind === kind) {
+                document.getElementById('pp-modal-body').innerHTML =
+                    '<div class="text-danger pp-empty">Detay yüklenemedi.</div>';
+            }
+            return;
+        }
+    }
+    // Only render if this modal is still the one the user is looking at.
+    if (meetingModalOpen && meetingModalContext
+        && meetingModalContext.jobNo === item.job_no && meetingModalContext.kind === kind) {
+        document.getElementById('pp-modal-body').innerHTML = build(brief, detail).body;
+    }
+}
+
+// Headers are strings, or {label, num: true} for right-aligned numeric
+// columns — the header must sit directly above its (right-aligned) data.
+function modalTableHtml(headers, rows) {
+    if (!rows.length) return '<div class="text-muted pp-empty">Kayıt yok.</div>';
+    const ths = headers.map(h => typeof h === 'object'
+        ? `<th${h.num ? ' class="pp-th-num"' : ''}>${h.label}</th>`
+        : `<th>${h}</th>`).join('');
+    return `
+        <table class="pp-modal-table">
+            <thead><tr>${ths}</tr></thead>
+            <tbody>${rows.join('')}</tbody>
+        </table>`;
+}
+
+// 2a — the "why": per-task plan with variances and pushers, fetched on demand.
+async function openPlanModal(item) {
+    openMeetingModal(
+        `Plan Detayı <span class="pp-modal-job">· ${escapeHtml(item.job_no)}</span>`,
+        MODAL_LOADING_HTML, { jobNo: item.job_no, kind: 'plan' });
+    const stillCurrent = () => meetingModalOpen && meetingModalContext
+        && meetingModalContext.jobNo === item.job_no && meetingModalContext.kind === 'plan';
+    let planData = meetingPlanCache.get(item.job_no);
+    if (!planData) {
+        try {
+            planData = await getJobOrderProductionPlan(item.job_no);
+            meetingPlanCache.set(item.job_no, planData);
+        } catch (error) {
+            console.error(`Plan fetch failed for ${item.job_no}:`, error);
+            if (stillCurrent()) {
+                document.getElementById('pp-modal-body').innerHTML =
+                    '<div class="text-danger pp-empty">Plan yüklenemedi.</div>';
+            }
+            return;
+        }
+    }
+    if (!stillCurrent()) return;
+
+    const byId = new Map(planData.tasks.map(t => [t.id, t]));
+    const nodeByJob = new Map((planData.nodes || []).map(n => [n.job_no, n]));
+    const label = (task) => {
+        const node = nodeByJob.get(task.job_no);
+        if (task.parent !== null) {
+            const parent = byId.get(task.parent);
+            const parentLabel = parent
+                ? (parent.title && node && parent.title !== node.title
+                    ? parent.title : parent.department_display)
+                : null;
+            return parentLabel ? `${parentLabel} - ${task.title || ''}` : (task.title || '');
+        }
+        const hasCustomTitle = task.title && node && task.title !== node.title;
+        return hasCustomTitle ? `${task.department_display} - ${task.title}` : task.department_display;
+    };
+
+    const SEVERITY_ORDER = {
+        at_risk: 0, overdue: 0, completed_late: 0,
+        in_progress: 1, not_started: 2, unplanned: 3,
+        completed_on_time: 4, excluded: 5,
+    };
+    const magnitude = (s) => Math.abs(
+        s.projected_variance_wd ?? s.end_variance_wd ?? s.overdue_wd ?? 0);
+    const severitySort = (a, b) =>
+        (SEVERITY_ORDER[a.schedule.classification] ?? 9) - (SEVERITY_ORDER[b.schedule.classification] ?? 9)
+        || magnitude(b.schedule) - magnitude(a.schedule);
+
+    const taskRow = (t) => {
+        const s = t.schedule;
+        const badge = CLASSIFICATION_BADGES[s.classification] || CLASSIFICATION_BADGES.not_started;
+        const end = s.projected_end_date || s.actual_end_date;
+        const variance = s.projected_variance_wd ?? s.end_variance_wd ?? s.overdue_wd;
+        const varianceHtml = variance === null || variance === undefined ? ''
+            : (variance > 0
+                ? ` <span class="pp-num-red">(+${formatWd(variance)})</span>`
+                : (variance < 0 ? ` <span class="pp-num-green">(${formatWd(variance)} erken)</span>` : ''));
+        const pusher = s.pushed_by && byId.get(s.pushed_by);
+        return `
+            <tr>
+                <td class="pp-td-main" title="${escapeHtml(label(t))}">${escapeHtml(label(t))}</td>
+                <td><span class="status-badge ${badge.badgeClass}">${badge.label}</span></td>
+                <td>${fmtShortDate(t.target_completion_date)}</td>
+                <td>${fmtShortDate(end)}${varianceHtml}</td>
+                <td class="pp-td-muted" title="${pusher ? escapeHtml(label(pusher)) : ''}">${pusher ? escapeHtml(label(pusher)) : '—'}</td>
+            </tr>`;
+    };
+
+    // Subtrees group by job order in tree order (the endpoint's nodes array
+    // is DFS), tasks severity-sorted within their group — a lone job order
+    // renders as a flat list with no group chrome.
+    const tasksByJob = new Map();
+    for (const t of visibleOf(planData.tasks)) {
+        if (!tasksByJob.has(t.job_no)) tasksByJob.set(t.job_no, []);
+        tasksByJob.get(t.job_no).push(t);
+    }
+    const groups = (planData.nodes || [])
+        .filter(n => (tasksByJob.get(n.job_no) || []).length)
+        .map(n => ({ node: n, tasks: tasksByJob.get(n.job_no).slice().sort(severitySort) }));
+    const multiNode = groups.length > 1;
+
+    const rows = [];
+    for (const { node, tasks } of groups) {
+        if (multiNode) {
+            const projected = node.summary && node.summary.projected_completion;
+            rows.push(`
+                <tr class="pp-modal-group">
+                    <td colspan="5" style="padding-left: ${node.depth * 18}px">
+                        ${escapeHtml(node.job_no)}
+                        <span class="pp-modal-group-title">${escapeHtml(node.title || '')}</span>
+                        <span class="pp-modal-group-meta">%${Math.round(node.completion_percentage || 0)}${projected ? ` · Öngörülen ${fmtShortDate(projected)}` : ''}</span>
+                    </td>
+                </tr>`);
+        }
+        rows.push(...tasks.map(taskRow));
+    }
+
+    document.getElementById('pp-modal-body').innerHTML = `
+        ${verdictHeadline(item.forecast || { verdict: 'unknown' })}
+        <div class="pp-modal-note">${multiNode
+            ? 'Alt iş emirlerine göre gruplu; her grupta geciken ve riskli işler üstte. "İten" sütunu, bitişini geciktiren önceki görevi gösterir.'
+            : 'Görevler önem sırasıyla: geciken ve riskli işler üstte. "İten" sütunu, bitişini geciktiren önceki görevi gösterir.'}</div>
+        ${modalTableHtml(['Görev', 'Durum', 'Hedef', 'Öngörülen / Gerçek', 'İten'], rows)}`;
+}
+
+function weldingModalHtml(brief) {
+    const welding = brief.welding || {};
+    // The panel leads with the biggest allocations; the modal reads as a
+    // job-order listing.
+    const resources = [...(welding.resources || [])].sort((a, b) =>
+        (a.job_no || '').localeCompare(b.job_no || '', undefined, { numeric: true })
+        || (a.planned - b.planned)
+        || b.allocated_weight_kg - a.allocated_weight_kg);
+    const rows = resources.map((r) => {
+        const badge = r.kind === 'subcontractor'
+            ? '<span class="status-badge status-purple">Taşeron</span>'
+            : '<span class="status-badge status-blue">Dahili</span>';
+        const progress = r.planned
+            ? `<span class="text-muted">plan${r.planned_start_date ? ` · ${fmtShortDate(r.planned_start_date)} – ${fmtShortDate(r.planned_end_date)}` : ''}</span>`
+            : `${miniBarHtml((r.progress_pct || 0) / 100, 'blue')} <strong>%${fmtInt(r.progress_pct)}</strong>`;
+        return `
+            <tr>
+                <td>${badge}</td>
+                <td class="pp-td-main" title="${escapeHtml(r.name)}">${escapeHtml(r.name)}</td>
+                <td>${escapeHtml(r.job_no)}</td>
+                <td class="pp-td-num">${fmtInt(r.allocated_weight_kg)} kg</td>
+                <td>${progress}</td>
+            </tr>`;
+    });
+    const hours = welding.hours || {};
+    const body = `
+        <div class="pp-modal-stats">
+            <span>Ağırlıklı ilerleme <strong>${welding.weighted_progress_pct == null ? '—' : '%' + fmtInt(welding.weighted_progress_pct)}</strong></span>
+            <span>Görev ilerlemesi <strong>${welding.task_progress_pct == null ? '—' : '%' + fmtInt(welding.task_progress_pct)}</strong></span>
+            <span>Tahsis <strong>${fmtInt(welding.allocated_kg_total)} kg</strong></span>
+            <span>İşçilik <strong>${fmtHours(hours.regular)} s</strong></span>
+            <span>Fazla mesai <strong>${fmtHours(hours.after_hours)} s</strong></span>
+            <span>Tatil <strong>${fmtHours(hours.holiday)} s</strong></span>
+        </div>
+        ${modalTableHtml(['Tür', 'Kaynak', 'İş Emri', { label: 'Tahsis', num: true }, 'İlerleme'], rows)}`;
+    return { title: 'Kaynaklı İmalat Detayı', body };
+}
+
+function machiningModalHtml(brief, detail) {
+    const machining = brief.machining || {};
+    const operations = (detail && detail.operations) || [];
+    const rows = operations.map((op) => `
+        <tr>
+            <td class="pp-td-main" title="${escapeHtml(op.name || op.key)}">${escapeHtml(op.name || op.key)}</td>
+            <td class="pp-td-muted" title="${escapeHtml(op.part_name || '')}">${escapeHtml(op.part_name || '—')}</td>
+            <td>${escapeHtml(op.job_no || '')}</td>
+            <td class="pp-td-num">${fmtHours(op.estimated_hours)} s</td>
+            <td class="pp-td-num">${fmtHours(op.hours_spent)} s</td>
+            <td>${op.completed
+                ? '<span class="status-badge status-green">Tamam</span>'
+                : '<span class="status-badge status-blue">Açık</span>'}</td>
+        </tr>`);
+    const body = `
+        <div class="pp-modal-stats">
+            <span>Operasyon <strong>${fmtInt(machining.operations_completed)} / ${fmtInt(machining.operations_total)}</strong></span>
+            <span>Tahmini <strong>${fmtHours(machining.estimated_hours_total)} s</strong></span>
+            <span>Harcanan <strong>${fmtHours(machining.hours_spent)} s</strong></span>
+            <span>Kalan <strong>~${fmtHours(machining.hours_remaining)} s</strong></span>
+            <span>Parça <strong>${fmtInt(machining.parts_completed)} / ${fmtInt(machining.parts_total)}</strong></span>
+        </div>
+        ${modalTableHtml(['Operasyon', 'Parça', 'İş Emri',
+            { label: 'Tahmini', num: true }, { label: 'Harcanan', num: true }, 'Durum'], rows)}`;
+    return { title: 'Talaşlı İmalat Detayı', body };
+}
+
+function cuttingModalHtml(brief, detail) {
+    const cutting = brief.cutting || {};
+    const parts = (detail && detail.parts) || [];
+    const rows = parts.map((p) => `
+        <tr>
+            <td class="pp-td-main">${escapeHtml(p.image_no || '—')}${p.position_no ? ` <span class="text-muted">/ ${escapeHtml(p.position_no)}</span>` : ''}</td>
+            <td class="pp-td-muted">${escapeHtml(p.nesting || '—')}</td>
+            <td>${escapeHtml(p.job_no || '')}</td>
+            <td class="pp-td-num">${fmtInt(p.quantity)} adet</td>
+            <td class="pp-td-num">${fmtInt(p.weight_kg)} kg</td>
+            <td>${p.cut
+                ? '<span class="status-badge status-green">Kesildi</span>'
+                : '<span class="status-badge status-orange">Bekliyor</span>'}</td>
+        </tr>`);
+    const body = `
+        <div class="pp-modal-stats">
+            <span>Bekleyen <strong>${fmtInt(cutting.parts_waiting)} parça · ${fmtInt(cutting.weight_waiting)} kg</strong></span>
+            <span>Kesilen <strong>${fmtInt(cutting.parts_cut)} / ${fmtInt(cutting.parts_total)} parça</strong></span>
+            <span>Ağırlık <strong>${fmtInt(cutting.weight_cut)} / ${fmtInt(cutting.weight_total)} kg</strong></span>
+        </div>
+        <div class="pp-modal-note">Bekleyenler üstte, ağır olan önce.</div>
+        ${modalTableHtml(['Resim / Poz', 'Nesting', 'İş Emri',
+            { label: 'Adet', num: true }, { label: 'Ağırlık', num: true }, 'Durum'], rows)}`;
+    return { title: 'CNC Kesim Detayı', body };
+}
+
+function qualityModalHtml(brief, detail) {
+    const quality = brief.quality || {};
+    const rows = ((detail && detail.list) || []).map((n) => `
+        <tr>
+            <td><strong>${escapeHtml(n.ncr_number)}</strong></td>
+            <td class="pp-td-main" title="${escapeHtml(n.title)}">${escapeHtml(n.title)}</td>
+            <td><span class="status-badge ${NCR_SEVERITY_BADGES[n.severity] || 'status-grey'}">${escapeHtml(n.severity_display)}</span></td>
+            <td><span class="status-badge ${['approved', 'closed'].includes(n.status) ? 'status-green' : 'status-red'}">${escapeHtml(n.status_display)}</span></td>
+            <td>${escapeHtml(n.job_no)}</td>
+            <td>${fmtShortDate(n.created_at)}</td>
+        </tr>`);
+    const sev = quality.open_by_severity || {};
+    const body = `
+        <div class="pp-modal-stats">
+            <span>Açık <strong class="${quality.open ? 'pp-num-red' : 'pp-num-green'}">${fmtInt(quality.open)}</strong></span>
+            <span>Kritik <strong>${fmtInt(sev.critical)}</strong></span>
+            <span>Majör <strong>${fmtInt(sev.major)}</strong></span>
+            <span>Minör <strong>${fmtInt(sev.minor)}</strong></span>
+            <span>Toplam <strong>${fmtInt(quality.total)}</strong></span>
+        </div>
+        ${modalTableHtml(['NCR', 'Başlık', 'Önem', 'Durum', 'İş Emri', 'Tarih'], rows)}`;
+    return { title: 'Kalite · NCR Detayı', body };
+}
+
+const PROCUREMENT_STAGE_BADGES = {
+    not_requested: '<span class="status-badge status-orange">Talebe dönüşmedi</span>',
+    requested: '<span class="status-badge status-blue">Talepte · bekliyor</span>',
+    delivered: '<span class="status-badge status-green">Teslim edildi</span>',
+};
+
+function procurementModalHtml(brief, detail) {
+    const procurement = brief.procurement || {};
+    const items = (detail && detail.items) || [];
+    const rows = items.map((w) => `
+        <tr>
+            <td class="pp-td-main" title="${escapeHtml(w.item_name || '')}">${escapeHtml(w.item_name || '—')}
+                <span class="text-muted">${escapeHtml(w.item_code || '')}</span></td>
+            <td>${escapeHtml(w.job_no || '')}</td>
+            <td class="pp-td-num">${fmtInt(w.quantity_to_purchase)}</td>
+            <td>${PROCUREMENT_STAGE_BADGES[w.stage] || ''}</td>
+        </tr>`);
+    const body = `
+        <div class="pp-modal-stats">
+            <span>Bekleyen <strong>${fmtInt(procurement.items_waiting)}</strong></span>
+            <span>Talebe dönüşmedi <strong>${fmtInt(procurement.not_yet_requested)}</strong></span>
+            <span>Talepte <strong>${fmtInt(procurement.requested_waiting)}</strong></span>
+            <span>Teslim edildi <strong class="pp-num-green">${fmtInt(procurement.items_delivered)} / ${fmtInt(procurement.items_total)}</strong></span>
+        </div>
+        ${modalTableHtml(['Malzeme', 'İş Emri', 'Miktar', 'Aşama'], rows)}`;
+    return { title: 'Satın Alma Detayı', body };
+}
+
+const RELEASE_STATUS_BADGES = {
+    released: 'status-green',
+    superseded: 'status-grey',
+    in_revision: 'status-orange',
+    pending_approval: 'status-blue',
+    rejected: 'status-red',
+};
+
+function revisionsModalHtml(brief, detail) {
+    const drawing = (brief.revisions || {}).drawing || {};
+    const target = (brief.revisions || {}).target_date || {};
+    const releaseRows = ((detail && detail.releases) || []).map((r) => `
+        <tr>
+            <td><strong>Rev ${escapeHtml(r.revision_code || `R${r.revision_number}`)}</strong></td>
+            <td><span class="status-badge ${RELEASE_STATUS_BADGES[r.status] || 'status-grey'}">${escapeHtml(r.status_display)}</span></td>
+            <td>${escapeHtml(r.job_no)}</td>
+            <td>${fmtShortDate(r.released_at)}</td>
+        </tr>`);
+    const targetRows = ((detail && detail.target_date_revisions) || []).map((t) => `
+        <tr>
+            <td>${fmtShortDate(t.previous_date)} → <strong>${fmtShortDate(t.new_date)}</strong></td>
+            <td class="pp-td-main" title="${escapeHtml(t.reason || '')}">${escapeHtml(t.reason || '—')}</td>
+            <td class="pp-td-muted">${escapeHtml(t.changed_by_name || '—')}</td>
+            <td>${fmtShortDate(t.changed_at)}</td>
+        </tr>`);
+    const body = `
+        <div class="pp-modal-section">Teknik Resim Yayınları
+            <span class="text-muted">· ${fmtInt(drawing.revision_count)} kez revize</span></div>
+        ${modalTableHtml(['Revizyon', 'Durum', 'İş Emri', 'Tarih'], releaseRows)}
+        <div class="pp-modal-section">Hedef Tarih Değişiklikleri
+            <span class="text-muted">· ${fmtInt(target.count)} kez</span></div>
+        ${modalTableHtml(['Değişiklik', 'Sebep', 'Değiştiren', 'Tarih'], targetRows)}`;
+    return { title: 'Revizyon Detayı', body };
 }
 
 function exitMeeting() {
@@ -759,10 +1203,9 @@ function renderMeetingSlide() {
     if (brief) {
         renderMeetingPanels(item, brief);
     } else {
-        ensureBrief(item.job_no).then(() => {
+        ensureBrief(item.job_no).then((loaded) => {
             const current = meetingItems[meetingIndex];
-            const loaded = current && meetingBriefCache.get(current.job_no);
-            if (currentMode === 'meeting' && loaded && current.job_no === item.job_no) {
+            if (currentMode === 'meeting' && loaded && current && current.job_no === item.job_no) {
                 renderMeetingPanels(current, loaded);
             }
         });
@@ -841,7 +1284,9 @@ function meetingHeroHtml(item, financial) {
         : '';
 
     return `
-        <div class="dashboard-card pp-hero pp-verdict-card pp-verdict-${meta.theme}">
+        <div class="dashboard-card pp-hero pp-verdict-card pp-verdict-${meta.theme}"
+             data-modal="plan" role="button"
+             title="Neden erken/geç? Görev bazında detay">
             <div class="card-body">
                 <div class="pp-hero-top">
                     <div class="pp-hero-id">
@@ -861,7 +1306,7 @@ function meetingHeroHtml(item, financial) {
                         <span class="pp-fig-value">${formatDateCell(forecast.target_completion_date)}</span>
                     </div>
                     <div class="pp-fig-arrow"><i class="fas fa-arrow-right-long"></i></div>
-                    <div class="pp-fig">
+                    <div class="pp-fig pp-fig-primary">
                         <label>Öngörülen Bitiş</label>
                         <span class="pp-fig-value ${projectedClass}">${formatDateCell(forecast.projected_completion_date)}</span>
                     </div>
@@ -869,12 +1314,12 @@ function meetingHeroHtml(item, financial) {
                         <label>Sapma</label>
                         ${varianceFigure}
                     </div>
-                    <div class="pp-fig">
+                    <div class="pp-fig pp-fig-progress">
                         <label>İlerleme</label>
-                        <span class="pp-fig-value">%${pct}</span>
-                        <div class="pp-fig-progressbar">
-                            <div class="pp-fig-progressfill pp-pf-${meta.theme}" style="width: ${Math.min(pct, 100)}%"></div>
-                        </div>
+                        <span class="pp-fig-value-line">
+                            <span class="pp-fig-value">%${pct}</span>
+                            <span class="pp-fig-progressbar"><span class="pp-fig-progressfill pp-pf-${meta.theme}" style="width: ${Math.min(pct, 100)}%"></span></span>
+                        </span>
                     </div>
                 </div>
                 ${verdictTimelineHtml(forecast, summary, overviewData ? overviewData.today : null)}
@@ -886,31 +1331,44 @@ function meetingHeroHtml(item, financial) {
 // stays inside its clipped cell.
 function meetingCaps() {
     const short = window.matchMedia('(max-height: 860px)').matches;
-    return { resources: short ? 3 : 4, files: short ? 3 : 4, ncrs: short ? 2 : 3 };
+    return { resources: short ? 3 : 4, files: short ? 3 : 4, ncrs: 3 };
 }
 
-async function ensureBrief(jobNo) {
-    if (meetingBriefCache.has(jobNo) || meetingBriefLoading.has(jobNo)) return;
-    meetingBriefLoading.add(jobNo);
-    try {
-        meetingBriefCache.set(jobNo, await getJobOrderMeetingBrief(jobNo));
-    } catch (error) {
-        console.error(`Meeting brief failed for ${jobNo}:`, error);
-        const item = meetingItems[meetingIndex];
-        if (currentMode === 'meeting' && item && item.job_no === jobNo) {
-            const panels = document.getElementById('pp-meeting-panels');
-            if (panels) {
-                panels.innerHTML = `
-                    <div class="dashboard-card pp-panel pp-panel-wide">
-                        <div class="card-body text-center text-danger py-4">
-                            <i class="fas fa-exclamation-triangle me-2"></i>Toplantı özeti yüklenemedi.
-                        </div>
-                    </div>`;
-            }
-        }
-    } finally {
-        meetingBriefLoading.delete(jobNo);
+function ensureBrief(jobNo) {
+    // A navigation can land on a slide whose brief is already in flight from
+    // neighbour prefetching — the caller must get THAT promise (resolving when
+    // the data arrives), not an immediately-resolved void. Returning early
+    // here was exactly the "response arrived but the page never rendered" bug.
+    if (meetingBriefCache.has(jobNo)) {
+        return Promise.resolve(meetingBriefCache.get(jobNo));
     }
+    if (meetingBriefPromises.has(jobNo)) {
+        return meetingBriefPromises.get(jobNo);
+    }
+    const promise = getJobOrderMeetingBrief(jobNo)
+        .then((brief) => {
+            meetingBriefCache.set(jobNo, brief);
+            return brief;
+        })
+        .catch((error) => {
+            console.error(`Meeting brief failed for ${jobNo}:`, error);
+            const item = meetingItems[meetingIndex];
+            if (currentMode === 'meeting' && item && item.job_no === jobNo) {
+                const panels = document.getElementById('pp-meeting-panels');
+                if (panels) {
+                    panels.innerHTML = `
+                        <div class="dashboard-card pp-panel pp-span-5">
+                            <div class="card-body text-center text-danger py-4">
+                                <i class="fas fa-exclamation-triangle me-2"></i>Toplantı özeti yüklenemedi.
+                            </div>
+                        </div>`;
+                }
+            }
+            return null;
+        })
+        .finally(() => meetingBriefPromises.delete(jobNo));
+    meetingBriefPromises.set(jobNo, promise);
+    return promise;
 }
 
 function meetingSkeletonHtml() {
@@ -926,11 +1384,15 @@ function meetingSkeletonHtml() {
         </div>`).join('');
 }
 
-function panelHtml(icon, title, bodyHtml, extraClass = '') {
+function panelHtml(icon, title, bodyHtml, extraClass = '', modalKind = null) {
+    const linkAttrs = modalKind
+        ? ` data-modal="${modalKind}" role="button" title="Detayı aç"` : '';
+    const linkHint = modalKind
+        ? '<span class="pp-link-hint"><i class="fas fa-expand"></i></span>' : '';
     return `
-        <div class="dashboard-card pp-panel${extraClass ? ' ' + extraClass : ''}">
+        <div class="dashboard-card pp-panel${extraClass ? ' ' + extraClass : ''}"${linkAttrs}>
             <div class="card-body">
-                <div class="pp-panel-title"><i class="fas fa-${icon} me-2"></i>${title}</div>
+                <div class="pp-panel-title"><i class="fas fa-${icon} me-2"></i>${title}${linkHint}</div>
                 ${bodyHtml}
             </div>
         </div>`;
@@ -963,18 +1425,18 @@ function renderMeetingPanels(item, brief) {
     // row B = quality(3) procurement(3) revisions(3) files(3).
     panels.innerHTML = [
         weldingPanelHtml(brief.welding),
-        machiningPanelHtml(brief.machining),
+        machiningPanelHtml(brief.machining, item.job_no),
         cuttingPanelHtml(brief.cutting),
-        qualityPanelHtml(brief.quality),
+        qualityPanelHtml(brief.quality, item.job_no),
         procurementPanelHtml(brief.procurement),
-        revisionsPanelHtml(brief.revisions),
-        filesPanelHtml(brief.files),
+        revisionsPanelHtml(brief.revisions, item.job_no),
+        filesPanelHtml(brief.files, item.job_no),
     ].join('');
 }
 
 const NCR_SEVERITY_BADGES = { critical: 'status-red', major: 'status-orange', minor: 'status-grey' };
 
-function qualityPanelHtml(quality) {
+function qualityPanelHtml(quality, jobNo) {
     if (!quality) return '';
     const caps = meetingCaps();
     const open = quality.open || 0;
@@ -986,7 +1448,7 @@ function qualityPanelHtml(quality) {
                 <span class="pp-panel-big-label">Açık NCR yok</span>
                 <span class="pp-panel-sub text-muted">toplam ${fmtInt(quality.total)}</span>
             </div>`;
-        return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-span-3');
+        return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-span-3', 'quality');
     }
     const shown = (quality.open_list || []).slice(0, caps.ncrs);
     const list = shown.map(n => `
@@ -1002,15 +1464,15 @@ function qualityPanelHtml(quality) {
                 ${sev.critical ? `<span class="pp-dot pp-dot-red">Kritik ${fmtInt(sev.critical)}</span>` : ''}
                 ${sev.major ? `<span class="pp-dot pp-dot-orange">Majör ${fmtInt(sev.major)}</span>` : ''}
                 ${sev.minor ? `<span class="pp-dot pp-dot-grey">Minör ${fmtInt(sev.minor)}</span>` : ''}
-                ${open > shown.length ? `<span class="text-muted">+${fmtInt(open - shown.length)}</span>` : ''}
+                ${open > shown.length ? `<span class="text-muted">+${fmtInt(open - shown.length)} daha</span>` : ''}
             </span>
         </div>
         ${list}`;
     // The ONLY panel with a colored top strip — quality problems must pop.
-    return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-span-3 pp-panel-alert');
+    return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-span-3 pp-panel-alert', 'quality');
 }
 
-function revisionsPanelHtml(revisions) {
+function revisionsPanelHtml(revisions, jobNo) {
     if (!revisions) return '';
     const drawing = revisions.drawing || {};
     const target = revisions.target_date || {};
@@ -1043,23 +1505,25 @@ function revisionsPanelHtml(revisions) {
                 <div class="pp-panel-sub ${target.count ? 'pp-num-orange' : 'text-muted'}">${fmtInt(target.count)} kez değişti</div>
             </div>
         </div>`;
-    return panelHtml('code-branch', 'Revizyonlar', body, 'pp-span-3');
+    return panelHtml('code-branch', 'Revizyonlar', body, 'pp-span-3', 'revisions');
 }
 
 function procurementPanelHtml(procurement) {
     if (!procurement) return '';
     const waiting = procurement.items_waiting || 0;
+    const total = procurement.items_total || 0;
+    const deliveredPct = total ? Math.round((procurement.items_delivered / total) * 100) : 0;
     const body = `
         <div class="pp-panel-hero">
-            <span class="pp-panel-big ${waiting ? 'pp-num-orange' : 'pp-num-green'}">${fmtInt(waiting)}</span>
+            <span class="pp-panel-big ${waiting ? 'pp-num-orange' : 'pp-num-green'}">${fmtInt(waiting)}<span class="pp-panel-big-dim">/${fmtInt(total)}</span></span>
             <span class="pp-panel-big-label">bekleyen kalem</span>
-            <span class="pp-panel-sub text-muted">toplam ${fmtInt(procurement.items_total)}</span>
         </div>
+        <div class="pp-panel-sub"><strong class="pp-num-green">%${deliveredPct}</strong> teslim edildi
+            ${miniBarHtml(total ? procurement.items_delivered / total : 0, 'green')}</div>
         <div class="pp-panel-sub">Talebe dönüşmedi: <strong>${fmtInt(procurement.not_yet_requested)}</strong></div>
         <div class="pp-panel-sub">Talepte · teslim bekliyor: <strong>${fmtInt(procurement.requested_waiting)}</strong></div>
-        <div class="pp-panel-sub pp-num-green">Teslim edildi: <strong>${fmtInt(procurement.items_delivered)}</strong></div>
-        ${miniBarHtml(procurement.items_total ? procurement.items_delivered / procurement.items_total : 0, 'green')}`;
-    return panelHtml('cart-shopping', 'Satın Alma', body, 'pp-span-3');
+        <div class="pp-panel-sub">Teslim edildi: <strong>${fmtInt(procurement.items_delivered)}</strong></div>`;
+    return panelHtml('cart-shopping', 'Satın Alma', body, 'pp-span-3', 'procurement');
 }
 
 function cuttingPanelHtml(cutting) {
@@ -1073,10 +1537,10 @@ function cuttingPanelHtml(cutting) {
         </div>
         <div class="pp-panel-sub">Kesilen: <strong>${fmtInt(cutting.parts_cut)}</strong> / ${fmtInt(cutting.parts_total)} parça · ${fmtInt(cutting.weight_cut)} / ${fmtInt(cutting.weight_total)} kg</div>
         ${miniBarHtml(cutting.weight_total ? cutting.weight_cut / cutting.weight_total : 0, 'blue')}`;
-    return panelHtml('scissors', 'CNC Kesim', body, 'pp-span-3');
+    return panelHtml('scissors', 'CNC Kesim', body, 'pp-span-3', 'cutting');
 }
 
-function machiningPanelHtml(machining) {
+function machiningPanelHtml(machining, jobNo) {
     if (!machining) return '';
     const waiting = machining.operations_waiting || 0;
     const body = `
@@ -1088,7 +1552,7 @@ function machiningPanelHtml(machining) {
         <div class="pp-panel-sub">Tahmini <strong>${fmtHours(machining.estimated_hours_total)} s</strong> · Harcanan <strong>${fmtHours(machining.hours_spent)} s</strong> · Kalan ~<strong>${fmtHours(machining.hours_remaining)} s</strong></div>
         <div class="pp-panel-sub text-muted">${fmtInt(machining.parts_completed)} / ${fmtInt(machining.parts_total)} parça tamam</div>
         ${miniBarHtml(machining.estimated_hours_total ? machining.hours_earned / machining.estimated_hours_total : 0, 'blue')}`;
-    return panelHtml('gears', 'Talaşlı İmalat', body, 'pp-span-4');
+    return panelHtml('gears', 'Talaşlı İmalat', body, 'pp-span-4', 'machining');
 }
 
 function weldingPanelHtml(welding) {
@@ -1142,7 +1606,7 @@ function weldingPanelHtml(welding) {
         ${rows || (usingTaskProgress || big === null
             ? '<div class="text-muted pp-empty">Kaynak ataması yok.</div>' : '')}
         ${hoursStrip}`;
-    return panelHtml('fire', 'Kaynaklı İmalat', body, 'pp-span-5');
+    return panelHtml('fire', 'Kaynaklı İmalat', body, 'pp-span-5', 'welding');
 }
 
 const FILE_GROUP_LABELS = [
@@ -1151,7 +1615,7 @@ const FILE_GROUP_LABELS = [
     ['discussion', 'Tartışma'],
 ];
 
-function filesPanelHtml(files) {
+function filesPanelHtml(files, jobNo) {
     if (!files) return '';
     const caps = meetingCaps();
     const totalAll = FILE_GROUP_LABELS.reduce(

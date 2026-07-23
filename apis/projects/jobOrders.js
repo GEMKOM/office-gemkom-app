@@ -906,3 +906,26 @@ export async function getJobOrderMeetingBrief(jobNo) {
         throw error;
     }
 }
+
+/**
+ * On-demand detail list for one meeting-view card modal.
+ * Endpoint: GET /projects/job-orders/{jobNo}/meeting-brief/{section}/
+ * @param {string} jobNo - Root job order number
+ * @param {string} section - machining | cutting | quality | procurement | revisions
+ * @returns {Promise<Object>} section detail payload
+ */
+export async function getMeetingBriefSection(jobNo, section) {
+    try {
+        const response = await authedFetch(
+            `${backendBase}/projects/job-orders/${encodeURIComponent(jobNo)}/meeting-brief/${encodeURIComponent(section)}/`);
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error fetching meeting section ${section} for ${jobNo}:`, error);
+        throw error;
+    }
+}
