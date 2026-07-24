@@ -429,22 +429,6 @@ function setupModalCallbacks() {
         }
     });
 
-    // Delete template callback
-    deleteTemplateModal.onConfirmCallback = async () => {
-        try {
-            deleteTemplateModal.setLoading(true);
-            await deleteTaskTemplate(currentTemplate.id);
-            deleteTemplateModal.hide();
-            showNotification('Şablon başarıyla silindi', 'success');
-            await loadTemplates();
-        } catch (error) {
-            console.error('Error deleting template:', error);
-            showNotification('Şablon silinirken bir hata oluştu', 'error');
-        } finally {
-            deleteTemplateModal.setLoading(false);
-        }
-    };
-
     // Add item callback will be set dynamically in openAddItemModal with the correct templateId
 }
 
@@ -566,12 +550,27 @@ async function openDeleteTemplateModal(templateId) {
     try {
         const template = await getTaskTemplateById(templateId);
         currentTemplate = template;
-        
-        deleteTemplateModal.updateMessage(
-            `"${escapeHtml(template.name)}" şablonunu silmek istediğinizden emin misiniz?`,
-            'Bu işlem geri alınamaz.'
-        );
-        deleteTemplateModal.show();
+
+        // ConfirmationModal only honors `onConfirm` / setOnConfirm — the old
+        // `onConfirmCallback` assignment was a dead property, so template
+        // delete never ran. Worse, removeItem() reuses this same modal and
+        // sets onConfirm for item deletion; confirming a later "delete
+        // template" dialog would then delete the previous item instead.
+        deleteTemplateModal.show({
+            message: `"${template.name}" şablonunu silmek istediğinizden emin misiniz?`,
+            description: 'Bu işlem geri alınamaz.',
+            onConfirm: async () => {
+                try {
+                    await deleteTaskTemplate(templateId);
+                    showNotification('Şablon başarıyla silindi', 'success');
+                    await loadTemplates();
+                } catch (error) {
+                    console.error('Error deleting template:', error);
+                    showNotification('Şablon silinirken bir hata oluştu', 'error');
+                    throw error;
+                }
+            }
+        });
     } catch (error) {
         console.error('Error loading template:', error);
         showNotification('Şablon yüklenirken bir hata oluştu', 'error');
