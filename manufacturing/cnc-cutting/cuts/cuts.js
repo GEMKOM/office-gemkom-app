@@ -36,7 +36,7 @@ import { parsePartsFromText } from './partsPasteParser.js';
 import { showNotification } from '../../../components/notification/notification.js';
 import { markTaskCompleted, unmarkTaskCompleted } from '../../../apis/tasks.js';
 import { ConfirmationModal } from '../../../components/confirmation-modal/confirmation-modal.js';
-import { getRemnantPlates, getRemnantPlateById } from '../../../apis/cnc_cutting/remnants.js';
+import { getRemnantPlates, getRemnantPlateById, createRemnantPlate } from '../../../apis/cnc_cutting/remnants.js';
 import { getPlanningItems, markPlanningRequestItemConsumed } from '../../../apis/planning/planningRequestItems.js';
 import { ModernDropdown } from '../../../components/dropdown/dropdown.js';
 import { getJobOrderDropdown } from '../../../apis/projects/jobOrders.js';
@@ -3967,15 +3967,26 @@ function showSelectRemnantModal(initialFilters = {}) {
         iconColor: 'text-info',
         fields: []
     });
-    
+
+    // Add inline "create new remnant plate" section so users can add a plate
+    // that isn't in the list without leaving the cut page.
+    selectRemnantModal.addSection({
+        id: 'remnant-create-section',
+        title: 'Yeni Fire Plaka Oluştur',
+        icon: 'fas fa-plus-circle',
+        iconColor: 'text-success',
+        fields: []
+    });
+
     // Render the modal
     selectRemnantModal.render();
-    
+
     // Initialize filters and table after render
     setTimeout(() => {
         initializeRemnantSelectionFilters(initialFilters);
         initializeRemnantSelectionTable();
-        
+        initializeRemnantCreateForm(initialFilters);
+
         // If initial filters were provided, apply them automatically
         if (initialFilters && (initialFilters.thickness || initialFilters.material || initialFilters.dimensions)) {
             setTimeout(() => {
@@ -4248,6 +4259,138 @@ function buildRemnantSelectionQuery(page = 1) {
     }
 
     return params;
+}
+
+// Inline remnant-plate creation inside the "Fire Plaka Seç" modal. When the
+// plate a user needs isn't listed, they create it here and it is auto-selected
+// for the current cut — no navigating away to the remnant management page.
+function initializeRemnantCreateForm(initialFilters = {}) {
+    const createSection = selectRemnantModal.container.querySelector('[data-section-id="remnant-create-section"]');
+    if (!createSection) return;
+
+    const fieldsContainer = createSection.querySelector('.row.g-2');
+    if (!fieldsContainer) return;
+
+    const wrapper = document.createElement('div');
+    wrapper.className = 'col-12';
+    wrapper.innerHTML = `
+        <button type="button" class="btn btn-outline-success btn-sm mb-2" id="toggle-remnant-create-btn">
+            <i class="fas fa-plus me-2"></i>Aradığınız fire plaka yok mu? Yeni oluşturun
+        </button>
+        <div id="remnant-create-form" style="display: none;">
+            <div class="row g-2 align-items-end">
+                <div class="col-md-3">
+                    <label class="form-label" for="new-remnant-thickness">Kalınlık (mm)*</label>
+                    <input type="number" step="0.01" min="0" class="form-control" id="new-remnant-thickness" placeholder="örn. 10">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="new-remnant-dimensions">Boyutlar*</label>
+                    <input type="text" class="form-control" id="new-remnant-dimensions" placeholder="örn. 1200x800">
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label" for="new-remnant-quantity">Adet*</label>
+                    <input type="number" step="1" min="1" class="form-control" id="new-remnant-quantity" value="1">
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label" for="new-remnant-material">Malzeme*</label>
+                    <input type="text" class="form-control" id="new-remnant-material" placeholder="örn. ST 37-2">
+                </div>
+                <div class="col-md-1">
+                    <button type="button" class="btn btn-success w-100" id="create-remnant-submit-btn" title="Oluştur ve seç">
+                        <i class="fas fa-check"></i>
+                    </button>
+                </div>
+            </div>
+            <small class="form-text text-muted d-block mt-1">
+                Oluşturulan fire plaka otomatik olarak bu kesim için seçilir.
+            </small>
+        </div>
+    `;
+    fieldsContainer.appendChild(wrapper);
+
+    const toggleBtn = wrapper.querySelector('#toggle-remnant-create-btn');
+    const form = wrapper.querySelector('#remnant-create-form');
+    const thicknessInput = wrapper.querySelector('#new-remnant-thickness');
+    const dimensionsInput = wrapper.querySelector('#new-remnant-dimensions');
+    const materialInput = wrapper.querySelector('#new-remnant-material');
+    const submitBtn = wrapper.querySelector('#create-remnant-submit-btn');
+
+    toggleBtn?.addEventListener('click', () => {
+        const willShow = form.style.display === 'none';
+        form.style.display = willShow ? 'block' : 'none';
+        if (willShow) {
+            // Prefill empty fields from the active search filters — the user most
+            // likely just searched for exactly the plate they now need to create.
+            const fv = remnantFilters ? remnantFilters.getFilterValues() : {};
+            if (!thicknessInput.value) thicknessInput.value = (fv['remnant-thickness-mm-filter'] ?? initialFilters.thickness ?? '').toString().trim();
+            if (!dimensionsInput.value) dimensionsInput.value = (fv['remnant-dimensions-filter'] ?? initialFilters.dimensions ?? '').toString().trim();
+            if (!materialInput.value) materialInput.value = (fv['remnant-material-filter'] ?? initialFilters.material ?? '').toString().trim();
+            thicknessInput.focus();
+        }
+    });
+
+    submitBtn?.addEventListener('click', () => createNewRemnantAndSelect(wrapper, submitBtn));
+}
+
+async function createNewRemnantAndSelect(wrapper, submitBtn) {
+    const thickness = wrapper.querySelector('#new-remnant-thickness')?.value?.trim();
+    const dimensions = wrapper.querySelector('#new-remnant-dimensions')?.value?.trim();
+    const quantityRaw = wrapper.querySelector('#new-remnant-quantity')?.value?.trim();
+    const material = wrapper.querySelector('#new-remnant-material')?.value?.trim();
+
+    if (!thickness || !dimensions || !quantityRaw || !material) {
+        showNotification('Kalınlık, boyutlar, adet ve malzeme alanları zorunludur', 'warning');
+        return;
+    }
+    const quantity = parseInt(quantityRaw, 10);
+    if (!Number.isFinite(quantity) || quantity < 1) {
+        showNotification('Adet en az 1 olmalıdır', 'warning');
+        return;
+    }
+
+    const originalHtml = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+    try {
+        const created = await createRemnantPlate({
+            thickness_mm: thickness,
+            dimensions,
+            quantity,
+            material
+        });
+
+        // Auto-select the freshly created plate for this cut — same effect as
+        // clicking "Seç" on a table row.
+        selectedRemnantPlate = created;
+        const available = created.available_quantity !== undefined && created.available_quantity !== null
+            ? parseInt(created.available_quantity, 10)
+            : quantity;
+        quantityUsed = available !== null && available < 1 ? available : 1;
+
+        // A cut has exactly one plate source — clear any planning-item selection.
+        selectedPlanningItem = null;
+        markItemConsumed = false;
+        updateSelectedPlanningItemDisplay();
+        updateSelectedPlanningItemDisplayEdit();
+
+        updateSelectedRemnantDisplay();
+        updateSelectedRemnantDisplayEdit();
+
+        // Close the selection modal.
+        const modalElement = document.querySelector('#select-remnant-modal-container .modal');
+        if (modalElement) {
+            bootstrap.Modal.getOrCreateInstance(modalElement)?.hide();
+        }
+
+        showNotification('Fire plaka oluşturuldu ve seçildi', 'success');
+    } catch (error) {
+        console.error('Error creating remnant plate:', error);
+        showNotification('Fire plaka oluşturulurken hata oluştu', 'error');
+    } finally {
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalHtml;
+    }
 }
 
 // ============================================================================
