@@ -4635,6 +4635,9 @@ async function loadPlanningItemSelectionTable(page = 1) {
         const filters = {
             is_plate: 'true',
             is_consumed: 'false',
+            // Each user selects a plate source from their own planning requests
+            // (superusers see everyone's — handled server-side).
+            mine: 'true',
             fields: 'simple',
             ordering: '-id',
             page: page,
