@@ -2991,6 +2991,15 @@ async function handleEditCutSave(formData, cutKey) {
         machineFkValue = dropdown.getValue();
     }
     
+    // Every cut needs exactly one plate source. Create already enforces this;
+    // edit must too — otherwise clearing the remnant/planning selection and
+    // saving sends null/empty source IDs and permanently unlinks the cut's
+    // plate (corrupting inventory / consumption accounting).
+    if (!selectedRemnantPlate && !selectedPlanningItem) {
+        showNotification('Fire plaka veya plaka kalemi seçmelisiniz', 'error');
+        return;
+    }
+
     const cutData = {
         name: formData['cut-name'],
         nesting_id: formData['cut-nesting-id'],
