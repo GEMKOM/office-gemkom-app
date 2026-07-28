@@ -846,7 +846,7 @@ const SECTION_MODAL_TITLES = {
     cutting: 'CNC Kesim Detayı',
     quality: 'Kalite · NCR Detayı',
     procurement: 'Satın Alma Detayı',
-    revisions: 'Revizyon Detayı',
+    revisions: 'Dizayn Detayı',
 };
 
 // Sections whose detail list is fetched only when the modal opens — the main
@@ -1219,7 +1219,7 @@ const RELEASE_STATUS_BADGES = {
 
 function revisionsModalHtml(brief, detail) {
     const drawing = (brief.revisions || {}).drawing || {};
-    const target = (brief.revisions || {}).target_date || {};
+    const targets = (brief.revisions || {}).design_targets || {};
     const releaseRows = ((detail && detail.releases) || []).map((r) => `
         <tr>
             <td><strong>Rev ${escapeHtml(r.revision_code || `R${r.revision_number}`)}</strong></td>
@@ -1227,21 +1227,23 @@ function revisionsModalHtml(brief, detail) {
             <td>${escapeHtml(r.job_no)}</td>
             <td>${fmtShortDate(r.released_at)}</td>
         </tr>`);
-    const targetRows = ((detail && detail.target_date_revisions) || []).map((t) => `
+    const taskRows = ((detail && detail.design_tasks) || []).map((t) => `
         <tr>
-            <td>${fmtShortDate(t.previous_date)} → <strong>${fmtShortDate(t.new_date)}</strong></td>
-            <td class="pp-td-main" title="${escapeHtml(t.reason || '')}">${escapeHtml(t.reason || '—')}</td>
-            <td class="pp-td-muted">${escapeHtml(t.changed_by_name || '—')}</td>
-            <td>${fmtShortDate(t.changed_at)}</td>
+            <td class="pp-td-main" title="${escapeHtml(t.title || '')}">${escapeHtml(t.title || '—')}</td>
+            <td>${escapeHtml(t.job_no)}</td>
+            <td>${t.target_completion_date
+                ? `<strong>${fmtShortDate(t.target_completion_date)}</strong>`
+                : '<span class="pp-num-orange">Girilmemiş</span>'}</td>
+            <td><span class="status-badge ${TASK_STATUS_BADGES[t.status] || 'status-grey'}">${escapeHtml(t.status_display)}</span></td>
         </tr>`);
     const body = `
         <div class="pp-modal-section">Teknik Resim Yayınları
             <span class="text-muted">· ${fmtInt(drawing.revision_count)} kez revize</span></div>
         ${modalTableHtml(['Revizyon', 'Durum', 'İş Emri', 'Tarih'], releaseRows)}
-        <div class="pp-modal-section">Hedef Tarih Değişiklikleri
-            <span class="text-muted">· ${fmtInt(target.count)} kez</span></div>
-        ${modalTableHtml(['Değişiklik', 'Sebep', 'Değiştiren', 'Tarih'], targetRows)}`;
-    return { title: 'Revizyon Detayı', body };
+        <div class="pp-modal-section">Dizayn Görevleri Hedef Tarihleri
+            <span class="text-muted">· ${fmtInt(targets.with_target)}/${fmtInt(targets.total)} görevde tarih</span></div>
+        ${modalTableHtml(['Görev', 'İş Emri', 'Hedef Tarih', 'Durum'], taskRows)}`;
+    return { title: 'Dizayn Detayı', body };
 }
 
 function exitMeeting() {
@@ -1402,7 +1404,6 @@ function meetingHeroHtml(item, financial) {
                         ${item.customer_name ? `<div class="pp-hero-customer">${escapeHtml(item.customer_name)}</div>` : ''}
                     </div>
                     <div class="pp-hero-pills">
-                        ${verdictHeadline(forecast)}
                         <span id="pp-fin-chip">${financialChipHtml(financial)}</span>
                     </div>
                 </div>
@@ -1579,11 +1580,10 @@ function qualityPanelHtml(quality, jobNo) {
 function revisionsPanelHtml(revisions, jobNo) {
     if (!revisions) return '';
     const drawing = revisions.drawing || {};
-    const target = revisions.target_date || {};
+    const targets = revisions.design_targets || {};
     const latest = drawing.latest;
-    const latestTarget = (target.latest_list || [])[0];
-    // Date-led: WHEN it was last revised is the meeting signal, the code is
-    // supporting detail.
+    const missing = (targets.total || 0) - (targets.with_target || 0);
+    const hasWindow = targets.earliest && targets.latest && targets.earliest !== targets.latest;
     const body = `
         <div class="pp-rev-cols">
             <div>
@@ -1600,16 +1600,13 @@ function revisionsPanelHtml(revisions, jobNo) {
             <div>
                 <div class="pp-rev-heading">Hedef Tarih</div>
                 <div class="pp-panel-hero">
-                    <span class="pp-panel-big">${latestTarget ? fmtShortDate(latestTarget.changed_at) : '—'}</span>
+                    <span class="pp-panel-big">${targets.latest ? fmtShortDate(targets.latest) : '—'}</span>
                 </div>
-                ${latestTarget ? `
-                    <div class="pp-panel-sub">${fmtShortDate(latestTarget.previous_date)} → ${fmtShortDate(latestTarget.new_date)}</div>
-                    ${latestTarget.reason ? `<div class="pp-panel-sub text-muted">“${escapeHtml(latestTarget.reason)}”</div>` : ''}`
-                : '<div class="pp-panel-sub text-muted">Değişiklik yok</div>'}
-                <div class="pp-panel-sub ${target.count ? 'pp-num-orange' : 'text-muted'}">${fmtInt(target.count)} kez değişti</div>
+                ${hasWindow ? `<div class="pp-panel-sub">En erken: ${fmtShortDate(targets.earliest)}</div>` : ''}
+                <div class="pp-panel-sub ${missing ? 'pp-num-orange' : 'text-muted'}">${fmtInt(targets.with_target)}/${fmtInt(targets.total)} dizayn görevinde tarih</div>
             </div>
         </div>`;
-    return panelHtml('code-branch', 'Revizyonlar', body, 'pp-span-3', 'revisions');
+    return panelHtml('pen-ruler', 'Dizayn', body, 'pp-span-3', 'revisions');
 }
 
 function procurementPanelHtml(procurement) {
