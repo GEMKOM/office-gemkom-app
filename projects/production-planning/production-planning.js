@@ -1193,6 +1193,7 @@ function procurementModalHtml(brief, detail) {
         <tr>
             <td class="pp-td-main" title="${escapeHtml(w.item_name || '')}">${escapeHtml(w.item_name || '—')}
                 <span class="text-muted">${escapeHtml(w.item_code || '')}</span></td>
+            <td class="pp-td-muted">${escapeHtml(w.request_number || '—')}</td>
             <td>${escapeHtml(w.job_no || '')}</td>
             <td class="pp-td-num">${fmtInt(w.quantity_to_purchase)}</td>
             <td>${PROCUREMENT_STAGE_BADGES[w.stage] || ''}</td>
@@ -1204,7 +1205,7 @@ function procurementModalHtml(brief, detail) {
             <span>Talepte <strong>${fmtInt(procurement.requested_waiting)}</strong></span>
             <span>Teslim edildi <strong class="pp-num-green">${fmtInt(procurement.items_delivered)} / ${fmtInt(procurement.items_total)}</strong></span>
         </div>
-        ${modalTableHtml(['Malzeme', 'İş Emri', 'Miktar', 'Aşama'], rows)}`;
+        ${modalTableHtml(['Malzeme', 'Talep', 'İş Emri', { label: 'Miktar', num: true }, 'Aşama'], rows)}`;
     return { title: 'Satın Alma Detayı', body };
 }
 
@@ -1394,9 +1395,11 @@ function meetingHeroHtml(item, financial) {
                 <div class="pp-hero-top">
                     <div class="pp-hero-id">
                         <span class="pp-verdict-jobno">${escapeHtml(item.job_no)}</span>
-                        <span class="pp-hero-title">${escapeHtml(item.title || '')}</span>
-                        ${item.customer_name ? `<span class="pp-hero-customer">${escapeHtml(item.customer_name)}</span>` : ''}
                         ${statusChip}
+                    </div>
+                    <div class="pp-hero-center">
+                        <div class="pp-hero-title" title="${escapeHtml(item.title || '')}">${escapeHtml(item.title || '')}</div>
+                        ${item.customer_name ? `<div class="pp-hero-customer">${escapeHtml(item.customer_name)}</div>` : ''}
                     </div>
                     <div class="pp-hero-pills">
                         ${verdictHeadline(forecast)}

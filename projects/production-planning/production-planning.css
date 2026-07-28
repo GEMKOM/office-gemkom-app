@@ -567,37 +567,56 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     margin-bottom: 12px;
 }
 
+/* Equal-flex side zones so the centre block is truly centred regardless of
+   how wide the job number or the pills are */
 .pp-hero-id {
     display: flex;
-    align-items: baseline;
+    align-items: center;
     gap: 12px;
-    min-width: 0;
     white-space: nowrap;
-    overflow: hidden;
+    flex: 1;
+    min-width: 0;
 }
 
 .pp-hero-id .pp-verdict-jobno {
     font-size: 1.65rem;
 }
 
+/* Title + customer: the readable centre of the slide */
+.pp-hero-center {
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+}
+
 .pp-hero-title {
-    font-size: 1.05rem;
-    color: #444;
+    font-size: 2rem;
+    font-weight: 800;
+    color: #1f2530;
+    line-height: 1.1;
+    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .pp-hero-customer {
-    color: #8a919c;
-    font-size: 0.85rem;
-    flex-shrink: 0;
+    color: #2c3345;
+    font-size: 1.1rem;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .pp-hero-pills {
     display: flex;
     align-items: center;
+    justify-content: flex-end;
     gap: 8px;
-    flex-shrink: 0;
+    flex: 1;
+    min-width: 0;
 }
 
 /* Both hero pills share one size so they read as a matched pair */
@@ -1262,11 +1281,23 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     }
 
     .pp-hero {
-        max-height: 172px;
+        max-height: 184px;
     }
 
     .pp-hero .card-body {
-        padding: 10px 16px 8px;
+        padding: 8px 16px 6px;
+    }
+
+    .pp-hero-top {
+        margin-bottom: 6px;
+    }
+
+    .pp-hero-title {
+        font-size: 1.5rem;
+    }
+
+    .pp-hero-customer {
+        font-size: 0.95rem;
     }
 
     .pp-hero .pp-fig-value {
@@ -1278,7 +1309,7 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     }
 
     .pp-hero .pp-tl-labels {
-        height: 22px;
+        height: 16px;
     }
 
     .pp-meeting-grid {
