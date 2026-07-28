@@ -28,7 +28,7 @@ import {
 } from '../../apis/projects/departmentTasks.js';
 import { listCustomers } from '../../apis/projects/customers.js';
 import { listJobOrders } from '../../apis/projects/jobOrders.js';
-import { authFetchUsers } from '../../apis/users.js';
+import { fetchUsersDropdown } from '../../apis/users.js';
 import {
     createRelease,
     completeRevision,
@@ -319,11 +319,17 @@ async function initializeComponents() {
             console.warn('Could not fetch department choices, using defaults:', error);
         }
 
-        // Load users for assignment filter (group name from config, e.g. machining_team)
+        // Load users for assignment pickers via the lightweight dropdown
+        // endpoint, scoped to this page's department (the old heavy list
+        // call sent a `group` param the backend silently ignored, so it
+        // fetched everyone with full profiles).
         try {
-            const groupName = userTeam ? (userTeam.endsWith('_team') ? userTeam : `${userTeam}_team`) : null;
-            const usersResponse = await authFetchUsers(1, 10000, groupName ? { group: groupName } : {});
-            users = usersResponse.results || [];
+            const dropdownUsers = await fetchUsersDropdown({
+                is_active: true,
+                ...(department ? { department_code: department } : {}),
+            });
+            // Consumers read `name` — the dropdown serializer calls it full_name.
+            users = dropdownUsers.map(u => ({ ...u, name: u.full_name }));
         } catch (error) {
             console.warn('Could not fetch users:', error);
         }
@@ -957,6 +963,24 @@ function initializeTableComponent() {
                 }
             },
             {
+                field: 'estimated_duration_wd',
+                label: 'Süre (iş g.)',
+                sortable: true,
+                editable: true,
+                formatter: (value, row) => {
+                    const isEditable = row.type !== 'machining_part' && row.type !== 'cnc_part';
+                    const cursorStyle = isEditable ? 'cursor: pointer;' : '';
+                    const display = (value !== null && value !== undefined && value !== '')
+                        ? `${parseFloat(value).toLocaleString('tr-TR')} g`
+                        : '-';
+                    return `
+                        <div class="editable-duration" data-task-id="${row.id}" data-duration-value="${value ?? ''}" style="${cursorStyle}" ${isEditable ? 'title="Tahmini süreyi (iş günü) değiştirmek için tıklayın"' : ''}>
+                            ${display}
+                        </div>
+                    `;
+                }
+            },
+            {
                 field: 'completion_percentage',
                 label: 'Tamamlanma',
                 sortable: false,
@@ -1560,6 +1584,10 @@ function initializeModalComponents() {
             if (formData.target_completion_date !== undefined) {
                 updateData.target_completion_date = formData.target_completion_date || null;
             }
+            if (formData.estimated_duration_wd !== undefined) {
+                updateData.estimated_duration_wd = formData.estimated_duration_wd === '' || formData.estimated_duration_wd === null
+                    ? null : parseFloat(formData.estimated_duration_wd);
+            }
             if (formData.notes !== undefined) updateData.notes = formData.notes || null;
 
             await patchDepartmentTask(taskId, updateData);
@@ -2154,6 +2182,7 @@ async function loadTasks() {
             setupProgressEditListeners();
             setupAssignedEditListeners();
             setupDateEditListeners();
+            setupDurationEditListeners();
             setupWeightEditListeners();
             setupTitleEditListeners();
         }, 50);
@@ -2262,6 +2291,7 @@ function updateTableDataOnly() {
         setupProgressEditListeners();
         setupAssignedEditListeners();
         setupDateEditListeners();
+        setupDurationEditListeners();
         setupWeightEditListeners();
         setupTitleEditListeners();
     }, 50);
@@ -2935,6 +2965,109 @@ function setupDateEditListeners() {
     };
     
     tasksTable.container.addEventListener('click', dateEditHandler);
+}
+
+// Inline editing for the "Süre (iş g.)" column — same interaction as the
+// date cells: click to edit, Enter/blur saves, Escape cancels.
+let durationEditHandler = null;
+function setupDurationEditListeners() {
+    if (!tasksTable || !tasksTable.container) {
+        setTimeout(setupDurationEditListeners, 100);
+        return;
+    }
+
+    if (durationEditHandler) {
+        tasksTable.container.removeEventListener('click', durationEditHandler);
+    }
+
+    durationEditHandler = (e) => {
+        const durationCell = e.target.closest('.editable-duration');
+        if (!durationCell) return;
+        if (e.target.tagName === 'INPUT') return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const taskIdAttr = durationCell.getAttribute('data-task-id');
+        const originalValue = durationCell.getAttribute('data-duration-value') || '';
+        const originalContent = durationCell.innerHTML;
+        if (!taskIdAttr) return;
+
+        const input = document.createElement('input');
+        input.type = 'number';
+        input.min = '0.5';
+        input.step = '0.5';
+        input.value = originalValue;
+        input.className = 'form-control form-control-sm';
+        input.style.cssText = 'width: 90px; margin: 0 auto; z-index: 10; position: relative;';
+
+        durationCell.innerHTML = '';
+        durationCell.style.display = 'flex';
+        durationCell.style.justifyContent = 'center';
+        durationCell.style.alignItems = 'center';
+        durationCell.appendChild(input);
+        input.focus();
+
+        const restore = (content) => {
+            durationCell.innerHTML = content;
+            durationCell.style.display = '';
+            durationCell.style.justifyContent = '';
+            durationCell.style.alignItems = '';
+        };
+
+        const saveDuration = async () => {
+            const raw = input.value;
+            if (raw === originalValue) {
+                restore(originalContent);
+                return;
+            }
+            const numericTaskId = isNaN(taskIdAttr) ? taskIdAttr : parseInt(taskIdAttr);
+            const newValue = raw === '' ? null : parseFloat(raw);
+            try {
+                await patchDepartmentTask(numericTaskId, { estimated_duration_wd: newValue });
+                showNotification('Tahmini süre güncellendi', 'success');
+                restore(newValue !== null
+                    ? `${newValue.toLocaleString('tr-TR')} g` : '-');
+                durationCell.setAttribute('data-duration-value', raw);
+                const task = tasks.find(t => t.id === numericTaskId) ||
+                    Array.from(subtasksCache.values()).flat().find(t => t.id === numericTaskId);
+                if (task) {
+                    task.estimated_duration_wd = newValue;
+                }
+            } catch (error) {
+                console.error('Error updating duration:', error);
+                let errorMessage = 'Tahmini süre güncellenirken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            errorMessage = Object.values(errorData).flat().join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (parseError) {
+                    // keep default message
+                }
+                showNotification(errorMessage, 'error');
+                restore(originalContent);
+            }
+        };
+
+        input.addEventListener('blur', saveDuration);
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                input.blur();
+            } else if (event.key === 'Escape') {
+                event.preventDefault();
+                input.removeEventListener('blur', saveDuration);
+                restore(originalContent);
+            }
+        });
+    };
+
+    tasksTable.container.addEventListener('click', durationEditHandler);
 }
 
 // Setup event listeners for weight editing using event delegation
@@ -3752,6 +3885,10 @@ async function renderEditActionForm(task) {
                 <div class="col-md-6">
                     <label class="form-label">Hedef Bitiş Tarihi</label>
                     <input type="date" class="form-control" id="edit-target-completion-date" value="${task.target_completion_date ? task.target_completion_date.split('T')[0] : ''}">
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Tahmini Süre (iş günü)</label>
+                    <input type="number" class="form-control" id="edit-estimated-duration-wd" min="0.5" step="0.5" value="${task.estimated_duration_wd ?? ''}">
                 </div>
                 <div class="col-md-12">
                     <label class="form-label">Notlar</label>
@@ -5849,7 +5986,12 @@ async function handleEditActionSubmit(task) {
     if (targetCompletionDateInput) {
         updateData.target_completion_date = targetCompletionDateInput.value || null;
     }
-    
+
+    const durationInput = taskDetailsModal.container.querySelector('#edit-estimated-duration-wd');
+    if (durationInput) {
+        updateData.estimated_duration_wd = durationInput.value === '' ? null : parseFloat(durationInput.value);
+    }
+
     const notesInput = taskDetailsModal.container.querySelector('#edit-notes');
     if (notesInput) {
         updateData.notes = notesInput.value || null;
@@ -6563,6 +6705,19 @@ async function showEditTaskModal(taskId) {
             icon: 'fas fa-calendar-check',
             colSize: 6,
             helpText: 'Hedef bitiş tarihi'
+        });
+
+        editTaskModal.addField({
+            id: 'edit-estimated-duration-wd',
+            name: 'estimated_duration_wd',
+            label: 'Tahmini Süre (iş günü)',
+            type: 'number',
+            value: task.estimated_duration_wd ?? '',
+            icon: 'fas fa-stopwatch',
+            colSize: 6,
+            min: 0.5,
+            step: 0.5,
+            helpText: 'Görevin kaç iş günü süreceği — üretim planı öngörüsünü besler'
         });
 
         editTaskModal.addSection({

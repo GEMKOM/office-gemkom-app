@@ -9302,7 +9302,19 @@ window.showCreateDepartmentTaskModal = async function(jobNo) {
             colSize: 6,
             helpText: 'Hedef bitiş tarihi'
         });
-        
+
+        createDepartmentTaskModal.addField({
+            id: 'estimated_duration_wd',
+            name: 'estimated_duration_wd',
+            label: 'Tahmini Süre (iş günü)',
+            type: 'number',
+            icon: 'fas fa-stopwatch',
+            colSize: 6,
+            min: 0.5,
+            step: 0.5,
+            helpText: 'Kaç iş günü sürecek — üretim planı öngörüsünü besler'
+        });
+
         // Add Additional Information section
         createDepartmentTaskModal.addSection({
             title: 'Ek Bilgiler',
@@ -9344,6 +9356,8 @@ window.showCreateDepartmentTaskModal = async function(jobNo) {
                     description: formData.description || '',
                     target_start_date: formData.target_start_date || null,
                     target_completion_date: formData.target_completion_date || null,
+                    estimated_duration_wd: formData.estimated_duration_wd
+                        ? parseFloat(formData.estimated_duration_wd) : null,
                     sequence: formData.sequence ? parseInt(formData.sequence) : null,
                     notes: formData.notes || ''
                 };

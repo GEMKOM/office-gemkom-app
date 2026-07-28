@@ -978,6 +978,27 @@ async function openPlanModal(item) {
         if (s.projection_kind === 'rate') {
             return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi; bu hızla ~${formatWd(rem)} iş günü daha sürer.`;
         }
+        if (s.projection_kind === 'duration') {
+            return `Girilen süre esas alındı: ~${formatWd(rem)} iş günü.`;
+        }
+        if (s.projection_kind === 'gate') {
+            const g = (s.projection_gates || []).find(x => x.binding);
+            if (g) {
+                const overdueNote = g.overdue ? ' (teslimat gecikmiş — en erken bugünden itibaren)' : '';
+                return `${g.label}: ${fmtShortDate(g.date)}${overdueNote}. Sonrasında ~${formatWd(rem)} iş günü sürer.`;
+            }
+            return `Başlama koşulu bekleniyor; sonrasında ~${formatWd(rem)} iş günü sürer.`;
+        }
+        if (s.projection_kind === 'coupled') {
+            const b = s.projection_basis || {};
+            const cutNote = b.cut_ratio !== undefined && b.cut_ratio !== null
+                ? ` (kesilen: %${Math.round(b.cut_ratio * 100)})` : '';
+            return `Kesim bittikçe ilerleyebilir — kesim öngörüsü ${fmtShortDate(b.base_end)} + son parti için ~${formatWd(b.tail_wd)} iş günü${cutNote}.`;
+        }
+        if (s.projection_kind === 'floored') {
+            const b = s.projection_basis || {};
+            return `${b.label || 'Bitiş koşulu'} — öngörü: ${fmtShortDate(s.projected_end_date)}.`;
+        }
         if (s.projection_kind === 'weight') {
             return `Henüz ilerleme yok; görevin ağırlığına ve işin genel hızına göre ~${formatWd(rem)} iş günü sürmesi bekleniyor.`;
         }

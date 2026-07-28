@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await loadUsers();
     initializeFilters();
     initializeTable();
+    setupMembersCopyHandler();
     await loadTeams();
     updateStats();
 });
@@ -605,8 +606,104 @@ function getMembersCount(row) {
 function formatMembers(row) {
     const members = getMembersList(row);
     if (members.length === 0) return '-';
-    if (members.length <= 2) return members.join(', ');
-    return `${members.slice(0, 2).join(', ')} +${members.length - 2}`;
+
+    const fullList = members.join(', ');
+    const escapedFull = escapeHtml(fullList);
+    const display = members.length <= 2
+        ? escapeHtml(fullList)
+        : `${escapeHtml(members.slice(0, 2).join(', '))} <span class="text-muted">+${members.length - 2}</span>`;
+
+    return `
+        <div class="d-flex align-items-center gap-2 members-cell">
+            <span class="members-text" title="${escapedFull}">${display}</span>
+            <button type="button"
+                class="btn btn-sm btn-link text-muted p-0 copy-members-btn"
+                title="Üyeleri kopyala"
+                data-members="${encodeURIComponent(fullList)}"
+                aria-label="Üyeleri kopyala">
+                <i class="fas fa-copy"></i>
+            </button>
+        </div>
+    `;
+}
+
+function escapeHtml(text) {
+    if (text === null || text === undefined) return '';
+    return String(text)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+let membersCopyListenerAttached = false;
+
+function setupMembersCopyHandler() {
+    if (membersCopyListenerAttached) return;
+
+    document.addEventListener('click', (e) => {
+        const btn = e.target.closest('.copy-members-btn');
+        if (!btn || !btn.closest('#teams-table-container')) return;
+
+        e.preventDefault();
+        e.stopPropagation();
+
+        const encoded = btn.getAttribute('data-members');
+        if (!encoded) return;
+
+        try {
+            copyMembersToClipboard(decodeURIComponent(encoded));
+        } catch (err) {
+            console.error('Failed to decode members list:', err);
+            showNotification('Üyeler kopyalanamadı', 'error');
+        }
+    });
+    membersCopyListenerAttached = true;
+}
+
+function copyMembersToClipboard(text) {
+    if (!text) {
+        showNotification('Kopyalanacak üye yok', 'error');
+        return;
+    }
+
+    if (navigator.clipboard?.writeText) {
+        navigator.clipboard.writeText(text)
+            .then(() => showNotification('Üyeler kopyalandı', 'success'))
+            .catch(() => copyMembersToClipboardFallback(text));
+        return;
+    }
+
+    copyMembersToClipboardFallback(text);
+}
+
+function copyMembersToClipboardFallback(text) {
+    const textarea = document.createElement('textarea');
+    textarea.value = text;
+    textarea.setAttribute('readonly', '');
+    textarea.style.position = 'fixed';
+    textarea.style.top = '0';
+    textarea.style.left = '0';
+    textarea.style.opacity = '0';
+    document.body.appendChild(textarea);
+    textarea.focus();
+    textarea.select();
+    textarea.setSelectionRange(0, text.length);
+
+    let copied = false;
+    try {
+        copied = document.execCommand('copy');
+    } catch (err) {
+        console.error('Copy failed:', err);
+    }
+
+    document.body.removeChild(textarea);
+
+    if (copied) {
+        showNotification('Üyeler kopyalandı', 'success');
+    } else {
+        showNotification('Üyeler kopyalanamadı', 'error');
+    }
 }
 
 function formatDateTime(value) {

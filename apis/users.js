@@ -8,13 +8,18 @@ import { authedFetch } from "../authService.js";
  * Hits the dedicated `/users/dropdown/` endpoint which returns only
  * id/username/first_name/last_name/full_name/is_active — no heavy profile
  * data, keeping payloads small even with thousands of users.
- * @param {{ is_active?: boolean | string }} [options]
+ * @param {{ is_active?: boolean | string, department_code?: string }} [options]
+ *   department_code: comma-separated position department codes
+ *   (e.g. 'manufacturing' or 'design,planning') to scope assignment pickers.
  * @returns {Promise<Array>} plain array of light user objects
  */
 export async function fetchUsersDropdown(options = {}) {
     const params = new URLSearchParams();
     if (options.is_active !== undefined && options.is_active !== null && options.is_active !== '') {
         params.set('is_active', String(options.is_active));
+    }
+    if (options.department_code) {
+        params.set('department_code', String(options.department_code));
     }
     const query = params.toString();
     const resp = await authedFetch(`${backendBase}/users/dropdown/${query ? `?${query}` : ''}`);
