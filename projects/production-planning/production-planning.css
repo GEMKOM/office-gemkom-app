@@ -1290,6 +1290,150 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     text-overflow: ellipsis;
 }
 
+/* --------------------------------------------------------------------------
+   Plan Detayı — enlarged "why this date" story modal
+   -------------------------------------------------------------------------- */
+
+.pp-modal.pp-modal-plan {
+    width: min(1280px, 96vw);
+    max-height: 92vh;
+}
+
+.pp-modal-plan .pp-modal-table {
+    font-size: 0.95rem;
+}
+
+/* Sentences need to wrap here — the narrow-modal ellipsis rule would eat them */
+.pp-modal-plan .pp-td-basis {
+    white-space: normal;
+    max-width: 360px;
+    min-width: 240px;
+    font-size: 0.88rem;
+    line-height: 1.35;
+}
+
+.pp-plan-verdict {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 16px;
+    border-radius: 10px;
+    font-size: 1.15rem;
+    margin-bottom: 14px;
+}
+
+.pp-plan-verdict i {
+    font-size: 1.3rem;
+}
+
+.pp-pv-red { background: #fdecec; color: #b91c1c; }
+.pp-pv-green { background: #e8f7f0; color: #047857; }
+.pp-pv-orange { background: #fef3e7; color: #c2410c; }
+.pp-pv-grey { background: #f1f4f8; color: #59616d; }
+
+.pp-plan-figures {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 14px;
+    text-align: center;
+}
+
+.pp-plan-fig {
+    background: #f7f9fc;
+    border: 1px solid #e2e6ec;
+    border-radius: 10px;
+    padding: 10px 8px;
+}
+
+.pp-plan-fig label {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #8a919c;
+    margin-bottom: 4px;
+}
+
+.pp-plan-fig span {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: #1f2530;
+}
+
+.pp-plan-driver {
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+    background: rgba(124, 58, 237, 0.07);
+    border: 1px solid rgba(124, 58, 237, 0.25);
+    border-radius: 10px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+}
+
+.pp-plan-driver .pp-driver-flag {
+    margin-top: 4px;
+    font-size: 1rem;
+}
+
+.pp-plan-driver-title {
+    font-size: 1rem;
+    color: #1f2530;
+}
+
+.pp-plan-driver-sub {
+    font-size: 0.9rem;
+    color: #59616d;
+    margin-top: 3px;
+}
+
+.pp-plan-counts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 6px;
+}
+
+.pp-plan-count {
+    font-size: 0.85rem;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 999px;
+}
+
+.pp-pc-red { background: #fdecec; color: #b91c1c; }
+.pp-pc-orange { background: #fef3e7; color: #c2410c; }
+.pp-pc-blue { background: #e8f0fe; color: #1d4ed8; }
+.pp-pc-grey { background: #f1f4f8; color: #59616d; }
+.pp-pc-green { background: #e8f7f0; color: #047857; }
+
+.pp-plan-progress {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.pp-plan-progress .pp-mini-bar {
+    width: 70px;
+    flex: none;
+}
+
+.pp-plan-pct {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.pp-mini-red { background: #dc2626; }
+.pp-mini-orange { background: #ea580c; }
+
+.pp-td-muted-sm {
+    color: #8a919c;
+    font-size: 0.82em;
+    font-weight: 500;
+}
+
 /* Short screens (1366×768 laptops): shrink one step, caps shrink in JS via
    the same max-height: 860px matchMedia query. */
 @media (max-height: 860px) {

@@ -824,6 +824,8 @@ function ensureMeetingModalHost() {
 
 function openMeetingModal(title, bodyHtml, context = null) {
     const host = ensureMeetingModalHost();
+    host.querySelector('.pp-modal').classList.toggle(
+        'pp-modal-plan', !!context && context.kind === 'plan');
     host.querySelector('#pp-modal-title').innerHTML = title;
     host.querySelector('#pp-modal-body').innerHTML = bodyHtml;
     host.style.display = 'flex';
@@ -958,60 +960,86 @@ async function openPlanModal(item) {
         return hasCustomTitle ? `${task.department_display} - ${task.title}` : task.department_display;
     };
 
-    const SEVERITY_ORDER = {
-        at_risk: 0, overdue: 0, completed_late: 0,
-        in_progress: 1, not_started: 2, unplanned: 3,
-        completed_on_time: 4, excluded: 5,
-    };
-    const magnitude = (s) => Math.abs(
-        s.projected_variance_wd ?? s.end_variance_wd ?? s.overdue_wd ?? 0);
-    const severitySort = (a, b) =>
-        (SEVERITY_ORDER[a.schedule.classification] ?? 9) - (SEVERITY_ORDER[b.schedule.classification] ?? 9)
-        || magnitude(b.schedule) - magnitude(a.schedule);
-
-    // How the projection was derived — the answer to "where does this date
-    // come from?" for unplanned tasks.
-    const basisCell = (t) => {
+    // Plain-language answer to "why this date?" — one short sentence per task,
+    // so the column reads without a legend.
+    const basisSentence = (t) => {
         const s = t.schedule;
-        if (t.status === 'completed') return '<span class="text-muted">—</span>';
-        const remaining = s.projection_remaining_wd;
+        if (t.status === 'completed') {
+            const v = s.end_variance_wd;
+            if (v !== null && v !== undefined && v > 0) {
+                return `Bitti — hedefinden ${formatWd(v)} iş günü geç tamamlandı.`;
+            }
+            return 'Bitti.';
+        }
+        const rem = s.projection_remaining_wd;
+        if (s.projection_kind === 'done') {
+            return '%100 görünüyor — kapanışı bekleniyor.';
+        }
         if (s.projection_kind === 'rate') {
-            return `${formatWd(s.projection_elapsed_wd)} günde %${Math.round(t.completion_percentage)} · ~${formatWd(remaining)} g kaldı`;
+            return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi; bu hızla ~${formatWd(rem)} iş günü daha sürer.`;
         }
         if (s.projection_kind === 'weight') {
-            return `<span title="Görev ağırlığının, işin bugüne kadarki temposuna oranı">ağırlık payı · ~${formatWd(remaining)} g</span>`;
+            return `Henüz ilerleme yok; görevin ağırlığına ve işin genel hızına göre ~${formatWd(rem)} iş günü sürmesi bekleniyor.`;
         }
         if (s.projection_kind === 'push') {
             const pusher = s.pushed_by && byId.get(s.pushed_by);
-            return `<span class="pp-td-muted" title="${pusher ? escapeHtml(label(pusher)) : ''}">İten: ${pusher ? escapeHtml(label(pusher)) : 'önceki görev'}</span>`;
+            return `Önce şu görev bitmeli: ${pusher ? label(pusher) : 'önceki görev'}. Sonrasında ~${formatWd(rem)} iş günü sürer.`;
         }
-        return '<span class="text-muted">—</span>';
+        if (s.projection_kind === 'subtasks') {
+            return 'Alt görevlerine göre: en geç biten alt görevi bu tarihte bitiyor.';
+        }
+        if (s.projection_kind === 'start') {
+            return (t.target_start_date || t.target_completion_date)
+                ? `Plandaki tarih aralığı esas alındı (~${formatWd(rem)} iş günü).`
+                : 'Süre bilgisi yok — 1 iş günü varsayıldı.';
+        }
+        return '';
+    };
+
+    const MINI_THEME = {
+        overdue: 'red', completed_late: 'red', at_risk: 'orange',
+        completed_on_time: 'green',
+    };
+    const progressCell = (t) => {
+        const pct = Math.round(t.completion_percentage || 0);
+        const theme = t.status === 'completed'
+            ? 'green' : (MINI_THEME[t.schedule.classification] || 'blue');
+        return `
+            <div class="pp-plan-progress">
+                ${miniBarHtml(pct / 100, theme)}<span class="pp-plan-pct">%${pct}</span>
+            </div>`;
     };
 
     const taskRow = (t) => {
         const s = t.schedule;
-        const badge = CLASSIFICATION_BADGES[s.classification] || CLASSIFICATION_BADGES.not_started;
+        const completed = t.status === 'completed';
+        // "Plansız" on a finished row reads as a problem — a completed task
+        // without a target date is simply done.
+        const badge = completed && s.classification === 'unplanned'
+            ? { label: 'Bitti', badgeClass: 'status-green' }
+            : (CLASSIFICATION_BADGES[s.classification] || CLASSIFICATION_BADGES.not_started);
         const end = s.projected_end_date || s.actual_end_date;
         const variance = s.projected_variance_wd ?? s.end_variance_wd ?? s.overdue_wd;
         const varianceHtml = variance === null || variance === undefined ? ''
             : (variance > 0
-                ? ` <span class="pp-num-red">(+${formatWd(variance)})</span>`
-                : (variance < 0 ? ` <span class="pp-num-green">(${formatWd(variance)} erken)</span>` : ''));
+                ? ` <span class="pp-num-red">${formatWd(variance)} g geç</span>`
+                : (variance < 0 ? ` <span class="pp-num-green">${formatWd(variance)} g erken</span>` : ''));
         const materialWaitHtml = s.material_wait ? ` ${materialWaitBadgeHtml(s.material_wait)}` : '';
         const driver = s.drives_completion;
         return `
             <tr${driver ? ' class="pp-modal-driver"' : ''}>
                 <td class="pp-td-main" title="${escapeHtml(label(t))}">${driver ? '<i class="fas fa-flag pp-driver-flag" title="Bitişi belirleyen görev"></i> ' : ''}${escapeHtml(label(t))}</td>
                 <td><span class="status-badge ${badge.badgeClass}">${badge.label}</span>${materialWaitHtml}</td>
+                <td>${progressCell(t)}</td>
                 <td>${fmtShortDate(t.target_completion_date)}</td>
-                <td>${fmtShortDate(end)}${varianceHtml}</td>
-                <td class="pp-td-basis">${basisCell(t)}</td>
+                <td>${fmtShortDate(end)}${completed ? ' <span class="pp-td-muted-sm">(gerçek)</span>' : ''}${varianceHtml}</td>
+                <td class="pp-td-basis">${escapeHtml(basisSentence(t))}</td>
             </tr>`;
     };
 
     // Subtrees group by job order in tree order (the endpoint's nodes array
-    // is DFS), tasks severity-sorted within their group — a lone job order
-    // renders as a flat list with no group chrome.
+    // is DFS), tasks in their original plan order within each group — a lone
+    // job order renders as a flat list with no group chrome.
     const tasksByJob = new Map();
     for (const t of visibleOf(planData.tasks)) {
         if (!tasksByJob.has(t.job_no)) tasksByJob.set(t.job_no, []);
@@ -1019,7 +1047,7 @@ async function openPlanModal(item) {
     }
     const groups = (planData.nodes || [])
         .filter(n => (tasksByJob.get(n.job_no) || []).length)
-        .map(n => ({ node: n, tasks: tasksByJob.get(n.job_no).slice().sort(severitySort) }));
+        .map(n => ({ node: n, tasks: tasksByJob.get(n.job_no) }));
     const multiNode = groups.length > 1;
 
     const rows = [];
@@ -1028,7 +1056,7 @@ async function openPlanModal(item) {
             const projected = node.summary && node.summary.projected_completion;
             rows.push(`
                 <tr class="pp-modal-group">
-                    <td colspan="5" style="padding-left: ${node.depth * 18}px">
+                    <td colspan="6" style="padding-left: ${node.depth * 18}px">
                         ${escapeHtml(node.job_no)}
                         <span class="pp-modal-group-title">${escapeHtml(node.title || '')}</span>
                         <span class="pp-modal-group-meta">%${Math.round(node.completion_percentage || 0)}${projected ? ` · Öngörülen ${fmtShortDate(projected)}` : ''}</span>
@@ -1038,27 +1066,85 @@ async function openPlanModal(item) {
         rows.push(...tasks.map(taskRow));
     }
 
-    // The one-line answer to "why this date": the task whose projected end IS
-    // the job's projected completion.
+    // The story, top-down: verdict sentence → the three dates → the task that
+    // decides the end date → task counts → the per-task table.
+    const forecast = item.forecast || {};
+    const vMeta = VERDICT_META[forecast.verdict] || VERDICT_META.unknown;
+    const verdictSentence = {
+        late_risk: `Bu gidişle iş, hedefinden <strong>${formatWd(forecast.variance_wd)} iş günü geç</strong> bitecek görünüyor.`,
+        on_track: 'Bu gidişle iş <strong>hedef tarihinde</strong> bitecek görünüyor.',
+        finished_late: `İş tamamlandı — hedefinden <strong>${formatWd(forecast.variance_wd)} iş günü geç</strong> bitti.`,
+        finished_on_time: 'İş tamamlandı — <strong>zamanında</strong> bitti.',
+        no_target: 'Hedef tarih girilmediği için sapma hesaplanamıyor.',
+    }[forecast.verdict] || 'Öngörü hesaplanacak veri yok.';
+
+    const v = forecast.variance_wd;
+    const sapmaHtml = v === null || v === undefined ? '—'
+        : (v > 0
+            ? `<span class="pp-fig-late">+${formatWd(v)} iş günü</span>`
+            : (v < 0 ? `<span class="pp-fig-early">${formatWd(v)} iş günü erken</span>` : 'Tam zamanında'));
+
     const driverTask = planData.tasks.find(t => t.schedule.drives_completion);
-    const driverLine = driverTask ? `
-        <div class="pp-modal-driver-line">
+    const driverBox = driverTask ? `
+        <div class="pp-plan-driver">
             <i class="fas fa-flag pp-driver-flag"></i>
-            Bitişi belirleyen: <strong>${escapeHtml(label(driverTask))}</strong>
-            <span class="text-muted">· ${escapeHtml(driverTask.job_no)}</span>
-            — ${fmtShortDate(driverTask.schedule.projected_end_date)}
-            <span class="text-muted">(${basisCell(driverTask).replace(/<[^>]*>/g, '')})</span>
+            <div>
+                <div class="pp-plan-driver-title">Bitiş tarihini bu görev belirliyor:
+                    <strong>${escapeHtml(label(driverTask))}</strong>
+                    <span class="pp-td-muted-sm">· ${escapeHtml(driverTask.job_no)}</span></div>
+                <div class="pp-plan-driver-sub">En geç bitmesi öngörülen görev bu:
+                    ${fmtShortDate(driverTask.schedule.projected_end_date)} — iş de o gün tamamlanır.
+                    ${escapeHtml(basisSentence(driverTask))}</div>
+            </div>
         </div>` : '';
 
+    const counts = { late: 0, lateDone: 0, risk: 0, active: 0, waiting: 0, done: 0 };
+    for (const { tasks } of groups) {
+        for (const t of tasks) {
+            const c = t.schedule.classification;
+            if (t.status === 'completed') {
+                if (c === 'completed_late') counts.lateDone += 1;
+                else counts.done += 1;
+            } else if (c === 'overdue') counts.late += 1;
+            else if (c === 'at_risk') counts.risk += 1;
+            else if (c === 'in_progress') counts.active += 1;
+            else counts.waiting += 1;
+        }
+    }
+    const chip = (n, txt, cls) => n ? `<span class="pp-plan-count ${cls}">${n} ${txt}</span>` : '';
+    const countsHtml = `
+        <div class="pp-plan-counts">
+            ${chip(counts.late, 'gecikmede', 'pp-pc-red')}
+            ${chip(counts.risk, 'risk altında', 'pp-pc-orange')}
+            ${chip(counts.active, 'devam ediyor', 'pp-pc-blue')}
+            ${chip(counts.waiting, 'başlamadı', 'pp-pc-grey')}
+            ${chip(counts.lateDone, 'geç bitti', 'pp-pc-red')}
+            ${chip(counts.done, 'bitti', 'pp-pc-green')}
+        </div>`;
+
     document.getElementById('pp-modal-body').innerHTML = `
-        ${verdictHeadline(item.forecast || { verdict: 'unknown' })}
-        ${driverLine}
-        <div class="pp-modal-note">${multiNode
-            ? 'Alt iş emirlerine göre gruplu; her grupta geciken ve riskli işler üstte.'
-            : 'Görevler önem sırasıyla: geciken ve riskli işler üstte.'}
-            "Öngörü Dayanağı" her tarihin nereden geldiğini söyler: tempo (şu sürede şu kadar ilerledi),
-            ağırlık payı (henüz tempo yok — görev ağırlığının işin temposuna oranı) veya iten görev.</div>
-        ${modalTableHtml(['Görev', 'Durum', 'Hedef', 'Öngörülen / Gerçek', 'Öngörü Dayanağı'], rows)}`;
+        <div class="pp-plan-verdict pp-pv-${vMeta.theme}">
+            <i class="fas ${vMeta.icon}"></i>
+            <div>${verdictSentence}</div>
+        </div>
+        <div class="pp-plan-figures">
+            <div class="pp-plan-fig">
+                <label>Hedef Bitiş</label>
+                <span>${formatDateLong(forecast.target_completion_date)}</span>
+            </div>
+            <div class="pp-plan-fig">
+                <label>Öngörülen Bitiş</label>
+                <span class="${forecast.verdict === 'late_risk' ? 'pp-fig-late' : ''}">${formatDateLong(forecast.projected_completion_date)}</span>
+            </div>
+            <div class="pp-plan-fig">
+                <label>Sapma</label>
+                <span>${sapmaHtml}</span>
+            </div>
+        </div>
+        ${driverBox}
+        ${countsHtml}
+        ${multiNode ? '<div class="pp-modal-note">Görevler alt iş emirlerine göre gruplu.</div>' : ''}
+        ${modalTableHtml(['Görev', 'Durum', 'İlerleme', 'Hedef', 'Öngörülen Bitiş', 'Neden bu tarih?'], rows)}`;
 }
 
 function weldingModalHtml(brief) {
