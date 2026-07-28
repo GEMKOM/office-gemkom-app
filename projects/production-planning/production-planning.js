@@ -1406,29 +1406,27 @@ function meetingHeroHtml(item, financial) {
                         <span id="pp-fin-chip">${financialChipHtml(financial)}</span>
                     </div>
                 </div>
-                <div class="pp-verdict-figures pp-hero-figures">
-                    <div class="pp-fig">
+                <div class="pp-hero-figures-xl">
+                    <div class="pp-fig-xl">
                         <label>Hedef Bitiş</label>
-                        <span class="pp-fig-value">${formatDateLong(forecast.target_completion_date)}</span>
+                        <span class="pp-fig-xl-value">${formatDateLong(forecast.target_completion_date)}</span>
                     </div>
-                    <div class="pp-fig-arrow"><i class="fas fa-arrow-right-long"></i></div>
-                    <div class="pp-fig pp-fig-primary">
+                    <div class="pp-fig-xl pp-fig-xl-primary">
                         <label>Öngörülen Bitiş</label>
-                        <span class="pp-fig-value ${projectedClass}">${formatDateLong(forecast.projected_completion_date)}</span>
+                        <span class="pp-fig-xl-value ${projectedClass}">${formatDateLong(forecast.projected_completion_date)}</span>
                     </div>
-                    <div class="pp-fig">
+                    <div class="pp-fig-xl">
                         <label>Sapma</label>
-                        ${varianceFigure}
-                    </div>
-                    <div class="pp-fig pp-fig-progress">
-                        <label>İlerleme</label>
-                        <span class="pp-fig-value-line">
-                            <span class="pp-fig-value">%${pct}</span>
-                            <span class="pp-fig-progressbar"><span class="pp-fig-progressfill pp-pf-${meta.theme}" style="width: ${Math.min(pct, 100)}%"></span></span>
-                        </span>
+                        ${varianceFigure.replace(/pp-fig-value/g, 'pp-fig-xl-value')}
                     </div>
                 </div>
-                ${verdictTimelineHtml(forecast, summary, overviewData ? overviewData.today : null)}
+                <div class="pp-hero-progress">
+                    <span class="pp-hero-progress-label">İlerleme</span>
+                    <div class="pp-hero-progress-bar">
+                        <div class="pp-hero-progress-fill pp-pf-${meta.theme}" style="width: ${Math.min(pct, 100)}%"></div>
+                    </div>
+                    <span class="pp-hero-progress-pct">%${pct}</span>
+                </div>
             </div>
         </div>`;
 }
