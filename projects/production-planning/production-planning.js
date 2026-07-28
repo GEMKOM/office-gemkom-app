@@ -514,12 +514,12 @@ function verdictCardHtml(jobOrderLike, summary, todayIso, opts = {}) {
                 <div class="pp-verdict-figures">
                     <div class="pp-fig">
                         <label>Hedef Bitiş</label>
-                        <span class="pp-fig-value">${formatDateCell(forecast.target_completion_date)}</span>
+                        <span class="pp-fig-value">${formatDateLong(forecast.target_completion_date)}</span>
                     </div>
                     <div class="pp-fig-arrow"><i class="fas fa-arrow-right-long"></i></div>
                     <div class="pp-fig">
                         <label>Öngörülen Bitiş</label>
-                        <span class="pp-fig-value ${projectedClass}">${formatDateCell(forecast.projected_completion_date)}</span>
+                        <span class="pp-fig-value ${projectedClass}">${formatDateLong(forecast.projected_completion_date)}</span>
                     </div>
                     <div class="pp-fig">
                         <label>Sapma</label>
@@ -1406,12 +1406,12 @@ function meetingHeroHtml(item, financial) {
                 <div class="pp-verdict-figures pp-hero-figures">
                     <div class="pp-fig">
                         <label>Hedef Bitiş</label>
-                        <span class="pp-fig-value">${formatDateCell(forecast.target_completion_date)}</span>
+                        <span class="pp-fig-value">${formatDateLong(forecast.target_completion_date)}</span>
                     </div>
                     <div class="pp-fig-arrow"><i class="fas fa-arrow-right-long"></i></div>
                     <div class="pp-fig pp-fig-primary">
                         <label>Öngörülen Bitiş</label>
-                        <span class="pp-fig-value ${projectedClass}">${formatDateCell(forecast.projected_completion_date)}</span>
+                        <span class="pp-fig-value ${projectedClass}">${formatDateLong(forecast.projected_completion_date)}</span>
                     </div>
                     <div class="pp-fig">
                         <label>Sapma</label>
@@ -2265,6 +2265,14 @@ function formatDateCell(value) {
     const date = new Date(value);
     if (isNaN(date.getTime())) return '-';
     return date.toLocaleDateString('tr-TR');
+}
+
+// Long form for the hero figures: "27 Temmuz 2026"
+function formatDateLong(value) {
+    if (!value) return '—';
+    const date = new Date(value);
+    if (isNaN(date.getTime())) return '—';
+    return date.toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function formatWd(value) {
