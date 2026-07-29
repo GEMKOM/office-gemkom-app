@@ -2580,6 +2580,18 @@ window.editJobOrder = async function(jobNo) {
         });
 
         editJobOrderModal.addField({
+            id: 'erp_product_codes',
+            name: 'erp_product_codes',
+            label: 'ERP Ürün Kodları',
+            type: 'textarea',
+            value: jobOrder.erp_product_codes || '',
+            icon: 'fas fa-barcode',
+            colSize: 12,
+            rows: 3,
+            helpText: "İmalat tamamlandığında ERP'ye ürün girişi için kullanılacak ürün kodları. Ana iş emrine girilir; alt iş emirleri devralır."
+        });
+
+        editJobOrderModal.addField({
             id: 'quantity',
             name: 'quantity',
             label: 'Miktar',
@@ -2841,6 +2853,12 @@ window.viewJobOrder = async function(jobNo) {
                                 <i class="fas fa-file-invoice me-1"></i>Müşteri Sipariş No
                             </div>
                             <div class="field-value flex-grow-1">${jobOrder.customer_order_no || '-'}</div>
+                        </div>
+                        <div class="field-row d-flex align-items-start py-2 border-bottom">
+                            <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
+                                <i class="fas fa-barcode me-1"></i>ERP Ürün Kodları
+                            </div>
+                            <div class="field-value flex-grow-1" style="white-space: pre-wrap; word-break: break-word;">${jobOrder.erp_product_codes || '-'}</div>
                         </div>
                         <div class="field-row d-flex align-items-center py-2 border-bottom">
                             <div class="field-label small text-muted" style="min-width: 180px; flex-shrink: 0;">
@@ -7809,6 +7827,18 @@ function showCreateJobOrderModal() {
         icon: 'fas fa-file-invoice',
         colSize: 6,
         helpText: 'Müşteri sipariş numarası'
+    });
+
+    createJobOrderModal.addField({
+        id: 'erp_product_codes',
+        name: 'erp_product_codes',
+        label: 'ERP Ürün Kodları',
+        type: 'textarea',
+        placeholder: 'ERP ürün kodları',
+        icon: 'fas fa-barcode',
+        colSize: 12,
+        rows: 3,
+        helpText: "İmalat tamamlandığında ERP'ye ürün girişi için kullanılacak ürün kodları. Ana iş emrine girilir; alt iş emirleri devralır."
     });
 
     createJobOrderModal.addField({

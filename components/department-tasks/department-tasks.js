@@ -829,8 +829,8 @@ function initializeTableComponent() {
                     let qcBadge = '';
                     if (row.qc_required === true) {
                         const qcStatusMap = {
-                            'pending': { class: 'status-yellow', label: 'KK Bekleniyor', icon: 'fas fa-clock' },
-                            'waiting': { class: 'status-blue', label: 'KK Bekleniyor', icon: 'fas fa-hourglass-half' },
+                            'pending': { class: 'status-yellow', label: 'KK', icon: 'fas fa-clock' },
+                            'waiting': { class: 'status-blue', label: 'KK', icon: 'fas fa-hourglass-half' },
                             'approved': { class: 'status-green', label: 'KK Onaylandı', icon: 'fas fa-check-circle' },
                             'rejected': { class: 'status-red', label: 'KK Reddedildi', icon: 'fas fa-times-circle' }
                         };
@@ -898,6 +898,22 @@ function initializeTableComponent() {
                     return `<div class="small">${subcontractorLines}</div>`;
                 }
             },
+            // Manufacturing only: the job order's total weight (kg), set by planning.
+            ...(department === 'manufacturing' ? [{
+                field: 'job_order_total_weight_kg',
+                label: 'İş Emri Ağırlığı',
+                sortable: false,
+                formatter: (value, row) => {
+                    if (value === null || value === undefined || value === '') {
+                        return '<div class="text-center text-muted">-</div>';
+                    }
+                    const formatted = parseFloat(value).toLocaleString('tr-TR', {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2
+                    });
+                    return `<div class="text-center">${formatted} kg</div>`;
+                }
+            }] : []),
             {
                 field: 'target_start_date',
                 label: 'Hedef Başlangıç',
@@ -7106,6 +7122,14 @@ async function handleCompleteTask(taskId, taskRow = null) {
             await showCreateReleaseModal(taskId);
         }
     } else {
+        // Manufacturing main task: require ERP product-code confirmation before completing.
+        const isMfgMain = !!(taskRow && (taskRow.is_manufacturing_main ||
+            (taskRow.department === 'manufacturing' && !taskRow.parent)));
+        if (isMfgMain) {
+            await showErpEntryCompletionModal(taskId, taskRow);
+            return;
+        }
+
         // For other departments, use the standard completion flow
         confirmationModal.show({
             message: 'Bu görevi tamamlamak istediğinize emin misiniz?',
@@ -7143,6 +7167,140 @@ async function handleCompleteTask(taskId, taskRow = null) {
                 }
             }
         });
+    }
+}
+
+/**
+ * Copy text to clipboard with a legacy fallback. Returns true on success.
+ */
+async function copyErpCodesToClipboard(text) {
+    try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            await navigator.clipboard.writeText(text);
+            return true;
+        }
+    } catch (e) {
+        // fall through to legacy path
+    }
+    try {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        const ok = document.execCommand('copy');
+        document.body.removeChild(ta);
+        return ok;
+    } catch (e) {
+        return false;
+    }
+}
+
+/**
+ * Completion modal for the main manufacturing task. Shows the ERP product codes
+ * (entered by planning on the job order), lets the operator copy them, and
+ * requires an explicit acknowledgement checkbox before completing the task.
+ */
+async function showErpEntryCompletionModal(taskId, taskRow) {
+    // Resolve the ERP product codes for this job order (may be inherited from the
+    // main job order). Prefer the value already on the row; otherwise fetch it.
+    let codes = (taskRow && taskRow.erp_product_codes !== undefined) ? taskRow.erp_product_codes : undefined;
+    if (codes === undefined) {
+        try {
+            const task = await getDepartmentTaskById(taskId);
+            codes = (task && task.erp_product_codes) || '';
+        } catch (e) {
+            codes = '';
+        }
+    }
+    codes = (codes || '').trim();
+    const hasCodes = codes.length > 0;
+
+    const escapeHtml = (s) => String(s)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+    const codesBlockHtml = hasCodes
+        ? `<pre id="erp-codes-text" style="white-space:pre-wrap;word-break:break-word;max-height:200px;overflow:auto;background:rgba(0,0,0,0.06);padding:8px;border-radius:4px;margin:0 0 8px 0;">${escapeHtml(codes)}</pre>`
+        : `<div class="text-muted fst-italic mb-2">Planlama henüz ürün kodu girmemiş.</div>`;
+
+    const detailsHtml = `
+        <div class="text-start">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+                <strong><i class="fas fa-barcode me-2"></i>ERP Ürün Kodları</strong>
+                ${hasCodes ? `<button type="button" class="btn btn-sm btn-outline-primary" id="erp-copy-btn"><i class="fas fa-copy me-1"></i>Kopyala</button>` : ''}
+            </div>
+            ${codesBlockHtml}
+            <div class="alert alert-warning py-2 mb-2 mt-2">Ürün kodlarını ERP'ye girdikten sonra bu görevi tamamlayın.</div>
+            <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="erp-ack-checkbox">
+                <label class="form-check-label" for="erp-ack-checkbox">
+                    Ürün kodlarını ERP'ye girdiğimi onaylıyorum.
+                </label>
+            </div>
+        </div>
+    `;
+
+    confirmationModal.show({
+        title: 'Ürün Girişi Onayı',
+        message: 'İmalat görevini tamamlamadan önce ürün girişini onaylayın.',
+        details: detailsHtml,
+        confirmText: 'Onayla ve Tamamla',
+        onCancel: () => {},
+        onConfirm: async () => {
+            const checkbox = document.getElementById('erp-ack-checkbox');
+            if (!checkbox || !checkbox.checked) {
+                showNotification('Devam etmek için ürün girişini onaylamanız gerekir.', 'warning');
+                throw new Error('erp-not-acknowledged'); // keep the modal open
+            }
+            try {
+                const response = await completeDepartmentTask(taskId, { erp_acknowledged: true });
+                showNotification('Görev tamamlandı', 'success');
+                if (response && response.task) {
+                    const updatedTask = response.task;
+                    if (updateTaskInLocalData(taskId, updatedTask)) {
+                        updateTableDataOnly();
+                    }
+                }
+            } catch (error) {
+                console.error('Error completing manufacturing task:', error);
+                let errorMessage = 'Görev tamamlanırken hata oluştu';
+                try {
+                    if (error.message) {
+                        const errorData = JSON.parse(error.message);
+                        if (typeof errorData === 'object') {
+                            const errors = Object.values(errorData).flat();
+                            errorMessage = errors.join(', ') || errorMessage;
+                        } else {
+                            errorMessage = error.message;
+                        }
+                    }
+                } catch (e) {
+                    // keep default message
+                }
+                showNotification(errorMessage, 'error');
+                throw error; // keep the modal open so the user can retry
+            }
+        }
+    });
+
+    // Wire up the copy button (elements exist synchronously after show() sets innerHTML).
+    if (hasCodes) {
+        const copyBtn = document.getElementById('erp-copy-btn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', async () => {
+                const ok = await copyErpCodesToClipboard(codes);
+                if (ok) {
+                    showNotification('Ürün kodları kopyalandı', 'success');
+                    copyBtn.innerHTML = '<i class="fas fa-check me-1"></i>Kopyalandı';
+                    setTimeout(() => { copyBtn.innerHTML = '<i class="fas fa-copy me-1"></i>Kopyala'; }, 2000);
+                } else {
+                    showNotification('Kopyalama başarısız oldu', 'error');
+                }
+            });
+        }
     }
 }
 

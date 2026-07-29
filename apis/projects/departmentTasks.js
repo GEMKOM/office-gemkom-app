@@ -356,15 +356,23 @@ export async function startDepartmentTask(taskId) {
 /**
  * Complete task (in_progress → completed)
  * @param {number} taskId - Task ID
+ * @param {Object} [options] - Optional completion payload
+ * @param {boolean} [options.erp_acknowledged] - Operator confirmed ERP product entry (required for the main manufacturing task)
+ * @param {string} [options.notes] - Optional completion note
  * @returns {Promise<Object>} Response with status, message, and task
  */
-export async function completeDepartmentTask(taskId) {
+export async function completeDepartmentTask(taskId, options = {}) {
     try {
+        const payload = {};
+        if (options.erp_acknowledged !== undefined) payload.erp_acknowledged = options.erp_acknowledged;
+        if (options.notes !== undefined && options.notes !== null) payload.notes = options.notes;
+
         const response = await authedFetch(`${backendBase}/projects/department-tasks/${taskId}/complete/`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
             },
+            body: JSON.stringify(payload),
             redirect: 'manual' // Prevent automatic redirect following
         });
         
