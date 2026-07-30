@@ -1720,17 +1720,20 @@ function procurementPanelHtml(procurement) {
     if (!procurement) return '';
     const waiting = procurement.items_waiting || 0;
     const total = procurement.items_total || 0;
-    const deliveredPct = total ? Math.round((procurement.items_delivered / total) * 100) : 0;
+    // Stage-weighted progress (same basis as the procurement task's own %:
+    // miktar x birim ağırlık, boru/profil boost, PO aşamaları) — NOT the
+    // item-count ratio, which over-credits small delivered fittings.
+    const pct = procurement.progress_pct;
     const body = `
         <div class="pp-panel-hero">
             <span class="pp-panel-big ${waiting ? 'pp-num-orange' : 'pp-num-green'}">${fmtInt(waiting)}<span class="pp-panel-big-dim">/${fmtInt(total)}</span></span>
             <span class="pp-panel-big-label">bekleyen kalem</span>
         </div>
-        <div class="pp-panel-sub"><strong class="pp-num-green">%${deliveredPct}</strong> teslim edildi
-            ${miniBarHtml(total ? procurement.items_delivered / total : 0, 'green')}</div>
+        <div class="pp-panel-sub"><strong class="pp-num-green">%${pct !== null && pct !== undefined ? pct.toLocaleString('tr-TR', { maximumFractionDigits: 1 }) : 0}</strong> tedarik ilerlemesi
+            ${miniBarHtml((pct || 0) / 100, 'green')}</div>
         <div class="pp-panel-sub">Talebe dönüşmedi: <strong>${fmtInt(procurement.not_yet_requested)}</strong></div>
         <div class="pp-panel-sub">Talepte · teslim bekliyor: <strong>${fmtInt(procurement.requested_waiting)}</strong></div>
-        <div class="pp-panel-sub">Teslim edildi: <strong>${fmtInt(procurement.items_delivered)}</strong></div>`;
+        <div class="pp-panel-sub">Teslim edildi: <strong>${fmtInt(procurement.items_delivered)}</strong> / ${fmtInt(total)} kalem</div>`;
     return panelHtml('cart-shopping', 'Satın Alma', body, 'pp-span-3', 'procurement');
 }
 
