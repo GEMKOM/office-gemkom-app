@@ -2,6 +2,7 @@ import { guardRoute, hasPerm, isSuperuser } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { ComparisonTable } from '../../../components/comparison-table/comparison-table.js';
+import { openAdjustPricesModal } from '../../../components/adjust-prices-modal/adjust-prices-modal.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { DisplayModal } from '../../../components/display-modal/display-modal.js';
 import { FileAttachments } from '../../../components/file-attachments/file-attachments.js';
@@ -918,17 +919,37 @@ async function showRequestDetailsModal() {
     }
     
     // Add action buttons to modal footer
+    const modalFooter = displayModal.container.querySelector('.modal-footer');
+
+    // Owner-only: adjust supplier offer prices within ±10% (copper etc. fluctuates).
+    // Available while the request is still in flight (awaiting approval or approved).
+    const canAdjustOffers = hasPerm('adjust_offer_prices')
+        && (currentRequest.status === 'submitted' || currentRequest.status === 'approved')
+        && (currentRequest.offers && currentRequest.offers.length > 0);
+    if (canAdjustOffers && modalFooter) {
+        const adjustButton = document.createElement('button');
+        adjustButton.type = 'button';
+        adjustButton.className = 'btn btn-outline-primary me-2';
+        adjustButton.innerHTML = '<i class="fas fa-tags me-1"></i>Fiyatları Güncelle';
+        adjustButton.onclick = () => openAdjustPricesModal(currentRequest, {
+            onSaved: async (resp) => {
+                if (resp && resp.purchase_request) {
+                    currentRequest = resp.purchase_request;
+                }
+                await showRequestDetailsModal();
+            }
+        });
+        modalFooter.insertBefore(adjustButton, modalFooter.firstChild);
+    }
+
     const shouldShowCancelButton = currentRequest.status === 'draft' || currentRequest.status === 'submitted';
-    if (shouldShowCancelButton) {
-        const modalFooter = displayModal.container.querySelector('.modal-footer');
-        if (modalFooter) {
-            const cancelButton = document.createElement('button');
-            cancelButton.type = 'button';
-            cancelButton.className = 'btn btn-danger me-2';
-            cancelButton.innerHTML = '<i class="fas fa-times me-1"></i>İptal Et';
-            cancelButton.onclick = handleCancelRequest;
-            modalFooter.insertBefore(cancelButton, modalFooter.firstChild);
-        }
+    if (shouldShowCancelButton && modalFooter) {
+        const cancelButton = document.createElement('button');
+        cancelButton.type = 'button';
+        cancelButton.className = 'btn btn-danger me-2';
+        cancelButton.innerHTML = '<i class="fas fa-times me-1"></i>İptal Et';
+        cancelButton.onclick = handleCancelRequest;
+        modalFooter.insertBefore(cancelButton, modalFooter.firstChild);
     }
     
     // Hide loading state and show the modal

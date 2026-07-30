@@ -1,5 +1,6 @@
-import { guardRoute } from '../../../authService.js';
+import { guardRoute, hasPerm } from '../../../authService.js';
 import { initNavbar } from '../../../components/navbar.js';
+import { openAdjustPricesModal } from '../../../components/adjust-prices-modal/adjust-prices-modal.js';
 import { HeaderComponent } from '../../../components/header/header.js';
 import { ComparisonTable } from '../../../components/comparison-table/comparison-table.js';
 import { TableComponent } from '../../../components/table/table.js';
@@ -958,6 +959,31 @@ async function showRequestDetailsModal() {
         renderComparisonTableForModal(comparisonTable);
     }
     
+    // Owner-only: adjust supplier offer prices within ±10% (copper etc. fluctuates).
+    // Available while awaiting approval or already approved, independent of the
+    // approve/reject buttons (which only show to a pending approver).
+    const canAdjustOffers = hasPerm('adjust_offer_prices')
+        && (currentRequest.status === 'submitted' || currentRequest.status === 'approved')
+        && (currentRequest.offers && currentRequest.offers.length > 0);
+    if (canAdjustOffers) {
+        const modalFooter = displayModal.container.querySelector('.modal-footer');
+        if (modalFooter) {
+            const adjustButton = document.createElement('button');
+            adjustButton.type = 'button';
+            adjustButton.className = 'btn btn-outline-primary me-auto';
+            adjustButton.innerHTML = '<i class="fas fa-tags me-1"></i>Fiyatları Güncelle';
+            adjustButton.onclick = () => openAdjustPricesModal(currentRequest, {
+                onSaved: async (resp) => {
+                    if (resp && resp.purchase_request) {
+                        currentRequest = resp.purchase_request;
+                    }
+                    await showRequestDetailsModal();
+                }
+            });
+            modalFooter.insertBefore(adjustButton, modalFooter.firstChild);
+        }
+    }
+
     // Add action buttons to modal footer
     const shouldShowButtons = currentRequest.status === 'submitted' && !userHasDecided;
     if (shouldShowButtons) {

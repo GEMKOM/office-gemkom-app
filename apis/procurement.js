@@ -869,6 +869,23 @@ export async function getItemPlanningRequests(itemId) {
     }
 }
 
+/**
+ * Owner-only: adjust supplier offer prices within ±10% of the original offer.
+ * Pass either { items: [{ item_offer_id, unit_price }] } or { percent, supplier_offer_id? }.
+ * POST /procurement/purchase-requests/{id}/adjust_offers/
+ */
+export async function adjustOfferPrices(requestId, payload) {
+    const response = await authedFetch(`${backendBase}/procurement/purchase-requests/${requestId}/adjust_offers/`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    if (!response.ok) {
+        throw new Error(await readErrorMessage(response, 'Teklif fiyatları güncellenirken hata oluştu'));
+    }
+    return await response.json();
+}
+
 // Item Offer API Functions
 export async function toggleItemRecommendation(itemOfferId) {
     try {
