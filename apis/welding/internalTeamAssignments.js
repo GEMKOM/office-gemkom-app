@@ -33,6 +33,15 @@ export async function fetchInternalTeamAssignments(filters = {}) {
     return await resp.json();
 }
 
+export async function fetchInternalTeamWeightSummary(weldingTaskId) {
+    const url = `${backendBase}/welding/internal-team-assignments/weight-summary/?welding_task_id=${encodeURIComponent(weldingTaskId)}`;
+    const resp = await authedFetch(url);
+    if (!resp.ok) {
+        throw new Error(await parseError(resp, "Ağırlık özeti yüklenirken hata oluştu"));
+    }
+    return await resp.json();
+}
+
 export async function createInternalTeamAssignmentWithSubtask(payload) {
     const url = `${backendBase}/welding/internal-team-assignments/create-with-subtask/`;
     const resp = await authedFetch(url, {

@@ -54,6 +54,7 @@ import { fetchPriceTiers, getPriceTierRemainingWeight, updatePriceTier } from '.
 import { fetchTeams } from '../../apis/welding/teams.js';
 import {
     fetchInternalTeamAssignments,
+    fetchInternalTeamWeightSummary,
     createInternalTeamAssignmentWithSubtask,
     updateInternalTeamAssignmentWithEndpoint,
     deleteInternalTeamAssignmentWithSubtask
@@ -904,6 +905,11 @@ function initializeTableComponent() {
                 label: 'İş Emri Ağırlığı',
                 sortable: false,
                 formatter: (value, row) => {
+                    // Only show on the top (parent) department task, not its subtasks —
+                    // children share the same job order, so repeating it is misleading.
+                    if (row && row.parent) {
+                        return '<div class="text-center text-muted">-</div>';
+                    }
                     if (value === null || value === undefined || value === '') {
                         return '<div class="text-center text-muted">-</div>';
                     }
@@ -4321,9 +4327,50 @@ async function renderAssignInternalTeamActionForm(task) {
             })
         ];
 
+        // Weight summary: total job weight and what remains once team + subcontractor
+        // (paint excluded) allocations are counted. Non-fatal if it fails to load.
+        let weightSummary = null;
+        try {
+            weightSummary = await fetchInternalTeamWeightSummary(task.id);
+        } catch (summaryError) {
+            console.error('Error loading internal team weight summary:', summaryError);
+        }
+
+        const fmtKg = (v) => Number(v).toLocaleString('tr-TR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+        const totalWeight = weightSummary && weightSummary.total_weight_kg !== null
+            ? parseFloat(weightSummary.total_weight_kg) : null;
+        const remainingWeight = weightSummary && weightSummary.remaining_weight_kg !== null
+            ? parseFloat(weightSummary.remaining_weight_kg) : null;
+
+        let weightSummaryHtml = '';
+        if (totalWeight !== null) {
+            const remainingClass = (remainingWeight !== null && remainingWeight <= 0) ? 'text-danger' : 'text-success';
+            weightSummaryHtml = `
+                <div class="alert alert-secondary py-2 px-3 mb-3">
+                    <div class="d-flex justify-content-between">
+                        <span><i class="fas fa-weight-hanging me-1"></i>İş Emri Ağırlığı:</span>
+                        <strong>${fmtKg(totalWeight)} kg</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span>Kalan (Takım + Taşeron):</span>
+                        <strong class="${remainingClass}">${remainingWeight !== null ? fmtKg(remainingWeight) : '-'} kg</strong>
+                    </div>
+                </div>
+            `;
+        }
+
+        const weightMaxAttr = (remainingWeight !== null && remainingWeight > 0) ? `max="${remainingWeight}"` : '';
+        const weightHelpHtml = (remainingWeight !== null)
+            ? `<small class="form-text text-muted">Kalan ayrılabilir ağırlık: ${fmtKg(Math.max(remainingWeight, 0))} kg</small>`
+            : '';
+
         return `
             <h5 class="mb-4"><i class="fas fa-users me-2"></i>Takım Ata ve Alt Görev Oluştur</h5>
             <form id="assign-internal-team-action-form">
+                ${weightSummaryHtml}
                 <div class="mb-4">
                     <h6 class="text-primary"><i class="fas fa-info-circle me-2"></i>Atama Bilgileri</h6>
                 </div>
@@ -4340,7 +4387,8 @@ async function renderAssignInternalTeamActionForm(task) {
                         <label class="form-label">
                             <i class="fas fa-weight me-1"></i>Ayrılan Ağırlık (kg) <span class="text-danger">*</span>
                         </label>
-                        <input type="number" class="form-control" id="internal-assignment-weight" name="allocated_weight_kg" step="0.01" min="0.01" required>
+                        <input type="number" class="form-control" id="internal-assignment-weight" name="allocated_weight_kg" step="0.01" min="0.01" ${weightMaxAttr} required>
+                        ${weightHelpHtml}
                     </div>
                     <div class="col-md-12">
                         <label class="form-label">
@@ -6301,7 +6349,7 @@ async function handleAssignInternalTeamActionSubmit(task, options = {}) {
     }
 
     const assignmentData = {
-        kaynak_task_id: task.id,
+        welding_task_id: task.id,
         team: parseInt(teamInput.value),
         allocated_weight_kg: parseFloat(weightInput.value)
     };
