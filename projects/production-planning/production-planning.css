@@ -1434,6 +1434,100 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     font-weight: 500;
 }
 
+/* --------------------------------------------------------------------------
+   Phase cards — phased masters show one card per faz (own ship dates)
+   -------------------------------------------------------------------------- */
+
+.pp-phase-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 10px;
+    margin: 4px 0 10px;
+}
+
+.pp-phase-card {
+    background: #f7f9fc;
+    border: 1px solid #e2e6ec;
+    border-radius: 10px;
+    padding: 8px 12px;
+    text-align: center;
+}
+
+.pp-phase-card.pp-phase-worst {
+    background: #fdecec;
+    border-color: #f2b8b8;
+}
+
+.pp-phase-card.pp-phase-quiet {
+    opacity: 0.75;
+}
+
+.pp-phase-name {
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: #59616d;
+    margin-bottom: 4px;
+}
+
+.pp-phase-worst .pp-phase-name {
+    color: #b91c1c;
+}
+
+.pp-phase-line {
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.85rem;
+    color: #1f2530;
+}
+
+.pp-phase-line label {
+    color: #8a919c;
+    font-weight: 600;
+    margin: 0;
+}
+
+.pp-phase-line span {
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+}
+
+.pp-phase-status {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 0.9rem;
+    font-weight: 800;
+}
+
+.pp-num-grey {
+    color: #8a919c;
+}
+
+/* Hero-sized variant: fills the figure row on the meeting slide */
+.pp-phase-card-xl {
+    padding: 10px 14px;
+}
+
+.pp-phase-card-xl .pp-phase-line {
+    font-size: 0.95rem;
+}
+
+.pp-phase-card-xl .pp-phase-status {
+    font-size: 1.15rem;
+}
+
+@media (max-height: 860px) {
+    .pp-phase-card-xl {
+        padding: 6px 10px;
+    }
+
+    .pp-phase-card-xl .pp-phase-status {
+        font-size: 1rem;
+    }
+}
+
 /* Short screens (1366×768 laptops): shrink one step, caps shrink in JS via
    the same max-height: 860px matchMedia query. */
 @media (max-height: 860px) {

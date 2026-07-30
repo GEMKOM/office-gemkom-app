@@ -383,11 +383,45 @@ function verdictHeadline(forecast) {
     if (forecast.verdict === 'late_risk' || forecast.verdict === 'finished_late') {
         detail = ` · +${formatWd(forecast.variance_wd)} iş günü`;
     }
+    // Phased masters: the headline is the WORST phase's number — say whose.
+    if (forecast.worst_phase !== undefined && forecast.worst_phase !== null) {
+        detail += ` · Faz ${forecast.worst_phase}`;
+    }
     return `
         <div class="pp-verdict-headline pp-vh-${meta.theme}">
             <i class="fas ${meta.icon}"></i>
             <span>${meta.label}${detail}</span>
         </div>`;
+}
+
+// Per-phase cards for phased masters — each faz ships on its own date, so
+// the single Hedef/Öngörülen/Sapma triple is replaced by one card per phase.
+function phaseCardsHtml(forecast, xl) {
+    const phases = forecast.phases || [];
+    if (!phases.length) return '';
+    const cls = xl ? 'pp-phase-card pp-phase-card-xl' : 'pp-phase-card';
+    const cards = phases.map((p) => {
+        const worst = p.phase_number === forecast.worst_phase;
+        const quiet = p.verdict === 'not_started';
+        let statusHtml;
+        if (quiet) {
+            statusHtml = '<span class="pp-phase-status pp-num-grey">Başlamadı</span>';
+        } else if (p.variance_wd !== null && p.variance_wd > 0) {
+            statusHtml = `<span class="pp-phase-status pp-num-red">+${formatWd(p.variance_wd)} iş günü</span>`;
+        } else if (p.variance_wd !== null && p.variance_wd < 0) {
+            statusHtml = `<span class="pp-phase-status pp-num-green">${formatWd(p.variance_wd)} g erken</span>`;
+        } else {
+            statusHtml = '<span class="pp-phase-status pp-num-green">Zamanında</span>';
+        }
+        return `
+            <div class="${cls}${worst ? ' pp-phase-worst' : ''}${quiet ? ' pp-phase-quiet' : ''}">
+                <div class="pp-phase-name">Faz ${p.phase_number}</div>
+                <div class="pp-phase-line"><label>Hedef</label><span>${fmtShortDate(p.target_completion_date)}</span></div>
+                <div class="pp-phase-line"><label>Öngörü</label><span>${quiet ? '—' : fmtShortDate(p.projected_completion_date)}</span></div>
+                ${statusHtml}
+            </div>`;
+    }).join('');
+    return `<div class="pp-phase-cards">${cards}</div>`;
 }
 
 function verdictTimelineHtml(forecast, summary, todayIso) {
@@ -983,11 +1017,20 @@ async function openPlanModal(item) {
         }
         if (s.projection_kind === 'gate') {
             const g = (s.projection_gates || []).find(x => x.binding);
+            const durationNote = {
+                weight: ' Süre girilmediği için ağırlık payına göre tahmin edildi.',
+                start: '',
+                duration: ' (girilen süre)',
+            }[s.projection_duration_kind] || '';
+            if (g && g.kind === 'dependency' && g.via_label) {
+                // The full chain: what holds the PARENT holds this row too.
+                return `Ana görevi tutan koşul: ${g.via_label} — bu yüzden en erken ${fmtShortDate(g.date)}'de başlayabilir. Sonrasında ~${formatWd(rem)} iş günü sürer.${durationNote}`;
+            }
             if (g) {
                 const overdueNote = g.overdue ? ' (teslimat gecikmiş — en erken bugünden itibaren)' : '';
-                return `${g.label}: ${fmtShortDate(g.date)}${overdueNote}. Sonrasında ~${formatWd(rem)} iş günü sürer.`;
+                return `${g.label}: ${fmtShortDate(g.date)}${overdueNote}. Sonrasında ~${formatWd(rem)} iş günü sürer.${durationNote}`;
             }
-            return `Başlama koşulu bekleniyor; sonrasında ~${formatWd(rem)} iş günü sürer.`;
+            return `Başlama koşulu bekleniyor; sonrasında ~${formatWd(rem)} iş günü sürer.${durationNote}`;
         }
         if (s.projection_kind === 'coupled') {
             const b = s.projection_basis || {};
@@ -1091,13 +1134,19 @@ async function openPlanModal(item) {
     // decides the end date → task counts → the per-task table.
     const forecast = item.forecast || {};
     const vMeta = VERDICT_META[forecast.verdict] || VERDICT_META.unknown;
-    const verdictSentence = {
+    const phased = !!(forecast.phases && forecast.phases.length);
+    let verdictSentence = {
         late_risk: `Bu gidişle iş, hedefinden <strong>${formatWd(forecast.variance_wd)} iş günü geç</strong> bitecek görünüyor.`,
         on_track: 'Bu gidişle iş <strong>hedef tarihinde</strong> bitecek görünüyor.',
         finished_late: `İş tamamlandı — hedefinden <strong>${formatWd(forecast.variance_wd)} iş günü geç</strong> bitti.`,
         finished_on_time: 'İş tamamlandı — <strong>zamanında</strong> bitti.',
         no_target: 'Hedef tarih girilmediği için sapma hesaplanamıyor.',
     }[forecast.verdict] || 'Öngörü hesaplanacak veri yok.';
+    if (phased && forecast.worst_phase !== null && forecast.worst_phase !== undefined) {
+        verdictSentence = forecast.verdict === 'late_risk'
+            ? `En geç faz: <strong>Faz ${forecast.worst_phase}</strong> — kendi hedefinden <strong>${formatWd(forecast.variance_wd)} iş günü geç</strong> görünüyor. Fazlar kendi sevk tarihlerine göre ayrı değerlendirilir.`
+            : `Fazlar kendi sevk tarihlerine göre ayrı değerlendirilir — geciken faz yok.`;
+    }
 
     const v = forecast.variance_wd;
     const sapmaHtml = v === null || v === undefined ? '—'
@@ -1148,6 +1197,7 @@ async function openPlanModal(item) {
             <i class="fas ${vMeta.icon}"></i>
             <div>${verdictSentence}</div>
         </div>
+        ${phased ? phaseCardsHtml(forecast, false) : `
         <div class="pp-plan-figures">
             <div class="pp-plan-fig">
                 <label>Hedef Bitiş</label>
@@ -1161,7 +1211,7 @@ async function openPlanModal(item) {
                 <label>Sapma</label>
                 <span>${sapmaHtml}</span>
             </div>
-        </div>
+        </div>`}
         ${driverBox}
         ${countsHtml}
         ${multiNode ? '<div class="pp-modal-note">Görevler alt iş emirlerine göre gruplu.</div>' : ''}
@@ -1514,6 +1564,7 @@ function meetingHeroHtml(item, financial) {
                         <span id="pp-fin-chip">${financialChipHtml(financial)}</span>
                     </div>
                 </div>
+                ${(forecast.phases && forecast.phases.length) ? phaseCardsHtml(forecast, true) : `
                 <div class="pp-hero-figures-xl">
                     <div class="pp-fig-xl">
                         <label>Hedef Bitiş</label>
@@ -1527,7 +1578,7 @@ function meetingHeroHtml(item, financial) {
                         <label>Sapma</label>
                         ${varianceFigure.replace(/pp-fig-value/g, 'pp-fig-xl-value')}
                     </div>
-                </div>
+                </div>`}
                 <div class="pp-hero-progress">
                     <span class="pp-hero-progress-label">İlerleme</span>
                     <div class="pp-hero-progress-bar">
