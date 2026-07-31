@@ -187,8 +187,8 @@ function initializeTable() {
         onPageChange: handlePageChange,
         showPagination: true,
         showSearch: false,
-        showExport: true,
-        exportFileName: 'maliyet-analizi-raporu',
+        exportable: true,
+        exportFilename: () => `maliyet-analizi-raporu_${new Date().toISOString().slice(0, 10)}.xlsx`,
         skeletonLoading: true
     });
 }
