@@ -374,8 +374,10 @@ async function showUserDetails(jobNo) {
             
             const userData = userMap.get(userId);
             const overtimeType = entry.overtime_type || 'regular';
-            const hours = entry.hours || 0;
-            
+            // API may return hours/cost as strings; coerce to numbers to avoid string concatenation
+            const hours = Number(entry.hours) || 0;
+            const cost = Number(entry.cost) || 0;
+
             // Map overtime_type to our structure
             if (overtimeType === 'regular') {
                 userData.hours.regular += hours;
@@ -384,17 +386,17 @@ async function showUserDetails(jobNo) {
             } else if (overtimeType === 'holiday') {
                 userData.hours.holiday += hours;
             }
-            
+
             // If cost information is available in entry, use it
             if (entry.cost !== undefined) {
                 if (overtimeType === 'regular') {
-                    userData.costs.regular += entry.cost;
+                    userData.costs.regular += cost;
                 } else if (overtimeType === 'after_hours') {
-                    userData.costs.after_hours += entry.cost;
+                    userData.costs.after_hours += cost;
                 } else if (overtimeType === 'holiday') {
-                    userData.costs.holiday += entry.cost;
+                    userData.costs.holiday += cost;
                 }
-                userData.total_cost += entry.cost;
+                userData.total_cost += cost;
             }
             
             userData.entries.push(entry);
@@ -412,10 +414,10 @@ async function showUserDetails(jobNo) {
         
         // Calculate totals from aggregated users or use summary if available
         const totalCost = users.reduce((sum, user) => sum + (user.total_cost || 0), 0);
-        const totalWeekdayHours = summary.breakdown_by_type?.regular || users.reduce((sum, user) => sum + (user.hours.regular || 0), 0);
-        const totalAfterHours = summary.breakdown_by_type?.after_hours || users.reduce((sum, user) => sum + (user.hours.after_hours || 0), 0);
-        const totalSundayHours = summary.breakdown_by_type?.holiday || users.reduce((sum, user) => sum + (user.hours.holiday || 0), 0);
-        const totalHours = summary.total_hours || totalWeekdayHours + totalAfterHours + totalSundayHours;
+        const totalWeekdayHours = Number(summary.breakdown_by_type?.regular || users.reduce((sum, user) => sum + (user.hours.regular || 0), 0));
+        const totalAfterHours = Number(summary.breakdown_by_type?.after_hours || users.reduce((sum, user) => sum + (user.hours.after_hours || 0), 0));
+        const totalSundayHours = Number(summary.breakdown_by_type?.holiday || users.reduce((sum, user) => sum + (user.hours.holiday || 0), 0));
+        const totalHours = Number(summary.total_hours || (totalWeekdayHours + totalAfterHours + totalSundayHours));
         const costPerHour = totalHours > 0 ? totalCost / totalHours : 0;
         const totalAfterHoursCost = users.reduce((sum, user) => sum + (user.costs.after_hours || 0), 0);
         const totalSundayCost = users.reduce((sum, user) => sum + (user.costs.holiday || 0), 0);
