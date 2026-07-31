@@ -96,7 +96,19 @@ function initializeFilters() {
         id: 'job_no',
         label: 'İş No',
         placeholder: 'İş numarası girin (isteğe bağlı)',
-        colSize: 8
+        colSize: 4
+    });
+
+    // Date range filters (filter by the entry's work date, not creation date)
+    filtersComponent.addDateFilter({
+        id: 'date_after',
+        label: 'Başlangıç Tarihi',
+        colSize: 3
+    });
+    filtersComponent.addDateFilter({
+        id: 'date_before',
+        label: 'Bitiş Tarihi',
+        colSize: 3
     });
 }
 
@@ -189,6 +201,8 @@ function initializeTable() {
         showSearch: false,
         exportable: true,
         exportFilename: () => `maliyet-analizi-raporu_${new Date().toISOString().slice(0, 10)}.xlsx`,
+        initialSortField: currentSortField,
+        initialSortDirection: currentSortDirection,
         skeletonLoading: true
     });
 }
@@ -204,50 +218,76 @@ function handleRowClick(rowData) {
     showUserDetails(rowData.job_no);
 }
 
-// Handle sort
+// Handle sort — the endpoint returns the full result set, so sort client-side
+// (works for every column, including İş No) without a server round-trip.
 function handleSort(field, direction) {
     currentSortField = field;
     currentSortDirection = direction;
-    loadJobHoursData();
+    renderJobHoursTable();
 }
 
 // Handle page change
 function handlePageChange(page) {
     currentPage = page;
-    loadJobHoursData();
+    renderJobHoursTable();
+}
+
+// Sort the loaded rows by the active column/direction.
+function sortJobHoursData(data, field, direction) {
+    if (!field) return data.slice();
+    const dir = direction === 'desc' ? -1 : 1;
+    return data.slice().sort((a, b) => {
+        const av = a[field];
+        const bv = b[field];
+        let cmp;
+        if (typeof av === 'number' && typeof bv === 'number') {
+            cmp = av - bv;
+        } else {
+            // job_no is a string like "001-23"; numeric-aware compare sorts 2 before 10
+            cmp = String(av ?? '').localeCompare(String(bv ?? ''), 'tr', { numeric: true });
+        }
+        return cmp * dir;
+    });
+}
+
+// Re-render the table from the currently loaded data using the active sort.
+function renderJobHoursTable() {
+    if (!jobHoursTable) return;
+    const sorted = sortJobHoursData(jobHoursData, currentSortField, currentSortDirection);
+    jobHoursTable.updateData(sorted, {
+        totalItems: totalJobs,
+        currentPage: currentPage,
+        pageSize: pageSize
+    });
 }
 
 // Load job cost data
 async function loadJobHoursData() {
     if (isLoading) return;
-    
+
     isLoading = true;
-    
+
     try {
         // Get current filters
         const filters = filtersComponent ? filtersComponent.getFilterValues() : {};
-        
+
         // Use the welding cost analysis API
         const data = await getWeldingJobCostTotals({
-            job_no: filters.job_no || undefined
+            job_no: filters.job_no || undefined,
+            date_after: filters.date_after || undefined,
+            date_before: filters.date_before || undefined
         });
-        
+
         // Process the data for display
         jobHoursData = processJobCostData(data.results || []);
         totalJobs = data.count || jobHoursData.length;
-        
+
         // Update statistics
         updateStatistics(data);
-        
-        // Update table
-        if (jobHoursTable) {
-            jobHoursTable.updateData(jobHoursData, {
-                totalItems: totalJobs,
-                currentPage: currentPage,
-                pageSize: pageSize
-            });
-        }
-        
+
+        // Update table (sorted by the active column)
+        renderJobHoursTable();
+
     } catch (error) {
         console.error('Error loading job cost data:', error);
         showError('Veri yüklenirken bir hata oluştu. Lütfen sayfayı yenileyin.');
@@ -351,8 +391,15 @@ function showError(message) {
 // Show user details modal
 async function showUserDetails(jobNo) {
     try {
+        // Apply the same work-date range as the report so the detail totals reconcile
+        const filters = filtersComponent ? filtersComponent.getFilterValues() : {};
+
         // Fetch user details for the job
-        const data = await getWeldingJobCostDetail({ job_no: jobNo });
+        const data = await getWeldingJobCostDetail({
+            job_no: jobNo,
+            date_after: filters.date_after || undefined,
+            date_before: filters.date_before || undefined
+        });
         const entries = data.entries || [];
         const summary = data.summary || {};
         
