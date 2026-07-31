@@ -482,6 +482,11 @@ export const NAVIGATION_STRUCTURE = {
                         label: 'Hakedişler',
                         icon: 'fas fa-file-invoice-dollar',
                         children: {}
+                    },
+                    '/manufacturing/subcontracting/adjustments': {
+                        label: 'Düzeltmeler',
+                        icon: 'fas fa-balance-scale-left',
+                        children: {}
                     }
                 }
             },
