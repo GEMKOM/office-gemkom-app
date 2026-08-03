@@ -1010,10 +1010,22 @@ async function openPlanModal(item) {
             return '%100 görünüyor — kapanışı bekleniyor.';
         }
         if (s.projection_kind === 'rate') {
-            return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi; bu hızla ~${formatWd(rem)} iş günü daha sürer.`;
+            const b = s.projection_basis || {};
+            let compare = '';
+            if (b.term === 'rate_vs_entered') {
+                const slower = rem > b.entered_remaining_wd;
+                compare = ` Girilen süre ${formatWd(b.entered_total_wd)} g (kalan ~${formatWd(b.entered_remaining_wd)} g) — tempo ${slower ? 'daha yavaş' : 'daha hızlı'}.`;
+            }
+            return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi; bu hızla ~${formatWd(rem)} iş günü daha sürer.${compare}`;
         }
         if (s.projection_kind === 'duration') {
             return `Girilen süre esas alındı: ~${formatWd(rem)} iş günü.`;
+        }
+        if (s.projection_kind === 'parent_duration') {
+            return `Ana göreve girilen süreden ağırlık payıyla: ~${formatWd(rem)} iş günü.`;
+        }
+        if (s.projection_kind === 'parent_window') {
+            return `Ana görevin plan penceresinden ağırlık payıyla: ~${formatWd(rem)} iş günü.`;
         }
         if (s.projection_kind === 'gate') {
             const g = (s.projection_gates || []).find(x => x.binding);
@@ -1021,6 +1033,8 @@ async function openPlanModal(item) {
                 weight: ' Süre girilmediği için ağırlık payına göre tahmin edildi.',
                 start: '',
                 duration: ' (girilen süre)',
+                parent_duration: ' Süre, ana göreve girilen süreden ağırlık payıyla türetildi.',
+                parent_window: ' Süre, ana görevin plan penceresinden ağırlık payıyla türetildi.',
             }[s.projection_duration_kind] || '';
             if (g && g.kind === 'dependency' && g.via_label) {
                 // The full chain: what holds the PARENT holds this row too.
