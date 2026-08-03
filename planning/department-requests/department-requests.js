@@ -13,6 +13,7 @@ import {
     getCompletedDepartmentRequests,
 } from '../../../apis/planning/departmentRequests.js';
 import { createPlanningRequest, getPlanningRequests, getPlanningRequest, markReadyForProcurement, updatePlanningRequest, partialUpdatePlanningRequest, cancelPlanningRequest as cancelPlanningRequestAPI } from '../../../apis/planning/planningRequests.js';
+import { releasePlanningRequestItemInventory } from '../../../apis/planning/planningRequestItems.js';
 import { formatDate, formatDateTime } from '../../../apis/formatters.js';
 import { UNIT_CHOICES, ITEM_CODE_NAMES } from '../../../apis/constants.js';
 import {
@@ -2499,6 +2500,14 @@ async function showEditPlanningRequestModal(request) {
                     itemData.specifications = itemSpecifications;
                 }
 
+                // Preserve the existing row identity so the backend updates this
+                // exact line instead of matching by (item_id, job_no) — which would
+                // collapse duplicate rows and risk deleting the wrong one.
+                const rowItemId = parseInt(row.dataset.itemId, 10);
+                if (!isNaN(rowItemId)) {
+                    itemData.id = rowItemId;
+                }
+
                 items.push(itemData);
             }
 
@@ -2867,8 +2876,35 @@ function prefillItemsFromPlanningRequest(request) {
         const disabledAttr = isConverted ? 'disabled' : '';
         const readonlyAttr = isConverted ? 'readonly' : '';
 
+        // Deletion lock is backend-authoritative (is_deletable): a line that was
+        // given from inventory or is tied to an active purchase request must not
+        // be removable. Fall back to is_converted for older API responses that
+        // don't yet return is_deletable.
+        const qtyFromInventory = parseFloat(item.quantity_from_inventory) || 0;
+        const qtyInActivePrs = parseFloat(item.quantity_in_active_prs) || 0;
+        const inventoryLocked = qtyFromInventory > 0;
+        const prLocked = qtyInActivePrs > 0;
+        const isDeletable = (item.is_deletable !== undefined) ? (item.is_deletable !== false) : !isConverted;
+        const removeDisabledAttr = isDeletable ? '' : 'disabled';
+        let lockReason = 'Ürünü Kaldır';
+        if (!isDeletable) {
+            if (inventoryLocked && prLocked) lockReason = 'Envanterden verilmiş ve satın alma talebine bağlı; silinemez';
+            else if (inventoryLocked) lockReason = 'Envanterden verilmiş; silmek için stoğa iade edin';
+            else if (prLocked) lockReason = 'Satın alma talebine bağlı; silmek için önce talebi iptal edin';
+            else lockReason = 'Bu kalem silinemez';
+        }
+        // Inventory-locked rows get a "return to stock" escape hatch so they can
+        // then be edited/removed. PR-locked rows must be freed by cancelling the PR.
+        const actionButton = inventoryLocked
+            ? `<button type="button" class="btn btn-outline-secondary btn-sm w-100" onclick="releasePlanningItemInventory(${item.id}, ${index})" title="Envanterden geri al (stoğa iade et)">
+                            <i class="fas fa-rotate-left"></i>
+                        </button>`
+            : `<button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePlanningItem(${index})" title="${lockReason}" ${removeDisabledAttr}>
+                            <i class="fas fa-trash"></i>
+                        </button>`;
+
         const itemHtml = `
-            <div class="planning-item-row mb-2" data-index="${index}" ${isConverted ? 'data-locked="true"' : ''}>
+            <div class="planning-item-row mb-2" data-index="${index}" data-item-id="${item.id ?? ''}" ${!isDeletable ? 'data-locked="true"' : ''}>
                 <div class="row g-2">
                     <div class="col-md-2">
                         <input type="text" class="form-control form-control-sm" name="item_code" placeholder="Ürün kodu veya ID" value="${escapeHtmlAttribute(itemCode)}" required ${readonlyAttr} ${disabledAttr}>
@@ -2894,9 +2930,7 @@ function prefillItemsFromPlanningRequest(request) {
                         <input type="text" class="form-control form-control-sm" name="item_specifications" placeholder="Özellikler" value="${escapeHtmlAttribute(specifications)}" ${readonlyAttr} ${disabledAttr}>
                     </div>
                     <div class="col-md-1">
-                        <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="removePlanningItem(${index})" title="Ürünü Kaldır" ${disabledAttr}>
-                            <i class="fas fa-trash"></i>
-                        </button>
+                        ${actionButton}
                     </div>
                 </div>
             </div>
@@ -3833,6 +3867,32 @@ removePlanningItem = function(index) {
     renderFilesList(); // Refresh files list
 };
 window.removePlanningItem = removePlanningItem;
+
+// Release an inventory-locked planning item back to stock so it can be edited or
+// removed again, then refresh the edit modal in place. Backed by the
+// /planning/items/{id}/release_inventory/ endpoint (restores catalog stock).
+async function releasePlanningItemInventory(itemId, index) {
+    if (!itemId) {
+        showNotification('Kalem bulunamadı.', 'error');
+        return;
+    }
+    const confirmed = confirm('Bu kalem envanterden geri alınacak ve miktar stoğa iade edilecek. Devam edilsin mi?');
+    if (!confirmed) return;
+    try {
+        await releasePlanningRequestItemInventory(itemId);
+        showNotification('Kalem envanterden geri alındı; stok iade edildi.', 'success');
+        // Re-fetch and re-render the modal items so the row unlocks
+        const requestId = parseInt(document.querySelector('[data-planning-request-id]')?.dataset.planningRequestId, 10);
+        if (requestId) {
+            const fullRequest = await getPlanningRequest(requestId);
+            prefillItemsFromPlanningRequest(fullRequest);
+            renderFilesList();
+        }
+    } catch (error) {
+        showNotification(error.message || 'Envanterden geri alma başarısız oldu.', 'error');
+    }
+}
+window.releasePlanningItemInventory = releasePlanningItemInventory;
 
 // Transfer department request function - opens create planning request modal with pre-filled data
 async function transferDepartmentRequest(requestId) {

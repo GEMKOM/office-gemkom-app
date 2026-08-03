@@ -445,3 +445,33 @@ export async function markPlanningRequestItemDelivered(itemId) {
         throw error;
     }
 }
+
+/**
+ * Release an item's "given from inventory" allocation, returning the quantity to
+ * stock so the line can be edited or deleted again. Reverses InventoryAllocation
+ * records (restoring catalog stock) and zeroes quantity_from_inventory.
+ * Purchase-request links are NOT affected — a PR-linked line must be freed by
+ * cancelling its purchase request.
+ * @param {number} itemId - Planning request item ID
+ * @returns {Promise<Object>} { detail, item }
+ */
+export async function releasePlanningRequestItemInventory(itemId) {
+    try {
+        const response = await authedFetch(`${PLANNING_BASE_URL}/items/${itemId}/release_inventory/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Kalem envanterden geri alınırken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error releasing inventory for planning request item ${itemId}:`, error);
+        throw error;
+    }
+}
