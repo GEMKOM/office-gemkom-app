@@ -1400,7 +1400,12 @@ function initializePlanningItemsTable() {
             {
                 field: 'item_name',
                 label: 'Malzeme Adı',
-                formatter: (value) => value || '-',
+                formatter: (value, row) => {
+                    const name = value || '-';
+                    if (!row.is_critical) return name;
+                    return `<span class="status-badge status-red" style="min-width: auto;"
+                        title="Kritik: imalat bu kalem teslim edilmeden devam edemez">Kritik</span> ${name}`;
+                },
                 sortable: true
             },
             {
@@ -1514,6 +1519,9 @@ function initializePlanningItemsTable() {
         sortable: true,
         responsive: true,
         striped: true,
+        // Kritik kalemler — imalat bu kalem teslim edilmeden devam edemez;
+        // satın almacı listede ilk bakışta ayırt etmeli.
+        rowBackgroundColor: (row) => row.is_critical ? '#fdeaea' : null,
         onPageChange: async (page) => {
             planningItemsCurrentPage = page;
             await loadPlanningRequestItems();

@@ -540,6 +540,11 @@ export const NAVIGATION_STRUCTURE = {
                     }
                 }
             },
+            '/procurement/critical-items': {
+                label: 'Kritik Malzemeler',
+                icon: 'fas fa-circle-exclamation',
+                children: {}
+            },
             '/procurement/purchase-requests': {
                 label: 'Satın Alma Talepleri',
                 icon: 'fas fa-shopping-cart',

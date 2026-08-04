@@ -16,6 +16,12 @@ const ALWAYS_ALLOWED_ROUTES = new Set(['/', '/login', '/login/']);
 const ROUTE_ACCESS_INHERITS = {
     // Üretim Planlama is a companion view of Proje Takibi
     '/projects/production-planning': ['/projects/project-tracking'],
+    // Kritik Malzemeler is a companion view of Malzeme Takibi and the PR
+    // create flow — whoever marks or buys critical items can monitor them.
+    '/procurement/critical-items': [
+        '/manufacturing/material-tracking',
+        '/procurement/purchase-requests/create',
+    ],
 };
 
 function normalizePath(path) {
