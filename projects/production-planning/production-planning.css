@@ -626,10 +626,6 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     line-height: 1.2;
 }
 
-.pp-fin-pill {
-    cursor: help;
-}
-
 /* The three dates spread edge to edge, large and centred — the slide's
    data headline. Öngörülen Bitiş is the biggest number on screen. */
 .pp-hero-figures-xl {
@@ -710,18 +706,136 @@ body.pp-meeting-fullscreen #pp-meeting-container {
    Panel grid — white cards one step below the hero
    -------------------------------------------------------------------------- */
 
+/* Two full-width rows. The finans medallion sits on the exact four-corner
+   junction at the grid center (welding|machining boundary and
+   procurement|revisions boundary both land on 50%), and those four panels
+   are MASK-NOTCHED with the same circular shape — the badge clips the
+   sections, it does not cover their data. */
 .pp-meeting-grid {
+    --medal-notch: 82px;
+    position: relative;
     display: grid;
     grid-template-columns: repeat(12, minmax(0, 1fr));
     grid-template-rows: repeat(2, minmax(0, 1fr));
+    grid-template-areas:
+        "welding welding welding welding welding welding machining machining machining cutting cutting cutting"
+        "quality quality quality procurement procurement procurement revisions revisions revisions files files files";
     gap: 12px;
     min-height: 0;
     margin-bottom: 0;
 }
 
-.pp-span-5 { grid-column: span 5; }
-.pp-span-4 { grid-column: span 4; }
-.pp-span-3 { grid-column: span 3; }
+.pp-area-welding { grid-area: welding; }
+.pp-area-machining { grid-area: machining; }
+.pp-area-cutting { grid-area: cutting; }
+.pp-area-quality { grid-area: quality; }
+.pp-area-procurement { grid-area: procurement; }
+.pp-area-revisions { grid-area: revisions; }
+.pp-area-files { grid-area: files; }
+
+/* Quarter-circle cutouts around the medallion — one per adjacent corner. */
+.pp-meeting-grid .pp-area-welding {
+    -webkit-mask-image: radial-gradient(circle at 100% 100%,
+        transparent var(--medal-notch), #000 calc(var(--medal-notch) + 1px));
+    mask-image: radial-gradient(circle at 100% 100%,
+        transparent var(--medal-notch), #000 calc(var(--medal-notch) + 1px));
+}
+
+.pp-meeting-grid .pp-area-machining {
+    -webkit-mask-image: radial-gradient(circle at 0% 100%,
+        transparent var(--medal-notch), #000 calc(var(--medal-notch) + 1px));
+    mask-image: radial-gradient(circle at 0% 100%,
+        transparent var(--medal-notch), #000 calc(var(--medal-notch) + 1px));
+}
+
+.pp-meeting-grid .pp-area-procurement {
+    -webkit-mask-image: radial-gradient(circle at 100% 0%,
+        transparent var(--medal-notch), #000 calc(var(--medal-notch) + 1px));
+    mask-image: radial-gradient(circle at 100% 0%,
+        transparent var(--medal-notch), #000 calc(var(--medal-notch) + 1px));
+}
+
+.pp-meeting-grid .pp-area-revisions {
+    -webkit-mask-image: radial-gradient(circle at 0% 0%,
+        transparent var(--medal-notch), #000 calc(var(--medal-notch) + 1px));
+    mask-image: radial-gradient(circle at 0% 0%,
+        transparent var(--medal-notch), #000 calc(var(--medal-notch) + 1px));
+}
+
+/* Content steps aside from its notch so nothing renders half-cut:
+   welding's bottom strip ends before the arc, procurement's expand hint
+   slides left, revisions' title and columns start past the arc. */
+.pp-meeting-grid .pp-area-welding .pp-hours-strip {
+    margin-right: calc(var(--medal-notch) + 4px);
+}
+
+.pp-meeting-grid .pp-area-machining .card-body {
+    padding-bottom: 14px;
+}
+
+.pp-meeting-grid .pp-area-procurement .pp-panel-title {
+    padding-right: calc(var(--medal-notch) + 4px);
+}
+
+.pp-meeting-grid .pp-area-revisions .pp-panel-title {
+    padding-left: calc(var(--medal-notch) - 6px);
+}
+
+.pp-meeting-grid .pp-area-revisions .pp-rev-cols {
+    padding-left: calc(var(--medal-notch) - 24px);
+}
+
+/* --- Finans medallion (badge overlay, verdict word only — no numbers on a
+   company-public screen) ------------------------------------------------- */
+
+.pp-fin-medal {
+    --medal-color: #6c757d;
+    --medal-halo: rgba(108, 117, 125, 0.12);
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 5;
+    width: 132px;
+    height: 132px;
+    border-radius: 50%;
+    background: #ffffff;
+    border: 5px solid var(--medal-color);
+    box-shadow: 0 8px 26px rgba(31, 37, 48, 0.20), 0 0 0 8px var(--medal-halo);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    text-align: center;
+    padding: 10px;
+    cursor: help;
+}
+
+.pp-fin-medal i {
+    font-size: 1.3rem;
+    color: var(--medal-color);
+}
+
+.pp-fin-medal-caption {
+    font-size: 0.62rem;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: #8a919c;
+}
+
+.pp-fin-medal-word {
+    font-size: 1.02rem;
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--medal-color);
+}
+
+.pp-fin-medal-green  { --medal-color: #198754; --medal-halo: rgba(25, 135, 84, 0.12); }
+.pp-fin-medal-orange { --medal-color: #fd7e14; --medal-halo: rgba(253, 126, 20, 0.12); }
+.pp-fin-medal-red    { --medal-color: #dc3545; --medal-halo: rgba(220, 53, 69, 0.12); }
+.pp-fin-medal-grey   { --medal-color: #6c757d; --medal-halo: rgba(108, 117, 125, 0.12); }
 
 .pp-panel {
     min-height: 0;
@@ -1596,6 +1710,24 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
 
     .pp-meeting-grid {
         gap: 8px;
+    }
+
+    .pp-meeting-grid {
+        --medal-notch: 66px;
+    }
+
+    .pp-fin-medal {
+        width: 104px;
+        height: 104px;
+        border-width: 4px;
+    }
+
+    .pp-fin-medal i {
+        font-size: 1rem;
+    }
+
+    .pp-fin-medal-word {
+        font-size: 0.82rem;
     }
 
     .pp-panel .card-body {

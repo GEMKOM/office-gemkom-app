@@ -1544,7 +1544,7 @@ function renderMeetingSlide() {
     const brief = meetingBriefCache.get(item.job_no);
     container.innerHTML =
         meetingStripHtml(item) +
-        meetingHeroHtml(item, brief && brief.financial) +
+        meetingHeroHtml(item) +
         `<div id="pp-meeting-panels" class="pp-meeting-grid">${brief ? '' : meetingSkeletonHtml()}</div>`;
 
     if (brief) {
@@ -1617,18 +1617,29 @@ const FINANCIAL_META = {
     no_data: { theme: 'grey', label: 'Finans · Veri Yok' },
 };
 
-function financialChipHtml(financial) {
+// Financial medallion: a compact circular badge floating at the center of
+// the panel grid, clipping over the section seams. Verdict word ONLY — the
+// slide is company-public, so no ratios, no amounts (user decision
+// 2026-08-04). Absent financial data (no cost access) renders nothing; the
+// badge is an overlay, so the grid never has a hole.
+function financialBadgeHtml(financial) {
     if (!financial) return '';
     const meta = FINANCIAL_META[financial.verdict] || FINANCIAL_META.no_data;
+    const word = meta.label.replace('Finans · ', '');
     const reason = (financial.reason || '') +
-        (financial.price_is_derived ? ' (satış fiyatı türetilmiş)' : '');
-    return `<span class="pp-verdict-headline pp-fin-pill pp-vh-${meta.theme}" title="${escapeHtml(reason)}">
-        <i class="fas fa-coins"></i>${meta.label}</span>`;
+        (financial.price_is_derived ? ' — satış fiyatı türetilmiş' : '');
+    return `
+        <div class="pp-fin-medal pp-fin-medal-${meta.theme}" title="${escapeHtml(reason)}">
+            <i class="fas fa-coins"></i>
+            <span class="pp-fin-medal-caption">Finans</span>
+            <span class="pp-fin-medal-word">${word}</span>
+        </div>`;
 }
 
 // Compact hero for the slide — reuses the verdict pill + timeline helpers but
 // never touches verdictCardHtml (portfolio/detail keep their card as-is).
-function meetingHeroHtml(item, financial) {
+// Finans lives in the center medallion (financialOrbHtml), not here.
+function meetingHeroHtml(item) {
     const forecast = item.forecast || { verdict: 'unknown', unplanned_open_tasks: 0 };
     const meta = VERDICT_META[forecast.verdict] || VERDICT_META.unknown;
     const summary = item.summary || {};
@@ -1661,9 +1672,7 @@ function meetingHeroHtml(item, financial) {
                         <div class="pp-hero-title" title="${escapeHtml(item.title || '')}">${escapeHtml(item.title || '')}</div>
                         ${item.customer_name ? `<div class="pp-hero-customer">${escapeHtml(item.customer_name)}</div>` : ''}
                     </div>
-                    <div class="pp-hero-pills">
-                        <span id="pp-fin-chip">${financialChipHtml(financial)}</span>
-                    </div>
+                    <div class="pp-hero-pills"></div>
                 </div>
                 ${(forecast.phases && forecast.phases.length) ? phaseCardsHtml(forecast, true) : `
                 <div class="pp-hero-figures-xl">
@@ -1721,7 +1730,7 @@ function ensureBrief(jobNo) {
                 const panels = document.getElementById('pp-meeting-panels');
                 if (panels) {
                     panels.innerHTML = `
-                        <div class="dashboard-card pp-panel pp-span-5">
+                        <div class="dashboard-card pp-panel pp-area-welding">
                             <div class="card-body text-center text-danger py-4">
                                 <i class="fas fa-exclamation-triangle me-2"></i>Toplantı özeti yüklenemedi.
                             </div>
@@ -1736,9 +1745,11 @@ function ensureBrief(jobNo) {
 }
 
 function meetingSkeletonHtml() {
-    return ['pp-span-5', 'pp-span-4', 'pp-span-3', 'pp-span-3', 'pp-span-3', 'pp-span-3', 'pp-span-3']
-        .map(span => `
-        <div class="dashboard-card pp-panel ${span}">
+    return ['pp-area-welding', 'pp-area-machining', 'pp-area-cutting',
+            'pp-area-quality', 'pp-area-procurement', 'pp-area-revisions',
+            'pp-area-files']
+        .map(area => `
+        <div class="dashboard-card pp-panel ${area}">
             <div class="card-body">
                 <div class="pp-skeleton pp-skeleton-title"></div>
                 <div class="pp-skeleton pp-skeleton-big"></div>
@@ -1781,12 +1792,11 @@ function miniBarHtml(ratio, theme = 'blue') {
 }
 
 function renderMeetingPanels(item, brief) {
-    const finChip = document.getElementById('pp-fin-chip');
-    if (finChip && brief.financial) finChip.innerHTML = financialChipHtml(brief.financial);
     const panels = document.getElementById('pp-meeting-panels');
     if (!panels) return;
-    // Grid placement: row A = welding(5) machining(4) cutting(3),
-    // row B = quality(3) procurement(3) revisions(3) files(3).
+    // Two full-width rows (placement via pp-area-* grid areas); the finans
+    // medallion floats over the center seam as an absolutely-positioned
+    // badge, clipping the neighbouring panels.
     panels.innerHTML = [
         weldingPanelHtml(brief.welding),
         machiningPanelHtml(brief.machining, item.job_no),
@@ -1795,6 +1805,7 @@ function renderMeetingPanels(item, brief) {
         procurementPanelHtml(brief.procurement),
         revisionsPanelHtml(brief.revisions, item.job_no),
         filesPanelHtml(brief.files, item.job_no),
+        financialBadgeHtml(brief.financial),
     ].join('');
 }
 
@@ -1812,7 +1823,7 @@ function qualityPanelHtml(quality, jobNo) {
                 <span class="pp-panel-big-label">Açık NCR yok</span>
                 <span class="pp-panel-sub text-muted">toplam ${fmtInt(quality.total)}</span>
             </div>`;
-        return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-span-3', 'quality');
+        return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-area-quality', 'quality');
     }
     const shown = (quality.open_list || []).slice(0, caps.ncrs);
     const list = shown.map(n => `
@@ -1833,7 +1844,7 @@ function qualityPanelHtml(quality, jobNo) {
         </div>
         ${list}`;
     // The ONLY panel with a colored top strip — quality problems must pop.
-    return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-span-3 pp-panel-alert', 'quality');
+    return panelHtml('clipboard-check', 'Kalite · NCR', body, 'pp-area-quality pp-panel-alert', 'quality');
 }
 
 function revisionsPanelHtml(revisions, jobNo) {
@@ -1865,7 +1876,7 @@ function revisionsPanelHtml(revisions, jobNo) {
                 <div class="pp-panel-sub ${missing ? 'pp-num-orange' : 'text-muted'}">${fmtInt(targets.with_target)}/${fmtInt(targets.total)} dizayn görevinde tarih</div>
             </div>
         </div>`;
-    return panelHtml('pen-ruler', 'Dizayn', body, 'pp-span-3', 'revisions');
+    return panelHtml('pen-ruler', 'Dizayn', body, 'pp-area-revisions', 'revisions');
 }
 
 function procurementPanelHtml(procurement) {
@@ -1887,7 +1898,7 @@ function procurementPanelHtml(procurement) {
         <div class="pp-panel-sub">Talepte · teslim bekliyor: <strong>${fmtInt(procurement.requested_waiting)}</strong></div>
         <div class="pp-panel-sub">Teslim edildi: <strong>${fmtInt(procurement.items_delivered)}</strong> / ${fmtInt(total)} kalem</div>
         ${procurement.critical_waiting ? `<div class="pp-panel-sub"><span class="pp-num-red">Kritik bekleyen: <strong>${fmtInt(procurement.critical_waiting)}</strong> — imalatı tutuyor</span></div>` : ''}`;
-    return panelHtml('cart-shopping', 'Satın Alma', body, 'pp-span-3', 'procurement');
+    return panelHtml('cart-shopping', 'Satın Alma', body, 'pp-area-procurement', 'procurement');
 }
 
 function cuttingPanelHtml(cutting) {
@@ -1903,7 +1914,7 @@ function cuttingPanelHtml(cutting) {
         <div class="pp-panel-sub">Kesilen: <strong>${fmtInt(cutting.parts_cut)}</strong> / ${fmtInt(cutting.parts_total)} parça · ${fmtInt(cutting.weight_cut)} / ${fmtInt(cutting.weight_total)} kg</div>
         ${materialWaiting ? `<div class="pp-panel-sub"><span class="pp-num-orange"><strong>${fmtInt(materialWaiting)} parça · ${fmtInt(cutting.weight_waiting_material)} kg</strong> malzeme bekliyor (satın alma)</span></div>` : ''}
         ${miniBarHtml(cutting.weight_total ? cutting.weight_cut / cutting.weight_total : 0, 'blue')}`;
-    return panelHtml('scissors', 'CNC Kesim', body, 'pp-span-3', 'cutting');
+    return panelHtml('scissors', 'CNC Kesim', body, 'pp-area-cutting', 'cutting');
 }
 
 function machiningPanelHtml(machining, jobNo) {
@@ -1918,7 +1929,7 @@ function machiningPanelHtml(machining, jobNo) {
         <div class="pp-panel-sub">Tahmini <strong>${fmtHours(machining.estimated_hours_total)} s</strong> · Harcanan <strong>${fmtHours(machining.hours_spent)} s</strong> · Kalan ~<strong>${fmtHours(machining.hours_remaining)} s</strong></div>
         <div class="pp-panel-sub text-muted">${fmtInt(machining.parts_completed)} / ${fmtInt(machining.parts_total)} parça tamam</div>
         ${miniBarHtml(machining.estimated_hours_total ? machining.hours_earned / machining.estimated_hours_total : 0, 'blue')}`;
-    return panelHtml('gears', 'Talaşlı İmalat', body, 'pp-span-4', 'machining');
+    return panelHtml('gears', 'Talaşlı İmalat', body, 'pp-area-machining', 'machining');
 }
 
 function weldingPanelHtml(welding) {
@@ -1983,7 +1994,7 @@ function weldingPanelHtml(welding) {
         ${rows || (usingTaskProgress || big === null
             ? '<div class="text-muted pp-empty">Kaynak ataması yok.</div>' : '')}
         ${waitLine}${hoursStrip}`;
-    return panelHtml('fire', 'Kaynaklı İmalat', body, 'pp-span-5', 'welding');
+    return panelHtml('fire', 'Kaynaklı İmalat', body, 'pp-area-welding', 'welding');
 }
 
 const FILE_GROUP_LABELS = [
@@ -2022,7 +2033,7 @@ function filesPanelHtml(files, jobNo) {
     const body = `
         <div class="pp-chips-row">${chips}${moreChip}</div>
         ${lines || '<div class="text-muted pp-empty">Dosya yok.</div>'}`;
-    return panelHtml('folder-open', 'Dosyalar', body, 'pp-span-3');
+    return panelHtml('folder-open', 'Dosyalar', body, 'pp-area-files');
 }
 
 // ---------------------------------------------------------------------------
