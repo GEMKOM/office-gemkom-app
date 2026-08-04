@@ -447,7 +447,13 @@ async function initializeJobOrders() {
         const jobNo = urlParams.get('job_no');
         const topicIdParam = urlParams.get('topic_id');
         
-        if (jobNo) {
+        // Notifications for a topic attached to a department task (not a real job
+        // order) build a pseudo job_no like "Task-2310". No job order has that
+        // number, so opening it directly would fail with "İş emri bilgileri
+        // yüklenirken hata oluştu" — fall through to the topic-only path instead.
+        const isTaskPseudoJobNo = !!jobNo && /^Task-\d+$/i.test(jobNo);
+
+        if (jobNo && !isTaskPseudoJobNo) {
             // Open job order modal directly without loading other data first
             await viewJobOrder(jobNo);
 

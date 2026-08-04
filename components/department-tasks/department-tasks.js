@@ -61,6 +61,7 @@ import {
 } from '../../apis/welding/internalTeamAssignments.js';
 import { submitQCReview, bulkSubmitQCReviews, listQCReviews, listNCRs, getNCR } from '../../apis/qualityControl.js';
 import { createComment, updateComment, uploadCommentAttachment, deleteAttachment } from '../../apis/projects/topics.js';
+import { initializeMentionFunctionality } from '../topic-discussion/topic-discussion.js';
 
 function escapeHtml(value) {
     const str = value === null || value === undefined ? '' : String(value);
@@ -70,6 +71,21 @@ function escapeHtml(value) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;')
         .replace(/'/g, '&#39;');
+}
+
+// Render comment content with @mentions turned into styled badges (matches the
+// project-tracking / topic-discussion display). Escapes first, then swaps the
+// @username tokens — usernames are word chars, so they survive escaping intact.
+function formatCommentWithMentions(content, mentionedUsers = []) {
+    const userMap = {};
+    (mentionedUsers || []).forEach((user) => {
+        if (user && user.username) userMap[user.username] = user;
+    });
+    return escapeHtml(content).replace(/@(\w+)/g, (match, username) => {
+        const user = userMap[username];
+        const displayName = user ? (user.full_name || user.username) : username;
+        return `<span class="mention-badge">@${escapeHtml(displayName)}</span>`;
+    });
 }
 
 /**
@@ -5537,14 +5553,17 @@ async function renderConsultationTab(task) {
                                         ${comment.is_edited ? '<small class="text-muted"><i class="fas fa-edit me-1"></i>Düzenlendi</small>' : ''}
                                         ${isAuthor ? `<button class="btn btn-link btn-sm p-0 ms-auto text-muted" data-action="edit-comment" data-comment-id="${comment.id}" title="Düzenle" style="line-height:1;"><i class="fas fa-pencil-alt" style="font-size:11px;"></i></button>` : ''}
                                     </div>
-                                    <div class="consultation-comment-content" style="white-space: pre-wrap;">${escapeHtml(comment.content)}</div>
+                                    <div class="consultation-comment-content" style="white-space: pre-wrap;">${formatCommentWithMentions(comment.content, comment.mentioned_users_data)}</div>
                                 </div>
                                 `;
                             }).join('')}
                     </div>
                     <div class="mt-3">
                         <label class="form-label"><i class="fas fa-pen me-1"></i>Yeni Yorum</label>
-                        <textarea class="form-control mb-2" id="consultation-comment-input" rows="3" placeholder="Yorum yazın..."></textarea>
+                        <div class="position-relative mb-2">
+                            <textarea class="form-control" id="consultation-comment-input" rows="3" placeholder="Yorum yazın... (@ile kullanıcı etiketleyin)"></textarea>
+                            <div class="mention-suggestions" id="consultation-mention-suggestions" style="display: none;"></div>
+                        </div>
                         <button class="btn btn-primary btn-sm" id="consultation-comment-add-btn" data-topic-id="${discussionTopic.id}">
                             <i class="fas fa-paper-plane me-1"></i>Yorum Ekle
                         </button>
@@ -5679,6 +5698,13 @@ async function showSiblingConsultationDetail(taskId) {
 function setupConsultationTabListeners(task) {
     const contentContainer = taskDetailsModal.container.querySelector('#action-content-consultation');
     if (!contentContainer) return;
+
+    // Enable @mention autocomplete on the new-comment textarea
+    const commentTextarea = contentContainer.querySelector('#consultation-comment-input');
+    const mentionSuggestions = contentContainer.querySelector('#consultation-mention-suggestions');
+    if (commentTextarea && mentionSuggestions) {
+        initializeMentionFunctionality(commentTextarea, mentionSuggestions);
+    }
 
     contentContainer.querySelectorAll('.sibling-consult-task-row').forEach((row) => {
         row.addEventListener('click', async () => {
@@ -5846,7 +5872,10 @@ function setupConsultationTabListeners(task) {
                 const formDiv = document.createElement('div');
                 formDiv.className = 'consultation-edit-form mt-1';
                 formDiv.innerHTML = `
-                    <textarea class="form-control form-control-sm mb-2 consultation-edit-textarea" rows="3" style="resize:vertical;"></textarea>
+                    <div class="position-relative mb-2">
+                        <textarea class="form-control form-control-sm consultation-edit-textarea" rows="3" style="resize:vertical;"></textarea>
+                        <div class="mention-suggestions consultation-edit-mention-suggestions" style="display: none;"></div>
+                    </div>
                     <div class="d-flex gap-2">
                         <button type="button" class="btn btn-sm btn-primary" data-action="save-consultation-edit" data-comment-id="${commentId}">
                             <i class="fas fa-check me-1"></i>Kaydet
@@ -5857,8 +5886,10 @@ function setupConsultationTabListeners(task) {
                     </div>
                 `;
                 commentEl.appendChild(formDiv);
-                formDiv.querySelector('.consultation-edit-textarea').value = comment?.content || '';
-                formDiv.querySelector('.consultation-edit-textarea').focus();
+                const editTextarea = formDiv.querySelector('.consultation-edit-textarea');
+                editTextarea.value = comment?.content || '';
+                initializeMentionFunctionality(editTextarea, formDiv.querySelector('.consultation-edit-mention-suggestions'));
+                editTextarea.focus();
                 return;
             }
 

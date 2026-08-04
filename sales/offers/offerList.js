@@ -87,6 +87,51 @@ const BADGE_CLASS_MAP = {
     danger: 'status-red'
 };
 
+// Clicking a status badge in the table opens the offer detail modal on the tab
+// most relevant to that status; anything not listed falls back to 'genel'.
+const STATUS_TAB_MAP = {
+    consultation: 'consultations',   // Danışma → Departman Görüşleri
+    pricing: 'pricing',              // Fiyatlandırma → Fiyatlandırma
+    pending_approval: 'approval',    // Onay Bekliyor → Onay
+    approved: 'approval'             // Onaylandı → Onay
+};
+
+const TAB_LABELS = {
+    genel: 'Genel',
+    kalemler: 'Kalemler',
+    dosyalar: 'Dosyalar',
+    consultations: 'Departman Görüşleri',
+    pricing: 'Fiyatlandırma',
+    approval: 'Onay'
+};
+
+// Statuses for which the "Teklif Sunumu için Son Tarih" deadline is no longer
+// actionable, so we don't highlight the row by remaining days.
+const DEADLINE_INACTIVE_STATUSES = ['won', 'lost', 'cancelled', 'converted'];
+
+// Whole days from today until the given date string (negative if overdue).
+function daysUntilDate(dateStr) {
+    if (!dateStr) return null;
+    const d = new Date(dateStr);
+    if (Number.isNaN(d.getTime())) return null;
+    const now = new Date();
+    const target = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+    return Math.round((target - today) / 86400000);
+}
+
+// Deadline urgency for an offer row: 'red' (<= 1 day left / overdue),
+// 'yellow' (< 3 days left) or null (not urgent / not applicable).
+function offerDeadlineUrgency(row) {
+    if (!row || !row.offer_expiry_date) return null;
+    if (DEADLINE_INACTIVE_STATUSES.includes(row.status)) return null;
+    const days = daysUntilDate(row.offer_expiry_date);
+    if (days == null) return null;
+    if (days <= 1) return 'red';
+    if (days < 3) return 'yellow';
+    return null;
+}
+
 let currentPage = 1;
 let currentSortField = '-created_at';
 let currentSortDirection = 'desc';
@@ -309,10 +354,8 @@ function initFilters() {
     offersFilters.addDropdownFilter({
         id: 'status-filter',
         label: 'Durum',
-        options: [
-            { value: '', label: 'Tümü' },
-            ...Object.entries(OFFER_STATUS_MAP).map(([v, l]) => ({ value: v, label: l }))
-        ],
+        multiple: true,
+        options: Object.entries(OFFER_STATUS_MAP).map(([v, l]) => ({ value: v, label: l })),
         placeholder: 'Tümü',
         colSize: 2
     });
@@ -376,17 +419,12 @@ function initTable() {
                 align: 'center',
                 formatter: (v, row) => {
                     // Prefer backend-provided status_display when available
-                    const display = v || row.status_display;
-                    if (display) {
-                        const color = OFFER_STATUS_COLORS[row.status] || 'secondary';
-                        const badgeClass = BADGE_CLASS_MAP[color] || 'status-grey';
-                        return `<span class="status-badge ${badgeClass}">${display}</span>`;
-                    }
-                    // Fallback to local mapping by status code
-                    const label = OFFER_STATUS_MAP[row.status] || row.status;
+                    const display = v || row.status_display || OFFER_STATUS_MAP[row.status] || row.status;
                     const color = OFFER_STATUS_COLORS[row.status] || 'secondary';
                     const badgeClass = BADGE_CLASS_MAP[color] || 'status-grey';
-                    return `<span class="status-badge ${badgeClass}">${label}</span>`;
+                    const targetTab = STATUS_TAB_MAP[row.status] || 'genel';
+                    const tabLabel = TAB_LABELS[targetTab] || 'Genel';
+                    return `<span class="status-badge ${badgeClass} offer-status-clickable" role="button" tabindex="0" style="cursor:pointer;" title="${tabLabel} sekmesini aç" data-offer-id="${row.id}" data-offer-tab="${targetTab}">${display}</span>`;
                 }
             },
             {
@@ -414,6 +452,22 @@ function initTable() {
                 formatter: (v) => {
                     if (!v) return '-';
                     return new Date(v).toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' });
+                }
+            },
+            {
+                field: 'offer_expiry_date',
+                label: 'Teklif Sunum Son Tarih',
+                sortable: true,
+                formatter: (v, row) => {
+                    if (!v) return '<span class="text-muted">-</span>';
+                    const dateStr = new Date(v).toLocaleDateString('tr-TR', { year: 'numeric', month: 'short', day: 'numeric' });
+                    const days = daysUntilDate(v);
+                    if (days == null || DEADLINE_INACTIVE_STATUSES.includes(row.status)) return dateStr;
+                    let remaining;
+                    if (days < 0) remaining = `<small class="text-danger fw-semibold">(${Math.abs(days)} gün gecikti)</small>`;
+                    else if (days === 0) remaining = '<small class="text-danger fw-semibold">(bugün)</small>';
+                    else remaining = `<small class="text-muted">(${days} gün)</small>`;
+                    return `${dateStr} ${remaining}`;
                 }
             },
             {
@@ -452,7 +506,13 @@ function initTable() {
             currentPage = 1;
             await loadOffers();
         },
-        rowBackgroundColor: (row) => (row.needs_my_approval ? '#fff3cd' : null),
+        rowBackgroundColor: (row) => {
+            // Deadline urgency on "Teklif Sunumu için Son Tarih" takes priority.
+            const urgency = offerDeadlineUrgency(row);
+            if (urgency === 'red') return '#f8d7da';   // <= 1 gün / gecikmiş
+            if (urgency === 'yellow') return '#fff3cd'; // < 3 gün
+            return row.needs_my_approval ? '#fff3cd' : null;
+        },
         actions: [
             {
                 key: 'view',
@@ -599,6 +659,39 @@ function initTable() {
         ],
         emptyMessage: 'Teklif bulunamadı',
         emptyIcon: 'fas fa-file-invoice-dollar'
+    });
+
+    bindStatusBadgeClicks();
+}
+
+// Open the offer detail modal on the status-appropriate tab when a status badge
+// in the table is clicked. Delegated on `document` because the table component
+// clones its own container on every re-render (dropping element listeners).
+function bindStatusBadgeClicks() {
+    if (bindStatusBadgeClicks._bound) return;
+    bindStatusBadgeClicks._bound = true;
+
+    const openFromBadge = (badge) => {
+        const id = badge.getAttribute('data-offer-id');
+        if (!id) return;
+        const tab = badge.getAttribute('data-offer-tab') || 'genel';
+        window.viewOffer(id, { initialTabId: tab });
+    };
+
+    document.addEventListener('click', (e) => {
+        const badge = e.target.closest('.offer-status-clickable');
+        if (!badge) return;
+        e.preventDefault();
+        e.stopPropagation();
+        openFromBadge(badge);
+    });
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        const badge = e.target.closest?.('.offer-status-clickable');
+        if (!badge) return;
+        e.preventDefault();
+        openFromBadge(badge);
     });
 }
 
@@ -6741,7 +6834,12 @@ async function loadOffers() {
         const pageSize = offersTable?.options?.itemsPerPage ?? 20;
         const opts = { page: currentPage, page_size: pageSize, ordering };
         if (fv['search-filter']) opts.search = fv['search-filter'];
-        if (fv['status-filter']) opts.status = fv['status-filter'];
+        const statusVal = fv['status-filter'];
+        if (Array.isArray(statusVal)) {
+            if (statusVal.length) opts.status__in = statusVal.join(',');
+        } else if (statusVal) {
+            opts.status = statusVal;
+        }
         if (fv['customer-filter']) opts.customer = fv['customer-filter'];
         if (fv['created-by-filter']) opts.created_by = fv['created-by-filter'];
 

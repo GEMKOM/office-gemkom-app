@@ -159,7 +159,7 @@ function renderCommentHtml(comment, currentUsername) {
     `;
 }
 
-function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
+export function initializeMentionFunctionality(textarea, mentionSuggestionsContainer) {
     let allUsers = [];
     let allGroups = [];
     let mentionStartPos = -1;
