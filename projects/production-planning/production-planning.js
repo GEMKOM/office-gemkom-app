@@ -21,6 +21,10 @@ import {
     getJobOrderMeetingBrief,
     getMeetingBriefSection
 } from '../../apis/projects/jobOrders.js';
+import {
+    markPlanningRequestItemCritical,
+    unmarkPlanningRequestItemCritical
+} from '../../apis/planning/planningRequestItems.js';
 
 // Module state
 let plan = null;                 // merged plan for all selected job orders
@@ -97,14 +101,18 @@ const TASK_STATUS_BADGES = {
     skipped: 'status-grey'
 };
 
-// CNC "material wait" badge — the plate stock line(s) feeding this job's cuts
-// have not been delivered, so the delay belongs to procurement, not CNC.
+// "Material wait" badge — the delay belongs to procurement, not the task.
+// CNC rows carry the plate keys (cuts_waiting / plate_items_pending); welding
+// and Üretim rows carry the manufacturing keys (pipe/profile + hand-marked
+// critical items).
 function materialWaitBadgeHtml(materialWait) {
     if (!materialWait) return '';
     const parts = [];
     if (materialWait.cuts_waiting > 0) parts.push(`${materialWait.cuts_waiting} kesim plaka bekliyor`);
     if (materialWait.plate_items_pending > 0) parts.push(`${materialWait.plate_items_pending} plaka kalemi teslim edilmedi`);
-    const tooltip = `Satın alma kaynaklı bekleme: ${parts.join(' · ') || 'plaka malzemesi teslim edilmedi'}`;
+    if (materialWait.pipe_profile_items_pending > 0) parts.push(`${materialWait.pipe_profile_items_pending} boru/profil kalemi teslim edilmedi`);
+    if (materialWait.critical_items_pending > 0) parts.push(`${materialWait.critical_items_pending} kritik kalem teslim edilmedi`);
+    const tooltip = `Satın alma kaynaklı bekleme: ${parts.join(' · ') || 'malzeme teslim edilmedi'}`;
     return `<span class="status-badge status-orange" title="${escapeHtml(tooltip)}">Malzeme Bekliyor</span>`;
 }
 
@@ -852,6 +860,10 @@ function ensureMeetingModalHost() {
     host.addEventListener('click', (e) => {
         if (e.target === host || e.target.closest('[data-modal-close]')) closeMeetingModal();
     });
+    host.addEventListener('change', (e) => {
+        const box = e.target.closest('.pp-crit-toggle');
+        if (box) onCriticalToggle(box);
+    });
     document.body.appendChild(host);
     return host;
 }
@@ -1368,16 +1380,60 @@ function procurementModalHtml(brief, detail) {
             <td>${escapeHtml(w.job_no || '')}</td>
             <td class="pp-td-num">${fmtInt(w.quantity_to_purchase)}</td>
             <td>${PROCUREMENT_STAGE_BADGES[w.stage] || ''}</td>
+            <td class="pp-td-crit">${w.id !== undefined ? `<input type="checkbox" class="pp-crit-toggle"
+                data-item-id="${w.id}" ${w.is_critical ? 'checked' : ''}
+                title="Kritik: imalat bu kalem teslim edilmeden devam edemez">` : ''}</td>
         </tr>`);
+    const criticalStat = procurement.critical_waiting
+        ? `<span>Kritik bekleyen <strong class="pp-num-red">${fmtInt(procurement.critical_waiting)}</strong></span>`
+        : '';
     const body = `
         <div class="pp-modal-stats">
             <span>Bekleyen <strong>${fmtInt(procurement.items_waiting)}</strong></span>
             <span>Talebe dönüşmedi <strong>${fmtInt(procurement.not_yet_requested)}</strong></span>
             <span>Talepte <strong>${fmtInt(procurement.requested_waiting)}</strong></span>
             <span>Teslim edildi <strong class="pp-num-green">${fmtInt(procurement.items_delivered)} / ${fmtInt(procurement.items_total)}</strong></span>
+            ${criticalStat}
         </div>
-        ${modalTableHtml(['Malzeme', 'Talep', 'İş Emri', { label: 'Miktar', num: true }, 'Aşama'], rows)}`;
+        ${modalTableHtml(['Malzeme', 'Talep', 'İş Emri', { label: 'Miktar', num: true }, 'Aşama', 'Kritik'], rows)}`;
     return { title: 'Satın Alma Detayı', body };
+}
+
+// Critical toggle — imalat bu kalem olmadan devam edemez. The forecast holds
+// Üretim's start until every critical item is delivered, so a toggle
+// invalidates the cached plan (Plan Detayı must refetch the new gates).
+async function onCriticalToggle(box) {
+    const itemId = Number(box.dataset.itemId);
+    const makeCritical = box.checked;
+    box.disabled = true;
+    try {
+        if (makeCritical) await markPlanningRequestItemCritical(itemId);
+        else await unmarkPlanningRequestItemCritical(itemId);
+
+        const jobNo = meetingModalContext && meetingModalContext.jobNo;
+        if (jobNo) {
+            const detail = meetingSectionCache.get(`${jobNo}:procurement`);
+            const row = detail && (detail.items || []).find(i => i.id === itemId);
+            if (row) {
+                row.is_critical = makeCritical;
+                const brief = meetingBriefCache.get(jobNo);
+                if (brief && brief.procurement && row.stage !== 'delivered') {
+                    brief.procurement.critical_waiting =
+                        (brief.procurement.critical_waiting || 0) + (makeCritical ? 1 : -1);
+                }
+            }
+            meetingPlanCache.delete(jobNo);
+        }
+        showNotification(makeCritical
+            ? 'Kalem kritik olarak işaretlendi — imalat öngörüsü bu teslimatı bekleyecek'
+            : 'Kritik işareti kaldırıldı', 'success');
+    } catch (error) {
+        console.error('Critical toggle failed:', error);
+        box.checked = !makeCritical;
+        showNotification(error?.message || 'Kritik işareti güncellenemedi', 'danger');
+    } finally {
+        box.disabled = false;
+    }
 }
 
 const RELEASE_STATUS_BADGES = {
@@ -1798,7 +1854,8 @@ function procurementPanelHtml(procurement) {
             ${miniBarHtml((pct || 0) / 100, 'green')}</div>
         <div class="pp-panel-sub">Talebe dönüşmedi: <strong>${fmtInt(procurement.not_yet_requested)}</strong></div>
         <div class="pp-panel-sub">Talepte · teslim bekliyor: <strong>${fmtInt(procurement.requested_waiting)}</strong></div>
-        <div class="pp-panel-sub">Teslim edildi: <strong>${fmtInt(procurement.items_delivered)}</strong> / ${fmtInt(total)} kalem</div>`;
+        <div class="pp-panel-sub">Teslim edildi: <strong>${fmtInt(procurement.items_delivered)}</strong> / ${fmtInt(total)} kalem</div>
+        ${procurement.critical_waiting ? `<div class="pp-panel-sub"><span class="pp-num-red">Kritik bekleyen: <strong>${fmtInt(procurement.critical_waiting)}</strong> — imalatı tutuyor</span></div>` : ''}`;
     return panelHtml('cart-shopping', 'Satın Alma', body, 'pp-span-3', 'procurement');
 }
 
@@ -1875,6 +1932,17 @@ function weldingPanelHtml(welding) {
         ? `<div class="pp-hours-strip"><i class="fas fa-user-clock me-1"></i>${hourParts.join('<span class="pp-meta-sep"> · </span>')}</div>`
         : '';
 
+    // Manufacturing material wait — same "the delay belongs to procurement"
+    // signal the Kesim panel shows for plates, here for pipes/profiles and
+    // hand-marked critical items.
+    const wait = welding.material_wait || {};
+    const waitParts = [];
+    if (wait.pipe_profile_items_pending) waitParts.push(`${fmtInt(wait.pipe_profile_items_pending)} boru/profil kalemi`);
+    if (wait.critical_items_pending) waitParts.push(`${fmtInt(wait.critical_items_pending)} kritik kalem`);
+    const waitLine = waitParts.length
+        ? `<div class="pp-panel-sub"><span class="pp-num-orange"><strong>${waitParts.join(' · ')}</strong> malzeme bekliyor (satın alma)</span></div>`
+        : '';
+
     const body = `
         <div class="pp-panel-hero">
             <span class="pp-panel-big">${big === null || big === undefined ? '—' : `%${fmtInt(big)}`}</span>
@@ -1883,7 +1951,7 @@ function weldingPanelHtml(welding) {
         </div>
         ${rows || (usingTaskProgress || big === null
             ? '<div class="text-muted pp-empty">Kaynak ataması yok.</div>' : '')}
-        ${hoursStrip}`;
+        ${waitLine}${hoursStrip}`;
     return panelHtml('fire', 'Kaynaklı İmalat', body, 'pp-span-5', 'welding');
 }
 

@@ -447,6 +447,59 @@ export async function markPlanningRequestItemDelivered(itemId) {
 }
 
 /**
+ * Flag an item as manufacturing-critical: the production forecast holds
+ * Üretim's projected start until every critical item of the job is delivered.
+ * @param {string|number} itemId - Planning request item ID
+ * @returns {Promise<Object>} Updated planning request item
+ */
+export async function markPlanningRequestItemCritical(itemId) {
+    try {
+        const response = await authedFetch(`${PLANNING_BASE_URL}/items/${itemId}/mark_critical/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Kalem kritik olarak işaretlenirken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error marking planning request item ${itemId} as critical:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Remove the manufacturing-critical flag from an item.
+ * @param {string|number} itemId - Planning request item ID
+ * @returns {Promise<Object>} Updated planning request item
+ */
+export async function unmarkPlanningRequestItemCritical(itemId) {
+    try {
+        const response = await authedFetch(`${PLANNING_BASE_URL}/items/${itemId}/unmark_critical/`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            }
+        });
+
+        if (!response.ok) {
+            const errorData = await response.json().catch(() => ({}));
+            throw new Error(errorData.detail || errorData.error || 'Kritik işareti kaldırılırken hata oluştu');
+        }
+
+        return await response.json();
+    } catch (error) {
+        console.error(`Error unmarking planning request item ${itemId} as critical:`, error);
+        throw error;
+    }
+}
+
+/**
  * Release an item's "given from inventory" allocation, returning the quantity to
  * stock so the line can be edited or deleted again. Reverses InventoryAllocation
  * records (restoring catalog stock) and zeroes quantity_from_inventory.

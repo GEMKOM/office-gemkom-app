@@ -1225,6 +1225,19 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     white-space: nowrap;
 }
 
+/* Kritik toggle — the "imalat bu kalem olmadan devam edemez" checkbox */
+.pp-modal-table .pp-td-crit {
+    text-align: center;
+}
+
+.pp-crit-toggle {
+    width: 16px;
+    height: 16px;
+    accent-color: #dc3545;
+    cursor: pointer;
+    vertical-align: middle;
+}
+
 .pp-modal-table tr:last-child td {
     border-bottom: none;
 }

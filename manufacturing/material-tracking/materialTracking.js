@@ -4,7 +4,11 @@ import { HeaderComponent } from '../../../components/header/header.js';
 import { FiltersComponent } from '../../../components/filters/filters.js';
 import { TableComponent } from '../../../components/table/table.js';
 import { initRouteProtection } from '../../../apis/routeProtection.js';
-import { getPlanningItems } from '../../../apis/planning/planningRequestItems.js';
+import {
+    getPlanningItems,
+    markPlanningRequestItemCritical,
+    unmarkPlanningRequestItemCritical
+} from '../../../apis/planning/planningRequestItems.js';
 import { extractResultsFromResponse } from '../../../apis/paginationHelper.js';
 import { showNotification } from '../../../components/notification/notification.js';
 
@@ -40,9 +44,44 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     initFilters();
     initTable();
+    bindCriticalToggle();
 
     await loadItems();
 });
+
+// Kritik = imalat bu kalem teslim edilmeden devam edemez: the production
+// forecast holds Üretim's projected start until every critical item of the
+// job is delivered. Delegated once — the table re-renders its rows on every
+// load, so per-row listeners would be lost.
+function bindCriticalToggle() {
+    const container = document.getElementById('planning-items-table-container');
+    if (!container) return;
+    container.addEventListener('change', async (e) => {
+        const box = e.target.closest('.mt-crit-toggle');
+        if (!box) return;
+        const itemId = Number(box.dataset.itemId);
+        const makeCritical = box.checked;
+        box.disabled = true;
+        try {
+            if (makeCritical) await markPlanningRequestItemCritical(itemId);
+            else await unmarkPlanningRequestItemCritical(itemId);
+            showNotification(makeCritical
+                ? 'Kalem kritik olarak işaretlendi — imalat öngörüsü bu teslimatı bekleyecek'
+                : 'Kritik işareti kaldırıldı', 'success');
+        } catch (error) {
+            box.checked = !makeCritical;
+            showNotification(error?.message || 'Kritik işareti güncellenemedi', 'danger');
+        } finally {
+            box.disabled = false;
+        }
+    });
+}
+
+function renderCriticalToggle(value, row) {
+    if (!row || row.id === undefined) return '-';
+    return `<input type="checkbox" class="mt-crit-toggle" data-item-id="${row.id}" ${value ? 'checked' : ''}
+        title="Kritik: imalat bu kalem teslim edilmeden devam edemez">`;
+}
 
 function renderBoolIcon(value) {
     if (value === true) return '<i class="fas fa-check text-success" title="Evet"></i>';
@@ -125,6 +164,17 @@ function initFilters() {
             colSize: 2
         })
         .addDropdownFilter({
+            id: 'is_critical',
+            label: 'Kritik',
+            options: [
+                { value: '', label: 'Tümü' },
+                { value: 'true', label: 'Kritik' },
+                { value: 'false', label: 'Kritik Değil' }
+            ],
+            placeholder: 'Tümü',
+            colSize: 2
+        })
+        .addDropdownFilter({
             id: 'from_inventory',
             label: 'Stoktan Karşılandı',
             options: [
@@ -182,6 +232,7 @@ function initTable() {
             { field: 'quantity_to_purchase', label: 'Satın Alınacak', sortable: false, formatter: (v) => (v ?? '-') },
             { field: 'item_unit', label: 'Birim', sortable: false, formatter: (v) => v || '-' },
             { field: 'is_delivered', label: 'Teslim', type: 'boolean', sortable: false, formatter: (v) => renderBoolIcon(v) },
+            { field: 'is_critical', label: 'Kritik', sortable: false, formatter: (v, row) => renderCriticalToggle(v, row) },
             { field: 'purchase_request_number', label: 'Satın Alma PR No', sortable: false, formatter: (v) => renderPurchaseRequestNumberBadge(v) }
         ],
         pagination: true,
@@ -235,6 +286,7 @@ async function loadItems() {
             planning_request_status: values.planning_request_status || undefined,
             job_no: values.job_no || undefined,
             is_delivered: values.is_delivered || undefined,
+            is_critical: values.is_critical || undefined,
             from_inventory: values.from_inventory || undefined,
             is_available: values.is_available || undefined,
             include_price: false,
