@@ -1008,7 +1008,7 @@ async function openPlanModal(item) {
 
     // Plain-language answer to "why this date?" — one short sentence per task,
     // so the column reads without a legend.
-    const basisSentence = (t) => {
+    const coreBasisSentence = (t) => {
         const s = t.schedule;
         if (t.status === 'completed') {
             const v = s.end_variance_wd;
@@ -1084,6 +1084,20 @@ async function openPlanModal(item) {
                 : 'Süre bilgisi yok — 1 iş günü varsayıldı.';
         }
         return '';
+    };
+
+    // Started tasks are never held by their conditions, but open waits must
+    // stay visible ("Üretim başladı ama kritik borular Eylül'de gelecek") —
+    // append them to whatever the core sentence says. Gate rows already
+    // narrate their binding condition.
+    const basisSentence = (t) => {
+        const s = t.schedule;
+        const core = coreBasisSentence(t);
+        if (s.projection_kind === 'gate' || t.status === 'completed') return core;
+        const open = (s.projection_gates || []).filter(g => g.open && !g.binding);
+        if (!open.length) return core;
+        const notes = open.map(g => g.date ? `${g.label}: ${fmtShortDate(g.date)}` : g.label);
+        return `${core} Açık koşul — ${notes.join(' · ')}.`;
     };
 
     const MINI_THEME = {
@@ -1372,6 +1386,22 @@ const PROCUREMENT_STAGE_BADGES = {
 function procurementModalHtml(brief, detail) {
     const procurement = brief.procurement || {};
     const items = (detail && detail.items) || [];
+    // Teslim tarihi: delivered rows show the actual date (green); pending
+    // rows the last open PO line's promise (red + "gecikti" once passed);
+    // no live PO = no date to promise.
+    const deliveryCell = (w) => {
+        if (w.stage === 'delivered') {
+            return w.delivered_at
+                ? `<span class="pp-num-green">${fmtShortDate(w.delivered_at)}</span>`
+                : '<span class="pp-num-green">teslim edildi</span>';
+        }
+        if (w.projected_delivery) {
+            return w.delivery_overdue
+                ? `<span class="pp-num-red" title="Söz verilen teslim tarihi geçti">${fmtShortDate(w.projected_delivery)} · gecikti</span>`
+                : `<span title="Öngörülen teslim (sipariş + teslim süresi)">~${fmtShortDate(w.projected_delivery)}</span>`;
+        }
+        return '<span class="text-muted" title="Açık sipariş yok — teslim tarihi öngörülemiyor">sipariş yok</span>';
+    };
     const rows = items.map((w) => `
         <tr>
             <td class="pp-td-main" title="${escapeHtml(w.item_name || '')}">${escapeHtml(w.item_name || '—')}
@@ -1380,6 +1410,7 @@ function procurementModalHtml(brief, detail) {
             <td>${escapeHtml(w.job_no || '')}</td>
             <td class="pp-td-num">${fmtInt(w.quantity_to_purchase)}</td>
             <td>${PROCUREMENT_STAGE_BADGES[w.stage] || ''}</td>
+            <td class="pp-td-date">${deliveryCell(w)}</td>
             <td class="pp-td-crit">${w.id !== undefined ? `<input type="checkbox" class="pp-crit-toggle"
                 data-item-id="${w.id}" ${w.is_critical ? 'checked' : ''}
                 title="Kritik: imalat bu kalem teslim edilmeden devam edemez">` : ''}</td>
@@ -1395,7 +1426,7 @@ function procurementModalHtml(brief, detail) {
             <span>Teslim edildi <strong class="pp-num-green">${fmtInt(procurement.items_delivered)} / ${fmtInt(procurement.items_total)}</strong></span>
             ${criticalStat}
         </div>
-        ${modalTableHtml(['Malzeme', 'Talep', 'İş Emri', { label: 'Miktar', num: true }, 'Aşama', 'Kritik'], rows)}`;
+        ${modalTableHtml(['Malzeme', 'Talep', 'İş Emri', { label: 'Miktar', num: true }, 'Aşama', 'Teslim Tarihi', 'Kritik'], rows)}`;
     return { title: 'Satın Alma Detayı', body };
 }
 

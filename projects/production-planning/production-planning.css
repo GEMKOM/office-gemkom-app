@@ -1230,6 +1230,11 @@ body.pp-meeting-fullscreen .pp-panel[data-modal]:hover .pp-link-hint {
     text-align: center;
 }
 
+.pp-modal-table .pp-td-date {
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+
 .pp-crit-toggle {
     width: 16px;
     height: 16px;
