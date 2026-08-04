@@ -1594,7 +1594,7 @@ function meetingStripHtml(item) {
                     <i class="fas fa-chevron-right"></i>
                 </button>
             </div>
-            <div class="pp-strip-title">Haftalık Gözden Geçirme</div>
+            <div class="pp-strip-title"></div>
             <div class="pp-strip-actions">
                 <input type="text" id="pp-meeting-search" class="pp-strip-search"
                        placeholder="İş no + Enter" autocomplete="off" spellcheck="false">
