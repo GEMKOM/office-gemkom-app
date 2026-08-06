@@ -697,8 +697,10 @@ function getExcelMatchForLine(line) {
     const nameKey = normalizeStockName(line.item_name);
     if (nameKey && excelCompare.byName.has(nameKey)) {
         const candidates = excelCompare.byName.get(nameKey);
+        if (candidates.length === 1) return candidates[0];
         const q = parseFloat(line.quantity) || 0;
-        return candidates.find(r => Math.abs(r.qty - q) < 1e-9) || candidates[0];
+        const quantityMatches = candidates.filter(r => Math.abs(r.qty - q) < 1e-9);
+        return quantityMatches.length === 1 ? quantityMatches[0] : null;
     }
     return null;
 }
@@ -1025,16 +1027,14 @@ function formatPriceDate(value) {
 }
 
 /**
- * Clamp a clean numeric string to the backend's max decimal places
- * (quantity: 2, unit_price: 6). Non-numeric input is passed through
- * untouched so DRF can report it instead of us silently mangling it.
+ * Enforce the backend's max decimal places without silently changing money data.
+ * Non-numeric input is passed through so DRF can report its own validation error.
  */
-function clampDecimals(value, places) {
+function validateDecimalPlaces(value, places) {
     const s = String(value ?? '').trim();
-    if (!/^-?\d+(\.\d+)?$/.test(s)) return s;
+    if (!/^-?\d+(\.\d+)?$/.test(s)) return true;
     const decimals = (s.split('.')[1] || '').length;
-    if (decimals <= places) return s;
-    return String(parseFloat(parseFloat(s).toFixed(places)));
+    return decimals <= places;
 }
 
 function syncLinesFromDom() {
@@ -1058,6 +1058,16 @@ async function saveLines() {
     if (!currentJobOrderForLines) return;
     syncLinesFromDom();
 
+    const invalidPrecisionIndex = editingLines.findIndex(line => {
+        const quantity = line.quantity != null && line.quantity !== '' ? line.quantity : '0';
+        const unitPrice = line.unit_price != null && line.unit_price !== '' ? line.unit_price : '0';
+        return !validateDecimalPlaces(quantity, 2) || !validateDecimalPlaces(unitPrice, 6);
+    });
+    if (invalidPrecisionIndex !== -1) {
+        showNotification(`${invalidPrecisionIndex + 1}. satırda miktar en fazla 2, birim fiyat en fazla 6 ondalık basamak olabilir. Değerler otomatik yuvarlanmadan düzeltilmelidir.`, 'error');
+        return;
+    }
+
     const saveBtn = document.getElementById('procurement-lines-save');
     const prevSaveHtml = saveBtn ? saveBtn.innerHTML : null;
     if (saveBtn) {
@@ -1067,8 +1077,8 @@ async function saveLines() {
 
     const payload = editingLines.map((line, idx) => {
         const itemDesc = (line.item_description || '').trim();
-        const quantity = (line.quantity != null && line.quantity !== '') ? clampDecimals(line.quantity, 2) : '0';
-        const unitPrice = (line.unit_price != null && line.unit_price !== '') ? clampDecimals(line.unit_price, 6) : '0';
+        const quantity = (line.quantity != null && line.quantity !== '') ? String(line.quantity).trim() : '0';
+        const unitPrice = (line.unit_price != null && line.unit_price !== '') ? String(line.unit_price).trim() : '0';
         const order = typeof line.order === 'number' ? line.order : parseInt(line.order, 10) || idx;
         const item = line.item ?? null;
         const planningRequestItem = line.planning_request_item ?? null;
