@@ -272,10 +272,9 @@ export async function login(username, password) {
     ]);
     const perms = initialPerms || await fetchAndStorePermissions();
 
-    // Block non-office users from logging in
-    // If permissions endpoint is temporarily unavailable, do not force logout loop.
-    // Enforce office_access only when permission payload is available.
-    if (perms && !hasPermissionInPayload(perms, 'office_access')) {
+    // Block non-office users from logging in. Permission loading is part of the
+    // office boundary, so fail closed if the payload cannot be fetched.
+    if (!perms || !hasPermissionInPayload(perms, 'office_access')) {
         // Clear tokens and cached data to ensure user is fully logged out
         logout();
         throw new Error('FORBIDDEN');
@@ -382,8 +381,6 @@ export async function impersonateUser(userId) {
         throw new Error('Missing user_id');
     }
 
-    storeImpersonatorContextIfMissing();
-
     const resp = await authedFetch(`${backendBase}/users/impersonate/`, {
         method: 'POST',
         body: JSON.stringify({ user_id: userId })
@@ -407,6 +404,7 @@ export async function impersonateUser(userId) {
     }
 
     // Swap tokens, then bootstrap session once (like login).
+    storeImpersonatorContextIfMissing();
     setTokens(data.access, data.refresh);
     await bootstrapSessionLikeLogin();
 
@@ -495,12 +493,7 @@ export function shouldBeOnLoginPage() {
 }
 
 export function shouldBeOnResetPasswordPage() {
-    if (!isLoggedIn()) {
-        return false;
-    }
-    
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
-    return user.must_reset_password === true;
+    return isLoggedIn() && mustResetPassword();
 }
 
 export function shouldBeOnMainPage() {
