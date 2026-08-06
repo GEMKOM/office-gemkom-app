@@ -243,6 +243,7 @@ function clearTokens() {
 
 export async function login(username, password) {
     // Always force a fresh permission fetch for each new login.
+    clearImpersonatorContext();
     localStorage.removeItem('permissions');
     cachedPermissions = null;
     cachedGrantedPageRoutes = null;
@@ -294,6 +295,7 @@ export async function login(username, password) {
 
 export function logout() {
     clearTokens();
+    clearImpersonatorContext();
     clearCachedUser();
     // Ensure in-memory permission caches are also dropped immediately.
     cachedPermissions = null;
