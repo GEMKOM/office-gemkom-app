@@ -143,8 +143,7 @@ function isUserInAssignedTeam(user, row) {
     return memberships.some(membership => membershipMatchesAssigned(membership, assigned));
 }
 
-function canCurrentUserDecideNCRs() {
-    const user = currentUser || null;
+function canUserDecideNCRs(user) {
     if (!user) return false;
     if (user.is_superuser === true || user.is_admin === true) return true;
 
@@ -154,6 +153,10 @@ function canCurrentUserDecideNCRs() {
     const hasName = groupNames.some((g) => String(g || '').toLowerCase() === 'kalite-kontrol');
     const hasId = groupIds.some((id) => Number(id) === 5);
     return hasName || hasId;
+}
+
+function canCurrentUserDecideNCRs() {
+    return canUserDecideNCRs(currentUser || null);
 }
 
 function isSubmittedNCR(ncr) {
@@ -179,6 +182,10 @@ function canUserSubmitNCR(user, ncr) {
 
 function isClosableNCR(ncr) {
     return (ncr?.status || '').toLowerCase() === 'approved';
+}
+
+function canUserCloseNCR(user, ncr) {
+    return isClosableNCR(ncr) && (canUserDecideNCRs(user) || isUserInAssignedTeam(user, ncr));
 }
 
 // Component instances
@@ -752,7 +759,7 @@ function initializeTableComponent(canDecideNCRs) {
         label: 'Kapat',
         icon: 'fas fa-lock',
         class: 'btn-outline-secondary',
-        visible: (row) => isClosableNCR(row),
+        visible: (row) => canUserCloseNCR(currentUser, row),
         onClick: (row) => handleCloseNCR(row)
     });
 
@@ -1760,6 +1767,12 @@ async function handleCloseNCR(ncr) {
         showNotification('Sadece "Onaylandı" durumundaki NCR kayıtları kapatılabilir.', 'warning');
         return;
     }
+
+    if (!canUserCloseNCR(currentUser, ncr)) {
+        showNotification('Bu NCR\'ı kapatmak için kalite kontrol veya atanan takım üyesi olmanız gerekir.', 'warning');
+        return;
+    }
+
     confirmationModal.show({
         title: 'NCR Kapat',
         message: `"${ncr.ncr_number || ncr.title}" NCR'sını kapatmak istediğinizden emin misiniz?`,
