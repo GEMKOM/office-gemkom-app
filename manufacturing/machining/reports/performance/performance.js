@@ -10,15 +10,30 @@ import { showNotification } from '../../../../components/notification/notificati
 // Formatters
 // ---------------------------------------------------------------------------
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function renderText(value) {
+    const text = String(value ?? '');
+    return text ? escapeHtml(text) : '-';
+}
+
 function renderTaskKeyBadge(value) {
     if (!value) return '-';
+    const taskKey = String(value);
     return `
-        <a href="/manufacturing/machining/tasks/list/?task=${value}" target="_blank" rel="noopener noreferrer"
+        <a href="/manufacturing/machining/tasks/list/?task=${encodeURIComponent(taskKey)}" target="_blank" rel="noopener noreferrer"
            style="text-decoration:none; cursor:pointer;">
             <span style="font-weight:700; color:#0d6efd; font-family:'Courier New',monospace; font-size:1rem;
                          background:rgba(13,110,253,0.1); padding:0.25rem 0.5rem; border-radius:4px;
                          border:1px solid rgba(13,110,253,0.2); display:inline-block;">
-                ${value}
+                ${escapeHtml(taskKey)}
             </span>
         </a>`;
 }
@@ -46,7 +61,10 @@ function renderBoolBadge(value) {
 
 function truncate(str, max = 30) {
     if (!str) return '-';
-    return str.length > max ? `<span title="${str}">${str.substring(0, max)}…</span>` : str;
+    const text = String(str);
+    return text.length > max
+        ? `<span title="${escapeHtml(text)}">${escapeHtml(text.substring(0, max))}…</span>`
+        : escapeHtml(text);
 }
 
 function hoursCell(value) {
@@ -78,7 +96,7 @@ function buildColumns() {
             label: 'İş No',
             sortable: true,
             headerClass: 'text-nowrap',
-            formatter: (v) => v || '-'
+            formatter: renderText
         },
         {
             field: 'machine_name',
@@ -133,7 +151,7 @@ function buildColumns() {
             label: 'Termin',
             sortable: true,
             headerClass: 'text-nowrap',
-            formatter: (v) => v || '-'
+            formatter: renderText
         },
     ];
 }
@@ -144,8 +162,8 @@ function buildColumns() {
 
 function buildGroupHeader(groupRows) {
     const row = groupRows[0];
-    const name = row._displayName;
-    const username = row._username;
+    const name = escapeHtml(row._displayName || '-');
+    const username = escapeHtml(row._username || '');
     const usernameHtml = row._firstName && row._lastName
         ? `<small class="text-muted ms-2">(@${username})</small>`
         : '';

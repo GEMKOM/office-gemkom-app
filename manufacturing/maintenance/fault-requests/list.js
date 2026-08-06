@@ -19,6 +19,15 @@ let itemsPerPage = 20;
 let totalItems = 0;
 let currentFilters = {};
 
+function escapeHtml(value) {
+    return String(value ?? '')
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) return;
     await initNavbar();
@@ -139,7 +148,7 @@ function initializeComponents() {
                     const name = v?.trim() || (row.asset_name
                         ? (row.location ? `${row.asset_name} — ${row.location}` : row.asset_name)
                         : '-');
-                    return `<span style="font-weight:500;color:#495057;">${name}</span>`;
+                    return `<span style="font-weight:500;color:#495057;">${escapeHtml(name)}</span>`;
                 }
             },
             {
@@ -147,9 +156,10 @@ function initializeComponents() {
                 label: 'Açıklama',
                 sortable: false,
                 formatter: (v) => {
-                    if (!v?.trim()) return '-';
-                    const t = v.length > 80 ? v.substring(0, 80) + '…' : v;
-                    return `<span title="${v.replace(/"/g,'&quot;')}">${t}</span>`;
+                    const text = String(v ?? '');
+                    if (!text.trim()) return '-';
+                    const t = text.length > 80 ? text.substring(0, 80) + '…' : text;
+                    return `<span title="${escapeHtml(text)}">${escapeHtml(t)}</span>`;
                 }
             },
             {
@@ -168,11 +178,14 @@ function initializeComponents() {
                 field: 'reported_by_full_name',
                 label: 'Bildiren',
                 sortable: true,
-                formatter: (v, row) => `
-                    <div style="font-weight:500;color:#495057;">
-                        <i class="fas fa-user-circle me-1 text-muted"></i>
-                        ${v || row.reported_by_username || 'Bilinmiyor'}
-                    </div>`
+                formatter: (v, row) => {
+                    const name = v || row.reported_by_username || 'Bilinmiyor';
+                    return `
+                        <div style="font-weight:500;color:#495057;">
+                            <i class="fas fa-user-circle me-1 text-muted"></i>
+                            ${escapeHtml(name)}
+                        </div>`;
+                }
             },
             {
                 field: 'reported_at',
@@ -193,7 +206,7 @@ function initializeComponents() {
                 formatter: (v, row) => {
                     const name = v || row.resolved_by_username;
                     if (!name) return '<span class="text-muted">—</span>';
-                    return `<span style="font-weight:500;"><i class="fas fa-user-check me-1 text-success"></i>${name}</span>`;
+                    return `<span style="font-weight:500;"><i class="fas fa-user-check me-1 text-success"></i>${escapeHtml(name)}</span>`;
                 }
             },
             {
