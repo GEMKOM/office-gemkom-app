@@ -689,8 +689,8 @@ function buildExcelCompareState(rows, fileName) {
     return { fileName, byCode, byName, rows: [...byCode.values()] };
 }
 
-/** Find the Excel row for a line: by stock code first, then by stock name (+ quantity when ambiguous). */
-function getExcelMatchForLine(line) {
+/** Find a possible Excel row for a line without considering other app lines. */
+function getExcelMatchCandidate(line) {
     if (!excelCompare) return null;
     const code = normalizeStockCode(line.item_code);
     if (code && excelCompare.byCode.has(code)) return excelCompare.byCode.get(code);
@@ -701,6 +701,20 @@ function getExcelMatchForLine(line) {
         return candidates.find(r => Math.abs(r.qty - q) < 1e-9) || candidates[0];
     }
     return null;
+}
+
+/**
+ * Find the Excel row for a line, but only when that row maps to exactly one
+ * app line. Excel rows are aggregated by stock code, so applying one aggregate
+ * to multiple app lines would copy the total quantity into every line.
+ */
+function getExcelMatchForLine(line) {
+    const match = getExcelMatchCandidate(line);
+    if (!match) return null;
+    const matchingLineCount = editingLines.reduce((count, candidateLine) => {
+        return count + (getExcelMatchCandidate(candidateLine) === match ? 1 : 0);
+    }, 0);
+    return matchingLineCount === 1 ? match : null;
 }
 
 /**
