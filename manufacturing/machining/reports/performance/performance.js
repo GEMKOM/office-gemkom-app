@@ -10,15 +10,27 @@ import { showNotification } from '../../../../components/notification/notificati
 // Formatters
 // ---------------------------------------------------------------------------
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[char]));
+}
+
 function renderTaskKeyBadge(value) {
     if (!value) return '-';
+    const displayValue = escapeHtml(value);
+    const taskParam = encodeURIComponent(String(value));
     return `
-        <a href="/manufacturing/machining/tasks/list/?task=${value}" target="_blank" rel="noopener noreferrer"
+        <a href="/manufacturing/machining/tasks/list/?task=${taskParam}" target="_blank" rel="noopener noreferrer"
            style="text-decoration:none; cursor:pointer;">
             <span style="font-weight:700; color:#0d6efd; font-family:'Courier New',monospace; font-size:1rem;
                          background:rgba(13,110,253,0.1); padding:0.25rem 0.5rem; border-radius:4px;
                          border:1px solid rgba(13,110,253,0.2); display:inline-block;">
-                ${value}
+                ${displayValue}
             </span>
         </a>`;
 }
@@ -46,7 +58,9 @@ function renderBoolBadge(value) {
 
 function truncate(str, max = 30) {
     if (!str) return '-';
-    return str.length > max ? `<span title="${str}">${str.substring(0, max)}…</span>` : str;
+    const text = String(str);
+    const escaped = escapeHtml(text);
+    return text.length > max ? `<span title="${escaped}">${escapeHtml(text.substring(0, max))}…</span>` : escaped;
 }
 
 function hoursCell(value) {
@@ -78,7 +92,7 @@ function buildColumns() {
             label: 'İş No',
             sortable: true,
             headerClass: 'text-nowrap',
-            formatter: (v) => v || '-'
+            formatter: (v) => v ? escapeHtml(v) : '-'
         },
         {
             field: 'machine_name',
@@ -133,7 +147,7 @@ function buildColumns() {
             label: 'Termin',
             sortable: true,
             headerClass: 'text-nowrap',
-            formatter: (v) => v || '-'
+            formatter: (v) => v ? escapeHtml(v) : '-'
         },
     ];
 }
@@ -144,8 +158,8 @@ function buildColumns() {
 
 function buildGroupHeader(groupRows) {
     const row = groupRows[0];
-    const name = row._displayName;
-    const username = row._username;
+    const name = escapeHtml(row._displayName);
+    const username = escapeHtml(row._username);
     const usernameHtml = row._firstName && row._lastName
         ? `<small class="text-muted ms-2">(@${username})</small>`
         : '';
@@ -175,13 +189,13 @@ function buildGroupHeader(groupRows) {
                 <i class="fas fa-user text-primary"></i>
                 <strong>${name}${usernameHtml}</strong>
                 <span class="status-badge status-green" style="min-width:auto; padding:0.25rem 0.5rem;">
-                    ${taskCount} görev
+                    ${escapeHtml(taskCount)} görev
                 </span>
             </div>
             <div class="d-flex gap-3 text-muted small flex-wrap">
                 <span><i class="fas fa-clock me-1"></i>Toplam: <strong class="text-body">${totalHours} s</strong></span>
                 <span><i class="fas fa-calendar-day me-1"></i>Günlük ort.: <strong class="text-body">${avgDaily} s</strong></span>
-                <span><i class="fas fa-check-circle me-1"></i>Tamamlanan: <strong class="text-body">${tasksCompleted}</strong></span>
+                <span><i class="fas fa-check-circle me-1"></i>Tamamlanan: <strong class="text-body">${escapeHtml(tasksCompleted)}</strong></span>
                 <span><i class="fas fa-chart-line me-1"></i>Ort. verimlilik: ${effHtml}</span>
                 <span><i class="fas fa-clock me-1"></i>Zamanında: ${otHtml}</span>
             </div>

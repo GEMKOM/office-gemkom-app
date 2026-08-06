@@ -19,6 +19,16 @@ let itemsPerPage = 20;
 let totalItems = 0;
 let currentFilters = {};
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>"']/g, (char) => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;',
+    }[char]));
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     if (!guardRoute()) return;
     await initNavbar();
@@ -129,7 +139,7 @@ function initializeComponents() {
                 label: 'ID',
                 sortable: true,
                 formatter: (v) => `<span style="font-weight:700;color:#0d6efd;font-family:'Courier New',monospace;font-size:.95rem;
-                    background:rgba(13,110,253,.1);padding:.2rem .5rem;border-radius:4px;border:1px solid rgba(13,110,253,.2);">${v || '-'}</span>`
+                    background:rgba(13,110,253,.1);padding:.2rem .5rem;border-radius:4px;border:1px solid rgba(13,110,253,.2);">${v ? escapeHtml(v) : '-'}</span>`
             },
             {
                 field: 'machine_name',
@@ -139,7 +149,7 @@ function initializeComponents() {
                     const name = v?.trim() || (row.asset_name
                         ? (row.location ? `${row.asset_name} — ${row.location}` : row.asset_name)
                         : '-');
-                    return `<span style="font-weight:500;color:#495057;">${name}</span>`;
+                    return `<span style="font-weight:500;color:#495057;">${escapeHtml(name)}</span>`;
                 }
             },
             {
@@ -149,7 +159,7 @@ function initializeComponents() {
                 formatter: (v) => {
                     if (!v?.trim()) return '-';
                     const t = v.length > 80 ? v.substring(0, 80) + '…' : v;
-                    return `<span title="${v.replace(/"/g,'&quot;')}">${t}</span>`;
+                    return `<span title="${escapeHtml(v)}">${escapeHtml(t)}</span>`;
                 }
             },
             {
@@ -171,7 +181,7 @@ function initializeComponents() {
                 formatter: (v, row) => `
                     <div style="font-weight:500;color:#495057;">
                         <i class="fas fa-user-circle me-1 text-muted"></i>
-                        ${v || row.reported_by_username || 'Bilinmiyor'}
+                        ${escapeHtml(v || row.reported_by_username || 'Bilinmiyor')}
                     </div>`
             },
             {
@@ -193,7 +203,7 @@ function initializeComponents() {
                 formatter: (v, row) => {
                     const name = v || row.resolved_by_username;
                     if (!name) return '<span class="text-muted">—</span>';
-                    return `<span style="font-weight:500;"><i class="fas fa-user-check me-1 text-success"></i>${name}</span>`;
+                    return `<span style="font-weight:500;"><i class="fas fa-user-check me-1 text-success"></i>${escapeHtml(name)}</span>`;
                 }
             },
             {
