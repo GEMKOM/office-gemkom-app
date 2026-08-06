@@ -6,6 +6,7 @@ let editCustomerModal = null;
 let editingCustomerId = null;
 let onSuccessCallback = null;
 let urlSyncBound = false;
+let customerEditRequestSeq = 0;
 
 function isCustomersPage() {
     return window.location.pathname.replace(/\/+$/, '').endsWith('/sales/customers');
@@ -43,6 +44,7 @@ function bindCustomerEditUrlSync(modal) {
     if (!modal?.modal || urlSyncBound) return;
     urlSyncBound = true;
     modal.modal.addEventListener('hidden.bs.modal', () => {
+        customerEditRequestSeq++;
         clearCustomerEditUrl();
         editingCustomerId = null;
     });
@@ -284,8 +286,13 @@ export async function openCustomerEditModal(customerId) {
         return;
     }
 
+    const requestSeq = ++customerEditRequestSeq;
+
     try {
         const customer = await getCustomerById(customerId);
+        if (requestSeq !== customerEditRequestSeq) {
+            return;
+        }
         if (!customer) {
             showNotification('Müşteri bulunamadı', 'error');
             return;
@@ -297,6 +304,9 @@ export async function openCustomerEditModal(customerId) {
         setCustomerEditUrl(customerId);
         editCustomerModal.show();
     } catch (error) {
+        if (requestSeq !== customerEditRequestSeq) {
+            return;
+        }
         console.error('Error loading customer for edit:', error);
         showNotification('Müşteri bilgileri yüklenirken hata oluştu', 'error');
     }

@@ -50,19 +50,24 @@ function initializeComponents() {
                 field: 'full_name',
                 label: 'Personel',
                 sortable: true,
-                formatter: (v, row) => `
-                    <div class="d-flex align-items-center gap-2">
-                        <div style="width:34px;height:34px;border-radius:50%;
-                                    background:linear-gradient(135deg,#0d6efd,#6610f2);
-                                    display:flex;align-items:center;justify-content:center;
-                                    color:#fff;font-weight:700;font-size:.85rem;flex-shrink:0;">
-                            ${(v || row.username || '?')[0].toUpperCase()}
-                        </div>
-                        <div>
-                            <div class="fw-semibold">${v || row.username}</div>
-                            <div class="text-muted" style="font-size:.75rem;">@${row.username}</div>
-                        </div>
-                    </div>`
+                formatter: (v, row) => {
+                    const displayName = v || row.username || '-';
+                    const username = row.username || '-';
+                    const initial = (displayName || '?')[0].toUpperCase();
+                    return `
+                        <div class="d-flex align-items-center gap-2">
+                            <div style="width:34px;height:34px;border-radius:50%;
+                                        background:linear-gradient(135deg,#0d6efd,#6610f2);
+                                        display:flex;align-items:center;justify-content:center;
+                                        color:#fff;font-weight:700;font-size:.85rem;flex-shrink:0;">
+                                ${escHtml(initial)}
+                            </div>
+                            <div>
+                                <div class="fw-semibold">${escHtml(displayName)}</div>
+                                <div class="text-muted" style="font-size:.75rem;">@${escHtml(username)}</div>
+                            </div>
+                        </div>`;
+                }
             },
             {
                 field: 'faults_resolved_count',
