@@ -2015,7 +2015,7 @@ function initInflowTrackerTable() {
                 label: 'İşlemler',
                 icon: 'fas fa-ellipsis-v',
                 class: 'btn-outline-secondary',
-                visible: (row) => row.source === 'expected_receipt' && row.editable,
+                visible: (row) => canMutateExpectedReceiptRow(row),
                 subActions: [
                     {
                         key: 'edit_installment',
@@ -2046,7 +2046,7 @@ function initInflowTrackerTable() {
                         key: 'cancel_receipt',
                         label: 'Kaydı iptal et',
                         icon: 'fas fa-ban',
-                        onClick: (row) => confirmCancelExpectedReceipt(row.receipt_id, row.title)
+                        onClick: (row) => confirmCancelExpectedReceipt(row.receipt_id, row.title, row)
                     }
                 ]
             }
@@ -2241,6 +2241,10 @@ function formatInflowSourceBadge(source, editable) {
         return `<span class="inflow-source-badge inflow-source-sales-offer"><i class="fas fa-lock me-1"></i>—</span>`;
     }
     return '—';
+}
+
+function canMutateExpectedReceiptRow(row) {
+    return row?.source === 'expected_receipt' && row.editable && !row.is_received;
 }
 
 function formatInflowDueDateCell(dueDate, row) {
@@ -2666,6 +2670,11 @@ function openCreateExpectedReceiptModal() {
 
 function openEditExpectedReceiptModal(row) {
     if (!expectedReceiptFormModal || !row.receipt_id) return;
+    if (row?.is_received) {
+        showErrorMessage('Tahsil edilmiş kayıtlar düzenlenemez.');
+        return;
+    }
+
     activeReceiptContext = { mode: 'edit', id: row.receipt_id };
     toggleExpectedReceiptFormCreateFields(false);
     expectedReceiptFormModal.options.title = 'Tahsilat Kaydını Düzenle';
@@ -2793,7 +2802,12 @@ async function loadInflowTracker() {
     }
 }
 
-function confirmCancelExpectedReceipt(receiptId, title) {
+function confirmCancelExpectedReceipt(receiptId, title, row = null) {
+    if (row?.is_received) {
+        showErrorMessage('Tahsil edilmiş kayıtlar iptal edilemez.');
+        return;
+    }
+
     const label = title ? `"${title}"` : `#${receiptId}`;
     actionConfirmModal.show({
         message: `${label} tahsilat kaydını iptal etmek istediğinize emin misiniz?`,
@@ -2934,10 +2948,16 @@ function openAddExpectedReceiptInstallmentModalFromRow(row) {
 }
 
 function openEditExpectedReceiptInstallmentModal(row) {
+    if (row?.is_received) {
+        showErrorMessage('Tahsil edilmiş taksitler düzenlenemez.');
+        return;
+    }
+
     activeReceiptContext = {
         mode: 'edit_installment',
         id: row.receipt_id,
         installment_id: row.installment_id,
+        is_received: !!row.is_received,
         currency: row.currency || 'EUR'
     };
     expectedReceiptInstallmentFormModal.options.title = 'Taksiti Düzenle';
@@ -3004,6 +3024,11 @@ async function handleAddExpectedReceiptInstallmentSave(formData) {
 
     try {
         if (activeReceiptContext.mode === 'edit_installment') {
+            if (activeReceiptContext.is_received) {
+                showErrorMessage('Tahsil edilmiş taksitler düzenlenemez.');
+                return;
+            }
+
             await updateExpectedReceiptInstallment(
                 activeReceiptContext.id,
                 activeReceiptContext.installment_id,
