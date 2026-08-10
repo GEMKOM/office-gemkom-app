@@ -51,15 +51,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Kritik = imalat bu kalem teslim edilmeden devam edemez: the production
 // forecast holds Üretim's projected start until every critical item of the
-// job is delivered. Delegated once — the table re-renders its rows on every
-// load, so per-row listeners would be lost.
+// job is delivered.
+//
+// Delegate from the *parent* of `#planning-items-table-container`, not the
+// container itself. TableComponent.render() → setupEventListeners() clones
+// that container on every load/page/sort, which silently drops listeners
+// attached directly to it (checkbox flips in the UI, API never called).
 function bindCriticalToggle() {
     const container = document.getElementById('planning-items-table-container');
-    if (!container) return;
-    container.addEventListener('change', async (e) => {
+    const host = container?.parentElement;
+    if (!host || host.dataset.mtCritBound === '1') return;
+    host.dataset.mtCritBound = '1';
+    host.addEventListener('change', async (e) => {
         const box = e.target.closest('.mt-crit-toggle');
         if (!box) return;
         const itemId = Number(box.dataset.itemId);
+        if (!Number.isFinite(itemId) || itemId <= 0) return;
         const makeCritical = box.checked;
         box.disabled = true;
         try {
