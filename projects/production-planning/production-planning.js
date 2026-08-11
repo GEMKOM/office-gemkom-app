@@ -1002,7 +1002,10 @@ async function openPlanModal(item) {
                 : null;
             return parentLabel ? `${parentLabel} - ${task.title || ''}` : (task.title || '');
         }
-        const hasCustomTitle = task.title && node && task.title !== node.title;
+        // A main titled after its own department ("Dizayn" under Dizayn)
+        // must not render as "Dizayn - Dizayn".
+        const hasCustomTitle = task.title && node && task.title !== node.title
+            && task.title !== task.department_display;
         return hasCustomTitle ? `${task.department_display} - ${task.title}` : task.department_display;
     };
 
@@ -1079,9 +1082,17 @@ async function openPlanModal(item) {
             return 'Alt görevlerine göre: en geç biten alt görevi bu tarihte bitiyor.';
         }
         if (s.projection_kind === 'start') {
-            return (t.target_start_date || t.target_completion_date)
-                ? `Plandaki tarih aralığı esas alındı (~${formatWd(rem)} iş günü).`
-                : 'Süre bilgisi yok — 1 iş günü varsayıldı.';
+            // A started-but-0% task restarts its window from TODAY — without
+            // saying so, "plandaki aralık" next to a date past the planned
+            // end reads as a contradiction (266-13-02 BAKIR EKİBİ).
+            const started = s.projection_elapsed_wd !== null
+                && s.projection_elapsed_wd !== undefined;
+            if (t.target_start_date || t.target_completion_date) {
+                return started
+                    ? `Plandaki aralığın süresi esas alındı (~${formatWd(rem)} iş günü) — ilerleme %0 olduğu için bugünden itibaren sayılıyor.`
+                    : `Plandaki tarih aralığı esas alındı (~${formatWd(rem)} iş günü).`;
+            }
+            return 'Süre bilgisi yok — 1 iş günü varsayıldı.';
         }
         return '';
     };
@@ -1135,11 +1146,24 @@ async function openPlanModal(item) {
                 <td class="pp-td-main" title="${escapeHtml(label(t))}">${driver ? '<i class="fas fa-flag pp-driver-flag" title="Bitişi belirleyen görev"></i> ' : ''}${escapeHtml(label(t))}</td>
                 <td><span class="status-badge ${badge.badgeClass}">${badge.label}</span>${materialWaitHtml}</td>
                 <td>${progressCell(t)}</td>
+                <td class="pp-td-date">${startCell(t)}</td>
                 <td>${fmtShortDate(t.target_completion_date)}</td>
                 <td>${fmtShortDate(end)}${completed ? ' <span class="pp-td-muted-sm">(gerçek)</span>' : ''}${varianceHtml}</td>
                 <td class="pp-td-basis">${escapeHtml(basisSentence(t))}</td>
             </tr>`;
     };
+
+    // Başlangıç: the actual (evidence/entered) start when the task has one,
+    // otherwise the forecast's projected start with a ~ prefix — gates and
+    // pushes are start stories, and the column makes them visible.
+    function startCell(t) {
+        const s = t.schedule;
+        if (s.actual_start_date) return fmtShortDate(s.actual_start_date);
+        if (s.projected_start_date) {
+            return `<span title="Öngörülen başlangıç">~${fmtShortDate(s.projected_start_date)}</span>`;
+        }
+        return '—';
+    }
 
     // Subtrees group by job order in tree order (the endpoint's nodes array
     // is DFS), tasks in their original plan order within each group — a lone
@@ -1156,18 +1180,26 @@ async function openPlanModal(item) {
 
     const rows = [];
     for (const { node, tasks } of groups) {
+        // A subtree job where every task finished with no lateness has no
+        // story left to tell — one header line says it all (270-06: 40+
+        // finished panel jobs each spent rows repeating "Bitti."). Any late
+        // finish keeps the group expanded so the red badge stays visible.
+        const allDone = multiNode && tasks.every(t => t.status === 'completed');
+        const anyLate = tasks.some(
+            t => t.schedule.classification === 'completed_late');
+        const collapse = allDone && !anyLate;
         if (multiNode) {
             const projected = node.summary && node.summary.projected_completion;
             rows.push(`
                 <tr class="pp-modal-group">
-                    <td colspan="6" style="padding-left: ${node.depth * 18}px">
+                    <td colspan="7" style="padding-left: ${node.depth * 18}px">
                         ${escapeHtml(node.job_no)}
                         <span class="pp-modal-group-title">${escapeHtml(node.title || '')}</span>
-                        <span class="pp-modal-group-meta">%${Math.round(node.completion_percentage || 0)}${projected ? ` · Öngörülen ${fmtShortDate(projected)}` : ''}</span>
+                        <span class="pp-modal-group-meta">%${Math.round(node.completion_percentage || 0)}${projected ? ` · Öngörülen ${fmtShortDate(projected)}` : ''}${collapse ? ' · <i class="fas fa-circle-check pp-num-green"></i> tamamlandı' : ''}</span>
                     </td>
                 </tr>`);
         }
-        rows.push(...tasks.map(taskRow));
+        if (!collapse) rows.push(...tasks.map(taskRow));
     }
 
     // The story, top-down: verdict sentence → the three dates → the task that
@@ -1255,7 +1287,7 @@ async function openPlanModal(item) {
         ${driverBox}
         ${countsHtml}
         ${multiNode ? '<div class="pp-modal-note">Görevler alt iş emirlerine göre gruplu.</div>' : ''}
-        ${modalTableHtml(['Görev', 'Durum', 'İlerleme', 'Hedef', 'Öngörülen Bitiş', 'Neden bu tarih?'], rows)}`;
+        ${modalTableHtml(['Görev', 'Durum', 'İlerleme', 'Başlangıç', 'Hedef', 'Öngörülen Bitiş', 'Neden bu tarih?'], rows)}`;
 }
 
 function weldingModalHtml(brief) {
@@ -2282,8 +2314,10 @@ function taskCellHtml(row) {
             </div>`;
     }
     // Main tasks are auto-titled with the job order title; the department is
-    // the meaningful label. Show the title only when it's a custom one.
-    const hasCustomTitle = row.title && row._node && row.title !== row._node.title;
+    // the meaningful label. Show the title only when it's a custom one (and
+    // not just the department name repeated).
+    const hasCustomTitle = row.title && row._node && row.title !== row._node.title
+        && row.title !== row.department_display;
     return `
         <div class="pp-main-task">
             <span class="pp-main-task-dept">${escapeHtml(row.department_display || '')}</span>
@@ -2296,7 +2330,8 @@ function displayLabelOf(task, node) {
         const parentLabel = parentLabelOf(taskById.get(task.parent), node);
         return parentLabel ? `${parentLabel} - ${task.title || ''}` : (task.title || '');
     }
-    const hasCustomTitle = task.title && node && task.title !== node.title;
+    const hasCustomTitle = task.title && node && task.title !== node.title
+        && task.title !== task.department_display;
     return hasCustomTitle ? `${task.department_display} - ${task.title}` : task.department_display;
 }
 
