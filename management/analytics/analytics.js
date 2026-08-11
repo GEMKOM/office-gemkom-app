@@ -1237,14 +1237,45 @@ async function showEstimatedCostBreakdownModal(jobNo) {
 
         const getComponentActual = (c) => c.actual_amount_eur ?? (c.key && costRow ? costRow[c.key] : null);
 
+        // €/kg over the SUBTREE weight (a root's own kg field is often
+        // empty); marj % against the effective selling price from the
+        // breakdown, falling back to the table row's display price.
+        const breakdownWeight = toNumber(data.subtree_weight_kg)
+            || toNumber(data.total_weight_kg)
+            || toNumber(costRow?.total_weight_kg);
+        const perKg = (v) => {
+            const n = toNumber(v);
+            if (!(breakdownWeight > 0) || !Number.isFinite(n)) return '–';
+            return `€${formatNumber(n / breakdownWeight, 2)}`;
+        };
+        const sellingPrice = toNumber(data.selling_price_eur) || (costRow
+            ? (costRow.selling_price_display_source === 'rolled_up_from_children'
+                ? toNumber(costRow.selling_price_display)
+                : toNumber(costRow.selling_price)) || toNumber(costRow.selling_price_display)
+            : 0);
+        const marjTile = (label, cost) => {
+            const c = toNumber(cost);
+            const m = (sellingPrice > 0 && Number.isFinite(c))
+                ? ((sellingPrice - c) / sellingPrice) * 100 : null;
+            return {
+                icon: 'percent',
+                cls: m == null ? 'text-secondary' : (m < 0 ? 'text-danger' : 'text-success'),
+                value: m == null ? '–' : formatPct(m),
+                label,
+                colSize: 3,
+            };
+        };
+
         const summaryHtml = summaryRow([
             { icon: 'chart-line', cls: 'text-primary', value: formatMoney(data.total_cost), label: 'Tahmini Toplam', colSize: 3 },
             { icon: 'receipt', cls: 'text-danger', value: formatMoney(actualTotalCost), label: 'Gerçek Toplam', colSize: 3 },
             { icon: 'balance-scale', cls: 'text-secondary', value: formatCostDiff(data.total_cost, actualTotalCost), label: 'Fark (Gerçek − Tahmini)', colSize: 3 },
             { icon: 'tasks', cls: 'text-primary', value: data.completion_pct != null ? pctStr(data.completion_pct, 1) : '–', label: 'Tamamlanma', colSize: 3 },
         ]) + summaryRow([
-            { icon: 'weight-hanging', cls: 'text-info', value: data.total_weight_kg != null ? formatNumber(data.total_weight_kg, 2) : '–', label: 'Ağırlık (kg)', colSize: 4 },
-            { icon: 'list', cls: 'text-secondary', value: String(components.length), label: 'Maliyet Kalemi', colSize: 4 },
+            { icon: 'weight-hanging', cls: 'text-info', value: breakdownWeight > 0 ? formatNumber(breakdownWeight, 2) : '–', label: 'Ağırlık (kg)', colSize: 3 },
+            { icon: 'list', cls: 'text-secondary', value: String(components.length), label: 'Maliyet Kalemi', colSize: 3 },
+            marjTile('Marj % (Tahmini)', data.total_cost),
+            marjTile('Marj % (Gerçek)', actualTotalCost),
         ]);
 
         const componentsHtml = `
@@ -1253,9 +1284,11 @@ async function showEstimatedCostBreakdownModal(jobNo) {
                     <thead class="table-light">
                         <tr>
                             <th>Kalem</th>
-                            <th class="text-end" style="width:120px;">Tahmini (EUR)</th>
-                            <th class="text-end" style="width:120px;">Gerçek (EUR)</th>
-                            <th class="text-end" style="width:120px;">Fark (EUR)</th>
+                            <th class="text-end" style="width:110px;">Tahmini (EUR)</th>
+                            <th class="text-end" style="width:90px;">Tahmini €/kg</th>
+                            <th class="text-end" style="width:110px;">Gerçek (EUR)</th>
+                            <th class="text-end" style="width:90px;">Gerçek €/kg</th>
+                            <th class="text-end" style="width:110px;">Fark (EUR)</th>
                             <th>Hesaplama</th>
                         </tr>
                     </thead>
@@ -1266,7 +1299,9 @@ async function showEstimatedCostBreakdownModal(jobNo) {
                             <tr>
                                 <td class="fw-semibold">${escapeHtml(c.label || c.key || '–')}</td>
                                 <td class="text-end fw-semibold">${formatMoney(c.amount_eur)}</td>
+                                <td class="text-end text-muted">${perKg(c.amount_eur)}</td>
                                 <td class="text-end">${formatMoney(actualAmt)}</td>
+                                <td class="text-end text-muted">${perKg(actualAmt)}</td>
                                 <td class="text-end">${formatCostDiff(c.amount_eur, actualAmt)}</td>
                                 <td class="text-muted small">${escapeHtml(c.description || '–')}</td>
                             </tr>
@@ -1275,7 +1310,9 @@ async function showEstimatedCostBreakdownModal(jobNo) {
                         <tr class="table-light">
                             <td><strong>Toplam</strong></td>
                             <td class="text-end"><strong>${formatMoney(data.total_cost)}</strong></td>
+                            <td class="text-end"><strong>${perKg(data.total_cost)}</strong></td>
                             <td class="text-end"><strong>${formatMoney(actualTotalCost)}</strong></td>
+                            <td class="text-end"><strong>${perKg(actualTotalCost)}</strong></td>
                             <td class="text-end"><strong>${formatCostDiff(data.total_cost, actualTotalCost)}</strong></td>
                             <td></td>
                         </tr>
