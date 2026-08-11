@@ -898,6 +898,7 @@ const SECTION_MODAL_TITLES = {
     quality: 'Kalite · NCR Detayı',
     procurement: 'Satın Alma Detayı',
     revisions: 'Dizayn Detayı',
+    financial: 'Finans Detayı',
 };
 
 // Sections whose detail list is fetched only when the modal opens — the main
@@ -908,6 +909,7 @@ const SECTION_MODAL_BUILDERS = {
     quality: qualityModalHtml,
     procurement: procurementModalHtml,
     revisions: revisionsModalHtml,
+    financial: financialModalHtml,
 };
 
 async function openSectionModal(kind) {
@@ -1670,14 +1672,51 @@ function financialBadgeHtml(financial) {
     if (!financial) return '';
     const meta = FINANCIAL_META[financial.verdict] || FINANCIAL_META.no_data;
     const word = meta.label.replace('Finans · ', '');
+    // Cost-permitted users click through to the amounts modal (the section
+    // endpoint re-checks the permission server-side); everyone else gets
+    // the words-only medal.
+    const clickable = !!financial.can_view_details;
     const reason = (financial.reason || '') +
-        (financial.price_is_derived ? ' — satış fiyatı türetilmiş' : '');
+        (financial.price_is_derived ? ' — satış fiyatı türetilmiş' : '') +
+        (clickable ? ' — detay için tıklayın' : '');
     return `
-        <div class="pp-fin-medal pp-fin-medal-${meta.theme}" title="${escapeHtml(reason)}">
+        <div class="pp-fin-medal pp-fin-medal-${meta.theme}${clickable ? ' pp-fin-medal-click' : ''}"
+             ${clickable ? 'data-modal="financial" role="button"' : ''} title="${escapeHtml(reason)}">
             <i class="fas fa-coins"></i>
             <span class="pp-fin-medal-caption">Finans</span>
             <span class="pp-fin-medal-word">${word}</span>
         </div>`;
+}
+
+function financialModalHtml(brief, detail) {
+    const d = detail || {};
+    const meta = FINANCIAL_META[d.verdict] || FINANCIAL_META.no_data;
+    const fmtEur = (v) => v === null || v === undefined
+        ? '—' : `€${Math.round(v).toLocaleString('tr-TR')}`;
+    const derivedMark = d.price_is_derived
+        ? ' <span class="status-badge status-grey" style="min-width:auto;">türetilmiş</span>' : '';
+    const marginHtml = d.margin_eur === null || d.margin_eur === undefined ? '—'
+        : (d.margin_eur < 0
+            ? `<span class="pp-num-red">${fmtEur(d.margin_eur)}</span>`
+            : `<span class="pp-num-green">${fmtEur(d.margin_eur)}</span>`);
+    const rows = (d.categories || []).map((c) => `
+        <tr>
+            <td class="pp-td-main">${escapeHtml(c.label)}</td>
+            <td class="pp-td-num">${fmtEur(c.amount_eur)}</td>
+        </tr>`);
+    const body = `
+        <div class="pp-modal-stats">
+            <span><span class="status-badge ${meta.theme === 'green' ? 'status-green' : meta.theme === 'red' ? 'status-red' : meta.theme === 'orange' ? 'status-orange' : 'status-grey'}">${meta.label}</span></span>
+            <span>Satış Fiyatı <strong>${fmtEur(d.price_eur)}</strong>${derivedMark}</span>
+            <span>Gerçekleşen <strong>${fmtEur(d.actual_total_eur)}</strong></span>
+            <span>Öngörülen Toplam <strong>${fmtEur(d.projected_total_eur)}</strong></span>
+            <span>Oran <strong>${d.cost_ratio_pct !== null && d.cost_ratio_pct !== undefined ? '%' + d.cost_ratio_pct.toLocaleString('tr-TR') : '—'}</strong></span>
+            <span>Marj <strong>${marginHtml}</strong></span>
+        </div>
+        <div class="pp-modal-note">${escapeHtml(d.reason || '')}${d.delivered_uncosted_deduction_eur ? ` (maliyeti girilmemiş teslim alınan kalemler için ${fmtEur(d.delivered_uncosted_deduction_eur)} düşüldü)` : ''}</div>
+        <div class="pp-modal-section">Gerçekleşen Maliyet Dağılımı</div>
+        ${modalTableHtml(['Kalem', { label: 'Tutar', num: true }], rows)}`;
+    return { title: 'Finans Detayı', body };
 }
 
 // Compact hero for the slide — reuses the verdict pill + timeline helpers but

@@ -832,6 +832,16 @@ body.pp-meeting-fullscreen #pp-meeting-container {
     color: var(--medal-color);
 }
 
+.pp-fin-medal-click {
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.pp-fin-medal-click:hover {
+    transform: translate(-50%, -50%) scale(1.05);
+    box-shadow: 0 12px 32px rgba(31, 37, 48, 0.26), 0 0 0 8px var(--medal-halo);
+}
+
 .pp-fin-medal-green  { --medal-color: #198754; --medal-halo: rgba(25, 135, 84, 0.12); }
 .pp-fin-medal-orange { --medal-color: #fd7e14; --medal-halo: rgba(253, 126, 20, 0.12); }
 .pp-fin-medal-red    { --medal-color: #dc3545; --medal-halo: rgba(220, 53, 69, 0.12); }
