@@ -1784,10 +1784,12 @@ function meetingHeroHtml(item) {
 }
 
 // Content caps shrink one step on short screens (laptop 768p) so every panel
-// stays inside its clipped cell.
+// stays inside its clipped cell. The finans medallion's notch eats a line
+// of the welding panel's bottom-right corner, so resources cap one lower
+// than v2 — the "+N kaynak" note carries the overflow.
 function meetingCaps() {
     const short = window.matchMedia('(max-height: 860px)').matches;
-    return { resources: short ? 3 : 4, files: short ? 3 : 4, ncrs: 3 };
+    return { resources: short ? 2 : 3, files: short ? 3 : 4, ncrs: 3 };
 }
 
 function ensureBrief(jobNo) {
