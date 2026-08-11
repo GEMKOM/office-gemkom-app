@@ -51,12 +51,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Kritik = imalat bu kalem teslim edilmeden devam edemez: the production
 // forecast holds Üretim's projected start until every critical item of the
-// job is delivered. Delegated once — the table re-renders its rows on every
-// load, so per-row listeners would be lost.
+// job is delivered.
+//
+// Delegate on the container's PARENT, not the container itself. TableComponent
+// re-renders on every load and its removeEventListeners() clones + replaces the
+// container node (cloneNode(true) does NOT copy addEventListener handlers), so a
+// listener bound to the container is destroyed on the first render. The parent
+// node is never replaced, and change events bubble up to it.
 function bindCriticalToggle() {
     const container = document.getElementById('planning-items-table-container');
-    if (!container) return;
-    container.addEventListener('change', async (e) => {
+    if (!container || !container.parentNode) return;
+    container.parentNode.addEventListener('change', async (e) => {
         const box = e.target.closest('.mt-crit-toggle');
         if (!box) return;
         const itemId = Number(box.dataset.itemId);
