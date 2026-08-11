@@ -382,6 +382,9 @@ const VERDICT_META = {
     finished_on_time: { theme: 'green', label: 'Tamamlandı · Zamanında', icon: 'fa-flag-checkered' },
     finished_late: { theme: 'red', label: 'Tamamlandı · Geç', icon: 'fa-flag-checkered' },
     no_target: { theme: 'orange', label: 'Hedef Tarih Girilmemiş', icon: 'fa-circle-question' },
+    // Every open task is a dataless placeholder — claiming a date would be
+    // fiction, so the hero shows the target and says "veri yok" instead.
+    no_data: { theme: 'grey', label: 'Öngörü İçin Veri Yok', icon: 'fa-hourglass-start' },
     unknown: { theme: 'grey', label: 'Öngörü Yok', icon: 'fa-circle-question' }
 };
 
@@ -1033,6 +1036,14 @@ async function openPlanModal(item) {
             }
             return `${formatWd(s.projection_elapsed_wd)} iş gününde %${Math.round(t.completion_percentage)} ilerledi; bu hızla ~${formatWd(rem)} iş günü daha sürer.${compare}`;
         }
+        // Slow progress never stretches an entered duration — it is a
+        // calendar budget from the task's real start; overruns surface as
+        // sapma, not as a quietly longer estimate.
+        if (['duration', 'parent_duration', 'parent_window'].includes(s.projection_kind)
+                && (s.projection_basis || {}).term === 'duration_budget') {
+            const b = s.projection_basis;
+            return `Girilen süre başlangıçtan itibaren bütçe olarak sayılıyor: ${formatWd(b.total_wd)} iş günü (${fmtShortDate(b.anchor)}'dan). Yavaş ilerleme bütçeyi uzatmaz — aşım, sapma olarak görünür.`;
+        }
         if (s.projection_kind === 'duration') {
             return `Girilen süre esas alındı: ~${formatWd(rem)} iş günü.`;
         }
@@ -1213,6 +1224,7 @@ async function openPlanModal(item) {
         finished_late: `İş tamamlandı — hedefinden <strong>${formatWd(forecast.variance_wd)} iş günü geç</strong> bitti.`,
         finished_on_time: 'İş tamamlandı — <strong>zamanında</strong> bitti.',
         no_target: 'Hedef tarih girilmediği için sapma hesaplanamıyor.',
+        no_data: 'Öngörü için henüz veri yok: açık görevlerin hiçbirinde süre, hedef tarih veya ilerleme bulunmuyor. Öngörü, ilk gerçek veriyle (dizayn süresi, teknik resim yayını, planlama talebi) netleşmeye başlar.',
     }[forecast.verdict] || 'Öngörü hesaplanacak veri yok.';
     if (phased && forecast.worst_phase !== null && forecast.worst_phase !== undefined) {
         verdictSentence = forecast.verdict === 'late_risk'
