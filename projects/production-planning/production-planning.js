@@ -1693,8 +1693,16 @@ function financialModalHtml(brief, detail) {
     const meta = FINANCIAL_META[d.verdict] || FINANCIAL_META.no_data;
     const fmtEur = (v) => v === null || v === undefined
         ? '—' : `€${Math.round(v).toLocaleString('tr-TR')}`;
+    const fmtPerKg = (v) => v === null || v === undefined
+        ? '—' : `€${v.toLocaleString('tr-TR', { maximumFractionDigits: 2 })}/kg`;
+    const perKgNote = (v) => v === null || v === undefined
+        ? '' : ` <span class="pp-td-muted-sm">(${fmtPerKg(v)})</span>`;
     const derivedMark = d.price_is_derived
         ? ' <span class="status-badge status-grey" style="min-width:auto;">türetilmiş</span>' : '';
+    // Kâr oranı = (satış − öngörülen maliyet) / satış — profit, not cost
+    // coverage.
+    const profitHtml = d.profit_pct === null || d.profit_pct === undefined ? '—'
+        : `<span class="${d.profit_pct < 0 ? 'pp-num-red' : 'pp-num-green'}">%${d.profit_pct.toLocaleString('tr-TR')}</span>`;
     const marginHtml = d.margin_eur === null || d.margin_eur === undefined ? '—'
         : (d.margin_eur < 0
             ? `<span class="pp-num-red">${fmtEur(d.margin_eur)}</span>`
@@ -1703,19 +1711,29 @@ function financialModalHtml(brief, detail) {
         <tr>
             <td class="pp-td-main">${escapeHtml(c.label)}</td>
             <td class="pp-td-num">${fmtEur(c.amount_eur)}</td>
+            <td class="pp-td-num">${fmtPerKg(c.eur_per_kg)}</td>
         </tr>`);
+    if (rows.length) {
+        rows.push(`
+        <tr>
+            <td class="pp-td-main"><strong>Toplam (gerçekleşen)</strong></td>
+            <td class="pp-td-num"><strong>${fmtEur(d.actual_total_eur)}</strong></td>
+            <td class="pp-td-num"><strong>${fmtPerKg(d.actual_eur_per_kg)}</strong></td>
+        </tr>`);
+    }
     const body = `
         <div class="pp-modal-stats">
             <span><span class="status-badge ${meta.theme === 'green' ? 'status-green' : meta.theme === 'red' ? 'status-red' : meta.theme === 'orange' ? 'status-orange' : 'status-grey'}">${meta.label}</span></span>
-            <span>Satış Fiyatı <strong>${fmtEur(d.price_eur)}</strong>${derivedMark}</span>
-            <span>Gerçekleşen <strong>${fmtEur(d.actual_total_eur)}</strong></span>
-            <span>Öngörülen Toplam <strong>${fmtEur(d.projected_total_eur)}</strong></span>
-            <span>Oran <strong>${d.cost_ratio_pct !== null && d.cost_ratio_pct !== undefined ? '%' + d.cost_ratio_pct.toLocaleString('tr-TR') : '—'}</strong></span>
+            <span>Satış Fiyatı <strong>${fmtEur(d.price_eur)}</strong>${perKgNote(d.price_eur_per_kg)}${derivedMark}</span>
+            <span>Gerçekleşen <strong>${fmtEur(d.actual_total_eur)}</strong>${perKgNote(d.actual_eur_per_kg)}</span>
+            <span>Öngörülen Toplam <strong>${fmtEur(d.projected_total_eur)}</strong>${perKgNote(d.projected_eur_per_kg)}</span>
+            <span>Kâr <strong>${profitHtml}</strong></span>
             <span>Marj <strong>${marginHtml}</strong></span>
+            ${d.total_weight_kg ? `<span>Ağırlık <strong>${fmtInt(d.total_weight_kg)} kg</strong></span>` : ''}
         </div>
         <div class="pp-modal-note">${escapeHtml(d.reason || '')}${d.delivered_uncosted_deduction_eur ? ` (maliyeti girilmemiş teslim alınan kalemler için ${fmtEur(d.delivered_uncosted_deduction_eur)} düşüldü)` : ''}</div>
         <div class="pp-modal-section">Gerçekleşen Maliyet Dağılımı</div>
-        ${modalTableHtml(['Kalem', { label: 'Tutar', num: true }], rows)}`;
+        ${modalTableHtml(['Kalem', { label: 'Tutar', num: true }, { label: '€/kg', num: true }], rows)}`;
     return { title: 'Finans Detayı', body };
 }
 
